@@ -1331,7 +1331,8 @@
         "updateConfiguration": "Mettre à jour la configuration",
         "connect": "Connecter",
         "reenterSecrets": "Saisissez à nouveau le champ secret pour enregistrer les modifications : les secrets stockés sont en écriture seule et ne sont pas affichés. | Saisissez à nouveau les champs secrets pour enregistrer les modifications : les secrets stockés sont en écriture seule et ne sont pas affichés.",
-        "optionalLabel": "{label} (facultatif)"
+        "optionalLabel": "{label} (facultatif)",
+        "missingFields": "Renseignez les champs obligatoires pour vous connecter : {fields}."
       },
       "field": {
         "defaultsTo": "Valeur par défaut : {value}"
@@ -1382,7 +1383,8 @@
         "caCertPem": "Certificat CA du cluster (PEM)",
         "caCertPemHelp": "Collez le bundle CA du cluster pour que le certificat TLS de l'apiserver soit vérifié. À omettre uniquement pour une CA publiquement approuvée.",
         "insecureSkipTlsVerify": "Ignorer la vérification TLS",
-        "insecureSkipTlsVerifyHelp": "Fortement déconseillé. Désactive la vérification TLS de l'apiserver ; à utiliser uniquement pour des clusters kind/dev."
+        "insecureSkipTlsVerifyHelp": "Fortement déconseillé. Désactive la vérification TLS de l'apiserver ; à utiliser uniquement pour des clusters kind/dev.",
+        "invalidFields": "Renseignez les champs obligatoires avec des valeurs valides pour vous connecter."
       },
       "kubernetes": {
         "label": "Nom",
@@ -1808,7 +1810,8 @@
         "caCertPem": "Certificat CA (PEM)",
         "caCertPemHelp": "Vérifie le certificat TLS de l'apiserver. À omettre uniquement pour une CA publiquement fiable.",
         "insecureSkipTlsVerify": "Ignorer la vérification TLS",
-        "insecureSkipTlsVerifyHelp": "Fortement déconseillé: clusters de dev/kind uniquement."
+        "insecureSkipTlsVerifyHelp": "Fortement déconseillé: clusters de dev/kind uniquement.",
+        "invalidPort": "Saisissez un port compris entre 1 et 65535."
       },
       "customType": {
         "title": "Types de manifeste personnalisés",
@@ -3052,6 +3055,7 @@
       "blocking": "({count} bloquante) | ({count} bloquantes)"
     },
     "environment": "Environnement",
+    "readyBanner": "L'environnement de test est prêt. Le Testeur commence son travail.",
     "footer": "Les scénarios sont les domaines que le Testeur a choisi d'éprouver (ses scénarios d'acceptation de la spécification). Les résultats et les réserves y sont regroupés par nom.",
     "infrastructure": "Infrastructure",
     "standup": {

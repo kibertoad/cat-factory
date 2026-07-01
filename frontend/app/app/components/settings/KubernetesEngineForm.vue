@@ -189,6 +189,25 @@ const canSave = computed(
     !!form.label.trim() && !!form.apiServerUrl.trim() && !!apiToken.value.trim() && urlValid.value,
 )
 
+// Why the Connect button is disabled, surfaced as a red hint next to it so a mandatory-field gap
+// is visible rather than a dead button. Lists the empty required fields by their on-screen label;
+// falls back to the port-range message for the one non-empty invalidity `canSave` can carry.
+const connectBlockedReason = computed(() => {
+  if (canSave.value) return ''
+  const missing: string[] = []
+  if (!form.label.trim()) missing.push(t('settings.infrastructure.kubernetesEngine.label'))
+  if (!form.apiServerUrl.trim())
+    missing.push(t('settings.infrastructure.kubernetesEngine.apiServerUrl'))
+  if (!apiToken.value.trim()) missing.push(t('settings.infrastructure.kubernetesEngine.apiToken'))
+  if (form.urlSource === 'ingressTemplate' && !form.hostTemplate.trim())
+    missing.push(t('settings.infrastructure.kubernetesEngine.hostTemplate'))
+  if (form.urlSource === 'serviceStatus' && !form.serviceName.trim())
+    missing.push(t('settings.infrastructure.kubernetesEngine.serviceName'))
+  if (missing.length)
+    return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+  return t('settings.infrastructure.kubernetesEngine.invalidPort')
+})
+
 function buildUrl(): Record<string, unknown> {
   const url: Record<string, unknown> = { source: form.urlSource }
   if (form.urlSource === 'ingressTemplate') {
@@ -429,7 +448,10 @@ async function copyAutoSetupCommand() {
       </span>
     </div>
 
-    <div class="flex justify-end">
+    <div class="flex items-center justify-end gap-3">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+        {{ connectBlockedReason }}
+      </p>
       <UButton
         color="primary"
         size="sm"

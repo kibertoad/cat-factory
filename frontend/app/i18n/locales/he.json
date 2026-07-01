@@ -1357,7 +1357,8 @@
         "caCertPem": "תעודת CA (PEM)",
         "caCertPemHelp": "מאמתת את תעודת ה-TLS של ה-apiserver. השמט רק עבור CA מהימן ציבורית.",
         "insecureSkipTlsVerify": "דלג על אימות TLS",
-        "insecureSkipTlsVerifyHelp": "מומלץ מאוד להימנע: אשכולות פיתוח/kind בלבד."
+        "insecureSkipTlsVerifyHelp": "מומלץ מאוד להימנע: אשכולות פיתוח/kind בלבד.",
+        "invalidPort": "הזן פורט בין 1 ל-65535."
       },
       "customType": {
         "title": "סוגי מניפסט מותאמים",
@@ -1455,7 +1456,8 @@
         "caCertPem": "אישור CA של האשכול (PEM)",
         "caCertPemHelp": "הדבק את חבילת ה-CA של האשכול כדי שאישור ה-TLS של ה-apiserver יאומת. השמט רק עבור CA נאמן ציבורית.",
         "insecureSkipTlsVerify": "דלג על אימות TLS",
-        "insecureSkipTlsVerifyHelp": "מומלץ בחום להימנע. מבטל את אימות ה-TLS של ה-apiserver; השתמש רק עבור אשכולות kind/פיתוח."
+        "insecureSkipTlsVerifyHelp": "מומלץ בחום להימנע. מבטל את אימות ה-TLS של ה-apiserver; השתמש רק עבור אשכולות kind/פיתוח.",
+        "invalidFields": "מלא את השדות הנדרשים בערכים תקינים כדי להתחבר."
       },
       "kubernetes": {
         "label": "שם",
@@ -1495,7 +1497,8 @@
         "updateConfiguration": "עדכן הגדרות",
         "connect": "התחבר",
         "reenterSecrets": "הזן מחדש את שדה הסוד כדי לשמור שינויים — סודות מאוחסנים הם לכתיבה בלבד ואינם מוצגים. | הזן מחדש את שדות הסוד כדי לשמור שינויים — סודות מאוחסנים הם לכתיבה בלבד ואינם מוצגים.",
-        "optionalLabel": "{label} (אופציונלי)"
+        "optionalLabel": "{label} (אופציונלי)",
+        "missingFields": "מלא את השדות הנדרשים כדי להתחבר: {fields}."
       },
       "field": {
         "defaultsTo": "ברירת מחדל היא {value}"
@@ -3071,6 +3074,7 @@
       "showLogs": "הצג יומני הקמה",
       "hideLogs": "הסתר יומני הקמה"
     },
+    "readyBanner": "סביבת הבדיקה פעילה. הבודק מתחיל בעבודתו.",
     "footer": "תרחישים הם התחומים שהבודק בחר לבחון (תרחישי קבלת המפרט שלו). תוצאות וחששות מקובצים תחתם לפי שם."
   },
   "visualConfirm": {

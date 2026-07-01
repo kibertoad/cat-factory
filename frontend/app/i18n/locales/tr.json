@@ -1359,7 +1359,8 @@
         "caCertPem": "CA sertifikası (PEM)",
         "caCertPemHelp": "apiserver TLS sertifikasını doğrular. Yalnızca herkesçe güvenilen bir CA için atlayın.",
         "insecureSkipTlsVerify": "TLS doğrulamasını atla",
-        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez: yalnızca geliştirme/kind kümeleri."
+        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez: yalnızca geliştirme/kind kümeleri.",
+        "invalidPort": "1 ile 65535 arasında bir bağlantı noktası girin."
       },
       "customType": {
         "title": "Özel manifest türleri",
@@ -1457,7 +1458,8 @@
         "caCertPem": "Küme CA sertifikası (PEM)",
         "caCertPemHelp": "apiserver'ın TLS sertifikasının doğrulanması için küme CA paketini yapıştırın. Yalnızca herkesçe güvenilen bir CA için boş bırakın.",
         "insecureSkipTlsVerify": "TLS doğrulamasını atla",
-        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez. apiserver TLS doğrulamasını devre dışı bırakır; yalnızca kind/dev kümeleri için kullanın."
+        "insecureSkipTlsVerifyHelp": "Kesinlikle önerilmez. apiserver TLS doğrulamasını devre dışı bırakır; yalnızca kind/dev kümeleri için kullanın.",
+        "invalidFields": "Bağlanmak için zorunlu alanları geçerli değerlerle doldurun."
       },
       "kubernetes": {
         "label": "Ad",
@@ -1497,7 +1499,8 @@
         "updateConfiguration": "Yapılandırmayı güncelle",
         "connect": "Bağlan",
         "reenterSecrets": "Değişiklikleri kaydetmek için sır alanını yeniden girin — saklanan sırlar yalnızca yazılabilir ve gösterilmez. | Değişiklikleri kaydetmek için sır alanlarını yeniden girin — saklanan sırlar yalnızca yazılabilir ve gösterilmez.",
-        "optionalLabel": "{label} (isteğe bağlı)"
+        "optionalLabel": "{label} (isteğe bağlı)",
+        "missingFields": "Bağlanmak için zorunlu alanları doldurun: {fields}."
       },
       "field": {
         "defaultsTo": "Varsayılan: {value}"
@@ -3073,6 +3076,7 @@
       "showLogs": "Başlatma günlüklerini göster",
       "hideLogs": "Başlatma günlüklerini gizle"
     },
+    "readyBanner": "Test ortamı hazır. Test aracı çalışmaya başlıyor.",
     "footer": "Senaryolar, Tester'ın test etmek için seçtiği alanlardır (spesifikasyon kabul senaryoları). Sonuçlar ve endişeler ada göre bunların altında gruplanır."
   },
   "visualConfirm": {

@@ -1400,7 +1400,8 @@
         "caCertPem": "CA certificate (PEM)",
         "caCertPemHelp": "Verifies the apiserver TLS cert. Omit only for a publicly-trusted CA.",
         "insecureSkipTlsVerify": "Skip TLS verification",
-        "insecureSkipTlsVerifyHelp": "Strongly discouraged: dev/kind clusters only."
+        "insecureSkipTlsVerifyHelp": "Strongly discouraged: dev/kind clusters only.",
+        "invalidPort": "Enter a port between 1 and 65535."
       },
       "customType": {
         "title": "Custom manifest types",
@@ -1498,7 +1499,8 @@
         "caCertPem": "Cluster CA certificate (PEM)",
         "caCertPemHelp": "Paste the cluster CA bundle so the apiserver's TLS certificate verifies. Omit only for a publicly-trusted CA.",
         "insecureSkipTlsVerify": "Skip TLS verification",
-        "insecureSkipTlsVerifyHelp": "Strongly discouraged. Disables apiserver TLS verification; use only for kind/dev clusters."
+        "insecureSkipTlsVerifyHelp": "Strongly discouraged. Disables apiserver TLS verification; use only for kind/dev clusters.",
+        "invalidFields": "Complete the required fields with valid values to connect."
       },
       "kubernetes": {
         "label": "Name",
@@ -1541,7 +1543,8 @@
         "@reenterSecrets": {
           "description": "Count-based: how many write-only secret fields the user must re-supply before re-saving (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
         },
-        "optionalLabel": "{label} (optional)"
+        "optionalLabel": "{label} (optional)",
+        "missingFields": "Fill in the required fields to connect: {fields}."
       },
       "field": {
         "defaultsTo": "Defaults to {value}"
@@ -3181,6 +3184,7 @@
       "showLogs": "Show stand-up logs",
       "hideLogs": "Hide stand-up logs"
     },
+    "readyBanner": "Test environment is up. The tester is starting its work.",
     "footer": "Scenarios are the areas the Tester chose to exercise (its spec acceptance scenarios). Outcomes and concerns are grouped under them by name.",
     "@screenshotAlt": {
       "description": "Alt text for a captured screenshot thumbnail; {view} is the screen/view name. The literal word 'screenshot' should be localized."

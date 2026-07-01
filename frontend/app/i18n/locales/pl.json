@@ -1331,7 +1331,8 @@
         "updateConfiguration": "Zaktualizuj konfigurację",
         "connect": "Połącz",
         "reenterSecrets": "Wprowadź ponownie pole sekretne, aby zapisać zmiany — przechowywane sekrety są tylko do zapisu i nie są wyświetlane. | Wprowadź ponownie pola sekretne, aby zapisać zmiany — przechowywane sekrety są tylko do zapisu i nie są wyświetlane. | Wprowadź ponownie pola sekretne, aby zapisać zmiany — przechowywane sekrety są tylko do zapisu i nie są wyświetlane.",
-        "optionalLabel": "{label} (opcjonalne)"
+        "optionalLabel": "{label} (opcjonalne)",
+        "missingFields": "Uzupełnij wymagane pola, aby połączyć: {fields}."
       },
       "field": {
         "defaultsTo": "Wartość domyślna: {value}"
@@ -1382,7 +1383,8 @@
         "caCertPem": "Certyfikat CA klastra (PEM)",
         "caCertPemHelp": "Wklej pakiet CA klastra, aby certyfikat TLS apiservera został zweryfikowany. Pomiń tylko dla publicznie zaufanego CA.",
         "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
-        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane. Wyłącza weryfikację TLS apiservera; używaj tylko dla klastrów kind/dev."
+        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane. Wyłącza weryfikację TLS apiservera; używaj tylko dla klastrów kind/dev.",
+        "invalidFields": "Uzupełnij wymagane pola prawidłowymi wartościami, aby połączyć."
       },
       "kubernetes": {
         "label": "Nazwa",
@@ -1808,7 +1810,8 @@
         "caCertPem": "Certyfikat CA (PEM)",
         "caCertPemHelp": "Weryfikuje certyfikat TLS apiservera. Pomiń tylko dla publicznie zaufanego CA.",
         "insecureSkipTlsVerify": "Pomiń weryfikację TLS",
-        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane: tylko klastry deweloperskie/kind."
+        "insecureSkipTlsVerifyHelp": "Zdecydowanie odradzane: tylko klastry deweloperskie/kind.",
+        "invalidPort": "Podaj port z zakresu od 1 do 65535."
       },
       "customType": {
         "title": "Niestandardowe typy manifestów",
@@ -3052,6 +3055,7 @@
       "blocking": "({count} blokujące) | ({count} blokujące) | ({count} blokujących)"
     },
     "environment": "Środowisko",
+    "readyBanner": "Środowisko testowe jest gotowe. Tester rozpoczyna pracę.",
     "footer": "Scenariusze to obszary, które Tester postanowił sprawdzić (jego scenariusze akceptacyjne ze specyfikacji). Wyniki i zastrzeżenia są pod nimi grupowane według nazwy.",
     "infrastructure": "Infrastruktura",
     "standup": {

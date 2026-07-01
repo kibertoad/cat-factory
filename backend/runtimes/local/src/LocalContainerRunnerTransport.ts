@@ -28,6 +28,7 @@ import {
   DockerRuntimeAdapter,
 } from './runtimes/index.js'
 import { harnessAllowedHosts } from './github.js'
+import { resolveHarnessImage } from './harnessImage.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -745,13 +746,10 @@ export function createLocalContainerTransportFromEnv(
   env: NodeJS.ProcessEnv,
   settings?: LocalSettings,
 ): LocalContainerRunnerTransport {
-  const image = env.LOCAL_HARNESS_IMAGE?.trim()
-  if (!image) {
-    throw new Error(
-      'LOCAL_HARNESS_IMAGE is required for local mode: set it to the executor-harness image ref ' +
-        '(a GHCR pull or a tag built from backend/internal/executor-harness/Dockerfile).',
-    )
-  }
+  // LOCAL_HARNESS_IMAGE is OPTIONAL: unset ⇒ the backend-matched RECOMMENDED_HARNESS_IMAGE, so a
+  // stock deployment runs the image this build was released against (startLocal refreshes it at
+  // boot). An explicit value (a custom build / a different pin / a mutable tag) still wins.
+  const image = resolveHarnessImage(env)
   const pool = settings?.pool
   const extraEnv = checkoutExtraEnv(settings)
   // The harness validates every clone/push host against an allow-list defaulting to
