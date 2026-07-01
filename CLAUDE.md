@@ -450,6 +450,20 @@ The allow-list is `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. The polic
   stays pinned to the OLD digest — so new per-run containers keep running stale code
   (a missing harness route then 404s as `Container dispatch failed (HTTP 404)`). A
   fresh, immutable tag is what forces the rollout.
+- **The release PR re-syncs the pins automatically — don't hand-fix a red release PR.**
+  A harness bump in a feature PR ships a changeset, so when the changesets action builds
+  the "Release Packages" PR it bumps the harness `version` a SECOND time (e.g. a manual
+  `1.27.5` becomes `1.27.6`) while leaving the three hand-maintained pins behind — which
+  used to be born as tag drift + red CI on the consistency guard. The root `version`
+  script now runs `scripts/sync-runner-image-tags.mjs` after `changeset version`, so the
+  release PR re-derives every pin from the freshly-bumped harness `version` and is
+  consistent by construction. Consequence: the RELEASED tag is whatever changesets
+  computed (`1.27.6`), which may differ from the tag the feature PR published (`1.27.5`);
+  the content is identical, and `docker-publish.yml` re-tags GHCR off the version bump,
+  but the Cloudflare managed-registry image for the released tag is only built when
+  someone next runs `pnpm image:publish` + `pnpm deploy`. Run `pnpm sync:image-tags`
+  locally if you ever need to reconcile the pins by hand;
+  `scripts/check-runner-image-tag.mjs` is the CI guard that verifies the same invariant.
 
 ## Adding a new published package
 
