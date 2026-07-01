@@ -67,9 +67,15 @@ function offerPriority(preferred: K3sRuntime): readonly OfferId[] {
 /**
  * Classify the host from its detected facts into the offered setup paths. Pure — no IO — so it's
  * the primary unit-test target. `recommended` is the highest-priority AVAILABLE offer for the
- * `preferred` runtime (default `k3d`, the no-root Docker path).
+ * `preferred` runtime (default `k3d`, the no-root Docker path). `platform` only shapes the
+ * `install-k3s` offer's copy — k3s is Linux-only, so on Windows/macOS that path points at
+ * k3s-in-Docker via k3d instead of a `curl | sh` install that can't run there.
  */
-export function classifyHost(d: HostDetections, preferred: K3sRuntime = 'k3d'): HostState {
+export function classifyHost(
+  d: HostDetections,
+  preferred: K3sRuntime = 'k3d',
+  platform: NodeJS.Platform = 'linux',
+): HostState {
   const useExisting: Offer = {
     id: 'use-existing',
     label: d.clusterContext
@@ -106,12 +112,16 @@ export function classifyHost(d: HostDetections, preferred: K3sRuntime = 'k3d'): 
   }
 
   // The guided k3s path is always available: when k3s is already installed it only points the user
-  // at starting the service; otherwise it PRINTS the install command (needs sudo). Never auto-runs.
+  // at starting the service; otherwise it PRINTS guidance (never auto-runs). On Linux that's the
+  // `curl | sh` install (needs sudo); on Windows/macOS, where k3s can't run natively, it's the
+  // k3d (k3s-in-Docker) path instead.
   const installK3s: Offer = {
     id: 'install-k3s',
     label: d.k3s.installed
       ? 'Start your already-installed k3s (needs sudo — not run for you)'
-      : 'Show the k3s install command (needs sudo — not run for you)',
+      : platform === 'linux'
+        ? 'Show the k3s install command (needs sudo — not run for you)'
+        : 'Show how to run k3s-in-Docker with k3d (k3s is Linux-only)',
     available: true,
     recommended: false,
   }
@@ -162,6 +172,22 @@ export function parseKindClusters(stdout: string): string[] {
     .filter((l) => l.length > 0 && !l.toLowerCase().startsWith('no kind clusters'))
 }
 
+/**
+ * Extract `clientVersion.gitVersion` from a `kubectl version --output=json` payload. The probe
+ * asks for JSON (to also read `serverVersion` for reachability), so the naive "first line of
+ * stdout" would be the opening `{` — this pulls the real client version (e.g. `v1.36.1`) for the
+ * findings report. Present even when the apiserver is down (kubectl still prints the client half).
+ */
+export function parseKubectlClientVersion(stdout: string): string | undefined {
+  try {
+    const parsed = JSON.parse(stdout) as { clientVersion?: { gitVersion?: unknown } }
+    const version = parsed.clientVersion?.gitVersion
+    return typeof version === 'string' && version.length > 0 ? version : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Detect whether a `kubectl version --output=json` payload reports a reachable apiserver. */
 export function hasServerVersion(stdout: string): boolean {
   try {
@@ -184,6 +210,7 @@ export function hasServerVersion(stdout: string): boolean {
 export async function probeHost(
   shell: HostShell,
   preferred: K3sRuntime = 'k3d',
+  platform: NodeJS.Platform = process.platform,
 ): Promise<HostState> {
   const [
     kubectlVersion,
@@ -210,7 +237,7 @@ export async function probeHost(
   const detections: HostDetections = {
     kubectl: {
       installed: isInstalled(kubectlVersion.code),
-      version: firstLine(kubectlVersion.stdout),
+      version: parseKubectlClientVersion(kubectlVersion.stdout),
     },
     k3d: { installed: isInstalled(k3dVersion.code), version: firstLine(k3dVersion.stdout) },
     kind: { installed: isInstalled(kindVersion.code), version: firstLine(kindVersion.stdout) },
@@ -225,5 +252,5 @@ export async function probeHost(
     kindClusters: kindList.code === 0 ? parseKindClusters(kindList.stdout) : [],
   }
 
-  return classifyHost(detections, preferred)
+  return classifyHost(detections, preferred, platform)
 }

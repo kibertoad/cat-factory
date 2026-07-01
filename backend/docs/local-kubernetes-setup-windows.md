@@ -25,18 +25,21 @@ exercise locally matches what ships.
 
 ## Pinned tool versions
 
-These match the [`deploy-harness` Dockerfile](../internal/deploy-harness/Dockerfile) pins (the
-image the deploy step actually runs), so local runs reproduce CI/container behaviour:
+`kubectl` / `kustomize` / `helm` match the
+[`deploy-harness` Dockerfile](../internal/deploy-harness/Dockerfile) pins (the image the deploy
+step actually runs); `k3d` matches CI's `test-k8s` job (the deploy-harness applies manifests to
+an existing cluster and ships **no** k3d). So local runs reproduce CI/container behaviour:
 
-| Tool      | Version   | Notes                                                                        |
-| --------- | --------- | ---------------------------------------------------------------------------- |
-| kubectl   | `v1.36.2` | Docker Desktop ships its own (older) kubectl — see PATH note.                |
-| kustomize | `v5.8.1`  | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
-| helm      | `v4.2.2`  |                                                                              |
-| k3d       | `v5.9.0`  | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
+| Tool      | Version   | Source of truth   | Notes                                                                        |
+| --------- | --------- | ----------------- | ---------------------------------------------------------------------------- |
+| kubectl   | `v1.36.2` | deploy-harness    | Docker Desktop ships its own (older) kubectl — see PATH note.                |
+| kustomize | `v5.8.1`  | deploy-harness    | Standalone; `kubectl` also bundles a `kustomize` subcommand.                 |
+| helm      | `v4.2.2`  | deploy-harness    |                                                                              |
+| k3d       | `v5.7.5`  | CI `test-k8s` job | Runs k3s in Docker; ships the klipper ServiceLB (LoadBalancer URLs resolve). |
 
-> Bump these deliberately and in lockstep with the deploy-harness Dockerfile / the CI
-> `test-k8s` job when the pinned versions move (see CLAUDE.md / CONTRIBUTING).
+> Bump these deliberately and in lockstep with their source of truth when the pinned versions
+> move — `kubectl`/`kustomize`/`helm` with the deploy-harness Dockerfile, `k3d` with the CI
+> `test-k8s` job (see CLAUDE.md / CONTRIBUTING).
 
 ## Install the CLIs (no admin required)
 
@@ -56,8 +59,8 @@ New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 # kubectl v1.36.2 (single exe)
 Invoke-WebRequest 'https://dl.k8s.io/release/v1.36.2/bin/windows/amd64/kubectl.exe' -OutFile "$bin\kubectl.exe"
 
-# k3d v5.9.0 (single exe, renamed)
-Invoke-WebRequest 'https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-windows-amd64.exe' -OutFile "$bin\k3d.exe"
+# k3d v5.7.5 (single exe, renamed)
+Invoke-WebRequest 'https://github.com/k3d-io/k3d/releases/download/v5.7.5/k3d-windows-amd64.exe' -OutFile "$bin\k3d.exe"
 
 # kustomize v5.8.1 (Windows asset is a .zip — note the Linux Dockerfile uses .tar.gz)
 Invoke-WebRequest 'https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.8.1/kustomize_v5.8.1_windows_amd64.zip' -OutFile "$tmp\kustomize.zip"
@@ -85,16 +88,16 @@ Open a **new** terminal (so the PATH change takes effect) and verify:
 kubectl version --client   # Client Version: v1.36.2 ; Kustomize Version: v5.7.1 (bundled)
 kustomize version          # v5.8.1
 helm version --short       # v4.2.2+g...
-k3d version                # k3d version v5.9.0
+k3d version                # k3d version v5.7.5
 ```
 
 ### PATH note: Docker Desktop's bundled kubectl
 
-Docker Desktop installs its own `kubectl` (today `v1.34.1`) under
+Docker Desktop installs its own `kubectl` (today `v1.36.1`) under
 `C:\Program Files\Docker\Docker\resources\bin`, which is on the **machine** PATH. Windows
 searches the machine PATH **before** the user PATH, so in a fresh shell a bare `kubectl` may
-resolve to Docker's older client rather than the `v1.36.2` installed above. Both drive a k3d
-cluster fine (a one-minor-version-older client is compatible), so this is usually harmless. If
+resolve to Docker's client rather than the `v1.36.2` installed above. Both drive a k3d
+cluster fine (a slightly older client is compatible), so this is usually harmless. If
 you want the pinned `v1.36.2` to win, either:
 
 - call it explicitly: `& "$env:USERPROFILE\bin\kubectl.exe" ...`, or
@@ -184,7 +187,15 @@ native `kubernetes` backend (`apiServerUrl: https://127.0.0.1:6443`, the Service
 
 The quickest path is the guided **`cat-factory k3s`** command — it probes the cluster you just
 brought up (or creates a fresh k3d one), applies the least-privilege ServiceAccount + RBAC, mints
-a token, and opens the Infrastructure form pre-filled for you (the **environment** backend). The
+a token, and opens the Infrastructure form pre-filled for you (the **environment** backend).
+
+> **On Windows, install k3d first (the steps above).** The guided command's fallback "install
+> k3s" path is Linux-only (`curl … | sh -`), so on a Windows host with no k3d it deliberately
+> **doesn't** print that command — it points back here to install k3d and create the cluster,
+> then detects it on the next run. Once k3d is on your PATH the command offers the "create a
+> local k3d cluster" path directly.
+
+The
 RBAC manifest, the runner-callback / `PUBLIC_URL` networking details, the URL-safety knobs, and
 the manual wire-it-yourself steps are documented in
 [`local-k3s-environments.md`](./local-k3s-environments.md).

@@ -108,12 +108,37 @@ describe('setupK3s', () => {
     const { chosen, connection } = await setupK3s(opts({ yes: true }), {
       io,
       shell: scriptShell({}),
+      platform: 'linux',
     })
     expect(chosen).toBe('install-k3s')
     expect(connection).toBeUndefined()
     const out = io.lines.join('\n')
     expect(out).toContain(K3S_INSTALL_COMMAND)
     expect(out).toContain('needs sudo')
+  })
+
+  it('steers to the k3d (Docker) path on Windows instead of the Linux install command', async () => {
+    const io = captureIo()
+    const { chosen } = await setupK3s(opts({ yes: true }), {
+      io,
+      shell: scriptShell({}),
+      platform: 'win32',
+    })
+    expect(chosen).toBe('install-k3s')
+    const out = io.lines.join('\n')
+    expect(out).not.toContain(K3S_INSTALL_COMMAND) // curl | sh can't run on Windows
+    expect(out).toContain('only on Linux')
+    expect(out).toContain('k3d cluster create cat-factory')
+    expect(out).toContain('local-kubernetes-setup-windows.md')
+  })
+
+  it('steers to `brew install k3d` on macOS', async () => {
+    const io = captureIo()
+    await setupK3s(opts({ yes: true }), { io, shell: scriptShell({}), platform: 'darwin' })
+    const out = io.lines.join('\n')
+    expect(out).not.toContain(K3S_INSTALL_COMMAND)
+    expect(out).toContain('brew install k3d')
+    expect(out).toContain('macOS')
   })
 
   it('honors an interactive selection over the recommendation', async () => {
