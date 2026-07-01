@@ -93,8 +93,12 @@ export const TESTER_AGENT_KIND = 'tester-api'
  * uploads them to the binary-artifact store. Its report carries `screenshots[]`, which the
  * visual-confirmation gate reviews against the supplied reference designs. Shares the
  * Tester→Fixer loop and the service's provision-type-driven infra; always needs a running app.
+ *
+ * Re-exported from `@cat-factory/contracts` (the single source of truth for the slug, which the
+ * SPA also uses to surface visual pipelines) so the wire value can't drift between the two.
  */
-export const UI_TESTER_AGENT_KIND = 'tester-ui'
+export { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 
 /** Both tester gate kinds (API + UI). They share the Tester→Fixer loop + infra choice. */
 export const TESTER_KINDS: readonly string[] = [TESTER_AGENT_KIND, UI_TESTER_AGENT_KIND]
@@ -136,5 +140,8 @@ export const HUMAN_TEST_AGENT_KIND = 'human-test'
  * re-captures via the UI tester. Approving advances the run. Handled by the
  * {@link VisualConfirmationController}; passes through (auto-advances) when no binary-artifact
  * store is wired (nowhere to read screenshots from).
+ *
+ * Re-exported from `@cat-factory/contracts` (the single source of truth) so the wire value
+ * can't drift between the engine and the SPA's visual-pipeline surface.
  */
-export const VISUAL_CONFIRM_AGENT_KIND = 'visual-confirmation'
+export { VISUAL_CONFIRM_AGENT_KIND } from '@cat-factory/contracts'

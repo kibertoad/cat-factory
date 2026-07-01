@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
+import { pipelineAllowedForFrame } from '~/utils/pipeline'
 
 const props = defineProps<{ block: Block }>()
 
@@ -129,6 +130,12 @@ function setModelPreset(id: string) {
 const selectedPipeline = computed(() =>
   props.block.pipelineId ? pipelines.getPipeline(props.block.pipelineId) : undefined,
 )
+// Hide UI-testing pipelines when this task's frame has no UI to exercise — they'd be refused at
+// run start (see utils/pipeline + the backend gate).
+const taskFrame = computed(() => board.serviceOf(props.block))
+const selectablePipelines = computed(() =>
+  pipelines.pipelines.filter((p) => pipelineAllowedForFrame(p, taskFrame.value, board.blocks)),
+)
 const pipelineMenu = computed(() => [
   [
     {
@@ -136,7 +143,7 @@ const pipelineMenu = computed(() => [
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => setPipeline(''),
     },
-    ...pipelines.pipelines.map((p) => ({
+    ...selectablePipelines.value.map((p) => ({
       label: p.name,
       icon: 'i-lucide-workflow',
       onSelect: () => setPipeline(p.id),

@@ -293,7 +293,8 @@
         "no_pr_to_merge": "Немає PR для злиття",
         "github_not_connected": "GitHub не підключено",
         "bootstrap_not_retryable": "Ініціалізацію неможливо повторити",
-        "bootstrap_reference_missing": "Еталонна архітектура зникла"
+        "bootstrap_reference_missing": "Еталонна архітектура зникла",
+        "visual_pipeline_no_frontend": "Немає фронтенду для тестування"
       },
       "fallbackMessage": "Ця дія суперечить поточному стану.",
       "providersUnconfigured": {

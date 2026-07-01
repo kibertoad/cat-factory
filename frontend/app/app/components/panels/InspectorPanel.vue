@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
+import { pipelineAllowedForFrame } from '~/utils/pipeline'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
@@ -137,13 +138,18 @@ const taskBranchUrl = computed(() => {
   return base ? `${base}/tree/${pr.branch}` : null
 })
 
-const runMenu = computed(() =>
-  pipelines.pipelines.map((p) => ({
-    label: p.name,
-    icon: 'i-lucide-play',
-    onSelect: () => block.value && execution.start(block.value.id, p),
-  })),
-)
+// Hide UI-testing pipelines when this block's frame has no UI to exercise — they'd be refused
+// at run start (see utils/pipeline + the backend gate).
+const runMenu = computed(() => {
+  const frame = block.value ? board.serviceOf(block.value) : undefined
+  return pipelines.pipelines
+    .filter((p) => pipelineAllowedForFrame(p, frame, board.blocks))
+    .map((p) => ({
+      label: p.name,
+      icon: 'i-lucide-play',
+      onSelect: () => block.value && execution.start(block.value.id, p),
+    }))
+})
 
 // Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
 // (Delete/Backspace) follow the exact same prompt + optimistic-delete + rollback path.
