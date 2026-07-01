@@ -1,6 +1,7 @@
 import {
   acceptInvitationContract,
   authConfigContract,
+  connectMothershipContract,
   forgotPasswordContract,
   logoutContract,
   meContract,
@@ -50,6 +51,11 @@ export function authApi({ http, send, ws }: ApiContext) {
       send(acceptInvitationContract, { pathPrefix: '/auth', pathParams: { token } }),
 
     logout: () => send(logoutContract, { pathPrefix: '/auth' }),
+
+    // Mothership mode (local facade): hand the local node a mothership SESSION token (captured
+    // from the mothership OAuth redirect fragment). The node exchanges it for a cached machine
+    // token and returns a LOCAL session for the same user. Mounted at the app root (no prefix).
+    connectMothership: (session: string) => send(connectMothershipContract, { body: { session } }),
 
     // Mint a short-lived, workspace-scoped ticket for the events WebSocket. A
     // browser can't set Authorization on a WS handshake, so the socket auths from

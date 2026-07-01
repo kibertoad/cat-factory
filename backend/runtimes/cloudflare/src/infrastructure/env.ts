@@ -261,6 +261,8 @@ export interface Env {
   AUTH_SESSION_SECRET?: string
   /** Session lifetime in hours; defaults to 168 (7 days). */
   AUTH_SESSION_TTL_HOURS?: string
+  /** Machine-token lifetime in ms for a mothership-mode node; defaults to 30 days. */
+  AUTH_MACHINE_TOKEN_TTL_MS?: string
   /** Fixed post-login landing URL (the SPA). Recommended in production. */
   AUTH_SUCCESS_REDIRECT_URL?: string
   /**

@@ -21,6 +21,7 @@ import { mergePresetController } from './modules/merge/MergePresetController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
 import { workspaceSettingsController } from './modules/settings/WorkspaceSettingsController.js'
 import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
+import { mothershipConnectController } from './modules/localSettings/MothershipConnectController.js'
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
 import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
@@ -103,6 +104,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', userApiKeyController())
   // Local-mode operational settings (warm pool + checkout reuse); 503 on non-local facades.
   app.route('/', localSettingsController())
+  // Local-mode mothership login (`/local/mothership/connect`): exchanges a mothership session
+  // for a cached machine token; 503 unless the local facade wired the connector.
+  app.route('/', mothershipConnectController())
   app.route('/accounts/:accountId', fragmentLibraryController('account'))
   app.route('/', workspaceController())
   // Real-time WebSocket event stream (self-authenticates via ?ticket=; the facade's

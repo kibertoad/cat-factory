@@ -200,7 +200,7 @@ export function makeMothershipConformanceApp(
   const scopeAccountIds = ms.scopeAccountIds
   const client: PersistenceRpcClient = {
     async call(request: PersistenceRpcRequest): Promise<PersistenceRpcResponse> {
-      const token = await mintMachineToken(SESSION_SECRET, {
+      const { token } = await mintMachineToken(SESSION_SECRET, {
         userId: CONF_USER.id,
         accountIds: [...scopeAccountIds],
         nodeId: 'node_conformance',

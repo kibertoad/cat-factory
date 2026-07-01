@@ -832,6 +832,11 @@
     "userMenu": {
       "mySetup": "Mi configuración",
       "signOut": "Cerrar sesión"
+    },
+    "mothership": {
+      "signIn": "Iniciar sesión con la central",
+      "hint": "Tus proyectos e identidad están en la central alojada: inicia sesión allí para conectar este nodo.",
+      "error": "No se pudo iniciar sesión con la central. Inténtalo de nuevo."
     }
   },
   "layout": {

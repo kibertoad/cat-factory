@@ -92,6 +92,12 @@ export interface AuthConfig {
   oauthBase: string
   /** Session token lifetime in milliseconds. */
   sessionTtlMs: number
+  /**
+   * Machine-token lifetime in milliseconds — the token a mothership mints for a whitelisted
+   * mothership-mode node (see `mintMachineToken` / `POST /auth/machine-token`). Longer-lived
+   * than a session (the node runs unattended); an expired token means the node re-logs in.
+   */
+  machineTokenTtlMs: number
   /** Fixed post-login landing URL; '' means honour the request-provided one. */
   successRedirectUrl: string
   /** Explicit OAuth redirect_uri; '' means derive it from the request origin. */

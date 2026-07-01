@@ -20,13 +20,37 @@
 > status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
 > (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry /
 > subscription-activation no-ops a run makes over the remote (telemetry is local-first, Phase 5;
-> activation is the local-sqlite bucket); the `fragments` / `slack` connect/provision surfaces;
-> the durable SQLite work queue (PR 2 — the in-process runner is single-process / best-effort); and
-> login-based machine-token minting (PR 3 — a static `LOCAL_MOTHERSHIP_TOKEN` is used until then).
+> activation is the local-sqlite bucket); the `fragments` / `slack` connect/provision surfaces; and
+> the durable SQLite work queue (PR 2 — the in-process runner is single-process / best-effort).
+> Login-based machine-token minting has **landed** (PR 3): the token is minted from a whitelisted
+> login and cached locally, so `LOCAL_MOTHERSHIP_TOKEN` is now only a headless/CI override.
 > The remaining `pending` org methods are the live per-repo checklist below.
 
 ### Landed so far
 
+- **PR 3 (login-based machine-token minting)** — the required static `LOCAL_MOTHERSHIP_TOKEN` is
+  replaced by a token minted from a whitelisted login and cached locally; the env var is now only a
+  headless/CI override. A mothership (either facade, via `registerCoreControllers`) serves
+  `POST /auth/machine-token`, which verifies the caller's SESSION (audience-pinned `session`),
+  derives the account scope from `accountService.listForUser` (a `requestedAccountIds` hint may only
+  NARROW it, never widen), and mints via the single production `mintMachineToken`
+  (`@cat-factory/server` — the hand-rolled test copy is gone). The local facade adds a `node:sqlite`
+  machine-token cache (`sqlite/machineTokenStore.ts`) and a local-only
+  `POST /local/mothership/connect` proxy (the `mothershipConnect` seam): the SPA signs the user into
+  the mothership (OAuth), captures the returned session from the redirect fragment, and hands it to
+  its OWN node (same origin — no CORS); the node forwards it to the mint endpoint, caches the OPAQUE
+  machine token (it is signed with the MOTHERSHIP's secret, so the node never verifies it), mints a
+  LOCAL session for the same user, and returns it so the SPA is signed in locally. `composeMothership`
+  resolves the token PER RPC via a provider (env override → unexpired cached token → none), so a
+  token-less node boots INERT (rather than throwing) and the SPA can drive the login.
+  `AUTH_MACHINE_TOKEN_TTL_MS` (default 30d) bounds the token; an expired cached token is treated as
+  absent (re-login on expiry — no silent refresh this slice). Tests: the mint helper + endpoint
+  scope/allowlist (`packages/server/test/machineToken*.spec.ts`), the sqlite token store
+  (`sqlite/machineTokenStore.test.ts`), the connector + `composeMothership` precedence
+  (`mothership.test.ts`), and the fake-mothership integration (`mothership-integration.spec.ts` now
+  mints via the endpoint AND drives the full `/local/mothership/connect` login flow end-to-end).
+  **Deferred:** device-code / headless CLI login, token rotation/revocation (nodeId denylist, PR 6),
+  silent refresh, and auto-allow-listing the loopback OAuth redirect on the mothership.
 - **PR 2 (durable SQLite work queue)** — the best-effort in-memory `InProcessWorkRunner` (PR 1) is
   replaced by the durable `SqliteWorkRunner`, backed by a file-based `node:sqlite` work queue
   (`runtimes/local/src/sqlite/workQueue.ts`, default `~/.cat-factory/work-queue.sqlite`, override
@@ -246,7 +270,7 @@ never remotely invocable (mothership-internal cron).
 | `subscriptionActivationRepository`                          | local-sqlite                                     | ⬜ todo | PR 3                            |
 | `localSettingsRepository`                                   | local-sqlite                                     | ⬜ todo | PR 3                            |
 | durable execution work queue                                | local-sqlite (replaces pg-boss)                  | ✅ done | PR 1 (in-proc) → PR 2 (durable) |
-| cached mothership machine token                             | local-sqlite                                     | ⬜ todo | PR 3                            |
+| cached mothership machine token                             | local-sqlite                                     | ✅ done | PR 3                            |
 | `llmCallMetricRepository`                                   | telemetry                                        | ⬜ todo | PR 5                            |
 | `agentContextSnapshotRepository`                            | telemetry                                        | ⬜ todo | PR 5                            |
 | `tokenUsageRepository`                                      | telemetry                                        | ⬜ todo | PR 5                            |

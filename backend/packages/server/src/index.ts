@@ -3,7 +3,7 @@
 // helpers, validation envelope, error mapping, CORS policy); the controllers,
 // middleware and the Hono app factory move here in subsequent steps.
 export { logger, type Logger } from './observability/logger.js'
-export { type AppEnv, type ServerContainer } from './http/env.js'
+export { type AppEnv, type MothershipConnector, type ServerContainer } from './http/env.js'
 export {
   type GitHubBackfillScheduler,
   type GitHubWebhookIngest,
@@ -164,10 +164,16 @@ export {
 export {
   HmacSigner,
   TOKEN_AUDIENCE,
+  type MachinePayload,
   type SessionPayload,
   type SessionUser,
   type TokenAudience,
 } from './auth/signing.js'
+export {
+  DEFAULT_MACHINE_TOKEN_TTL_MS,
+  mintMachineToken,
+  resolveMachineTokenTtlMs,
+} from './auth/machineToken.js'
 export {
   WS_TICKET_TTL_MS,
   authorizeWsUpgrade,

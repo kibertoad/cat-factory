@@ -18,6 +18,7 @@ import {
   SqliteWorkRunner,
   type MothershipComposition,
   composeMothership,
+  createMothershipConnector,
   isMothershipMode,
 } from './mothership.js'
 import { ConflictError } from '@cat-factory/kernel'
@@ -175,8 +176,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     localMode: {
       enabled: true,
       // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
-      // to the mothership (org/durable state). Off → the standard siloed-Postgres local mode.
-      ...(mothership ? { mothership: true } : {}),
+      // to the mothership (org/durable state), and (in mothership mode) where to send the user
+      // to sign in. Off → the standard siloed-Postgres local mode.
+      ...(mothership ? { mothership: true, mothershipUrl: env.LOCAL_MOTHERSHIP_URL?.trim() } : {}),
       ...(gitToken ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
       // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
       // the developer straight to the right token page (scopes differ per provider).
@@ -566,6 +568,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     ...container,
     vcsIdentity,
     ...(localSettingsService ? { localSettings: { service: localSettingsService } } : {}),
+    // Mothership-mode login seam (local facade only): the SPA hands the node a mothership session
+    // via `POST /local/mothership/connect`, which forwards it to the mothership's mint endpoint and
+    // caches the returned machine token. Absent (503) outside mothership mode.
+    ...(mothership && env.LOCAL_MOTHERSHIP_URL?.trim()
+      ? {
+          mothershipConnect: createMothershipConnector({
+            baseUrl: env.LOCAL_MOTHERSHIP_URL.trim(),
+            store: mothership.machineTokenStore,
+          }),
+        }
+      : {}),
     // On shutdown (mothership mode; the boot path calls this from its SIGTERM/SIGINT handler):
     // stop the work runner's recovery poll FIRST so it can't touch the queue mid-close, then
     // release both local SQLite handles (credentials + work queue). No-op otherwise.

@@ -5,10 +5,15 @@ import { type CoreRepositories, type DriveConfig, driveExecution } from '@cat-fa
 import {
   HttpPersistenceRpcClient,
   type Logger,
+  type MothershipConnector,
   createRemoteRepositoryRegistry,
 } from '@cat-factory/server'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
+import {
+  type LocalMachineTokenStore,
+  createLocalMachineTokenStore,
+} from './sqlite/machineTokenStore.js'
 import { SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 
 // Mothership mode (docs/initiatives/mothership-mode.md): the local node keeps NO main
@@ -22,6 +27,12 @@ import { SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 /** True when this local node should boot in mothership mode (a mothership URL is configured). */
 export function isMothershipMode(env: NodeJS.ProcessEnv): boolean {
   return !!env.LOCAL_MOTHERSHIP_URL?.trim()
+}
+
+/** The cached machine token if present AND unexpired, else null (an expired token is "no token"). */
+function validCachedToken(store: LocalMachineTokenStore): string | null {
+  const cached = store.read()
+  return cached && cached.exp > Date.now() ? cached.token : null
 }
 
 /**
@@ -54,6 +65,12 @@ export interface MothershipComposition {
   credentialStore: LocalCredentialStore
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
+  /**
+   * The local-sqlite cache of the mothership-minted machine token. The `/local/mothership/connect`
+   * login flow writes it; the RPC client's token provider reads it per request (below). Kept
+   * separate from the RPC client so the connect controller can update it live (no restart).
+   */
+  machineTokenStore: LocalMachineTokenStore
   /** Close the underlying SQLite databases (call on shutdown). */
   close(): void
 }
@@ -65,23 +82,27 @@ export interface MothershipComposition {
  * repositories as `options.providerApiKeyRepository` / `options.localModelEndpointRepository`,
  * with `options.db` left undefined.
  *
- * Throws when `LOCAL_MOTHERSHIP_TOKEN` is missing — a mothership URL with no machine token
- * cannot authenticate a single call, so fail fast at boot rather than 403 on first read.
+ * The machine token is resolved PER RPC via a token provider, precedence:
+ *   1. `LOCAL_MOTHERSHIP_TOKEN` env (a headless/CI override — no login flow), else
+ *   2. the local-sqlite cache written by the `/local/mothership/connect` login flow (if unexpired),
+ *      else
+ *   3. `null` — every call comes back 403 and the node boots "not connected", so the SPA can drive
+ *      the login. Booting inert (rather than throwing on a missing token) is what makes the
+ *      SPA-driven login possible: the node must be up to serve the SPA that mints the token.
  */
 export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition {
   const baseUrl = env.LOCAL_MOTHERSHIP_URL?.trim()
   if (!baseUrl) {
     throw new Error('composeMothership called without LOCAL_MOTHERSHIP_URL set')
   }
-  const token = env.LOCAL_MOTHERSHIP_TOKEN?.trim()
-  if (!token) {
-    throw new Error(
-      'LOCAL_MOTHERSHIP_URL is set but LOCAL_MOTHERSHIP_TOKEN is not. A mothership-mode node ' +
-        'authenticates every persistence call with a machine token minted by the mothership; ' +
-        'set LOCAL_MOTHERSHIP_TOKEN and restart. (Login-based minting lands in a later slice.)',
-    )
-  }
-  const client = new HttpPersistenceRpcClient({ baseUrl, token })
+  const machineTokenStore = createLocalMachineTokenStore(
+    localDbPath(env.LOCAL_MOTHERSHIP_TOKEN_DB, 'machine-token.sqlite'),
+  )
+  const envToken = env.LOCAL_MOTHERSHIP_TOKEN?.trim()
+  const client = new HttpPersistenceRpcClient({
+    baseUrl,
+    token: () => envToken || validCachedToken(machineTokenStore),
+  })
   const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
@@ -91,9 +112,89 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     repos,
     credentialStore,
     workQueue,
+    machineTokenStore,
     close: () => {
       credentialStore.close()
       workQueue.close()
+      machineTokenStore.close()
+    },
+  }
+}
+
+/**
+ * Build the local-mode mothership login connector: exchange a mothership SESSION token (captured
+ * by the SPA from the OAuth redirect fragment) for a machine token via `POST /auth/machine-token`,
+ * cache the OPAQUE result in the local store, and report the resulting scope. The mothership
+ * assigns the node id on each connect: the forwarded session is opaque here, so the node can't
+ * tell WHICH user is connecting, and reusing the previously-cached id would mint a different
+ * user's token under the last user's node id (conflating identity for future revocation). The
+ * mothership verifies the session (its own secret) — the node never verifies the returned token,
+ * it only presents it — so a session the mothership won't mint for yields a clean failure.
+ */
+export function createMothershipConnector(opts: {
+  baseUrl: string
+  store: LocalMachineTokenStore
+  fetchImpl?: typeof fetch
+}): MothershipConnector {
+  const fetchImpl = opts.fetchImpl ?? fetch
+  const baseUrl = opts.baseUrl.replace(/\/$/, '')
+  return {
+    async connect(session) {
+      let res: Response
+      try {
+        res = await fetchImpl(`${baseUrl}/auth/machine-token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${session}` },
+          // No client-supplied node id: the mothership assigns one bound to the verified user,
+          // so a reconnect as a different user never inherits the previous user's node id.
+          body: '{}',
+        })
+      } catch (err) {
+        return {
+          ok: false,
+          status: 502,
+          message: `Could not reach the mothership: ${err instanceof Error ? err.message : String(err)}`,
+        }
+      }
+      const body = (await res.json().catch(() => null)) as {
+        token?: string
+        nodeId?: string
+        userId?: string
+        accountIds?: string[]
+        exp?: number
+        user?: {
+          id: string
+          login: string
+          name: string | null
+          avatarUrl: string | null
+          email?: string | null
+        }
+        error?: { message?: string }
+      } | null
+      if (
+        !res.ok ||
+        !body?.token ||
+        !body.nodeId ||
+        !body.userId ||
+        !Array.isArray(body.accountIds) ||
+        typeof body.exp !== 'number' ||
+        !body.user
+      ) {
+        return {
+          ok: false,
+          status: res.status || 502,
+          message: body?.error?.message ?? 'The mothership rejected the sign-in',
+        }
+      }
+      opts.store.write({
+        token: body.token,
+        nodeId: body.nodeId,
+        userId: body.userId,
+        accountIds: body.accountIds,
+        exp: body.exp,
+        createdAt: Date.now(),
+      })
+      return { ok: true, accountIds: body.accountIds, exp: body.exp, user: body.user }
     },
   }
 }
