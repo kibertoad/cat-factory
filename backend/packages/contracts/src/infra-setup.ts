@@ -17,10 +17,13 @@ import * as v from 'valibot'
 //     Node facade delegates container agents to a pool (Cloudflare has built-in
 //     per-run containers, local runs them on the host), so this is `not_applicable`
 //     everywhere except an unconfigured Node deployment. Unset ⇒ NO agents can run.
-//   - binary storage — the per-account content-storage backend. On the Node facade
-//     it defaults to `off`; Cloudflare binds R2 and local defaults to a filesystem
-//     store, so this is `not_applicable`/`configured` there. Unset ⇒ screenshot /
-//     reference-image storage (the UI-tester + visual-confirmation gate) is off.
+//   - binary storage — the per-account content-storage backend. Every facade wires an
+//     artifact-store resolver, so this is effectively `configured`/`not_defined`, not
+//     `not_applicable`: local defaults to a filesystem store and Cloudflare with an
+//     `ARTIFACT_BUCKET` binding defaults to R2 (both ⇒ `configured`), while the Node
+//     facade defaults to `off` AND a Cloudflare deployment WITHOUT that binding also
+//     resolves nothing (both ⇒ `not_defined`). Unset ⇒ screenshot / reference-image
+//     storage (the UI-tester + visual-confirmation gate) is off.
 // ---------------------------------------------------------------------------
 
 /**

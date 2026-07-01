@@ -2,8 +2,12 @@
 // Loud prompt that this deployment needs a piece of infrastructure the operator hasn't set up
 // yet, so a whole class of agents can't run. Driven off the server-computed `infraSetup`
 // snapshot projection (`not_defined` per area) — so it only fires on a runtime that actually
-// requires the piece (e.g. the runner-pool executor + binary storage only matter on remote
-// Node; ephemeral test environments on any runtime that wires the integration).
+// requires the piece (the runner-pool executor matters on remote Node; binary storage on any
+// runtime whose account picked no backend — incl. Cloudflare without an ARTIFACT_BUCKET binding;
+// ephemeral test environments on any runtime that wires the integration).
+//
+// The outer overlay is `pointer-events-none` (only the banner CARDS re-enable pointer events), so
+// the full-width top strip it spans never intercepts clicks on the board chrome underneath it.
 //
 // Dismissal offers the two choices the product asks for: hide for THIS SESSION (a ui-store flag,
 // cleared on workspace switch, re-nags next load) or "I'm OK with the limitations, don't notify
@@ -23,8 +27,11 @@ const workspace = useWorkspaceStore()
 // only testing agents; missing storage only degrades the UI-tester's screenshots.
 const AREAS: InfraSetupArea[] = ['agentExecutor', 'ephemeralEnvironments', 'binaryStorage']
 
-// Exhaustive per-area presentation (leaf i18n keys mirror the area verbatim, so the typed
-// message-key check covers each). `action` deep-links into the relevant setup surface.
+// Exhaustive per-area presentation (an exhaustive `Record<InfraSetupArea, …>`, so adding an area
+// without a meta entry fails typecheck — the tier-2 guard). The i18n keys are resolved
+// dynamically (`t(AREA_META[area].titleKey)`), so tier-1 typed-key checking doesn't cover them;
+// the `i18n:check` drift guard (tier 3) catches any that are absent from the catalog. `action`
+// deep-links into the relevant setup surface.
 const AREA_META: Record<
   InfraSetupArea,
   { icon: string; titleKey: string; bodyKey: string; actionKey: string; onConfigure: () => void }
@@ -105,12 +112,12 @@ function dismissMenu(area: InfraSetupArea): DropdownMenuItem[][] {
   <Transition name="fade">
     <div
       v-if="visible.length > 0"
-      class="absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
+      class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
     >
       <div
         v-for="area in visible"
         :key="area"
-        class="w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
+        class="pointer-events-auto w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
         role="alert"
         :data-testid="`infra-setup-banner-${area}`"
       >

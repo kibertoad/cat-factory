@@ -13,7 +13,12 @@ import {
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { EnvironmentBackendRegistry, RunnerBackendRegistry } from '@cat-factory/integrations'
-import type { BackendKindOption, CustomAgentKind, WorkspaceSnapshot } from '@cat-factory/contracts'
+import type {
+  BackendKindOption,
+  CustomAgentKind,
+  InfraSetup,
+  WorkspaceSnapshot,
+} from '@cat-factory/contracts'
 import type { AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
 
@@ -77,15 +82,36 @@ function snapshotBackendKinds(registries: {
  * The per-area infrastructure-setup status for a workspace, computed from whatever THIS
  * deployment actually wired (so it's runtime-symmetric by construction — the shared controller
  * derives it, no per-facade code). Each area is:
- *  - `not_applicable` — the integration isn't wired for this runtime (nothing to configure). The
- *    runner-pool executor is only wired on remote Node; Cloudflare has built-in per-run
- *    containers and local runs agents on the host, so it's `not_applicable` there. Binary storage
- *    is `not_applicable` when the facade wired no artifact-store resolver at all.
+ *  - `not_applicable` — the integration isn't wired for this runtime (nothing to configure), so
+ *    the read function is absent. The runner-pool executor is only wired on remote Node (Cloudflare
+ *    has built-in per-run containers, local runs agents on the host). Binary storage is
+ *    `not_applicable` only when the facade wired no artifact-store resolver at all — in practice
+ *    every facade wires one, so this area is `configured`/`not_defined` everywhere: a Cloudflare
+ *    deployment without an `ARTIFACT_BUCKET` binding (or any account that selected no backend)
+ *    reads `not_defined` too, not just stock Node.
  *  - `not_defined`    — the deployment CAN use it but the operator hasn't set it up (banner-worthy):
  *    no environment/runner-pool connection registered, or the account selected no content-storage
  *    backend (Node defaults to `off`).
  *  - `configured`     — a connection / backend is defined.
+ *
+ * IMPORTANT: this is an ADVISORY projection for a banner — it must never break the workspace
+ * snapshot (the board load). Each area's read is fault-isolated: a read that throws (e.g. a
+ * mothership persistence RPC that doesn't expose the connection repo, or a rotated encryption key
+ * that fails a secret decrypt) degrades that area to `not_applicable` ("can't tell → don't nag")
+ * rather than 500-ing `GET /workspaces/:id`.
  */
+async function areaStatus(
+  wired: boolean,
+  read: () => Promise<unknown>,
+): Promise<'not_applicable' | 'not_defined' | 'configured'> {
+  if (!wired) return 'not_applicable'
+  try {
+    return (await read()) ? 'configured' : 'not_defined'
+  } catch {
+    return 'not_applicable'
+  }
+}
+
 async function snapshotInfraSetup(
   container: {
     environments?: { connectionService: { getConnection(ws: string): Promise<unknown> } }
@@ -93,35 +119,19 @@ async function snapshotInfraSetup(
     resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
   },
   workspaceId: string,
-) {
-  const [environmentConnection, runnerConnection, binaryStore] = await Promise.all([
-    container.environments
-      ? container.environments.connectionService.getConnection(workspaceId)
-      : Promise.resolve(undefined),
-    container.runners
-      ? container.runners.connectionService.getConnection(workspaceId)
-      : Promise.resolve(undefined),
-    container.resolveBinaryArtifactStore
-      ? container.resolveBinaryArtifactStore(workspaceId)
-      : Promise.resolve(undefined),
+): Promise<InfraSetup> {
+  const [ephemeralEnvironments, agentExecutor, binaryStorage] = await Promise.all([
+    areaStatus(!!container.environments, () =>
+      container.environments!.connectionService.getConnection(workspaceId),
+    ),
+    areaStatus(!!container.runners, () =>
+      container.runners!.connectionService.getConnection(workspaceId),
+    ),
+    areaStatus(!!container.resolveBinaryArtifactStore, () =>
+      container.resolveBinaryArtifactStore!(workspaceId),
+    ),
   ])
-  return {
-    ephemeralEnvironments: !container.environments
-      ? ('not_applicable' as const)
-      : environmentConnection
-        ? ('configured' as const)
-        : ('not_defined' as const),
-    agentExecutor: !container.runners
-      ? ('not_applicable' as const)
-      : runnerConnection
-        ? ('configured' as const)
-        : ('not_defined' as const),
-    binaryStorage: !container.resolveBinaryArtifactStore
-      ? ('not_applicable' as const)
-      : binaryStore
-        ? ('configured' as const)
-        : ('not_defined' as const),
-  }
+  return { ephemeralEnvironments, agentExecutor, binaryStorage }
 }
 
 function deploymentModelDefaults(routing: AgentRouting) {

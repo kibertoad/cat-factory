@@ -91,10 +91,23 @@ export async function startRun(
  * Make the SPA open a specific workspace on load by pre-seeding the persisted store
  * (pinia-plugin-persistedstate writes the `workspace` store's picked `workspaceId` to
  * localStorage). Must be called BEFORE `page.goto`.
+ *
+ * Also permanently dismisses the infra-setup banner for every area. The e2e backend is a
+ * stock Node deployment (ENCRYPTION_KEY set ⇒ the runner-pool surface is wired but no pool is
+ * registered, content storage defaults to `off`), so the advisory `InfraSetupBanner` would
+ * legitimately render a full-width top overlay and intercept clicks on the board chrome the
+ * specs drive — orthogonal noise for every non-banner spec. The banner reads its permanent
+ * dismissals from `cat-factory:infra-setup-dismissed` keyed by user id; auth is off in e2e so
+ * the key is `local`. Seeding it here (before `goto`, the single choke point every board spec
+ * routes through) keeps the suite deterministic without a test-only branch in product code.
  */
 export async function pinWorkspace(page: Page, workspaceId: string): Promise<void> {
   await page.addInitScript((id) => {
     window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
+    window.localStorage.setItem(
+      'cat-factory:infra-setup-dismissed',
+      JSON.stringify({ local: ['agentExecutor', 'ephemeralEnvironments', 'binaryStorage'] }),
+    )
   }, workspaceId)
 }
 
