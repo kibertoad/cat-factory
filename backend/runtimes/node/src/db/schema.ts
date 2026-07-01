@@ -250,6 +250,10 @@ export const blocks = pgTable(
     provisioning: text('provisioning'),
     cloud_provider: text('cloud_provider'),
     instance_size: text('instance_size'),
+    // Frontend-frame-level (`type: 'frontend'`): serialized FrontendConfig — how to
+    // build/serve/mock the frontend for a self-contained UI test + its backend
+    // bindings (env-var → upstream), which double as the board's frontend→service links.
+    frontend_config: text('frontend_config'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),

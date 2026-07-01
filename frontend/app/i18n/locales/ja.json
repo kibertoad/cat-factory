@@ -378,6 +378,34 @@
       "manageBoard": "このボードのフラグメントライブラリを管理…",
       "manageAccount": "アカウントのフラグメントを管理…"
     },
+    "frontendConfig": {
+      "title": "フロントエンド",
+      "hint": "自己完結型の UI テストのために、このフロントエンドをビルド、配信、モックする方法。下のバインディングは、呼び出すバックエンドサービスとフロントエンドをつなぎます。",
+      "packageManager": "パッケージマネージャー",
+      "installCommand": "インストールコマンド",
+      "buildScript": "ビルドスクリプト",
+      "outputDir": "出力ディレクトリ",
+      "serveMode": "配信モード",
+      "serveStatic": "静的",
+      "serveCommand": "コマンド",
+      "serveModeHint": "静的はビルド出力ディレクトリを配信します。コマンドは package.json のスクリプト（例: preview）を実行します。",
+      "serveScript": "配信スクリプト",
+      "servePort": "配信ポート",
+      "mockMappingsPath": "モックマッピングのパス",
+      "envInjection": "環境変数の注入",
+      "envBuild": "ビルド時",
+      "envRuntime": "ランタイム",
+      "envInjectionHint": "ビルド時はバックエンドの URL をビルド環境変数として注入します。ランタイムは window.env シムに書き込みます。",
+      "previewEnabled": "閲覧可能なプレビューを有効にする",
+      "previewHint": "クリック可能な URL 付きの配信プレビューを実行し続けます。Local および Node ランタイムのみ。",
+      "bindings": {
+        "title": "バックエンドバインディング",
+        "hint": "フロントエンドがアップストリーム URL のために読み取る各環境変数と、その解決先: バインドされたサービスの一時環境、または WireMock スタブ。",
+        "mock": "モック（WireMock）",
+        "remove": "バインディングを削除",
+        "empty": "バックエンドバインディングがありません。追加して、環境変数をサービスまたはモックに向けてください。"
+      }
+    },
     "releaseHealth": {
       "title": "リリース後の健全性",
       "clear": "クリア",
