@@ -1,5 +1,14 @@
 # @cat-factory/server
 
+## 0.60.2
+
+### Patch Changes
+
+- Updated dependencies [b744822]
+- Updated dependencies [c40736e]
+  - @cat-factory/integrations@0.50.1
+  - @cat-factory/orchestration@0.51.6
+
 ## 0.60.1
 
 ### Patch Changes
