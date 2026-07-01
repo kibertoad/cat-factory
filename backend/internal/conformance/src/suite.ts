@@ -2286,6 +2286,47 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(retried.status).toBe(409)
         expect(retried.body.error.details?.reason).toBe('providers_unconfigured')
       })
+
+      it('runs the SAME provider guard on RESTART-from-step as on start', async () => {
+        // A restart re-dispatches the stored steps just like a retry (from an arbitrary step),
+        // so it must be gated identically — otherwise a run whose model went unconfigured slips
+        // past restart and strands mid-run. Start under a configured model, fail it, remove the
+        // provider, restart from step 0 → refused up front with the same conflict a start gives.
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { asyncKinds: ['coder'], dispatchThrowKinds: ['coder'] },
+          { cloudflareModelsEnabled: false },
+        )
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const key = await call<{ id: string }>('POST', `/workspaces/${wsId}/api-keys`, KEY)
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+
+        const removed = await call('DELETE', `/workspaces/${wsId}/api-keys/${key.body.id}`)
+        expect(removed.status).toBe(204)
+
+        // Restart from the first step → refused with providers_unconfigured, because restart now
+        // shares start's `assertRunnable` gate over the stored steps it re-drives.
+        const restarted = await call<{ error: { details?: { reason?: string } } }>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/restart`,
+          { fromStepIndex: 0 },
+        )
+        expect(restarted.status).toBe(409)
+        expect(restarted.body.error.details?.reason).toBe('providers_unconfigured')
+      })
     })
 
     describe('merge presets', () => {
