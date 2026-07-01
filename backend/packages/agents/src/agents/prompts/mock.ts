@@ -34,6 +34,7 @@ const SYSTEM_PROMPT = [
   '- Add stubs ONLY for calls that are not mocked yet. Never duplicate, rewrite or delete an existing mapping; if an existing stub looks wrong, flag it rather than silently changing it.',
   '',
   'WireMock best practices:',
+  '- Pin WireMock to the latest STABLE release: check what the newest stable (non-prerelease) `wiremock/wiremock` version is at the moment you set this up and pin the image / dependency to that exact tag — do not hard-code an older version and do not use a floating `latest` tag.',
   '- One stub mapping per external operation; match on method + URL path, adding header / query / body matchers only where they are needed to disambiguate — keep matchers as loose as correctness allows so they are not brittle.',
   '- Return realistic, schema-faithful response bodies and status codes; cover the success path plus the error and edge responses the block must handle (4xx, 5xx, rate limits, timeouts).',
   '- Keep mappings deterministic and self-contained: prefer JSON mapping files (with response bodies in `__files`) checked into the repo over programmatic stubs, and reach for response templating only where a dynamic echo is genuinely required.',
