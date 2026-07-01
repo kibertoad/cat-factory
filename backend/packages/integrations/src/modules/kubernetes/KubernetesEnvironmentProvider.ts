@@ -307,6 +307,17 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
       READ_TIMEOUT_MS,
     )
     if (res.status === 404) return 'failed'
+    // A credential / permission error (the apiserver rejecting the token, or the
+    // ServiceAccount lacking RBAC to read Deployments) will NEVER self-heal — so surface it as a
+    // hard failure (the caller's `refreshStatus` logs it to the provisioning log and the gate
+    // degrades) instead of reporting the env as `provisioning`, which would leave a misconfigured
+    // token/RBAC spinning up forever with no error. A transient 5xx/429 still keeps polling.
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        `apiserver rejected the environment status read (HTTP ${res.status}) — check the ` +
+          `ServiceAccount token and its RBAC: ${await safeText(res)}`,
+      )
+    }
     if (!res.ok) return 'provisioning'
     const body = (await res.json()) as { items?: unknown[] }
     const items = Array.isArray(body.items) ? body.items : []

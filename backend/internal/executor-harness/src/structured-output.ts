@@ -283,7 +283,9 @@ async function callRepair<T>(
     model: access.model,
     stream: false,
     max_tokens: REPAIR_MAX_OUTPUT_TOKENS,
-    temperature: 0,
+    // No `temperature`: the newest models (Anthropic Opus 4.7+/the Claude 5 family) reject
+    // any sampling parameter with a 400, and a single-shot repair whose system prompt already
+    // forces JSON-only output doesn't need one — so we omit it for every model/provider.
     messages,
   }
 
@@ -343,7 +345,10 @@ async function callSubscriptionRepair<T>(
   const body = {
     model: access.model,
     max_tokens: REPAIR_MAX_OUTPUT_TOKENS,
-    temperature: 0,
+    // No `temperature`: Anthropic's newest models (Opus 4.7+/Claude 5 family) reject the
+    // sampling parameters with `400 invalid_request_error: temperature is deprecated for this
+    // model`. The repair prompt fully constrains the output to JSON, so determinism via
+    // temperature=0 isn't needed — omitting it keeps the call valid on every model.
     system: REPAIR_SYSTEM,
     messages: [
       {
