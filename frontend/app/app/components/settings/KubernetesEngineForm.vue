@@ -160,7 +160,8 @@ watch(
     if (!prefill || props.handler || props.engine !== 'local-k3s') return
     if (prefill.label.trim()) form.label = prefill.label.trim()
     if (prefill.apiServerUrl.trim()) form.apiServerUrl = prefill.apiServerUrl.trim()
-    form.insecureSkipTlsVerify = prefill.insecureSkipTlsVerify
+    if (prefill.insecureSkipTlsVerify !== undefined)
+      form.insecureSkipTlsVerify = prefill.insecureSkipTlsVerify
     if (prefill.namespaceTemplate.trim()) form.namespaceTemplate = prefill.namespaceTemplate.trim()
     if (prefill.hostTemplate.trim()) {
       form.urlSource = 'ingressTemplate'

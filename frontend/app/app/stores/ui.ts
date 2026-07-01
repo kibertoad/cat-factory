@@ -24,7 +24,9 @@ export interface K3sSetupPrefill {
   apiServerUrl: string
   namespaceTemplate: string
   hostTemplate: string
-  insecureSkipTlsVerify: boolean
+  // Absent when the link omitted the param, so the form keeps its engine default rather than
+  // forcing verification back on (which would break a self-signed local cluster).
+  insecureSkipTlsVerify?: boolean
 }
 
 /** Transient UI state: selection, panels, zoom level. */
@@ -565,7 +567,11 @@ export const useUiStore = defineStore('ui', () => {
       apiServerUrl: params.get('apiServerUrl') ?? '',
       namespaceTemplate: params.get('namespaceTemplate') ?? '',
       hostTemplate: params.get('hostTemplate') ?? '',
-      insecureSkipTlsVerify: params.get('insecureSkipTlsVerify') === '1',
+      // Only carry the flag the link actually set — a missing param leaves the form's engine
+      // default (skip-TLS on for a local self-signed cluster) untouched.
+      insecureSkipTlsVerify: params.has('insecureSkipTlsVerify')
+        ? params.get('insecureSkipTlsVerify') === '1'
+        : undefined,
     }
     resetHubReturn()
     infrastructureTab.value = 'environment'
