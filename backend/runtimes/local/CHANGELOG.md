@@ -1,5 +1,19 @@
 # @cat-factory/local-server
 
+## 0.33.4
+
+### Patch Changes
+
+- 37c488f: Internal refactor of mothership-mode code (no behaviour change): share one `node:sqlite` open
+  helper between the local credential store and work queue, make `statusForPersistenceError` a
+  lookup table, inline the trivial mothership db-path wrappers, bind `pickRepoSource` through a
+  local `sourced` helper (collapsing the repeated `remoteRepos`/`db` wiring, including the five
+  GitHub projection repos) in the Node container, and centralize the mothership-vs-Postgres
+  persistence decision in the local container behind a single `resolveLocalPersistence` helper.
+- Updated dependencies [37c488f]
+  - @cat-factory/node-server@0.53.7
+  - @cat-factory/server@0.60.3
+
 ## 0.33.3
 
 ### Patch Changes
