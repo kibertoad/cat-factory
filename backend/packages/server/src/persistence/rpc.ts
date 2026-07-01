@@ -322,6 +322,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
+  // The board's run controls (retry / stop a failed or running run) enter through the unified
+  // `agent_runs` table: `AgentRunController` calls `getRef(workspaceId, id)` to resolve the run's
+  // KIND, then dispatches to the matching service. `getRef` takes the workspaceId as arg0, so it
+  // reuses the `workspace` rule (resolve the owning account, reject out-of-scope as 404). Exposing
+  // it makes the EXECUTION-run retry/stop path functional in mothership mode — every downstream
+  // read+write those services make (`executionRepository.get/deleteByBlock/upsert/markFailed`,
+  // `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage prechecks) is
+  // already allow-listed on the run/start path. The bootstrap + env-config-repair retry branches
+  // read their own repos (`bootstrapJobRepository.get`, `referenceArchitectureRepository.get`, …),
+  // which stay `pending` — a later slice. The sweeper-only `listStale`/`liveRunIds` stay
+  // mothership-internal (its cron owns them).
+  agentRunRepository: {
+    getRef: { scope: { kind: 'workspace', arg: 0 } },
+  },
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
