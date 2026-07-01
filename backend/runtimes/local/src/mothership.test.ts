@@ -245,8 +245,8 @@ describe('createMothershipConnector', () => {
     store.close()
   })
 
-  it('reuses a prior node id across reconnects', async () => {
-    const bodies: unknown[] = []
+  it('never reuses a cached node id (the mothership assigns one, avoiding cross-user conflation)', async () => {
+    const bodies: Record<string, unknown>[] = []
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
       bodies.push(JSON.parse(String(init.body)))
       return new Response(JSON.stringify(mintResponse), {
@@ -255,6 +255,7 @@ describe('createMothershipConnector', () => {
       })
     })
     const store = createLocalMachineTokenStore(':memory:')
+    // A prior connect (as some other user) left node_prior in the cache.
     store.write({
       token: 't',
       nodeId: 'node_prior',
@@ -265,7 +266,10 @@ describe('createMothershipConnector', () => {
     })
     const connector = createMothershipConnector({ baseUrl: 'https://m.test', store })
     await connector.connect('session-xyz')
-    expect(bodies[0]).toMatchObject({ nodeId: 'node_prior' })
+    // The request carries NO node id, so a different user never inherits node_prior; the node id
+    // the mothership returns is what gets cached.
+    expect(bodies[0]).toEqual({})
+    expect(store.read()?.nodeId).toBe('node_1')
     store.close()
   })
 

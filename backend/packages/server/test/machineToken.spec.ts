@@ -14,7 +14,7 @@ const SECRET = 'test-session-secret-0123456789'
 
 describe('mintMachineToken', () => {
   it('mints a token that verifies under the machine audience with the given scope', async () => {
-    const token = await mintMachineToken(SECRET, {
+    const { token, exp, nodeId } = await mintMachineToken(SECRET, {
       userId: 'usr_1',
       accountIds: ['acc_1', 'acc_2'],
       nodeId: 'node_1',
@@ -29,15 +29,18 @@ describe('mintMachineToken', () => {
       scope: { accountIds: ['acc_1', 'acc_2'] },
     })
     expect(payload!.exp).toBeGreaterThan(Date.now())
+    // The returned exp/nodeId are EXACTLY what was signed (no second clock read that drifts).
+    expect(exp).toBe(payload!.exp)
+    expect(nodeId).toBe('node_1')
   })
 
   it('does NOT verify under a different audience (cross-token-confusion defence)', async () => {
-    const token = await mintMachineToken(SECRET, { userId: 'usr_1', accountIds: ['acc_1'] })
+    const { token } = await mintMachineToken(SECRET, { userId: 'usr_1', accountIds: ['acc_1'] })
     expect(await new HmacSigner(SECRET).verify(token, { aud: TOKEN_AUDIENCE.session })).toBeNull()
   })
 
   it('honours an explicit ttl and generates a node id when none is given', async () => {
-    const token = await mintMachineToken(SECRET, {
+    const { token, nodeId } = await mintMachineToken(SECRET, {
       userId: 'usr_1',
       accountIds: ['acc_1'],
       ttlMs: 1000,
@@ -47,6 +50,8 @@ describe('mintMachineToken', () => {
     })
     expect(payload!.exp).toBeLessThanOrEqual(Date.now() + 1000)
     expect(payload!.nodeId).toMatch(/^node_/)
+    // The generated id is returned to the caller, not left for it to re-derive.
+    expect(nodeId).toBe(payload!.nodeId)
   })
 })
 

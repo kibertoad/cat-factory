@@ -25,17 +25,24 @@ export function resolveMachineTokenTtlMs(raw: string | undefined): number {
  * (the mothership's session secret — the same key `PersistenceController` verifies against).
  * `nodeId` identifies the local node the token is minted for (telemetry / future revocation);
  * `ttlMs` bounds the token's life (default {@link DEFAULT_MACHINE_TOKEN_TTL_MS}).
+ *
+ * Returns the signed token alongside the exact `exp` and `nodeId` it committed to, so a caller
+ * echoes the authoritative values instead of recomputing them (a second `Date.now()` would drift
+ * from the signed claim).
  */
-export function mintMachineToken(
+export async function mintMachineToken(
   secret: string,
   opts: { userId: string; accountIds: string[]; nodeId?: string; ttlMs?: number },
-): Promise<string> {
+): Promise<{ token: string; exp: number; nodeId: string }> {
+  const nodeId = opts.nodeId ?? `node_${crypto.randomUUID()}`
+  const exp = Date.now() + (opts.ttlMs ?? DEFAULT_MACHINE_TOKEN_TTL_MS)
   const payload: MachinePayload = {
     aud: TOKEN_AUDIENCE.machine,
-    nodeId: opts.nodeId ?? `node_${crypto.randomUUID()}`,
+    nodeId,
     userId: opts.userId,
     scope: { accountIds: opts.accountIds },
-    exp: Date.now() + (opts.ttlMs ?? DEFAULT_MACHINE_TOKEN_TTL_MS),
+    exp,
   }
-  return new HmacSigner(secret).sign(payload)
+  const token = await new HmacSigner(secret).sign(payload)
+  return { token, exp, nodeId }
 }

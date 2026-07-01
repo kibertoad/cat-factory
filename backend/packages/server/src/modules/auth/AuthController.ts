@@ -95,10 +95,22 @@ function googleCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): st
 }
 
 /**
+ * A loopback host (the user's OWN machine): `localhost`, the `127.0.0.0/8` block, or IPv6 `::1`.
+ * A redirect to one of these is not an exfiltration vector — capturing the fragment there means
+ * already running a server on the victim's own machine. This is what lets a mothership honour the
+ * post-login redirect back to a mothership-mode LOCAL node (`http://localhost:PORT`), which is
+ * neither same-origin nor pre-allowlisted, without an operator hand-listing every dev port.
+ */
+function isLoopbackRedirect(url: URL): boolean {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
+}
+
+/**
  * Choose the post-login landing URL from the (untrusted) `redirect` query. The
  * session token is appended as a fragment, so an unrestricted redirect is a
- * token-exfiltration primitive — only same-origin or explicitly allowlisted origins
- * are honoured, else the request origin.
+ * token-exfiltration primitive — only same-origin, an explicitly allowlisted origin, or a
+ * loopback host (the caller's own machine) is honoured, else the request origin.
  */
 export function pickPostLoginRedirect(
   requested: string | undefined,
@@ -111,7 +123,11 @@ export function pickPostLoginRedirect(
   try {
     const url = new URL(requested)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback
-    if (url.origin === requestOrigin || cfg.allowedRedirectOrigins.includes(url.origin)) {
+    if (
+      url.origin === requestOrigin ||
+      cfg.allowedRedirectOrigins.includes(url.origin) ||
+      isLoopbackRedirect(url)
+    ) {
       return requested
     }
   } catch {
@@ -142,13 +158,18 @@ function sessionUser(user: UserRecord, login: string): SessionUser {
   }
 }
 
-async function mintSession(cfg: AuthConfig, user: SessionUser): Promise<string> {
-  const session: SessionPayload = {
-    ...user,
-    aud: TOKEN_AUDIENCE.session,
-    exp: Date.now() + cfg.sessionTtlMs,
-  }
-  return new HmacSigner(cfg.sessionSecret).sign(session)
+/**
+ * Mint a user SESSION token, returning the signed token and the exact `exp` it committed to so a
+ * caller can report the real expiry without a second clock read. Shared by every login path AND
+ * the local-mode mothership-connect controller, so the session claim shape lives in one place.
+ */
+export async function mintSession(
+  cfg: AuthConfig,
+  user: SessionUser,
+): Promise<{ token: string; exp: number }> {
+  const exp = Date.now() + cfg.sessionTtlMs
+  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp }
+  return { token: await new HmacSigner(cfg.sessionSecret).sign(session), exp }
 }
 
 /** Whether an email's domain is on the self-signup allowlist. */
@@ -351,7 +372,7 @@ export function authController(): Hono<AppEnv> {
       name: user.name,
     })
     if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
-    const token = await mintSession(cfg, sessionUser(user, identity.login))
+    const { token } = await mintSession(cfg, sessionUser(user, identity.login))
     return c.redirect(withToken(state.redirect, token))
   })
 
@@ -424,7 +445,7 @@ export function authController(): Hono<AppEnv> {
       name: user.name,
     })
     if (state.invite) await acceptInvite(c, state.invite, user.id, user.email)
-    const token = await mintSession(cfg, sessionUser(user, identity.email || user.id))
+    const { token } = await mintSession(cfg, sessionUser(user, identity.email || user.id))
     return c.redirect(withToken(state.redirect, token))
   })
 
@@ -463,7 +484,7 @@ export function authController(): Hono<AppEnv> {
         name: user.name,
       })
       if (body.invite) await acceptInvite(c, body.invite, user.id, user.email)
-      const token = await mintSession(cfg, sessionUser(user, user.email || user.id))
+      const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
       return c.json({ token, user: sessionUser(user, user.email || user.id) }, 201)
     } catch (err) {
       if (err instanceof ConflictError || err instanceof ValidationError) {
@@ -482,7 +503,7 @@ export function authController(): Hono<AppEnv> {
     if (!user) {
       return c.json({ error: { code: 'unauthorized', message: 'Invalid email or password' } }, 401)
     }
-    const token = await mintSession(cfg, sessionUser(user, user.email || user.id))
+    const { token } = await mintSession(cfg, sessionUser(user, user.email || user.id))
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
   })
 
@@ -560,7 +581,7 @@ export function authController(): Hono<AppEnv> {
       name: user.name,
     })
     const session = sessionUser(user, identity.login)
-    const sessionToken = await mintSession(cfg, session)
+    const { token: sessionToken } = await mintSession(cfg, session)
     return c.json({ token: sessionToken, user: session }, 200)
   })
 
@@ -582,16 +603,11 @@ export function authController(): Hono<AppEnv> {
         503,
       )
     }
-    const secret = cfg.sessionSecret
-    // Verify the presented bearer as a SESSION token directly (pinned `aud: session`), NOT via
-    // the authGate — `/internal`-style machine calls bypass that gate, and pinning the audience
+    // Verify the presented bearer as a SESSION token (pinned `aud: session`), NOT via the
+    // authGate — `/internal`-style machine calls bypass that gate, and pinning the audience
     // stops a container/ws/machine token from being replayed to mint a fresh machine token.
-    const presented = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const session = secret
-      ? await new HmacSigner(secret).verify<SessionPayload>(presented, {
-          aud: TOKEN_AUDIENCE.session,
-        })
-      : null
+    // `verifySession` is the one place that check lives, so this endpoint can't drift from it.
+    const session = await verifySession(c)
     if (!session) {
       return c.json(
         { error: { code: 'forbidden', message: 'A valid session is required to mint a token' } },
@@ -617,12 +633,12 @@ export function authController(): Hono<AppEnv> {
         403,
       )
     }
-    const nodeId = body.nodeId ?? `node_${crypto.randomUUID()}`
-    const exp = Date.now() + cfg.machineTokenTtlMs
-    const token = await mintMachineToken(secret, {
+    // The mint helper computes and signs the authoritative `exp`/`nodeId`, then hands them back
+    // so the response echoes EXACTLY what was signed (no second clock read that could drift).
+    const { token, exp, nodeId } = await mintMachineToken(cfg.sessionSecret, {
       userId: session.id,
       accountIds,
-      nodeId,
+      nodeId: body.nodeId,
       ttlMs: cfg.machineTokenTtlMs,
     })
     return c.json(

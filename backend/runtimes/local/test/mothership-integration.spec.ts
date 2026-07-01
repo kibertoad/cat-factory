@@ -156,11 +156,13 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
 
     // The machine token the local node presents on every RPC: audience-pinned `machine`,
     // scoped to the seeded account, signed with the mothership's session secret.
-    machineToken = await mintMachineToken(SESSION_SECRET, {
-      userId: ORG_OWNER.id,
-      accountIds: [account.id],
-      nodeId: 'node_integration-test',
-    })
+    machineToken = (
+      await mintMachineToken(SESSION_SECRET, {
+        userId: ORG_OWNER.id,
+        accountIds: [account.id],
+        nodeId: 'node_integration-test',
+      })
+    ).token
 
     // Serve the mothership on an ephemeral loopback port (a REAL HTTP backend for the RPC).
     mothershipUrl = await new Promise<string>((resolve) => {

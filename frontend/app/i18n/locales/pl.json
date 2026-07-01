@@ -832,7 +832,8 @@
     },
     "mothership": {
       "signIn": "Zaloguj się przez serwer centralny",
-      "hint": "Twoje projekty i tożsamość znajdują się na hostowanym serwerze centralnym — zaloguj się tam, aby połączyć ten węzeł."
+      "hint": "Twoje projekty i tożsamość znajdują się na hostowanym serwerze centralnym. Zaloguj się tam, aby połączyć ten węzeł.",
+      "error": "Nie udało się zalogować przez serwer centralny. Spróbuj ponownie."
     }
   },
   "layout": {

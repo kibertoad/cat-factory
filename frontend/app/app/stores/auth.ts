@@ -61,6 +61,12 @@ export const useAuthStore = defineStore(
     /** True once the initial auth handshake has settled. */
     const ready = ref(false)
     /**
+     * Mothership mode: the last mothership sign-in failure (node unreachable / rejected session),
+     * or null. Set when the post-OAuth connect exchange fails, so the login screen can tell the
+     * user the click didn't take instead of silently returning them to the sign-in button.
+     */
+    const mothershipError = ref<string | null>(null)
+    /**
      * True only once `getAuthConfig()` has resolved successfully. Distinguishes "the backend
      * told us auth is off" from "we never reached the backend" (the bootstrap catch path),
      * so an unreachable backend falls through to the board's own error UI instead of being
@@ -130,8 +136,12 @@ export const useAuthStore = defineStore(
       try {
         const result = await api.connectMothership(session)
         applySession({ token: result.session, user: result.user })
-      } catch {
-        // Leave the user on the login screen to retry; the node stays unconnected.
+        mothershipError.value = null
+      } catch (err) {
+        // Surface the failure so the login screen shows it, rather than silently dropping the
+        // user back on the sign-in button as if the click did nothing. The captured session is
+        // already stripped from the URL, so recovery is a fresh "Sign in via mothership".
+        mothershipError.value = err instanceof Error ? err.message : 'Could not connect to the mothership'
       }
       return true
     }
@@ -145,6 +155,7 @@ export const useAuthStore = defineStore(
       if (typeof window === 'undefined') return
       const base = localMode.value?.mothershipUrl
       if (!base) return
+      mothershipError.value = null
       const here = new URL(window.location.origin + window.location.pathname)
       here.searchParams.set('mothership_connect', '1')
       const redirect = new URLSearchParams({ redirect: here.toString() })
@@ -321,6 +332,7 @@ export const useAuthStore = defineStore(
       infrastructure,
       autoLoginProvider,
       ready,
+      mothershipError,
       configLoaded,
       isLocalFacade,
       isAuthenticated,

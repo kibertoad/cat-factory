@@ -203,6 +203,13 @@ const noSignInMethod = computed(
           {{ t('auth.mothership.signIn') }}
         </UButton>
         <p class="px-1 text-xs text-slate-400">{{ t('auth.mothership.hint') }}</p>
+        <p
+          v-if="auth.mothershipError"
+          class="px-1 text-xs text-rose-400"
+          data-testid="mothership-error"
+        >
+          {{ t('auth.mothership.error') }}
+        </p>
       </div>
 
       <!-- Local mode: sign in with the env-configured source-control PAT. The token lives

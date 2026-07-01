@@ -1,8 +1,8 @@
 import { connectMothershipContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
-import { HmacSigner, type SessionPayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
 import type { AppEnv } from '../../http/env.js'
+import { mintSession } from '../auth/AuthController.js'
 
 /**
  * Local-mode mothership login: `POST /local/mothership/connect`.
@@ -48,16 +48,12 @@ export function mothershipConnectController(): Hono<AppEnv> {
     }
     // Mint a LOCAL session (this node's own secret) for the connected user, so the SPA is signed
     // into its own node — the mothership session it forwarded is signed with the MOTHERSHIP's
-    // secret and cannot be verified here.
+    // secret and cannot be verified here. `exp` describes THIS returned session (not the far
+    // longer-lived machine token), so a consumer scheduling re-auth uses the right deadline.
     const cfg = c.get('container').config.auth
-    const local: SessionPayload = {
-      ...result.user,
-      aud: TOKEN_AUDIENCE.session,
-      exp: Date.now() + cfg.sessionTtlMs,
-    }
-    const sessionToken = await new HmacSigner(cfg.sessionSecret).sign(local)
+    const { token: sessionToken, exp } = await mintSession(cfg, result.user)
     return c.json(
-      { accountIds: result.accountIds, exp: result.exp, session: sessionToken, user: result.user },
+      { accountIds: result.accountIds, exp, session: sessionToken, user: result.user },
       200,
     )
   })

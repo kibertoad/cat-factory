@@ -42,4 +42,23 @@ describe('pickPostLoginRedirect', () => {
     expect(pickPostLoginRedirect('javascript:alert(1)', ORIGIN, cfg)).toBe(`${ORIGIN}/`)
     expect(pickPostLoginRedirect('::::not-a-url', ORIGIN, cfg)).toBe(`${ORIGIN}/`)
   })
+
+  it('honours a loopback redirect (a mothership-mode local node signing in via the mothership)', () => {
+    // The token can only be captured on the victim's OWN machine, so loopback is not an
+    // exfiltration vector — this is what makes the "sign in via mothership" round-trip land back
+    // on the local node without an operator allowlisting every dev port.
+    for (const target of [
+      'http://localhost:5173/?mothership_connect=1',
+      'http://127.0.0.1:8787/',
+      'http://[::1]:3000/',
+    ]) {
+      expect(pickPostLoginRedirect(target, ORIGIN, cfg)).toBe(target)
+    }
+  })
+
+  it('does not treat a look-alike host as loopback', () => {
+    // Guard the regex: only the real loopback block, not a domain that merely starts with 127.
+    expect(pickPostLoginRedirect('https://localhost.evil.example/x', ORIGIN, cfg)).toBe(`${ORIGIN}/`)
+    expect(pickPostLoginRedirect('https://127.0.0.1.evil.example/x', ORIGIN, cfg)).toBe(`${ORIGIN}/`)
+  })
 })

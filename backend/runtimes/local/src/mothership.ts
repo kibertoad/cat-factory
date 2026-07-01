@@ -135,10 +135,12 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
 /**
  * Build the local-mode mothership login connector: exchange a mothership SESSION token (captured
  * by the SPA from the OAuth redirect fragment) for a machine token via `POST /auth/machine-token`,
- * cache the OPAQUE result in the local store, and report the resulting scope. A prior node id is
- * reused across reconnects (stable telemetry / future revocation), else the mothership assigns one.
- * The mothership verifies the session (its own secret) — the node never verifies the returned
- * token, it only presents it — so a session the mothership won't mint for yields a clean failure.
+ * cache the OPAQUE result in the local store, and report the resulting scope. The mothership
+ * assigns the node id on each connect: the forwarded session is opaque here, so the node can't
+ * tell WHICH user is connecting, and reusing the previously-cached id would mint a different
+ * user's token under the last user's node id (conflating identity for future revocation). The
+ * mothership verifies the session (its own secret) — the node never verifies the returned token,
+ * it only presents it — so a session the mothership won't mint for yields a clean failure.
  */
 export function createMothershipConnector(opts: {
   baseUrl: string
@@ -149,13 +151,14 @@ export function createMothershipConnector(opts: {
   const baseUrl = opts.baseUrl.replace(/\/$/, '')
   return {
     async connect(session) {
-      const priorNodeId = opts.store.read()?.nodeId
       let res: Response
       try {
         res = await fetchImpl(`${baseUrl}/auth/machine-token`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${session}` },
-          body: JSON.stringify(priorNodeId ? { nodeId: priorNodeId } : {}),
+          // No client-supplied node id: the mothership assigns one bound to the verified user,
+          // so a reconnect as a different user never inherits the previous user's node id.
+          body: '{}',
         })
       } catch (err) {
         return {

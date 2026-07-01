@@ -23,5 +23,13 @@ request (env override → unexpired cached token → none), so a token-less node
 SPA can drive the login rather than the boot throwing. The login screen gains a "Sign in via
 mothership" affordance behind `localMode.mothership` (i18n across all locales).
 
+A mothership now honours a post-login `redirect` back to a loopback host (`localhost`,
+`127.0.0.0/8`, `::1`) in `pickPostLoginRedirect`, so the "Sign in via mothership" round-trip lands
+back on the local node without an operator allowlisting every dev port (a redirect to the caller's
+own machine is not a token-exfiltration vector). A failed connect exchange now surfaces an error on
+the login screen instead of silently returning to the sign-in button, and each connect lets the
+mothership assign the node id (a reconnect as a different user never inherits the previous user's
+id).
+
 Config: `AUTH_MACHINE_TOKEN_TTL_MS` (default 30 days) sets the machine-token lifetime on both
 facades.

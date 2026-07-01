@@ -872,7 +872,8 @@
     },
     "mothership": {
       "signIn": "Sign in via mothership",
-      "hint": "Your projects and identity live on the hosted mothership — sign in there to connect this node."
+      "hint": "Your projects and identity live on the hosted mothership. Sign in there to connect this node.",
+      "error": "Could not sign in via the mothership. Try again."
     }
   },
   "layout": {

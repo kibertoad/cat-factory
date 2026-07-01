@@ -832,7 +832,8 @@
     },
     "mothership": {
       "signIn": "Ana sunucu üzerinden oturum aç",
-      "hint": "Projeleriniz ve kimliğiniz barındırılan ana sunucuda tutulur — bu düğümü bağlamak için orada oturum açın."
+      "hint": "Projeleriniz ve kimliğiniz barındırılan ana sunucuda tutulur. Bu düğümü bağlamak için orada oturum açın.",
+      "error": "Ana sunucu üzerinden oturum açılamadı. Tekrar deneyin."
     }
   },
   "layout": {

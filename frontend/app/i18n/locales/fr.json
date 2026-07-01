@@ -832,7 +832,8 @@
     },
     "mothership": {
       "signIn": "Se connecter via le serveur central",
-      "hint": "Vos projets et votre identité sont sur le serveur central hébergé — connectez-vous là-bas pour relier ce nœud."
+      "hint": "Vos projets et votre identité sont sur le serveur central hébergé. Connectez-vous là-bas pour relier ce nœud.",
+      "error": "Impossible de se connecter via le serveur central. Réessayez."
     }
   },
   "layout": {
