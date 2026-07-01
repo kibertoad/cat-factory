@@ -136,7 +136,7 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
 - **`k3s-probe.ts`** (pure) — `classifyHost(detections): HostState`, where `detections` is the
   injected output of `kubectl version` / `k3d cluster list` / `kind get clusters` / `docker info`
   / CLI `--version` checks. Produces `{ reachableCluster?, dockerAvailable, installed:
-  {k3d,kind,k3s,kubectl}, offers: Offer[] }`. Offers: _use existing cluster_, _create k3d cluster_
+{k3d,kind,k3s,kubectl}, offers: Offer[] }`. Offers: _use existing cluster_, _create k3d cluster_
   (default), _show k3s install command_. No shell-out in the pure layer.
 - **`host-shell.ts`** — the `HostShell` seam: `run(cmd, args): Promise<{code, stdout, stderr}>` +
   `which(bin)`. Real impl spawns via `child_process`; a `scriptShell` fake for tests (mirrors
@@ -155,7 +155,7 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
   - SA + **least-privilege** RBAC + token: apply the runner Role plus a scoped `ClusterRole`/binding
     for the namespace create/apply/delete the env backend needs (encode the manifest from
     `backend/docs/local-k3s-environments.md` — NOT `cluster-admin` by default), then `kubectl
-    create token cat-factory -n cat-factory` (k8s ≥ 1.24).
+create token cat-factory -n cat-factory` (k8s ≥ 1.24).
   - **Idempotent**: probe-first; reuse an existing SA/cluster rather than duplicating.
   - Each mutating step behind an **explicit confirm**; the k3s `curl | sh` path only ever _prints_
     the command (or requires an elevated confirm), never auto-runs.
@@ -166,9 +166,9 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
 
 - **`k3s-handler.ts`** (pure) — `buildK3sHandler(resolved): RegisterEnvironmentHandlerInput`
   producing `{ provisionType: 'kubernetes', config: { engine: 'local-k3s', kubernetes: { label,
-  apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hostTemplate:
-  '{{branch}}.127.0.0.1.nip.io' }, namespaceTemplate: 'cf-env-{{pullNumber}}' } }, secrets:
-  { apiToken } }`. Unit-tested against the contract schema (`registerEnvironmentHandlerSchema`).
+apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hostTemplate:
+'{{branch}}.127.0.0.1.nip.io' }, namespaceTemplate: 'cf-env-{{pullNumber}}' } }, secrets:
+{ apiToken } }`. Unit-tested against the contract schema (`registerEnvironmentHandlerSchema`).
 - **Hand-off (primary):** print the values + open the SPA form deep-linked/pre-filled; the user
   runs **Test → Save**, reusing `EnvironmentConnectionService.testHandler` (the
   `POST /workspaces/:ws/environments/handlers/test` probe from #557) + `registerHandler`. No new
@@ -194,12 +194,12 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
 
 ## Per-item status
 
-| Item                                                       | Status   | PR   |
-| ---------------------------------------------------------- | -------- | ---- |
-| Slice 0 — prefill + hint + handler test-connection probe   | done     | #557 |
-| Decide surface (CLI vs in-app wizard)                      | resolved | —    |
+| Item                                                        | Status   | PR   |
+| ----------------------------------------------------------- | -------- | ---- |
+| Slice 0 — prefill + hint + handler test-connection probe    | done     | #557 |
+| Decide surface (CLI vs in-app wizard)                       | resolved | —    |
 | Slice 1 — CLI surface + pure probe planner + shell-out seam | todo     | —    |
-| Slice 2 — provision actions (k3d default; guided k3s)      | todo     | —    |
-| Slice 3 — wire handler (build + hand-off) + verify probe   | todo     | —    |
-| Slice 4 — SPA guided entry point + deep-link               | todo     | —    |
-| Slice 5 — docs + escape hatch + tracker update             | todo     | —    |
+| Slice 2 — provision actions (k3d default; guided k3s)       | todo     | —    |
+| Slice 3 — wire handler (build + hand-off) + verify probe    | todo     | —    |
+| Slice 4 — SPA guided entry point + deep-link                | todo     | —    |
+| Slice 5 — docs + escape hatch + tracker update              | todo     | —    |

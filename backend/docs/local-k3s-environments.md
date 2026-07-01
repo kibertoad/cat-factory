@@ -57,10 +57,10 @@ can use the `kubernetes` backend with no extra code:
    - `apiToken`: the ServiceAccount token (stored encrypted).
    - the **URL derivation** (ingress-template host like `{{branch}}.127.0.0.1.nip.io` works with
      k3s Traefik; or a `serviceStatus` LoadBalancer with k3s ServiceLB) + the `namespaceTemplate`.
-   The **`manifestSource`** is no longer on this connection — it is declared per-service on the
-   block's `provisioning` (colocated path or a separate repo), and merged with this engine config
-   at provision time. In local mode you can additionally set a per-user "this-machine" override of
-   the handler.
+     The **`manifestSource`** is no longer on this connection — it is declared per-service on the
+     block's `provisioning` (colocated path or a separate repo), and merged with this engine config
+     at provision time. In local mode you can additionally set a per-user "this-machine" override of
+     the handler.
 
 Local mode widens the environment URL-safety policy by default (`ENVIRONMENTS_ALLOW_HTTP_URLS`
 

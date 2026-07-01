@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { ArgError, HELP_TEXT, parseArgs } from './args.js'
 import { bootstrap } from './bootstrap.js'
+import { setupK3s } from './k3s.js'
 
 function readVersion(): string {
   try {
@@ -32,6 +33,10 @@ async function main(): Promise<void> {
   }
   if (options.command === 'version') {
     process.stdout.write(`${readVersion()}\n`)
+    return
+  }
+  if (options.command === 'k3s') {
+    await setupK3s(options)
     return
   }
 
