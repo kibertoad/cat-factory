@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
-import { buildInfraNotes } from '../src/agent.js'
+import { buildInfraNotes, buildPreviewOutcome } from '../src/agent.js'
 import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
@@ -420,5 +420,52 @@ describe('buildInfraNotes (agent prompt folding)', () => {
     expect(notes).toHaveLength(2)
     expect(notes[0]).toContain('WireMock never came up')
     expect(notes[1]).toContain('Drive your UI tests against http://localhost:4173')
+  })
+})
+
+describe('buildPreviewOutcome (preview stand-up boundary)', () => {
+  it('succeeds when the app is served, carrying the serve URL', () => {
+    const outcome = buildPreviewOutcome({ serveUrl: 'http://localhost:4173' })
+    expect(outcome).toEqual({ ok: true, url: 'http://localhost:4173' })
+  })
+
+  it('surfaces a WireMock-down note as a soft warning on an otherwise-up preview', () => {
+    const outcome = buildPreviewOutcome({
+      serveUrl: 'http://localhost:4173',
+      note: 'WireMock never came up',
+    })
+    expect(outcome).toEqual({
+      ok: true,
+      url: 'http://localhost:4173',
+      note: 'WireMock never came up',
+    })
+  })
+
+  it('fails hard when the served app is unreachable, folding the note into the reason', () => {
+    const outcome = buildPreviewOutcome({ note: 'build exited 1' })
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.error).toContain('build exited 1')
+  })
+
+  it('fails with a generic reason when there is no serve URL and no note', () => {
+    const outcome = buildPreviewOutcome({})
+    expect(outcome.ok).toBe(false)
+    if (!outcome.ok) expect(outcome.error).toContain('never reachable')
+  })
+})
+
+describe('parseAgentJob (preview mode)', () => {
+  it('accepts a preview job carrying the frontend infra spec', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'preview',
+      infra: { kind: 'frontend', servePort: 4173 },
+    })
+    expect(job.mode).toBe('preview')
+    expect(job.infra?.kind).toBe('frontend')
+  })
+
+  it('rejects a job with an unknown mode', () => {
+    expect(() => parseAgentJob({ ...base, mode: 'serve' })).toThrow(/mode/)
   })
 })

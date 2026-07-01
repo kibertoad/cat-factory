@@ -249,7 +249,7 @@ export interface BootstrapTargetSpec {
 // RepoFiles port — never here.
 
 /** How the generic agent runs: read-only exploration, or edit-and-push coding. */
-export type AgentMode = 'explore' | 'coding'
+export type AgentMode = 'explore' | 'coding' | 'preview'
 
 /**
  * Explore mode: how a container agent stands its dependencies up before the run (the
@@ -360,10 +360,13 @@ export interface AgentOutputSpec {
 
 /**
  * The generic agent job. `mode` selects the flow; the remaining fields are the union
- * the two flows need. Explore: clone `branch`, run read-only, return prose (or a parsed
+ * the flows need. Explore: clone `branch`, run read-only, return prose (or a parsed
  * `custom` JSON object when `output.kind==='structured'`). Coding: clone `branch` (or
  * resume `newBranch`), run, commit + push to `pushBranch`, and open `pr` when one is set
- * and the run produced changes.
+ * and the run produced changes. Preview (local/node only): clone `branch`, build + serve
+ * the frontend (`infra.kind==='frontend'`) with its other upstreams mocked and KEEP IT
+ * RUNNING — no agent runs and the serve is deliberately not torn down when the job returns
+ * (see {@link AgentResult.preview}).
  */
 export interface AgentJob extends HarnessAuthFields {
   jobId: string
@@ -405,6 +408,10 @@ export interface AgentJob extends HarnessAuthFields {
    * tester). Brings the docker-compose infra up on localhost for the duration of the
    * run and tears it down afterward; a stand-up failure is non-fatal (surfaced to the
    * agent as a note). The agent makes no commits regardless. Absent ⇒ no infra managed.
+   *
+   * Preview mode: REQUIRED and must be the `frontend` variant — it is the whole job (build
+   * + serve + WireMock, kept alive). No agent runs and, unlike the tester, the stand-up is
+   * NOT torn down when the job returns.
    */
   infra?: AgentInfraSpec
   /** Coding mode: a fresh branch to create off the clone before running (else work on `branch`). */
@@ -492,6 +499,13 @@ export interface AgentResult {
    * — the failure-class artifact the orchestrator-side provisioning logs can't capture.
    */
   infraSetup?: InfraSetupRecord
+  /**
+   * Preview mode: the in-container URL the built app is served at (e.g. `http://localhost:4173`).
+   * This is NOT host-reachable on its own — the container runtime publishes the serve port to an
+   * ephemeral host port and the backend forms the browsable URL from that; this is echoed for
+   * logging/context. Present only on a successful preview stand-up.
+   */
+  preview?: { url: string }
   /** Coding mode: whether a change was pushed. */
   pushed?: boolean
   prUrl?: string
@@ -669,8 +683,15 @@ export function parseAgentJob(input: unknown): AgentJob {
     throw new Error('Invalid job: body must be an object')
   }
   const o = input as Record<string, unknown>
-  const mode = o.mode === 'coding' ? 'coding' : o.mode === 'explore' ? 'explore' : undefined
-  if (!mode) throw new Error("Invalid job: 'mode' must be 'explore' or 'coding'")
+  const mode =
+    o.mode === 'coding'
+      ? 'coding'
+      : o.mode === 'explore'
+        ? 'explore'
+        : o.mode === 'preview'
+          ? 'preview'
+          : undefined
+  if (!mode) throw new Error("Invalid job: 'mode' must be 'explore', 'coding' or 'preview'")
   const repo = (o.repo ?? {}) as Record<string, unknown>
   const output =
     typeof o.output === 'object' && o.output !== null

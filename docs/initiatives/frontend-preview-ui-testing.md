@@ -47,8 +47,10 @@ build on. Link the merged pilot PR here once it lands.
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                    | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
 | 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e      | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
 | 4c  | Surface/gate visual pipelines (`tester-ui`/`visual-confirmation`) to frames with a UI | done   | [#636](https://github.com/kibertoad/cat-factory/pull/636) |
-| 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)    | done   | this PR                                                   |
-| 5b  | The long-lived browsable-serve mechanic (build+serve kept alive, URL surface, stop)   | todo   | —                                                         |
+| 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)    | done   | [#638](https://github.com/kibertoad/cat-factory/pull/638) |
+| 5b  | Harness `preview` mode — build+serve kept alive (the serve mechanic's container half) | done   | this PR                                                   |
+| 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop   | todo   | —                                                         |
+| 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector         | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
 
@@ -250,16 +252,49 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     a config authored on local/node and later served from the Worker keeps its `previewEnabled` flag
     (inert there) rather than being silently stripped — pre-1.0 breakage rules mean the flag just
     does nothing on the Worker, no migration.
-  - **5b (the deferred serve mechanic) is the remaining half of the original slice 5.** 5a lands the
+  - **The deferred serve mechanic (originally "5b") is split into 5b/5c/5d.** 5a landed the
     capability + the honest toggle gate; the long-lived build+serve+mock kept ALIVE (vs
     `standUpFrontend`'s tear-down-with-the-run), the host-reachable URL surfaced to the SPA, and a
-    stop control are 5b. Concrete design to pick up (do NOT re-derive): reuse `standUpFrontend`
-    (harness) unchanged but drive it from a dedicated **preview job** on the local/node container
-    transport that (a) publishes the `servePort` to an ephemeral HOST port (local mode's
-    `ContainerRuntimeAdapter` already does exactly this for the harness job port — reuse
-    `docker port`) and (b) does NOT call `tearDownFrontend` until an explicit stop. Persist the
-    running preview like an ephemeral `environments` row (it already carries `url`/`status`/`frameId`
-    - a stop path) keyed by the `frontend` frame, so the SPA surfaces the clickable URL on the frame
-      inspector and a stop button reuses the env teardown path. Gate the whole flow on
-      `frontendPreview.supported` server-side too (a run-start / provision guard), since 5a only gates
-      the SPA toggle. Keep it a local/node differentiator — the Worker never wires the preview job.
+    stop control are the remaining work. It was split by layer so each slice is independently
+    testable in this repo's toolchain (the harness runs pure vitest; the transport/backend need the
+    Postgres/conformance harness; the SPA is a thin follow-up): **5b** = the harness `preview` mode
+    (this PR); **5c** = the container-transport preview dispatch + the backend `PreviewService` +
+    controller + persistence + server-side gate + conformance; **5d** = the SPA frame-inspector
+    surface.
+- Slice 5b conventions & gotchas:
+  - **`preview` is a THIRD harness `mode`, not a new job kind.** It rides the same generic `agent`
+    job (`server.ts` `KINDS.agent`) and the same `standUpFrontend` the `tester-ui` explore flow
+    uses — the ONLY differences are (a) no agent runs and (b) the serve / WireMock processes are
+    deliberately NOT torn down when the handler returns. Because the stand-up children are plain
+    `spawn`ed children of the harness process (not tied to the run's abort signal) and the transport
+    does not remove the container until an explicit stop, they keep serving after the job completes.
+  - **A preview cannot use `withWorkspace`/`acquireRepoCheckout`.** Those remove the temp checkout in
+    a `finally` the moment the handler returns, which would delete the files a `static`-mode server
+    serves (and pull the cwd out from under a `command`-mode dev server). `runPreviewMode` clones
+    into a bare `mkdtemp` dir it does NOT remove on success; the single-purpose preview container
+    reclaims it on stop. A FAILED preview tears the partial stand-up down AND removes the dir, so a
+    failed attempt leaks neither processes nor disk.
+  - **A preview must actually come up — no "test what you can" fallback.** Unlike the tester (where a
+    stand-up problem is a non-fatal prompt note), a preview with no reachable serve URL is a hard
+    failure (`no-usable-output`), with the stand-up `note` folded into the reason. App-up-but-
+    WireMock-down rides along as a soft warning on the success. The boundary is the pure
+    `buildPreviewOutcome` (unit-tested), mirroring how `buildInfraNotes` is extracted + tested.
+  - **The `preview.url` in the result is the IN-CONTAINER url** (e.g. `http://localhost:4173`), not
+    host-reachable on its own. 5c's transport publishes the serve port to an ephemeral host port
+    (reuse the docker adapter's `docker port` read, exactly as it does for the 8080 harness port) and
+    forms the browsable URL from that; the harness url is echoed for logging/context only.
+  - **Image bump (1.29.0):** the `src/**` change ships in the runner image, so the harness `version`
+    - the three hand-maintained pins were re-synced via `pnpm sync:image-tags` (guard:
+      `node scripts/check-runner-image-tag.mjs`). 5c/5d do not touch the harness and need no further bump.
+  - **5c (transport + backend) design to pick up (do NOT re-derive):** drive `mode:'preview'` from a
+    dedicated preview dispatch on the local/node container transport that (a) publishes the
+    `servePort` to an ephemeral HOST port (local mode's `ContainerRuntimeAdapter` already does exactly
+    this for the harness job port — reuse `docker port`; add a second published port + an
+    `endpoint(id, port)` lookup) and (b) does NOT stop the container until an explicit stop. Persist
+    the running preview like an ephemeral `environments` row (it already carries `url`/`status`/
+    `frameId` + a stop path) keyed by the `frontend` frame — but note `EnvironmentTeardownService`
+    calls a provisioning `provider.teardown`, which a preview has none of, so `PreviewService.stop`
+    owns its stop (transport stop + registry `softDelete`) rather than reusing that service verbatim.
+    Gate the whole flow on `frontendPreview.supported` server-side (a start/provision guard), since 5a
+    only gates the SPA toggle. Keep it a local/node differentiator — the Worker never wires the
+    preview dispatch. **5d** then surfaces the clickable URL + a stop button on the frame inspector.

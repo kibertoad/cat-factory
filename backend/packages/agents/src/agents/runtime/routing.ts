@@ -105,5 +105,9 @@ export async function resolveInlineModelRef(
   inputs: StepModelInputs,
 ): Promise<ModelRef> {
   const ref = await resolveStepModelRef(resolvers, inputs)
-  return inlineModelRef(ref, resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref, (resolvers.runsInline ? { runsInline: resolvers.runsInline } : {}))
+  return inlineModelRef(
+    ref,
+    resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref,
+    resolvers.runsInline ? { runsInline: resolvers.runsInline } : {},
+  )
 }
