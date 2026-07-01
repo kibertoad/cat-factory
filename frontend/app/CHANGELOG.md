@@ -1,5 +1,32 @@
 # @cat-factory/app
 
+## 0.70.1
+
+### Patch Changes
+
+- 3c4dcc6: Fix a live-vs-snapshot race that could leave a failed repo-bootstrap frame stuck on the
+  "bootstrapping…" badge. A `board` event triggers a debounced `workspace.refresh()`, and that
+  snapshot read can resolve AFTER a newer `bootstrap` event has already landed — a blind
+  re-hydrate then regressed a terminal run (e.g. a `failed` bootstrap reverting to `running`,
+  with no further event to correct it). `agentRuns` now reconciles bootstrap runs monotonically
+  by `updatedAt`, so a lagging refresh (or out-of-order event) can't clobber a live transition.
+- 3c4dcc6: Add stable `data-testid` hooks to the agent-failure banner + retry (`AgentFailureCard`), the
+  bootstrap progress badge (`BlockNode`), and the inspector step rows + subtask bars
+  (`TaskExecution`), so the e2e suite can assert on the failure/retry, bootstrap, merge-review
+  and async-progress live flows. Behaviour-neutral markup only.
+- 2d6dabe: UX quality-of-life pass (part 1): add a reusable confirmation dialog + `useConfirm()`
+  and gate every destructive action behind it (delete task/module/service, recurring
+  pipeline, custom pipeline, merge/model preset, and dependency edge), routed through a
+  shared `useBlockDeletion` so the inspector button and future keyboard shortcut can't
+  drift. Add a reusable `EmptyState` component and apply it to the context pickers, the
+  dependency list, and the (previously blank) execution history.
+- 2d6dabe: UX quality-of-life pass (part 2): confirm silent actions with feedback toasts (run
+  started, notification handled/dismissed, one-click-copyable container id/url) and add a
+  global keyboard layer — Escape to deselect/close the inspector, Delete/Backspace to remove
+  the selected block (through the same confirm-gated deletion the inspector button uses), and
+  `?` for a keyboard-shortcuts cheatsheet (also reachable from the command bar). Delete is
+  guarded so it never fires while typing, and Escape yields to any open modal.
+
 ## 0.70.0
 
 ### Minor Changes
