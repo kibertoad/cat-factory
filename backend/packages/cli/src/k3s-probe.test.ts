@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { COMMAND_NOT_FOUND, type HostShell, type ShellResult } from './host-shell.js'
-import { classifyHost, type HostDetections, probeHost } from './k3s-probe.js'
+import {
+  classifyHost,
+  type HostDetections,
+  parseKubectlClientVersion,
+  probeHost,
+} from './k3s-probe.js'
 
 /** A HostDetections with everything absent; override the fields a case cares about. */
 function detections(overrides: Partial<HostDetections> = {}): HostDetections {
@@ -102,6 +107,31 @@ describe('classifyHost', () => {
     const state = classifyHost(detections({ k3s: { installed: true } }))
     expect(state.offers.find((o) => o.id === 'install-k3s')?.label).toContain('already-installed')
   })
+
+  it('reframes the install offer to k3d on non-Linux hosts (k3s is Linux-only)', () => {
+    const linux = classifyHost(detections(), 'k3d', 'linux')
+    expect(linux.offers.find((o) => o.id === 'install-k3s')?.label).toContain('k3s install command')
+
+    const windows = classifyHost(detections(), 'k3d', 'win32')
+    const offer = windows.offers.find((o) => o.id === 'install-k3s')
+    expect(offer?.label).toContain('k3d')
+    expect(offer?.label).toContain('Linux-only')
+  })
+})
+
+describe('parseKubectlClientVersion', () => {
+  it('extracts clientVersion.gitVersion from the JSON payload (not the leading "{")', () => {
+    const stdout = JSON.stringify({
+      clientVersion: { gitVersion: 'v1.36.1' },
+      serverVersion: { gitVersion: 'v1.30.6' },
+    })
+    expect(parseKubectlClientVersion(stdout)).toBe('v1.36.1')
+  })
+
+  it('returns undefined for non-JSON or a missing client version', () => {
+    expect(parseKubectlClientVersion('not json')).toBeUndefined()
+    expect(parseKubectlClientVersion('{}')).toBeUndefined()
+  })
 })
 
 describe('probeHost', () => {
@@ -109,7 +139,10 @@ describe('probeHost', () => {
     const shell = scriptShell({
       'kubectl version --output=json --request-timeout=3s': {
         code: 0,
-        stdout: JSON.stringify({ serverVersion: { gitVersion: 'v1.30.0' } }),
+        stdout: JSON.stringify({
+          clientVersion: { gitVersion: 'v1.36.1' },
+          serverVersion: { gitVersion: 'v1.30.0' },
+        }),
       },
       'kubectl config current-context': { code: 0, stdout: 'k3d-cat-factory\n' },
       'k3d version': { code: 0, stdout: 'k3d version v5.6.0\n' },
@@ -118,6 +151,7 @@ describe('probeHost', () => {
     })
     const state = await probeHost(shell)
     expect(state.detections.reachableCluster).toBe(true)
+    expect(state.detections.kubectl.version).toBe('v1.36.1')
     expect(state.detections.clusterContext).toBe('k3d-cat-factory')
     expect(state.detections.k3d.installed).toBe(true)
     expect(state.detections.k3d.version).toBe('k3d version v5.6.0')

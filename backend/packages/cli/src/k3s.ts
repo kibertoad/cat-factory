@@ -14,6 +14,8 @@ import {
 export interface K3sDeps {
   io?: Io
   shell?: HostShell
+  /** Host platform, injected so the k3s-install guidance is deterministic in tests. */
+  platform?: NodeJS.Platform
 }
 
 /** What {@link setupK3s} resolves to (returned for tests + programmatic callers). */
@@ -39,20 +41,21 @@ export const K3S_INSTALL_COMMAND = 'curl -sfL https://get.k3s.io | sh -'
 export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise<K3sResult> {
   const io = deps.io ?? createConsoleIo()
   const shell = deps.shell ?? createNodeShell()
+  const platform = deps.platform ?? process.platform
 
   const preferred = options.k3sRuntime ?? OPTION_DEFAULTS.k3sRuntime
 
   io.info('\ncat-factory — guided local k3s / k3d setup\n')
   io.info('Probing your machine for a usable Kubernetes cluster…')
 
-  const state = await probeHost(shell, preferred)
+  const state = await probeHost(shell, preferred, platform)
   io.info(renderReport(state))
 
   const chosen = await chooseOffer(state, options, io)
 
   // The k3s install needs sudo — we only ever print the command, never provision on the user's behalf.
   if (chosen === 'install-k3s') {
-    printInstallGuidance(state, io)
+    printInstallGuidance(state, io, platform)
     return { state, chosen }
   }
 
@@ -149,29 +152,59 @@ function offerLabel(o: Offer): string {
 }
 
 /**
- * Print the k3s install guidance. The install needs sudo, so the command is only ever PRINTED —
- * cat-factory never runs it for the user.
+ * Print the k3s install guidance. cat-factory never provisions k3s for the user, so this only ever
+ * PRINTS instructions. The copy is platform-aware: k3s is Linux-only, so on Windows/macOS it steers
+ * to the k3d (k3s-in-Docker) path rather than a `curl | sh` install that can't run there.
  */
-function printInstallGuidance(state: HostState, io: Io): void {
+function printInstallGuidance(state: HostState, io: Io, platform: NodeJS.Platform): void {
   // Don't tell a user who already has k3s to re-install it — point them at starting the service.
+  if (state.detections.k3s.installed) {
+    io.info(
+      [
+        '',
+        'k3s is already installed. Start it (needs sudo), e.g.:',
+        '',
+        '  sudo systemctl start k3s   # or: sudo k3s server',
+        '',
+        'Then re-run `cat-factory k3s` — it will detect the running cluster and provision the handler.',
+      ].join('\n'),
+    )
+    return
+  }
+
+  // k3s runs only on Linux; on Windows/macOS the supported route is a real k3s cluster inside
+  // Docker via k3d, so point there instead of printing a Linux-only install command.
+  if (platform !== 'linux') {
+    const osName = platform === 'win32' ? 'Windows' : platform === 'darwin' ? 'macOS' : platform
+    const install =
+      platform === 'win32'
+        ? 'Install k3d (needs Docker Desktop running) — see backend/docs/local-kubernetes-setup-windows.md, then:'
+        : 'Install k3d (needs Docker running), e.g. `brew install k3d`, then:'
+    io.info(
+      [
+        '',
+        `k3s runs only on Linux, so it can't be installed directly on ${osName}.`,
+        'Run a real k3s cluster inside Docker with k3d instead:',
+        '',
+        `  ${install}`,
+        '',
+        '  k3d cluster create cat-factory --api-port 127.0.0.1:6443',
+        '',
+        'Then re-run `cat-factory k3s` — it will detect the new k3d cluster and provision the handler.',
+      ].join('\n'),
+    )
+    return
+  }
+
   io.info(
-    state.detections.k3s.installed
-      ? [
-          '',
-          'k3s is already installed. Start it (needs sudo), e.g.:',
-          '',
-          '  sudo systemctl start k3s   # or: sudo k3s server',
-          '',
-          'Then re-run `cat-factory k3s` — it will detect the running cluster and provision the handler.',
-        ].join('\n')
-      : [
-          '',
-          'Install k3s (single-node) — run this yourself (needs sudo):',
-          '',
-          `  ${K3S_INSTALL_COMMAND}`,
-          '',
-          'Then re-run `cat-factory k3s` — it will detect the new cluster and provision the handler.',
-        ].join('\n'),
+    [
+      '',
+      'Install k3s (single-node) — run this yourself (needs sudo):',
+      '',
+      `  ${K3S_INSTALL_COMMAND}`,
+      '',
+      'Then re-run `cat-factory k3s` — it will detect the new cluster and provision the handler.',
+    ].join('\n'),
   )
 }
 
