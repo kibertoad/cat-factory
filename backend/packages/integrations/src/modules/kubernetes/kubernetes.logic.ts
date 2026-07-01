@@ -1,4 +1,8 @@
-import type { KubernetesRunnerConfig, RunnerDispatchOptions } from '@cat-factory/kernel'
+import type {
+  KubernetesRunnerConfig,
+  ProviderConfigField,
+  RunnerDispatchOptions,
+} from '@cat-factory/kernel'
 import { isCloudMetadataHost, ValidationError } from '@cat-factory/kernel'
 import { KUBERNETES_RUNNER_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 
@@ -16,6 +20,75 @@ export const KUBERNETES_TOKEN_KEY = KUBERNETES_RUNNER_TOKEN_SECRET_KEY
 
 /** Default port the executor-harness HTTP server listens on inside the pod. */
 export const DEFAULT_HARNESS_PORT = 8080
+
+/**
+ * The shared NON-SECRET flat connect-form fields common to every apiserver-backed runner
+ * backend (native Kubernetes AND EKS — an EKS apiserver IS a Kubernetes apiserver). The
+ * Kubernetes backend appends its ServiceAccount-token secret; the EKS backend appends the AWS
+ * region/cluster + credential-secret fields. Defined once here so the two can't drift. The
+ * advanced pod knobs (resources / nodeSelector / tolerations / labels) are intentionally NOT
+ * surfaced — they're records/arrays a flat form can't express, so they stay API-only exactly
+ * as the previous hardcoded form left them (a re-save preserves them; see `RunnerBackendForm`).
+ */
+export const KUBERNETES_RUNNER_FORM_FIELDS: ProviderConfigField[] = [
+  { key: 'label', label: 'Name', required: true, placeholder: 'prod cluster' },
+  {
+    key: 'apiServerUrl',
+    label: 'API server URL',
+    required: true,
+    placeholder: 'https://10.0.0.1:6443',
+  },
+  { key: 'namespace', label: 'Namespace', required: true, placeholder: 'cat-factory' },
+  {
+    key: 'image',
+    label: 'Executor image',
+    required: true,
+    placeholder: 'ghcr.io/kibertoad/cat-factory-executor:latest',
+  },
+  {
+    key: 'imageUi',
+    label: 'UI-tester image',
+    help: 'The heavier Playwright image used for image:ui dispatches (optional).',
+  },
+  {
+    key: 'caCertPem',
+    label: 'API server CA (PEM)',
+    type: 'textarea',
+    help: 'PEM CA bundle verifying the apiserver cert. Omit only for a publicly-trusted CA.',
+  },
+  {
+    key: 'harnessPort',
+    label: 'Harness port',
+    type: 'number',
+    default: String(DEFAULT_HARNESS_PORT),
+  },
+  {
+    key: 'insecureSkipTlsVerify',
+    label: 'Skip TLS verification',
+    type: 'checkbox',
+    help: 'Strongly discouraged; kind/dev clusters only.',
+  },
+]
+
+/**
+ * Invert a stored discriminated config's payload object into the flat `{ key: string }` values
+ * a native connect form prefills from (the inverse of overlaying flat fields onto the config).
+ * Secrets are skipped (write-only) and non-string scalars are stringified so `harnessPort`
+ * (number) / `insecureSkipTlsVerify` (boolean) round-trip through the string-typed form.
+ */
+export function flattenConfigValues(
+  payload: Record<string, unknown>,
+  fields: ProviderConfigField[],
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const field of fields) {
+    if (field.secret) continue
+    const value = payload[field.key]
+    if (value === undefined || value === null) continue
+    out[field.key] = typeof value === 'string' ? value : String(value)
+  }
+  return out
+}
 
 /**
  * Coerce an arbitrary id into a `<prefix><sanitized>` RFC1123 label (<=`max` chars,

@@ -5,11 +5,11 @@ import {
   resolveAgentConfig,
   isProxyableProvider,
 } from '@cat-factory/agents'
-// Opt-in AWS EKS backends (runner + environment). The Node/local facades can honor the custom
-// CA + minted IAM token EKS needs (the Cloudflare Worker cannot verify a private CA), so they
-// register the backends here by reference. They are pass-throughs until a workspace actually
-// connects an `eks` backend, and carry NO runtime AWS SDK dependency (the token is minted with
-// WebCrypto), so this adds no cost to a deployment that never uses EKS.
+// Opt-in AWS EKS backends (runner + environment), registered by reference below (the Worker
+// facade registers the same pair, keeping the runtimes symmetric with the native `kubernetes`
+// backend these extend). They are pass-throughs until a workspace actually connects an `eks`
+// backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
+// adds no cost to a deployment that never uses EKS.
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import {
   ConfluenceProvider,
@@ -1247,8 +1247,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
 
   // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
   // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
-  // pass-through until a workspace connects an `eks` backend. Registered only on Node/local
-  // (never the Worker) since EKS clusters present a private CA the Worker can't verify.
+  // pass-through until a workspace connects an `eks` backend. Registered on BOTH facades (the
+  // Worker registers the same pair in its container build) so the runtimes stay symmetric with
+  // the native `kubernetes` backend these extend — a real EKS cluster's private-CA apiserver is
+  // only reachable from a runtime that can pin a custom CA (Node/local), the same constraint a
+  // private-CA `kubernetes` connection already carries.
   runnerBackendRegistry.register(eksRunnerBackend)
   environmentBackendRegistry.register(eksEnvironmentBackend)
 

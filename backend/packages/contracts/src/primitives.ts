@@ -199,9 +199,20 @@ export const eksClusterFieldsSchema = v.object({
   /**
    * Override the STS host the apiserver token is presigned against. Defaults to the regional
    * public endpoint `sts.<region>.amazonaws.com`. Set it for a VPC/FIPS/GovCloud STS endpoint —
-   * or, in the integration tests, a local EKS emulator (floci) STS endpoint.
+   * or, in the integration tests, a local EKS emulator (floci) STS endpoint. Constrained to a
+   * bare `host` or `host:port` (no scheme/path/query): the value is interpolated straight into
+   * the presigned URL's host + the SIGNED `host` header, so anything richer would produce a
+   * malformed, unsignable token.
    */
-  stsHost: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(255))),
+  stsHost: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.regex(/^[a-z0-9.-]+(:[0-9]{1,5})?$/i, 'must be a bare host or host:port'),
+      v.minLength(1),
+      v.maxLength(255),
+    ),
+  ),
 })
 export type EksClusterFields = v.InferOutput<typeof eksClusterFieldsSchema>
 

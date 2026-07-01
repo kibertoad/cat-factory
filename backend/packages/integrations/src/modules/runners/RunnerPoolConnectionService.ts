@@ -144,9 +144,11 @@ export class RunnerPoolConnectionService {
    * the SPA can render the connect form before the first connect. The stored config/secrets
    * are folded in only when the requested kind matches the stored one.
    *
-   * A custom runner kind rides the generic manifest body and has no per-kind config form
-   * hooks (the `RunnerBackendProvider` interface has none), so — like the built-in manifest
-   * backend — it uses the shared flat manifest form, falling back to the raw manifest editor.
+   * A NATIVE backend (Kubernetes / EKS) exposes a `form` descriptor, so it returns a `native`
+   * descriptor of typed flat fields + the config skeleton the SPA overlays them onto — the SPA
+   * renders one generic form for every such backend and never learns which kinds exist. A
+   * manifest/custom kind rides the generic manifest body (no `form`), so — like the built-in
+   * manifest backend — it uses the shared flat manifest form, falling back to the raw editor.
    */
   async describeProvider(workspaceId: string, kind?: string): Promise<ProviderDescriptor> {
     const record = await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)
@@ -154,7 +156,36 @@ export class RunnerPoolConnectionService {
     // (e.g. not-yet-connected custom) kind must be a registered backend, else the stored or
     // default `manifest` kind.
     const resolvedKind = kind ?? record?.kind ?? 'manifest'
-    this.provider(resolvedKind)
+    const backend = this.provider(resolvedKind)
+
+    // NATIVE backend: a typed flat form. Overlay values onto the STORED config when connected
+    // (so advanced API-only fields survive a re-save), else the empty skeleton.
+    if (backend.form) {
+      const connected = !!record && resolvedKind === record.kind
+      const storedConfig = connected
+        ? (JSON.parse(record!.configJson) as RunnerBackendConfig)
+        : undefined
+      const fields = backend.form.fields()
+      const values = storedConfig ? backend.form.valuesFromConfig(storedConfig) : {}
+      const storedSecretKeys = connected ? Object.keys(await this.decryptSecrets(record!)) : []
+      return {
+        providerId: connected ? record!.providerId : resolvedKind,
+        label: connected ? record!.label : (backend.displayLabel ?? resolvedKind),
+        kind: 'native',
+        configFields: fields,
+        supportsTest: true,
+        missingRequired: missingRequiredConfigKeys(fields, [
+          ...Object.keys(values),
+          ...storedSecretKeys,
+        ]),
+        configTemplate: (storedConfig ?? backend.form.skeleton()) as unknown as Record<
+          string,
+          unknown
+        >,
+        values,
+      }
+    }
+
     const useStored = !!record && resolvedKind === record.kind
     const config = useStored ? (JSON.parse(record!.configJson) as RunnerBackendConfig) : undefined
     // Both the built-in `manifest` backend AND a custom kind ride the generic

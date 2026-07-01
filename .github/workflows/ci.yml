@@ -869,13 +869,32 @@ jobs:
             echo 'EKS_CA_EOF'
           } >> "$GITHUB_ENV"
 
-      # Build + import the mock-harness image the runner suite drives, into floci's k3s.
-      - name: Build + import mock-harness image
+      # Build the mock-harness image + best-effort LOAD it into floci's emulated k3s. A
+      # host-built image is NOT visible to k3s's own containerd, so a runner pod would
+      # ImagePullBackOff unless the image is imported — hence `EKS_IT_RUNNER_IMAGE` (which drives
+      # the image-needing runner suite) is exported ONLY when a load path actually succeeds. If
+      # floci exposes no importable cluster, the var stays unset and the runner suite self-skips,
+      # while the environment suite (testConnection/teardown — no image needed) still exercises
+      # the minted-token → apiserver seam. `k3d image import` is tried first (floci's k3s is
+      # commonly a k3d cluster); refine here as floci's tooling stabilises.
+      - name: Build + load mock-harness image into k3s
         continue-on-error: true
         run: |
+          set -x
           docker build -t cat-factory-mock-harness:it \
             backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
-          echo "EKS_IT_RUNNER_IMAGE=cat-factory-mock-harness:it" >> "$GITHUB_ENV"
+          loaded=""
+          if command -v k3d >/dev/null 2>&1; then
+            CLUSTER="$(k3d cluster list -o json 2>/dev/null | python3 -c 'import sys,json; cs=json.load(sys.stdin); print(cs[0]["name"] if cs else "")' 2>/dev/null || echo "")"
+            if [ -n "$CLUSTER" ] && k3d image import cat-factory-mock-harness:it -c "$CLUSTER"; then
+              loaded=1
+            fi
+          fi
+          if [ -n "$loaded" ]; then
+            echo "EKS_IT_RUNNER_IMAGE=cat-factory-mock-harness:it" >> "$GITHUB_ENV"
+          else
+            echo "Could not load the image into an emulated k3s cluster; the runner suite will self-skip."
+          fi
 
       - name: EKS integration tests
         env:

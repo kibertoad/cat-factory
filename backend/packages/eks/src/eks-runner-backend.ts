@@ -3,6 +3,8 @@ import {
   EKS_SECRET_ACCESS_KEY_SECRET_KEY,
 } from '@cat-factory/contracts'
 import { kubernetesLogic, type RunnerBackendProvider } from '@cat-factory/integrations'
+import type { RunnerBackendConfig } from '@cat-factory/kernel'
+import { EKS_CLUSTER_FORM_FIELDS, EKS_CREDENTIAL_FORM_FIELDS } from './eks-form.logic.js'
 import { EksRunnerTransport } from './EksRunnerTransport.js'
 
 // The AWS EKS runner backend: native per-run pods on an EKS cluster over the apiserver
@@ -17,6 +19,25 @@ import { EksRunnerTransport } from './EksRunnerTransport.js'
 export const eksRunnerBackend: RunnerBackendProvider = {
   kind: 'eks',
   displayLabel: 'AWS EKS',
+  // The typed flat connect form the SPA renders generically — the SAME shared apiserver fields
+  // as the native Kubernetes backend PLUS the AWS region/cluster + credential secrets. The
+  // config skeleton the flat fields overlay onto is `{ kind: 'eks', eks }`, so the SPA assembles
+  // an EKS config without knowing EKS exists (it reads the single payload key off the skeleton).
+  form: {
+    fields: () => [
+      ...kubernetesLogic.KUBERNETES_RUNNER_FORM_FIELDS,
+      ...EKS_CLUSTER_FORM_FIELDS,
+      ...EKS_CREDENTIAL_FORM_FIELDS,
+    ],
+    skeleton: () => ({ kind: 'eks', eks: {} }) as RunnerBackendConfig,
+    valuesFromConfig: (config) =>
+      'eks' in config
+        ? kubernetesLogic.flattenConfigValues(config.eks as unknown as Record<string, unknown>, [
+            ...kubernetesLogic.KUBERNETES_RUNNER_FORM_FIELDS,
+            ...EKS_CLUSTER_FORM_FIELDS,
+          ])
+        : {},
+  },
   referencedSecretKeys: (config) =>
     'eks' in config ? [EKS_ACCESS_KEY_ID_SECRET_KEY, EKS_SECRET_ACCESS_KEY_SECRET_KEY] : [],
   connectionMeta: (config) => {

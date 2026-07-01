@@ -32,14 +32,31 @@ A workspace then connects an `eks` runner/environment backend with an `EksRunner
 `region` + `clusterName`), and the AWS credentials (`awsAccessKeyId` / `awsSecretAccessKey` /
 optional `awsSessionToken`) in the write-only secret bundle.
 
-> EKS is Node/local-only: an EKS cluster presents a private CA, which the Cloudflare Worker
-> can't verify (no custom-CA `fetch`). The Worker is intentionally not registered.
+Both facades register the backends by reference (`backend/runtimes/node/src/container.ts` and
+`backend/runtimes/cloudflare/src/infrastructure/container.ts`), keeping the runtimes symmetric
+with the native `kubernetes` backend they extend.
 
-> Surfacing EKS as its **own** first-class environment _engine_ in the SPA infra-handler
-> selector (so the connect flow lowers to `{ kind: 'eks' }` rather than `{ kind: 'kubernetes' }`)
-> needs a dedicated `InfraEngine('eks')` threaded through the contract engine union +
-> `handlerConfigToBackendConfig` + the SPA forms — a scoped follow-up. The environment provider
-> itself is fully functional today when resolved by kind.
+> **Runtime reach.** A real EKS cluster's apiserver presents a **private CA**, which only a
+> runtime that can pin a custom CA (Node/local, via `undici`) can verify — the SAME constraint a
+> private-CA `kubernetes` connection already carries. The Worker registers the `eks` kind for
+> symmetry, but a connection to such a cluster is rejected up front at registration when the
+> runtime can't honor the custom CA (`customTlsSupported: false`), so it fails loudly rather than
+> silently at first dispatch.
+
+### UI reach
+
+The **runner** backend is a first-class UI citizen: it self-describes its connect form via the
+`RunnerBackendProvider.form` descriptor, so the SPA renders it generically (region / cluster /
+credentials + the shared apiserver fields) with **no** EKS-specific frontend code — the same
+descriptor-driven path the built-in Kubernetes runner backend now uses.
+
+The **environment** backend is functional when resolved by kind, but is not yet surfaced as its
+own first-class environment _engine_ in the SPA infra-handler selector (the connect flow would
+lower to `{ kind: 'eks' }` rather than `{ kind: 'kubernetes' }`). That needs a dedicated
+`InfraEngine('eks')` threaded through the contract engine union + `handlerConfigToBackendConfig`
+
+- the per-provision-type SPA forms — tracked in
+  [`docs/initiatives/descriptor-driven-infra-forms.md`](../../../docs/initiatives/descriptor-driven-infra-forms.md).
 
 ## Tests
 

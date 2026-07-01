@@ -3,6 +3,8 @@
 '@cat-factory/contracts': minor
 '@cat-factory/integrations': minor
 '@cat-factory/node-server': minor
+'@cat-factory/worker': minor
+'@cat-factory/app': minor
 ---
 
 Add opt-in AWS EKS runner + environment backends as a new standalone package
@@ -13,11 +15,23 @@ apiserver token, minted with WebCrypto (no runtime AWS SDK dependency).
 
 - `@cat-factory/contracts`: new first-class `{ kind: 'eks' }` runner + environment backend
   variants (`eksRunnerConfigSchema` / `eksProvisionConfigSchema`), the shared
-  `eksClusterFieldsSchema` (`region` / `clusterName` / optional `stsHost`), and the AWS
-  secret-key constants. `'eks'` is now a reserved backend kind.
+  `eksClusterFieldsSchema` (`region` / `clusterName` / optional `stsHost`, now shape-validated),
+  and the AWS secret-key constants. `'eks'` is now a reserved backend kind. `ProviderConfigField`
+  gains `number` / `checkbox` / `textarea` field types, and `ProviderDescriptor` gains
+  `configTemplate` / `values` so a native backend's typed config renders as a generic form.
 - `@cat-factory/integrations`: `KubernetesApiClient` gains an optional async token-provider
-  seam (behaviour-preserving for the existing Kubernetes backend), and the runner
-  transport / environment provider expose it so a different auth scheme can be injected.
-- `@cat-factory/node-server`: registers the EKS backends by reference (opt-in; the default
-  registries stay AWS-free). EKS is Node/local-only — the Cloudflare Worker can't verify an
-  EKS cluster's private CA, so it is intentionally not registered there.
+  seam (behaviour-preserving for the existing Kubernetes backend). `RunnerBackendProvider` gains
+  an optional `form` descriptor (the shared apiserver fields live once in
+  `kubernetesLogic.KUBERNETES_RUNNER_FORM_FIELDS`), so the Kubernetes/EKS runner backends
+  self-describe their connect form.
+- `@cat-factory/node-server` + `@cat-factory/worker`: register the EKS backends by reference on
+  BOTH facades (symmetric with the native `kubernetes` backend they extend; a pass-through until
+  a workspace connects an `eks` backend). A real EKS cluster's private-CA apiserver is only
+  reachable from a runtime that can pin a custom CA (Node/local) — the same constraint a
+  private-CA `kubernetes` connection already carries, rejected up front at registration on the
+  Worker rather than failing silently.
+- `@cat-factory/app`: the runner-pool connect form is now rendered generically from the backend
+  descriptor for every backend kind (built-in `kubernetes`, opt-in `eks`, and custom native
+  kinds) — the hardcoded `KubernetesRunnerForm.vue` was removed and the SPA no longer knows which
+  optional backends exist. See `docs/initiatives/descriptor-driven-infra-forms.md` for the
+  remaining env-axis + manifest-editor work.

@@ -672,6 +672,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/eks':
+        specifier: workspace:*
+        version: link:../../packages/eks
       '@cat-factory/gates':
         specifier: workspace:*
         version: link:../../packages/gates
