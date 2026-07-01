@@ -669,6 +669,18 @@ export const customManifestTypeSchema = v.object({
   /** Optional hint describing the input shape the provider expects. */
   acceptsInputHint: v.optional(v.pipe(v.string(), v.maxLength(500))),
   description: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /**
+   * Default in-repo path (complete relative path with filename, e.g. `deploy/preview.yaml`,
+   * or a bare filename e.g. `preview.yaml`) for a service's `manifestPath`. Prefilled when a
+   * service selects this type and used as the seed for path auto-detection.
+   */
+  defaultManifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /**
+   * The coding-agent prompt used to generate the manifest (when absent) or fix it (when
+   * present but invalid). Absent ⇒ the service inspector's "generate/fix manifest" affordance
+   * is hidden (there is nothing to instruct the agent with).
+   */
+  fixerPrompt: v.optional(v.pipe(v.string(), v.maxLength(4000))),
 })
 export type CustomManifestType = v.InferOutput<typeof customManifestTypeSchema>
 
@@ -677,6 +689,8 @@ export const upsertCustomManifestTypeSchema = v.object({
   label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
   acceptsInputHint: v.optional(v.pipe(v.string(), v.maxLength(500))),
   description: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  defaultManifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  fixerPrompt: v.optional(v.pipe(v.string(), v.maxLength(4000))),
 })
 export type UpsertCustomManifestTypeInput = v.InferOutput<typeof upsertCustomManifestTypeSchema>
 
@@ -890,6 +904,29 @@ export const bootstrapEnvironmentRepoSchema = v.object({
 })
 export type BootstrapEnvironmentRepoInput = v.InferOutput<typeof bootstrapEnvironmentRepoSchema>
 
+/**
+ * Generate (when absent) or fix (when present-but-invalid) a service's CUSTOM manifest file in
+ * a target repo, by dispatching the coding agent with the selected custom-manifest-type's
+ * `fixerPrompt`. The run is a durable, asynchronous `env-config-repair` run tracked exactly
+ * like {@link bootstrapEnvironmentRepoSchema}'s agent fallback. Nothing is persisted about the
+ * service; the fix is pushed onto the target branch.
+ */
+export const repairCustomManifestSchema = v.object({
+  /** The custom-manifest-type this service pins — supplies the `fixerPrompt` for the agent. */
+  manifestId: manifestIdSchema,
+  owner: v.pipe(v.string(), v.minLength(1)),
+  repo: v.pipe(v.string(), v.minLength(1)),
+  /** Branch the agent clones from and pushes the fix back onto; absent ⇒ the default branch. */
+  gitRef: v.optional(v.pipe(v.string(), v.minLength(1))),
+  /** Service subdirectory within the repo (monorepo); absent ⇒ the repo root. */
+  directory: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
+  /** The target manifest path to create/fix (entered value, else the type's default). */
+  manifestPath: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  /** Optional VCS provider hint; absent ⇒ the workspace's connected provider. */
+  provider: v.optional(v.picklist(['github', 'gitlab'])),
+})
+export type RepairCustomManifestInput = v.InferOutput<typeof repairCustomManifestSchema>
+
 /** Manually provision an environment (outside a pipeline run). */
 export const provisionEnvironmentSchema = v.object({
   blockId: v.optional(v.pipe(v.string(), v.minLength(1))),
@@ -1048,9 +1085,19 @@ export const detectServiceProvisioningSchema = v.object({
    * The provision type the user currently has SELECTED (the active tab). The detector
    * prioritizes finding THIS option before falling back to the other — e.g. on the
    * `docker-compose` tab it recommends a compose file when one exists, even if Kubernetes
-   * manifests are also present. Only `kubernetes`/`docker-compose` change the search order
-   * (the others have nothing to auto-detect); absent ⇒ prefer `kubernetes` (the richer config).
+   * manifests are also present. Only `kubernetes`/`docker-compose`/`custom` change the search
+   * order (the others have nothing to auto-detect); absent ⇒ prefer `kubernetes` (richer).
    */
   prefer: v.optional(provisionTypeSchema),
+  /**
+   * `custom` only: the selected custom-manifest-type id. Its `defaultManifestPath` seeds the
+   * path search (see {@link customManifestTypeSchema}). Ignored for other provision types.
+   */
+  manifestId: v.optional(manifestIdSchema),
+  /**
+   * `custom` only: the service's CURRENT `manifestPath`, if any. When it already points at an
+   * existing file the detector keeps it; otherwise it applies the default-path search rules.
+   */
+  currentManifestPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
 })
 export type DetectServiceProvisioningInput = v.InferOutput<typeof detectServiceProvisioningSchema>

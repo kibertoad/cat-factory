@@ -102,12 +102,17 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
           `'${this.deps.model.provider}' is not supported.`,
       )
     }
-    const spec = this.deps.environmentProvider.describeRepairAgent?.({
-      issues: request.issues,
-      ...(request.inputs ? { inputs: request.inputs } : {}),
-      repoOwner: owner,
-      repoName: repo,
-    })
+    // An explicit prompt override (the custom-manifest generate/fix flow) wins over the
+    // connection provider's `describeRepairAgent` — its prompt comes from the custom-manifest-type
+    // definition, not the provider.
+    const spec =
+      request.promptOverride ??
+      this.deps.environmentProvider.describeRepairAgent?.({
+        issues: request.issues,
+        ...(request.inputs ? { inputs: request.inputs } : {}),
+        repoOwner: owner,
+        repoName: repo,
+      })
     if (!spec) {
       throw new Error('The environment provider does not support agent-based config repair.')
     }
@@ -140,7 +145,9 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       ghToken,
       repo: { owner, name: repo, baseBranch: gitRef, cloneUrl },
       branch: gitRef,
-      commitMessage: 'chore: repair environment provider config',
+      commitMessage: request.manifestPath
+        ? `chore: generate/fix ${request.manifestPath}`
+        : 'chore: repair environment provider config',
       noChangesIsError: false,
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
     }

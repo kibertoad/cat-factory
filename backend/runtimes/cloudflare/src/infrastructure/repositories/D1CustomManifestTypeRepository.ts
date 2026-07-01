@@ -10,6 +10,8 @@ interface CustomManifestTypeRow {
   label: string
   accepts_input_hint: string | null
   description: string | null
+  default_manifest_path: string | null
+  fixer_prompt: string | null
   created_at: number
   updated_at: number
 }
@@ -21,6 +23,8 @@ function toRecord(row: CustomManifestTypeRow): CustomManifestTypeRecord {
     label: row.label,
     acceptsInputHint: row.accepts_input_hint,
     description: row.description,
+    defaultManifestPath: row.default_manifest_path,
+    fixerPrompt: row.fixer_prompt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -44,12 +48,14 @@ export class D1CustomManifestTypeRepository implements CustomManifestTypeReposit
     await this.db
       .prepare(
         `INSERT INTO custom_manifest_types
-           (workspace_id, manifest_id, label, accepts_input_hint, description, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+           (workspace_id, manifest_id, label, accepts_input_hint, description, default_manifest_path, fixer_prompt, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, manifest_id) DO UPDATE SET
            label = excluded.label,
            accepts_input_hint = excluded.accepts_input_hint,
            description = excluded.description,
+           default_manifest_path = excluded.default_manifest_path,
+           fixer_prompt = excluded.fixer_prompt,
            updated_at = excluded.updated_at`,
       )
       .bind(
@@ -58,6 +64,8 @@ export class D1CustomManifestTypeRepository implements CustomManifestTypeReposit
         record.label,
         record.acceptsInputHint,
         record.description,
+        record.defaultManifestPath,
+        record.fixerPrompt,
         record.createdAt,
         record.updatedAt,
       )

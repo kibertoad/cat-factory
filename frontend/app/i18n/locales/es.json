@@ -453,6 +453,19 @@
         "namespace": "Los manifiestos fijan el espacio de nombres \"{namespace}\"; se recomienda respetarlo en el gestor del espacio de trabajo.",
         "confidenceHigh": "Detectado",
         "confidenceLow": "Sugerencia"
+      },
+      "customManifestPathHint": "Se rellena con el valor predeterminado del tipo al seleccionarlo. Usa Detectar para localizar un manifiesto existente en el repositorio.",
+      "generateManifest": {
+        "title": "Archivo de manifiesto",
+        "button": "Generar / corregir",
+        "hint": "Ejecuta un agente de código para crear el manifiesto en esta ruta (o corregirlo si existe pero no es válido) y subirlo a la rama.",
+        "error": "No se pudo iniciar la generación del manifiesto.",
+        "dispatched": "Se inició una ejecución de generación del manifiesto.",
+        "status": {
+          "running": "Generando el manifiesto…",
+          "succeeded": "Manifiesto generado y subido.",
+          "failed": "La generación del manifiesto falló. Vuelve a intentarlo desde la ventana de Infraestructura."
+        }
       }
     },
     "agentConfig": {
@@ -1805,7 +1818,11 @@
         "description": "Descripción (opcional)",
         "add": "Añadir tipo",
         "saveFailed": "No se pudo guardar el tipo personalizado",
-        "removeFailed": "No se pudo eliminar el tipo personalizado"
+        "removeFailed": "No se pudo eliminar el tipo personalizado",
+        "defaultManifestPath": "Ruta de manifiesto predeterminada (opcional)",
+        "defaultManifestPathHelp": "Se rellena en un servicio que fije este tipo, y es la base para la detección automática de la ruta. Una ruta completa (deploy/preview.yaml) o solo un nombre de archivo.",
+        "fixerPrompt": "Prompt de corrección (opcional)",
+        "fixerPromptHelp": "Instrucciones para el agente de código para generar o corregir el manifiesto. Cuando se define, el servicio muestra un botón Generar / corregir."
       },
       "handler": {
         "intro": "Configura cómo se gestiona cada tipo de aprovisionamiento que declara un servicio: el motor y la conexión. Los manifiestos o la ruta de compose de un servicio (el qué/dónde) se definen en el servicio.",

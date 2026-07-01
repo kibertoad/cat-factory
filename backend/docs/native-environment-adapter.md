@@ -142,7 +142,7 @@ the descriptor-driven flat fields when your provider implements
 ### Also register a custom manifest type (for `remote-custom` backends)
 
 Registering the backend only teaches the platform **how** a `custom`-type environment is stood
-up (the `remote-custom` "how"). It does **not** by itself let a service *choose* `custom`
+up (the `remote-custom` "how"). It does **not** by itself let a service _choose_ `custom`
 provisioning: a service pins a **`manifestId`** drawn from the **custom-manifest-type catalog**,
 and a `remote-custom` handler declares which id it `acceptsManifestId`. If that catalog is empty,
 the service inspector's provisioning picker shows _"No custom manifest types are defined yet. Add
@@ -162,6 +162,13 @@ sources by `manifestId`:
     manifestId: 'kargo', // what a service pins and the handler's `acceptsManifestId` matches
     label: 'Kargo PREnv',
     description: 'Kargo ephemeral preview environment, provisioned from the repo config.',
+    // Optional: prefilled onto a service's `manifestPath` on selection + the seed for path
+    // auto-detection (a complete path, or a bare filename searched one level deep).
+    defaultManifestPath: '.kargo/prenv.yaml',
+    // Optional: the coding-agent prompt for the service inspector's "Generate / fix" button
+    // (generate the manifest when missing, fix it when invalid). Absent ⇒ no button.
+    fixerPrompt:
+      'Author a valid Kargo PREnv manifest describing this service (image, ports, health check).',
   })
   ```
 

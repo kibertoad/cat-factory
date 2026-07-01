@@ -195,6 +195,19 @@ candidate exists (else a `type-mismatch`). This is how a **custom environment/de
 `engines: () => ['remote-custom']`) becomes a selectable run target for a service's `custom`
 type — no new table, controller, or UI window.
 
+A custom manifest type may also declare two optional fields (both on the code-registered
+`RegisteredCustomManifestType` AND the workspace-editable rows):
+
+- **`defaultManifestPath`** — the default in-repo manifest path (a complete `deploy/preview.yaml`
+  or a bare `preview.yaml`). The service inspector **prefills** a service's `manifestPath` with it
+  when the type is selected, and it seeds path **auto-detection** (below).
+- **`fixerPrompt`** — the coding-agent prompt to **generate** the manifest (when absent) or **fix**
+  it (when present but invalid). When set, the service inspector shows a **Generate / fix** button
+  (`POST …/environments/custom-manifest/repair`) that dispatches the fixer as a durable
+  `env-config-repair` run (see the merge-lifecycle repair flow) writing to the entered path. Absent
+  ⇒ no button. Before dispatch the service runs the connected `remote-custom` provider's
+  `validateRepo` (when any) to enrich the prompt, but the agent runs regardless (a double-check).
+
 ## Per-user handler override (local mode)
 
 Local mode layers a per-USER override over the workspace handler (the "this-machine" engine),
@@ -223,6 +236,14 @@ user always confirms/edits — nothing is applied silently. What it infers, by c
 - **Lower confidence (surfaced as candidates, never auto-picked):** **which** overlay under
   `overlays/*` is the ephemeral one (ranked by name — `prenv`/`preview`/`pr`/`ephemeral`/`dev`),
   and helm releases declared parseably (`helmfile.yaml` / a `Chart.yaml` dependency).
+
+For a **`custom`** service, detection instead resolves the in-repo **manifest path** from the
+selected type's `defaultManifestPath` (`detectCustomManifest`, same checkout-free reader). It is
+monorepo-aware — the search is rooted at the service subtree (`directory`) or the repo root — and:
+keeps the current `manifestPath` when it already points at an existing file; else checks the exact
+`<root>/<defaultPath>`; else, when the default is a **bare filename**, checks that file one level
+deep in each immediate child dir; else pre-fills the default location (noting it will be created on
+generate). Pass `manifestId` (+ the current `manifestPath`) to the detect endpoint for this branch.
 
 Wired as `EnvironmentConnectionService.detectServiceProvisioning` → `POST
 …/environments/detect-provisioning`; the SPA's `ServiceTestConfig.vue` prefills
@@ -256,6 +277,7 @@ DELETE /workspaces/:ws/environments/handlers/:provisionType         unregister a
 PUT    /workspaces/:ws/environments/custom-types/:manifestId        upsert a workspace custom manifest type
 DELETE /workspaces/:ws/environments/custom-types/:manifestId        remove a workspace custom manifest type
 POST   /workspaces/:ws/environments/detect-provisioning             non-binding recommended config from the repo
+POST   /workspaces/:ws/environments/custom-manifest/repair          generate/fix a custom manifest via the fixer agent
 ```
 
 Local-mode-only per-user override (`EnvironmentUserHandlerController`, mounted at ROOT with no

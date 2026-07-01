@@ -20,6 +20,7 @@ import type {
   InfraHandlerConfig,
   ProviderDescriptor,
   ProvisionType,
+  RepairAgentSpec,
   RepoValidationIssue,
   RepoValidationResult,
   RunRepoContext,
@@ -34,8 +35,9 @@ import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type {
   DetectServiceProvisioningInput,
   ProvisioningRecommendation,
+  RepairCustomManifestInput,
 } from '@cat-factory/contracts'
-import { detectKubernetesProvisioning } from './provision-detect.logic.js'
+import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
 import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -98,10 +100,54 @@ export interface ConfigRepairDispatch {
   gitRef: string
   issues: RepoValidationIssue[]
   inputs?: Record<string, string>
+  /**
+   * Explicit repair prompt. When set, the agent is dispatched with THIS prompt instead of the
+   * provider's `describeRepairAgent` — used by the custom-manifest generate/fix flow, whose
+   * prompt comes from the custom-manifest-type definition rather than the connection provider.
+   */
+  promptOverride?: RepairAgentSpec
+  /**
+   * The single repo-relative file the agent should create/fix (the custom manifest path). Kept
+   * for the prompt/commit message; the agent still pushes onto `gitRef` with no PR.
+   */
+  manifestPath?: string
 }
 
 /** Deterministic head branch for the PR-mode config bootstrap (idempotent re-runs). */
 const BOOTSTRAP_CONFIG_BRANCH = 'cat-factory/env-config'
+
+/**
+ * Compose the coding-agent prompt for a custom-manifest generate/fix run: the custom type's own
+ * `fixerPrompt` framed with the concrete target path, whether the file exists (generate vs fix),
+ * and any validation issues found. Keeps the agent scoped to the one file and pushing on-branch.
+ */
+function buildCustomManifestRepairPrompt(args: {
+  basePrompt: string
+  label: string
+  manifestPath: string
+  exists: boolean
+  issues: RepoValidationIssue[]
+}): RepairAgentSpec {
+  const { basePrompt, label, manifestPath, exists, issues } = args
+  const situation = exists
+    ? `The manifest file at \`${manifestPath}\` already exists but may be invalid or incomplete — validate it and make the minimal edits needed to bring it into a valid state.`
+    : `The manifest file at \`${manifestPath}\` does not exist yet — create it.`
+  const issueList = issues.length
+    ? `\n\nValidation reported these issues to address:\n${issues.map((i) => `- [${i.severity}] ${i.path ? `${i.path}: ` : ''}${i.message}`).join('\n')}`
+    : ''
+  const prompt = [
+    `You are setting up the "${label}" custom deployment manifest for a service.`,
+    situation,
+    '',
+    basePrompt,
+    issueList,
+    '',
+    `Write ONLY the manifest at \`${manifestPath}\` (create the directory if needed); leave the rest of the repository untouched. Commit and push your changes; do NOT open a pull request.`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return { prompt }
+}
 
 // EnvironmentConnectionService: owns the binding between a workspace and an
 // environment provider. The connect config is discriminated by `kind`; the registered
@@ -354,7 +400,13 @@ export class EnvironmentConnectionService {
   async upsertCustomType(
     workspaceId: string,
     manifestId: string,
-    input: { label: string; acceptsInputHint?: string; description?: string },
+    input: {
+      label: string
+      acceptsInputHint?: string
+      description?: string
+      defaultManifestPath?: string
+      fixerPrompt?: string
+    },
   ): Promise<CustomManifestType> {
     const repo = this.deps.customManifestTypeRepository
     if (!repo) throw new ConflictError('Custom manifest types are not configured')
@@ -369,6 +421,8 @@ export class EnvironmentConnectionService {
       label: input.label,
       acceptsInputHint: input.acceptsInputHint ?? null,
       description: input.description ?? null,
+      defaultManifestPath: input.defaultManifestPath ?? null,
+      fixerPrompt: input.fixerPrompt ?? null,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     }
@@ -379,6 +433,8 @@ export class EnvironmentConnectionService {
       source: 'workspace',
       ...(record.acceptsInputHint ? { acceptsInputHint: record.acceptsInputHint } : {}),
       ...(record.description ? { description: record.description } : {}),
+      ...(record.defaultManifestPath ? { defaultManifestPath: record.defaultManifestPath } : {}),
+      ...(record.fixerPrompt ? { fixerPrompt: record.fixerPrompt } : {}),
     }
   }
 
@@ -618,6 +674,21 @@ export class EnvironmentConnectionService {
         ],
       }
     }
+    // `custom`: detect the in-repo manifest PATH from the selected type's default (monorepo-aware),
+    // rather than the kubernetes/compose heuristic. Requires a selected `manifestId` to look up
+    // the default; without one there's nothing type-specific to detect.
+    if (input.prefer === 'custom' && input.manifestId) {
+      const type = (await this.listCustomTypes(workspaceId)).find(
+        (t) => t.manifestId === input.manifestId,
+      )
+      return detectCustomManifest(bound.repo, {
+        gitRef: input.gitRef ?? bound.baseBranch,
+        ...(input.directory ? { directory: input.directory } : {}),
+        manifestId: input.manifestId,
+        ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
+        ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
+      })
+    }
     return detectKubernetesProvisioning(bound.repo, {
       gitRef: input.gitRef ?? bound.baseBranch,
       ...(input.directory ? { directory: input.directory } : {}),
@@ -783,6 +854,124 @@ export class EnvironmentConnectionService {
       branch: writeBranch,
       ...(usedAgent ? { usedAgent: true, ...(repairJobId ? { repairJobId } : {}) } : {}),
       issues: [...generatedIssues, ...validation.issues],
+    }
+  }
+
+  /**
+   * Generate (when absent) or fix (when present but invalid) a service's CUSTOM manifest file by
+   * dispatching the fixer coding agent with the selected custom-manifest-type's `fixerPrompt`.
+   * The run is a durable, asynchronous `env-config-repair` run (returns immediately with
+   * `usedAgent`/`repairJobId`), tracked exactly like {@link bootstrapRepo}'s agent fallback.
+   *
+   * Validation policy (lean toward diligence): if a `remote-custom` provider with `validateRepo`
+   * is connected we run it to enrich the prompt with concrete issues, but the agent is dispatched
+   * regardless — an undefined/ok validation still gets a double-check pass.
+   */
+  async repairCustomManifest(
+    workspaceId: string,
+    input: RepairCustomManifestInput,
+  ): Promise<BootstrapRepoResult> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const fail = (issues: RepoValidationIssue[]): BootstrapRepoResult => ({
+      ok: false,
+      committed: false,
+      issues,
+    })
+
+    const type = (await this.listCustomTypes(workspaceId)).find(
+      (t) => t.manifestId === input.manifestId,
+    )
+    if (!type?.fixerPrompt) {
+      return fail([
+        {
+          severity: 'error',
+          message: `The custom manifest type "${input.manifestId}" defines no fixer prompt, so it can't generate or fix its manifest automatically.`,
+        },
+      ])
+    }
+    if (!this.deps.dispatchConfigRepair) {
+      return fail([
+        { severity: 'error', message: 'Automated manifest generation is not available.' },
+      ])
+    }
+
+    const bound = await this.resolveRepo(workspaceId, input.owner, input.repo, input.provider)
+    if (!bound) {
+      return fail([
+        {
+          severity: 'error',
+          message:
+            'No VCS connection is configured for this workspace; cannot read or write the repo.',
+        },
+      ])
+    }
+    const targetBranch = input.gitRef ?? bound.baseBranch
+    const manifestPath = input.manifestPath.trim()
+
+    // Existence drives the generate-vs-fix framing of the prompt.
+    const existing = await bound.repo.getFile(manifestPath, targetBranch)
+    const exists = existing !== null
+
+    // Best-effort provider validation to enrich the prompt (skipped when no provider/connection).
+    let issues: RepoValidationIssue[] = []
+    if (exists) {
+      try {
+        const provider = await this.providerForWorkspace(workspaceId)
+        const manifest = await this.optionalManifest(workspaceId)
+        const resolveSecret = await this.resolveSecrets(workspaceId)
+        const validation = await this.runProviderValidate(
+          provider,
+          bound,
+          targetBranch,
+          input.owner,
+          input.repo,
+          stringifyProviderConfig(manifest?.providerConfig),
+          resolveSecret,
+        )
+        issues = validation.issues
+      } catch {
+        // No connected provider (or it can't validate) — the agent still double-checks the file.
+      }
+    }
+
+    const promptOverride = buildCustomManifestRepairPrompt({
+      basePrompt: type.fixerPrompt,
+      label: type.label,
+      manifestPath,
+      exists,
+      issues,
+    })
+
+    const started = await this.deps.dispatchConfigRepair({
+      workspaceId,
+      owner: input.owner,
+      repo: input.repo,
+      gitRef: targetBranch,
+      issues,
+      promptOverride,
+      manifestPath,
+    })
+
+    await this.deps.provisioningLog?.record({
+      workspaceId,
+      subsystem: 'environment',
+      operation: 'provision',
+      targetId: null,
+      providerId: input.manifestId,
+      blockId: null,
+      executionId: null,
+      outcome: 'success',
+      error: null,
+      detail: JSON.stringify({ manifestPath, exists, repairJobId: started.jobId }),
+    })
+
+    return {
+      ok: false,
+      committed: false,
+      usedAgent: true,
+      branch: targetBranch,
+      repairJobId: started.jobId,
+      issues,
     }
   }
 

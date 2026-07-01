@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProvisioningRepoReader } from './provision-detect.logic.js'
-import { detectKubernetesProvisioning } from './provision-detect.logic.js'
+import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
 
 // In-memory RepoFiles-shaped reader built from a flat path→content map. `listDirectory`
 // derives the immediate children (file vs dir) from the keys, mirroring the contents API.
@@ -530,5 +530,98 @@ spec:
     // No name match + no manifests ⇒ we don't invent a kubernetes recommendation.
     expect(rec.detected).toBe(false)
     expect(rec.provisioning.type).toBe('infraless')
+  })
+})
+
+describe('detectCustomManifest', () => {
+  it('keeps the current path when it already points to an existing file', async () => {
+    const reader = makeReader({
+      'services/api/preview.yaml': 'kind: X',
+      'services/api/other.yaml': 'kind: Y',
+    })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+      defaultPath: 'preview.yaml',
+      currentPath: 'services/api/other.yaml',
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning).toMatchObject({
+      type: 'custom',
+      manifestId: 'kargo',
+      manifestPath: 'services/api/other.yaml',
+    })
+    expect(rec.notes[0]!.confidence).toBe('high')
+  })
+
+  it('resolves the exact default path within a monorepo service subtree', async () => {
+    const reader = makeReader({ 'services/api/deploy/preview.yaml': 'kind: X' })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+      defaultPath: 'deploy/preview.yaml',
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.manifestPath).toBe('services/api/deploy/preview.yaml')
+  })
+
+  it('resolves the exact default path at the repo root for a non-monorepo service', async () => {
+    const reader = makeReader({ 'deploy/preview.yaml': 'kind: X' })
+    const rec = await detectCustomManifest(reader, {
+      manifestId: 'kargo',
+      defaultPath: 'deploy/preview.yaml',
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.manifestPath).toBe('deploy/preview.yaml')
+  })
+
+  it('finds a bare-filename default one level deep from the service root', async () => {
+    const reader = makeReader({
+      'services/api/README.md': '# api',
+      'services/api/deploy/kargo.yaml': 'kind: X',
+    })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+      defaultPath: 'kargo.yaml',
+    })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.manifestPath).toBe('services/api/deploy/kargo.yaml')
+  })
+
+  it('does not descend when the default carries a path (only the exact location is checked)', async () => {
+    // The default has a directory component, so the one-level-deep search does NOT apply — a
+    // file at a different depth must not be matched; we fall back to the default location.
+    const reader = makeReader({ 'services/api/sub/config/kargo.yaml': 'kind: X' })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+      defaultPath: 'config/kargo.yaml',
+    })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.manifestPath).toBe('services/api/config/kargo.yaml')
+    expect(rec.notes[0]!.confidence).toBe('low')
+  })
+
+  it('falls back to the default location (not found) so generate writes there', async () => {
+    const reader = makeReader({ 'services/api/README.md': '# api' })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+      defaultPath: 'deploy/preview.yaml',
+    })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.manifestPath).toBe('services/api/deploy/preview.yaml')
+  })
+
+  it('has nothing to detect without a default or current path', async () => {
+    const reader = makeReader({ 'services/api/README.md': '# api' })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+    })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning).toMatchObject({ type: 'custom', manifestId: 'kargo' })
+    expect(rec.provisioning.manifestPath).toBeUndefined()
   })
 })

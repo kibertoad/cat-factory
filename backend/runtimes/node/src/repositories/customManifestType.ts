@@ -15,6 +15,8 @@ function toRecord(row: Row): CustomManifestTypeRecord {
     label: row.label,
     acceptsInputHint: row.accepts_input_hint,
     description: row.description,
+    defaultManifestPath: row.default_manifest_path,
+    fixerPrompt: row.fixer_prompt,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -41,6 +43,8 @@ export class DrizzleCustomManifestTypeRepository implements CustomManifestTypeRe
         label: record.label,
         accepts_input_hint: record.acceptsInputHint,
         description: record.description,
+        default_manifest_path: record.defaultManifestPath,
+        fixer_prompt: record.fixerPrompt,
         created_at: record.createdAt,
         updated_at: record.updatedAt,
       })
@@ -50,6 +54,8 @@ export class DrizzleCustomManifestTypeRepository implements CustomManifestTypeRe
           label: record.label,
           accepts_input_hint: record.acceptsInputHint,
           description: record.description,
+          default_manifest_path: record.defaultManifestPath,
+          fixer_prompt: record.fixerPrompt,
           updated_at: record.updatedAt,
         },
       })

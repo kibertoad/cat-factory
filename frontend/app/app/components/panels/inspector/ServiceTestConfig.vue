@@ -37,6 +37,7 @@ const accounts = useAccountsStore()
 const github = useGitHubStore()
 const services = useServicesStore()
 const infra = useInfraConfigStore()
+const agentRuns = useAgentRunsStore()
 const { t } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
@@ -83,6 +84,12 @@ watch(
 )
 const customManifestId = computed(() => props.block.provisioning?.manifestId ?? '')
 const customManifestPath = computed(() => props.block.provisioning?.manifestPath ?? '')
+// The catalog entry for the pinned custom type — supplies its default manifest path (prefill +
+// detection seed) and whether it can generate/fix (a `fixerPrompt` is declared).
+const selectedCustomType = computed(() =>
+  infra.customTypes.find((c) => c.manifestId === customManifestId.value),
+)
+const manifestFixerAvailable = computed(() => !!selectedCustomType.value?.fixerPrompt)
 
 const PROVISION_TYPES = computed<{ value: ProvisionType; label: string }[]>(() => [
   { value: 'infraless', label: t('inspector.testConfig.provisionTypes.infraless') },
@@ -159,11 +166,57 @@ function setKubeRenderer(value: KubernetesRenderer) {
 }
 
 function setCustomManifestId(value: string) {
-  patchProvisioning({ type: 'custom', manifestId: value || undefined })
+  // Prefill the manifest path with the selected type's default (verbatim; editable afterwards).
+  // Leave the existing path untouched when the type declares no default.
+  const type = infra.customTypes.find((c) => c.manifestId === value)
+  patchProvisioning({
+    type: 'custom',
+    manifestId: value || undefined,
+    ...(type?.defaultManifestPath ? { manifestPath: type.defaultManifestPath } : {}),
+  })
 }
 
 function setCustomManifestPath(value: string) {
   patchProvisioning({ type: 'custom', manifestPath: value.trim() || undefined })
+}
+
+// Generate (or fix) the custom manifest via the fixer coding agent (async repair run). Shown only
+// when the selected type declares a `fixerPrompt`. The dispatched run is tracked live below by id.
+const generating = ref(false)
+const manifestRepairError = ref(false)
+const manifestRepairJobId = ref<string | null>(null)
+const manifestRepairJob = computed(() =>
+  manifestRepairJobId.value ? agentRuns.envConfigRepairById(manifestRepairJobId.value) : undefined,
+)
+
+async function generateOrFixManifest() {
+  const ctx = repoContext.value
+  const type = selectedCustomType.value
+  if (!ctx || !type?.fixerPrompt) return
+  const repo = github.repoFor(ctx.githubId)
+  const path = customManifestPath.value.trim() || type.defaultManifestPath
+  if (!repo || !path) {
+    manifestRepairError.value = true
+    return
+  }
+  generating.value = true
+  manifestRepairError.value = false
+  manifestRepairJobId.value = null
+  try {
+    const res = await infra.repairCustomManifest({
+      manifestId: type.manifestId,
+      owner: repo.owner,
+      repo: repo.name,
+      manifestPath: path,
+      ...(ctx.directory ? { directory: ctx.directory } : {}),
+    })
+    manifestRepairJobId.value = res.repairJobId ?? null
+    if (!res.usedAgent) manifestRepairError.value = true
+  } catch {
+    manifestRepairError.value = true
+  } finally {
+    generating.value = false
+  }
 }
 
 // The provisioning hints (cloud provider + instance size) are advisory inputs to the
@@ -239,19 +292,27 @@ async function detectFromRepo() {
       owner: repo.owner,
       repo: repo.name,
       ...(ctx.directory ? { directory: ctx.directory } : {}),
-      // Prioritize the option matching the currently-selected tab (kubernetes vs
-      // docker-compose); the detector falls back to the other when the preferred isn't found.
+      // Prioritize the option matching the currently-selected tab (kubernetes / docker-compose /
+      // custom); the detector falls back to the other when the preferred isn't found.
       prefer: provisionType.value,
+      // `custom`: the selected type seeds the path search from its default; the current path is
+      // kept when it already resolves.
+      ...(provisionType.value === 'custom' && customManifestId.value
+        ? {
+            manifestId: customManifestId.value,
+            ...(customManifestPath.value ? { currentManifestPath: customManifestPath.value } : {}),
+          }
+        : {}),
     })
     detectResult.value = rec
     // Pre-select the recommended compose service so the picker opens on a real choice.
     pickedComposeService.value =
       rec.composeServiceCandidates?.find((c) => c.recommended)?.service ?? null
-    // Only prefill when the detector actually inferred something. A `detected: false`
-    // recommendation is `infraless`; applying it would WIPE the service's existing
-    // provisioning (board.updateBlock persists immediately). Leave the current config
-    // untouched and just surface the "nothing found" note.
-    if (rec.detected) {
+    // Prefill when the detector inferred something. A non-custom `detected: false` recommendation
+    // is `infraless`; applying it would WIPE the service's existing provisioning (updateBlock
+    // persists immediately) — so we skip it. A `custom` recommendation is non-destructive (it just
+    // carries the resolved/default manifest path), so we apply it even when the file wasn't found.
+    if (rec.detected || rec.provisioning.type === 'custom') {
       board.updateBlock(props.block.id, { provisioning: rec.provisioning })
       if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
     }
@@ -369,7 +430,10 @@ function setSize(value: InstanceSize) {
       </p>
 
       <template v-if="detectResult && !detecting">
-        <p v-if="!detectResult.detected" class="text-[11px] text-amber-300/80">
+        <p
+          v-if="!detectResult.detected && detectResult.provisioning.type !== 'custom'"
+          class="text-[11px] text-amber-300/80"
+        >
           {{ t('inspector.testConfig.detect.none') }}
         </p>
         <template v-else>
@@ -659,6 +723,53 @@ function setSize(value: InstanceSize) {
             (e: KeyboardEvent) => setCustomManifestPath((e.target as HTMLInputElement).value)
           "
         />
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.customManifestPathHint') }}
+        </p>
+      </div>
+
+      <!-- Generate (when missing) or fix (when invalid) the manifest via the fixer agent. Only
+           shown when the selected type declares a fixer prompt. -->
+      <div
+        v-if="manifestFixerAvailable && repoContext"
+        class="space-y-1.5 rounded border border-slate-800 bg-slate-900/40 p-2"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] text-slate-400">{{
+            t('inspector.testConfig.generateManifest.title')
+          }}</span>
+          <UButton
+            size="xs"
+            variant="soft"
+            color="primary"
+            icon="i-lucide-file-cog"
+            :loading="generating"
+            :disabled="!customManifestPath && !selectedCustomType?.defaultManifestPath"
+            @click="generateOrFixManifest"
+          >
+            {{ t('inspector.testConfig.generateManifest.button') }}
+          </UButton>
+        </div>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.generateManifest.hint') }}
+        </p>
+        <p v-if="manifestRepairError" class="text-[11px] text-rose-300/80">
+          {{ t('inspector.testConfig.generateManifest.error') }}
+        </p>
+        <p
+          v-else-if="manifestRepairJob"
+          class="text-[11px]"
+          :class="{
+            'text-sky-300/80': manifestRepairJob.status === 'running',
+            'text-emerald-300/80': manifestRepairJob.status === 'succeeded',
+            'text-rose-300/80': manifestRepairJob.status === 'failed',
+          }"
+        >
+          {{ t(`inspector.testConfig.generateManifest.status.${manifestRepairJob.status}`) }}
+        </p>
+        <p v-else-if="manifestRepairJobId" class="text-[11px] text-sky-300/80">
+          {{ t('inspector.testConfig.generateManifest.dispatched') }}
+        </p>
       </div>
     </div>
 

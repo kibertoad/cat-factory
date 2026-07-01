@@ -6,6 +6,7 @@ import type {
   EnvironmentHandlerView,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
+  RepairCustomManifestInput,
   TestEnvironmentHandlerInput,
   UpsertCustomManifestTypeInput,
   UpsertEnvironmentUserHandlerBody,
@@ -112,6 +113,16 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     return api.detectServiceProvisioning(ws.requireId(), input)
   }
 
+  /**
+   * Generate (or fix) a service's custom manifest via the fixer coding agent. Dispatches a
+   * durable async repair run and returns immediately with `usedAgent`/`repairJobId`; the run is
+   * tracked via the workspace stream like the provider-config repair. Nothing persisted here.
+   */
+  async function repairCustomManifest(input: RepairCustomManifestInput) {
+    const ws = useWorkspaceStore()
+    return api.repairCustomManifest(ws.requireId(), input)
+  }
+
   async function unregisterHandler(type: ProvisionType, manifestId?: string | null) {
     const ws = useWorkspaceStore()
     await api.unregisterEnvironmentHandler(ws.requireId(), type, manifestId ?? undefined)
@@ -181,6 +192,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     registerHandler,
     testHandler,
     detectProvisioning,
+    repairCustomManifest,
     unregisterHandler,
     upsertCustomType,
     removeCustomType,

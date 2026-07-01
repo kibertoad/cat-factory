@@ -475,6 +475,19 @@
       "customNoTypes": "No custom manifest types are defined yet. Add one in the Infrastructure window.",
       "customManifestIdHint": "The custom type this service produces, matched to a remote-custom handler the workspace configures.",
       "customManifestPath": "Manifest path (optional)",
+      "customManifestPathHint": "Prefilled from the type's default when you select it. Use Detect to locate an existing manifest in the repo.",
+      "generateManifest": {
+        "title": "Manifest file",
+        "button": "Generate / fix",
+        "hint": "Runs a coding agent to create the manifest at this path (or fix it if it exists but is invalid) and push it to the branch.",
+        "error": "Could not start the manifest generation run.",
+        "dispatched": "A manifest generation run was started.",
+        "status": {
+          "running": "Generating the manifest…",
+          "succeeded": "Manifest generated and pushed.",
+          "failed": "The manifest generation run failed. Retry it from the Infrastructure window."
+        }
+      },
       "detect": {
         "title": "Auto-detect",
         "button": "Detect from repo",
@@ -1394,6 +1407,10 @@
         "acceptsInputHint": "Input hint (optional)",
         "acceptsInputHintHelp": "Describes the input shape the provider expects.",
         "description": "Description (optional)",
+        "defaultManifestPath": "Default manifest path (optional)",
+        "defaultManifestPathHelp": "Prefilled on a service that pins this type, and the seed for path auto-detection. A complete path (deploy/preview.yaml) or a bare filename.",
+        "fixerPrompt": "Fixer prompt (optional)",
+        "fixerPromptHelp": "Coding-agent instructions to generate or fix the manifest. When set, a service shows a Generate / fix button.",
         "add": "Add type",
         "saveFailed": "Could not save the custom type",
         "removeFailed": "Could not remove the custom type"

@@ -12,6 +12,7 @@ import {
   registerEnvironmentHandlerContract,
   registerEnvironmentProviderContract,
   removeCustomManifestTypeContract,
+  repairCustomManifestContract,
   teardownEnvironmentContract,
   testEnvironmentConnectionContract,
   testEnvironmentHandlerContract,
@@ -140,6 +141,20 @@ export function environmentController(): Hono<AppEnv> {
     if (!env) return unavailable(c)
     return c.json(
       await env.connectionService.detectServiceProvisioning(
+        param(c, 'workspaceId'),
+        c.req.valid('json'),
+      ),
+      200,
+    )
+  })
+
+  // Generate (or fix) a service's custom manifest via the fixer coding agent — dispatches a
+  // durable env-config-repair run tracked exactly like the provider-config repair fallback.
+  buildHonoRoute(app, repairCustomManifestContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.repairCustomManifest(
         param(c, 'workspaceId'),
         c.req.valid('json'),
       ),
