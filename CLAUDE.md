@@ -1157,7 +1157,7 @@ shard, or a "N flaky" line in the report, treat it exactly like a hard failure:
 - **Do NOT re-run CI hoping for green, do NOT bump `retries`, do NOT `test.skip`/`test.fixme`
   the spec, and do NOT dismiss it as "just a browser/boot flake."** "It passed the second
   time" is a failed task, not a completed one. The non-blocking `Test e2e` job means a flake
-  can't *stop a merge*, but that is a safety net for infra hiccups, NOT permission to ignore a
+  can't _stop a merge_, but that is a safety net for infra hiccups, NOT permission to ignore a
   flake — an intermittent RED is a signal to fix, every time.
 - **Reproduce, then root-cause.** A flake almost always exposes a REAL race in the product,
   not "a slow test": a live event applied between a snapshot's fetch and its store-commit
