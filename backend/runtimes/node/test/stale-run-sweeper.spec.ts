@@ -58,11 +58,11 @@ describe.skipIf(!databaseUrl)('node stale-run sweeper building blocks', () => {
     }
     const live = await repos.agentRunRepository.liveRunIds(rows.map(([id]) => id))
     const liveSet = new Set(live)
-    expect(liveSet.has(rows[0][0])).toBe(true) // running
-    expect(liveSet.has(rows[1][0])).toBe(true) // blocked
-    expect(liveSet.has(rows[2][0])).toBe(true) // paused
-    expect(liveSet.has(rows[3][0])).toBe(false) // done
-    expect(liveSet.has(rows[4][0])).toBe(false) // failed
+    expect(liveSet.has(rows[0]![0])).toBe(true) // running
+    expect(liveSet.has(rows[1]![0])).toBe(true) // blocked
+    expect(liveSet.has(rows[2]![0])).toBe(true) // paused
+    expect(liveSet.has(rows[3]![0])).toBe(false) // done
+    expect(liveSet.has(rows[4]![0])).toBe(false) // failed
     // A run id with no row is not live either.
     expect(await repos.agentRunRepository.liveRunIds(['exec_missing'])).toEqual([])
   })

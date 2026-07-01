@@ -1,6 +1,7 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
 import type {
+  AgentRunRepository,
   DeployCloneTarget,
   EnvironmentProvider,
   ExecutionEventPublisher,
@@ -138,6 +139,13 @@ export interface ConformanceApp {
    * refused, not clobbering) identically on D1 and Postgres.
    */
   executionRepository(): ExecutionRepository
+  /**
+   * The facade's kind-spanning `agent_runs` view over its real store, so the suite can assert
+   * the stale-run sweeper's read primitives behave identically on D1 and Postgres: `listStale`
+   * returns each candidate's `updatedAt` (the hard-stall clock reads it) and `liveRunIds`
+   * filters out terminal runs (the local orphaned-container reap keys off it).
+   */
+  agentRunRepository(): AgentRunRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

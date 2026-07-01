@@ -295,7 +295,10 @@ async function callRepair<T>(
   // system prompt already demands JSON — rather than failing the repair outright.
   const withFormat = { ...base, response_format: { type: 'json_object' } }
   let res = await post(url, access, withFormat)
-  if (!res.ok && res.status >= 400 && res.status < 500) {
+  // A 4xx here means the upstream REJECTED `response_format` → fall back to prompt-only. Exclude
+  // 429: it is a rate-limit (already retried with backoff inside `post`), not a param rejection,
+  // so re-interpreting it as one would waste a second full prompt-only round on a rate-limit.
+  if (!res.ok && res.status !== 429 && res.status >= 400 && res.status < 500) {
     log.warn('structured-output: repair upstream rejected response_format — retrying prompt-only', {
       agent: spec.label,
       jobId: access.jobId,

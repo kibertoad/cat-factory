@@ -406,6 +406,7 @@ export function makeMothershipConformanceApp(
     seedIncorporatedClarityReview,
     // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
     executionRepository: () => ms.container.executionRepository,
+    agentRunRepository: () => ms.container.agentRunRepository,
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

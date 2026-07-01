@@ -271,6 +271,69 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('agent_runs sweeper read primitives (listStale + liveRunIds)', () => {
+      // The stale-run sweeper reads these two `agent_runs` primitives to recover/flag orphaned
+      // runs (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local
+      // orphaned-container reap). Assert they behave identically on D1 and Postgres so a facade
+      // can't silently drift the recovery path.
+      it('listStale carries updatedAt (running only) and liveRunIds filters terminal runs', async () => {
+        const app = harness.makeApp()
+        const runs = app.agentRunRepository()
+        const execs = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const seed = (id: string, status: ExecutionInstance['status']) =>
+          execs.upsert(workspace.id, {
+            id,
+            blockId: `blk_${id}`,
+            pipelineId: 'pl',
+            pipelineName: 'Pipeline',
+            steps: [],
+            currentStep: 0,
+            status,
+            initiatedBy: null,
+          })
+        await seed('exec_sweep_running', 'running')
+        await seed('exec_sweep_blocked', 'blocked')
+        await seed('exec_sweep_paused', 'paused')
+        await seed('exec_sweep_done', 'done')
+        await seed('exec_sweep_failed', 'failed')
+
+        // `listStale` returns only `running` rows, each carrying a numeric `updatedAt` — the
+        // timestamp the sweeper's hard-stall clock reads. (Spans workspaces, so assert by id.)
+        const stale = await runs.listStale(Date.now() + 60_000)
+        const staleIds = new Set(stale.map((r) => r.id))
+        expect(staleIds.has('exec_sweep_running')).toBe(true)
+        expect(staleIds.has('exec_sweep_blocked')).toBe(false)
+        expect(staleIds.has('exec_sweep_paused')).toBe(false)
+        expect(staleIds.has('exec_sweep_done')).toBe(false)
+        const runningRow = stale.find((r) => r.id === 'exec_sweep_running')
+        expect(typeof runningRow?.updatedAt).toBe('number')
+        expect(runningRow?.updatedAt).toBeGreaterThan(0)
+        expect(runningRow?.kind).toBe('execution')
+
+        // `liveRunIds` keeps non-terminal runs (running/blocked/paused), drops terminal
+        // (done/failed) and unknown ids — the exact contract the container reap depends on.
+        const live = new Set(
+          await runs.liveRunIds([
+            'exec_sweep_running',
+            'exec_sweep_blocked',
+            'exec_sweep_paused',
+            'exec_sweep_done',
+            'exec_sweep_failed',
+            'exec_sweep_missing',
+          ]),
+        )
+        expect(live.has('exec_sweep_running')).toBe(true)
+        expect(live.has('exec_sweep_blocked')).toBe(true)
+        expect(live.has('exec_sweep_paused')).toBe(true)
+        expect(live.has('exec_sweep_done')).toBe(false)
+        expect(live.has('exec_sweep_failed')).toBe(false)
+        expect(live.has('exec_sweep_missing')).toBe(false)
+        expect(await runs.liveRunIds([])).toEqual([])
+      })
+    })
+
     describe('pipeline versioning + reseed', () => {
       it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
         const { call, createWorkspace } = harness.makeApp()

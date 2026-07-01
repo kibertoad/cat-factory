@@ -172,10 +172,16 @@ export interface SweeperConfig {
   intervalMs: number
   leaseMs: number
   /**
-   * Hard deadline: a `running` execution whose lease has been stale this long AND whose
-   * advance job is not live is failed `stalled` rather than re-driven forever — so a run
-   * orphaned by a crashed orchestrator that recovery can't resume stops spinning silently
-   * and surfaces (loudly) the failure banner + retry instead.
+   * Hard deadline: a `running` execution this process has been UNABLE TO RECOVER for this
+   * long (its advance job stays not-live across ticks despite re-driving) is failed `stalled`
+   * rather than re-driven forever — so a run orphaned by a crashed orchestrator that recovery
+   * can't resume stops spinning silently and surfaces (loudly) the failure banner + retry.
+   *
+   * The clock is per-PROCESS (measured from the first tick that observed the run orphaned),
+   * NOT the raw lease age: a long orchestrator downtime inflates `updated_at`, so keying the
+   * deadline off lease age would fail an otherwise-recoverable run on the very first boot tick
+   * — before recovery was even attempted. Measuring from first-observed-orphaned excludes the
+   * downtime and guarantees at least one re-drive attempt before giving up.
    */
   hardStallMs: number
 }
@@ -202,11 +208,13 @@ function queueForKind(kind: string): string | null {
  * - `orphaned` — reclaim the dead job to free its singletonKey, then re-drive (or fail).
  * - `missing`  — re-drive directly.
  *
- * An execution orphaned past `hardStallMs` is failed `stalled` instead of re-driven, so an
- * unrecoverable run doesn't spin `running` forever. Decision-parked (`blocked`) and
- * spend-paused (`paused`) runs aren't `running`, so they're left alone. Returns a stop
- * function; also runs one tick immediately (boot reconcile — recover runs a crashed
- * previous process orphaned without waiting a full interval).
+ * An execution this process has been unable to recover for `hardStallMs` (measured from the
+ * first tick that saw it orphaned, so a long downtime doesn't count) is failed `stalled`
+ * instead of re-driven forever, so an unrecoverable run doesn't spin `running` forever — but
+ * every orphan still gets at least one re-drive attempt first. Decision-parked (`blocked`)
+ * and spend-paused (`paused`) runs aren't `running`, so they're left alone. Returns a stop
+ * function; also runs one tick immediately (boot reconcile — recover runs a crashed previous
+ * process orphaned without waiting a full interval).
  */
 export function startStaleRunSweeper(
   boss: PgBoss,
@@ -219,10 +227,16 @@ export function startStaleRunSweeper(
   // A live drive heartbeats its active job every `heartbeatSeconds`; treat a heartbeat older
   // than a generous multiple of that (but at least the lease) as a dead worker.
   const staleHeartbeatMs = Math.max(cfg.leaseMs, queueOptions.heartbeatSeconds * 1000 * 3)
+  // Per-PROCESS "first observed orphaned" clock, keyed by run id. The hard-stall deadline is
+  // measured from this — NOT the raw lease age — so a long orchestrator downtime (which
+  // inflates `updated_at`) can't fail an otherwise-recoverable run before recovery is even
+  // attempted. Entries are dropped once a run recovers or leaves the stale set.
+  const orphanedSince = new Map<string, number>()
   const tick = async () => {
     try {
       const now = Date.now()
       const stale = await container.agentRunRepository.listStale(now - cfg.leaseMs)
+      const stillOrphaned = new Set<string>()
       for (const ref of stale) {
         const queue = queueForKind(ref.kind)
         if (!queue) continue
@@ -236,7 +250,15 @@ export function startStaleRunSweeper(
           staleHeartbeatMs,
           now,
         )
-        if (state === 'live') continue
+        if (state === 'live') {
+          orphanedSince.delete(ref.id)
+          continue
+        }
+        // Start (or carry forward) this run's per-process orphaned clock.
+        const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
+        orphanedSince.set(ref.id, firstSeenOrphaned)
+        stillOrphaned.add(ref.id)
+
         if (state === 'orphaned' && jobId) {
           log.warn(
             { workspaceId: ref.workspaceId, runId: ref.id, kind: ref.kind, jobId },
@@ -250,21 +272,26 @@ export function startStaleRunSweeper(
           )
         }
 
-        // Hard-stall backstop (execution only): an orphaned run that recovery cannot resume
-        // within the deadline is failed rather than left spinning `running` with no progress.
-        if (ref.kind === 'execution' && now - ref.updatedAt > cfg.hardStallMs) {
+        // Hard-stall backstop (execution only): a run this process has been unable to recover
+        // for the whole deadline — re-driven on earlier ticks yet still not live — is failed
+        // rather than left spinning `running`. Gated on the per-process clock (not lease age),
+        // so a run first seen orphaned this tick (e.g. right after a long downtime) is always
+        // re-driven at least once below before it can ever be given up on.
+        if (ref.kind === 'execution' && now - firstSeenOrphaned > cfg.hardStallMs) {
           const mins = Math.round((now - ref.updatedAt) / 60_000)
           log.warn(
             { workspaceId: ref.workspaceId, executionId: ref.id, staleMinutes: mins },
-            'run stalled past hard deadline with no live driver; failing',
+            'run stalled past hard deadline; recovery could not resume it; failing',
           )
           await container.executionService.failRun(
             ref.workspaceId,
             ref.id,
-            `Run stalled: no progress for ${mins} minutes and its durable driver was gone.`,
+            `Run stalled: no progress for ${mins} minutes and recovery could not resume it.`,
             'stalled',
             null,
           )
+          orphanedSince.delete(ref.id)
+          stillOrphaned.delete(ref.id)
           continue
         }
 
@@ -287,6 +314,11 @@ export function startStaleRunSweeper(
           { workspaceId: ref.workspaceId, executionId: ref.id },
           sendOptions(ref.id, queueOptions),
         )
+      }
+      // Forget runs that recovered (bumped their lease → left the stale set) or went terminal,
+      // so their per-process orphaned clock restarts if they ever stall again.
+      for (const id of orphanedSince.keys()) {
+        if (!stillOrphaned.has(id)) orphanedSince.delete(id)
       }
     } catch (error) {
       log.error(

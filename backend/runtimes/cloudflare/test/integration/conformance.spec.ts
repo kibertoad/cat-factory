@@ -162,6 +162,8 @@ const harness: ConformanceHarness = {
         makeOnboardingProbe(buildContainer(env, { agentExecutor: new FakeAgentExecutor() })),
       executionRepository: () =>
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
+      agentRunRepository: () =>
+        buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
     }
   },
 }
