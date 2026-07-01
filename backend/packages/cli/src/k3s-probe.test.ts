@@ -72,12 +72,42 @@ describe('classifyHost', () => {
     )
     expect(state.recommended).toBe('use-existing')
   })
+
+  it('honors a `kind` runtime preference over the default k3d path', () => {
+    const d = detections({
+      docker: { installed: true, running: true },
+      k3d: { installed: true },
+      kind: { installed: true },
+    })
+    expect(classifyHost(d).recommended).toBe('create-k3d')
+    expect(classifyHost(d, 'kind').recommended).toBe('create-kind')
+  })
+
+  it('offers create-kind with a reason when kind is missing', () => {
+    const noKind = classifyHost(detections({ docker: { installed: true, running: true } }))
+    const offer = noKind.offers.find((o) => o.id === 'create-kind')
+    expect(offer?.available).toBe(false)
+    expect(offer?.reason).toContain('kind')
+  })
+
+  it('a `k3s` preference favors the guided install over the Docker paths', () => {
+    const state = classifyHost(
+      detections({ docker: { installed: true, running: true }, k3d: { installed: true } }),
+      'k3s',
+    )
+    expect(state.recommended).toBe('install-k3s')
+  })
+
+  it('labels the install offer as "start" when k3s is already installed', () => {
+    const state = classifyHost(detections({ k3s: { installed: true } }))
+    expect(state.offers.find((o) => o.id === 'install-k3s')?.label).toContain('already-installed')
+  })
 })
 
 describe('probeHost', () => {
   it('detects a reachable cluster + installed tools from the shell', async () => {
     const shell = scriptShell({
-      'kubectl version --output=json': {
+      'kubectl version --output=json --request-timeout=3s': {
         code: 0,
         stdout: JSON.stringify({ serverVersion: { gitVersion: 'v1.30.0' } }),
       },

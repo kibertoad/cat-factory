@@ -12,17 +12,22 @@ export {
 export { bootstrap, type BootstrapDeps, type FileSystem, BootstrapError } from './bootstrap.js'
 export {
   COMMAND_NOT_FOUND,
+  COMMAND_TIMED_OUT,
   createNodeShell,
+  DEFAULT_COMMAND_TIMEOUT_MS,
   type HostShell,
   type ShellResult,
 } from './host-shell.js'
 export { K3S_INSTALL_COMMAND, type K3sDeps, type K3sResult, setupK3s } from './k3s.js'
 export {
   classifyHost,
+  hasServerVersion,
   type HostDetections,
   type HostState,
   type Offer,
   type OfferId,
+  parseK3dClusters,
+  parseKindClusters,
   probeHost,
   type ToolDetection,
 } from './k3s-probe.js'

@@ -44,7 +44,7 @@ function opts(extra: Partial<CliOptions>): CliOptions {
 }
 
 const REACHABLE = {
-  'kubectl version --output=json': {
+  'kubectl version --output=json --request-timeout=3s': {
     code: 0,
     stdout: JSON.stringify({ serverVersion: { gitVersion: 'v1.30.0' } }),
   },
@@ -96,5 +96,41 @@ describe('setupK3s', () => {
     const { chosen } = await setupK3s(opts({ yes: true, clusterName: 'my-cluster' }), { io, shell })
     expect(chosen).toBe('create-k3d')
     expect(io.lines.join('\n')).toContain('my-cluster')
+  })
+
+  it('honors --runtime kind and echoes the kind cluster name', async () => {
+    const shell = scriptShell({
+      'kind version': { code: 0, stdout: 'kind v0.23.0' },
+      'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+    })
+    const io = captureIo()
+    const { chosen } = await setupK3s(opts({ yes: true, k3sRuntime: 'kind', clusterName: 'kd' }), {
+      io,
+      shell,
+    })
+    expect(chosen).toBe('create-kind')
+    expect(io.lines.join('\n')).toContain('kind cluster "kd"')
+  })
+
+  it('guides an already-installed k3s to start (not re-install)', async () => {
+    const shell = scriptShell({ 'k3s --version': { code: 0, stdout: 'k3s version v1.30.0+k3s1' } })
+    const io = captureIo()
+    const { chosen } = await setupK3s(opts({ yes: true }), { io, shell })
+    expect(chosen).toBe('install-k3s')
+    const out = io.lines.join('\n')
+    expect(out).toContain('already installed')
+    expect(out).not.toContain(K3S_INSTALL_COMMAND)
+  })
+
+  it('warns when the chosen k3d cluster name already exists', async () => {
+    const shell = scriptShell({
+      'k3d version': { code: 0, stdout: 'k3d version v5.6.0' },
+      'k3d cluster list --output json': { code: 0, stdout: '[{"name":"dupe"}]' },
+      'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+    })
+    const io = captureIo()
+    const { chosen } = await setupK3s(opts({ yes: true, clusterName: 'dupe' }), { io, shell })
+    expect(chosen).toBe('create-k3d')
+    expect(io.lines.join('\n')).toContain('already exists')
   })
 })

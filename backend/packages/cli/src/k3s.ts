@@ -29,10 +29,12 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
   const io = deps.io ?? createConsoleIo()
   const shell = deps.shell ?? createNodeShell()
 
+  const preferred = options.k3sRuntime ?? OPTION_DEFAULTS.k3sRuntime
+
   io.info('\ncat-factory — guided local k3s / k3d setup\n')
   io.info('Probing your machine for a usable Kubernetes cluster…')
 
-  const state = await probeHost(shell)
+  const state = await probeHost(shell, preferred)
   io.info(renderReport(state))
 
   const chosen = await chooseOffer(state, options, io)
@@ -95,42 +97,73 @@ function offerLabel(o: Offer): string {
 }
 
 /**
- * Print the guidance for the chosen path. The k3s install command is only ever PRINTED (it needs
- * sudo). The k3d / existing-cluster paths summarize what the follow-up slice will do — this slice
+ * Print the guidance for the chosen path. The k3s command is only ever PRINTED (it needs sudo). The
+ * k3d/kind / existing-cluster paths summarize what the follow-up slice will do — this slice
  * intentionally stops before mutating the host.
  */
 function printGuidance(chosen: OfferId, state: HostState, options: CliOptions, io: Io): void {
   if (chosen === 'install-k3s') {
+    // Don't tell a user who already has k3s to re-install it — point them at starting the service.
+    io.info(
+      state.detections.k3s.installed
+        ? [
+            '',
+            'k3s is already installed. Start it (needs sudo), e.g.:',
+            '',
+            '  sudo systemctl start k3s   # or: sudo k3s server',
+            '',
+            'Then re-run `cat-factory k3s` — it will detect the running cluster and offer to wire it.',
+          ].join('\n')
+        : [
+            '',
+            'Install k3s (single-node) — run this yourself (needs sudo):',
+            '',
+            `  ${K3S_INSTALL_COMMAND}`,
+            '',
+            'Then re-run `cat-factory k3s` — it will detect the new cluster and offer to wire it.',
+          ].join('\n'),
+    )
+    return
+  }
+
+  if (chosen === 'use-existing') {
     io.info(
       [
         '',
-        'Install k3s (single-node) — run this yourself (needs sudo):',
+        `Selected: reuse the existing cluster${
+          state.detections.clusterContext ? ` (context: ${state.detections.clusterContext})` : ''
+        }.`,
         '',
-        `  ${K3S_INSTALL_COMMAND}`,
+        'Next (coming in the follow-up step): cat-factory will',
+        '  - read the apiserver URL from your kubeconfig',
+        '  - create a least-privilege ServiceAccount + RBAC and mint a token',
+        '  - hand the values to the Settings → Infrastructure → Local k3s form to Test + Save',
         '',
-        'Then re-run `cat-factory k3s` — it will detect the new cluster and offer to wire it.',
+        'Provisioning is not performed in this release — nothing was changed on your host.',
       ].join('\n'),
     )
     return
   }
 
+  // create-k3d | create-kind
+  const distro = chosen === 'create-kind' ? 'kind' : 'k3d'
   const clusterName = options.clusterName ?? OPTION_DEFAULTS.k3sClusterName
-  const summary =
-    chosen === 'create-k3d'
-      ? `Selected: create a local k3d cluster "${clusterName}".`
-      : `Selected: reuse the existing cluster${
-          state.detections.clusterContext ? ` (context: ${state.detections.clusterContext})` : ''
-        }.`
+  const existing =
+    chosen === 'create-kind' ? state.detections.kindClusters : state.detections.k3dClusters
+  const collision = existing.includes(clusterName)
 
   io.info(
     [
       '',
-      summary,
+      `Selected: create a local ${distro} cluster "${clusterName}".`,
+      // A cluster of that name already exists — the follow-up provisioner is idempotent (it reuses
+      // rather than duplicates), so flag it now instead of surprising the user in the next slice.
+      ...(collision
+        ? [`  ! a ${distro} cluster named "${clusterName}" already exists — it will be reused.`]
+        : []),
       '',
       'Next (coming in the follow-up step): cat-factory will',
-      chosen === 'create-k3d'
-        ? '  - create the k3d cluster and read its apiserver URL'
-        : '  - read the apiserver URL from your kubeconfig',
+      `  - create the ${distro} cluster and read its apiserver URL`,
       '  - create a least-privilege ServiceAccount + RBAC and mint a token',
       '  - hand the values to the Settings → Infrastructure → Local k3s form to Test + Save',
       '',

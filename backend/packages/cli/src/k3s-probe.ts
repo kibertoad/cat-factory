@@ -1,3 +1,4 @@
+import { type K3sRuntime } from './args.js'
 import { COMMAND_NOT_FOUND, type HostShell } from './host-shell.js'
 
 /** Whether a host CLI is installed, and its reported version string when detectable. */
@@ -27,7 +28,7 @@ export interface HostDetections {
 }
 
 /** The setup paths the probe can offer. */
-export type OfferId = 'use-existing' | 'create-k3d' | 'install-k3s'
+export type OfferId = 'use-existing' | 'create-k3d' | 'create-kind' | 'install-k3s'
 
 /** One offered setup path, with whether it's currently possible + why not. */
 export interface Offer {
@@ -46,14 +47,29 @@ export interface HostState {
   recommended: OfferId
 }
 
-/** Priority order: prefer reusing a live cluster, then the no-root k3d path, then guided k3s. */
-const OFFER_PRIORITY: readonly OfferId[] = ['use-existing', 'create-k3d', 'install-k3s']
+/**
+ * Priority order for picking the recommendation, given the user's preferred runtime. A live cluster
+ * always wins; otherwise the preferred distribution's create/install path is tried first, then the
+ * others as fallbacks. Every list ends with `install-k3s`, which is always available.
+ */
+function offerPriority(preferred: K3sRuntime): readonly OfferId[] {
+  switch (preferred) {
+    case 'kind':
+      return ['use-existing', 'create-kind', 'create-k3d', 'install-k3s']
+    case 'k3s':
+      // An explicit k3s preference favours the guided single-node install over the Docker paths.
+      return ['use-existing', 'install-k3s', 'create-k3d', 'create-kind']
+    default:
+      return ['use-existing', 'create-k3d', 'create-kind', 'install-k3s']
+  }
+}
 
 /**
  * Classify the host from its detected facts into the offered setup paths. Pure — no IO — so it's
- * the primary unit-test target. `recommended` is the highest-priority AVAILABLE offer.
+ * the primary unit-test target. `recommended` is the highest-priority AVAILABLE offer for the
+ * `preferred` runtime (default `k3d`, the no-root Docker path).
  */
-export function classifyHost(d: HostDetections): HostState {
+export function classifyHost(d: HostDetections, preferred: K3sRuntime = 'k3d'): HostState {
   const useExisting: Offer = {
     id: 'use-existing',
     label: d.clusterContext
@@ -64,31 +80,46 @@ export function classifyHost(d: HostDetections): HostState {
     reason: d.reachableCluster ? undefined : 'No cluster is reachable via your kubeconfig',
   }
 
+  const dockerReason = !d.docker.installed
+    ? 'Docker is not installed'
+    : !d.docker.running
+      ? 'Docker is not running'
+      : undefined
+
   const createK3d: Offer = {
     id: 'create-k3d',
     label: 'Create a local k3d cluster (Docker, no root)',
     available: d.docker.running && d.k3d.installed,
     recommended: false,
-    reason: !d.docker.installed
-      ? 'Docker is not installed'
-      : !d.docker.running
-        ? 'Docker is not running'
-        : !d.k3d.installed
-          ? 'k3d is not installed (https://k3d.io)'
-          : undefined,
+    reason:
+      dockerReason ?? (!d.k3d.installed ? 'k3d is not installed (https://k3d.io)' : undefined),
   }
 
-  // Guided k3s install only ever PRINTS a command (needs sudo), so it's always an option.
+  const createKind: Offer = {
+    id: 'create-kind',
+    label: 'Create a local kind cluster (Docker, no root)',
+    available: d.docker.running && d.kind.installed,
+    recommended: false,
+    reason:
+      dockerReason ??
+      (!d.kind.installed ? 'kind is not installed (https://kind.sigs.k8s.io)' : undefined),
+  }
+
+  // The guided k3s path is always available: when k3s is already installed it only points the user
+  // at starting the service; otherwise it PRINTS the install command (needs sudo). Never auto-runs.
   const installK3s: Offer = {
     id: 'install-k3s',
-    label: 'Show the k3s install command (needs sudo — not run for you)',
+    label: d.k3s.installed
+      ? 'Start your already-installed k3s (needs sudo — not run for you)'
+      : 'Show the k3s install command (needs sudo — not run for you)',
     available: true,
     recommended: false,
   }
 
-  const offers: Offer[] = [useExisting, createK3d, installK3s]
+  const offers: Offer[] = [useExisting, createK3d, createKind, installK3s]
   const recommended =
-    OFFER_PRIORITY.find((id) => offers.find((o) => o.id === id)?.available) ?? 'install-k3s'
+    offerPriority(preferred).find((id) => offers.find((o) => o.id === id)?.available) ??
+    'install-k3s'
   for (const o of offers) o.recommended = o.id === recommended
 
   return { detections: d, offers, recommended }
@@ -142,11 +173,18 @@ export function hasServerVersion(stdout: string): boolean {
 }
 
 /**
- * Probe the host over the {@link HostShell} seam and classify it. Runs each tool's detection
- * command, treats {@link COMMAND_NOT_FOUND} as "not installed", and folds the results through the
- * pure {@link classifyHost}. Tested with a scripted fake shell.
+ * Probe the host over the {@link HostShell} seam and classify it for the `preferred` runtime. Runs
+ * each tool's detection command, treats {@link COMMAND_NOT_FOUND} as "not installed", and folds the
+ * results through the pure {@link classifyHost}. Tested with a scripted fake shell.
+ *
+ * `kubectl version` / `config current-context` contact the apiserver, so they carry an explicit
+ * `--request-timeout` — a kubeconfig pointing at a down cluster then fails fast instead of hanging
+ * the probe (the {@link HostShell} watchdog is the outer backstop).
  */
-export async function probeHost(shell: HostShell): Promise<HostState> {
+export async function probeHost(
+  shell: HostShell,
+  preferred: K3sRuntime = 'k3d',
+): Promise<HostState> {
   const [
     kubectlVersion,
     kubectlContext,
@@ -157,7 +195,7 @@ export async function probeHost(shell: HostShell): Promise<HostState> {
     k3sVersion,
     dockerVersion,
   ] = await Promise.all([
-    shell.run('kubectl', ['version', '--output=json']),
+    shell.run('kubectl', ['version', '--output=json', '--request-timeout=3s']),
     shell.run('kubectl', ['config', 'current-context']),
     shell.run('k3d', ['version']),
     shell.run('k3d', ['cluster', 'list', '--output', 'json']),
@@ -187,5 +225,5 @@ export async function probeHost(shell: HostShell): Promise<HostState> {
     kindClusters: kindList.code === 0 ? parseKindClusters(kindList.stdout) : [],
   }
 
-  return classifyHost(detections)
+  return classifyHost(detections, preferred)
 }
