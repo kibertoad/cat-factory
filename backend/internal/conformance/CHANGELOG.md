@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.9.74
+
+### Patch Changes
+
+- Updated dependencies [eab2b60]
+  - @cat-factory/server@0.63.1
+
 ## 0.9.73
 
 ### Patch Changes
