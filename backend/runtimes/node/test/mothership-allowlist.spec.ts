@@ -149,21 +149,22 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listOlderThan: 'sweeper',
     deleteOlderThan: 'sweeper',
   },
-  modelPresetRepository: { get: 'pending', remove: 'pending' },
-  serviceFragmentDefaultsRepository: { set: 'pending' },
+  // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
+  // `upsert` were already remotely callable — so the whole model-preset repo is remote.
+  modelPresetRepository: {},
+  // `set` is now allow-listed (the fragment-defaults editor); `get` was already remote.
+  serviceFragmentDefaultsRepository: {},
   pipelineScheduleRepository: {
     values: 'helper',
-    get: 'pending',
+    // `get`/`upsert`/`remove`/`insertRun`/`updateRun`/`listRuns` are now allow-listed (the
+    // recurring-schedule management surface incl. `runNow`); the serviceId-keyed `listByService`
+    // stays off the SPA path and the sweeper reads/prunes stay mothership-internal.
     listByService: 'pending',
     listDue: 'sweeper',
-    upsert: 'pending',
-    remove: 'pending',
-    insertRun: 'pending',
-    updateRun: 'pending',
-    listRuns: 'pending',
     pruneRunsBefore: 'sweeper',
   },
-  trackerSettingsRepository: { put: 'pending' },
+  // `put` is now allow-listed (the tracker-settings editor); `get` was already remote.
+  trackerSettingsRepository: {},
   serviceRepository: {
     get: 'pending',
     listByFrameBlocks: 'pending',
@@ -203,8 +204,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'pending',
     deleteByBlockStage: 'pending',
   },
-  mergePresetRepository: { get: 'pending', remove: 'pending' },
-  workspaceSettingsRepository: { upsert: 'pending' },
+  // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
+  // `upsert` were already remotely callable — so the whole merge-preset repo is remote.
+  mergePresetRepository: {},
+  // `upsert` is now allow-listed (the workspace-settings panel save); `get` was already remote.
+  workspaceSettingsRepository: {},
   observabilityConnectionRepository: { get: 'pending', upsert: 'pending', delete: 'pending' },
   incidentEnrichmentConnectionRepository: {
     get: 'pending',
