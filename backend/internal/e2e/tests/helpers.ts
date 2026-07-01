@@ -162,6 +162,8 @@ export async function startBootstrap(
  * dismissals from `cat-factory:infra-setup-dismissed` keyed by user id; auth is off in e2e so
  * the key is `local`. Seeding it here (before `goto`, the single choke point every board spec
  * routes through) keeps the suite deterministic without a test-only branch in product code.
+ * NOTE: this key + shape mirror `INFRA_SETUP_DISMISSED_STORAGE_KEY` in the app's
+ * `InfraSetupBanner.vue`; if that ever changes, update this seed in lockstep.
  */
 export async function pinWorkspace(page: Page, workspaceId: string): Promise<void> {
   await page.addInitScript((id) => {

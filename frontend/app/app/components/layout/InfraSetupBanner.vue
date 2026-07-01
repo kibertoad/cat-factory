@@ -6,17 +6,34 @@
 // runtime whose account picked no backend — incl. Cloudflare without an ARTIFACT_BUCKET binding;
 // ephemeral test environments on any runtime that wires the integration).
 //
-// The outer overlay is `pointer-events-none` (only the banner CARDS re-enable pointer events), so
-// the full-width top strip it spans never intercepts clicks on the board chrome underneath it.
+// Positioning/stacking against the sibling advisory banners (AI-readiness, provider-config) is
+// owned by the shared, click-through banner column in `pages/index.vue` — so concurrent prompts
+// stack vertically instead of drawing on top of each other. This component only stacks its OWN
+// (up to three) area cards; each card re-enables pointer events while the column stays inert.
 //
 // Dismissal offers the two choices the product asks for: hide for THIS SESSION (a ui-store flag,
 // cleared on workspace switch, re-nags next load) or "I'm OK with the limitations, don't notify
 // me again" — a PERMANENT, per-USER dismissal persisted in localStorage keyed by the signed-in
 // user id (so it's this-user-only and survives reloads).
+//
+// Scope note: the permanent dismissal is per-USER and DEPLOYMENT-wide, not per-account. That is
+// exact for `agentExecutor`/`ephemeralEnvironments` (deployment-level wiring). `binaryStorage` is
+// per-account, so a user who permanently silences it on one account won't be re-nagged on another
+// account that also has no storage — an accepted trade-off (the setting stays reachable from
+// account settings, and the SESSION dismissal re-nags on the next load regardless).
+//
+// Freshness note: `infraSetup` is a server projection recomputed only on snapshot (re)load, so a
+// banner clears on the next board load after the operator configures the area via the deep-link,
+// not the instant the config panel saves.
 import { useLocalStorage } from '@vueuse/core'
 import { computed } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { InfraSetupArea } from '~/types/domain'
+
+// The localStorage key holding the permanent per-user dismissals. Kept as a named constant so the
+// shape is defined once; the e2e suite seeds the SAME key in `backend/internal/e2e/tests/helpers.ts`
+// (`pinWorkspace`) to suppress the banner — keep the two in sync if this ever changes.
+const INFRA_SETUP_DISMISSED_STORAGE_KEY = 'cat-factory:infra-setup-dismissed'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -63,7 +80,7 @@ const AREA_META: Record<
 // scoped to the signed-in user and doesn't leak across accounts on a shared browser). No
 // signed-in user (local/auth-off single-user mode) ⇒ the `local` bucket.
 const permanentDismissed = useLocalStorage<Record<string, InfraSetupArea[]>>(
-  'cat-factory:infra-setup-dismissed',
+  INFRA_SETUP_DISMISSED_STORAGE_KEY,
   {},
 )
 const userKey = computed(() => auth.user?.id ?? 'local')
@@ -110,10 +127,7 @@ function dismissMenu(area: InfraSetupArea): DropdownMenuItem[][] {
 
 <template>
   <Transition name="fade">
-    <div
-      v-if="visible.length > 0"
-      class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
-    >
+    <div v-if="visible.length > 0" class="flex w-full flex-col items-center gap-2">
       <div
         v-for="area in visible"
         :key="area"

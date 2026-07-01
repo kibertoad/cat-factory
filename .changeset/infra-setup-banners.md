@@ -1,5 +1,6 @@
 ---
 '@cat-factory/contracts': minor
+'@cat-factory/integrations': minor
 '@cat-factory/server': minor
 '@cat-factory/app': minor
 ---
@@ -23,3 +24,9 @@ The SPA surfaces each `not_defined` area as a loud, per-area setup banner with a
 into the relevant configuration. Dismissing a banner asks whether to hide it just for this
 session (re-nags next load) or permanently — "I'm OK with the limitations, don't notify me
 again" — the latter persisted per-user in localStorage.
+
+The advisory top-of-board banners (AI-readiness, provider-config, infra-setup) now render in a
+single shared, click-through column so concurrent prompts on a fresh deployment stack vertically
+instead of drawing on top of each other. The `RunnerPoolConnectionService` and
+`EnvironmentConnectionService` gain a `hasConnection` presence probe (no secret decrypt) that the
+projection uses on the hot board-load path.

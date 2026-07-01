@@ -251,13 +251,23 @@ watch(
     <TranslationWarningBanner />
     <!-- Local-mode setup prompt (missing GitHub PAT); floats over whatever is shown below. -->
     <GitHubPatBanner />
-    <!-- AI-readiness prompt (no usable model source, or default preset uses unavailable models). -->
-    <AiProvidersBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
-    <!-- Infrastructure provider prompt (env/runner-pool wired but missing mandatory config). -->
-    <ProviderConfigBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
-    <!-- Infra-setup prompt (this deployment needs an executor / test env / storage that the
-         operator hasn't defined yet, so a class of agents can't run). -->
-    <InfraSetupBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
+    <!-- Stacked advisory banners: one click-through column so concurrent prompts never draw on
+         top of each other (a fresh, unconfigured deployment can raise all three at once — no AI
+         model + no runner pool + no storage). The wrapper is `pointer-events-none`; each banner
+         re-enables pointer events on its own card, so the empty strip never intercepts clicks on
+         the board chrome underneath.
+         - AI-readiness (no usable model source, or default preset uses unavailable models).
+         - Infrastructure provider (env/runner-pool wired but missing mandatory config).
+         - Infra-setup (this deployment needs an executor / test env / storage the operator hasn't
+           defined yet, so a class of agents can't run). -->
+    <div
+      v-if="workspace.ready && !needsGitHubInstall && !githubProbePending"
+      class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
+    >
+      <AiProvidersBanner />
+      <ProviderConfigBanner />
+      <InfraSetupBanner />
+    </div>
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
     <div

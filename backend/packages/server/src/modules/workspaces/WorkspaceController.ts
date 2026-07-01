@@ -100,7 +100,7 @@ function snapshotBackendKinds(registries: {
  * that fails a secret decrypt) degrades that area to `not_applicable` ("can't tell → don't nag")
  * rather than 500-ing `GET /workspaces/:id`.
  */
-async function areaStatus(
+export async function areaStatus(
   wired: boolean,
   read: () => Promise<unknown>,
 ): Promise<'not_applicable' | 'not_defined' | 'configured'> {
@@ -112,20 +112,28 @@ async function areaStatus(
   }
 }
 
-async function snapshotInfraSetup(
-  container: {
-    environments?: { connectionService: { getConnection(ws: string): Promise<unknown> } }
-    runners?: { connectionService: { getConnection(ws: string): Promise<unknown> } }
-    resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
-  },
+/**
+ * The subset of the request container `snapshotInfraSetup` reads. Named (rather than inlined)
+ * so the presence-probe method shapes are explicit and a signature change is caught here. The
+ * connection probes use `hasConnection` — a yes/no that does NOT decrypt the secret bundle — so
+ * this (which runs on every board load) stays cheap on a configured deployment.
+ */
+export interface InfraSetupSources {
+  environments?: { connectionService: { hasConnection(ws: string): Promise<boolean> } }
+  runners?: { connectionService: { hasConnection(ws: string): Promise<boolean> } }
+  resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
+}
+
+export async function snapshotInfraSetup(
+  container: InfraSetupSources,
   workspaceId: string,
 ): Promise<InfraSetup> {
   const [ephemeralEnvironments, agentExecutor, binaryStorage] = await Promise.all([
     areaStatus(!!container.environments, () =>
-      container.environments!.connectionService.getConnection(workspaceId),
+      container.environments!.connectionService.hasConnection(workspaceId),
     ),
     areaStatus(!!container.runners, () =>
-      container.runners!.connectionService.getConnection(workspaceId),
+      container.runners!.connectionService.hasConnection(workspaceId),
     ),
     areaStatus(!!container.resolveBinaryArtifactStore, () =>
       container.resolveBinaryArtifactStore!(workspaceId),

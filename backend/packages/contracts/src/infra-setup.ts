@@ -43,7 +43,12 @@ export const infraSetupSchema = v.object({
   ephemeralEnvironments: infraSetupStatusSchema,
   /** The container agent executor (self-hosted runner pool). Relevant only on remote Node. */
   agentExecutor: infraSetupStatusSchema,
-  /** Binary/object storage for UI screenshots + reference images. Relevant on remote Node. */
+  /**
+   * Binary/object storage for UI screenshots + reference images. Every facade wires an
+   * artifact-store resolver, so this is `configured`/`not_defined` on every runtime — not just
+   * remote Node: a Cloudflare deployment WITHOUT an `ARTIFACT_BUCKET` binding (or any account
+   * that selected no backend) reads `not_defined` too.
+   */
   binaryStorage: infraSetupStatusSchema,
 })
 export type InfraSetup = v.InferOutput<typeof infraSetupSchema>
