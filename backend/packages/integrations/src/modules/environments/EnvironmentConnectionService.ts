@@ -49,6 +49,7 @@ import {
 import {
   buildInfraHandlerFields,
   handlerConfigToBackendConfig,
+  overlaySecrets,
   resolveHandlerBackend,
   type ServiceKubeInputs,
   toManifestId,
@@ -294,7 +295,10 @@ export class EnvironmentConnectionService {
     input: RegisterHandlerInput,
   ): Promise<EnvironmentHandlerView> {
     const record = await this.storeHandler(workspaceId, input)
-    return this.toHandlerView(record, Object.keys(input.secrets))
+    // Derive the stored secret-key names from the PERSISTED record (not the request body), so a
+    // secret preserved on edit (the operator left the field blank to keep the saved token) still
+    // reports as set. Mirrors listHandlers.
+    return this.toHandlerView(record, this.referencedSecretKeyNames(record))
   }
 
   /** Rotate the secret bundle for one handler without re-sending its config. */
@@ -608,7 +612,16 @@ export class EnvironmentConnectionService {
       input.backendKind,
     )
     const backendConfig = handlerConfigToBackendConfig(input.config, backend.kind)
-    return this.testConnection(workspaceId, { config: backendConfig, secrets: input.secrets })
+    // Fall back to the SAVED handler's stored secrets so an operator can (re)test an existing
+    // connection — or edit a non-secret field and test it — WITHOUT re-entering the write-only
+    // token the edit form never surfaces. A freshly-typed secret still overrides the stored one;
+    // a blank/omitted value preserves it (see overlaySecrets).
+    const provisionType = engineToProvisionType(input.config.engine)
+    const manifestId =
+      input.config.engine === 'remote-custom' ? input.config.acceptsManifestId : null
+    const stored = await this.storedSecretsFor(workspaceId, provisionType, manifestId)
+    const secrets = overlaySecrets(stored, input.secrets)
+    return this.testConnection(workspaceId, { config: backendConfig, secrets })
   }
 
   /**
@@ -1172,18 +1185,31 @@ export class EnvironmentConnectionService {
     input: RegisterHandlerInput,
   ): Promise<EnvironmentConnectionRecord> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const fields = buildInfraHandlerFields(this.deps.environmentBackendRegistry, input, {
-      ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
-      ...(this.deps.customTlsSupported !== undefined
-        ? { customTlsSupported: this.deps.customTlsSupported }
-        : {}),
-    })
+    // Resolve the existing row up-front so an EDIT can PRESERVE write-only secrets the operator
+    // didn't re-enter: a blank/omitted secret keeps the stored value, so changing a non-secret
+    // field (or re-saving) never wipes the token. A supplied non-empty value replaces it. A first
+    // registration has no stored bundle, so every referenced key must be supplied — enforced by
+    // buildInfraHandlerFields over the merged bundle below. (buildInfraHandlerFields derives the
+    // persisted provisionType/manifestId straight from the input, so this lookup key matches it.)
     const existing = await this.deps.environmentConnectionRepository.getByWorkspaceAndType(
       workspaceId,
-      fields.provisionType,
-      fields.manifestId,
+      input.provisionType,
+      input.manifestId ?? null,
     )
-    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(input.secrets))
+    const secrets = existing
+      ? overlaySecrets(await this.decryptSecrets(existing), input.secrets)
+      : input.secrets
+    const fields = buildInfraHandlerFields(
+      this.deps.environmentBackendRegistry,
+      { ...input, secrets },
+      {
+        ...(this.deps.urlPolicy ? { urlPolicy: this.deps.urlPolicy } : {}),
+        ...(this.deps.customTlsSupported !== undefined
+          ? { customTlsSupported: this.deps.customTlsSupported }
+          : {}),
+      },
+    )
+    const secretsCipher = await this.deps.secretCipher.encrypt(JSON.stringify(secrets))
     const record: EnvironmentConnectionRecord = {
       workspaceId,
       ...fields,
@@ -1193,6 +1219,20 @@ export class EnvironmentConnectionService {
     }
     await this.deps.environmentConnectionRepository.upsert(record)
     return record
+  }
+
+  /** The decrypted secret bundle of a stored handler (or {} when none is registered). */
+  private async storedSecretsFor(
+    workspaceId: string,
+    provisionType: ProvisionType,
+    manifestId: string | null,
+  ): Promise<Record<string, string>> {
+    const record = await this.deps.environmentConnectionRepository.getByWorkspaceAndType(
+      workspaceId,
+      provisionType,
+      manifestId,
+    )
+    return record ? this.decryptSecrets(record) : {}
   }
 
   /** Lower a legacy backend config into a per-type {@link InfraHandlerConfig}. */

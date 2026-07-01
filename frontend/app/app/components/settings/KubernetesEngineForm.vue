@@ -184,9 +184,19 @@ const urlValid = computed(() => {
 })
 
 const connected = computed(() => !!props.handler)
+// Whether a token is already SAVED for this handler. The value is write-only (never returned),
+// so on edit the token field starts blank and the operator may leave it blank to keep the stored
+// token — the backend falls back to it for both the connection test and the save. A new value
+// entered here replaces it.
+const tokenStored = computed(
+  () => !!props.handler && props.handler.secretKeys.includes(KUBERNETES_ENV_TOKEN_SECRET_KEY),
+)
 const canSave = computed(
   () =>
-    !!form.label.trim() && !!form.apiServerUrl.trim() && !!apiToken.value.trim() && urlValid.value,
+    !!form.label.trim() &&
+    !!form.apiServerUrl.trim() &&
+    (tokenStored.value || !!apiToken.value.trim()) &&
+    urlValid.value,
 )
 
 // Why the Connect button is disabled, surfaced as a red hint next to it so a mandatory-field gap
@@ -198,7 +208,10 @@ const connectBlockedReason = computed(() => {
   if (!form.label.trim()) missing.push(t('settings.infrastructure.kubernetesEngine.label'))
   if (!form.apiServerUrl.trim())
     missing.push(t('settings.infrastructure.kubernetesEngine.apiServerUrl'))
-  if (!apiToken.value.trim()) missing.push(t('settings.infrastructure.kubernetesEngine.apiToken'))
+  // The token is required only for a FIRST connect; on edit a saved token is preserved when
+  // the field is left blank, so don't flag it as missing.
+  if (!tokenStored.value && !apiToken.value.trim())
+    missing.push(t('settings.infrastructure.kubernetesEngine.apiToken'))
   if (form.urlSource === 'ingressTemplate' && !form.hostTemplate.trim())
     missing.push(t('settings.infrastructure.kubernetesEngine.hostTemplate'))
   if (form.urlSource === 'serviceStatus' && !form.serviceName.trim())
@@ -239,9 +252,12 @@ function buildPayload(): KubeHandlerPayload {
   if (form.imageTemplate.trim()) kubernetes.imageTemplate = form.imageTemplate.trim()
   // One honest assertion at the boundary that actually builds the shape (the reactive form is
   // dynamically assembled, then validated server-side); the emitted config flows typed onward.
+  // OMIT the token when the field is blank so the backend preserves the saved one (a blank
+  // secret means "keep it") — only a typed value is sent, and it replaces the stored token.
+  const token = apiToken.value.trim()
   return {
     config: { engine: props.engine, kubernetes } as unknown as KubeHandlerConfig,
-    secrets: { [KUBERNETES_ENV_TOKEN_SECRET_KEY]: apiToken.value.trim() },
+    secrets: token ? { [KUBERNETES_ENV_TOKEN_SECRET_KEY]: token } : {},
   }
 }
 
@@ -322,9 +338,29 @@ async function copyAutoSetupCommand() {
 
     <UFormField
       :label="t('settings.infrastructure.kubernetesEngine.apiToken')"
-      :help="t('settings.infrastructure.kubernetesEngine.apiTokenHelp')"
+      :help="
+        tokenStored
+          ? t('settings.infrastructure.kubernetesEngine.apiTokenHelpStored')
+          : t('settings.infrastructure.kubernetesEngine.apiTokenHelp')
+      "
     >
-      <UInput v-model="apiToken" type="password" class="font-mono" autocomplete="off" />
+      <template v-if="tokenStored" #hint>
+        <span class="inline-flex items-center gap-1 text-[11px] text-emerald-400">
+          <UIcon name="i-lucide-check-circle-2" class="h-3.5 w-3.5" />
+          {{ t('settings.infrastructure.kubernetesEngine.tokenSaved') }}
+        </span>
+      </template>
+      <UInput
+        v-model="apiToken"
+        type="password"
+        class="font-mono"
+        autocomplete="off"
+        :placeholder="
+          tokenStored
+            ? t('settings.infrastructure.kubernetesEngine.apiTokenPlaceholderStored')
+            : undefined
+        "
+      />
     </UFormField>
 
     <!-- URL derivation: how the live environment URL is resolved once the service's
