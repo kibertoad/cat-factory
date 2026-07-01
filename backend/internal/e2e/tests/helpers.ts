@@ -6,6 +6,44 @@ import { type APIRequestContext, type Locator, type Page, expect } from '@playwr
 export const BACKEND_URL =
   process.env.E2E_BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 8787}`
 
+// The test-only control channel `testServer.ts` listens on (a separate port, so it never
+// couples to the app's CORS/auth). Defaults to `PORT + 1` — the same derivation the backend
+// uses. A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE starting a run.
+export const CONTROL_URL =
+  process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
+
+/**
+ * The per-workspace fake behaviour a spec can request (mirrors the backend `FakeProfile`).
+ * All fields optional; absent ⇒ the base backend behaviour. Set this for a workspace BEFORE
+ * starting its run — the backend reads it when the run's first agent step dispatches.
+ */
+export interface FakeProfile {
+  /** Confidence the fake reports on the final step (drives auto-merge vs merge-review). */
+  confidence?: number
+  /** Step indices that raise a one-shot decision. Pass `[]` to disable the default gate. */
+  decisionOnSteps?: number[]
+  /** Agent kinds driven as a POLLED async job (surfacing subtask bars) instead of inline. */
+  asyncKinds?: string[]
+  /** Agent kinds whose container dispatch THROWS (the run faults with `failureKind: 'dispatch'`). */
+  dispatchThrowKinds?: string[]
+  /** Number of `running` polls an async job reports before `done` (default 2). */
+  asyncPolls?: number
+  /** Subtask snapshots the bootstrap run emits (one per running poll) before it finishes. */
+  bootstrapProgress?: { completed: number; inProgress: number; total: number }[]
+  /** When set, the bootstrap run reports FAILED on poll (the failure-banner + retry path). */
+  bootstrapFailWith?: string
+}
+
+/** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
+export async function setFakeProfile(
+  request: APIRequestContext,
+  workspaceId: string,
+  profile: FakeProfile,
+): Promise<void> {
+  const res = await request.post(`${CONTROL_URL}/fake-profile`, { data: { workspaceId, profile } })
+  if (!res.ok()) throw new Error(`fake-profile control ${res.status()}: ${await res.text()}`)
+}
+
 // Shared timeouts for LIVE (WebSocket-pushed) assertions. A live run advances through
 // several durable pg-boss steps, so web-first assertions need headroom over the default
 // 5s — but we still want NO fixed sleeps. Named here so every spec uses the same budget.
@@ -83,6 +121,40 @@ export async function startRun(
   await json(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}/executions`, {
       data: { pipelineId },
+    }),
+  )
+}
+
+/** One bootstrap job as the controller returns it (only the fields the specs read). */
+export interface BootstrapJob {
+  id: string
+  status: string
+  repoName: string
+  /** The provisional service frame the run materialises (the board node to assert on). */
+  blockId: string | null
+}
+
+/**
+ * Start a "bootstrap repo" run over REST (the same endpoint the launch modal calls). Returns
+ * immediately with a `running` job whose `blockId` is the provisional service frame now on the
+ * board — the spec asserts on that frame's live progress / failure. The fake bootstrapper (see
+ * `FakeProfile.bootstrapProgress` / `bootstrapFailWith`) drives the scripted lifecycle.
+ */
+export async function startBootstrap(
+  request: APIRequestContext,
+  workspaceId: string,
+  repoName: string,
+): Promise<BootstrapJob> {
+  return json<BootstrapJob>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/bootstrap/jobs`, {
+      data: {
+        referenceArchitectureId: null,
+        repoName,
+        description: 'e2e bootstrap',
+        private: true,
+        instructions: 'a small Hono API with a /health route',
+        type: 'service',
+      },
     }),
   )
 }

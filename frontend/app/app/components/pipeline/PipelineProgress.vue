@@ -237,7 +237,14 @@ const ITEM_ICON: Record<string, string> = {
 
     <!-- agent chain as a vertical timeline -->
     <ol class="flex flex-col">
-      <li v-for="(s, i) in steps" :key="i" class="relative flex gap-4 pb-5 last:pb-0">
+      <li
+        v-for="(s, i) in steps"
+        :key="i"
+        class="relative flex gap-4 pb-5 last:pb-0"
+        data-testid="pipeline-step"
+        :data-step-kind="s.agentKind"
+        :data-step-state="s.state"
+      >
         <!-- connector line to the next step -->
         <span
           v-if="i < steps.length - 1"
@@ -385,7 +392,11 @@ const ITEM_ICON: Record<string, string> = {
           </div>
 
           <!-- live subtask counts from the agent's todo list -->
-          <div v-if="s.subtasks && s.subtasks.total > 0" class="mt-2">
+          <div
+            v-if="s.subtasks && s.subtasks.total > 0"
+            class="mt-2"
+            data-testid="pipeline-subtasks"
+          >
             <div class="flex items-center justify-between text-[10px] text-slate-400">
               <span>
                 {{

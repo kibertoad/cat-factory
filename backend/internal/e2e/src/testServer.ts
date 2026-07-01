@@ -17,12 +17,10 @@
 //
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
-import {
-  AsyncFakeAgentExecutor,
-  FakeAgentExecutor,
-  FakeRepoBootstrapper,
-} from '@cat-factory/conformance'
+import { createServer } from 'node:http'
+import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
 import { buildNodeContainer, start } from '@cat-factory/node-server'
+import { E2eFakeAgentExecutor, E2eRepoBootstrapper, type FakeProfile } from './fakeProfile.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
  * the kernel `AgentKind` type, which isn't a dependency of this test-only package). */
@@ -62,17 +60,53 @@ const asyncKinds = parseKinds(process.env.E2E_ASYNC_KINDS)
 // 1; lower it (e.g. for a merge-review flow) via E2E_CONFIDENCE.
 const confidence = process.env.E2E_CONFIDENCE ? Number(process.env.E2E_CONFIDENCE) : 1
 
-const agentExecutor =
-  dispatchThrowKinds.length > 0 || asyncKinds.length > 0
-    ? new AsyncFakeAgentExecutor({
-        confidence,
-        decisionOnSteps,
-        // A thrown dispatch is only meaningful for an async (polled) kind, so any
-        // dispatch-throw kind is implicitly async too.
-        asyncKinds: [...new Set([...asyncKinds, ...dispatchThrowKinds])],
+// The BASE fake options every workspace inherits (the historical global env knobs). A spec
+// overrides these PER WORKSPACE via the control channel below; a workspace with no profile
+// gets exactly these, so the pre-existing specs are unchanged.
+const baseOptions: FakeOptions = {
+  confidence,
+  decisionOnSteps,
+  ...(asyncKinds.length || dispatchThrowKinds.length
+    ? {
+        // A thrown dispatch is only meaningful for an async (polled) kind.
+        asyncKinds: [...new Set([...asyncKinds, ...dispatchThrowKinds])] as FakeKind[],
         dispatchThrowKinds,
-      })
-    : new FakeAgentExecutor({ confidence, decisionOnSteps })
+      }
+    : {}),
+}
+
+// The per-workspace fake-behaviour registry, mutated by the test-only control server below and
+// read by the two profile-aware wrappers. Keyed by workspace id.
+const profiles = new Map<string, FakeProfile>()
+const agentExecutor = new E2eFakeAgentExecutor(baseOptions, profiles)
+const repoBootstrapper = new E2eRepoBootstrapper(profiles)
+
+// A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
+// shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
+// (Playwright's request context — not the browser), keyed to its own freshly-seeded
+// workspace, BEFORE it starts the run. Listens on `PORT + 1` (or `E2E_CONTROL_PORT`); the
+// `setFakeProfile` helper derives the same address.
+const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
+createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/fake-profile') {
+    const chunks: Buffer[] = []
+    req.on('data', (c) => chunks.push(c as Buffer))
+    req.on('end', () => {
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+          workspaceId: string
+          profile: FakeProfile
+        }
+        profiles.set(body.workspaceId, body.profile ?? {})
+        res.writeHead(204).end()
+      } catch (err) {
+        res.writeHead(400).end(err instanceof Error ? err.message : String(err))
+      }
+    })
+    return
+  }
+  res.writeHead(404).end()
+}).listen(controlPort)
 
 // A non-secret, fixed encryption key (32 zero bytes, base64). The always-on task-source
 // integration makes config load require ENCRYPTION_KEY; a fixed value keeps any encrypted
@@ -87,6 +121,12 @@ const env: NodeJS.ProcessEnv = {
   // ENVIRONMENT so the flag is honoured. Mirrors the conformance test env.
   TESTING_NO_AUTH: 'true',
   ENVIRONMENT: 'test',
+  // Poll durable async agent jobs + gates every second instead of the 15s/30s production
+  // cadence, so a polled `awaiting_job` run (an async agent kind) reaches a terminal state
+  // well within the suite's LIVE/RUN_TERMINAL timeouts. Inline specs don't poll, so this is
+  // a no-op for them; the fakes are deterministic, so a faster cadence changes no outcome.
+  JOB_POLL_INTERVAL: process.env.JOB_POLL_INTERVAL ?? '1 second',
+  CI_POLL_INTERVAL: process.env.CI_POLL_INTERVAL ?? '1 second',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,
   PORT: process.env.PORT ?? '8787',
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
@@ -117,7 +157,7 @@ await start({
       ...opts,
       overrides: {
         agentExecutor,
-        repoBootstrapper: new FakeRepoBootstrapper(),
+        repoBootstrapper,
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
       // model, so the execution start guard needs that provider marked available to start a
