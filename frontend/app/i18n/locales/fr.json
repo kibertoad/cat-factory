@@ -294,6 +294,7 @@
         "github_not_connected": "GitHub non connecté",
         "bootstrap_not_retryable": "L’initialisation ne peut pas être relancée",
         "bootstrap_reference_missing": "L’architecture de référence a disparu",
+        "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline",
         "visual_pipeline_no_frontend": "Aucun frontend à tester"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",

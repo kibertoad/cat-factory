@@ -16,37 +16,29 @@ export {
   describeFailingChecks,
 } from '@cat-factory/kernel'
 
-/**
- * The agent kind of the special requirements-review gate step. It is NOT a container /
- * prose agent: the engine runs the inline reviewer (via the requirements module), parks
- * the run for the dedicated review window, and drives the iterative answer → incorporate →
- * re-review loop until it converges (or the human resolves a hit iteration cap). Passes
- * through when the requirements module / reviewer model is not wired.
- */
-export const REQUIREMENTS_REVIEW_AGENT_KIND = 'requirements-review'
-
-/**
- * The agent kind of the special clarity-review gate step. Like the requirements reviewer
- * it is an INLINE engine step (not a container/prose agent): the engine runs the inline
- * clarity reviewer (via the clarity module), parks the run for the dedicated review
- * window, and drives the iterative answer → incorporate → re-review loop until it
- * converges. It triages a BUG REPORT for fixability rather than reviewing requirements
- * completeness. Passes through when the clarity module / reviewer model is not wired.
- */
-export const CLARITY_REVIEW_AGENT_KIND = 'clarity-review'
-
-/**
- * The agent kinds of the two brainstorm (structured-dialogue) gate steps. Like the
- * requirements / clarity reviewers they are INLINE engine steps (not container/prose
- * agents): the engine runs the inline brainstorm agent (via the brainstorm module), parks
- * the run for the dedicated brainstorm window, and drives the iterative propose → pick →
- * incorporate → re-run loop until it converges. `requirements-brainstorm` explores options
- * from a vague description (before the requirements review); `architecture-brainstorm`
- * explores approaches from the refined requirements (before the architect). Both pass
- * through when the brainstorm module / model is not wired.
- */
-export const REQUIREMENTS_BRAINSTORM_AGENT_KIND = 'requirements-brainstorm'
-export const ARCHITECTURE_BRAINSTORM_AGENT_KIND = 'architecture-brainstorm'
+// The inline reviewer / brainstorm gate-step kind ids are the single source of truth in
+// `@cat-factory/agents` (`step-surface.ts`), co-located with the `isInlineModelStep`
+// taxonomy that keys off them (agents can't import orchestration, so the classifier owns the
+// ids). Re-exported here for the engine's existing internal call sites, exactly as the
+// gate/helper kinds are re-exported from kernel above.
+//
+// - `requirements-review`: the engine runs the inline reviewer (requirements module), parks
+//   the run for the review window, and drives answer → incorporate → re-review until it
+//   converges (or the human resolves a hit iteration cap).
+// - `clarity-review`: the inline clarity reviewer (clarity module) — triages a BUG REPORT
+//   for fixability rather than reviewing requirements completeness — same park + loop.
+// - `requirements-brainstorm` / `architecture-brainstorm`: the two inline brainstorm
+//   (structured-dialogue) steps; propose → pick → incorporate → re-run until convergence.
+//   The former explores options from a vague description (before the requirements review),
+//   the latter approaches from the refined requirements (before the architect).
+//
+// All pass through when their module / reviewer model is not wired.
+export {
+  REQUIREMENTS_REVIEW_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+} from '@cat-factory/agents'
 
 /**
  * The agent kind of the read-only `bug-investigator` container agent. It clones the repo,

@@ -294,6 +294,7 @@
         "github_not_connected": "GitHub bağlı değil",
         "bootstrap_not_retryable": "Bootstrap yeniden denenemiyor",
         "bootstrap_reference_missing": "Referans mimari kayıp",
+        "preset_unsatisfiable": "Model ön ayarı bu ardışık düzeni çalıştıramıyor",
         "visual_pipeline_no_frontend": "Test edilecek bir frontend yok"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",

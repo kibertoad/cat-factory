@@ -43,6 +43,13 @@ export interface StepModelResolvers {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  /**
+   * Whether a container-only subscription harness ref can be run as an INLINE call in this
+   * deployment (local mode's ambient CLI). When it returns true for a resolved harness ref,
+   * {@link resolveInlineModelRef} KEEPS the ref (the harness-aware model provider serves it)
+   * instead of degrading to the routing default. Absent → always degrade (Node/Worker).
+   */
+  runsInline?: (ref: ModelRef) => boolean
 }
 
 /** What a step needs to resolve its model: which kind, the block's pin, the workspace. */
@@ -98,5 +105,5 @@ export async function resolveInlineModelRef(
   inputs: StepModelInputs,
 ): Promise<ModelRef> {
   const ref = await resolveStepModelRef(resolvers, inputs)
-  return inlineModelRef(ref, resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref)
+  return inlineModelRef(ref, resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref, (resolvers.runsInline ? { runsInline: resolvers.runsInline } : {}))
 }

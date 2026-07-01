@@ -570,6 +570,15 @@ export interface NodeContainerOptions {
    */
   githubClient?: GitHubClient
   /**
+   * Wrap the model-provider resolver right after it's built, so a sibling facade can add a
+   * flavour the base resolver lacks. Local mode wraps it so a subscription HARNESS ref
+   * (`claude-code` / `codex`) resolves to a CLI-backed inline model driving the developer's
+   * ambient CLI — the inline analogue of its container ambient-auth path. Undefined → the
+   * base Node resolver (HTTP providers only). Applied to both the inline executor and
+   * `createCore`, so the reviewer/brainstorm/estimator + the inline agent kinds all use it.
+   */
+  wrapModelProviderResolver?: (inner: ModelProviderResolver) => ModelProviderResolver
+  /**
    * Override the git origin (clone URL + provider) for a run's repo. The default builds a
    * `github.com` URL; the local GitLab facade injects a builder emitting the configured
    * GitLab host + `gitlab`, so agent containers clone the right host and open merge requests
@@ -1355,7 +1364,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     config.spend.currency,
   )
-  const modelProviderResolver = buildModelProviderResolver(env, db, apiKeys, localModelEndpoints)
+  const baseModelProviderResolver = buildModelProviderResolver(
+    env,
+    db,
+    apiKeys,
+    localModelEndpoints,
+  )
+  const modelProviderResolver = options.wrapModelProviderResolver
+    ? options.wrapModelProviderResolver(baseModelProviderResolver)
+    : baseModelProviderResolver
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     options.cloudflareModelsEnabled ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
@@ -1365,6 +1382,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
+    // In local mode this keeps an ambient-eligible subscription harness ref so the inline
+    // design/research kinds run on the developer's Claude Code / Codex CLI; undefined on
+    // stock Node (no inline harness), where such a ref degrades to the routing default.
+    ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
@@ -1813,6 +1834,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         agentRouting: config.agents.routing,
         resolveBlockModel: config.agents.resolveBlockModel,
         resolveWorkspaceModelDefault,
+        // Consensus runs its participants INLINE, so in local mode keep an ambient-eligible
+        // subscription harness ref (served via the CLI) instead of degrading it; undefined on
+        // stock Node/Worker, where such a ref degrades to the routing default as before.
+        ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
         sessionRepository: repos.consensusSessionRepository,
         ...(executionEventPublisher ? { eventPublisher: executionEventPublisher } : {}),
       }))
@@ -2006,6 +2031,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
+    // Local mode runs the inline reviewers/brainstorm/estimator on the ambient Claude Code /
+    // Codex CLI when the pinned model is a subscription harness (undefined on stock Node, so
+    // such refs degrade to the routing default). Also drives the preset satisfiability guard.
+    ...(config.agents.inlineHarnessRef ? { inlineHarnessRef: config.agents.inlineHarnessRef } : {}),
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
     // the inbox + the human-action surfaces. Node has no real-time push, so the rows
     // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.

@@ -294,6 +294,7 @@
         "github_not_connected": "GitHub no conectado",
         "bootstrap_not_retryable": "La inicialización no se puede reintentar",
         "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido",
+        "preset_unsatisfiable": "El preajuste de modelo no puede ejecutar esta canalización",
         "visual_pipeline_no_frontend": "No hay frontend que probar"
       },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",

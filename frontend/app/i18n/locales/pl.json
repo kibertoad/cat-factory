@@ -294,6 +294,7 @@
         "github_not_connected": "GitHub nie jest połączony",
         "bootstrap_not_retryable": "Inicjalizacji nie można ponowić",
         "bootstrap_reference_missing": "Architektura referencyjna zniknęła",
+        "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku",
         "visual_pipeline_no_frontend": "Brak frontendu do przetestowania"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",

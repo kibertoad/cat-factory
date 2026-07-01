@@ -328,6 +328,7 @@
         "bootstrap_not_retryable": "Bootstrap can’t be retried",
         "bootstrap_reference_missing": "Reference architecture is gone",
         "provision_type_unhandled": "No handler for this provision type",
+        "preset_unsatisfiable": "Model preset can't run this pipeline",
         "visual_pipeline_no_frontend": "No frontend to test"
       },
       "fallbackMessage": "This action conflicts with the current state.",

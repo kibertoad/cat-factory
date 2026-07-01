@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
-import type { Block, ModelProvider } from '@cat-factory/kernel'
+import type { Block, ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 
@@ -112,6 +112,34 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
     const svc = new RequirementReviewService({ ...baseDeps(), requirementReviewRepository })
     return { svc }
   }
+
+  describe('inline model resolution (subscription harness)', () => {
+    const CLAUDE_SUB: ModelRef = { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' }
+    function serviceWith(extra: Record<string, unknown>) {
+      const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
+      return new RequirementReviewService({
+        ...baseDeps(),
+        requirementReviewRepository,
+        resolveBlockModel: () => CLAUDE_SUB,
+        ...extra,
+      })
+    }
+
+    it('degrades a subscription harness model to the routing default (no inline harness)', async () => {
+      const svc = serviceWith({})
+      script.push({ text: JSON.stringify({ items: [] }) })
+      const review = await svc.review(WS, BLOCK.id, {})
+      // No inline-harness support ⇒ the reviewer runs the fallback provider model, not the sub.
+      expect(review.model).toBe('fake:m')
+    })
+
+    it('keeps the subscription harness model when the deployment runs it inline (local ambient)', async () => {
+      const svc = serviceWith({ runsInline: () => true })
+      script.push({ text: JSON.stringify({ items: [] }) })
+      const review = await svc.review(WS, BLOCK.id, {})
+      expect(review.model).toBe('anthropic:claude-opus-4-8')
+    })
+  })
 
   it('runs the full loop: review → reply → incorporate → re-review → converge', async () => {
     const { svc } = makeService()

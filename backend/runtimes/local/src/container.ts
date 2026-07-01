@@ -37,6 +37,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
+import { makeInlineHarnessPredicate, wrapResolverWithInlineHarness } from './harnessInline.js'
 import { buildLocalDeployTransport } from './NativeCliDeployTransport.js'
 import { applyLocalDefaults } from './config.js'
 import {
@@ -174,6 +175,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // endpoints + gates are served through `vcsClient`, GitHub- or GitLab-backed alike.
     ...(gitToken ? { github: { ...base.github, enabled: true } } : {}),
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
+    // With native agents on, the inline LLM steps (requirements reviewer, brainstorm,
+    // task-estimator, inline document kinds) can run on a subscription model through the
+    // developer's ambient `claude`/`codex` CLI too — so a subscription-only preset no longer
+    // strands them (or trips the preset-satisfiability guard). The predicate matches the same
+    // ambient-native vendors the container path allows; `wrapModelProviderResolver` below serves
+    // those refs via the CLI. Off → inline steps degrade to a provider model as on stock Node.
+    ...(nativeAgents
+      ? {
+          agents: { ...base.agents, inlineHarnessRef: makeInlineHarnessPredicate(nativeHarnesses) },
+        }
+      : {}),
     localMode: {
       enabled: true,
       // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
@@ -533,6 +545,12 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
     // this the clone URL is always github.com, so a GitLab repo can't be cloned).
     ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
+    // Serve ambient-eligible subscription harness refs (Claude Code / Codex) as INLINE CLI
+    // calls, so the inline reviewers/brainstorm/estimator + inline agent kinds run on the
+    // developer's subscription — the inline analogue of the container ambient-auth path.
+    ...(nativeAgents
+      ? { wrapModelProviderResolver: wrapResolverWithInlineHarness(nativeHarnesses) }
+      : {}),
     // Auto-provision the synthetic per-workspace installation so the integration reports
     // connected with no manual connect step.
     ...(githubInstallationRepository ? { githubInstallationRepository } : {}),

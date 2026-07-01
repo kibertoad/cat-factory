@@ -582,6 +582,16 @@ export interface CoreDependencies {
    * uses the default ref above.
    */
   requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as
+   * an INLINE LLM call in this deployment — true only in local mode, where the developer's
+   * ambient CLI login is driven as a host subprocess. Threaded into every inline service
+   * (requirements/clarity reviewers, brainstorm, kaizen, sandbox) so an ambient-eligible
+   * harness ref is kept (served by the harness-aware model provider) instead of degraded to
+   * the routing default, and into the start guard's inline-model check. From
+   * `config.agents.inlineHarnessRef`; absent on Node/Worker (no inline harness path).
+   */
+  inlineHarnessRef?: (ref: ModelRef) => boolean
 
   // ---- Prompt-fragment library (opt-in; ADR 0006) -------------------------
   // The managed, tenant-scoped catalog of best-practice fragments. The library
@@ -1418,6 +1428,9 @@ function createRequirementsModule(
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
     resolveBlockModel: deps.requirementReviewResolveModel,
+    // In local mode, run the reviewer inline through the ambient Claude Code / Codex CLI on a
+    // subscription model instead of degrading to the routing default.
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     // Honour the workspace's model presets for the `requirements` kind too, so the
     // reviewer resolves its model exactly like a pipeline step. Reuses the already
     // wired model-preset repository (the workspace default preset); absent → only
@@ -1541,6 +1554,7 @@ function createBrainstormModule(
     modelProvider: deps.modelProvider,
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     resolveWorkspaceModelDefault,
   }
 
@@ -1584,6 +1598,7 @@ function createKaizenModule(deps: CoreDependencies): KaizenModule | undefined {
     // Reuse the reviewer's routing default ref + block-model resolver (the agents' default).
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     // Resolve the workspace's per-kind default for `kaizen`, like a pipeline step.
     resolveWorkspaceModelDefault: deps.modelPresetRepository
       ? (workspaceId, agentKind, modelPresetId) =>
@@ -1621,6 +1636,7 @@ function createClarityModule(
     modelProvider: deps.modelProvider,
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     resolveWorkspaceModelDefault: deps.modelPresetRepository
       ? (workspaceId, agentKind, modelPresetId) =>
           resolvePresetModelForKind(
@@ -1792,6 +1808,7 @@ function createSandboxModule(deps: CoreDependencies): SandboxModule | undefined 
     modelProvider: deps.modelProvider,
     resolveModelId: deps.requirementReviewResolveModel,
     defaultModelRef,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
   })
   return { service, runService }
 }
