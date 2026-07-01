@@ -66,18 +66,22 @@ const infraSetup = computed(() => testState.value?.infraSetup ?? null)
 // The captured stand-up logs are shown on demand (they can be long).
 const showInfraSetupLogs = ref(false)
 
-// Once ALL of a tester's infrastructure is up — its container is running, the ephemeral
+// Once ALL of a tester's infrastructure is up (its container is running, the ephemeral
 // environment (when it tests against one) is ready, and any in-container dependency stand-up
-// succeeded — the agent can actually begin exercising the change. Surface an explicit line
+// succeeded) the agent can actually begin exercising the change. Surface an explicit line
 // saying so, so a run's details don't jump silently from "provisioning" straight into a blank
-// "working" state. Gated on the tester genuinely depending on a test environment (an ephemeral
-// env or an in-container stand-up); an infraless tester has nothing to announce here.
-const containerReady = computed(() => {
-  const c = step.value?.container
-  return !c || c.status === 'up'
-})
+// "working" state. This only fills the gap BEFORE the first working signal, so it is scoped
+// to a still-running step that hasn't produced a report yet: a finished step (state 'done'),
+// a failed run, or one that already has a report is past "starting", so the banner clears.
+// (The backend keeps the raw container status at 'up' after the step ends; 'destroyed' is a
+// display-only derivation in StepContainerStatus, so gating on the step state is what stops
+// the banner lingering.) Requires the container to actually report 'up' (a not-yet-created
+// container is not "up"), and requires the tester to genuinely depend on a test environment
+// (an ephemeral env or an in-container stand-up); an infraless tester has nothing to announce.
 const infraReady = computed(() => {
-  if (runFailed.value || !containerReady.value) return false
+  const s = step.value
+  if (!s || runFailed.value || s.state === 'done' || report.value) return false
+  if (s.container?.status !== 'up') return false
   const env = stepEnvironment.value
   const infra = infraSetup.value
   if (!env && !infra) return false
