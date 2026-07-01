@@ -293,7 +293,8 @@
         "no_pr_to_merge": "No hay PR para fusionar",
         "github_not_connected": "GitHub no conectado",
         "bootstrap_not_retryable": "La inicialización no se puede reintentar",
-        "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido"
+        "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido",
+        "visual_pipeline_no_frontend": "No hay frontend que probar"
       },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
       "providersUnconfigured": {

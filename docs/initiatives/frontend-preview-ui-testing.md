@@ -39,15 +39,15 @@ build on. Link the merged pilot PR here once it lands.
 
 ## Per-slice status
 
-| #   | Slice                                                                                | Status | PR                                                        |
-| --- | ------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------- |
-| 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
-| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
-| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
-| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
-| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
-| 4c  | Surface/gate frontend pipelines (`pl_frontend`/`pl_visual`) to `frontend` frames     | todo   | —                                                         |
-| 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
+| #   | Slice                                                                                 | Status | PR                                                        |
+| --- | ------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------- |
+| 1   | Repo type selector + `library`/`document` types + task/pipeline gating                | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
+| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry  | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
+| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance     | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
+| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                    | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
+| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e      | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
+| 4c  | Surface/gate visual pipelines (`tester-ui`/`visual-confirmation`) to frames with a UI | done   | _this PR_                                                 |
+| 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate           | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
 
@@ -160,12 +160,9 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     pipeline + prompt. `pl_frontend` runs fully self-contained for a mock-only frontend today; the
     live-env e2e assertion lands with 4b. Do it as a deployer-keying change, NOT a reverse-walk
     hack in `resolveFrontendConfig`.
-  - **Frontend pipelines are not yet frame-type-gated (slice 4c).** Nothing restricts `pl_frontend`
-    (or `pl_visual`) to `type: 'frontend'` frames — run on a backend task the `mocker` frontend
-    section correctly drops out (it is keyed on `context.frontend`), but `tester-ui` then has no
-    app/infra to drive. This is pre-existing (shared with `pl_visual`) and out of scope for the
-    runtime-neutral pipeline+prompt slice; surfacing/gating frontend pipelines to frontend frames
-    is tracked as **slice 4c**.
+  - **Visual pipelines are frame-gated as of slice 4c (below).** `pl_frontend` / `pl_visual` (any
+    pipeline with a `tester-ui` / `visual-confirmation` step) are now refused at run start unless
+    the task's frame is a `frontend` frame or a frame a frontend links to.
   - **The frontend mocker default lives in one place.** `DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH`
     (`@cat-factory/contracts`) is the single backend source of truth for WireMock's default
     `--root-dir` (`mocks/`); the mocker prompt imports it instead of a private literal. The harness
@@ -198,3 +195,34 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
   - **`pl_frontend` stays `experimental` — but now for ONE reason, not two.** The live-service
     keying caveat in its `seed.ts` comment is resolved; only the `ui`-image per-step routing
     remains (still slice-3's deferred deploy-time step). Keep the label until that lands.
+- Slice 4c conventions & gotchas:
+  - **The gate keys off a "visual step", NOT a pipeline id or a frame `type` alone.** A pipeline is
+    "visual" when it carries `tester-ui` OR `visual-confirmation` (`pipelineHasVisualStep`,
+    `@cat-factory/contracts`) — so it captures `pl_frontend`, `pl_visual`, AND any custom pipeline
+    that adds a UI-testing step, without an id allow-list. The allowed frames are a `frontend` frame
+    OR a frame a frontend LINKS to (`frameAllowsVisualPipeline`): the manual visual-confirmation
+    flow reviews reference designs + screenshots uploaded to the TASK, so it does NOT need the
+    self-contained frontend infra — a backend `service` that a frontend binds is a legitimate host
+    for it. Hence the rule is "has a UI to exercise", not "is a `frontend` frame".
+  - **One shared predicate, two consumers.** The pure predicates live in `@cat-factory/contracts`
+    (imported by the backend gate AND the SPA surface) so the "what's offered" and "what's allowed"
+    can't drift. The canonical `UI_TESTER_AGENT_KIND` / `VISUAL_CONFIRM_AGENT_KIND` slugs moved to
+    contracts too; `ci.logic` re-exports them (all existing importers unchanged).
+  - **The gate is a run-start guard, not a save-time or task-create validation.** Pipelines stay
+    frame-agnostic templates; `ExecutionService.assertPipelineFrameTypeAllowed` (a new
+    `visual_pipeline_no_frontend` conflict) enforces it BEFORE any side effects, alongside the
+    tester-infra / binary-storage guards, so it holds for manual starts, recurring fires, and
+    direct API calls alike — the SPA picker filtering is only a hint. It reads the workspace block
+    list ONCE for the frontend→service links (no per-frame point read). Ordered FIRST among the
+    tester-related guards so a wrong-frame run gets the precise "no UI" error, not a downstream one.
+  - **`frontend_config` is read during the gate, so it's a cross-runtime parity surface.** The
+    conformance suite refuses a visual pipeline on a bare service frame and then, after a frontend
+    binds that service, lets the same run START — a facade that dropped/mismapped `frontend_config`
+    would find no link and refuse the allowed case. The three existing visual-confirmation
+    conformance tests (which ran on `task_login` under the bare `blk_auth` service frame) now link
+    the seeded `blk_frontend` frame to `blk_auth` first, so they satisfy the gate.
+  - **Surface is applied at every pipeline picker**, keyed off the block's enclosing frame
+    (`board.serviceOf`) + the board's frontend→service links: task-create (`AddTaskModal`),
+    run-settings (`TaskRunSettings`), the run launchers (`InspectorPanel` / `BlockFocusView`), and
+    the recurring schedule (`RecurringPipelineModal`). A new pipeline picker MUST reuse
+    `pipelineAllowedForFrame` (`~/utils/pipeline`) so it stays consistent with the gate.

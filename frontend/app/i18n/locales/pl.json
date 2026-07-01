@@ -293,7 +293,8 @@
         "no_pr_to_merge": "Brak PR do scalenia",
         "github_not_connected": "GitHub nie jest połączony",
         "bootstrap_not_retryable": "Inicjalizacji nie można ponowić",
-        "bootstrap_reference_missing": "Architektura referencyjna zniknęła"
+        "bootstrap_reference_missing": "Architektura referencyjna zniknęła",
+        "visual_pipeline_no_frontend": "Brak frontendu do przetestowania"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {

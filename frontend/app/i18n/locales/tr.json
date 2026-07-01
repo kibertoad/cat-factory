@@ -293,7 +293,8 @@
         "no_pr_to_merge": "Birleştirilecek PR yok",
         "github_not_connected": "GitHub bağlı değil",
         "bootstrap_not_retryable": "Bootstrap yeniden denenemiyor",
-        "bootstrap_reference_missing": "Referans mimari kayıp"
+        "bootstrap_reference_missing": "Referans mimari kayıp",
+        "visual_pipeline_no_frontend": "Test edilecek bir frontend yok"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
       "providersUnconfigured": {
