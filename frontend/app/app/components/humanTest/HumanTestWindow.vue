@@ -19,6 +19,7 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
 const { t, d } = useI18n()
+const { confirmAction, toastDone } = useConfirmAction()
 
 // Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: the gate state
 // rides on the execution step, pushed over the stream.
@@ -102,7 +103,10 @@ async function recreate() {
 }
 async function destroy() {
   if (!blockId.value) return
+  const noun = t('humanTest.envNoun')
+  if (!(await confirmAction('destroy', noun))) return
   await humanTest.destroyEnv(blockId.value)
+  toastDone('destroy', noun)
 }
 
 /** Env actions need a provider (an env is/was present, or it's provisioning) — disabled in degraded mode. */

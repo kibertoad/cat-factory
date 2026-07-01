@@ -91,6 +91,44 @@ branch (same two changesets):
 | Confirm dialog: primary button `autofocus` so Enter confirms                   | done   |
 | `KeyboardShortcutsHelp`: drop deprecated `navigator.platform`                  | done   |
 
+### Follow-up iteration 2 — destructive-confirm coverage for settings/connection surfaces
+
+A fresh sweep of the SPA (after PR #620 merged) found the confirm gate covered the board +
+preset + integration-toolbar surfaces, but **18 equally-destructive actions on the
+settings/connection surfaces still mutated instantly** (revoke a credential, disconnect a
+connection, clear a config, destroy an environment), and 9 of those also succeeded silently.
+Landed as one follow-up PR on top of the merged initiative, adding a **new reusable
+primitive** rather than one-off gates.
+
+New reference primitive (reuse this for any non-block destructive action):
+`frontend/app/app/composables/useConfirmAction.ts` — `const { confirmAction, toastDone } =
+useConfirmAction()`; `await confirmAction(shape, name)` gates (returns `false` on
+cancel/dismiss), `toastDone(shape, name)` toasts on success. `shape` ∈
+`disconnect | remove | revoke | clear | destroy`; copy is generic
+(`common.confirm.titles.*` / `common.confirm.{irreversible,reconnectHint}` /
+`common.toast.*`) with the target `name` interpolated, so the irreversibility warning is
+translated once per locale. `name` is a short noun: a brand (`Slack`), a data value (the
+invite email, the arch/type name), or a feature noun key (`humanTest.envNoun`).
+
+| Unit                                                                                       | Status |
+| ------------------------------------------------------------------------------------------ | ------ |
+| `useConfirmAction.ts` + generic `common.confirm.*` / `common.toast.*` copy                 | done   |
+| Confirm + toast: revoke API key (`ApiKeysSection`)                                          | done   |
+| Confirm + toast: revoke team invite / disconnect email (`AccountTeamSettings`)             | done   |
+| Confirm + toast: disconnect observability / incident (`ObservabilityConnectionPanel`)      | done   |
+| Confirm + toast: clear release-health config (`ServiceReleaseHealthConfig`)                | done   |
+| Confirm + toast: destroy human-test env (`HumanTestWindow`)                                | done   |
+| Confirm + toast: remove custom manifest type (`CustomManifestTypeEditor`)                  | done   |
+| Confirm + toast: remove reference architecture (`BootstrapModal`)                          | done   |
+| Confirm: disconnect task/document source (`Task/DocumentSourceConnectModal` — toast kept)  | done   |
+| Confirm: remove provider connection (`ProviderConnectionTab` — toast kept)                 | done   |
+| Confirm: remove kube handler / override / custom (`InfraHandlersConfigurator` — toast kept) | done   |
+| Confirm: clear Slack / Linear / web-search (`AccountDeploymentSettings` — toast kept)      | done   |
+| i18n keys (8 locales) + patch changeset                                                     | done   |
+
+Empty-state (category C) surfaced no genuine new gaps this sweep — the remaining empty
+renders are compact inline placeholders or full-page states with CTAs, both intentional.
+
 ## Conventions & gotchas (carried between iterations)
 
 - **`UModal` already traps focus + closes on Escape + renders a backdrop.** Never add
@@ -112,6 +150,16 @@ branch (same two changesets):
   `RemovalSnapshot` rollback semantics are unchanged.
 - **Register the global keydown listener exactly once** (from `pages/index.vue` setup), never
   per-component, to avoid N handlers firing N deletions.
+- **Non-block destructive actions go through `useConfirmAction`, board blocks through
+  `useBlockDeletion`.** Don't hand-roll a `confirm({...})` + toast at a settings/connection
+  call site — pick the `disconnect/remove/revoke/clear/destroy` shape and pass a `name`. Only
+  call `toastDone(...)` **after** the mutation resolves (so a thrown/failed mutation doesn't
+  toast success); leave the existing error toast in the `catch`. Where the surface already
+  toasted success (task/doc source, provider connection, infra handlers, deployment clears),
+  add only the confirm gate — don't double-toast.
+- **`name` prefers a real value over a generic noun** — a brand (`'Slack'`), the invite email,
+  the arch/type display name. Add a feature-namespace noun key (`humanTest.envNoun`,
+  `settings.infrastructure.handler.kubeNoun`) only when the target has no natural display name.
 - **i18n**: straight quotes, no em-dashes; `@key` descriptions only for genuinely ambiguous
   keys; translated catalogs (`es/fr/…`) carry no `@` siblings.
   </content>

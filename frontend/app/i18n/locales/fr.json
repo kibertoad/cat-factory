@@ -20,11 +20,30 @@
     "remove": "Retirer",
     "confirm": {
       "defaultTitle": "Êtes-vous sûr ?",
-      "confirm": "Confirmer"
+      "confirm": "Confirmer",
+      "irreversible": "Cette action est irréversible.",
+      "reconnectHint": "Vous devrez le reconnecter avant de pouvoir l’utiliser à nouveau.",
+      "titles": {
+        "disconnect": "Déconnecter {name} ?",
+        "remove": "Supprimer {name} ?",
+        "revoke": "Révoquer {name} ?",
+        "clear": "Effacer {name} ?",
+        "destroy": "Détruire {name} ?"
+      }
     },
     "copied": "Copié dans le presse-papiers",
     "disconnect": "Déconnecter",
-    "copyFailed": "Échec de la copie dans le presse-papiers"
+    "copyFailed": "Échec de la copie dans le presse-papiers",
+    "revoke": "Révoquer",
+    "clear": "Effacer",
+    "destroy": "Détruire",
+    "toast": {
+      "disconnected": "{name} déconnecté",
+      "removed": "{name} supprimé",
+      "revoked": "{name} révoqué",
+      "cleared": "{name} effacé",
+      "destroyed": "{name} détruit"
+    }
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -436,7 +455,8 @@
       "saveMonitoring": "Enregistrer la surveillance",
       "savedToast": "Surveillance enregistrée",
       "saveFailed": "Impossible d'enregistrer le mappage",
-      "clearFailed": "Impossible d'effacer le mappage"
+      "clearFailed": "Impossible d'effacer le mappage",
+      "configNoun": "la configuration de santé de la version"
     },
     "testConfig": {
       "title": "Infrastructure de test",
@@ -1064,7 +1084,8 @@
         "revokeInvite": "Impossible de révoquer l'invitation",
         "connectEmail": "Impossible de connecter l'expéditeur des e-mails",
         "disconnectEmail": "Impossible de déconnecter l'expéditeur des e-mails"
-      }
+      },
+      "emailNoun": "l’envoi d’e-mails"
     },
     "boardSwitcher": {
       "accountFallback": "Compte",
@@ -1696,7 +1717,9 @@
         "connected": "Observabilité connectée",
         "connectFailed": "Impossible d'enregistrer la connexion",
         "disconnectFailed": "Impossible de déconnecter"
-      }
+      },
+      "connectionNoun": "la connexion d’observabilité",
+      "incidentNoun": "le fournisseur d’incidents"
     },
     "localMode": {
       "title": "Mode local",
@@ -1966,7 +1989,10 @@
         "overrideActive": "Active",
         "personalOverrideHint": "Surchargez le gestionnaire de l'espace de travail pour ce type de provisionnement sur votre propre machine. Stocké par utilisateur.",
         "removeOverride": "Supprimer la surcharge",
-        "loading": "Chargement de la configuration de l'infrastructure…"
+        "loading": "Chargement de la configuration de l'infrastructure…",
+        "kubeNoun": "le gestionnaire Kubernetes",
+        "kubeOverrideNoun": "le remplacement Kubernetes",
+        "customNoun": "ce gestionnaire"
       }
     }
   },
@@ -2090,7 +2116,8 @@
           "step1": "Générez une clé virtuelle sur votre passerelle LiteLLM (ou utilisez sa clé maîtresse).",
           "step2": "L'URL de base de la passerelle est définie par l'opérateur de votre déploiement (LITELLM_BASE_URL), pas ici."
         }
-      }
+      },
+      "keyNoun": "cette clé API"
     },
     "vendorCredentials": {
       "title": "Fournisseurs de LLM",
@@ -3125,7 +3152,8 @@
       "completed": "terminé",
       "failed": "échoué",
       "inProgress": "en cours"
-    }
+    },
+    "envNoun": "l’environnement de test"
   },
   "testing": {
     "title": "Rapport de tests",

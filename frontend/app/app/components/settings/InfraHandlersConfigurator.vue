@@ -31,6 +31,7 @@ const infra = useInfraConfigStore()
 const auth = useAuthStore()
 const ui = useUiStore()
 const toast = useToast()
+const { confirmAction } = useConfirmAction()
 
 const isLocal = computed(() => auth.localMode?.enabled === true)
 
@@ -154,6 +155,7 @@ async function saveKube(payload: { config: KubeHandlerConfig; secrets: Record<st
 }
 
 async function removeKube() {
+  if (!(await confirmAction('remove', t('settings.infrastructure.handler.kubeNoun')))) return
   busy.value = true
   try {
     await infra.unregisterHandler('kubernetes')
@@ -190,6 +192,8 @@ async function saveKubeOverride(payload: {
 }
 
 async function removeKubeOverride() {
+  if (!(await confirmAction('remove', t('settings.infrastructure.handler.kubeOverrideNoun'))))
+    return
   busy.value = true
   try {
     await infra.removeUserHandler('kubernetes')
@@ -311,6 +315,7 @@ async function saveCustom(payload: {
 
 async function removeCustom() {
   if (!selectedCustomId.value) return
+  if (!(await confirmAction('remove', t('settings.infrastructure.handler.customNoun')))) return
   busy.value = true
   try {
     await infra.unregisterHandler('custom', selectedCustomId.value)

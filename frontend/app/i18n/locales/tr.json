@@ -20,11 +20,30 @@
     "remove": "Kaldır",
     "confirm": {
       "defaultTitle": "Emin misiniz?",
-      "confirm": "Onayla"
+      "confirm": "Onayla",
+      "irreversible": "Bu işlem geri alınamaz.",
+      "reconnectHint": "Yeniden kullanabilmek için tekrar bağlamanız gerekir.",
+      "titles": {
+        "disconnect": "{name} bağlantısı kesilsin mi?",
+        "remove": "{name} kaldırılsın mı?",
+        "revoke": "{name} iptal edilsin mi?",
+        "clear": "{name} temizlensin mi?",
+        "destroy": "{name} yok edilsin mi?"
+      }
     },
     "copied": "Panoya kopyalandı",
     "disconnect": "Bağlantıyı kes",
-    "copyFailed": "Panoya kopyalanamadı"
+    "copyFailed": "Panoya kopyalanamadı",
+    "revoke": "İptal et",
+    "clear": "Temizle",
+    "destroy": "Yok et",
+    "toast": {
+      "disconnected": "{name} bağlantısı kesildi",
+      "removed": "{name} kaldırıldı",
+      "revoked": "{name} iptal edildi",
+      "cleared": "{name} temizlendi",
+      "destroyed": "{name} yok edildi"
+    }
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -436,7 +455,8 @@
       "saveMonitoring": "İzlemeyi kaydet",
       "savedToast": "İzleme kaydedildi",
       "saveFailed": "Eşleme kaydedilemedi",
-      "clearFailed": "Eşleme temizlenemedi"
+      "clearFailed": "Eşleme temizlenemedi",
+      "configNoun": "sürüm sağlığı yapılandırması"
     },
     "testConfig": {
       "title": "Test altyapısı",
@@ -1064,7 +1084,8 @@
         "revokeInvite": "Davet iptal edilemedi",
         "connectEmail": "E-posta göndericisi bağlanamadı",
         "disconnectEmail": "E-posta göndericisinin bağlantısı kesilemedi"
-      }
+      },
+      "emailNoun": "e-posta gönderimi"
     },
     "boardSwitcher": {
       "accountFallback": "Hesap",
@@ -1503,7 +1524,10 @@
         "overrideActive": "Etkin",
         "personalOverrideHint": "Bu sağlama türü için çalışma alanı işleyicisini kendi makinende geçersiz kıl. Kullanıcı başına saklanır.",
         "removeOverride": "Geçersiz kılmayı kaldır",
-        "loading": "Altyapı ayarları yükleniyor…"
+        "loading": "Altyapı ayarları yükleniyor…",
+        "kubeNoun": "Kubernetes işleyicisi",
+        "kubeOverrideNoun": "Kubernetes geçersiz kılması",
+        "customNoun": "bu işleyici"
       }
     },
     "providerConnection": {
@@ -1809,7 +1833,9 @@
         "connected": "Gözlemlenebilirlik bağlandı",
         "connectFailed": "Bağlantı kaydedilemedi",
         "disconnectFailed": "Bağlantı kesilemedi"
-      }
+      },
+      "connectionNoun": "gözlemlenebilirlik bağlantısı",
+      "incidentNoun": "olay sağlayıcısı"
     },
     "localMode": {
       "title": "Yerel mod",
@@ -2103,7 +2129,8 @@
           "step1": "LiteLLM ağ geçidinizde bir sanal anahtar oluşturun (veya ana anahtarını kullanın).",
           "step2": "Ağ geçidinin temel URL'si burada değil, dağıtım operatörünüz tarafından ayarlanır (LITELLM_BASE_URL)."
         }
-      }
+      },
+      "keyNoun": "bu API anahtarı"
     },
     "vendorCredentials": {
       "title": "LLM Sağlayıcıları",
@@ -3138,7 +3165,8 @@
       "completed": "tamamlandı",
       "failed": "başarısız",
       "inProgress": "devam ediyor"
-    }
+    },
+    "envNoun": "test ortamı"
   },
   "testing": {
     "title": "Test raporu",

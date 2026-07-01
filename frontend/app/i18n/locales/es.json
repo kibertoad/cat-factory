@@ -20,11 +20,30 @@
     "remove": "Quitar",
     "confirm": {
       "defaultTitle": "¿Estás seguro?",
-      "confirm": "Confirmar"
+      "confirm": "Confirmar",
+      "irreversible": "Esta acción no se puede deshacer.",
+      "reconnectHint": "Tendrás que volver a conectarlo antes de poder usarlo de nuevo.",
+      "titles": {
+        "disconnect": "¿Desconectar {name}?",
+        "remove": "¿Quitar {name}?",
+        "revoke": "¿Revocar {name}?",
+        "clear": "¿Borrar {name}?",
+        "destroy": "¿Destruir {name}?"
+      }
     },
     "copied": "Copiado al portapapeles",
     "disconnect": "Desconectar",
-    "copyFailed": "No se pudo copiar al portapapeles"
+    "copyFailed": "No se pudo copiar al portapapeles",
+    "revoke": "Revocar",
+    "clear": "Borrar",
+    "destroy": "Destruir",
+    "toast": {
+      "disconnected": "{name} desconectado",
+      "removed": "{name} eliminado",
+      "revoked": "{name} revocado",
+      "cleared": "{name} borrado",
+      "destroyed": "{name} destruido"
+    }
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -436,7 +455,8 @@
       "saveMonitoring": "Guardar monitoreo",
       "savedToast": "Monitoreo guardado",
       "saveFailed": "No se pudo guardar la asignación",
-      "clearFailed": "No se pudo limpiar la asignación"
+      "clearFailed": "No se pudo limpiar la asignación",
+      "configNoun": "la configuración de salud de la versión"
     },
     "testConfig": {
       "title": "Infraestructura de pruebas",
@@ -1064,7 +1084,8 @@
         "revokeInvite": "No se pudo revocar la invitación",
         "connectEmail": "No se pudo conectar el remitente de correo",
         "disconnectEmail": "No se pudo desconectar el remitente de correo"
-      }
+      },
+      "emailNoun": "el envío de correo"
     },
     "boardSwitcher": {
       "accountFallback": "Cuenta",
@@ -1696,7 +1717,9 @@
         "connected": "Observabilidad conectada",
         "connectFailed": "No se pudo guardar la conexión",
         "disconnectFailed": "No se pudo desconectar"
-      }
+      },
+      "connectionNoun": "la conexión de observabilidad",
+      "incidentNoun": "el proveedor de incidencias"
     },
     "localMode": {
       "title": "Modo local",
@@ -1966,7 +1989,10 @@
         "overrideActive": "Activa",
         "personalOverrideHint": "Anula el gestor del espacio de trabajo para este tipo de aprovisionamiento en tu propia máquina. Se guarda por usuario.",
         "removeOverride": "Quitar anulación",
-        "loading": "Cargando la configuración de infraestructura…"
+        "loading": "Cargando la configuración de infraestructura…",
+        "kubeNoun": "el controlador de Kubernetes",
+        "kubeOverrideNoun": "la anulación de Kubernetes",
+        "customNoun": "este controlador"
       }
     }
   },
@@ -2090,7 +2116,8 @@
           "step1": "Genera una clave virtual en tu pasarela LiteLLM (o usa su clave maestra).",
           "step2": "La URL base de la pasarela la establece el operador de tu despliegue (LITELLM_BASE_URL), no aquí."
         }
-      }
+      },
+      "keyNoun": "esta clave de API"
     },
     "vendorCredentials": {
       "title": "Proveedores de LLM",
@@ -3125,7 +3152,8 @@
       "completed": "completado",
       "failed": "fallido",
       "inProgress": "en curso"
-    }
+    },
+    "envNoun": "el entorno de prueba"
   },
   "testing": {
     "title": "Informe de pruebas",

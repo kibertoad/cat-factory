@@ -20,11 +20,30 @@
     "remove": "削除",
     "confirm": {
       "defaultTitle": "よろしいですか？",
-      "confirm": "確認"
+      "confirm": "確認",
+      "irreversible": "この操作は取り消せません。",
+      "reconnectHint": "再び使用するには、接続し直す必要があります。",
+      "titles": {
+        "disconnect": "{name} を切断しますか？",
+        "remove": "{name} を削除しますか？",
+        "revoke": "{name} を取り消しますか？",
+        "clear": "{name} をクリアしますか？",
+        "destroy": "{name} を破棄しますか？"
+      }
     },
     "copied": "クリップボードにコピーしました",
     "disconnect": "切断",
-    "copyFailed": "クリップボードにコピーできませんでした"
+    "copyFailed": "クリップボードにコピーできませんでした",
+    "revoke": "取り消す",
+    "clear": "クリア",
+    "destroy": "破棄",
+    "toast": {
+      "disconnected": "{name} を切断しました",
+      "removed": "{name} を削除しました",
+      "revoked": "{name} を取り消しました",
+      "cleared": "{name} をクリアしました",
+      "destroyed": "{name} を破棄しました"
+    }
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -436,7 +455,8 @@
       "saveMonitoring": "監視を保存",
       "savedToast": "監視を保存しました",
       "saveFailed": "マッピングを保存できませんでした",
-      "clearFailed": "マッピングをクリアできませんでした"
+      "clearFailed": "マッピングをクリアできませんでした",
+      "configNoun": "リリースヘルス設定"
     },
     "testConfig": {
       "title": "テストインフラ",
@@ -1064,7 +1084,8 @@
         "revokeInvite": "招待を取り消せませんでした",
         "connectEmail": "メール送信者を接続できませんでした",
         "disconnectEmail": "メール送信者を切断できませんでした"
-      }
+      },
+      "emailNoun": "メール送信"
     },
     "boardSwitcher": {
       "accountFallback": "アカウント",
@@ -1503,7 +1524,10 @@
         "overrideActive": "有効",
         "personalOverrideHint": "このプロビジョニングタイプのワークスペースハンドラーを自分のマシンで上書きします。ユーザーごとに保存されます。",
         "removeOverride": "オーバーライドを削除",
-        "loading": "インフラ設定を読み込んでいます…"
+        "loading": "インフラ設定を読み込んでいます…",
+        "kubeNoun": "Kubernetes ハンドラー",
+        "kubeOverrideNoun": "Kubernetes のオーバーライド",
+        "customNoun": "このハンドラー"
       }
     },
     "providerConnection": {
@@ -1809,7 +1833,9 @@
         "connected": "オブザーバビリティを接続しました",
         "connectFailed": "接続を保存できませんでした",
         "disconnectFailed": "切断できませんでした"
-      }
+      },
+      "connectionNoun": "オブザーバビリティ接続",
+      "incidentNoun": "インシデントプロバイダー"
     },
     "localMode": {
       "title": "ローカルモード",
@@ -2103,7 +2129,8 @@
           "step1": "LiteLLM ゲートウェイで仮想キーを生成します (またはマスターキーを使用します)。",
           "step2": "ゲートウェイのベース URL は、ここではなくデプロイ運用者が設定します (LITELLM_BASE_URL)。"
         }
-      }
+      },
+      "keyNoun": "この API キー"
     },
     "vendorCredentials": {
       "title": "LLM ベンダー",
@@ -3138,7 +3165,8 @@
       "completed": "完了",
       "failed": "失敗",
       "inProgress": "進行中"
-    }
+    },
+    "envNoun": "テスト環境"
   },
   "testing": {
     "title": "テストレポート",

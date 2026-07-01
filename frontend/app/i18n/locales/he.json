@@ -20,11 +20,30 @@
     "remove": "הסר",
     "confirm": {
       "defaultTitle": "האם אתה בטוח?",
-      "confirm": "אישור"
+      "confirm": "אישור",
+      "irreversible": "לא ניתן לבטל פעולה זו.",
+      "reconnectHint": "יהיה עליך לחבר אותו מחדש כדי להשתמש בו שוב.",
+      "titles": {
+        "disconnect": "לנתק את {name}?",
+        "remove": "להסיר את {name}?",
+        "revoke": "לבטל את {name}?",
+        "clear": "לנקות את {name}?",
+        "destroy": "להשמיד את {name}?"
+      }
     },
     "copied": "הועתק ללוח",
     "disconnect": "נתק",
-    "copyFailed": "לא ניתן להעתיק ללוח"
+    "copyFailed": "לא ניתן להעתיק ללוח",
+    "revoke": "לבטל",
+    "clear": "לנקות",
+    "destroy": "להשמיד",
+    "toast": {
+      "disconnected": "{name} נותק",
+      "removed": "{name} הוסר",
+      "revoked": "{name} בוטל",
+      "cleared": "{name} נוקה",
+      "destroyed": "{name} הושמד"
+    }
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -436,7 +455,8 @@
       "saveMonitoring": "שמור ניטור",
       "savedToast": "הניטור נשמר",
       "saveFailed": "לא ניתן לשמור את המיפוי",
-      "clearFailed": "לא ניתן לנקות את המיפוי"
+      "clearFailed": "לא ניתן לנקות את המיפוי",
+      "configNoun": "תצורת בריאות הגרסה"
     },
     "testConfig": {
       "title": "תשתית בדיקות",
@@ -1064,7 +1084,8 @@
         "revokeInvite": "לא ניתן היה לבטל הזמנה",
         "connectEmail": "לא ניתן היה לחבר שולח אימייל",
         "disconnectEmail": "לא ניתן היה לנתק שולח אימייל"
-      }
+      },
+      "emailNoun": "שליחת האימייל"
     },
     "boardSwitcher": {
       "accountFallback": "חשבון",
@@ -1501,7 +1522,10 @@
         "overrideActive": "פעילה",
         "personalOverrideHint": "עקוף את מטפל מרחב העבודה עבור סוג אספקה זה במכונה שלך. נשמר לכל משתמש.",
         "removeOverride": "הסר עקיפה",
-        "loading": "טוען הגדרות תשתית…"
+        "loading": "טוען הגדרות תשתית…",
+        "kubeNoun": "מטפל ה-Kubernetes",
+        "kubeOverrideNoun": "עקיפת ה-Kubernetes",
+        "customNoun": "מטפל זה"
       }
     },
     "providerConnection": {
@@ -1807,7 +1831,9 @@
         "connected": "התצפיתיות מחוברת",
         "connectFailed": "לא ניתן היה לשמור את החיבור",
         "disconnectFailed": "לא ניתן היה להתנתק"
-      }
+      },
+      "connectionNoun": "חיבור התצפיתיות",
+      "incidentNoun": "ספק התקריות"
     },
     "localMode": {
       "title": "מצב מקומי",
@@ -2101,7 +2127,8 @@
           "step1": "צור מפתח וירטואלי בשער LiteLLM שלך (או השתמש במפתח המאסטר שלו).",
           "step2": "כתובת הבסיס של השער נקבעת על ידי מפעיל הפריסה שלך (LITELLM_BASE_URL), ולא כאן."
         }
-      }
+      },
+      "keyNoun": "מפתח API זה"
     },
     "vendorCredentials": {
       "title": "ספקי LLM",
@@ -3136,7 +3163,8 @@
       "completed": "הושלם",
       "failed": "נכשל",
       "inProgress": "בתהליך"
-    }
+    },
+    "envNoun": "סביבת הבדיקה"
   },
   "testing": {
     "title": "דוח בדיקה",
