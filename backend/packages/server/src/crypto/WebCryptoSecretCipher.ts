@@ -65,7 +65,23 @@ export class WebCryptoSecretCipher implements SecretCipher {
     const iv = base64urlToBytes(parts[2]!) as Uint8Array<ArrayBuffer>
     const ciphertext = base64urlToBytes(parts[3]!) as Uint8Array<ArrayBuffer>
     const key = await this.deriveKey(salt)
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+    let plain: ArrayBuffer
+    try {
+      plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+    } catch (e) {
+      // AES-GCM authentication failed. This is almost always a master-key (ENCRYPTION_KEY)
+      // mismatch: the key was rotated/regenerated since this secret was sealed, so every
+      // credential sealed under the previous key is now unrecoverable. The raw Web Crypto
+      // failure is the opaque DOMException "The operation failed for an operation-specific
+      // reason", which surfaced verbatim as a run/request failure with no clue to the cause.
+      // Rethrow an actionable message (preserving the original as `cause`).
+      throw new Error(
+        'A stored secret could not be decrypted: the encryption key (ENCRYPTION_KEY) does not ' +
+          'match the one it was sealed under — it was most likely rotated or regenerated. ' +
+          'Restore the original key, or re-enter the affected credential to re-seal it under the current key.',
+        { cause: e },
+      )
+    }
     return new TextDecoder().decode(plain)
   }
 

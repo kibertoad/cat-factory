@@ -180,6 +180,38 @@ describe('ApiKeyService', () => {
     expect(leased.provider).toBe('qwen')
   })
 
+  it('wraps a decrypt failure with the provider + key id (encryption-key mismatch)', async () => {
+    const repo = new FakeRepo()
+    let seq = 0
+    const idGenerator: IdGenerator = { next: (prefix: string) => `${prefix}_${++seq}` }
+    // A cipher that fails to decrypt — the shape of a key sealed under a rotated ENCRYPTION_KEY,
+    // whose raw Web Crypto failure is the opaque "operation-specific reason" DOMException.
+    const cause = new Error('The operation failed for an operation-specific reason')
+    const failingCipher: SecretCipher = {
+      encrypt: async (plaintext) => `enc(${plaintext})`,
+      decrypt: async () => {
+        throw cause
+      },
+    }
+    const service = new ApiKeyService({
+      providerApiKeyRepository: repo,
+      workspaceRepository,
+      secretCipher: failingCipher,
+      idGenerator,
+      clock: { now: () => 1000 },
+      usageWindowMs: WINDOW,
+    })
+    await service.addKey('workspace', WS, { provider: 'openrouter', label: 'k', key: 'sk-x' })
+    const err = await service.lease(WS, 'openrouter').catch((e: unknown) => e as Error)
+    // Actionable: names the offending provider + key id, and keeps the original as `cause` —
+    // instead of surfacing the bare, contextless Web Crypto message.
+    expect(err).toBeInstanceOf(Error)
+    expect(err.message).toContain("'openrouter'")
+    expect(err.message).toContain('apikey_1')
+    expect(err.message).toContain('operation-specific reason')
+    expect((err as Error).cause).toBe(cause)
+  })
+
   it('rotates to the least-loaded key across scopes (usage-aware)', async () => {
     const { service } = build()
     const wsKey = await service.addKey('workspace', WS, { provider: 'qwen', label: 'ws', key: '1' })
