@@ -2191,6 +2191,11 @@ export function buildContainer(
   // deployment is visible in the logs instead of quietly auto-merging without checking CI.
   warnUnwiredGates(logger)
 
+  // The unified `agent_runs` reader (kind-spanning) — surfaced on the container for
+  // `AgentRunController` AND folded into the mothership `repositories` registry below (it is the
+  // one repo not carried by `CoreDependencies`). One instance shared by both.
+  const agentRunRepository = new D1AgentRunRepository({ db })
+
   return {
     ...createCore(dependencies),
     config,
@@ -2200,15 +2205,21 @@ export function buildContainer(
     // The block→service→repo resolver, surfaced so the task-search controller can scope a
     // GitHub-issue search to the originating service's repo (and refuse it when unlinked).
     resolveRepoTarget: buildResolveRepoTarget(db),
-    agentRunRepository: new D1AgentRunRepository({ db }),
+    agentRunRepository,
     // Execution-scoped repo, surfaced for the conformance suite's compareAndSwap parity check.
     executionRepository: dependencies.executionRepository,
     // The repository registry the mothership-mode machine API (`/internal/persistence`) reflects
     // over, so a Cloudflare deployment can act as a mothership for mothership-mode local nodes.
     // The controller gates which repo+method is callable (allow-list) and account-scopes each
     // call; exposing the whole `dependencies` (which carries every repo under its canonical name)
-    // is safe. Sourced from `dependencies` so both facades attach the registry identically.
-    repositories: dependencies as unknown as PersistenceRegistry,
+    // is safe. `agentRunRepository` is the one repo NOT part of `CoreDependencies` (the engine's
+    // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
+    // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
+    // Sourced identically on both facades so they attach the same registry surface.
+    repositories: {
+      ...dependencies,
+      agentRunRepository,
+    } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

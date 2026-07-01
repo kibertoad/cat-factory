@@ -180,6 +180,12 @@ function makeRegistry(): {
       listByWorkspace: async (ws: string) => [{ ws }],
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
     },
+    // The board's run-control entry (retry/stop): resolve a run's kind by (workspaceId, id). The
+    // stub echoes the workspaceId; `listStale` is wired but sweeper-only (absent from the allow-list).
+    agentRunRepository: {
+      getRef: async (ws: string, id: string) => ({ ws, id, kind: 'execution' }),
+      listStale: async () => [],
+    },
     tokenUsageRepository: {
       totalsSinceForWorkspace: async (ws: string, _since: number) => ({ ws }),
     },
@@ -674,4 +680,40 @@ describe('settings, preset & schedule management surface (workspace-scoped write
       })
     })
   }
+})
+
+describe('agent-run control surface (retry/stop entry — workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // `AgentRunController` (retry/stop a run) resolves the run's KIND via `getRef(workspaceId, id)`
+  // before dispatching to the matching service; it takes the workspaceId as arg0 → the `workspace`
+  // rule. Exposing it makes the execution-run retry/stop path functional in mothership mode.
+  it('forwards agentRunRepository.getRef for an in-scope workspace', async () => {
+    const ref = await remoteRegistry().agentRunRepository!.getRef!('ws_in', 'ex_1')
+    // The ref round-trips with its kind, proving the controller can branch on it over the RPC.
+    expect(ref).toMatchObject({ ws: 'ws_in', id: 'ex_1', kind: 'execution' })
+  })
+
+  it('rejects agentRunRepository.getRef for an out-of-scope workspace (404, no leak)', async () => {
+    // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+    await expect(
+      remoteRegistry().agentRunRepository!.getRef!('ws_out', 'ex_1'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('still refuses the sweeper-only agentRunRepository.listStale (off the allow-list)', async () => {
+    // `listStale` is wired on the fake repo but sweeper-internal — never remotely callable.
+    await expect(remoteRegistry().agentRunRepository!.listStale!(0)).rejects.toThrow(/not callable/)
+  })
 })

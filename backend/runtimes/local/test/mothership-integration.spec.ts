@@ -250,6 +250,36 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
     expect(persisted?.status).toBe('done')
   })
 
+  it('resolves an agent run kind over the remote RPC for the retry/stop surface', async () => {
+    // The board's run controls (retry/stop) enter through `agentRunRepository.getRef`, the method
+    // this slice allow-listed. Prove it round-trips end-to-end: in mothership mode
+    // `container.agentRunRepository` IS the remote proxy, so `getRef` necessarily travels over the
+    // RPC. The prior test drove task_login's run to `done`; retrying a non-failed run must resolve
+    // its kind (execution) over the RPC and THEN be refused by the engine with 409
+    // `run_not_retryable` — a non-allow-listed `getRef` would instead surface as an `unknown_method`
+    // error (a 5xx), so the clean 409 proves the read reached the mothership and returned a ref.
+    const snap = await local.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    const run = snap.body.executions.find((e) => e.blockId === 'task_login')
+    expect(run?.status).toBe('done')
+
+    const retry = await local.call<{ error?: { code?: string; details?: { reason?: string } } }>(
+      'POST',
+      `/workspaces/${workspaceId}/agent-runs/${run!.id}/retry`,
+    )
+    expect(retry.status).toBe(409)
+    // A `ConflictError` serialises as `code: 'conflict'` with the specific reason under details.
+    expect(retry.body.error?.code).toBe('conflict')
+    expect(retry.body.error?.details?.reason).toBe('run_not_retryable')
+
+    // An unknown run id: `getRef` returns null over the RPC (the null round-trips through the
+    // tagged envelope), so the controller 404s — never a scope leak, never a 5xx.
+    const unknown = await local.call(
+      'POST',
+      `/workspaces/${workspaceId}/agent-runs/ex_does-not-exist/retry`,
+    )
+    expect(unknown.status).toBe(404)
+  })
+
   it('mints a machine token from a whitelisted session (scoped to the user accounts)', async () => {
     // A mothership SESSION for the org owner — as the OAuth callback would produce.
     const session = await mintSession(ORG_OWNER)

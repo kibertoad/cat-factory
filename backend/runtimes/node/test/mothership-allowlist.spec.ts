@@ -126,7 +126,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   blockRepository: { listByService: 'pending' },
   pipelineRepository: {},
   executionRepository: { listByService: 'pending', listStale: 'sweeper' },
-  agentRunRepository: { getRef: 'pending', listStale: 'sweeper', liveRunIds: 'sweeper' },
+  // `getRef` is allow-listed (the board's retry/stop run-control entry point). `listStale`/
+  // `liveRunIds` are the stale-run sweeper's kind-spanning reads — mothership-internal cron.
+  agentRunRepository: { listStale: 'sweeper', liveRunIds: 'sweeper' },
   tokenUsageRepository: { record: 'telemetry', totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
   llmCallMetricRepository: {
     record: 'telemetry',
