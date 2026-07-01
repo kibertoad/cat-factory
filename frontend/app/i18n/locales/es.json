@@ -1331,7 +1331,8 @@
         "updateConfiguration": "Actualizar configuración",
         "connect": "Conectar",
         "reenterSecrets": "Vuelve a introducir el campo secreto para guardar los cambios: los secretos almacenados son de solo escritura y no se muestran. | Vuelve a introducir los campos secretos para guardar los cambios: los secretos almacenados son de solo escritura y no se muestran.",
-        "optionalLabel": "{label} (opcional)"
+        "optionalLabel": "{label} (opcional)",
+        "missingFields": "Completa los campos obligatorios para conectar: {fields}."
       },
       "field": {
         "defaultsTo": "Por defecto: {value}"
@@ -1382,7 +1383,8 @@
         "caCertPem": "Certificado CA del clúster (PEM)",
         "caCertPemHelp": "Pega el bundle CA del clúster para que el certificado TLS del apiserver se verifique. Omítelo solo para una CA de confianza pública.",
         "insecureSkipTlsVerify": "Omitir verificación TLS",
-        "insecureSkipTlsVerifyHelp": "Muy desaconsejado. Desactiva la verificación TLS del apiserver; úsalo solo para clústeres kind/dev."
+        "insecureSkipTlsVerifyHelp": "Muy desaconsejado. Desactiva la verificación TLS del apiserver; úsalo solo para clústeres kind/dev.",
+        "invalidFields": "Completa los campos obligatorios con valores válidos para conectar."
       },
       "kubernetes": {
         "label": "Nombre",
@@ -1808,7 +1810,8 @@
         "caCertPem": "Certificado CA (PEM)",
         "caCertPemHelp": "Verifica el certificado TLS del apiserver. Omítelo solo con una CA de confianza pública.",
         "insecureSkipTlsVerify": "Omitir la verificación TLS",
-        "insecureSkipTlsVerifyHelp": "Muy desaconsejado: solo clústeres de desarrollo/kind."
+        "insecureSkipTlsVerifyHelp": "Muy desaconsejado: solo clústeres de desarrollo/kind.",
+        "invalidPort": "Introduce un puerto entre 1 y 65535."
       },
       "customType": {
         "title": "Tipos de manifiesto personalizados",

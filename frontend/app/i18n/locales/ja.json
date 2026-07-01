@@ -1359,7 +1359,8 @@
         "caCertPem": "CA 証明書 (PEM)",
         "caCertPemHelp": "apiserver の TLS 証明書を検証します。公的に信頼された CA の場合のみ省略します。",
         "insecureSkipTlsVerify": "TLS 検証をスキップ",
-        "insecureSkipTlsVerifyHelp": "強く非推奨: 開発/kind クラスターのみ。"
+        "insecureSkipTlsVerifyHelp": "強く非推奨: 開発/kind クラスターのみ。",
+        "invalidPort": "1〜65535 のポート番号を入力してください。"
       },
       "customType": {
         "title": "カスタムマニフェストタイプ",
@@ -1457,7 +1458,8 @@
         "caCertPem": "クラスター CA 証明書 (PEM)",
         "caCertPemHelp": "apiserver の TLS 証明書を検証できるよう、クラスターの CA バンドルを貼り付けてください。公的に信頼された CA の場合のみ省略できます。",
         "insecureSkipTlsVerify": "TLS 検証をスキップ",
-        "insecureSkipTlsVerifyHelp": "強く非推奨です。apiserver の TLS 検証を無効にします。kind/開発クラスターでのみ使用してください。"
+        "insecureSkipTlsVerifyHelp": "強く非推奨です。apiserver の TLS 検証を無効にします。kind/開発クラスターでのみ使用してください。",
+        "invalidFields": "接続するには必須項目に有効な値を入力してください。"
       },
       "kubernetes": {
         "label": "名前",
@@ -1497,7 +1499,8 @@
         "updateConfiguration": "設定を更新",
         "connect": "接続",
         "reenterSecrets": "変更を保存するにはシークレットフィールドを再入力してください。保存済みのシークレットは書き込み専用で表示されません。 | 変更を保存するにはシークレットフィールドを再入力してください。保存済みのシークレットは書き込み専用で表示されません。",
-        "optionalLabel": "{label} (任意)"
+        "optionalLabel": "{label} (任意)",
+        "missingFields": "接続するには必須項目を入力してください: {fields}。"
       },
       "field": {
         "defaultsTo": "デフォルト値は {value}"
