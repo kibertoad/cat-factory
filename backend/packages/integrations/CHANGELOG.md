@@ -1,5 +1,62 @@
 # @cat-factory/integrations
 
+## 0.50.1
+
+### Patch Changes
+
+- b744822: Surface a Kubernetes environment that can't finish provisioning instead of leaving it spinning up forever.
+
+  Two gaps let a misconfigured ephemeral-environment (bad/insufficient ServiceAccount token, missing RBAC, or a rollout that never completes) sit at `provisioning` indefinitely with nothing shown in the run's "Infrastructure attempts":
+
+  - `KubernetesEnvironmentProvider`'s status read mapped **every** non-OK apiserver response — including `401`/`403` — to `provisioning`. A credential/permission error never self-heals, so the env never left "spinning up". It now throws a clear error on `401`/`403` (caught + logged by `refreshStatus`, after which the human-test gate degrades to manual mode) while transient `5xx`/`429` still keep polling.
+  - `EnvironmentProvisioningService.refreshStatus` only recorded a provisioning-log entry when the status read **threw**, so a reconciliation that flipped the env to `failed` without throwing (e.g. a rollout that exceeded its progress deadline, or a vanished namespace) left the "Infrastructure attempts" drawer empty. It now records a `failure` entry on the transition into `failed`.
+
+- c40736e: Simplify the Kubernetes integration module internally (behaviour-preserving).
+
+  - Remove the unused `isSupportedKind()` export from `kubernetes-environment.logic.ts`.
+  - Drop the `KubernetesEnvironmentProvider`'s private `renderImage()`, which duplicated the
+    shared `renderTemplate()`, and derive the per-PR namespace + template vars once through a
+    single `provisionContext()` helper reused by `provision`, `buildProvisionJob`, and
+    `finalizeProvision`.
+  - Collapse the repeated apiserver GET/parse and "by name, else first in list" logic in the
+    status/URL reads behind two small `getJson`/`getByNameOrFirst` helpers.
+  - Share the custom-TLS runtime-support check between the runner and environment backends via
+    a new `assertCustomTlsSupported()` in `kubernetes.logic.ts`.
+
+  No functional or wire-shape changes; covered by the existing unit suite.
+
+## 0.50.0
+
+### Minor Changes
+
+- 77c6842: Broaden the provisioning auto-detector and make it monorepo-aware with user-selectable candidates.
+
+  - **More layouts recognized.** Compose detection now covers override/env-variant names
+    (`compose.override.*`, `docker-compose.override.*`, `docker-compose.{prod,dev}.*`) and files nested
+    under `deploy/` / `docker/` / `.docker/` / `compose/`. Kubernetes detection adds common roots
+    (`charts`, `chart`, `helm`, `kustomize`, `.kube`, `infra`, `infrastructure`, `infra/manifests`,
+    `deploy/k8s`, `deploy/kubernetes`, `config/k8s`, `ops`, `gitops`, `.deploy`) and nested wrapper
+    subdirs (`overlays`, `base`, `helm`, `charts`, `kustomize`).
+  - **Monorepo-aware.** When scoped to a service subdirectory, the detector checks both the colocated
+    service folder AND the repo's root shared-deploy dirs (`deploy/<svc>`, `k8s/<svc>`,
+    `manifests/services/<svc>`, …), matching the service's slice by its directory basename. Unrelated
+    slices are not surfaced when colocated manifests already win, and a name-matched slice with no
+    confirmable manifests is only pre-selected when it actually matches the service name (never a
+    fabricated pick at an arbitrary directory).
+  - **Choose instead of silent auto-pick.** The recommendation now surfaces `serviceDirCandidates`
+    (which root-shared monorepo slice), `manifestRootCandidates` (which k8s root when several resolve),
+    and `composeServiceCandidates` (which compose service) alongside the existing overlay candidates, each
+    rendered as a selectable chip in the service inspector's "Detect from repo" panel.
+
+  The recommendation's new fields are optional; nothing is persisted by detection. The compose service key
+  is advisory (surfaced as a candidate/note only) — it is not written onto the service provisioning.
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+  - @cat-factory/kernel@0.63.3
+
 ## 0.49.0
 
 ### Minor Changes

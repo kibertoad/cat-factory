@@ -1227,6 +1227,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // sub-helpers (tasks/documents/environments/fragments/slack) are opt-in and off by default, so
   // they are NOT on the default board-load + run path and remain a follow-up sub-slice.
   const remoteRepos = options.db ? undefined : (repos as unknown as Record<string, unknown>)
+  // `remoteRepos` + `db` are fixed for this build, so bind them once: `sourced('name', (d) => …)`
+  // picks the remote registry entry in mothership mode, else builds the Drizzle repo over `db`.
+  const sourced = <T>(name: string, build: (d: DrizzleDb) => T): T =>
+    pickRepoSource(remoteRepos, name, () => build(db))
 
   // The app-owned backend registries (env + runner kind → provider), built once here and
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
@@ -1369,24 +1373,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // Persistence the container-execution path needs (built from the same db). The
   // runner-pool repo also backs the `runners` Core module so a pool is registrable
   // via the API; the installation repo backs both token minting and repo resolution.
-  const runnerPoolConnectionRepository = pickRepoSource(
-    remoteRepos,
+  const runnerPoolConnectionRepository = sourced(
     'runnerPoolConnectionRepository',
-    () => new DrizzleRunnerPoolConnectionRepository(db),
+    (d) => new DrizzleRunnerPoolConnectionRepository(d),
   )
   const githubInstallationRepository =
     options.githubInstallationRepository ??
-    pickRepoSource(
-      remoteRepos,
-      'githubInstallationRepository',
-      () => new DrizzleGitHubInstallationRepository(db),
-    )
+    sourced('githubInstallationRepository', (d) => new DrizzleGitHubInstallationRepository(d))
   // The repositories projection (+ sync cursors), shared by `buildResolveRepoTarget`
   // (block→repo resolution) and the GitHub sync/webhook module below.
-  const repoProjectionRepository = pickRepoSource(
-    remoteRepos,
+  const repoProjectionRepository = sourced(
     'repoProjectionRepository',
-    () => new DrizzleRepoProjectionRepository(db),
+    (d) => new DrizzleRepoProjectionRepository(d),
   )
 
   // The GitHub App registry, built once when the App is configured and shared by the
@@ -1605,11 +1603,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     : undefined
   const issueWritebackProvider = new IssueWritebackService({
     trackerSettingsRepository: repos.trackerSettingsRepository,
-    taskRepository: pickRepoSource(
-      remoteRepos,
-      'taskRepository',
-      () => new DrizzleTaskRepository(db),
-    ),
+    taskRepository: sourced('taskRepository', (d) => new DrizzleTaskRepository(d)),
     fetchImpl: fetch,
     ...(githubClient && resolveWritebackIssue
       ? {
@@ -1723,30 +1717,27 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           githubClient,
           githubInstallationRepository,
           repoProjectionRepository,
-          branchProjectionRepository: pickRepoSource(
-            remoteRepos,
+          // The five GitHub projection repos share one shape (remote in mothership mode, else
+          // Drizzle over `db`), routed through the shared `sourced` helper.
+          branchProjectionRepository: sourced(
             'branchProjectionRepository',
-            () => new DrizzleBranchProjectionRepository(db),
+            (d) => new DrizzleBranchProjectionRepository(d),
           ),
-          pullRequestProjectionRepository: pickRepoSource(
-            remoteRepos,
+          pullRequestProjectionRepository: sourced(
             'pullRequestProjectionRepository',
-            () => new DrizzlePullRequestProjectionRepository(db),
+            (d) => new DrizzlePullRequestProjectionRepository(d),
           ),
-          issueProjectionRepository: pickRepoSource(
-            remoteRepos,
+          issueProjectionRepository: sourced(
             'issueProjectionRepository',
-            () => new DrizzleIssueProjectionRepository(db),
+            (d) => new DrizzleIssueProjectionRepository(d),
           ),
-          commitProjectionRepository: pickRepoSource(
-            remoteRepos,
+          commitProjectionRepository: sourced(
             'commitProjectionRepository',
-            () => new DrizzleCommitProjectionRepository(db),
+            (d) => new DrizzleCommitProjectionRepository(d),
           ),
-          checkRunProjectionRepository: pickRepoSource(
-            remoteRepos,
+          checkRunProjectionRepository: sourced(
             'checkRunProjectionRepository',
-            () => new DrizzleCheckRunProjectionRepository(db),
+            (d) => new DrizzleCheckRunProjectionRepository(d),
           ),
           webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
           // Bound the initial backfill to the commit retention horizon (0 = full).
@@ -1780,10 +1771,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // module + ref-arch CRUD then work like the Worker); the container-dispatching
   // `repoBootstrapper` wires only when its prerequisites are met (transport + proxy +
   // token + GitHub client) — the same token source the container executor uses.
-  const bootstrapJobRepository = pickRepoSource(
-    remoteRepos,
+  const bootstrapJobRepository = sourced(
     'bootstrapJobRepository',
-    () => new DrizzleBootstrapJobRepository(db),
+    (d) => new DrizzleBootstrapJobRepository(d),
   )
   const bootstrapMintInstallationToken =
     options.mintInstallationToken ??
@@ -1960,10 +1950,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // re-seals the token for the run); until that lands it routes to the remote registry like the
     // other org stores, so a no-db build doesn't `TypeError` — `deleteByExecution` is not yet
     // allow-listed, so it returns a clean `unknown_method` there (see the per-repo checklist).
-    subscriptionActivationRepository: pickRepoSource(
-      remoteRepos,
+    subscriptionActivationRepository: sourced(
       'subscriptionActivationRepository',
-      () => new DrizzleSubscriptionActivationRepository(db),
+      (d) => new DrizzleSubscriptionActivationRepository(d),
     ),
     // In-org shared services. When a realtime hub is wired (start()), the engine's
     // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
@@ -2020,10 +2009,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
     // the inbox + the human-action surfaces. Node has no real-time push, so the rows
     // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
-    notificationRepository: pickRepoSource(
-      remoteRepos,
+    notificationRepository: sourced(
       'notificationRepository',
-      () => new DrizzleNotificationRepository(db),
+      (d) => new DrizzleNotificationRepository(d),
     ),
     ...tasks.deps,
     // Recurring pipelines + the workspace tracker selection. The tracker provider
@@ -2116,10 +2104,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // module + API available; `repoBootstrapper` (when wired) dispatches the bootstrap
     // container through the shared runner seam, and `bootstrapRunner` (pg-boss, below)
     // durably drives its poll loop — parity with the Worker's BootstrapWorkflow.
-    referenceArchitectureRepository: pickRepoSource(
-      remoteRepos,
+    referenceArchitectureRepository: sourced(
       'referenceArchitectureRepository',
-      () => new DrizzleReferenceArchitectureRepository(db),
+      (d) => new DrizzleReferenceArchitectureRepository(d),
     ),
     bootstrapJobRepository,
     ...(repoBootstrapper ? { repoBootstrapper } : {}),
@@ -2127,10 +2114,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // repository is wired unconditionally; the repairer (agent fallback) is wired
     // post-overrides below over the FINAL provider, and the durable runner in the
     // `options.boss` block above — parity with the Worker's EnvConfigRepairWorkflow.
-    envConfigRepairJobRepository: pickRepoSource(
-      remoteRepos,
+    envConfigRepairJobRepository: sourced(
       'envConfigRepairJobRepository',
-      () => new DrizzleEnvConfigRepairJobRepository(db),
+      (d) => new DrizzleEnvConfigRepairJobRepository(d),
     ),
     // Document sources (Confluence / Notion / GitHub docs): wired from the shared
     // integration providers exactly like the Worker, so a workspace can connect a

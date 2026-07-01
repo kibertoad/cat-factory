@@ -49,24 +49,21 @@ export interface PersistenceRpcError {
   details?: Record<string, unknown>
 }
 
+// The `Record<PersistenceErrorCode, …>` type keeps this exhaustive — a new error code fails `tsc`
+// until it is mapped, exactly like the previous `switch` did.
+const ERROR_STATUS: Record<PersistenceErrorCode, number> = {
+  not_found: 404,
+  validation: 422,
+  conflict: 409,
+  credential_required: 428,
+  forbidden: 403,
+  unknown_method: 400,
+  internal: 500,
+}
+
 /** Map an error code to the HTTP status the controller returns (and the client reads). */
 export function statusForPersistenceError(code: PersistenceErrorCode): number {
-  switch (code) {
-    case 'not_found':
-      return 404
-    case 'validation':
-      return 422
-    case 'conflict':
-      return 409
-    case 'credential_required':
-      return 428
-    case 'forbidden':
-      return 403
-    case 'unknown_method':
-      return 400
-    case 'internal':
-      return 500
-  }
+  return ERROR_STATUS[code]
 }
 
 // ---------------------------------------------------------------------------

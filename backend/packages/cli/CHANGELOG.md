@@ -1,5 +1,74 @@
 # @cat-factory/cli
 
+## 0.4.0
+
+### Minor Changes
+
+- cf5774a: `cat-factory k3s` now provisions on your behalf (guided-setup slice 2): after the probe,
+  it creates (or reuses) a local k3d/kind cluster, applies a least-privilege ServiceAccount
+
+  - RBAC, mints a long-lived token, reads the apiserver URL, and prints the values to wire
+    into the Local k3s environment handler. Every mutating step is behind an explicit confirm
+    (skipped by `--yes`); the sudo `k3s` install is still only ever printed. The `HostShell`
+    seam gained an `input` option so the RBAC manifest is piped to `kubectl apply -f -` without
+    touching disk. Also refreshes the scaffold `@cat-factory/app` pin to `^0.64.0`.
+
+    Hardening: cluster creation runs under a 5-minute watchdog (the default 10s would kill the
+    image pull); the RBAC no longer grants cluster-wide `list`/`watch` on `secrets`/
+    `serviceaccounts` (which would let the token read every ServiceAccount token — effectively
+    cluster-admin); `--yes` refuses to auto-provision a reachable cluster that doesn't look local
+    (guarding a kubeconfig pointed at a shared/remote cluster) and the confirm names the target
+    context + apiserver; commands target an explicit `--context` instead of mutating the user's
+    global current-context; a create that fails on the apiserver port surfaces a collision hint;
+    and the `0.0.0.0` apiserver bind address is normalized to `127.0.0.1`.
+
+## 0.3.1
+
+### Patch Changes
+
+- c40736e: Refresh the scaffolded `@cat-factory/app` pin to `^0.64.0` so `cat-factory init` generates a
+  frontend deployment against the current published layer (the `^0.63.1` pin no longer covered
+  `0.64.0`).
+
+## 0.3.0
+
+### Minor Changes
+
+- fb699f3: Add the `cat-factory k3s` guided local-cluster setup command (initiative slice 1: host probe +
+  report).
+
+  `cat-factory k3s` probes the machine over a new injectable host shell-out seam (`HostShell`) for a
+  reachable cluster / installed `k3d`/`kind`/`k3s`/`kubectl` / a running Docker, classifies the host
+  (pure `classifyHost`), and reports what it found plus a recommended path — reuse the existing
+  cluster, create a k3d or kind cluster (Docker, no root; selected by `--runtime`), or the guided
+  (sudo) k3s path (which points at starting an already-installed k3s, or otherwise prints the install
+  command — never run). The apiserver-contacting `kubectl` probes carry a `--request-timeout` and the
+  `HostShell` has a watchdog, so a stale kubeconfig fails fast instead of hanging the probe. Mirrors
+  the `init` command's pure-planner + IO-seam shape and is fully unit-tested with a scripted fake
+  shell. Cluster provisioning, ServiceAccount/token minting, and wiring the `local-k3s` infra handler
+  follow in later slices.
+
+## 0.2.2
+
+### Patch Changes
+
+- 720942a: Refresh the scaffolded project's pinned library versions so `cat-factory init`
+  emits an up-to-date local-mode deployment. `@cat-factory/local-server` was pinned
+  at `^0.19.5` (published `0.33.0`) and `@cat-factory/app` at `^0.47.7` (published
+  `0.63.1`), so a freshly scaffolded project resolved badly stale backend/frontend
+  libraries. Bumped both pins to the current published majors.
+
+  Also note the local-mode sign-in step in the generated `README.md`: local mode
+  requires sign-in, and because the CLI writes the provider PAT, the login screen
+  offers "Sign in with configured PAT" — the generated run instructions now say so.
+
+  Guard the pins against silent re-drift: `templates.pins.test.ts` fails the build
+  if either caret no longer covers the current workspace version of
+  `@cat-factory/local-server` / `@cat-factory/app`, so the pins can't quietly fall
+  behind the libraries again. Also corrected the `templates.ts` comment, which
+  claimed the caret picks up "patch/minor" releases — for these `0.x` libraries a
+  caret only covers patches, so each minor bump needs a manual refresh here.
+
 ## 0.2.1
 
 ### Patch Changes

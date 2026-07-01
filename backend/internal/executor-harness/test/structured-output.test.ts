@@ -120,6 +120,8 @@ describe('resolveStructuredOutput', () => {
     expect(body.stream).toBe(false)
     expect(body.response_format).toEqual({ type: 'json_object' })
     expect(body.messages.at(-1).content).toContain('this is not json at all')
+    // No sampling params: the newest models (Opus 4.7+/Claude 5 family) 400 on `temperature`.
+    expect(body.temperature).toBeUndefined()
   })
 
   it('falls back to a prompt-only repair when the upstream rejects response_format (4xx)', async () => {
@@ -202,6 +204,8 @@ describe('resolveStructuredOutput', () => {
     expect(url).toBe('https://api.z.ai/api/anthropic/v1/messages')
     // API-token vendors authenticate with x-api-key, not a bearer session token.
     expect((init as RequestInit).headers).toMatchObject({ 'x-api-key': 'glm-key-secret' })
+    // No `temperature`: Anthropic's newest models reject the sampling params with a 400.
+    expect(JSON.parse((init as RequestInit).body as string).temperature).toBeUndefined()
   })
 
   it('does not attempt repair for the codex harness (no proxy, no JSON API)', async () => {

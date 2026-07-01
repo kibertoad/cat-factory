@@ -60,6 +60,17 @@ name: Deploy (production / Cloudflare)
 on:
   push:
     branches: [main]
+    # A docs-only merge must NOT trigger a deployment — prose never reaches the
+    # deployed Worker/SPA, so there is nothing to ship. Unlike the publish flow
+    # (release.yml) this excludes README files too: a README is documentation, not
+    # deployed artifact. The workflow still runs whenever any non-doc file changed
+    # (mixed doc+code pushes deploy normally). A skipped docs-only push simply
+    # leaves the `prod-deployed` marker unmoved, so the next real push's
+    # incremental diff (see below) still folds in everything since the last deploy.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'backend/docs/**'
   # Manual re-deploy of any subset (e.g. to re-push without a code change). Each
   # input defaults to true so a bare dispatch redeploys everything.
   workflow_dispatch:

@@ -1,6 +1,5 @@
-import { ValidationError } from '@cat-factory/kernel'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
-import { assertApiServerUrlSafe } from './kubernetes.logic.js'
+import { assertApiServerUrlSafe, assertCustomTlsSupported } from './kubernetes.logic.js'
 import {
   kubernetesConfigToManifest,
   parseKubernetesEnvConfig,
@@ -39,17 +38,7 @@ export const kubernetesEnvironmentBackend: EnvironmentBackendProvider = {
   assertConfigSafe: (config, opts) => {
     if (!('kubernetes' in config)) return
     assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
-    const needsCustomTls =
-      !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
-    if (needsCustomTls && opts?.customTlsSupported === false) {
-      // Caller-input error (a config this runtime can't honor) → ValidationError (422 with
-      // the reason), not a plain Error (a generic 500 the connect form can't surface).
-      throw new ValidationError(
-        'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
-          '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
-          'run this workspace on the Node/local deployment.',
-      )
-    }
+    assertCustomTlsSupported(config.kubernetes, opts)
   },
   toManifest: (config) => {
     if (!('kubernetes' in config)) throw new Error('Expected a kubernetes environment config')
