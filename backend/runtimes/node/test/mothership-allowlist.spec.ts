@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PILOT_PERSISTENCE_METHODS } from '@cat-factory/server'
+import { REMOTE_PERSISTENCE_METHODS } from '@cat-factory/server'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
 import {
   DrizzleBootstrapJobRepository,
@@ -61,7 +61,7 @@ import { DrizzleUserSecretRepository } from '../src/repositories/userSecret.js'
 // correctly proxied — but only for methods a flow actually exercises. THIS test is the
 // coverage-independent backstop: it reflects EVERY public method of EVERY Drizzle repository and
 // requires each to be CLASSIFIED exactly once — either it is in the server-side allow-list
-// (`PILOT_PERSISTENCE_METHODS`, i.e. remotely callable), or it is in `NON_REMOTE` with an explicit
+// (`REMOTE_PERSISTENCE_METHODS`, i.e. remotely callable), or it is in `NON_REMOTE` with an explicit
 // reason (telemetry / local-sqlite / admin-gated / sweeper / pending / helper).
 //
 // So adding a new Drizzle repository or method WITHOUT a deliberate decision fails this test: the
@@ -480,7 +480,7 @@ describe('mothership persistence allow-list completeness', () => {
   it('classifies every repository method as remotely-callable or explicitly non-remote', () => {
     const unclassified: string[] = []
     for (const [repo, methods] of Object.entries(REFLECTED)) {
-      const allow = PILOT_PERSISTENCE_METHODS[repo] ?? {}
+      const allow = REMOTE_PERSISTENCE_METHODS[repo] ?? {}
       const nonRemote = NON_REMOTE[repo] ?? {}
       for (const method of methods) {
         const isAllowed = Object.hasOwn(allow, method)
@@ -490,7 +490,7 @@ describe('mothership persistence allow-list completeness', () => {
     }
     expect(
       unclassified,
-      'Every Drizzle repository method must be either allow-listed in PILOT_PERSISTENCE_METHODS ' +
+      'Every Drizzle repository method must be either allow-listed in REMOTE_PERSISTENCE_METHODS ' +
         '(proxied to the mothership) or recorded in NON_REMOTE with a reason. The methods below are ' +
         'neither — add a scope rule to the allow-list to proxy them, or classify them as ' +
         'pending/local/telemetry/admin/sweeper/onboarding/helper in this test:\n' +
@@ -500,7 +500,7 @@ describe('mothership persistence allow-list completeness', () => {
 
   it('has no dead allow-list entries (every allow-listed method exists on its repository)', () => {
     const dead: string[] = []
-    for (const [repo, methods] of Object.entries(PILOT_PERSISTENCE_METHODS)) {
+    for (const [repo, methods] of Object.entries(REMOTE_PERSISTENCE_METHODS)) {
       const reflected = REFLECTED[repo]
       for (const method of Object.keys(methods)) {
         if (!reflected || !reflected.includes(method)) dead.push(`${repo}.${method}`)
@@ -514,7 +514,7 @@ describe('mothership persistence allow-list completeness', () => {
 
   it('never allow-lists a method also marked non-remote (no contradictory classification)', () => {
     const contradictions: string[] = []
-    for (const [repo, methods] of Object.entries(PILOT_PERSISTENCE_METHODS)) {
+    for (const [repo, methods] of Object.entries(REMOTE_PERSISTENCE_METHODS)) {
       const nonRemote = NON_REMOTE[repo] ?? {}
       for (const method of Object.keys(methods)) {
         if (Object.hasOwn(nonRemote, method)) {

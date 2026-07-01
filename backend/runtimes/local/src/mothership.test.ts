@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DriveConfig } from '@cat-factory/node-server'
 import { buildLocalContainer } from './container.js'
-import { InProcessWorkRunner, composeMothership, isMothershipMode } from './mothership.js'
+import {
+  SqliteWorkRunner,
+  type SqliteWorkRunnerOptions,
+  composeMothership,
+  isMothershipMode,
+} from './mothership.js'
+import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 
 // Unit coverage for the mothership composition seam (docs/initiatives/mothership-mode.md):
 //   - the boot-mode probe,
@@ -125,18 +131,52 @@ const DRIVE_CFG: DriveConfig = {
   ciMaxPolls: 1,
 }
 
+// Large lease / backoff / sweep so timing never interferes with the synchronous assertions; the
+// drive itself resolves in microtasks (instant sleep), so a `tick` macrotask flushes each drive.
+const RUNNER_OPTS: SqliteWorkRunnerOptions = {
+  drive: DRIVE_CFG,
+  leaseMs: 60_000,
+  reArmDelayMs: 60_000,
+  errorBackoffMs: 60_000,
+  sweepIntervalMs: 60_000,
+  maxAttempts: 5,
+  concurrency: 10,
+}
+
 const silentLog = { info: () => {}, error: () => {}, warn: () => {} } as never
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-describe('InProcessWorkRunner', () => {
-  it('drives a run to completion via the execution service', async () => {
+// Track runners/queues so their (unref'd) timers + handles are released after each test.
+const cleanups: (() => void)[] = []
+afterEach(() => {
+  for (const c of cleanups.splice(0)) c()
+})
+
+function makeRunner(
+  queue: SqliteWorkQueue,
+  exec: unknown,
+  opts: Partial<SqliteWorkRunnerOptions> = {},
+  extras: { staleRuns?: unknown; now?: () => number } = {},
+): SqliteWorkRunner {
+  const runner = new SqliteWorkRunner(queue, { ...RUNNER_OPTS, ...opts }, silentLog, extras.now)
+  runner.bind(exec as never, extras.staleRuns as never)
+  cleanups.push(() => {
+    runner.stop()
+    queue.close()
+  })
+  return runner
+}
+
+describe('SqliteWorkRunner', () => {
+  it('drives a run to completion via the execution service, then settles its queue row', async () => {
+    const queue = createWorkQueue(':memory:')
     const advance = vi.fn(async () => ({ kind: 'done' as const }))
-    const runner = new InProcessWorkRunner(DRIVE_CFG, silentLog)
-    runner.bind({ advanceInstance: advance } as never)
+    const runner = makeRunner(queue, { advanceInstance: advance })
     await runner.startRun('ws', 'ex')
     await tick()
     expect(advance).toHaveBeenCalledTimes(1)
     expect(advance).toHaveBeenCalledWith('ws', 'ex', expect.anything())
+    expect(queue.size()).toBe(0) // standstill → row deleted
   })
 
   it('serializes per execution: signals during an in-flight drive coalesce into one re-drive', async () => {
@@ -148,12 +188,13 @@ describe('InProcessWorkRunner', () => {
           release = () => resolve({ kind: 'done' })
         }),
     )
-    const runner = new InProcessWorkRunner(DRIVE_CFG, silentLog)
-    runner.bind({ advanceInstance: advance } as never)
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance })
 
     await runner.startRun('ws', 'ex')
     await tick()
     expect(advance).toHaveBeenCalledTimes(1) // first drive in flight
+    expect(queue.size('active')).toBe(1)
 
     // Two signals arrive mid-drive — they MUST coalesce into exactly one follow-up, not two.
     await runner.signalDecision('ws', 'ex')
@@ -167,6 +208,7 @@ describe('InProcessWorkRunner', () => {
     release!() // second drive finishes → no pending signal → runner goes idle
     await tick()
     expect(advance).toHaveBeenCalledTimes(2)
+    expect(queue.size()).toBe(0)
 
     // A fresh start after going idle drives again.
     await runner.startRun('ws', 'ex')
@@ -176,18 +218,119 @@ describe('InProcessWorkRunner', () => {
     await tick()
   })
 
-  it('swallows a drive error (logged, never an unhandled rejection)', async () => {
+  it('swallows a drive error and re-drives on a later trigger (no unhandled rejection)', async () => {
+    // advanceInstance throwing is caught INSIDE driveExecution (it fails the run and returns), so
+    // the run settles normally; a later trigger drives it again.
     const advance = vi.fn(async () => {
       throw new Error('boom')
     })
-    const runner = new InProcessWorkRunner(DRIVE_CFG, silentLog)
-    runner.bind({ advanceInstance: advance, failRun: vi.fn(async () => {}) } as never)
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance, failRun: vi.fn(async () => {}) })
     await expect(runner.startRun('ws', 'ex')).resolves.toBeUndefined()
     await tick()
-    // The runner cleared its in-flight slot, so a later start drives again.
     await runner.startRun('ws', 'ex')
     await tick()
     expect(advance).toHaveBeenCalledTimes(2)
+  })
+
+  it('defers a run for retry when the drive loop itself throws (queue row survives)', async () => {
+    // Force driveExecution itself to throw: advanceInstance rejects AND failRun rejects, so the
+    // internal failure funnel re-throws out of the loop into the runner's own catch.
+    const advance = vi.fn(async () => {
+      throw new Error('boom')
+    })
+    const failRun = vi.fn(async () => {
+      throw new Error('fail too')
+    })
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance, failRun })
+    await runner.startRun('ws', 'ex')
+    await tick()
+    expect(advance).toHaveBeenCalledTimes(1)
+    // The run is NOT lost: it is held (deferred) for a backoff'd retry, not deleted.
+    expect(queue.size()).toBe(1)
+  })
+
+  it('durable: a fresh runner re-drives runs orphaned by a prior process on bind', async () => {
+    // Simulate a prior process that claimed a run (marked it `active`) and crashed mid-drive.
+    const queue = createWorkQueue(':memory:')
+    queue.enqueue('ws', 'ex', Date.now())
+    queue.claim(Date.now(), RUNNER_OPTS.leaseMs, new Set())
+    expect(queue.size('active')).toBe(1)
+
+    // A new process boots over the SAME durable queue: bind() resets the orphan and re-drives it.
+    const advance = vi.fn(async () => ({ kind: 'done' as const }))
+    makeRunner(queue, { advanceInstance: advance }) // bind() runs recovery
+    await tick()
+    expect(advance).toHaveBeenCalledTimes(1)
+    expect(queue.size()).toBe(0)
+  })
+
+  it('fails a run loudly and evicts it after maxAttempts consecutive drive failures', async () => {
+    // Reaching the runner's own catch needs driveExecution itself to throw — which only happens
+    // when even the failRun funnel throws (a broken persistence path, e.g. mothership unreachable).
+    // `enqueue` (the per-trigger re-queue) clears the backoff lease, so each startRun re-drives
+    // immediately without waiting out errorBackoffMs.
+    const advance = vi.fn(async () => {
+      throw new Error('persistence down')
+    })
+    const failRun = vi.fn(async () => {
+      throw new Error('persistence still down')
+    })
+    const queue = createWorkQueue(':memory:')
+    const runner = makeRunner(queue, { advanceInstance: advance, failRun }, { maxAttempts: 3 })
+    // Three consecutive failed drives bring the failure count to the cap.
+    for (let i = 0; i < 3; i++) {
+      await runner.startRun('ws', 'ex')
+      await tick()
+    }
+    expect(advance).toHaveBeenCalledTimes(3)
+    // The next drain evicts the poison run AND tries to fail it (best-effort, the spy throws).
+    await runner.startRun('ws', 'ex')
+    await tick()
+    expect(queue.size()).toBe(0) // evicted, not left stuck running forever
+    // failRun was attempted for the eviction (the 3 in-drive calls + the eviction call).
+    expect(failRun.mock.calls.some((c) => (c as unknown[])[3] === 'evicted')).toBe(true)
+  })
+
+  it('reconciles a run still running in storage but missing its queue row (durability backstop)', async () => {
+    // The run exists ONLY in storage (no queue row) — e.g. its row was lost. The storage-reconcile
+    // backstop on bind re-enqueues it and drives it to completion.
+    const queue = createWorkQueue(':memory:')
+    const advance = vi.fn(async () => ({ kind: 'done' as const }))
+    const listStale = vi.fn(async () => [{ workspaceId: 'ws', id: 'orphan', kind: 'execution' }])
+    makeRunner(queue, { advanceInstance: advance }, {}, { staleRuns: { listStale } })
+    await tick()
+    await tick()
+    expect(listStale).toHaveBeenCalled()
+    expect(advance).toHaveBeenCalledWith('ws', 'orphan', expect.anything())
+    expect(queue.size()).toBe(0)
+  })
+
+  it('storage reconcile leaves non-execution kinds and in-flight runs alone', async () => {
+    const queue = createWorkQueue(':memory:')
+    const advance = vi.fn(async () => ({ kind: 'done' as const }))
+    const listStale = vi.fn(async () => [{ workspaceId: 'ws', id: 'boot', kind: 'bootstrap' }])
+    makeRunner(queue, { advanceInstance: advance }, {}, { staleRuns: { listStale } })
+    await tick()
+    await tick()
+    // A bootstrap orphan is not an execution run — this runner must not pick it up.
+    expect(advance).not.toHaveBeenCalled()
+    expect(queue.size()).toBe(0)
+  })
+
+  it('a best-effort reconcile swallows a listStale that throws (repo not allow-listed yet)', async () => {
+    const queue = createWorkQueue(':memory:')
+    const advance = vi.fn(async () => ({ kind: 'done' as const }))
+    const listStale = vi.fn(async () => {
+      throw new Error('unknown_method')
+    })
+    // Must not throw out of bind / crash the runner.
+    expect(() =>
+      makeRunner(queue, { advanceInstance: advance }, {}, { staleRuns: { listStale } }),
+    ).not.toThrow()
+    await tick()
+    expect(advance).not.toHaveBeenCalled()
   })
 })
 
@@ -200,6 +343,7 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     LOCAL_MOTHERSHIP_URL: 'https://m.test',
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+    LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
   }
 
   it('composes the engine with NO db — remote repos + local credential store + in-process runner', () => {

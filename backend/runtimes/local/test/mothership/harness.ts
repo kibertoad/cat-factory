@@ -24,11 +24,9 @@ import {
   migrate,
 } from '@cat-factory/node-server'
 import {
-  HmacSigner,
   type PersistenceRpcClient,
   type PersistenceRpcRequest,
   type PersistenceRpcResponse,
-  TOKEN_AUDIENCE,
   type ServerContainer,
   createRemoteRepositoryRegistry,
 } from '@cat-factory/server'
@@ -45,6 +43,7 @@ import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '
 import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
+import { ENCRYPTION_KEY, SESSION_SECRET, buildMothershipEnv, mintMachineToken } from './setup.js'
 
 // ---------------------------------------------------------------------------
 // Mothership-mode conformance harness (docs/initiatives/mothership-mode.md).
@@ -70,8 +69,6 @@ import { createLocalCredentialStore } from '../../src/sqlite/credentialStore.js'
 // (the source of truth), mirroring the existing harnesses' direct-store seams.
 // ---------------------------------------------------------------------------
 
-const SESSION_SECRET = 'mothership-conformance-session-secret-0123456789'
-const ENCRYPTION_KEY = Buffer.alloc(32).toString('base64')
 const SEED_CLOCK: Clock = { now: () => Date.now() }
 
 // The fixed conformance user that owns every workspace the harness seeds on the mothership.
@@ -88,17 +85,7 @@ const CONF_USER = {
 // repo otherwise comes back `... is not wired`). It is NOT dev-open — it only answers the
 // machine-token RPC — so a login provider is configured to satisfy the boot guard (password
 // over the shared session secret); the harness never makes a user-authenticated HTTP call to it.
-const MOTHERSHIP_ENV: NodeJS.ProcessEnv = {
-  ...process.env,
-  ENVIRONMENT: 'test',
-  ENCRYPTION_KEY,
-  AUTH_SESSION_SECRET: SESSION_SECRET,
-  AUTH_PASSWORD_ENABLED: 'true',
-  SLACK_ENABLED: 'true',
-  ENVIRONMENTS_ENABLED: 'true',
-  PROMPT_LIBRARY_ENABLED: 'true',
-  DOCUMENT_SOURCES: 'confluence,notion,github,figma,zeplin,linear',
-}
+const MOTHERSHIP_ENV: NodeJS.ProcessEnv = buildMothershipEnv({ SLACK_ENABLED: 'true' })
 
 // The system-under-test env: dev-open (the shared suite calls with no session), no local
 // Postgres. Same integration toggles as the mothership so the engine builds the same modules.
@@ -156,7 +143,6 @@ async function recreateDatabase(adminUrl: string, dbName: string): Promise<void>
 interface Mothership {
   container: ServerContainer
   app: ReturnType<typeof createApp>
-  signer: HmacSigner
   // Every account seeded across the spec file's apps. The machine token is signed over this
   // SHARED set, not a per-app one: the seeded demo boards reuse FIXED block ids
   // (`blk_frontend`, `mod_sessions`, …) across workspaces in the one shared mothership db, so
@@ -178,7 +164,6 @@ function getMothership(db: DrizzleDb): Mothership {
     ms = {
       container,
       app: createApp(container, MOTHERSHIP_ENV),
-      signer: new HmacSigner(SESSION_SECRET),
       scopeAccountIds: new Set<string>(),
     }
     mothershipByDb.set(db, ms)
@@ -215,12 +200,10 @@ export function makeMothershipConformanceApp(
   const scopeAccountIds = ms.scopeAccountIds
   const client: PersistenceRpcClient = {
     async call(request: PersistenceRpcRequest): Promise<PersistenceRpcResponse> {
-      const token = await ms.signer.sign({
-        aud: TOKEN_AUDIENCE.machine,
-        nodeId: 'node_conformance',
+      const token = await mintMachineToken(SESSION_SECRET, {
         userId: CONF_USER.id,
-        scope: { accountIds: [...scopeAccountIds] },
-        exp: Date.now() + 3_600_000,
+        accountIds: [...scopeAccountIds],
+        nodeId: 'node_conformance',
       })
       const res = await ms.app.fetch(
         new Request('http://mothership.internal/internal/persistence', {

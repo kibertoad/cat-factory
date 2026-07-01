@@ -115,6 +115,35 @@ watch(
   { immediate: true },
 )
 
+// The local-cluster apiserver address every loopback distro (k3s / k3d / kind / minikube)
+// exposes by default — see `seedForEngine`.
+const LOCAL_K3S_API_SERVER = 'https://127.0.0.1:6443'
+
+// Seed the form for the SELECTED engine, so picking an engine gives immediate feedback instead
+// of a dead toggle. `local-k3s` is a low-config local cluster (k3s / k3d / kind all expose a
+// loopback apiserver with a self-signed cert), so prefill its loopback defaults + flag insecure
+// TLS — the operator then only pastes a ServiceAccount token and picks the URL source.
+// `remote-kubernetes` starts clean. Only seeds a FRESH form (never clobbers an edit — a saved
+// handler is prefilled from its stored config by the watch above).
+watch(
+  () => props.engine,
+  (engine) => {
+    if (props.handler) return
+    if (engine === 'local-k3s') {
+      if (!form.label.trim()) form.label = 'Local k3s'
+      if (!form.apiServerUrl.trim()) form.apiServerUrl = LOCAL_K3S_API_SERVER
+      form.insecureSkipTlsVerify = true
+    } else {
+      // Clear the local-only loopback defaults so a remote engine isn't misleadingly prefilled,
+      // but leave anything the operator has actually typed.
+      if (form.apiServerUrl === LOCAL_K3S_API_SERVER) form.apiServerUrl = ''
+      if (form.label === 'Local k3s') form.label = ''
+      form.insecureSkipTlsVerify = false
+    }
+  },
+  { immediate: true },
+)
+
 const servicePortValid = computed(() => {
   const raw = form.servicePort.trim()
   if (!raw) return true
@@ -183,6 +212,13 @@ function optional(label: string): string {
           ? t('settings.providerConnection.form.updateConfiguration')
           : t('settings.providerConnection.form.connect')
       }}
+    </p>
+
+    <p
+      v-if="engine === 'local-k3s'"
+      class="rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-[11px] text-sky-200"
+    >
+      {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
     </p>
 
     <UFormField :label="t('settings.infrastructure.kubernetesEngine.label')">

@@ -727,6 +727,19 @@ export const registerEnvironmentHandlerSchema = v.object({
 export type RegisterEnvironmentHandlerInput = v.InferOutput<typeof registerEnvironmentHandlerSchema>
 
 /**
+ * Probe a per-type infra handler connection before saving (nothing persisted). Carries the
+ * engine connection config + its (write-only) secret bundle, optionally pinning the registry
+ * backend that builds the provider (else resolved from the engine). The same shape as
+ * {@link registerEnvironmentHandlerSchema} minus the persistence-only `provisionType`/`manifestId`.
+ */
+export const testEnvironmentHandlerSchema = v.object({
+  config: infraHandlerConfigSchema,
+  backendKind: v.optional(v.string()),
+  secrets: v.optional(v.record(v.string(), v.string())),
+})
+export type TestEnvironmentHandlerInput = v.InferOutput<typeof testEnvironmentHandlerSchema>
+
+/**
  * The body for a per-USER handler override PUT, where the provision type is taken from the
  * path (`/me/environment-handlers/:workspaceId/:provisionType`) — so the body carries only
  * the config + secrets (+ optional `manifestId`/`backendKind`), and must NOT re-send a
@@ -902,7 +915,7 @@ export type ProvisioningDetectionConfidence = v.InferOutput<
 
 /** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
 export const provisioningDetectionNoteSchema = v.object({
-  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose`. */
+  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`. */
   field: v.string(),
   confidence: provisioningDetectionConfidenceSchema,
   /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
@@ -926,11 +939,75 @@ export const provisioningOverlayCandidateSchema = v.object({
 export type ProvisioningOverlayCandidate = v.InferOutput<typeof provisioningOverlayCandidateSchema>
 
 /**
+ * A per-service slice found inside a ROOT SHARED deploy directory of a monorepo — the common
+ * layout where a service's manifests live under `deploy/<svc>` / `k8s/<svc>` / `manifests/services/<svc>`
+ * (keyed by the service name) rather than colocated under `services/<svc>/k8s`. The detector
+ * matches the slice whose basename equals the service directory's basename and pre-selects it,
+ * but every candidate is surfaced so the user can pick a different one.
+ */
+export const provisioningServiceDirCandidateSchema = v.object({
+  /** Repo-relative directory of the slice (the value `manifestSource.path` would take), e.g. `deploy/api`. */
+  path: v.string(),
+  /** The slice's subfolder basename (e.g. `api`). */
+  name: v.string(),
+  /** The candidate matching the service directory's basename (the pre-selected one). */
+  recommended: v.boolean(),
+})
+export type ProvisioningServiceDirCandidate = v.InferOutput<
+  typeof provisioningServiceDirCandidateSchema
+>
+
+/**
+ * A `services:` key when a discovered Docker Compose file declares MORE THAN ONE service — the
+ * user picks which service corresponds to this board block. Advisory only: the chosen key is NOT
+ * persisted on the service (the compose backend targets the file, not a single service), so the
+ * chip sets `composePath` and the key rides a note.
+ */
+export const provisioningComposeServiceCandidateSchema = v.object({
+  /** The compose file the service is declared in (the `-f` target — the value `composePath` would take). */
+  composePath: v.string(),
+  /** The `services:` key (e.g. `api`). */
+  service: v.string(),
+  /** The heuristic top pick (basename match, else the first declared service). */
+  recommended: v.boolean(),
+})
+export type ProvisioningComposeServiceCandidate = v.InferOutput<
+  typeof provisioningComposeServiceCandidateSchema
+>
+
+/**
+ * A candidate Kubernetes manifest ROOT when several resolve (e.g. both `k8s/` and `manifests/`
+ * hold real manifests). Generalizes `overlayCandidates` from "which overlay within one root" to
+ * "which root": each carries its own `renderer`. Complementary to `overlayCandidates` — both may
+ * appear (pick the root, then the overlay within it).
+ */
+export const provisioningManifestRootCandidateSchema = v.object({
+  /** Repo-relative manifest directory (the value `manifestSource.path` would take). */
+  path: v.string(),
+  /** A human label (the directory's last path segment). */
+  name: v.string(),
+  /** The renderer for this root (`kustomization.yaml` present ⇒ `kustomize`, else `raw`). */
+  renderer: kubernetesRendererSchema,
+  /** The pre-selected root (the one reflected in `provisioning.manifestSource`). */
+  recommended: v.boolean(),
+})
+export type ProvisioningManifestRootCandidate = v.InferOutput<
+  typeof provisioningManifestRootCandidateSchema
+>
+
+/**
  * A non-binding provisioning recommendation detected from a service's repo. `provisioning`
  * carries the service-owned config to prefill (the "what + where"); `urlSource`/`namespace`
  * are engine-level suggestions the workspace handler owns (the detector can READ them from
- * the manifests but they aren't stored on the service); `overlayCandidates` + `notes` drive
+ * the manifests but they aren't stored on the service); the candidate arrays + `notes` drive
  * the confirm UI. `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
+ *
+ * The candidate arrays let the user CHOOSE instead of accepting a silent auto-pick:
+ * `overlayCandidates` (which overlay within a kustomize root), `manifestRootCandidates` (which
+ * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice), and
+ * `composeServiceCandidates` (which compose service). Each note's `field` is one of
+ * `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` |
+ * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`.
  */
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),
@@ -942,6 +1019,12 @@ export const provisioningRecommendationSchema = v.object({
   namespace: v.optional(v.string()),
   /** Candidate ephemeral overlays to choose among (kustomize with several `overlays/*`). */
   overlayCandidates: v.optional(v.array(provisioningOverlayCandidateSchema)),
+  /** Candidate k8s manifest roots to choose among when several resolve (complements `overlayCandidates`). */
+  manifestRootCandidates: v.optional(v.array(provisioningManifestRootCandidateSchema)),
+  /** Candidate root-shared monorepo deploy slices to choose among (keyed by service name). */
+  serviceDirCandidates: v.optional(v.array(provisioningServiceDirCandidateSchema)),
+  /** Candidate compose services to pick from when the compose file declares several (advisory). */
+  composeServiceCandidates: v.optional(v.array(provisioningComposeServiceCandidateSchema)),
   /** Per-field confidence + hints for the SPA. */
   notes: v.array(provisioningDetectionNoteSchema),
 })

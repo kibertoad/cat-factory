@@ -1902,6 +1902,8 @@ export function buildContainer(
     overrides.environmentBackendRegistry ?? defaultRegistries.environmentBackendRegistry
   const runnerBackendRegistry =
     overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
+  const customManifestTypeRegistry =
+    overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
@@ -2044,6 +2046,10 @@ export function buildContainer(
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
+    // The code-defined custom provision-type catalog, merged with the workspace rows by
+    // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
+    // per-service provisioning picker.
+    customManifestTypeRegistry,
     // Resolves the per-account binary-artifact store (screenshots) for the
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,

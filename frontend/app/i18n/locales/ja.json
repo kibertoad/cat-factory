@@ -446,6 +446,9 @@
         "none": "Kubernetes マニフェストや Compose ファイルは検出されませんでした。",
         "applied": "{type} の設定を提案しました。以下のフィールドを確認して調整してください。",
         "overlayTitle": "一時環境のオーバーレイ",
+        "serviceDirTitle": "サービスのデプロイフォルダ",
+        "manifestRootTitle": "マニフェストの場所",
+        "composeServiceTitle": "Compose サービス",
         "urlSource": "推奨される環境 URL ソース: {source}。これはワークスペースのハンドラーが管理します。そちらで設定してください。",
         "namespace": "マニフェストは名前空間「{namespace}」を固定しています。ワークスペースのハンドラーでそれを尊重することを推奨します。",
         "confidenceHigh": "検出",
@@ -1304,6 +1307,7 @@
         "remote-kubernetes": "リモート Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "このマシン上のローカル k3s/k3d/kind クラスター向けにあらかじめ入力されています。ServiceAccount をロールにバインドし、`kubectl create token NAME -n NAMESPACE`（Kubernetes 1.24 以降）でトークンを発行して下記に貼り付けてください。その後、環境 URL の導出方法を選択し、クラスターが別のポートで待ち受けている場合は API サーバー URL を編集してください。",
         "label": "接続ラベル",
         "labelPlaceholder": "プレビュークラスター",
         "apiServerUrl": "API サーバー URL",

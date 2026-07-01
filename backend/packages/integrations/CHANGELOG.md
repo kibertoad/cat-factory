@@ -1,5 +1,76 @@
 # @cat-factory/integrations
 
+## 0.50.0
+
+### Minor Changes
+
+- 77c6842: Broaden the provisioning auto-detector and make it monorepo-aware with user-selectable candidates.
+
+  - **More layouts recognized.** Compose detection now covers override/env-variant names
+    (`compose.override.*`, `docker-compose.override.*`, `docker-compose.{prod,dev}.*`) and files nested
+    under `deploy/` / `docker/` / `.docker/` / `compose/`. Kubernetes detection adds common roots
+    (`charts`, `chart`, `helm`, `kustomize`, `.kube`, `infra`, `infrastructure`, `infra/manifests`,
+    `deploy/k8s`, `deploy/kubernetes`, `config/k8s`, `ops`, `gitops`, `.deploy`) and nested wrapper
+    subdirs (`overlays`, `base`, `helm`, `charts`, `kustomize`).
+  - **Monorepo-aware.** When scoped to a service subdirectory, the detector checks both the colocated
+    service folder AND the repo's root shared-deploy dirs (`deploy/<svc>`, `k8s/<svc>`,
+    `manifests/services/<svc>`, …), matching the service's slice by its directory basename. Unrelated
+    slices are not surfaced when colocated manifests already win, and a name-matched slice with no
+    confirmable manifests is only pre-selected when it actually matches the service name (never a
+    fabricated pick at an arbitrary directory).
+  - **Choose instead of silent auto-pick.** The recommendation now surfaces `serviceDirCandidates`
+    (which root-shared monorepo slice), `manifestRootCandidates` (which k8s root when several resolve),
+    and `composeServiceCandidates` (which compose service) alongside the existing overlay candidates, each
+    rendered as a selectable chip in the service inspector's "Detect from repo" panel.
+
+  The recommendation's new fields are optional; nothing is persisted by detection. The compose service key
+  is advisory (surfaced as a candidate/note only) — it is not written onto the service provisioning.
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+  - @cat-factory/kernel@0.63.3
+
+## 0.49.0
+
+### Minor Changes
+
+- 79a0f48: Wire the programmatic custom provision-type catalog (`CustomManifestTypeRegistry`)
+  into every facade so a code-registered `custom` manifest type is actually visible.
+  Previously a deployment/provider package could register a custom manifest type, but
+  no runtime constructed or injected the registry, so `listCustomTypes` always saw an
+  empty registered set — the type never appeared in the infrastructure custom-type
+  editor or the per-service provisioning picker.
+
+  `customManifestTypeRegistry` now belongs to `BackendRegistries` (built by
+  `createBackendRegistries()`), and the Cloudflare + Node facades thread it into
+  `createCore` (local inherits via `buildNodeContainer`). A deployment registers a
+  type by reference — `registries.customManifestTypeRegistry.register({ manifestId,
+label, … })` — exactly like a custom environment/runner backend. The cross-runtime
+  conformance suite now asserts a registered type surfaces in the handlers bundle
+  (`source: 'registered'`) on both runtimes.
+
+## 0.48.2
+
+### Patch Changes
+
+- 2e1354f: Improve the Kubernetes per-type engine configurator:
+
+  - **k3s feedback** — picking the `local-k3s` engine now prefills the engine form's loopback
+    defaults (API server `https://127.0.0.1:6443`, label, skip-TLS) and shows a hint banner that
+    explains the prefill and how to mint a ServiceAccount token, instead of leaving the form
+    unchanged. Switching back to `remote-kubernetes` clears those local-only defaults. k3s/k3d/kind
+    share the same loopback defaults, so they remain one preset rather than separate options.
+  - **Test connection** — the Kubernetes engine form (workspace + per-user override) gains a working
+    "Test connection" button. A new `POST /workspaces/:ws/environments/handlers/test` endpoint lowers
+    the engine config to a backend config and reaches the apiserver with the supplied token (nothing
+    persisted), reusing the existing connection-probe path. Reported as `{ ok, message }`.
+
+- Updated dependencies [2e1354f]
+  - @cat-factory/contracts@0.70.1
+  - @cat-factory/kernel@0.63.2
+
 ## 0.48.1
 
 ### Patch Changes

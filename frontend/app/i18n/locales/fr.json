@@ -446,6 +446,9 @@
         "none": "Aucun manifeste Kubernetes ni fichier Compose détecté.",
         "applied": "Configuration {type} suggérée. Vérifiez et ajustez les champs ci-dessous.",
         "overlayTitle": "Overlay éphémère",
+        "serviceDirTitle": "Dossier de déploiement du service",
+        "manifestRootTitle": "Emplacement du manifeste",
+        "composeServiceTitle": "Service Compose",
         "urlSource": "Source d'URL d'environnement suggérée : {source}. Le gestionnaire de l'espace de travail la contrôle ; définissez-la là.",
         "namespace": "Les manifestes fixent l'espace de noms « {namespace} » ; il est recommandé de le respecter sur le gestionnaire de l'espace de travail.",
         "confidenceHigh": "Détecté",
@@ -1753,6 +1756,7 @@
         "remote-kubernetes": "Kubernetes distant"
       },
       "kubernetesEngine": {
+        "localK3sHint": "Prérempli pour un cluster local k3s/k3d/kind sur cette machine. Liez un ServiceAccount à un rôle, générez son token avec `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) et collez-le ci-dessous. Choisissez ensuite comment l'URL de l'environnement est dérivée, et modifiez l'URL de l'API server si votre cluster écoute sur un autre port.",
         "label": "Libellé de la connexion",
         "labelPlaceholder": "Cluster de prévisualisation",
         "apiServerUrl": "URL de l'API server",

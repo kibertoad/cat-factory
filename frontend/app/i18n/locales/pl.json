@@ -446,6 +446,9 @@
         "none": "Nie wykryto manifestów Kubernetes ani pliku Compose.",
         "applied": "Zaproponowano konfigurację {type}. Przejrzyj i dostosuj pola poniżej.",
         "overlayTitle": "Tymczasowy overlay",
+        "serviceDirTitle": "Folder wdrożenia usługi",
+        "manifestRootTitle": "Lokalizacja manifestu",
+        "composeServiceTitle": "Usługa Compose",
         "urlSource": "Sugerowane źródło adresu URL środowiska: {source}. Zarządza tym handler przestrzeni roboczej; ustaw to tam.",
         "namespace": "Manifesty ustalają przestrzeń nazw \"{namespace}\"; zaleca się jej przestrzeganie w handlerze przestrzeni roboczej.",
         "confidenceHigh": "Wykryto",
@@ -1753,6 +1756,7 @@
         "remote-kubernetes": "Zdalny Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą, wygeneruj jego token poleceniem `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) i wklej go poniżej. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
         "label": "Etykieta połączenia",
         "labelPlaceholder": "Klaster podglądu",
         "apiServerUrl": "URL serwera API",

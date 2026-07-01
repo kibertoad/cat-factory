@@ -483,6 +483,9 @@
         "none": "No Kubernetes manifests or Compose file were detected.",
         "applied": "Suggested a {type} config. Review and adjust the fields below.",
         "overlayTitle": "Ephemeral overlay",
+        "serviceDirTitle": "Service deploy folder",
+        "manifestRootTitle": "Manifest location",
+        "composeServiceTitle": "Compose service",
         "urlSource": "Suggested environment URL source: {source}. The workspace handler owns this; set it there.",
         "namespace": "Manifests pin namespace \"{namespace}\"; recommend honoring it on the workspace handler.",
         "confidenceHigh": "Detected",
@@ -1344,6 +1347,7 @@
         "remote-kubernetes": "Remote Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "Prefilled for a local k3s/k3d/kind cluster on this machine. Bind a ServiceAccount to a role, mint its token with `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+), and paste it below. Then choose how the environment URL is derived, and edit the API server URL if your cluster listens on a different port.",
         "label": "Connection label",
         "labelPlaceholder": "Preview cluster",
         "apiServerUrl": "API server URL",

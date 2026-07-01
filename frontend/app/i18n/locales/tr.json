@@ -446,6 +446,9 @@
         "none": "Kubernetes manifesti veya Compose dosyası algılanmadı.",
         "applied": "{type} yapılandırması önerildi. Aşağıdaki alanları gözden geçirip ayarlayın.",
         "overlayTitle": "Geçici overlay",
+        "serviceDirTitle": "Servis dağıtım klasörü",
+        "manifestRootTitle": "Manifest konumu",
+        "composeServiceTitle": "Compose servisi",
         "urlSource": "Önerilen ortam URL kaynağı: {source}. Bunu çalışma alanı işleyicisi yönetir; oradan ayarlayın.",
         "namespace": "Manifestler \"{namespace}\" ad alanını sabitliyor; çalışma alanı işleyicisinde buna uymanız önerilir.",
         "confidenceHigh": "Algılandı",
@@ -1304,6 +1307,7 @@
         "remote-kubernetes": "Uzak Kubernetes"
       },
       "kubernetesEngine": {
+        "localK3sHint": "Bu makinedeki yerel bir k3s/k3d/kind kümesi için önceden dolduruldu. Bir ServiceAccount'u bir role bağlayın, `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) ile token'ını oluşturun ve aşağıya yapıştırın. Ardından ortam URL'sinin nasıl türetileceğini seçin ve kümeniz farklı bir bağlantı noktasını dinliyorsa API sunucu URL'sini düzenleyin.",
         "label": "Bağlantı etiketi",
         "labelPlaceholder": "Önizleme kümesi",
         "apiServerUrl": "API sunucu URL'si",

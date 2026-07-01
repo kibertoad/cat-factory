@@ -1,5 +1,68 @@
 # @cat-factory/worker
 
+## 0.49.5
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+  - @cat-factory/integrations@0.50.0
+  - @cat-factory/agents@0.24.11
+  - @cat-factory/consensus@0.7.99
+  - @cat-factory/gates@0.2.52
+  - @cat-factory/gitlab@0.4.22
+  - @cat-factory/kernel@0.63.3
+  - @cat-factory/orchestration@0.51.5
+  - @cat-factory/prompt-fragments@0.9.26
+  - @cat-factory/server@0.60.1
+  - @cat-factory/spend@0.10.56
+  - @cat-factory/provider-cloudflare@0.7.99
+  - @cat-factory/observability-langfuse@0.7.95
+
+## 0.49.4
+
+### Patch Changes
+
+- 79a0f48: Wire the programmatic custom provision-type catalog (`CustomManifestTypeRegistry`)
+  into every facade so a code-registered `custom` manifest type is actually visible.
+  Previously a deployment/provider package could register a custom manifest type, but
+  no runtime constructed or injected the registry, so `listCustomTypes` always saw an
+  empty registered set — the type never appeared in the infrastructure custom-type
+  editor or the per-service provisioning picker.
+
+  `customManifestTypeRegistry` now belongs to `BackendRegistries` (built by
+  `createBackendRegistries()`), and the Cloudflare + Node facades thread it into
+  `createCore` (local inherits via `buildNodeContainer`). A deployment registers a
+  type by reference — `registries.customManifestTypeRegistry.register({ manifestId,
+label, … })` — exactly like a custom environment/runner backend. The cross-runtime
+  conformance suite now asserts a registered type surfaces in the handlers bundle
+  (`source: 'registered'`) on both runtimes.
+
+- Updated dependencies [79a0f48]
+- Updated dependencies [91f876b]
+  - @cat-factory/integrations@0.49.0
+  - @cat-factory/server@0.60.0
+  - @cat-factory/orchestration@0.51.4
+
+## 0.49.3
+
+### Patch Changes
+
+- Updated dependencies [2e1354f]
+  - @cat-factory/contracts@0.70.1
+  - @cat-factory/kernel@0.63.2
+  - @cat-factory/integrations@0.48.2
+  - @cat-factory/server@0.59.2
+  - @cat-factory/agents@0.24.10
+  - @cat-factory/consensus@0.7.98
+  - @cat-factory/gates@0.2.51
+  - @cat-factory/gitlab@0.4.21
+  - @cat-factory/orchestration@0.51.3
+  - @cat-factory/prompt-fragments@0.9.25
+  - @cat-factory/spend@0.10.55
+  - @cat-factory/observability-langfuse@0.7.94
+  - @cat-factory/provider-cloudflare@0.7.98
+
 ## 0.49.2
 
 ### Patch Changes

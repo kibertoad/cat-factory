@@ -1,5 +1,61 @@
 # @cat-factory/server
 
+## 0.60.1
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+  - @cat-factory/integrations@0.50.0
+  - @cat-factory/agents@0.24.11
+  - @cat-factory/kernel@0.63.3
+  - @cat-factory/orchestration@0.51.5
+  - @cat-factory/prompt-fragments@0.9.26
+  - @cat-factory/spend@0.10.56
+
+## 0.60.0
+
+### Minor Changes
+
+- 91f876b: Mothership-mode tech-debt cleanup (functionality-preserving): rename the persistence
+  allow-list export `PILOT_PERSISTENCE_METHODS` → `REMOTE_PERSISTENCE_METHODS` (it is the
+  functional surface, no longer a pilot) and drop the unused `accountField` `ScopeRule` kind
+  that was defined but never allow-listed or exercised. Also refresh stale comments/docs that
+  predated the Phase-3 merge gate (which is now MET): the `MothershipComposition.repos` JSDoc,
+  the `buildNodeContainer` `db: undefined` service-matrix note, and the mothership-mode tracker
+  banner. No runtime behavior change.
+
+### Patch Changes
+
+- Updated dependencies [79a0f48]
+  - @cat-factory/integrations@0.49.0
+  - @cat-factory/orchestration@0.51.4
+
+## 0.59.2
+
+### Patch Changes
+
+- 2e1354f: Improve the Kubernetes per-type engine configurator:
+
+  - **k3s feedback** — picking the `local-k3s` engine now prefills the engine form's loopback
+    defaults (API server `https://127.0.0.1:6443`, label, skip-TLS) and shows a hint banner that
+    explains the prefill and how to mint a ServiceAccount token, instead of leaving the form
+    unchanged. Switching back to `remote-kubernetes` clears those local-only defaults. k3s/k3d/kind
+    share the same loopback defaults, so they remain one preset rather than separate options.
+  - **Test connection** — the Kubernetes engine form (workspace + per-user override) gains a working
+    "Test connection" button. A new `POST /workspaces/:ws/environments/handlers/test` endpoint lowers
+    the engine config to a backend config and reaches the apiserver with the supplied token (nothing
+    persisted), reusing the existing connection-probe path. Reported as `{ ok, message }`.
+
+- Updated dependencies [2e1354f]
+  - @cat-factory/contracts@0.70.1
+  - @cat-factory/kernel@0.63.2
+  - @cat-factory/integrations@0.48.2
+  - @cat-factory/agents@0.24.10
+  - @cat-factory/orchestration@0.51.3
+  - @cat-factory/prompt-fragments@0.9.25
+  - @cat-factory/spend@0.10.55
+
 ## 0.59.1
 
 ### Patch Changes

@@ -1,5 +1,81 @@
 # @cat-factory/local-server
 
+## 0.33.2
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+  - @cat-factory/integrations@0.50.0
+  - @cat-factory/agents@0.24.11
+  - @cat-factory/gitlab@0.4.22
+  - @cat-factory/kernel@0.63.3
+  - @cat-factory/orchestration@0.51.5
+  - @cat-factory/server@0.60.1
+  - @cat-factory/node-server@0.53.5
+
+## 0.33.1
+
+### Patch Changes
+
+- 79a0f48: Wire the programmatic custom provision-type catalog (`CustomManifestTypeRegistry`)
+  into every facade so a code-registered `custom` manifest type is actually visible.
+  Previously a deployment/provider package could register a custom manifest type, but
+  no runtime constructed or injected the registry, so `listCustomTypes` always saw an
+  empty registered set — the type never appeared in the infrastructure custom-type
+  editor or the per-service provisioning picker.
+
+  `customManifestTypeRegistry` now belongs to `BackendRegistries` (built by
+  `createBackendRegistries()`), and the Cloudflare + Node facades thread it into
+  `createCore` (local inherits via `buildNodeContainer`). A deployment registers a
+  type by reference — `registries.customManifestTypeRegistry.register({ manifestId,
+label, … })` — exactly like a custom environment/runner backend. The cross-runtime
+  conformance suite now asserts a registered type surfaces in the handlers bundle
+  (`source: 'registered'`) on both runtimes.
+
+- 91f876b: Mothership-mode tech-debt cleanup (functionality-preserving): rename the persistence
+  allow-list export `PILOT_PERSISTENCE_METHODS` → `REMOTE_PERSISTENCE_METHODS` (it is the
+  functional surface, no longer a pilot) and drop the unused `accountField` `ScopeRule` kind
+  that was defined but never allow-listed or exercised. Also refresh stale comments/docs that
+  predated the Phase-3 merge gate (which is now MET): the `MothershipComposition.repos` JSDoc,
+  the `buildNodeContainer` `db: undefined` service-matrix note, and the mothership-mode tracker
+  banner. No runtime behavior change.
+- Updated dependencies [79a0f48]
+- Updated dependencies [91f876b]
+  - @cat-factory/integrations@0.49.0
+  - @cat-factory/node-server@0.53.4
+  - @cat-factory/server@0.60.0
+  - @cat-factory/orchestration@0.51.4
+
+## 0.33.0
+
+### Minor Changes
+
+- cc01f1e: Mothership mode: durable SQLite execution work queue (initiative PR 2).
+
+  The best-effort in-memory `InProcessWorkRunner` is replaced by the durable `SqliteWorkRunner`,
+  backed by a file-based `node:sqlite` work queue (default `~/.cat-factory/work-queue.sqlite`,
+  override with `LOCAL_MOTHERSHIP_WORK_DB`). A mothership-mode local node has no Postgres/pg-boss,
+  so it drives runs in-process — but the queue now persists the "this run needs driving" intent, so
+  a crash or restart re-drives what was in flight (boot-time orphan reset + a periodic recovery
+  poll). It mirrors pg-boss's `exclusive` advance queue (one row per run, mid-drive signal
+  coalescing, deferred gate re-polls, a poison-attempt cap), reusing the same `executionRuntime()`
+  timing derivation.
+
+## 0.32.3
+
+### Patch Changes
+
+- Updated dependencies [2e1354f]
+  - @cat-factory/contracts@0.70.1
+  - @cat-factory/kernel@0.63.2
+  - @cat-factory/integrations@0.48.2
+  - @cat-factory/server@0.59.2
+  - @cat-factory/agents@0.24.10
+  - @cat-factory/gitlab@0.4.21
+  - @cat-factory/orchestration@0.51.3
+  - @cat-factory/node-server@0.53.3
+
 ## 0.32.2
 
 ### Patch Changes
