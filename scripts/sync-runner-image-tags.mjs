@@ -15,46 +15,15 @@
 // makes the release PR self-consistent by construction.
 //
 // It is also safe to run by hand at any time (it is a no-op when everything already
-// matches) and mirrors the image descriptors in scripts/check-runner-image-tag.mjs
-// — keep the two in sync when adding an image or a pin location.
+// matches). The image descriptors + pin locations are the shared source of truth in
+// scripts/runner-images.mjs, so this and the guard can't drift.
 
-import { readFileSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-
-// One descriptor per per-run container image. `image` is the bare image name; a
-// pin is `<image>:<semver>` anywhere in a target file (bare, `-t`-prefixed, or
-// registry-prefixed). The `\d`-anchored tag match deliberately skips non-semver
-// example tags like `cat-factory-executor:local` mentioned in prose/comments.
-const IMAGES = [
-  {
-    label: 'executor',
-    image: 'cat-factory-executor',
-    harnessPkg: 'backend/internal/executor-harness/package.json',
-    targets: [
-      'deploy/backend/package.json',
-      'deploy/backend/wrangler.toml',
-      // RECOMMENDED_HARNESS_IMAGE — the tag local mode pins + pulls at boot; must
-      // stay a matched set with the backend (see CLAUDE.md → Releases & changesets).
-      'backend/runtimes/local/src/harnessImage.ts',
-    ],
-  },
-  {
-    label: 'deploy',
-    image: 'cat-factory-deploy',
-    harnessPkg: 'backend/internal/deploy-harness/package.json',
-    targets: ['deploy/backend/package.json', 'deploy/backend/wrangler.toml'],
-  },
-]
-
-function readRepoFile(relPath) {
-  return readFileSync(resolve(repoRoot, relPath), 'utf8')
-}
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { DEPLOY_PKG, IMAGES, readRepoFile, repoRoot, WRANGLER } from './runner-images.mjs'
 
 let changed = 0
-for (const { label, image, harnessPkg, targets } of IMAGES) {
+for (const { label, image, harnessPkg, extraPins } of IMAGES) {
   const version = JSON.parse(readRepoFile(harnessPkg)).version
   if (!version) {
     console.error(`::error::[${label}] could not read "version" from ${harnessPkg}.`)
@@ -64,7 +33,7 @@ for (const { label, image, harnessPkg, targets } of IMAGES) {
   // `<image>:<digit...>` — semver tags only, so example tags like `:local` are left alone.
   const tagRe = new RegExp(`(${image}:)\\d[^"'\\s]*`, 'g')
   const replacement = `$1${version}`
-  for (const target of targets) {
+  for (const target of [DEPLOY_PKG, WRANGLER, ...extraPins]) {
     const before = readRepoFile(target)
     const after = before.replace(tagRe, replacement)
     if (after !== before) {
