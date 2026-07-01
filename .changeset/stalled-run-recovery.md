@@ -1,12 +1,12 @@
 ---
-"@cat-factory/kernel": minor
-"@cat-factory/contracts": minor
-"@cat-factory/orchestration": patch
-"@cat-factory/worker": patch
-"@cat-factory/node-server": patch
-"@cat-factory/local-server": patch
-"@cat-factory/executor-harness": patch
-"@cat-factory/app": patch
+'@cat-factory/kernel': minor
+'@cat-factory/contracts': minor
+'@cat-factory/orchestration': patch
+'@cat-factory/worker': patch
+'@cat-factory/node-server': patch
+'@cat-factory/local-server': patch
+'@cat-factory/executor-harness': patch
+'@cat-factory/app': patch
 ---
 
 Recover and surface stalled runs instead of letting them spin `running` forever.

@@ -294,10 +294,7 @@ export default {
           // Only log when it actually acted.
           .then(({ redriven, finalized, stalled }) => {
             if (redriven > 0 || finalized > 0 || stalled > 0) {
-              logger.warn(
-                { cron: 'run-sweeper', redriven, finalized, stalled },
-                'swept stuck runs',
-              )
+              logger.warn({ cron: 'run-sweeper', redriven, finalized, stalled }, 'swept stuck runs')
             }
           })
           .catch((error) =>

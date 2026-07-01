@@ -422,7 +422,8 @@ function repairRetryAfterMs(res: Response): number | undefined {
   const raw = res.headers.get('retry-after')
   if (!raw) return undefined
   const secs = Number(raw)
-  if (Number.isFinite(secs)) return secs > 0 ? Math.min(secs * 1000, REPAIR_RETRY_MAX_MS) : undefined
+  if (Number.isFinite(secs))
+    return secs > 0 ? Math.min(secs * 1000, REPAIR_RETRY_MAX_MS) : undefined
   const at = Date.parse(raw)
   if (Number.isNaN(at)) return undefined
   const ms = at - Date.now()
