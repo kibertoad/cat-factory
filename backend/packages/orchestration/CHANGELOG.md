@@ -1,5 +1,27 @@
 # @cat-factory/orchestration
 
+## 0.53.0
+
+### Minor Changes
+
+- 6f95aff: Add a repository-type selector to repo import and bootstrap. A frame can now be onboarded as
+  a backend service, a frontend app, a shared library, or a document repository. Document
+  repositories accept only document/spike tasks (enforced in `BoardService.addTask` and the
+  create-task form). New `library`/`document` block types, `frameRepoTypeSchema`/`FRAME_REPO_TYPES`
+  in contracts, and display metadata for the new types.
+
+### Patch Changes
+
+- Updated dependencies [6f95aff]
+  - @cat-factory/contracts@0.74.0
+  - @cat-factory/kernel@0.65.0
+  - @cat-factory/agents@0.24.14
+  - @cat-factory/integrations@0.51.2
+  - @cat-factory/prompt-fragments@0.9.29
+  - @cat-factory/sandbox@0.8.67
+  - @cat-factory/spend@0.10.59
+  - @cat-factory/workspaces@0.10.6
+
 ## 0.52.1
 
 ### Patch Changes
