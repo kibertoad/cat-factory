@@ -182,7 +182,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // ambient-native vendors the container path allows; `wrapModelProviderResolver` below serves
     // those refs via the CLI. Off → inline steps degrade to a provider model as on stock Node.
     ...(nativeAgents
-      ? { agents: { ...base.agents, inlineHarnessRef: makeInlineHarnessPredicate(nativeHarnesses) } }
+      ? {
+          agents: { ...base.agents, inlineHarnessRef: makeInlineHarnessPredicate(nativeHarnesses) },
+        }
       : {}),
     localMode: {
       enabled: true,

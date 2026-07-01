@@ -115,8 +115,11 @@ guard treats a subscription model as inline-satisfiable; where it isn't, the gua
 | Local: ambient CLI runner + `HarnessInlineModelProvider` + config wiring | ✅ done | `harnessInline.ts`; wired via the new `wrapModelProviderResolver` seam on `buildNodeContainer`. |
 | Conformance: preset-unsatisfiable refusal | ⬜ deferred | The guard is SHARED orchestration code (identical on Node/Worker; `inlineHarnessRef` undefined), so there is no facade-drift to catch — covered by unit tests instead. A cross-runtime assertion needs `subscriptions` wired into the harness (to reach the "container-usable, not inline-usable" state); tracked as a follow-up. |
 | Unit tests (kernel logic via agents, `isInlineModelStep`, `CliInlineLanguageModel`, reviewer resolution, local predicate/provider) | ✅ done | |
+| Consensus: thread `runsInline` into `ConsensusAgentExecutor` (an inline path) | ✅ done | `baseRef` + `refForModelId` now pass the predicate; wired from `config.agents.inlineHarnessRef` in `node/container.ts`; covered by a consensus unit test (degrade vs keep). Without this a subscription-only consensus participant still stranded on the fallback provider in local mode. |
+| CLI runner hardening (local): timeout watchdog + SIGKILL escalation, claude in-band error surfacing, injectable exec seam + runner tests | ✅ done | `spawnCliExec` now has a `DEFAULT_CLI_TIMEOUT_MS` watchdog so a hung CLI can't park the run; `makeClaudeRunner` throws on `is_error`/`error_*` subtypes instead of returning the error text as a review; `runnerForVendor(vendor, exec)` takes an injectable exec so the vendor runners are unit-tested. |
 | Frontend: i18n mapping for `preset_unsatisfiable` (+ all 8 locales) | ✅ done | |
 | Changesets | ✅ done | |
+| Guard visibility into consensus per-participant model pins | ⬜ deferred | The start guard classifies steps by `pipeline.agentKinds` and checks the block pin / workspace default; it does NOT see a consensus step's per-participant model pins (a consensus step keeps its container `agentKind`). In local mode the consensus threading above makes subscription refs runnable, so no failure; on Node/Worker a consensus step whose participants pin a subscription-only model is not refused up front and would still degrade mid-run. Narrow (opt-in consensus + subscription-only participant pins + non-inline-harness runtime); tracked as a follow-up rather than expanding the guard's data model here. |
 
 ## Gotchas carried between iterations
 
@@ -127,3 +130,15 @@ guard treats a subscription model as inline-satisfiable; where it isn't, the gua
   failure entirely, so no persistence change is needed.
 - **Don't loosen the existing guard**: keep `isModelUsable` on every model-bearing step and
   only *add* the inline-strict check for inline steps, so no currently-passing run regresses.
+- **Every INLINE caller must thread `runsInline`** — the reviewers, brainstorm, kaizen, sandbox,
+  `AiAgentExecutor`, AND the consensus executor. A missed inline call site silently keeps
+  degrading subscription harness refs even in local mode (the consensus path was one such gap).
+- **The inline-engine kind ids are single-sourced in `@cat-factory/agents` `step-surface.ts`**
+  (co-located with `isInlineModelStep`, since agents can't import orchestration); `ci.logic.ts`
+  re-exports them, mirroring how the gate/helper kinds are re-exported from kernel. Add a new
+  inline kind's id there so the classifier can't drift.
+- **The ambient CLIs report failures in-band (exit 0)** — `claude --output-format json` sets
+  `is_error` / an `error_*` subtype with the message in `result`; surface it as a throw, or the
+  error string is parsed as a real review. These one-shot CLIs expose no token-length stop
+  reason, so a genuine output-cap truncation reads as `stop` (the `finishReason === 'length'`
+  guard only fires for HTTP providers).

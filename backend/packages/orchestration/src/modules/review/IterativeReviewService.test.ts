@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
-import type { Block, ModelProvider } from '@cat-factory/kernel'
+import type { Block, ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import { ClarityReviewService } from '../clarity/ClarityReviewService.js'
 
@@ -114,7 +114,7 @@ describe('IterativeReviewService (via RequirementReviewService)', () => {
   }
 
   describe('inline model resolution (subscription harness)', () => {
-    const CLAUDE_SUB = { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' }
+    const CLAUDE_SUB: ModelRef = { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' }
     function serviceWith(extra: Record<string, unknown>) {
       const requirementReviewRepository = fakeRepo<{ id: string; blockId: string }>() as never
       return new RequirementReviewService({

@@ -4,6 +4,7 @@ import type {
   AgentRunContext,
   ConsensusSession,
   ModelProvider,
+  ModelRef,
   TaskEstimate,
 } from '@cat-factory/kernel'
 import { decideConsensusMode } from './gating.js'
@@ -213,6 +214,43 @@ describe('ConsensusAgentExecutor', () => {
     expect(last.rounds[0]?.contributions).toHaveLength(2)
     expect(last.synthesis).toBe('SYNTHESIZED')
     expect(last.id).toBe('cns_ex_2')
+  })
+
+  it('keeps a subscription harness base ref when the deployment runs it inline (local ambient)', async () => {
+    // A subscription-only participant/base model must NOT degrade to the routing default when
+    // local mode can serve the harness inline — otherwise the consensus panel strands on the
+    // unconfigured fallback provider (the exact bug the inline-harness change fixes elsewhere).
+    const claudeSub: ModelRef = { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' }
+    const runWith = async (runsInline?: (ref: ModelRef) => boolean): Promise<ModelRef[]> => {
+      const resolved: ModelRef[] = []
+      const provider: ModelProvider = {
+        resolve: (ref) => {
+          resolved.push(ref)
+          return {} as never
+        },
+      }
+      const exec = new ConsensusAgentExecutor({
+        ...baseDeps,
+        modelProvider: provider,
+        resolveBlockModel: () => claudeSub,
+        ...(runsInline ? { runsInline } : {}),
+      })
+      await exec.run(
+        makeContext({
+          block: { id: 'blk', title: 'T', type: 'service', description: 'D', modelId: 'claude-opus' },
+          consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
+        }),
+      )
+      return resolved
+    }
+
+    // No inline-harness support ⇒ the harness ref degrades to the routing default (provider 'fake').
+    const degraded = await runWith(undefined)
+    expect(degraded.every((r) => r.provider === 'fake')).toBe(true)
+
+    // Inline-harness support ⇒ the ambient-eligible harness ref is kept and served via the CLI.
+    const kept = await runWith(() => true)
+    expect(kept.every((r) => r.provider === 'anthropic' && r.harness === 'claude-code')).toBe(true)
   })
 
   it('runsAsync is false while consensus is active, delegated otherwise', () => {

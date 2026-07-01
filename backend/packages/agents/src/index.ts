@@ -36,7 +36,13 @@ export {
   registeredStructuredOutput,
   clearRegisteredAgentKinds,
 } from './agents/kinds/registry.js'
-export { isInlineModelStep } from './agents/kinds/step-surface.js'
+export {
+  isInlineModelStep,
+  REQUIREMENTS_REVIEW_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
+} from './agents/kinds/step-surface.js'
 // Schema-driven structured output: derive a kind's `agent.output` spec + a typed parser from
 // one valibot schema instead of a hand-written shapeHint string + lenient coercer.
 export {

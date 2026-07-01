@@ -3,6 +3,7 @@
 '@cat-factory/agents': minor
 '@cat-factory/contracts': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/consensus': minor
 '@cat-factory/server': minor
 '@cat-factory/node-server': minor
 '@cat-factory/local-server': minor
@@ -20,7 +21,8 @@ start a pipeline whose model preset can't satisfy every step.
   unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
   Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
   local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
-  degrading it.
+  degrading it. The consensus executor (an inline path) threads the same predicate, so a
+  subscription-only consensus participant model is kept inline in local mode too.
 - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
   inline-usability, not just container-usability. A subscription-only model that satisfies the
   container agents but can't run the inline reviewers (and this deployment has no inline harness)

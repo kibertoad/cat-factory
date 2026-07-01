@@ -1834,6 +1834,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         agentRouting: config.agents.routing,
         resolveBlockModel: config.agents.resolveBlockModel,
         resolveWorkspaceModelDefault,
+        // Consensus runs its participants INLINE, so in local mode keep an ambient-eligible
+        // subscription harness ref (served via the CLI) instead of degrading it; undefined on
+        // stock Node/Worker, where such a ref degrades to the routing default as before.
+        ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
         sessionRepository: repos.consensusSessionRepository,
         ...(executionEventPublisher ? { eventPublisher: executionEventPublisher } : {}),
       }))
