@@ -1,10 +1,14 @@
 import { CONTAINER_RUNTIMES, type ContainerRuntime, DEFAULT_HARNESS_IMAGE } from './templates.js'
 import { VCS_PROVIDERS, type VcsProvider } from './vcs.js'
 
+/** The Kubernetes distribution `cat-factory k3s` can provision/target. */
+export const K3S_RUNTIMES = ['k3d', 'kind', 'k3s'] as const
+export type K3sRuntime = (typeof K3S_RUNTIMES)[number]
+
 /** Parsed, validated CLI options. Unset optionals are resolved later (defaults / prompts). */
 export interface CliOptions {
-  /** The subcommand. Only `init` exists today; the default when omitted. */
-  command: 'init' | 'help' | 'version'
+  /** The subcommand. `init` (the default when omitted) or `k3s` (guided local-cluster setup). */
+  command: 'init' | 'k3s' | 'help' | 'version'
   dir?: string
   projectName?: string
   appTitle?: string
@@ -16,6 +20,10 @@ export interface CliOptions {
   harnessImage?: string
   /** Container runtime that spawns agent jobs (`LOCAL_CONTAINER_RUNTIME`). */
   containerRuntime?: ContainerRuntime
+  /** `k3s` command: name for a provisioned local cluster. */
+  clusterName?: string
+  /** `k3s` command: the Kubernetes distribution to provision/target. */
+  k3sRuntime?: K3sRuntime
   /** Skip opening the browser at the token-creation URL (still prints it). */
   noOpen: boolean
   /** Non-interactive: never prompt; use defaults/flags. Fails if a required value is missing. */
@@ -55,6 +63,12 @@ export function parseArgs(argv: string[]): CliOptions {
       case 'init':
         if (!commandSet) {
           opts.command = 'init'
+          commandSet = true
+        }
+        break
+      case 'k3s':
+        if (!commandSet) {
+          opts.command = 'k3s'
           commandSet = true
         }
         break
@@ -101,6 +115,12 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--container-runtime':
         opts.containerRuntime = parseContainerRuntime(takeValue(flag, inline, queue))
         break
+      case '--cluster-name':
+        opts.clusterName = takeValue(flag, inline, queue)
+        break
+      case '--runtime':
+        opts.k3sRuntime = parseK3sRuntime(takeValue(flag, inline, queue))
+        break
       case '--no-open':
         opts.noOpen = true
         break
@@ -133,6 +153,12 @@ function parseContainerRuntime(value: string): ContainerRuntime {
   )
 }
 
+function parseK3sRuntime(value: string): K3sRuntime {
+  const v = value.toLowerCase()
+  if ((K3S_RUNTIMES as readonly string[]).includes(v)) return v as K3sRuntime
+  throw new ArgError(`Invalid --runtime "${value}" (expected: ${K3S_RUNTIMES.join(' | ')})`)
+}
+
 function parsePort(value: string): number {
   const n = Number(value)
   if (!Number.isInteger(n) || n < 1 || n > 65535) {
@@ -153,18 +179,24 @@ export const OPTION_DEFAULTS = {
   port: 8787,
   harnessImage: DEFAULT_HARNESS_IMAGE,
   containerRuntime: 'docker' as ContainerRuntime,
+  // `k3s` command defaults.
+  k3sClusterName: 'cat-factory',
+  k3sRuntime: 'k3d' as K3sRuntime,
 } as const
 
 export const HELP_TEXT = `cat-factory — bootstrap a local cat-factory deployment
 
 Usage:
   cat-factory [init] [options]
+  cat-factory k3s [options]
 
-Scaffolds a local-mode backend (local/) and frontend SPA (frontend/), generates the
-crypto secrets, mints a GitHub/GitLab personal access token (opens your browser), and
-writes gitignored .env files.
+Commands:
+  init   Scaffold a local-mode backend (local/) + frontend SPA (frontend/): generate the
+         crypto secrets, mint a GitHub/GitLab PAT (opens your browser), write gitignored .env.
+  k3s    Guided local Kubernetes setup: probe the host for a usable cluster and report what's
+         found + recommended (provisioning + handler wiring land in a follow-up).
 
-Options:
+Options (init):
   -d, --dir <path>        Target directory (default: ./<name>)
       --name <name>       Project name slug (default: cat-factory)
       --title <title>     Frontend app title (default: Agent Architecture Board)
@@ -180,4 +212,9 @@ Options:
   -f, --force             Overwrite existing files
   -h, --help              Show this help
   -v, --version           Show the CLI version
+
+Options (k3s):
+      --cluster-name <n>  Name for a provisioned local cluster (default: cat-factory)
+      --runtime <r>       Kubernetes distribution: k3d | kind | k3s (default: k3d)
+  -y, --yes               Non-interactive: pick the recommended path, never prompt
 `

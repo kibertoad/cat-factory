@@ -9,16 +9,16 @@ disruption to existing code, not just effort. That ordering doubles as a recomme
 sequence: land the contained, low-risk wins first and work down toward the structural
 ones.
 
-| #   | Candidate                                       | Area                | Impact    | Effort    |
-| --- | ----------------------------------------------- | ------------------- | --------- | --------- |
-| 1   | Split the monolithic Drizzle repositories file  | Backend persistence | Medium    | Low       |
-| 2   | Generic row mappers                             | Backend persistence | Medium    | Low       |
-| 3   | Finish the store pattern-factory adoption       | Frontend            | Medium    | Low       |
-| 4   | Split the `ui.ts` store                         | Frontend            | High      | Medium    |
-| 5   | Finish the manifest-driven agent-kind registry  | Backend engine      | High      | Medium    |
-| 6   | Module registry for the orchestration container | Backend DI          | High      | High      |
-| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime       | High      | High      |
-| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime       | Very high | High      |
+| #   | Candidate                                       | Area                | Impact    | Effort |
+| --- | ----------------------------------------------- | ------------------- | --------- | ------ |
+| 1   | Split the monolithic Drizzle repositories file  | Backend persistence | Medium    | Low    |
+| 2   | Generic row mappers                             | Backend persistence | Medium    | Low    |
+| 3   | Finish the store pattern-factory adoption       | Frontend            | Medium    | Low    |
+| 4   | Split the `ui.ts` store                         | Frontend            | High      | Medium |
+| 5   | Finish the manifest-driven agent-kind registry  | Backend engine      | High      | Medium |
+| 6   | Module registry for the orchestration container | Backend DI          | High      | High   |
+| 7   | Shared base repositories (D1 ⇄ Drizzle)         | Cross-runtime       | High      | High   |
+| 8   | Shared container builder (Node ⇄ Cloudflare)    | Cross-runtime       | Very high | High   |
 
 See [Recently landed](#recently-landed) at the bottom for candidates that have since
 shipped and were removed from the active list.
