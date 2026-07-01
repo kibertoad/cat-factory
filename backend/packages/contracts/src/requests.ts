@@ -3,6 +3,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { writebackOverrideSchema } from './entities.js'
 import { serviceProvisioningSchema } from './environments.js'
+import { frontendConfigSchema } from './frontend.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
 import {
   agentKindSchema,
@@ -166,6 +167,10 @@ export const updateBlockSchema = v.partial(
     cloudProvider: cloudProviderSchema,
     // Service-level (frame): the abstract instance size for this service's jobs.
     instanceSize: instanceSizeSchema,
+    // Frontend-frame-level (`type: 'frontend'`): how to build/serve/mock the frontend
+    // for a self-contained UI test + its backend bindings (which double as board links).
+    // See docs/initiatives/frontend-preview-ui-testing.md.
+    frontendConfig: frontendConfigSchema,
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),

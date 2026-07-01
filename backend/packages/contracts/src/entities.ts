@@ -13,6 +13,7 @@ import {
   serviceProvisioningSchema,
 } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
+import { frontendConfigSchema } from './frontend.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -181,6 +182,14 @@ export const blockSchema = v.object({
    * the built-in default size.
    */
   instanceSize: v.optional(instanceSizeSchema),
+  /**
+   * Frontend-frame-level (`type: 'frontend'`): how to build, serve, and mock this
+   * frontend for a self-contained UI test (+ an optional browsable preview on
+   * local/node), and its backend bindings — env-var → upstream, which double as the
+   * board's frontend→service links. See {@link frontendConfigSchema} and
+   * docs/initiatives/frontend-preview-ui-testing.md. Absent on non-frontend frames.
+   */
+  frontendConfig: v.optional(frontendConfigSchema),
   /**
    * The pull request the block's implementation ("implementer") agent opened for
    * its work. Set on a task once its container agent pushes a branch and opens a

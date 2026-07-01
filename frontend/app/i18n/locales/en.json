@@ -415,6 +415,34 @@
       "manageBoard": "Manage this board's fragment library…",
       "manageAccount": "Manage account fragments…"
     },
+    "frontendConfig": {
+      "title": "Frontend",
+      "hint": "How to build, serve, and mock this frontend for a self-contained UI test. Bindings below link it to the backend services it calls.",
+      "packageManager": "Package manager",
+      "installCommand": "Install command",
+      "buildScript": "Build script",
+      "outputDir": "Output directory",
+      "serveMode": "Serve mode",
+      "serveStatic": "Static",
+      "serveCommand": "Command",
+      "serveModeHint": "Static serves the build output directory; Command runs a package.json script (e.g. preview).",
+      "serveScript": "Serve script",
+      "servePort": "Serve port",
+      "mockMappingsPath": "Mock mappings path",
+      "envInjection": "Env injection",
+      "envBuild": "Build-time",
+      "envRuntime": "Runtime",
+      "envInjectionHint": "Build-time injects the backend URLs as build env vars; Runtime writes them into a window.env shim.",
+      "previewEnabled": "Enable browsable preview",
+      "previewHint": "Keeps a served preview running with a clickable URL. Local and Node runtimes only.",
+      "bindings": {
+        "title": "Backend bindings",
+        "hint": "Each env var the frontend reads for an upstream URL, and where it resolves: a bound service's ephemeral environment, or a WireMock stub.",
+        "mock": "Mock (WireMock)",
+        "remove": "Remove binding",
+        "empty": "No backend bindings. Add one to point an env var at a service or a mock."
+      }
+    },
     "releaseHealth": {
       "title": "Post-release health",
       "clear": "Clear",

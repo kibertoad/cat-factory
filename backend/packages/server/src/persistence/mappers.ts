@@ -75,6 +75,8 @@ export interface BlockRow {
   cloud_provider: string | null
   /** Service-level: abstract instance size for the service's jobs. */
   instance_size: string | null
+  /** Frontend-frame-level: serialized FrontendConfig (build/serve/mock + backend bindings), JSON object. */
+  frontend_config?: string | null
   created_by: string | null
   responsible_product_user_id: string | null
   /** Task-level: the task-estimator's triage (complexity/risk/impact), JSON object. */
@@ -412,6 +414,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optJsonField('provisioning'),
   optField('cloudProvider'),
   optField('instanceSize'),
+  // Frontend-frame-level config (build/serve/mock + backend bindings) — a JSON object.
+  optJsonField('frontendConfig'),
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
   // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
   legacyUserIdField('createdBy'),
