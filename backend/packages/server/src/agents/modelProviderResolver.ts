@@ -60,12 +60,21 @@ export function createScopedModelProviderResolver(
       if (opts.apiKeys) {
         const providers = await opts.apiKeys.configuredProviders(scope.workspaceId, poolOpts)
         for (const provider of providers) {
-          const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
-          registry[provider] = buildDirectResolver(
-            provider,
-            leased.secret,
-            opts.baseUrlFor(provider),
-          )
+          try {
+            const leased = await opts.apiKeys.lease(scope.workspaceId, provider, poolOpts)
+            registry[provider] = buildDirectResolver(
+              provider,
+              leased.secret,
+              opts.baseUrlFor(provider),
+            )
+          } catch (e) {
+            // One provider's key failing to lease/decrypt (e.g. sealed under a rotated
+            // ENCRYPTION_KEY, or missing a base URL) must NOT sink the whole scoped provider:
+            // an inline call targeting a DIFFERENT, healthy provider should still resolve.
+            // Defer the failure to resolve time so it only surfaces — with the real cause —
+            // if this exact provider is the one actually requested.
+            registry[provider] = unusableProviderResolver(e)
+          }
         }
       }
       // The initiating user's locally-run runners (keyless OpenAI-compatible endpoints).
@@ -88,6 +97,18 @@ export function createScopedModelProviderResolver(
       }
       return composite
     },
+  }
+}
+
+/**
+ * A resolver that defers a provider's build failure (a key that couldn't be leased/decrypted,
+ * or a missing base URL) to resolve time. Registered in place of a real resolver so an unrelated
+ * broken provider key doesn't sink the whole scoped provider — only a call that actually targets
+ * this provider throws, and with the original cause preserved.
+ */
+function unusableProviderResolver(error: unknown): ModelResolver {
+  return () => {
+    throw error instanceof Error ? error : new Error(String(error))
   }
 }
 
