@@ -193,8 +193,9 @@ Usage:
 Commands:
   init   Scaffold a local-mode backend (local/) + frontend SPA (frontend/): generate the
          crypto secrets, mint a GitHub/GitLab PAT (opens your browser), write gitignored .env.
-  k3s    Guided local Kubernetes setup: probe the host for a usable cluster and report what's
-         found + recommended (provisioning + handler wiring land in a follow-up).
+  k3s    Guided local Kubernetes setup: probe the host for a usable cluster, then create (or
+         reuse) one + a least-privilege ServiceAccount and print the values to wire the
+         Local k3s environment handler. A k3s install needs sudo, so it is only ever printed.
 
 Options (init):
   -d, --dir <path>        Target directory (default: ./<name>)
@@ -216,5 +217,5 @@ Options (init):
 Options (k3s):
       --cluster-name <n>  Name for a provisioned local cluster (default: cat-factory)
       --runtime <r>       Kubernetes distribution: k3d | kind | k3s (default: k3d)
-  -y, --yes               Non-interactive: pick the recommended path, never prompt
+  -y, --yes               Non-interactive: pick the recommended path + skip confirms
 `
