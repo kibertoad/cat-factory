@@ -208,6 +208,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   workspaceSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The workspace-settings panel saves its edits (e.g. the `storeAgentContext` toggle). The
+    // settings endpoints are member-level (not admin-gated), workspace-scoped — the same policy
+    // as the block/pipeline mutations above. Completes the read+write settings surface.
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
   mergePresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
@@ -219,6 +223,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // none (a write triggered by the board-load read). Member-level (the preset CRUD is not
     // admin-gated), workspace-scoped — the same policy as the block/pipeline mutations above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The preset-library editor reads one preset and deletes it. Both take the workspaceId as
+    // arg0 and are member-level (the preset CRUD is not admin-gated), completing the merge-preset
+    // library management surface (list/getDefault/upsert were already exposed for the board load).
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
   },
   modelPresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
@@ -228,6 +237,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // `ModelPresetService.list` lazily seeds the built-in defaults for a workspace that has none
     // (a write the board-load read triggers), exactly like `mergePresetRepository.upsert` above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The model-preset library editor's read-one + delete, the mirror of the merge-preset
+    // management pair above. Member-level, workspace-scoped.
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Agent-context run-path reads -----------------------------------------------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
@@ -260,14 +273,33 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   serviceFragmentDefaultsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The service-fragment-defaults editor saves the workspace's default fragment set. Member-level,
+    // workspace-scoped — completes the read+write surface (`get` was exposed for the board load).
+    set: { scope: { kind: 'workspace', arg: 0 } },
   },
   pipelineScheduleRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    // Recurring-pipeline management, all driven by the local node's `RecurringPipelineController`
+    // → `RecurringPipelineService` (CRUD + run history + `runNow`). Every method takes the
+    // workspaceId as arg0 and is member-level (the schedule endpoints are not admin-gated).
+    // `runNow` fires the schedule in-process, so its `fire()` writes (`insertRun`/`updateRun`/
+    // `upsert`) are on the path too — the sweeper-only `listDue`/`pruneRunsBefore` stay
+    // mothership-internal (its cron owns them). Completes the schedule management surface (the
+    // `list`/`getByBlock`/`listByServices` reads were already exposed).
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+    insertRun: { scope: { kind: 'workspace', arg: 0 } },
+    updateRun: { scope: { kind: 'workspace', arg: 0 } },
+    listRuns: { scope: { kind: 'workspace', arg: 0 } },
   },
   trackerSettingsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The tracker-settings editor persists its config. Member-level, workspace-scoped — completes
+    // the read+write surface (`get` was exposed for the board load).
+    put: { scope: { kind: 'workspace', arg: 0 } },
   },
   notificationRepository: {
     listOpen: { scope: { kind: 'workspace', arg: 0 } },
@@ -289,6 +321,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+  },
+  // The board's run controls (retry / stop a failed or running run) enter through the unified
+  // `agent_runs` table: `AgentRunController` calls `getRef(workspaceId, id)` to resolve the run's
+  // KIND, then dispatches to the matching service. `getRef` takes the workspaceId as arg0, so it
+  // reuses the `workspace` rule (resolve the owning account, reject out-of-scope as 404). Exposing
+  // it makes the EXECUTION-run retry/stop path functional in mothership mode — every downstream
+  // read+write those services make (`executionRepository.get/deleteByBlock/upsert/markFailed`,
+  // `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage prechecks) is
+  // already allow-listed on the run/start path. The bootstrap + env-config-repair retry branches
+  // read their own repos (`bootstrapJobRepository.get`, `referenceArchitectureRepository.get`, …),
+  // which stay `pending` — a later slice. The sweeper-only `listStale`/`liveRunIds` stay
+  // mothership-internal (its cron owns them).
+  agentRunRepository: {
+    getRef: { scope: { kind: 'workspace', arg: 0 } },
   },
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },

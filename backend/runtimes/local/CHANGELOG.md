@@ -1,5 +1,35 @@
 # @cat-factory/local-server
 
+## 0.35.5
+
+### Patch Changes
+
+- Updated dependencies [39534d6]
+  - @cat-factory/server@0.63.2
+  - @cat-factory/node-server@0.55.2
+
+## 0.35.4
+
+### Patch Changes
+
+- Updated dependencies [eab2b60]
+  - @cat-factory/server@0.63.1
+  - @cat-factory/node-server@0.55.1
+
+## 0.35.3
+
+### Patch Changes
+
+- Updated dependencies [762fe66]
+  - @cat-factory/contracts@0.76.0
+  - @cat-factory/server@0.63.0
+  - @cat-factory/node-server@0.55.0
+  - @cat-factory/agents@0.24.16
+  - @cat-factory/gitlab@0.4.27
+  - @cat-factory/integrations@0.51.4
+  - @cat-factory/kernel@0.66.1
+  - @cat-factory/orchestration@0.53.2
+
 ## 0.35.2
 
 ### Patch Changes

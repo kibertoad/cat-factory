@@ -28,6 +28,49 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (failed-run retry / stop control surface)** — the board's run controls
+  (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`, `AgentRunController`) enter through the
+  unified `agent_runs` table's `agentRunRepository.getRef(workspaceId, id)`, which resolves a run's
+  KIND before dispatching to the matching service. That read was the last thing keeping the
+  EXECUTION-run retry/stop path returning `unknown_method` in mothership mode, so it is now
+  allow-listed (workspace-scoped on arg0, reusing the existing `workspace` rule). Every downstream
+  read+write the execution retry/stop services make — `executionRepository.get`/`deleteByBlock`/
+  `upsert`/`markFailed`, `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage
+  prechecks — was already exposed on the run/start path, so `getRef` is the only new entry. The
+  bootstrap + env-config-repair retry BRANCHES read their own repos (`bootstrapJobRepository.get`,
+  `referenceArchitectureRepository.get`, …) and stay `pending` (a later slice); the sweeper-only
+  `agentRunRepository.listStale`/`liveRunIds` stay mothership-internal. **Wiring fix (both facades):**
+  `agentRunRepository` is the ONE repo surfaced on the container OUTSIDE `CoreDependencies`, so the
+  reflected `repositories` registry (built from `dependencies`) didn't carry it — a remote `getRef`
+  came back `... is not wired`. `buildNodeContainer` and the Cloudflare `buildContainer` now fold it
+  into the registry explicitly (the integration test below is what surfaced this). Otherwise a
+  server-only allow-list change, symmetric by construction (the dispatcher reflects over each facade's
+  registry). Round-trip +
+  cross-account-scope + off-allow-list (`listStale`) unit tests in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves `getRef` out of `pending`; and the
+  fake-mothership integration test (`runtimes/local/test/mothership-integration.spec.ts`) asserts the
+  retry endpoint resolves an execution run's kind over the real RPC (then the engine refuses the
+  non-failed run with 409 `run_not_retryable`) and 404s an unknown run id (`getRef`'s `null` round-trip).
+- **Phase 3 follow-up (settings / preset / schedule management write surface)** — the workspace-scoped
+  WRITES a mothership-mode SPA drives to SAVE settings are now allow-listed, so the settings panels
+  are functional (not read-only) in mothership mode. Previously only the board-load READS of these
+  repos were remotely callable, leaving the settings/preset/schedule editors able to display but not
+  persist. Newly allow-listed (every method takes the workspaceId as arg0, reusing the existing
+  `workspace` scope rule — no new scope machinery): `workspaceSettingsRepository.upsert`,
+  `trackerSettingsRepository.put`, `serviceFragmentDefaultsRepository.set`, `mergePresetRepository`
+  `get`/`remove`, `modelPresetRepository` `get`/`remove` (completing both preset libraries' CRUD),
+  and the recurring-schedule management surface `pipelineScheduleRepository` `get`/`upsert`/`remove`/
+  `insertRun`/`updateRun`/`listRuns` (the local node's `RecurringPipelineService` CRUD + `runNow`,
+  which fires in-process so its `fire()` writes are on the path). Each is member-level (none is
+  admin-gated) and workspace-scoped, matching the block/pipeline mutation policy already exposed. The
+  sweeper-only `pipelineScheduleRepository` `listDue`/`pruneRunsBefore` and the serviceId-keyed
+  `listByService` stay off the SPA path. Round-trip + cross-account-scope tests for every new method
+  are in `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
+  merge-preset / model-preset / workspace-settings / tracker-settings / service-fragment-defaults
+  repos are now fully remote). Server-only allow-list change, symmetric by construction (the
+  dispatcher reflects over each facade's registry).
 - **PR 3 (login-based machine-token minting)** — the required static `LOCAL_MOTHERSHIP_TOKEN` is
   replaced by a token minted from a whitelisted login and cached locally; the env var is now only a
   headless/CI override. A mothership (either facade, via `registerCoreControllers`) serves
@@ -240,11 +283,11 @@ never remotely invocable (mothership-internal cron).
 | `invitationRepository`                                      | remote                                           | ⬜ todo | PR 3                            |
 | `passwordResetTokenRepository`                              | remote                                           | ⬜ todo | PR 3                            |
 | `emailConnectionRepository`                                 | remote (delivery delegated)                      | ⬜ todo | PR 4                            |
-| `agentRunRepository`                                        | remote                                           | ⬜ todo | PR 3                            |
-| `modelPresetRepository`                                     | remote                                           | ⬜ todo | PR 3                            |
-| `serviceFragmentDefaultsRepository`                         | remote                                           | ⬜ todo | PR 3                            |
-| `pipelineScheduleRepository`                                | remote                                           | ⬜ todo | PR 3                            |
-| `trackerSettingsRepository`                                 | remote                                           | ⬜ todo | PR 3                            |
+| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)        | ✅ done | PR 3 (retry/stop surface)       |
+| `modelPresetRepository`                                     | remote                                           | ✅ done | PR 3 (settings writes)          |
+| `serviceFragmentDefaultsRepository`                         | remote                                           | ✅ done | PR 3 (settings writes)          |
+| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)           | ◑ part  | PR 3 (settings writes)          |
+| `trackerSettingsRepository`                                 | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `serviceRepository`                                         | remote                                           | ⬜ todo | PR 3                            |
 | `workspaceMountRepository`                                  | remote                                           | ⬜ todo | PR 3                            |
 | `requirementReviewRepository`                               | remote                                           | ⬜ todo | PR 3                            |
@@ -253,8 +296,8 @@ never remotely invocable (mothership-internal cron).
 | `consensusSessionRepository`                                | remote                                           | ⬜ todo | PR 3                            |
 | `clarityReviewRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
 | `brainstormSessionRepository`                               | remote                                           | ⬜ todo | PR 3                            |
-| `mergePresetRepository`                                     | remote                                           | ⬜ todo | PR 3                            |
-| `workspaceSettingsRepository`                               | remote                                           | ⬜ todo | PR 3                            |
+| `mergePresetRepository`                                     | remote                                           | ✅ done | PR 3 (settings writes)          |
+| `workspaceSettingsRepository`                               | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `observabilityConnectionRepository`                         | remote                                           | ⬜ todo | PR 3                            |
 | `incidentEnrichmentConnectionRepository`                    | remote                                           | ⬜ todo | PR 3                            |
 | `accountSettingsRepository`                                 | remote                                           | ⬜ todo | PR 3                            |

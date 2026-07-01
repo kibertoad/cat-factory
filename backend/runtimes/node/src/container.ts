@@ -2235,8 +2235,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // over, so a Node deployment can act as a mothership for mothership-mode local nodes. The
     // controller gates which repo+method is callable (allow-list) and account-scopes each call;
     // exposing the whole `dependencies` (which carries every repo under its canonical name) is
-    // safe. Sourced from `dependencies` so both facades attach the registry identically.
-    repositories: dependencies as unknown as PersistenceRegistry,
+    // safe. `agentRunRepository` is the one repo NOT part of `CoreDependencies` (the engine's
+    // Core never reads it — it's surfaced separately above for `AgentRunController`), so fold it
+    // in explicitly, else the board's retry/stop `getRef` call comes back `... is not wired`.
+    // Sourced identically on both facades so they attach the same registry surface.
+    repositories: {
+      ...dependencies,
+      agentRunRepository: repos.agentRunRepository,
+    } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

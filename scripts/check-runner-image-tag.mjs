@@ -22,52 +22,29 @@
 // The deploy.yml guard runs the same logic post-merge; this lets PR CI catch it first.
 
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import {
+  DEPLOY_PKG,
+  IMAGES as IMAGE_DESCRIPTORS,
+  readRepoFile,
+  repoRoot,
+  WRANGLER,
+} from './runner-images.mjs'
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-
-const DEPLOY_PKG = 'deploy/backend/package.json'
-const WRANGLER = 'deploy/backend/wrangler.toml'
-
-// One descriptor per per-run container image. `tagRe` matches the `<image>:<tag>` ref in
-// both deploy/backend/package.json (the image:publish* script) and wrangler.toml (the
-// [[containers]] image), capturing everything after the colon up to the first quote or
-// whitespace. `sourcePrefixes`/`sourceFiles` are the files whose content goes into that
-// image — kept in sync with the `image*` paths-filters in .github/workflows/deploy.yml.
-const IMAGES = [
-  {
-    label: 'executor',
-    harnessPkg: 'backend/internal/executor-harness/package.json',
-    tagRe: /cat-factory-executor:([^"'\s]+)/,
-    sourcePrefixes: ['backend/internal/executor-harness/src/'],
-    sourceFiles: new Set([
-      'backend/internal/executor-harness/Dockerfile',
-      'backend/internal/executor-harness/tsconfig.json',
-      'backend/internal/executor-harness/package.json',
-    ]),
-  },
-  {
-    label: 'deploy',
-    harnessPkg: 'backend/internal/deploy-harness/package.json',
-    tagRe: /cat-factory-deploy:([^"'\s]+)/,
-    sourcePrefixes: ['backend/internal/deploy-harness/src/'],
-    sourceFiles: new Set([
-      'backend/internal/deploy-harness/Dockerfile',
-      'backend/internal/deploy-harness/tsconfig.json',
-      'backend/internal/deploy-harness/package.json',
-    ]),
-  },
-]
+// Adapt the shared descriptors (scripts/runner-images.mjs — the single source of truth this
+// and the auto-sync both derive from) to what the guard needs: a `tagRe` that matches the
+// `<image>:<tag>` ref in DEPLOY_PKG + WRANGLER (capturing the tag up to the first quote or
+// whitespace) and the source files as a Set for fast membership tests.
+const IMAGES = IMAGE_DESCRIPTORS.map((d) => ({
+  label: d.label,
+  harnessPkg: d.harnessPkg,
+  tagRe: new RegExp(`${d.image}:([^"'\\s]+)`),
+  sourcePrefixes: d.sourcePrefixes,
+  sourceFiles: new Set(d.sourceFiles),
+}))
 
 function fail(message) {
   console.error(`::error::${message}`)
   process.exitCode = 1
-}
-
-function readRepoFile(relPath) {
-  return readFileSync(resolve(repoRoot, relPath), 'utf8')
 }
 
 function extractTag(tagRe, relPath) {

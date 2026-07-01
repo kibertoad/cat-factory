@@ -1,5 +1,80 @@
 # @cat-factory/worker
 
+## 0.51.2
+
+### Patch Changes
+
+- 39534d6: Mothership mode: allow-list `agentRunRepository.getRef`, so the board's run controls (retry /
+  stop a failed or running run) are functional for execution runs in a no-Postgres mothership-mode
+  local node.
+
+  Wiring fix (both facades): `agentRunRepository` is the one repo surfaced on the container OUTSIDE
+  `CoreDependencies`, so the mothership `repositories` registry (`ServerContainer.repositories`,
+  reflected by `/internal/persistence`) was built from `dependencies` alone and did not carry it —
+  a remote `getRef` call came back `Repository 'agentRunRepository.getRef' is not wired`. Both
+  `buildNodeContainer` and the Cloudflare `buildContainer` now fold it into the registry explicitly,
+  so either facade acting as a mothership serves the retry/stop `getRef` read.
+
+  `AgentRunController` (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`) resolves a run's KIND via
+  `agentRunRepository.getRef(workspaceId, id)` before dispatching to the matching service. That read
+  was the last thing on the execution-run retry/stop path still coming back `unknown_method` over
+  `/internal/persistence`. It is now allow-listed, workspace-scoped on arg0 (reusing the existing
+  `workspace` rule — resolve the owning account, reject out-of-scope as 404). Every downstream
+  read+write the execution retry/stop services make (`executionRepository.get`/`deleteByBlock`/
+  `upsert`/`markFailed`, `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage
+  prechecks) was already exposed on the run/start path, so `getRef` is the only new entry.
+
+  The bootstrap + env-config-repair retry BRANCHES read their own repos (`bootstrapJobRepository.get`,
+  `referenceArchitectureRepository.get`, …) and stay `pending` — a later slice. The sweeper-only
+  `agentRunRepository.listStale`/`liveRunIds` stay mothership-internal.
+
+  Server-only allow-list change, symmetric by construction (the dispatcher reflects over each facade's
+  registry). Round-trip + cross-account-scope + off-allow-list unit tests cover it; the static
+  allow-list drift guard moves `getRef` out of `pending`; and the fake-mothership integration test
+  asserts the retry endpoint resolves a run's kind over the real RPC and 404s an unknown run id.
+
+- Updated dependencies [39534d6]
+  - @cat-factory/server@0.63.2
+
+## 0.51.1
+
+### Patch Changes
+
+- Updated dependencies [eab2b60]
+  - @cat-factory/server@0.63.1
+
+## 0.51.0
+
+### Minor Changes
+
+- 762fe66: Add a first-class `frontend`-frame configuration. A frontend frame now carries a
+  `frontendConfig` (package manager, install/build/serve knobs, WireMock mappings path,
+  preview toggle) plus `backendBindings` that map each env var the frontend reads to an
+  upstream: a bound service frame's ephemeral environment, or a WireMock stub. The bindings
+  double as board links, drawn as frontend→service edges on the canvas. New inspector panel
+  (`FrontendConfig.vue`), the `frontend_config` JSON column mirrored across D1 and Drizzle
+  with a cross-runtime conformance round-trip, and `frontendConfig` on the update-block input.
+
+  Second slice of the frontend-preview + in-context UI-testing initiative
+  (docs/initiatives/frontend-preview-ui-testing.md).
+
+### Patch Changes
+
+- Updated dependencies [762fe66]
+  - @cat-factory/contracts@0.76.0
+  - @cat-factory/server@0.63.0
+  - @cat-factory/agents@0.24.16
+  - @cat-factory/consensus@0.7.104
+  - @cat-factory/gates@0.2.57
+  - @cat-factory/gitlab@0.4.27
+  - @cat-factory/integrations@0.51.4
+  - @cat-factory/kernel@0.66.1
+  - @cat-factory/orchestration@0.53.2
+  - @cat-factory/prompt-fragments@0.9.31
+  - @cat-factory/spend@0.10.61
+  - @cat-factory/provider-cloudflare@0.7.104
+  - @cat-factory/observability-langfuse@0.7.100
+
 ## 0.50.3
 
 ### Patch Changes
