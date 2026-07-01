@@ -4,6 +4,7 @@
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/local-server': patch
+'@cat-factory/node-server': patch
 '@cat-factory/contracts': patch
 '@cat-factory/app': patch
 ---
@@ -36,7 +37,9 @@ it works on Cloudflare and Apple `container` too.
   from the injected build env, and a configured `servePort` that collides with a reserved
   in-container port (8080 harness job server, 8089 WireMock) falls back to the default. The
   inspector's servePort placeholder now shows 4173. Shared `pathExists` / log-capture helpers
-  are de-duplicated in the harness.
+  are de-duplicated in the harness. The frontend UI-test gate's batch env read
+  (`environmentRegistryRepository.listByWorkspace`) is added to the mothership remote-persistence
+  allow-list so the gate resolves in mothership mode.
 
 BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
 (`service` | `frontend`); the default backend-service tester shape is unchanged.

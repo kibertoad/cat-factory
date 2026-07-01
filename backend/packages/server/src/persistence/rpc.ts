@@ -270,6 +270,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   environmentRegistryRepository: {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
+    // The workspace-scoped batch read behind `EnvironmentProvisioningService.listHandles`
+    // (the environments list endpoint + the frontend UI-test gate's single indexed env read,
+    // `AgentContextBuilder.resolveFrontendConfig` — a batch read, not a per-binding point read).
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
   serviceFragmentDefaultsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
