@@ -15,7 +15,13 @@
     "copy": "Kopyala",
     "block": "Blok",
     "actionFailed": "İşlem başarısız oldu",
-    "close": "Kapat"
+    "close": "Kapat",
+    "delete": "Sil",
+    "remove": "Kaldır",
+    "confirm": {
+      "defaultTitle": "Emin misiniz?",
+      "confirm": "Onayla"
+    }
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -514,7 +520,11 @@
       "merged": "Birleştirildi",
       "notMerged": "Henüz birleştirilmedi",
       "empty": "Bağımlılık yok. İstediğiniz zaman çalıştırılabilir.",
-      "blocked": "Bağımlılıklar birleştirilene kadar engellendi."
+      "blocked": "Bağımlılıklar birleştirilene kadar engellendi.",
+      "confirmRemove": {
+        "title": "Bu bağımlılık kaldırılsın mı?",
+        "body": "Bu görev artık \"{name}\" ögesini beklemeyecek."
+      }
     },
     "estimate": {
       "title": "Tahmin",
@@ -559,7 +569,11 @@
       "companionOf": "{label} (yardımcı)",
       "merged": "Birleştirildi",
       "open": "Aç",
-      "mergePr": "PR'ı birleştir"
+      "mergePr": "PR'ı birleştir",
+      "empty": {
+        "title": "Henüz çalıştırma yok",
+        "body": "Çalıştırma geçmişini burada görmek için bir pipeline başlatın."
+      }
     },
     "structure": {
       "module": "Modül",
@@ -759,7 +773,25 @@
       "viewRequirements": "Gereksinimleri Görüntüle",
       "reRun": "Yeniden çalıştır",
       "run": "Çalıştır",
-      "focus": "Odaklan"
+      "focus": "Odaklan",
+      "confirmDelete": {
+        "task": {
+          "title": "Bu görev silinsin mi?",
+          "body": "\"{name}\" ve çalıştırma geçmişi kaldırılacak. Bu işlem geri alınamaz."
+        },
+        "module": {
+          "title": "Bu modül silinsin mi?",
+          "body": "\"{name}\" ve içindeki her şey kaldırılacak. Bu işlem geri alınamaz."
+        },
+        "service": {
+          "title": "Bu servis silinsin mi?",
+          "body": "\"{name}\" ve içindeki her şey kaldırılacak. Bu işlem geri alınamaz."
+        },
+        "recurring": {
+          "title": "Bu yinelenen pipeline silinsin mi?",
+          "body": "\"{name}\", zamanlaması ve çalıştırma geçmişi kaldırılacak. Bu işlem geri alınamaz."
+        }
+      }
     }
   },
   "observability": {
@@ -1317,6 +1349,10 @@
         "nameRequiredTitle": "Ad gerekli",
         "nameRequiredBody": "Hazır ayara bir ad verin.",
         "saveFailed": "Hazır ayar kaydedilemedi"
+      },
+      "confirmDelete": {
+        "title": "Bu model ön ayarı silinsin mi?",
+        "body": "\"{name}\" kaldırılacak. Onu kullanan görevler çalışma alanı varsayılanına döner."
       }
     },
     "account": {
@@ -1695,7 +1731,11 @@
         "deleteFailed": "Ön ayar silinemedi"
       },
       "autoMergeOnHint": "Eşiklerin içindeyken otomatik birleştir.",
-      "autoMergeOffHint": "PR'yi her zaman insan incelemesine gönder."
+      "autoMergeOffHint": "PR'yi her zaman insan incelemesine gönder.",
+      "confirmDelete": {
+        "title": "Bu birleştirme ön ayarı silinsin mi?",
+        "body": "\"{name}\" kaldırılacak. Onu kullanan görevler çalışma alanı varsayılanına döner."
+      }
     },
     "observabilityConnection": {
       "title": "Sürüm sonrası sağlık",
@@ -2484,6 +2524,10 @@
         "cloned": "\"{name}\" klonlandı — şimdi \"{copy}\" düzenleniyor",
         "cloneFailed": "Pipeline klonlanamadı",
         "updateFailed": "Pipeline güncellenemedi"
+      },
+      "confirmDeletePipeline": {
+        "title": "Bu pipeline silinsin mi?",
+        "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       }
     },
     "progress": {

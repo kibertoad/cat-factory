@@ -15,7 +15,13 @@
     "copy": "コピー",
     "block": "ブロック",
     "actionFailed": "操作に失敗しました",
-    "close": "閉じる"
+    "close": "閉じる",
+    "delete": "削除",
+    "remove": "削除",
+    "confirm": {
+      "defaultTitle": "よろしいですか？",
+      "confirm": "確認"
+    }
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -514,7 +520,11 @@
       "merged": "マージ済み",
       "notMerged": "未マージ",
       "empty": "依存関係はありません。いつでも実行できます。",
-      "blocked": "依存関係がマージされるまでブロックされます。"
+      "blocked": "依存関係がマージされるまでブロックされます。",
+      "confirmRemove": {
+        "title": "この依存関係を削除しますか？",
+        "body": "このタスクは今後「{name}」を待たなくなります。"
+      }
     },
     "estimate": {
       "title": "見積もり",
@@ -559,7 +569,11 @@
       "companionOf": "{label} (コンパニオン)",
       "merged": "マージ済み",
       "open": "開く",
-      "mergePr": "PR をマージ"
+      "mergePr": "PR をマージ",
+      "empty": {
+        "title": "実行履歴はまだありません",
+        "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
+      }
     },
     "structure": {
       "module": "モジュール",
@@ -759,7 +773,25 @@
       "viewRequirements": "要件を表示",
       "reRun": "再実行",
       "run": "実行",
-      "focus": "フォーカス"
+      "focus": "フォーカス",
+      "confirmDelete": {
+        "task": {
+          "title": "このタスクを削除しますか？",
+          "body": "「{name}」と実行履歴が削除されます。この操作は取り消せません。"
+        },
+        "module": {
+          "title": "このモジュールを削除しますか？",
+          "body": "「{name}」とその中のすべてが削除されます。この操作は取り消せません。"
+        },
+        "service": {
+          "title": "このサービスを削除しますか？",
+          "body": "「{name}」とその中のすべてが削除されます。この操作は取り消せません。"
+        },
+        "recurring": {
+          "title": "この定期パイプラインを削除しますか？",
+          "body": "「{name}」、そのスケジュール、実行履歴が削除されます。この操作は取り消せません。"
+        }
+      }
     }
   },
   "observability": {
@@ -1317,6 +1349,10 @@
         "nameRequiredTitle": "名前が必要です",
         "nameRequiredBody": "プリセットに名前を付けてください。",
         "saveFailed": "プリセットを保存できませんでした"
+      },
+      "confirmDelete": {
+        "title": "このモデルプリセットを削除しますか？",
+        "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
       }
     },
     "account": {
@@ -1695,7 +1731,11 @@
         "deleteFailed": "プリセットを削除できませんでした"
       },
       "autoMergeOnHint": "しきい値内なら自動的にマージします。",
-      "autoMergeOffHint": "常にPRを人間のレビューに回します。"
+      "autoMergeOffHint": "常にPRを人間のレビューに回します。",
+      "confirmDelete": {
+        "title": "このマージプリセットを削除しますか？",
+        "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
+      }
     },
     "observabilityConnection": {
       "title": "リリース後のヘルス",
@@ -2484,6 +2524,10 @@
         "cloned": "「{name}」を複製しました、「{copy}」を編集中です",
         "cloneFailed": "パイプラインを複製できませんでした",
         "updateFailed": "パイプラインを更新できませんでした"
+      },
+      "confirmDeletePipeline": {
+        "title": "このパイプラインを削除しますか？",
+        "body": "「{name}」が削除されます。この操作は取り消せません。"
       }
     },
     "progress": {

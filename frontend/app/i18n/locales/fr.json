@@ -15,7 +15,13 @@
     "copy": "Copier",
     "actionFailed": "Échec de l’action",
     "close": "Fermer",
-    "block": "Bloc"
+    "block": "Bloc",
+    "delete": "Supprimer",
+    "remove": "Retirer",
+    "confirm": {
+      "defaultTitle": "Êtes-vous sûr ?",
+      "confirm": "Confirmer"
+    }
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -514,7 +520,11 @@
       "merged": "Fusionné",
       "notMerged": "Pas encore fusionné",
       "empty": "Aucune dépendance. Peut s'exécuter à tout moment.",
-      "blocked": "Bloqué jusqu'à la fusion des dépendances."
+      "blocked": "Bloqué jusqu'à la fusion des dépendances.",
+      "confirmRemove": {
+        "title": "Retirer cette dépendance ?",
+        "body": "Cette tâche n'attendra plus \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Estimation",
@@ -559,7 +569,11 @@
       "companionOf": "{label} (compagnon)",
       "merged": "Fusionné",
       "open": "Ouvert",
-      "mergePr": "Fusionner la PR"
+      "mergePr": "Fusionner la PR",
+      "empty": {
+        "title": "Aucune exécution pour l'instant",
+        "body": "Lancez un pipeline pour voir l'historique d'exécution ici."
+      }
     },
     "structure": {
       "module": "Module",
@@ -759,7 +773,25 @@
       "viewRequirements": "Voir les exigences",
       "reRun": "Relancer",
       "run": "Exécuter",
-      "focus": "Cibler"
+      "focus": "Cibler",
+      "confirmDelete": {
+        "task": {
+          "title": "Supprimer cette tâche ?",
+          "body": "\"{name}\" et son historique d'exécution seront supprimés. Cette action est irréversible."
+        },
+        "module": {
+          "title": "Supprimer ce module ?",
+          "body": "\"{name}\" et tout son contenu seront supprimés. Cette action est irréversible."
+        },
+        "service": {
+          "title": "Supprimer ce service ?",
+          "body": "\"{name}\" et tout son contenu seront supprimés. Cette action est irréversible."
+        },
+        "recurring": {
+          "title": "Supprimer ce pipeline récurrent ?",
+          "body": "\"{name}\", sa planification et son historique d'exécution seront supprimés. Cette action est irréversible."
+        }
+      }
     }
   },
   "observability": {
@@ -1317,6 +1349,10 @@
         "nameRequiredTitle": "Nom requis",
         "nameRequiredBody": "Donnez un nom au préréglage.",
         "saveFailed": "Impossible d'enregistrer le préréglage"
+      },
+      "confirmDelete": {
+        "title": "Supprimer ce préréglage de modèle ?",
+        "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront au préréglage par défaut de l'espace de travail."
       }
     },
     "account": {
@@ -1582,7 +1618,11 @@
         "deleteFailed": "Impossible de supprimer le préréglage"
       },
       "autoMergeOnHint": "Fusionner automatiquement si dans les seuils.",
-      "autoMergeOffHint": "Toujours envoyer la PR en revue humaine."
+      "autoMergeOffHint": "Toujours envoyer la PR en revue humaine.",
+      "confirmDelete": {
+        "title": "Supprimer ce préréglage de fusion ?",
+        "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront au préréglage par défaut de l'espace de travail."
+      }
     },
     "observabilityConnection": {
       "title": "Santé post-publication",
@@ -2471,6 +2511,10 @@
         "cloned": "\"{name}\" cloné — édition de \"{copy}\" en cours",
         "cloneFailed": "Impossible de cloner le pipeline",
         "updateFailed": "Impossible de mettre à jour le pipeline"
+      },
+      "confirmDeletePipeline": {
+        "title": "Supprimer ce pipeline ?",
+        "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       }
     },
     "progress": {

@@ -145,20 +145,11 @@ const runMenu = computed(() =>
   })),
 )
 
+// Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
+// (Delete/Backspace) follow the exact same prompt + optimistic-delete + rollback path.
+const { deleteBlock } = useBlockDeletion()
 function remove() {
-  if (!block.value) return
-  const id = block.value.id
-  // Close the inspector right away; the stores hide the block optimistically and
-  // restore it (with a toast) only if the backend delete fails.
-  ui.select(null)
-  // A schedule owns its reused block + run history — removing the schedule deletes
-  // them server-side, so delete the schedule rather than orphaning it.
-  if (schedule.value) {
-    void recurring.remove(schedule.value.id)
-    return
-  }
-  execution.cancel(id)
-  void board.removeBlock(id)
+  void deleteBlock(block.value)
 }
 
 // ---- failed agent run (bootstrap or execution) ------------------------------
@@ -492,6 +483,7 @@ const showOriginalDescription = ref(false)
           size="sm"
           icon="i-lucide-trash-2"
           class="ms-auto"
+          data-testid="inspector-delete"
           :title="deleteLabel"
           @click="remove"
         >

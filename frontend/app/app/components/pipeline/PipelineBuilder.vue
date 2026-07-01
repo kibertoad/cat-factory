@@ -198,6 +198,18 @@ function edit(p: Pipeline) {
   pipelines.loadForEdit(p)
 }
 
+const { confirm } = useConfirm()
+async function removePipeline(p: Pipeline) {
+  const ok = await confirm({
+    title: t('pipeline.builder.confirmDeletePipeline.title'),
+    description: t('pipeline.builder.confirmDeletePipeline.body', { name: p.name }),
+    variant: 'destructive',
+    confirmLabel: t('common.delete'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (ok) void pipelines.removePipeline(p.id)
+}
+
 /** Clone any pipeline (incl. a read-only built-in) into an editable copy, then edit it. */
 async function clone(p: Pipeline) {
   try {
@@ -776,7 +788,7 @@ async function clone(p: Pipeline) {
                     variant="ghost"
                     size="xs"
                     :title="t('pipeline.builder.delete')"
-                    @click="pipelines.removePipeline(p.id)"
+                    @click="removePipeline(p)"
                   />
                 </div>
               </div>

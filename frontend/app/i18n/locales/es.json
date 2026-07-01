@@ -15,7 +15,13 @@
     "copy": "Copiar",
     "actionFailed": "La acción falló",
     "close": "Cerrar",
-    "block": "Bloque"
+    "block": "Bloque",
+    "delete": "Eliminar",
+    "remove": "Quitar",
+    "confirm": {
+      "defaultTitle": "¿Estás seguro?",
+      "confirm": "Confirmar"
+    }
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -514,7 +520,11 @@
       "merged": "Fusionado",
       "notMerged": "Aún sin fusionar",
       "empty": "Sin dependencias. Puede ejecutarse en cualquier momento.",
-      "blocked": "Bloqueado hasta que se fusionen las dependencias."
+      "blocked": "Bloqueado hasta que se fusionen las dependencias.",
+      "confirmRemove": {
+        "title": "¿Quitar esta dependencia?",
+        "body": "Esta tarea ya no esperará a \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Estimación",
@@ -559,7 +569,11 @@
       "companionOf": "{label} (acompañante)",
       "merged": "Fusionado",
       "open": "Abierto",
-      "mergePr": "Fusionar PR"
+      "mergePr": "Fusionar PR",
+      "empty": {
+        "title": "Aún no hay ejecuciones",
+        "body": "Inicia un pipeline para ver el historial de ejecución aquí."
+      }
     },
     "structure": {
       "module": "Módulo",
@@ -759,7 +773,25 @@
       "viewRequirements": "Ver requisitos",
       "reRun": "Reejecutar",
       "run": "Ejecutar",
-      "focus": "Enfocar"
+      "focus": "Enfocar",
+      "confirmDelete": {
+        "task": {
+          "title": "¿Eliminar esta tarea?",
+          "body": "Se eliminarán \"{name}\" y su historial de ejecución. Esta acción no se puede deshacer."
+        },
+        "module": {
+          "title": "¿Eliminar este módulo?",
+          "body": "Se eliminará \"{name}\" y todo su contenido. Esta acción no se puede deshacer."
+        },
+        "service": {
+          "title": "¿Eliminar este servicio?",
+          "body": "Se eliminará \"{name}\" y todo su contenido. Esta acción no se puede deshacer."
+        },
+        "recurring": {
+          "title": "¿Eliminar este pipeline recurrente?",
+          "body": "Se eliminarán \"{name}\", su programación y su historial de ejecución. Esta acción no se puede deshacer."
+        }
+      }
     }
   },
   "observability": {
@@ -1317,6 +1349,10 @@
         "nameRequiredTitle": "Nombre obligatorio",
         "nameRequiredBody": "Dale un nombre al ajuste.",
         "saveFailed": "No se pudo guardar el ajuste"
+      },
+      "confirmDelete": {
+        "title": "¿Eliminar este preset de modelo?",
+        "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
       }
     },
     "account": {
@@ -1582,7 +1618,11 @@
         "deleteFailed": "No se pudo eliminar el ajuste"
       },
       "autoMergeOnHint": "Fusionar automáticamente cuando esté dentro de los umbrales.",
-      "autoMergeOffHint": "Enviar siempre el PR a revisión humana."
+      "autoMergeOffHint": "Enviar siempre el PR a revisión humana.",
+      "confirmDelete": {
+        "title": "¿Eliminar este preset de fusión?",
+        "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
+      }
     },
     "observabilityConnection": {
       "title": "Salud posterior al lanzamiento",
@@ -2471,6 +2511,10 @@
         "cloned": "Clonado \"{name}\" — ahora editando \"{copy}\"",
         "cloneFailed": "No se pudo clonar el pipeline",
         "updateFailed": "No se pudo actualizar el pipeline"
+      },
+      "confirmDeletePipeline": {
+        "title": "¿Eliminar este pipeline?",
+        "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       }
     },
     "progress": {

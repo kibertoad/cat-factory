@@ -29,6 +29,7 @@ const CONCERN_LEVELS = computed<{ value: RequirementConcernLevel; label: string 
 
 const store = useMergePresetsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 // Local editable copy per preset, kept in sync with the store. Percentages are
 // edited 0..100 and stored 0..1.
@@ -116,6 +117,14 @@ async function makeDefault(p: MergeThresholdPreset) {
 }
 
 async function remove(p: MergeThresholdPreset) {
+  const ok = await confirm({
+    title: t('settings.mergeThresholds.confirmDelete.title'),
+    description: t('settings.mergeThresholds.confirmDelete.body', { name: p.name }),
+    variant: 'destructive',
+    confirmLabel: t('common.delete'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   busy.value = p.id
   try {
     await store.remove(p.id)

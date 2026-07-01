@@ -10,9 +10,17 @@
   },
   "common": {
     "save": "Save",
+    "saved": "Saved",
     "cancel": "Cancel",
     "retry": "Retry",
     "copy": "Copy",
+    "copied": "Copied to clipboard",
+    "delete": "Delete",
+    "remove": "Remove",
+    "confirm": {
+      "defaultTitle": "Are you sure?",
+      "confirm": "Confirm"
+    },
     "block": "Block",
     "@block": {
       "description": "Generic fallback NOUN for a board item whose title is unknown (a service / module / task node). Not the verb 'to block'."
@@ -551,7 +559,11 @@
       "merged": "Merged",
       "notMerged": "Not merged yet",
       "empty": "No dependencies. Can run any time.",
-      "blocked": "Blocked until dependencies merge."
+      "blocked": "Blocked until dependencies merge.",
+      "confirmRemove": {
+        "title": "Remove this dependency?",
+        "body": "This task will no longer wait for \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Estimate",
@@ -564,6 +576,10 @@
         "incorporating": "Incorporating…",
         "reviewing": "Re-reviewing…",
         "recommending": "Recommending…"
+      },
+      "empty": {
+        "title": "No runs yet",
+        "body": "Start a pipeline to see execution history here."
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
@@ -779,6 +795,24 @@
       "deleteTask": "Delete task",
       "deleteModule": "Delete module",
       "deleteService": "Delete service",
+      "confirmDelete": {
+        "task": {
+          "title": "Delete this task?",
+          "body": "\"{name}\" and its run history will be removed. This can't be undone."
+        },
+        "module": {
+          "title": "Delete this module?",
+          "body": "\"{name}\" and everything inside it will be removed. This can't be undone."
+        },
+        "service": {
+          "title": "Delete this service?",
+          "body": "\"{name}\" and everything inside it will be removed. This can't be undone."
+        },
+        "recurring": {
+          "title": "Delete this recurring pipeline?",
+          "body": "\"{name}\", its schedule and its run history will be removed. This can't be undone."
+        }
+      },
       "titlePlaceholder": "Title…",
       "reworkedRequirements": "Reworked requirements",
       "agentStepsUseDocument": "Agent steps use this document.",
@@ -1323,6 +1357,10 @@
       "subtitle": "Presets that map a model to every agent. A task picks one; tasks default to the workspace default preset.",
       "back": "Back",
       "closeEsc": "Close (Esc)",
+      "confirmDelete": {
+        "title": "Delete this model preset?",
+        "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
+      },
       "quota": "quota",
       "list": {
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
@@ -1697,6 +1735,10 @@
     "mergeThresholds": {
       "intro": "Named auto-merge policies a task can choose. After CI passes, the {merger} agent scores the PR on complexity, risk and impact (0-100%); the PR auto-merges only when every score is at or below the preset's ceilings, otherwise a review notification is raised. The default preset governs any task that picks none.",
       "mergerAgent": "merger",
+      "confirmDelete": {
+        "title": "Delete this merge preset?",
+        "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
+      },
       "concern": {
         "none": "None (always stop)",
         "low": "Low",
@@ -2518,6 +2560,10 @@
       "clone": "Clone",
       "edit": "Edit this pipeline",
       "delete": "Delete this pipeline",
+      "confirmDeletePipeline": {
+        "title": "Delete this pipeline?",
+        "body": "\"{name}\" will be removed. This can't be undone."
+      },
       "disabledStepTooltip": "Disabled, skipped at run",
       "cancelEdit": "Cancel edit",
       "clear": "Clear",
