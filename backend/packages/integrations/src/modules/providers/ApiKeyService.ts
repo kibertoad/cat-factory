@@ -184,7 +184,21 @@ export class ApiKeyService {
         `No ${provider} API key is configured for this workspace, its account, or your user`,
       )
     }
-    const secret = await this.deps.secretCipher.decrypt(chosen.keyCipher)
+    let secret: string
+    try {
+      secret = await this.deps.secretCipher.decrypt(chosen.keyCipher)
+    } catch (e) {
+      // Name the credential that failed to decrypt so the failure (e.g. an inline reviewer
+      // that leases keys before any LLM call) points at the offending provider key rather
+      // than surfacing the cipher's opaque error with no context. The cipher already
+      // explains the likely encryption-key mismatch; prepend which key it was.
+      throw new Error(
+        `Could not decrypt the leased '${provider}' API key '${chosen.id}': ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+        { cause: e },
+      )
+    }
     return { keyId: chosen.id, provider, secret }
   }
 
