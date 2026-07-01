@@ -576,8 +576,7 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
     o.packageManager === 'pnpm' || o.packageManager === 'npm' || o.packageManager === 'yarn'
       ? o.packageManager
       : undefined
-  const serveMode =
-    o.serveMode === 'static' || o.serveMode === 'command' ? o.serveMode : undefined
+  const serveMode = o.serveMode === 'static' || o.serveMode === 'command' ? o.serveMode : undefined
   const envInjection =
     o.envInjection === 'build' || o.envInjection === 'runtime' ? o.envInjection : undefined
   // Only string→string entries survive; a non-string value is dropped so a malformed

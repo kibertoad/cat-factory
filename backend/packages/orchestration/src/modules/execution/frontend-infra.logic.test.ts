@@ -60,9 +60,9 @@ describe('resolveFrontendBindings', () => {
 
 describe('hasLiveServiceBinding', () => {
   it('is true when any binding has a resolved service URL', () => {
-    expect(
-      hasLiveServiceBinding([{ envVar: 'A' }, { envVar: 'B', serviceUrl: 'https://x' }]),
-    ).toBe(true)
+    expect(hasLiveServiceBinding([{ envVar: 'A' }, { envVar: 'B', serviceUrl: 'https://x' }])).toBe(
+      true,
+    )
   })
 
   it('is false when every binding is mocked (no service under test)', () => {

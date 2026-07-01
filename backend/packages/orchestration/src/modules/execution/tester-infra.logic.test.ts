@@ -64,15 +64,16 @@ describe('decideTesterInfra', () => {
 
   describe('frontend (self-contained UI test)', () => {
     it('passes when at least one bound service has a live ephemeral env (the service under test)', () => {
-      expect(
-        decideTesterInfra({ ...base, frontend: { hasLiveService: true } }),
-      ).toEqual({ ok: true })
+      expect(decideTesterInfra({ ...base, frontend: { hasLiveService: true } })).toEqual({
+        ok: true,
+      })
     })
 
     it('refuses when no bound service has a live env (no service under test)', () => {
-      expect(
-        decideTesterInfra({ ...base, frontend: { hasLiveService: false } }),
-      ).toEqual({ ok: false, reason: 'frontend-no-live-service' })
+      expect(decideTesterInfra({ ...base, frontend: { hasLiveService: false } })).toEqual({
+        ok: false,
+        reason: 'frontend-no-live-service',
+      })
     })
 
     it('takes precedence over the provision-type branch (a frontend declares no provisioning)', () => {

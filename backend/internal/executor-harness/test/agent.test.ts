@@ -118,7 +118,10 @@ describe('parseAgentJob', () => {
         serveMode: 'static',
         servePort: 4173,
         envInjection: 'build',
-        env: { PUB_API_URL: 'https://api.ephemeral.example', PUB_OTHER_URL: 'http://localhost:8089' },
+        env: {
+          PUB_API_URL: 'https://api.ephemeral.example',
+          PUB_OTHER_URL: 'http://localhost:8089',
+        },
         wiremockMappingsPath: 'mocks/',
         wiremockPort: 8089,
       },

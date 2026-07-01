@@ -223,7 +223,10 @@ function startServe(
   const mode = infra.serveMode ?? DEFAULTS.serveMode
   if (mode === 'command' && infra.serveScript) {
     const pm = infra.packageManager ?? DEFAULTS.packageManager
-    logger.info('agent(frontend): serving via script', { serveScript: infra.serveScript, servePort })
+    logger.info('agent(frontend): serving via script', {
+      serveScript: infra.serveScript,
+      servePort,
+    })
     return spawn(pm, ['run', infra.serveScript], {
       cwd: dir,
       stdio: 'ignore',
