@@ -147,7 +147,7 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
 - Tests: `k3s-probe.test.ts` (classification over injected detection fixtures); `k3s.test.ts`
   (orchestrator over `scriptIo`/`memFs`/`scriptShell`, no real cluster).
 
-### Slice 2 — provision actions (k3d default; guided k3s) (DONE, this PR)
+### Slice 2 — provision actions (k3d default; guided k3s) (DONE, PR #578)
 
 - **`k3s-provision.ts`** (pure planners + a thin executor over `HostShell`):
   - k3d/kind: plan `k3d cluster create <name> --api-port 6443` (or `kind create cluster --name`),
@@ -211,7 +211,7 @@ apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hos
 | Slice 0 — prefill + hint + handler test-connection probe    | done     | #557 |
 | Decide surface (CLI vs in-app wizard)                       | resolved | —    |
 | Slice 1 — CLI surface + pure probe planner + shell-out seam | done     | #569 |
-| Slice 2 — provision actions (k3d default; guided k3s)       | done     | TBD  |
+| Slice 2 — provision actions (k3d default; guided k3s)       | done     | #578 |
 | Slice 3 — wire handler (build + hand-off) + verify probe    | todo     | —    |
 | Slice 4 — SPA guided entry point + deep-link                | todo     | —    |
 | Slice 5 — docs + escape hatch + tracker update              | todo     | —    |
