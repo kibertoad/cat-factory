@@ -152,6 +152,15 @@ export interface ServerContainer extends Core {
    */
   resolveBinaryArtifactStore?: ResolveBinaryArtifactStore
   /**
+   * True ONLY when a self-hosted runner pool is the sole execution backend for container agents
+   * (an unregistered pool then means NO agent can run) — i.e. this facade has no built-in per-run
+   * container runtime. Set by remote/stock Node; unset (falsy) on Cloudflare (built-in per-run
+   * containers) and local mode (per-run host containers), where the wired runner surface is an
+   * OPTIONAL alternate target. The infra-setup snapshot projection reads it so the "agent executor
+   * not configured" banner fires only where the pool is genuinely mandatory.
+   */
+  agentExecutorRequiresRunnerPool?: boolean
+  /**
    * Consumer of normalised inbound VCS webhook events (the neutral ingest route's
    * `POST /vcs/:provider/webhooks` hands verified+mapped events here). Present only when a
    * facade wires a sink; absent ⇒ the route still verifies + maps + acks but drops the event

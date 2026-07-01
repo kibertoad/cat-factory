@@ -60,3 +60,15 @@ export const infraSetupAreaSchema = v.picklist([
   'binaryStorage',
 ])
 export type InfraSetupArea = v.InferOutput<typeof infraSetupAreaSchema>
+
+/** Every infra-setup area, as a plain readonly tuple (the source of truth for iteration). */
+export const INFRA_SETUP_AREAS = infraSetupAreaSchema.options
+
+/**
+ * The `localStorage` key under which the SPA's `InfraSetupBanner` persists its PERMANENT,
+ * per-user "don't notify me again" dismissals ({@link InfraSetupArea}[] keyed by user id).
+ * Lives in this dependency-free contracts package — rather than only inside the Vue component —
+ * so the SPA and the e2e suite (which seeds the same key to suppress the banner) share ONE
+ * source of truth and can't drift.
+ */
+export const INFRA_SETUP_DISMISSED_STORAGE_KEY = 'cat-factory:infra-setup-dismissed'

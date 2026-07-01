@@ -27,13 +27,12 @@
 // not the instant the config panel saves.
 import { useLocalStorage } from '@vueuse/core'
 import { computed } from 'vue'
+// The localStorage key holding the permanent per-user dismissals lives in `@cat-factory/contracts`
+// (a dependency-free package the SPA and the e2e suite both import), so the key + shape can't drift
+// between this component and the e2e seed in `backend/internal/e2e/tests/helpers.ts` (`pinWorkspace`).
+import { INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-factory/contracts'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { InfraSetupArea } from '~/types/domain'
-
-// The localStorage key holding the permanent per-user dismissals. Kept as a named constant so the
-// shape is defined once; the e2e suite seeds the SAME key in `backend/internal/e2e/tests/helpers.ts`
-// (`pinWorkspace`) to suppress the banner — keep the two in sync if this ever changes.
-const INFRA_SETUP_DISMISSED_STORAGE_KEY = 'cat-factory:infra-setup-dismissed'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -127,12 +126,19 @@ function dismissMenu(area: InfraSetupArea): DropdownMenuItem[][] {
 
 <template>
   <Transition name="fade">
-    <div v-if="visible.length > 0" class="flex w-full flex-col items-center gap-2">
+    <!-- One polite live region for ALL area cards (plus the sibling AI/provider banners) rather
+         than an assertive `role="alert"` per card — an advisory setup nag shouldn't interrupt a
+         screen reader, and up to three stacked alerts would spam it. -->
+    <div
+      v-if="visible.length > 0"
+      class="flex w-full flex-col items-center gap-2"
+      role="status"
+      aria-live="polite"
+    >
       <div
         v-for="area in visible"
         :key="area"
         class="pointer-events-auto w-full max-w-3xl rounded-2xl border-2 border-amber-500/70 bg-amber-950/95 p-5 shadow-2xl backdrop-blur"
-        role="alert"
         :data-testid="`infra-setup-banner-${area}`"
       >
         <div class="flex items-start gap-4">

@@ -8,8 +8,9 @@ import {
 // Unit coverage for the infra-setup snapshot projection. The cross-runtime conformance suite only
 // pins "present + valid enum" (per-area values legitimately differ by runtime); these tests pin the
 // actual detection: wired-but-unconfigured → `not_defined`, configured → `configured`, unwired →
-// `not_applicable`, and the fault-isolation that a throwing probe degrades to `not_applicable`
-// rather than 500-ing the board load.
+// `not_applicable`, that the agent-executor area only fires where a runner pool is the SOLE executor
+// (`agentExecutorRequiresRunnerPool`), and the fault-isolation that a throwing/hanging probe degrades
+// to `not_applicable` (logged) rather than 500-ing / stalling the board load.
 
 const WS = 'ws-1'
 
@@ -46,6 +47,25 @@ describe('areaStatus', () => {
     })
     expect(status).toBe('not_applicable')
   })
+
+  it('degrades to not_applicable when the read hangs past the timeout (never stalls the board)', async () => {
+    const status = await areaStatus(true, () => new Promise<boolean>(() => {}), { timeoutMs: 10 })
+    expect(status).toBe('not_applicable')
+  })
+
+  it('logs the swallowed fault so a persistent misconfig stays diagnosable', async () => {
+    const warns: Array<Record<string, unknown>> = []
+    const logger = { warn: (obj: Record<string, unknown>) => warns.push(obj) }
+    await areaStatus(
+      true,
+      async () => {
+        throw new Error('boom')
+      },
+      { area: 'agentExecutor', logger },
+    )
+    expect(warns).toHaveLength(1)
+    expect(warns[0]).toMatchObject({ area: 'agentExecutor', err: 'boom' })
+  })
 })
 
 describe('snapshotInfraSetup', () => {
@@ -63,6 +83,7 @@ describe('snapshotInfraSetup', () => {
       {
         environments: envSource(false), // no env provider registered
         runners: runnerSource(true), // a runner pool is connected
+        agentExecutorRequiresRunnerPool: true, // stock/remote Node: the pool is the only executor
         resolveBinaryArtifactStore: async () => null, // account picked no storage backend
       },
       WS,
@@ -72,6 +93,24 @@ describe('snapshotInfraSetup', () => {
       agentExecutor: 'configured',
       binaryStorage: 'not_defined',
     })
+  })
+
+  it('agentExecutor is not_defined when the pool is the sole executor and none is registered (remote Node)', async () => {
+    const infra = await snapshotInfraSetup(
+      { runners: runnerSource(false), agentExecutorRequiresRunnerPool: true },
+      WS,
+    )
+    expect(infra.agentExecutor).toBe('not_defined')
+  })
+
+  it('agentExecutor is not_applicable when the runner surface is wired but NOT the sole executor (local / Cloudflare)', async () => {
+    // Local mode always wires the runner surface (ENCRYPTION_KEY is always set) yet runs agents in
+    // per-run host containers, so a missing pool must NOT nag — the flag gates that.
+    const unregistered = await snapshotInfraSetup({ runners: runnerSource(false) }, WS)
+    expect(unregistered.agentExecutor).toBe('not_applicable')
+    // Even a *registered* pool is not_applicable there: the pool isn't the executor of record.
+    const registered = await snapshotInfraSetup({ runners: runnerSource(true) }, WS)
+    expect(registered.agentExecutor).toBe('not_applicable')
   })
 
   it('treats a resolved artifact store as configured', async () => {
@@ -93,6 +132,7 @@ describe('snapshotInfraSetup', () => {
           },
         },
         runners: runnerSource(true),
+        agentExecutorRequiresRunnerPool: true,
       },
       WS,
     )
@@ -107,6 +147,7 @@ describe('snapshotInfraSetup', () => {
       {
         environments: { connectionService: { hasConnection: async (ws) => (seen.push(ws), true) } },
         runners: { connectionService: { hasConnection: async (ws) => (seen.push(ws), true) } },
+        agentExecutorRequiresRunnerPool: true,
         resolveBinaryArtifactStore: async (ws) => (seen.push(ws), {}),
       },
       WS,

@@ -1,4 +1,7 @@
 import { type APIRequestContext, type Locator, type Page, expect } from '@playwright/test'
+// The infra-setup dismissal key + the area list are owned by the contracts package, so the e2e
+// seed below shares ONE source of truth with the SPA's `InfraSetupBanner.vue` (no drift).
+import { INFRA_SETUP_AREAS, INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-factory/contracts'
 // The wire shape is owned by the backend seam (`src/fakeProfile.ts`); import it here so the
 // test side can't drift from the control-channel payload the backend parses. Type-only, so it
 // pulls in none of that module's runtime deps (`@cat-factory/conformance`).
@@ -159,20 +162,23 @@ export async function startBootstrap(
  * registered, content storage defaults to `off`), so the advisory `InfraSetupBanner` would
  * legitimately render a full-width top overlay and intercept clicks on the board chrome the
  * specs drive — orthogonal noise for every non-banner spec. The banner reads its permanent
- * dismissals from `cat-factory:infra-setup-dismissed` keyed by user id; auth is off in e2e so
- * the key is `local`. Seeding it here (before `goto`, the single choke point every board spec
- * routes through) keeps the suite deterministic without a test-only branch in product code.
- * NOTE: this key + shape mirror `INFRA_SETUP_DISMISSED_STORAGE_KEY` in the app's
- * `InfraSetupBanner.vue`; if that ever changes, update this seed in lockstep.
+ * dismissals from `INFRA_SETUP_DISMISSED_STORAGE_KEY` keyed by user id; auth is off in e2e so the
+ * key is `local`. Seeding it here (before `goto`, the single choke point every board spec routes
+ * through) keeps the suite deterministic without a test-only branch in product code. The key + area
+ * list come from `@cat-factory/contracts`, the same source the banner reads, so they can't drift.
  */
 export async function pinWorkspace(page: Page, workspaceId: string): Promise<void> {
-  await page.addInitScript((id) => {
-    window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
-    window.localStorage.setItem(
-      'cat-factory:infra-setup-dismissed',
-      JSON.stringify({ local: ['agentExecutor', 'ephemeralEnvironments', 'binaryStorage'] }),
-    )
-  }, workspaceId)
+  await page.addInitScript(
+    ({ id, dismissKey, areas }) => {
+      window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
+      window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas }))
+    },
+    {
+      id: workspaceId,
+      dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
+      areas: [...INFRA_SETUP_AREAS],
+    },
+  )
 }
 
 /** Navigate to the board and wait for it to finish bootstrapping (canvas mounted). The

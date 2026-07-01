@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@cat-factory/conformance": "workspace:*",
+    "@cat-factory/contracts": "workspace:*",
     "@cat-factory/node-server": "workspace:*"
   },
   "devDependencies": {
