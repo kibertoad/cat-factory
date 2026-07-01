@@ -116,13 +116,25 @@ function makeRegistry(): {
       deleteByWorkspace: async (_ws: string) => undefined,
       countByServiceIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
     },
-    workspaceSettingsRepository: { get: async (ws: string) => ({ ws }) },
-    // `upsert` is the lazy default-seed the board-load `list` read triggers (member-level write).
-    mergePresetRepository: { list: async (ws: string) => [{ ws }], upsert: async () => undefined },
+    workspaceSettingsRepository: {
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+    },
+    // `upsert` is the lazy default-seed the board-load `list` read triggers (member-level write);
+    // `get`/`remove` are the preset-library editor's read-one + delete.
+    mergePresetRepository: {
+      list: async (ws: string) => [{ ws }],
+      getDefault: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      get: async (ws: string) => ({ ws }),
+      remove: async () => undefined,
+    },
     modelPresetRepository: {
       list: async (ws: string) => [{ ws }],
       getDefault: async (ws: string) => ({ ws }),
       upsert: async () => undefined,
+      get: async (ws: string) => ({ ws }),
+      remove: async () => undefined,
     },
     // The agent-context run-path reads: a block's linked docs/tasks + provisioned environment.
     documentRepository: {
@@ -139,13 +151,25 @@ function makeRegistry(): {
       getByBlock: async (ws: string) => ({ ws }),
       get: async (ws: string) => ({ ws }),
     },
-    serviceFragmentDefaultsRepository: { get: async (ws: string) => [{ ws }] },
+    serviceFragmentDefaultsRepository: {
+      get: async (ws: string) => [{ ws }],
+      set: async () => undefined,
+    },
     pipelineScheduleRepository: {
       list: async (ws: string) => [{ ws }],
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      remove: async () => undefined,
+      insertRun: async () => undefined,
+      updateRun: async () => undefined,
+      listRuns: async (ws: string) => [{ ws }],
     },
-    trackerSettingsRepository: { get: async (ws: string) => ({ ws }) },
+    trackerSettingsRepository: {
+      get: async (ws: string) => ({ ws }),
+      put: async () => undefined,
+    },
     notificationRepository: {
       listOpen: async (ws: string) => [{ ws }],
       findOpenByBlock: async (ws: string) => ({ ws }),
@@ -589,6 +613,65 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
       await expect(remoteRegistry()[repo]![method]!('ws_out', { id: 'p_1' })).rejects.toMatchObject(
         { code: 'not_found' },
       )
+    })
+  }
+})
+
+describe('settings, preset & schedule management surface (workspace-scoped writes)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The management methods a mothership-mode SPA drives to SAVE settings/presets/schedules (the
+  // matching reads were already exposed for the board load). Each takes the workspaceId as arg0
+  // and reuses the `workspace` rule; `args` are the trailing arguments after it. Value-returning
+  // methods (`echoes: true`) echo the workspaceId so we prove the call reached the bound
+  // workspace; void writes just resolve.
+  const WRITES: Array<{ repo: string; method: string; args: unknown[]; echoes?: boolean }> = [
+    { repo: 'workspaceSettingsRepository', method: 'upsert', args: [{ storeAgentContext: true }] },
+    { repo: 'trackerSettingsRepository', method: 'put', args: [{}] },
+    { repo: 'serviceFragmentDefaultsRepository', method: 'set', args: [['frag_1']] },
+    { repo: 'mergePresetRepository', method: 'get', args: ['preset_1'], echoes: true },
+    { repo: 'mergePresetRepository', method: 'remove', args: ['preset_1'] },
+    { repo: 'modelPresetRepository', method: 'get', args: ['preset_1'], echoes: true },
+    { repo: 'modelPresetRepository', method: 'remove', args: ['preset_1'] },
+    { repo: 'pipelineScheduleRepository', method: 'get', args: ['sched_1'], echoes: true },
+    { repo: 'pipelineScheduleRepository', method: 'upsert', args: [{ id: 'sched_1' }] },
+    { repo: 'pipelineScheduleRepository', method: 'remove', args: ['sched_1'] },
+    { repo: 'pipelineScheduleRepository', method: 'insertRun', args: [{ id: 'run_1' }] },
+    {
+      repo: 'pipelineScheduleRepository',
+      method: 'updateRun',
+      args: ['run_1', { status: 'done' }],
+    },
+    { repo: 'pipelineScheduleRepository', method: 'listRuns', args: ['sched_1'], echoes: true },
+  ]
+
+  for (const { repo, method, args, echoes } of WRITES) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoes) {
+        const echoed = Array.isArray(result) ? result[0] : result
+        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
     })
   }
 })
