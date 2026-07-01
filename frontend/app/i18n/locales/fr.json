@@ -437,6 +437,7 @@
       "envInjectionHint": "À la compilation, injecte les URL du backend comme variables d'environnement de compilation ; À l'exécution, les écrit dans un shim window.env. Notez que votre outil de build peut n'exposer au navigateur que les variables préfixées (p. ex. VITE_) ; nommez donc les liaisons selon sa convention.",
       "previewEnabled": "Activer l'aperçu navigable",
       "previewHint": "Maintient un aperçu servi en cours d'exécution avec une URL cliquable. Uniquement pour les runtimes Local et Node.",
+      "previewUnsupported": "Ce déploiement ne peut pas héberger d'aperçu navigable. Exécutez sur un déploiement Local ou Node pour conserver un aperçu servi avec une URL cliquable.",
       "bindings": {
         "title": "Liaisons du backend",
         "hint": "Chaque variable d'environnement que le frontend lit pour une URL en amont, et où elle se résout : l'environnement éphémère d'un service lié, ou un stub WireMock.",

@@ -85,4 +85,16 @@ describe('Node auth gate wiring', () => {
     const body = (await res.json()) as { patLogin?: { providers: string[] } }
     expect(body.patLogin?.providers).toEqual(['github', 'gitlab'])
   })
+
+  // The browsable-preview capability is a local/node differentiator (the Worker's auth.spec
+  // pins it `false`): Node can keep a built frontend served on a host-reachable URL, so it
+  // advertises `frontendPreview.supported: true` and the SPA offers the `previewEnabled` toggle.
+  it('advertises browsable-preview support on the Node facade', async () => {
+    const call = makeApp(AUTH_ENABLED)
+    const res = await call('GET', '/auth/config')
+    const body = (await res.json()) as {
+      infrastructure?: { frontendPreview?: { supported?: boolean } }
+    }
+    expect(body.infrastructure?.frontendPreview?.supported).toBe(true)
+  })
 })

@@ -437,6 +437,7 @@
       "envInjectionHint": "En compilación inyecta las URL del backend como variables de entorno de compilación; En ejecución las escribe en un shim de window.env. Ten en cuenta que tu herramienta de compilación puede exponer al navegador solo variables con prefijo (p. ej. VITE_), así que nombra los enlaces según su convención.",
       "previewEnabled": "Activar vista previa navegable",
       "previewHint": "Mantiene una vista previa servida en ejecución con una URL clicable. Solo en los entornos Local y Node.",
+      "previewUnsupported": "Este despliegue no puede alojar una vista previa navegable. Ejecuta en un despliegue Local o Node para mantener una vista previa servida con una URL clicable.",
       "bindings": {
         "title": "Vinculaciones del backend",
         "hint": "Cada variable de entorno que el frontend lee para una URL upstream, y dónde se resuelve: el entorno efímero de un servicio vinculado, o un stub de WireMock.",

@@ -18,7 +18,14 @@ import type {
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
+const auth = useAuthStore()
 const { t } = useI18n()
+
+// A browsable preview needs a long-lived host serve, so it is a local/node runtime capability
+// the deployment advertises (`infrastructure.frontendPreview.supported`); the Worker reports it
+// unsupported. Default to true until the auth handshake resolves so the toggle isn't briefly
+// disabled on a runtime that does support it.
+const previewSupported = computed(() => auth.infrastructure?.frontendPreview?.supported !== false)
 
 const config = computed<FrontendConfig>(() => props.block.frontendConfig ?? { backendBindings: [] })
 const bindings = computed(() => config.value.backendBindings ?? [])
@@ -334,18 +341,23 @@ function removeBinding(index: number) {
       </div>
     </div>
 
-    <!-- Browsable preview (local/node only). -->
+    <!-- Browsable preview (local/node only; the Worker reports it unsupported). -->
     <div class="border-t border-slate-800 pt-2">
       <UCheckbox
-        :model-value="config.previewEnabled === true"
+        :model-value="previewSupported && config.previewEnabled === true"
         :label="t('inspector.frontendConfig.previewEnabled')"
+        :disabled="!previewSupported"
         size="xs"
         @update:model-value="
           (v: boolean | 'indeterminate') => save({ previewEnabled: v === true ? true : undefined })
         "
       />
       <p class="mt-1 text-[11px] leading-snug text-slate-500">
-        {{ t('inspector.frontendConfig.previewHint') }}
+        {{
+          previewSupported
+            ? t('inspector.frontendConfig.previewHint')
+            : t('inspector.frontendConfig.previewUnsupported')
+        }}
       </p>
     </div>
   </div>

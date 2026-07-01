@@ -125,6 +125,16 @@ export const infrastructureCapabilitiesSchema = v.object({
     available: v.array(testEnvBackendKindSchema),
     active: testEnvBackendKindSchema,
   }),
+  /**
+   * Whether this deployment can host a long-lived, BROWSABLE frontend preview (the
+   * `frontendConfig.previewEnabled` toggle on a `frontend` frame). A browsable preview keeps the
+   * built app served on a host-reachable URL, which needs a long-lived host serve — so it is a
+   * genuine local/node differentiator. The Worker serves only the self-contained UI-test
+   * container (built, tested, and torn down with the run), so it reports `supported: false` and
+   * the SPA disables the preview toggle there. `supported: true` means the runtime CAN host a
+   * preview; a specific frontend still opts in per-frame via `previewEnabled`.
+   */
+  frontendPreview: v.object({ supported: v.boolean() }),
 })
 export type InfrastructureCapabilities = v.InferOutput<typeof infrastructureCapabilitiesSchema>
 
