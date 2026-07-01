@@ -10,8 +10,11 @@ import type {
 import type {
   KubernetesManifestSource,
   KubernetesRenderer,
+  ProvisioningComposeServiceCandidate,
+  ProvisioningManifestRootCandidate,
   ProvisioningOverlayCandidate,
   ProvisioningRecommendation,
+  ProvisioningServiceDirCandidate,
 } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
@@ -255,6 +258,23 @@ function applyOverlay(candidate: ProvisioningOverlayCandidate) {
   setKubePath(candidate.path)
 }
 
+// Point the manifest path at a different k8s root (and match its renderer) the user picks.
+function applyManifestRoot(candidate: ProvisioningManifestRootCandidate) {
+  setKubePath(candidate.path)
+  setKubeRenderer(candidate.renderer)
+}
+
+// Point the manifest path at a different root-shared monorepo deploy slice the user picks.
+function applyServiceDir(candidate: ProvisioningServiceDirCandidate) {
+  setKubePath(candidate.path)
+}
+
+// Point the compose file at the picked candidate's file. The service KEY is advisory (surfaced
+// as a note only) — the compose backend targets the file, not a single service — so we set the path.
+function applyComposeService(candidate: ProvisioningComposeServiceCandidate) {
+  setComposePath(candidate.composePath)
+}
+
 function provisionTypeLabel(type: ProvisionType): string {
   return t(`inspector.testConfig.provisionTypes.${type}`)
 }
@@ -350,6 +370,42 @@ function setSize(value: InstanceSize) {
             }}
           </p>
 
+          <div v-if="detectResult.serviceDirCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.serviceDirTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="s in detectResult.serviceDirCandidates"
+                :key="s.path"
+                :color="kubePath === s.path ? 'primary' : 'neutral'"
+                :variant="kubePath === s.path ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyServiceDir(s)"
+              >
+                {{ s.name }}
+              </UButton>
+            </div>
+          </div>
+
+          <div v-if="detectResult.manifestRootCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.manifestRootTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="r in detectResult.manifestRootCandidates"
+                :key="r.path"
+                :color="kubePath === r.path ? 'primary' : 'neutral'"
+                :variant="kubePath === r.path ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyManifestRoot(r)"
+              >
+                {{ r.name }}
+              </UButton>
+            </div>
+          </div>
+
           <div v-if="detectResult.overlayCandidates?.length" class="space-y-1">
             <span class="text-[11px] text-slate-400">{{
               t('inspector.testConfig.detect.overlayTitle')
@@ -364,6 +420,24 @@ function setSize(value: InstanceSize) {
                 @click="applyOverlay(o)"
               >
                 {{ o.name }}
+              </UButton>
+            </div>
+          </div>
+
+          <div v-if="detectResult.composeServiceCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.composeServiceTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="c in detectResult.composeServiceCandidates"
+                :key="c.service"
+                :color="composePath === c.composePath ? 'primary' : 'neutral'"
+                :variant="composePath === c.composePath ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyComposeService(c)"
+              >
+                {{ c.service }}
               </UButton>
             </div>
           </div>
