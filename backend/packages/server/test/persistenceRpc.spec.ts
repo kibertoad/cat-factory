@@ -867,18 +867,41 @@ describe('advanced review / session management surface (workspace-scoped)', () =
   // The clarity-review / brainstorm / consensus windows: run + re-read + persist/replace as the
   // window iterates. Every method takes the workspaceId as arg0 (the `upsert(workspaceId, review)`
   // signature carries it positionally → the `workspace` rule). `args` are the trailing arguments
-  // after it; value-returning methods (`echoes: true`) echo the workspaceId, void writes resolve.
-  const METHODS: Array<{ repo: string; method: string; args: unknown[]; echoes?: boolean }> = [
+  // after it; value-returning reads (`echoed`) echo the FULL bound arg set so the round-trip can
+  // assert every argument reached the repo in order, void writes resolve `undefined`.
+  const METHODS: Array<{
+    repo: string
+    method: string
+    args: unknown[]
+    // The object a value-returning read echoes back (workspaceId + trailing args), asserting the
+    // whole argument list survived the hop in order. Absent → a void write (resolves `undefined`).
+    echoed?: Record<string, unknown>
+  }> = [
     // requirement-review: getByBlock/get/upsert were exposed earlier; deleteByBlock completes it.
-    { repo: 'requirementReviewRepository', method: 'get', args: ['rev_1'], echoes: true },
+    {
+      repo: 'requirementReviewRepository',
+      method: 'get',
+      args: ['rev_1'],
+      echoed: { ws: 'ws_in', id: 'rev_1' },
+    },
     { repo: 'requirementReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
     { repo: 'requirementReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
     // clarity-review (bug-report triage).
-    { repo: 'clarityReviewRepository', method: 'get', args: ['rev_1'], echoes: true },
+    {
+      repo: 'clarityReviewRepository',
+      method: 'get',
+      args: ['rev_1'],
+      echoed: { ws: 'ws_in', id: 'rev_1' },
+    },
     { repo: 'clarityReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
     { repo: 'clarityReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
     // brainstorm (structured dialogue, keyed by block+stage).
-    { repo: 'brainstormSessionRepository', method: 'get', args: ['sess_1'], echoes: true },
+    {
+      repo: 'brainstormSessionRepository',
+      method: 'get',
+      args: ['sess_1'],
+      echoed: { ws: 'ws_in', id: 'sess_1' },
+    },
     { repo: 'brainstormSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
     {
       repo: 'brainstormSessionRepository',
@@ -886,18 +909,35 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       args: ['blk_1', 'discovery'],
     },
     // consensus (multi-strategy orchestration, keyed by run step).
-    { repo: 'consensusSessionRepository', method: 'get', args: ['sess_1'], echoes: true },
-    { repo: 'consensusSessionRepository', method: 'getByStep', args: ['ex_1', 0], echoes: true },
-    { repo: 'consensusSessionRepository', method: 'getByBlock', args: ['blk_1'], echoes: true },
+    {
+      repo: 'consensusSessionRepository',
+      method: 'get',
+      args: ['sess_1'],
+      echoed: { ws: 'ws_in', id: 'sess_1' },
+    },
+    {
+      repo: 'consensusSessionRepository',
+      method: 'getByStep',
+      args: ['ex_1', 0],
+      echoed: { ws: 'ws_in', executionId: 'ex_1', stepIndex: 0 },
+    },
+    {
+      repo: 'consensusSessionRepository',
+      method: 'getByBlock',
+      args: ['blk_1'],
+      echoed: { ws: 'ws_in', blockId: 'blk_1' },
+    },
     { repo: 'consensusSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
   ]
 
-  for (const { repo, method, args, echoes } of METHODS) {
+  for (const { repo, method, args, echoed } of METHODS) {
     it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
       const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
-      if (echoes) {
-        const echoed = Array.isArray(result) ? result[0] : result
-        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      if (echoed) {
+        // Assert the FULL bound arg set round-tripped (workspaceId + every trailing arg in order),
+        // not just that the call was authorized — a read that dropped or reordered an arg would
+        // slip past a bare `{ ws }` check.
+        expect(Array.isArray(result) ? result[0] : result).toMatchObject(echoed)
       } else {
         expect(result).toBeUndefined()
       }
@@ -910,4 +950,39 @@ describe('advanced review / session management surface (workspace-scoped)', () =
       })
     })
   }
+
+  // A void write resolves `undefined`, so the loop above can't see WHAT reached the repo. Drive a
+  // capturing registry to prove the write path forwards the workspaceId + payload (and, for the
+  // block+stage delete, every positional key) in order across the round-trip — the write-path
+  // analogue of the `echoed` reads above.
+  it('forwards the workspaceId + payload to a write in order', async () => {
+    const calls: unknown[][] = []
+    const { registry, ...resolvers } = makeRegistry()
+    const capturing: PersistenceRegistry = {
+      ...registry,
+      consensusSessionRepository: {
+        ...registry.consensusSessionRepository,
+        upsert: async (...a: unknown[]) => void calls.push(a),
+      },
+      brainstormSessionRepository: {
+        ...registry.brainstormSessionRepository,
+        deleteByBlockStage: async (...a: unknown[]) => void calls.push(a),
+      },
+    }
+    const client = inProcessClient({
+      registry: capturing,
+      ...resolvers,
+      scope: { accountIds: [ACCOUNT], userId: USER },
+    })
+    const remote = createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+
+    await remote.consensusSessionRepository!.upsert!('ws_in', { id: 'sess_1' })
+    await remote.brainstormSessionRepository!.deleteByBlockStage!('ws_in', 'blk_1', 'discovery')
+
+    expect(calls).toContainEqual(['ws_in', { id: 'sess_1' }])
+    expect(calls).toContainEqual(['ws_in', 'blk_1', 'discovery'])
+  })
 })
