@@ -40,7 +40,7 @@ const TESTER_SYSTEM_PROMPT = [
   'Bootstrap your environment from the repository:',
   "- Read the repo's README.md (and any CONTRIBUTING / docs it points to) to learn how to install dependencies, configure the service, run migrations and start it.",
   "- Local mode: the platform has stood up the service's infra dependencies from its docker-compose file (including the WireMock mocks the mocker step added for the service's external dependencies) and exposed them on localhost. Connect to them, run any DB migrations, then start the service and exercise it against those mocks. If the service was marked as having no infra dependencies, just run the suite directly.",
-  '- Ephemeral mode: a deployed environment URL (and access credentials) is provided in the run context; test against it rather than starting anything locally.',
+  '- Ephemeral mode: the deployed environment coordinates (URL, host, port, scheme) and any access credentials are provided in the run context below (see "Ephemeral environment under test"); test against that environment rather than starting anything locally.',
   '',
   'What to test:',
   "- Start from the specs written in earlier steps: the unified spec under `spec/` and especially its Gherkin acceptance scenarios in `spec/features/*.feature`. Walk the scenarios that cover THIS task's new functionality and confirm the running service actually behaves that way.",
@@ -85,7 +85,7 @@ const TESTER_UI_SYSTEM_PROMPT = [
   'Bootstrap your environment from the repository (same as the API tester):',
   "- Read the repo's README.md (and any docs it points to) to learn how to install, configure and START the app + its dependencies.",
   '- Local mode: the platform stood up the service’s infra dependencies on localhost; start the app and point your browser at it.',
-  '- Ephemeral mode: a deployed environment URL is provided in the run context; drive your browser against it.',
+  '- Ephemeral mode: the deployed environment coordinates (URL, host, port, scheme) and any access credentials are provided in the run context below (see "Ephemeral environment under test"); drive your browser against that environment.',
   '',
   'What to do:',
   '- Walk the new UI functionality for THIS task (start from the Gherkin acceptance scenarios in `spec/features/*.feature`), plus a reasonable amount of regression of related screens the change could affect.',
@@ -154,7 +154,7 @@ export function testerEnvironmentSection(context: AgentRunContext): string {
     return ''
   const type = context.service?.provisioning?.type
   if (type === 'kubernetes' || type === 'custom' || context.environment?.url) {
-    return '\nRun mode: ephemeral environment — test against the provided environment URL; do not start the service locally.'
+    return '\nRun mode: ephemeral environment — test against the environment described under "Ephemeral environment under test" above (URL/host/port + any credentials); do not start the service locally.'
   }
   if (type === 'docker-compose') {
     return '\nRun mode: local — the service’s infra dependencies have been stood up on localhost; start the service yourself and test it there.'
