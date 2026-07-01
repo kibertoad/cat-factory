@@ -12,7 +12,8 @@ import type { DriveConfig } from './drive.js'
 // the expired/failed drive job and by the stale-run sweeper (which re-drives stale
 // `env-config-repair` runs too).
 
-const QUEUE = 'env-config-repair.advance'
+export const ENV_CONFIG_REPAIR_QUEUE = 'env-config-repair.advance'
+const QUEUE = ENV_CONFIG_REPAIR_QUEUE
 // `exclusive` so (queue, singletonKey=jobId) is unique across created/active/retry — at most
 // one drive job per repair run alive, and duplicate sends are no-ops.
 const QUEUE_POLICY = 'exclusive' as const

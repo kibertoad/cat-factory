@@ -90,6 +90,9 @@ export function executionRuntime(config: AppConfig, env: NodeJS.ProcessEnv): Exe
   const sweeper: SweeperConfig = {
     intervalMs: Math.max(1, Number(env.STALE_RUN_SWEEP_MINUTES) || 5) * 60_000,
     leaseMs: Math.max(1, Number(env.STALE_RUN_LEASE_MINUTES) || 10) * 60_000,
+    // A run orphaned this long (no live driver) is failed `stalled` instead of re-driven
+    // forever. Generous by default so only genuinely unrecoverable runs are given up on.
+    hardStallMs: Math.max(1, Number(env.STALE_RUN_HARD_FAIL_MINUTES) || 60) * 60_000,
   }
 
   const concurrency = Math.max(1, num(env.EXECUTION_CONCURRENCY) ?? 10)

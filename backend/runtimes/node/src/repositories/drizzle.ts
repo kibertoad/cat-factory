@@ -19,6 +19,7 @@ import type {
   CloudProvider,
   AgentRunRef,
   AgentRunRepository,
+  StaleAgentRun,
   Block,
   BlockPatch,
   BlockRepository,
@@ -626,21 +627,46 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
       : null
   }
 
-  async listStale(olderThanEpochMs: number): Promise<AgentRunRef[]> {
+  async listStale(olderThanEpochMs: number): Promise<StaleAgentRun[]> {
     const rows = await this.db
-      .select({ workspaceId: agentRuns.workspace_id, id: agentRuns.id, kind: agentRuns.kind })
+      .select({
+        workspaceId: agentRuns.workspace_id,
+        id: agentRuns.id,
+        kind: agentRuns.kind,
+        updatedAt: agentRuns.updated_at,
+      })
       .from(agentRuns)
       .where(and(eq(agentRuns.status, 'running'), lt(agentRuns.updated_at, olderThanEpochMs)))
       .orderBy(agentRuns.updated_at)
     return rows.map((r) => ({
       workspaceId: r.workspaceId,
       id: r.id,
+      updatedAt: r.updatedAt,
       kind: decodeEnum(agentRunKindSchema, r.kind, {
         table: 'agent_runs',
         column: 'kind',
         id: r.id,
       }),
     }))
+  }
+
+  async liveRunIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return []
+    const live: string[] = []
+    // Chunk the IN list (batch, not a point-read per id) so a large set stays one query each.
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select({ id: agentRuns.id })
+        .from(agentRuns)
+        .where(
+          and(
+            inArray(agentRuns.status, ['running', 'blocked', 'paused', 'pending']),
+            inArray(agentRuns.id, ids.slice(i, i + 500)),
+          ),
+        )
+      for (const r of rows) live.push(r.id)
+    }
+    return live
   }
 }
 

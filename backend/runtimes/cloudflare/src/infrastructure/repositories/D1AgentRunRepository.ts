@@ -1,5 +1,5 @@
 import { agentRunKindSchema } from '@cat-factory/contracts'
-import type { AgentRunRef, AgentRunRepository } from '@cat-factory/kernel'
+import type { AgentRunRef, AgentRunRepository, StaleAgentRun } from '@cat-factory/kernel'
 import { decodeEnum } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -35,23 +35,43 @@ export class D1AgentRunRepository implements AgentRunRepository {
       : null
   }
 
-  async listStale(olderThanEpochMs: number): Promise<AgentRunRef[]> {
+  async listStale(olderThanEpochMs: number): Promise<StaleAgentRun[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT workspace_id, id, kind FROM agent_runs
+        `SELECT workspace_id, id, kind, updated_at FROM agent_runs
          WHERE status = 'running' AND updated_at < ?
          ORDER BY updated_at`,
       )
       .bind(olderThanEpochMs)
-      .all<{ workspace_id: string; id: string; kind: string }>()
+      .all<{ workspace_id: string; id: string; kind: string; updated_at: number }>()
     return (results ?? []).map((r) => ({
       workspaceId: r.workspace_id,
       id: r.id,
+      updatedAt: r.updated_at,
       kind: decodeEnum(agentRunKindSchema, r.kind, {
         table: 'agent_runs',
         column: 'kind',
         id: r.id,
       }),
     }))
+  }
+
+  async liveRunIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return []
+    const live: string[] = []
+    // Chunk the IN list so a large set never blows the SQL variable limit (batch, not N+1).
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT id FROM agent_runs
+           WHERE status IN ('running', 'blocked', 'paused', 'pending') AND id IN (${placeholders})`,
+        )
+        .bind(...chunk)
+        .all<{ id: string }>()
+      for (const r of results ?? []) live.push(r.id)
+    }
+    return live
   }
 }

@@ -224,4 +224,23 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   async listPoolMembers(): Promise<string[]> {
     return []
   }
+
+  async listRunContainers(
+    exec: ContainerExec,
+  ): Promise<Array<{ runId: string; containerId: string }>> {
+    // Running (non-terminal) managed VMs. The deterministic name IS `cf-<runId>`, so the run
+    // id is recovered by stripping the prefix (run ids only ever use `[a-zA-Z0-9_]`, which the
+    // name sanitizer leaves untouched, so this round-trips). Pooling is unsupported here, so
+    // every managed container is a per-run one.
+    const rows = parseList((await exec(['list', '--all', '--format', 'json'])).stdout).filter(
+      (r) => isManaged(r) && !TERMINAL_STATUSES.has(r.status),
+    )
+    return rows
+      .map((r) => {
+        const handle = r.name ?? r.id
+        const named = handle.startsWith(NAME_PREFIX) ? handle : (r.id ?? handle)
+        return { runId: named.slice(NAME_PREFIX.length), containerId: handle }
+      })
+      .filter((c) => c.runId && c.containerId)
+  }
 }

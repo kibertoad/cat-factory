@@ -169,6 +169,7 @@
       "environmentFailed": "Environment provisioning failed",
       "bootstrapFailed": "Bootstrap failed",
       "runFailed": "Run failed",
+      "stalled": "Run stalled",
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "showDetail": "Show detail",

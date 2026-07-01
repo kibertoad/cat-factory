@@ -180,8 +180,11 @@ describe('durable execution: sweeper', () => {
         redrove.push(ref)
       },
       finalizeOrphan: async () => {},
+      failStalled: async () => {},
       clock,
       leaseMs: -60_000,
+      // Large deadline: these cases exercise redrive/finalize, not the hard-stall path.
+      hardStallMs: 60 * 60 * 1000,
     })
 
     expect(result.redriven).toBeGreaterThanOrEqual(1)
@@ -208,8 +211,11 @@ describe('durable execution: sweeper', () => {
       finalizeOrphan: async (ref) => {
         finalized.push(ref)
       },
+      failStalled: async () => {},
       clock,
       leaseMs: -60_000,
+      // Large deadline: these cases exercise redrive/finalize, not the hard-stall path.
+      hardStallMs: 60 * 60 * 1000,
     })
 
     expect(result.redriven).toBe(0)
@@ -240,8 +246,11 @@ describe('durable execution: sweeper', () => {
       finalizeOrphan: async (ref) => {
         finalized.push(ref)
       },
+      failStalled: async () => {},
       clock,
       leaseMs: -60_000,
+      // Large deadline: these cases exercise redrive/finalize, not the hard-stall path.
+      hardStallMs: 60 * 60 * 1000,
     })
 
     expect(result.finalized).toBeGreaterThanOrEqual(1)
@@ -269,11 +278,52 @@ describe('durable execution: sweeper', () => {
         redrove.push(ref)
       },
       finalizeOrphan: async () => {},
+      failStalled: async () => {},
       clock,
       leaseMs: -60_000,
+      // Large deadline: these cases exercise redrive/finalize, not the hard-stall path.
+      hardStallMs: 60 * 60 * 1000,
     })
 
     expect(result.redriven).toBeGreaterThanOrEqual(1)
     expect(redrove.some((r) => r.id === 'boot_stale' && r.kind === 'bootstrap')).toBe(true)
+  })
+
+  it('fails a still-missing execution as stalled once past the hard-stall deadline', async () => {
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const redrove: AgentRunRef[] = []
+    const stalledRuns: AgentRunRef[] = []
+    const result = await sweepStuckRuns({
+      agentRunRepository,
+      // Instance never came back; recovery would just re-create-and-lose it forever.
+      instanceState: async () => 'missing',
+      redrive: async (ref) => {
+        redrove.push(ref)
+      },
+      finalizeOrphan: async () => {},
+      failStalled: async (ref) => {
+        stalledRuns.push(ref)
+      },
+      clock,
+      leaseMs: -60_000,
+      // Negative deadline => the just-created run counts as past the hard-stall window.
+      hardStallMs: -60_000,
+    })
+
+    expect(result.stalled).toBeGreaterThanOrEqual(1)
+    expect(stalledRuns.some((r) => r.id === instance.id && r.kind === 'execution')).toBe(true)
+    // Hard-stalled runs are failed, not re-driven.
+    expect(redrove.some((r) => r.id === instance.id)).toBe(false)
+
+    const failed = await starter.executionRepository.get(wsId, instance.id)
+    expect(failed?.status).toBe('failed')
+    expect(failed?.failure?.kind).toBe('stalled')
   })
 })

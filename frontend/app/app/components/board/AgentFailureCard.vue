@@ -24,6 +24,9 @@ const title = computed(() => {
   // An `environment` failure means the deployer's EnvironmentProvider could not provision —
   // name it, with the provider's verbatim error in the collapsible detail below.
   if (failure.value?.kind === 'environment') return t('board.failure.environmentFailed')
+  // A `stalled` failure means the run's durable driver was lost (crashed/restarted
+  // orchestrator) and recovery couldn't resume it — name it so it doesn't read as an agent bug.
+  if (failure.value?.kind === 'stalled') return t('board.failure.stalled')
   return props.run.kind === 'bootstrap'
     ? t('board.failure.bootstrapFailed')
     : t('board.failure.runFailed')

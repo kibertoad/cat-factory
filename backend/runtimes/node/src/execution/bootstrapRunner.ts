@@ -12,7 +12,8 @@ import type { DriveConfig } from './drive.js'
 // retry of the expired/failed drive job and by the stale-run sweeper (which now re-drives
 // stale `bootstrap` runs too).
 
-const QUEUE = 'bootstrap.advance'
+export const BOOTSTRAP_QUEUE = 'bootstrap.advance'
+const QUEUE = BOOTSTRAP_QUEUE
 // `exclusive` so (queue, singletonKey=jobId) is unique across created/active/retry — at
 // most one drive job per bootstrap run alive, and duplicate sends are no-ops. Mirrors the
 // execution advance queue.

@@ -195,7 +195,14 @@ export async function start(
   // timer fires), so start them AFTER the listener binds — the server accepts requests a
   // few ms sooner. The pg-boss workers above stay before listen so an enqueued job always
   // has a consumer.
-  const stopSweeper = startStaleRunSweeper(boss, container, runtime.sweeper, runtime.queue, logger)
+  const stopSweeper = startStaleRunSweeper(
+    boss,
+    pool,
+    container,
+    runtime.sweeper,
+    runtime.queue,
+    logger,
+  )
   // Bound the unbounded tables (`token_usage`, the heavy `llm_call_metrics`): the Worker
   // prunes these from cron, Node has none, so a timer mirrors it. Without this the
   // observability sink — full per-call prompt/response — grows forever on Postgres.

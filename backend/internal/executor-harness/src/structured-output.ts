@@ -361,12 +361,17 @@ async function callSubscriptionRepair<T>(
       },
     ],
   }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-    signal: access.signal,
-  })
+  const res = await fetchRepairWithRetry(
+    () =>
+      fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: access.signal,
+      }),
+    access.signal,
+    access.jobId,
+  )
   if (!res.ok) {
     // A vendor 4xx body can echo the API key/token back; `redact` applies both the
     // GitHub-shaped pattern rules AND scrubs the leased subscription credential (the raw
@@ -387,12 +392,108 @@ async function callSubscriptionRepair<T>(
 
 /** POST a chat-completions body to the proxy with the session bearer token. */
 function post(url: string, access: ProxyAccess, body: unknown): Promise<Response> {
-  return fetch(url, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${access.sessionToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: access.signal,
+  return fetchRepairWithRetry(
+    () =>
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${access.sessionToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: access.signal,
+      }),
+    access.signal,
+    access.jobId,
+  )
+}
+
+// A single structured-repair call is the LAST line of defence before an unparseable agent
+// reply fails the whole run. A TRANSIENT upstream blip on that one call — most importantly a
+// 429 rate-limit (which once turned a recoverable parse into a hard `no structured result`
+// failure), but also a 5xx or a dropped connection — must not be fatal, so retry it with
+// exponential backoff honoring `Retry-After`.
+const REPAIR_RETRY_ATTEMPTS = 3
+const REPAIR_RETRY_BASE_MS = 500
+const REPAIR_RETRY_MAX_MS = 8_000
+
+/** `Retry-After` (seconds or HTTP-date) as ms, capped; undefined if absent/invalid. */
+function repairRetryAfterMs(res: Response): number | undefined {
+  const raw = res.headers.get('retry-after')
+  if (!raw) return undefined
+  const secs = Number(raw)
+  if (Number.isFinite(secs)) return secs > 0 ? Math.min(secs * 1000, REPAIR_RETRY_MAX_MS) : undefined
+  const at = Date.parse(raw)
+  if (Number.isNaN(at)) return undefined
+  const ms = at - Date.now()
+  return ms > 0 ? Math.min(ms, REPAIR_RETRY_MAX_MS) : undefined
+}
+
+/** Exponential backoff (base 500ms, capped 8s) with up to 25% positive jitter. */
+function repairBackoffMs(attempt: number): number {
+  const base = Math.min(REPAIR_RETRY_MAX_MS, REPAIR_RETRY_BASE_MS * 2 ** (attempt - 1))
+  return base + Math.floor(base * 0.25 * Math.random())
+}
+
+/** Sleep `ms`, rejecting early if the abort signal fires. */
+async function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return
+  if (signal?.aborted) throw signal.reason ?? new Error('aborted')
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason ?? new Error('aborted'))
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', onAbort, { once: true })
   })
+}
+
+/**
+ * Run a repair fetch, retrying TRANSIENT failures (HTTP 429 / >=500 / network error) with
+ * exponential backoff honoring `Retry-After`. A caller abort is terminal. Non-transient
+ * responses (2xx/4xx, e.g. a `response_format` rejection) and the final attempt return
+ * as-is — the caller's existing `!res.ok` handling then produces the repair diagnostic
+ * without this masking a genuine, non-retryable error.
+ */
+async function fetchRepairWithRetry(
+  doFetch: () => Promise<Response>,
+  signal?: AbortSignal,
+  jobId?: string,
+): Promise<Response> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= REPAIR_RETRY_ATTEMPTS; attempt++) {
+    if (signal?.aborted) throw signal.reason ?? new Error('aborted')
+    let res: Response | undefined
+    try {
+      res = await doFetch()
+    } catch (err) {
+      // A caller/watchdog abort is terminal; a network error is transient → retry.
+      if (signal?.aborted) throw err
+      lastError = err
+    }
+    if (res) {
+      const transient = res.status === 429 || res.status >= 500
+      if (!transient || attempt >= REPAIR_RETRY_ATTEMPTS) return res
+      const wait = repairRetryAfterMs(res) ?? repairBackoffMs(attempt)
+      // Discard the unread body before retrying so the connection can be reused.
+      await res.body?.cancel().catch(() => {})
+      log.warn('structured-output: repair upstream transient failure — backing off', {
+        jobId,
+        status: res.status,
+        attempt,
+        waitMs: wait,
+      })
+      await abortableDelay(wait, signal)
+      continue
+    }
+    if (attempt >= REPAIR_RETRY_ATTEMPTS) break
+    await abortableDelay(repairBackoffMs(attempt), signal)
+  }
+  throw lastError instanceof Error ? lastError : new Error('repair request failed after retries')
 }
 
 /** Run `parse`, treating a thrown error (e.g. `extractJsonObject`) as "no value". */

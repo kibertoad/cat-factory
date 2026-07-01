@@ -53,7 +53,7 @@ export type {
 export type { ConsensusSessionRepository } from './consensus-repositories.js'
 export type { ClarityReviewRepository } from './clarity-review-repositories.js'
 export type { BrainstormSessionRepository } from './brainstorm-repositories.js'
-export type { AgentRunRef, AgentRunRepository } from './agent-runs.js'
+export type { AgentRunRef, AgentRunRepository, StaleAgentRun } from './agent-runs.js'
 export type {
   HarnessKind,
   ModelProvider,
