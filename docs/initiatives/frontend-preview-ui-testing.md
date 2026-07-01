@@ -45,7 +45,7 @@ build on. Link the merged pilot PR here once it lands.
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
-| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | todo   | —                                                         |
+| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
 | 4c  | Surface/gate frontend pipelines (`pl_frontend`/`pl_visual`) to `frontend` frames     | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
@@ -171,3 +171,30 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     `--root-dir` (`mocks/`); the mocker prompt imports it instead of a private literal. The harness
     keeps its own literal copy (`frontend-infra.ts` `DEFAULTS`) because changing it is an image-tag
     bump — keep the two in lock-step.
+- Slice 4b conventions & gotchas:
+  - **An env is keyed by BOTH the task `block_id` AND the service `frame_id` — additive, not a
+    re-key.** The `deployer` still records `block_id` (the task it ran on), so the same-block
+    deployer→tester env projection (`RunDispatcher.attachEnvironmentProjection` /
+    `getHandleForBlock(instance.blockId)`) and per-task env supersede semantics are UNCHANGED. The
+    new `frame_id` column (`environments`, D1 `0030` ⇄ Drizzle `environments.frame_id`) is the
+    cross-frame discovery key: `RunDispatcher.deployerProvisionArgs` walks the block to its service
+    frame (`contextBuilder.resolveServiceFrameId`) and passes `ProvisionArgs.frameId`;
+    `AgentContextBuilder.resolveFrontendConfig` indexes the single `listHandles` read by
+    `handle.frameId` (NOT `blockId`) so a `frontend` frame's `service` binding — whose
+    `serviceBlockId` names a service FRAME — resolves to the live env. Do NOT re-key `block_id` to
+    the frame: it would break the tester lookup and collapse per-task envs.
+  - **`buildEnvironmentRecord` fans `frameId` in on BOTH the provisioned AND the failed-record
+    paths** (`recordProvisioned` + `persistFailedEnvironment`), so a failed deploy still carries
+    the frame it belonged to. Adding a required field to `EnvironmentRecord` makes every direct
+    constructor (only the in-memory test fake today) supply it.
+  - **The cross-runtime assertion is a positive mirror of the slice-3 refusal test.** Where slice
+    3 asserted a frontend UI-tester with NO live service is refused (`frontend-no-live-service`),
+    slice 4b asserts that provisioning the bound service's env (via a `deployer` on a task inside
+    its frame) lets the same UI-tester run START — pinning both the `frame_id` D1 ⇄ Drizzle
+    round-trip and the frame-keyed resolution. The happy-path binding→URL math stays covered by the
+    `resolveFrontendBindings` unit tests. A full browser-driving live-env e2e (the assembled SPA
+    round-trip) was NOT added here — the conformance start-gate assertion is the runtime-neutral
+    proof; an e2e that stands a real live backend up is a heavier, separate add.
+  - **`pl_frontend` stays `experimental` — but now for ONE reason, not two.** The live-service
+    keying caveat in its `seed.ts` comment is resolved; only the `ui`-image per-step routing
+    remains (still slice-3's deferred deploy-time step). Keep the label until that lands.
