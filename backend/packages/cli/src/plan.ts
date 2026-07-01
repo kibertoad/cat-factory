@@ -167,6 +167,12 @@ npm run dev        # Nuxt dev server on http://localhost:3000
 Open http://localhost:3000. \`NUXT_PUBLIC_API_BASE\` (in \`frontend/.env\`) points at
 \`${input.apiBase}\`.
 
+Local mode requires sign-in (per-user credentials can't be stored anonymously). Because
+\`${tokenVar}\` is set, the login screen offers **"Sign in with configured ${label} PAT"** —
+click it and the token's ${label} account becomes your signed-in identity (chosen once, it
+persists across refreshes and restarts). The token stays on the server; it is never shown in
+the browser.
+
 ## Rotating the ${label} token
 
 The token in \`local/.env\` (\`${tokenVar}\`) was minted at this URL with the right scopes
