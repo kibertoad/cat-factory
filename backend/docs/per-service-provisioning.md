@@ -15,9 +15,9 @@ live, and **how** that gets stood up when a pipeline's `deployer` step runs (and
 > a custom environment backend), [`local-k3s-environments.md`](./local-k3s-environments.md)
 > (pointing local mode at a local k3s), the
 > [`@cat-factory/deploy-harness` README](../internal/deploy-harness/README.md) (the render
-> container's contract), and the initiative tracker
-> [`docs/initiatives/per-service-provision-types.md`](../../docs/initiatives/per-service-provision-types.md)
-> (the full design + slice history).
+> container's contract), and the decision record
+> [`adr/0007-per-service-provisioning.md`](./adr/0007-per-service-provisioning.md)
+> (the design rationale + why the model looks the way it does).
 
 ## The what/where ÷ how split
 

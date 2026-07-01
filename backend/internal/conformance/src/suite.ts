@@ -2404,11 +2404,23 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         testConnection: async () => ({ ok: true, message: 'ok' }),
       }
 
+      // A code-defined custom PROVISION TYPE (the `custom` catalog half), registered by reference
+      // exactly like the backends. It must surface in the handlers bundle's `customTypes` marked
+      // `source: 'registered'` so the infra custom-type editor + the per-service provisioning
+      // picker can offer it — even with no workspace-defined rows.
+      const REGISTERED_TYPE = 'conformance-terraform'
+
       // The app-owned registries the harness injects, pre-loaded with the built-ins + the two
-      // custom backends — by reference, so the facade sees them regardless of module identity.
+      // custom backends + the registered custom manifest type — by reference, so the facade sees
+      // them regardless of module identity.
       const backendRegistries = createBackendRegistries()
       backendRegistries.environmentBackendRegistry.register(customEnvBackend)
       backendRegistries.runnerBackendRegistry.register(customRunnerBackend)
+      backendRegistries.customManifestTypeRegistry.register({
+        manifestId: REGISTERED_TYPE,
+        label: 'Conformance Terraform',
+        description: 'HCL plan + apply',
+      })
 
       const envManifest = {
         providerId: ENV_KIND,
@@ -2497,6 +2509,23 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(snap.body.runnerBackendKinds?.map((k) => k.kind)).toEqual(
           expect.arrayContaining(['manifest', 'kubernetes', RUNNER_KIND]),
         )
+      })
+
+      it('surfaces a programmatically-registered custom manifest type in the handlers bundle', async () => {
+        // A code-registered custom provision type must appear in the catalog the SPA reads (the
+        // infra custom-type editor + the per-service provisioning picker) WITHOUT any
+        // workspace-defined row, marked `source: 'registered'` (read-only). A facade that forgot
+        // to wire the `customManifestTypeRegistry` into `createCore` returns an empty catalog here.
+        const { call, createWorkspace } = harness.makeApp(undefined, { backendRegistries })
+        const { workspace } = await createWorkspace()
+        const bundle = await call<{
+          customTypes: { manifestId: string; label: string; source: string }[]
+        }>('GET', `/workspaces/${workspace.id}/environments/handlers`)
+        expect(bundle.status).toBe(200)
+        const registered = bundle.body.customTypes.find((t) => t.manifestId === REGISTERED_TYPE)
+        expect(registered).toBeDefined()
+        expect(registered!.label).toBe('Conformance Terraform')
+        expect(registered!.source).toBe('registered')
       })
 
       it('rejects a config whose kind collides with a reserved built-in (guard)', async () => {

@@ -260,7 +260,7 @@ describe('persistence RPC round-trip', () => {
 
   it('refuses a method outside the allow-list', async () => {
     const repos = remote()
-    // `delete` is wired on the fake repo but not in the pilot allow-list.
+    // `delete` is wired on the fake repo but not in the remote allow-list.
     await expect(
       (repos.workspaceRepository as unknown as { delete(id: string): Promise<void> }).delete(
         'ws_in',
@@ -339,7 +339,7 @@ describe('createRemoteRepositoryRegistry (full-surface, drift-proof)', () => {
     const repos = createRemoteRepositoryRegistry(registryClient()) as unknown as {
       workspaceRepository: { get(id: string): Promise<{ id: string } | null> }
     }
-    // No per-repo wiring: a repo the pilot proxy never enumerated still resolves and forwards.
+    // No per-repo wiring: a repo the proxy never enumerated still resolves and forwards.
     await expect(repos.workspaceRepository.get('ws_in')).resolves.toMatchObject({ id: 'ws_in' })
   })
 

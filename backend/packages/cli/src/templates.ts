@@ -3,11 +3,15 @@
 // the generated project works standalone outside the monorepo.
 
 // Pinned library versions the scaffolded project depends on. Pinned (not the `latest` dist-tag)
-// so a scaffold is reproducible and the backend/frontend can't resolve to skewed releases; the
-// caret allows in-range patch/minor pickups. Bump these when cutting a CLI release against newer
-// libraries. (`@cat-factory/local-server` and `@cat-factory/app` version independently.)
-export const LOCAL_SERVER_VERSION = '^0.19.5'
-export const APP_VERSION = '^0.47.7'
+// so a scaffold is reproducible and the backend/frontend can't resolve to skewed releases. These
+// are `0.x` libraries, so the caret only picks up in-range PATCH releases (`^0.33.0` allows
+// `0.33.x` but NOT `0.34.0`) — every minor bump of a library needs a manual refresh here. Keep
+// the caret covering the current published versions of `@cat-factory/local-server` and
+// `@cat-factory/app`; `templates.pins.test.ts` fails the build if a pin drifts out of range of the
+// workspace version. Bump these when cutting a CLI release against newer libraries. (The two
+// libraries version independently.)
+export const LOCAL_SERVER_VERSION = '^0.33.0'
+export const APP_VERSION = '^0.63.1'
 export const NUXT_VERSION = '^4.4.8'
 export const TYPES_NODE_VERSION = '^26.0.1'
 export const TYPESCRIPT_VERSION = '7.0.1-rc'

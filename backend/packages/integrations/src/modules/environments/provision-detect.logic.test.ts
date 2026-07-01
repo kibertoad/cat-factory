@@ -318,4 +318,217 @@ spec:
       { name: 'registry/app', newTagTemplate: '{{branch}}' },
     ])
   })
+
+  // --- Broadened layouts + monorepo awareness + candidate selection -----------------------------
+
+  it('discovers an env-variant compose file when no canonical one exists', async () => {
+    const reader = makeReader({ 'docker-compose.prod.yml': 'services:\n  api: {}\n' })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.type).toBe('docker-compose')
+    expect(rec.provisioning.composePath).toBe('docker-compose.prod.yml')
+  })
+
+  it('prefers the canonical compose name over an override when both exist', async () => {
+    const reader = makeReader({
+      'compose.yaml': 'services:\n  api: {}\n',
+      'compose.override.yaml': 'services:\n  api: {}\n',
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.composePath).toBe('compose.yaml')
+  })
+
+  it('discovers a compose file nested under deploy/', async () => {
+    const reader = makeReader({ 'deploy/compose.yaml': 'services:\n  api: {}\n' })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.type).toBe('docker-compose')
+    expect(rec.provisioning.composePath).toBe('deploy/compose.yaml')
+  })
+
+  it('surfaces compose service candidates when several services are declared', async () => {
+    const reader = makeReader({ 'compose.yaml': 'services:\n  api: {}\n  worker: {}\n' })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.composeServiceCandidates).toHaveLength(2)
+    // No basename to match (root-level) ⇒ the first declared service is pre-selected.
+    const recommended = rec.composeServiceCandidates!.filter((c) => c.recommended)
+    expect(recommended).toHaveLength(1)
+    expect(recommended[0]!.service).toBe('api')
+    expect(rec.notes.some((n) => n.field === 'composeService')).toBe(true)
+  })
+
+  it('pre-selects the compose service matching the service directory basename', async () => {
+    const reader = makeReader({
+      'apps/worker/compose.yaml': 'services:\n  api: {}\n  worker: {}\n',
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'apps/worker' })
+    expect(rec.composeServiceCandidates!.find((c) => c.recommended)!.service).toBe('worker')
+  })
+
+  it('does NOT surface compose service candidates for a single-service compose file', async () => {
+    const reader = makeReader({ 'compose.yaml': 'services:\n  api: {}\n' })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.composeServiceCandidates).toBeUndefined()
+  })
+
+  it('detects manifests under newly-recognized roots (infrastructure/, gitops/)', async () => {
+    for (const dir of ['infrastructure', 'gitops']) {
+      const reader = makeReader({ [`${dir}/deployment.yaml`]: deployment('registry/app:1.0.0') })
+      const rec = await detectKubernetesProvisioning(reader)
+      expect(rec.provisioning.type).toBe('kubernetes')
+      expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: dir })
+    }
+  })
+
+  it('finds a monorepo service slice in a ROOT shared deploy dir (deploy/<svc>)', async () => {
+    const reader = makeReader({
+      'services/api/src/index.ts': 'export {}',
+      'deploy/api/deployment.yaml': deployment('registry/api:1.0.0'),
+      'deploy/web/deployment.yaml': deployment('registry/web:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    expect(rec.provisioning.type).toBe('kubernetes')
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: 'deploy/api' })
+    // Both slices are surfaced; the basename-matched one is recommended.
+    expect(rec.serviceDirCandidates).toHaveLength(2)
+    const chosen = rec.serviceDirCandidates!.find((c) => c.recommended)!
+    expect(chosen.name).toBe('api')
+    expect(rec.notes.some((n) => n.field === 'serviceDir')).toBe(true)
+  })
+
+  it('surfaces every shared slice when the service matches slices under two shared roots', async () => {
+    const reader = makeReader({
+      'deploy/api/deployment.yaml': deployment('registry/api:1.0.0'),
+      'k8s/api/deployment.yaml': deployment('registry/api:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    expect(rec.serviceDirCandidates!.map((c) => c.path).sort()).toEqual(['deploy/api', 'k8s/api'])
+    // Exactly one recommended (SHARED_DEPLOY_ROOTS order ⇒ deploy/ wins).
+    expect(rec.serviceDirCandidates!.filter((c) => c.recommended)).toHaveLength(1)
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: 'deploy/api' })
+  })
+
+  it('surfaces manifest-root candidates when several k8s roots resolve', async () => {
+    const reader = makeReader({
+      'k8s/deployment.yaml': deployment('registry/app:1.0.0'),
+      'manifests/deployment.yaml': deployment('registry/app:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.manifestRootCandidates!.map((c) => c.path).sort()).toEqual(['k8s', 'manifests'])
+    expect(rec.manifestRootCandidates!.filter((c) => c.recommended)).toHaveLength(1)
+    expect(rec.notes.some((n) => n.field === 'manifestRoot')).toBe(true)
+  })
+
+  it('does NOT surface manifest-root candidates for a single k8s root', async () => {
+    const reader = makeReader({ 'k8s/deployment.yaml': deployment('registry/app:1.0.0') })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.manifestRootCandidates).toBeUndefined()
+  })
+
+  it('does NOT run the shared-deploy scan when no service directory is given', async () => {
+    const reader = makeReader({
+      'k8s/deployment.yaml': deployment('registry/app:1.0.0'),
+      'deploy/api/deployment.yaml': deployment('registry/api:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    // Root-level detection uses the colocated k8s root; the deploy/api slice is NOT a candidate.
+    expect(rec.serviceDirCandidates).toBeUndefined()
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: 'k8s' })
+  })
+
+  it('stays bounded and completes on a repo with many decoy directories', async () => {
+    let reads = 0
+    const decoyDirs = Array.from({ length: 60 }, (_, i) => `noise-${i}`)
+    const base: ProvisioningRepoReader = {
+      async getFile(path) {
+        reads++
+        return path === 'k8s/deployment.yaml' ? { content: deployment('registry/app:1.0.0') } : null
+      },
+      async listDirectory(path) {
+        reads++
+        if (path === '') {
+          return [
+            { name: 'k8s', type: 'dir', path: 'k8s' },
+            ...decoyDirs.map((n) => ({ name: n, type: 'dir', path: n })),
+          ]
+        }
+        if (path === 'k8s')
+          return [{ name: 'deployment.yaml', type: 'file', path: 'k8s/deployment.yaml' }]
+        // Every decoy dir looks non-empty to force listing, but holds nothing useful.
+        return [{ name: 'readme.md', type: 'file', path: `${path}/readme.md` }]
+      },
+    }
+    const rec = await detectKubernetesProvisioning(base)
+    expect(rec.provisioning.type).toBe('kubernetes')
+    // The read budget (200) caps the fan-out — the scan never runs away on the decoys.
+    expect(reads).toBeLessThanOrEqual(210)
+  })
+
+  it('does NOT surface unrelated shared-deploy slices alongside colocated manifests', async () => {
+    const reader = makeReader({
+      'services/api/k8s/deployment.yaml': deployment('registry/api:1.0.0'),
+      // A shared deploy dir exists but only holds OTHER services — not this one.
+      'deploy/web/deployment.yaml': deployment('registry/web:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: 'services/api/k8s' })
+    // No `deploy/*` slice matches "api", so nothing noisy is surfaced.
+    expect(rec.serviceDirCandidates).toBeUndefined()
+    expect(rec.notes.some((n) => n.field === 'serviceDir')).toBe(false)
+  })
+
+  it('surfaces a same-name shared slice as a hint even when manifests are colocated', async () => {
+    const reader = makeReader({
+      'services/api/k8s/deployment.yaml': deployment('registry/api:1.0.0'),
+      'deploy/api/deployment.yaml': deployment('registry/api:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    // Colocated manifests still win, but the matching shared slice is offered as an alternative.
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: 'services/api/k8s' })
+    expect(rec.serviceDirCandidates!.map((c) => c.path)).toEqual(['deploy/api'])
+    expect(rec.notes.some((n) => n.field === 'serviceDir')).toBe(true)
+  })
+
+  it('skips the shared-root container dir itself (manifests/services) as a slice', async () => {
+    const reader = makeReader({
+      'manifests/services/api/deployment.yaml': deployment('registry/api:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    // `manifests/services` is a container for slices, not a slice — only `manifests/services/api`.
+    expect(rec.serviceDirCandidates!.map((c) => c.path)).toEqual(['manifests/services/api'])
+    expect(rec.provisioning.manifestSource).toEqual({
+      type: 'colocated',
+      path: 'manifests/services/api',
+    })
+  })
+
+  it('no longer treats apps/ as a shared-deploy root', async () => {
+    const reader = makeReader({
+      // Only an apps/<svc> slice exists (source-tree convention) and nothing is colocated.
+      'apps/api/deployment.yaml': deployment('registry/api:1.0.0'),
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.type).toBe('infraless')
+  })
+
+  it('pre-selects a name-matched shared slice even when manifests cannot be confirmed inside it', async () => {
+    const reader = makeReader({
+      // The slice matches the service name but holds no recognizable k8s manifests.
+      'deploy/api/notes.md': '# nothing useful here',
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.manifestSource).toEqual({ type: 'colocated', path: 'deploy/api' })
+    expect(rec.serviceDirCandidates!.some((c) => c.recommended && c.name === 'api')).toBe(true)
+  })
+
+  it('does NOT fabricate a k8s pick from an arbitrary slice that matches no service name', async () => {
+    const reader = makeReader({
+      // A shared slice exists but for a DIFFERENT service, with no confirmable manifests.
+      'deploy/web/notes.md': '# nothing useful here',
+    })
+    const rec = await detectKubernetesProvisioning(reader, { directory: 'services/api' })
+    // No name match + no manifests ⇒ we don't invent a kubernetes recommendation.
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.type).toBe('infraless')
+  })
 })
