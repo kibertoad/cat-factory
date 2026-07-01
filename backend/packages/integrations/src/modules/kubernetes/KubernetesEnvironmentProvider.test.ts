@@ -193,6 +193,40 @@ describe('KubernetesEnvironmentProvider.status', () => {
     expect(result.status).toBe('provisioning')
   })
 
+  it.each([401, 403])(
+    'throws on a %d status read (credential/RBAC error) instead of reporting provisioning',
+    async (status) => {
+      stubFetch((c) =>
+        c.method === 'GET' && c.url.includes('/deployments')
+          ? { status, body: { message: 'forbidden' } }
+          : { status: 200 },
+      )
+      const provider = new KubernetesEnvironmentProvider()
+      await expect(
+        provider.status({
+          manifest,
+          externalId: 'cf-env-1',
+          provisionFields: { namespace: 'cf-env-1' },
+          resolveSecret,
+        }),
+      ).rejects.toThrow(/ServiceAccount token|RBAC|HTTP (401|403)/i)
+    },
+  )
+
+  it('keeps polling (provisioning) on a transient 5xx status read', async () => {
+    stubFetch((c) =>
+      c.method === 'GET' && c.url.includes('/deployments') ? { status: 503 } : { status: 200 },
+    )
+    const provider = new KubernetesEnvironmentProvider()
+    const result = await provider.status({
+      manifest,
+      externalId: 'cf-env-1',
+      provisionFields: { namespace: 'cf-env-1' },
+      resolveSecret,
+    })
+    expect(result.status).toBe('provisioning')
+  })
+
   it('re-derives an ingress-template URL identically across status (non-branch vars survive)', async () => {
     // provision() must persist the full var set so a hostTemplate referencing {{pullNumber}}
     // (or any non-branch var) is not silently corrupted to an empty value on the next poll.
