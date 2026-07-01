@@ -1144,6 +1144,36 @@ with those fakes injected); the full picture is in [`backend/internal/e2e/README
   an otherwise-green PR. Promote it into `test-gate.needs` only once it has earned trust
   (see the README's promotion checklist).
 
+### A flaky e2e test is a BLOCKING bug — investigate and deflake, NEVER retry
+
+**A flaky e2e spec is a blocking issue that must ALWAYS be investigated and deflaked at its
+root cause — it can NEVER be "just retried" until it goes green, and a green-on-retry run is
+NOT a pass.** This is an absolute rule. Playwright is configured to enforce it
+(`failOnFlakyTests: true` in `playwright.config.ts`): a spec that fails on the first attempt
+and passes on a retry reports the shard **RED**, on purpose. The retry exists ONLY to capture
+the trace/video for diagnosis — it does **not** rescue the run. So when you see a red e2e
+shard, or a "N flaky" line in the report, treat it exactly like a hard failure:
+
+- **Do NOT re-run CI hoping for green, do NOT bump `retries`, do NOT `test.skip`/`test.fixme`
+  the spec, and do NOT dismiss it as "just a browser/boot flake."** "It passed the second
+  time" is a failed task, not a completed one. The non-blocking `Test e2e` job means a flake
+  can't *stop a merge*, but that is a safety net for infra hiccups, NOT permission to ignore a
+  flake — an intermittent RED is a signal to fix, every time.
+- **Reproduce, then root-cause.** A flake almost always exposes a REAL race in the product,
+  not "a slow test": a live event applied between a snapshot's fetch and its store-commit
+  (see the bootstrap-failure flake — a stale on-connect resync dropped a live-added terminal
+  run in `agentRuns.hydrate`), a subscribe-after-broadcast gap, a status that renders from a
+  clobbered store. Reproduce it (locally you can start Postgres + the built frontend/backend
+  and run the single spec with `--repeat-each` under load), find the ordering hazard, and
+  **fix the SOURCE** — usually a frontend store reconcile or a `helpers.ts` readiness gate,
+  occasionally the backend event path. Add a unit test that pins the race so it can't return.
+- **Never paper over it in the spec.** No fixed `sleep`, no bumped per-assertion timeout to
+  "give it more time," no reload to re-pull the snapshot (that hides exactly the live-push bug
+  the suite exists to catch). Web-first assertions on the named `helpers.ts` timeouts only.
+- **The bar for "fixed" is deterministic, not lucky:** the spec must pass a high-count
+  `--repeat-each` locally AND the root-cause fix (with its regression test) must be in the
+  same change. Only then is the flake closed.
+
 ## Internationalization (i18n)
 
 All user-facing copy in the SPA is translatable via **`@nuxtjs/i18n`** (vue-i18n under

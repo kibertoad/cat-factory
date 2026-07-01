@@ -211,19 +211,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   mergePresetRepository: {},
   // `upsert` is now allow-listed (the workspace-settings panel save); `get` was already remote.
   workspaceSettingsRepository: {},
-  observabilityConnectionRepository: { get: 'pending', upsert: 'pending', delete: 'pending' },
-  incidentEnrichmentConnectionRepository: {
-    get: 'pending',
-    upsert: 'pending',
-    delete: 'pending',
-  },
+  // The whole observability / incident-enrichment connection + per-block release-health config
+  // surface is now allow-listed (the post-release-health settings panels' get/upsert/delete),
+  // so these repos are fully remote — get/getByBlock/listByWorkspace/delete via the `workspace`
+  // rule, the record-based `upsert` via the `workspaceField` rule.
+  observabilityConnectionRepository: {},
+  incidentEnrichmentConnectionRepository: {},
   accountSettingsRepository: { getByAccount: 'pending', upsert: 'pending', listAll: 'sweeper' },
-  releaseHealthConfigRepository: {
-    getByBlock: 'pending',
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    delete: 'pending',
-  },
+  releaseHealthConfigRepository: {},
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
   // --- non-core repositories -----------------------------------------------------
   bootstrapJobRepository: {

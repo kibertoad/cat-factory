@@ -28,6 +28,38 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (post-release-health / observability settings write surface)** — the
+  three settings repositories the post-release-health flow's panels manage are now allow-listed,
+  so a mothership-mode SPA can PERSIST (not just display) an observability connection, a per-block
+  monitor/SLO mapping, and an incident-enrichment connection. Previously none of these was remotely
+  callable, so every call came back `unknown_method`. Newly allow-listed:
+  `observabilityConnectionRepository` `get`/`upsert`/`delete`, `releaseHealthConfigRepository`
+  `getByBlock`/`listByWorkspace`/`upsert`/`delete`, and `incidentEnrichmentConnectionRepository`
+  `get`/`upsert`/`delete`. The reads/deletes take the workspaceId as arg0 (the existing `workspace`
+  rule); the record-based `upsert(record)` needed a **new `workspaceField` scope rule** — the
+  scope key is a `workspaceId` FIELD of the record, not a positional arg. Binding on
+  `record.workspaceId` is exactly right: the write targets that workspace, so the record can only be
+  persisted into an in-scope one; a missing/non-string field or an out-of-scope workspace is refused
+  as 404. Each is member-level (the controllers mount under `/workspaces/:workspaceId`, none is
+  admin-gated) and workspace-scoped, matching the other settings panels' policy. These are core
+  repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
+  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
+  allow-list. Server-only, symmetric by construction (the dispatcher reflects over each facade's
+  registry). Round-trip + cross-account-scope + missing-field unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (the whole
+  observability / incident-enrichment / release-health-config surface is now remote). **Explicitly
+  NOT in this slice:** decrypting a sealed connection cipher at gate-probe time (the later
+  secrets-delegation slice) and `accountSettingsRepository` (account-scoped, a separate decision).
+  So the settings PANELS are functional end-to-end (persist + read back the redacted summary),
+  but a saved observability connection does NOT yet drive a post-release-health gate probe in
+  mothership mode — that waits on the secrets-delegation slice. Note the connection `get` returns
+  the full record (the sealed `credentials` blob) over the machine API, matching the
+  `environmentRegistryRepository.get` precedent (the RPC client is the trusted, account-scoped
+  local node; the blob is sealed). The `workspaceField` rule binds only the record's top-level
+  `workspaceId`; `releaseHealthConfigRepository`'s `blockId` is not re-validated over the RPC (the
+  service layer, bypassed here, owns block-existence), so a config can only ever land in the
+  caller's own in-scope workspace.
 - **Phase 3 follow-up (failed-run retry / stop control surface)** — the board's run controls
   (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`, `AgentRunController`) enter through the
   unified `agent_runs` table's `agentRunRepository.getRef(workspaceId, id)`, which resolves a run's
@@ -298,10 +330,10 @@ never remotely invocable (mothership-internal cron).
 | `brainstormSessionRepository`                               | remote                                           | ⬜ todo | PR 3                            |
 | `mergePresetRepository`                                     | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `workspaceSettingsRepository`                               | remote                                           | ✅ done | PR 3 (settings writes)          |
-| `observabilityConnectionRepository`                         | remote                                           | ⬜ todo | PR 3                            |
-| `incidentEnrichmentConnectionRepository`                    | remote                                           | ⬜ todo | PR 3                            |
+| `observabilityConnectionRepository`                         | remote                                           | ✅ done | PR 3 (release-health settings)  |
+| `incidentEnrichmentConnectionRepository`                    | remote                                           | ✅ done | PR 3 (release-health settings)  |
 | `accountSettingsRepository`                                 | remote                                           | ⬜ todo | PR 3                            |
-| `releaseHealthConfigRepository`                             | remote                                           | ⬜ todo | PR 3                            |
+| `releaseHealthConfigRepository`                             | remote                                           | ✅ done | PR 3 (release-health settings)  |
 | `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership) | ⬜ todo | PR 3                            |
 | `githubInstallationRepository`                              | remote                                           | ⬜ todo | PR 3                            |
 | `runnerPoolConnectionRepository`                            | remote                                           | ⬜ todo | PR 3                            |

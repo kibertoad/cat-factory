@@ -74,6 +74,15 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  * How a method's call is bound to an account so the dispatcher can reject anything outside
  * the machine token's `scope.accountIds` (a 404, matching the auth gate's non-leak policy):
  *   - `workspace`     — `args[arg]` is a workspaceId; resolve its owning account.
+ *   - `workspaceField`— `args[arg]` is a record with a `workspaceId` string field (an
+ *                       `upsert(record)` whose scope key is a property of the record, not a
+ *                       positional arg); resolve that workspace's owning account like `workspace`.
+ *                       ONLY the top-level `workspaceId` is bound — sibling fields (e.g. a
+ *                       record's `blockId`) are NOT scope-validated here, exactly as the raw repo
+ *                       upsert doesn't cross-check them. That is safe because the row is stored
+ *                       under (and later read by) the bound `workspaceId`, so a stray sibling id
+ *                       only ever lands in the caller's own in-scope workspace; the service layer
+ *                       (bypassed by the RPC) is where block-existence is enforced.
  *   - `account`       — `args[arg]` IS an accountId.
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
@@ -88,6 +97,7 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
+  | { kind: 'workspaceField'; arg: number }
   | { kind: 'account'; arg: number }
   | { kind: 'accountList'; arg: number }
   | { kind: 'selfUser'; arg: number }
@@ -382,6 +392,44 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   brainstormSessionRepository: {
     getByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- Post-release-health / observability settings surface -----------------------
+  // The three settings repositories a mothership-mode SPA manages for the post-release-health
+  // flow: the (single) observability connection, the per-block monitor/SLO mapping, and the
+  // incident-enrichment connection. Their controllers mount under `/workspaces/:workspaceId`
+  // and are member-level (not admin-gated), so they follow the same policy as the other
+  // settings panels above. Reads/deletes take the workspaceId as arg0 (the `workspace` rule);
+  // the record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the
+  // `workspaceField` rule — the id is a property, not a positional arg). Exposing them makes
+  // the observability / release-health / incident-enrichment editors functional (persist +
+  // read back), not read-only, in mothership mode.
+  //
+  // Scope of what this unlocks: the settings PANELS work end-to-end (save + read back the
+  // redacted summary, which never decrypts). The saved connection cannot yet DRIVE a
+  // post-release-health gate probe in mothership mode — decrypting the sealed connection cipher
+  // at gate-probe time belongs to the later secrets-delegation slice. The connection `get` here
+  // returns the FULL record (the sealed `credentials` blob), not the redacted service view: the
+  // RPC client is the trusted local node, the blob is sealed and account-scoped, so this matches
+  // the existing `environmentRegistryRepository.get` precedent (sealed cipher over the machine
+  // API). The record-based `upsert` binds only the top-level `record.workspaceId` (see the
+  // `workspaceField` note above) — `releaseHealthConfigRepository`'s `blockId` is NOT
+  // re-validated here, so a config can only ever be planted into the caller's own in-scope
+  // workspace, never another's.
+  observabilityConnectionRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  releaseHealthConfigRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  incidentEnrichmentConnectionRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +521,21 @@ export async function dispatchPersistenceCall(
       // that would have returned null/undefined directly becomes a not-found over the machine
       // API. That is the safe choice (no existence leak) and matches the auth gate's policy.
       const workspaceId = args[rule.arg]
+      if (typeof workspaceId !== 'string') return denied
+      if (!inScope(await opts.resolveAccountId(workspaceId))) return denied
+      break
+    }
+    case 'workspaceField': {
+      // The scope key is a `workspaceId` FIELD of the record arg (an `upsert(record)` whose
+      // workspaceId is a property, not a positional arg). Bind via that workspace's owning
+      // account exactly like `workspace`. A non-object arg, a missing/non-string field, or an
+      // unresolvable workspace is refused as 404 — the write targets exactly `record.workspaceId`,
+      // so binding on it means the record can only be persisted into an in-scope workspace.
+      const record = args[rule.arg]
+      const workspaceId =
+        record && typeof record === 'object'
+          ? (record as { workspaceId?: unknown }).workspaceId
+          : undefined
       if (typeof workspaceId !== 'string') return denied
       if (!inScope(await opts.resolveAccountId(workspaceId))) return denied
       break
