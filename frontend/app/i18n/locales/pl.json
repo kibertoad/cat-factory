@@ -29,7 +29,8 @@
         "revoke": "Unieważnić {name}?",
         "clear": "Wyczyścić {name}?",
         "destroy": "Zniszczyć {name}?"
-      }
+      },
+      "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
     "disconnect": "Rozłącz",
@@ -3153,7 +3154,8 @@
       "failed": "niepowodzenie",
       "inProgress": "w toku"
     },
-    "envNoun": "środowisko testowe"
+    "envNoun": "środowisko testowe",
+    "destroyFailed": "Nie udało się zniszczyć środowiska"
   },
   "testing": {
     "title": "Raport z testów",

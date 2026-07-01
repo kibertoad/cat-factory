@@ -110,20 +110,20 @@ cancel/dismiss), `toastDone(shape, name)` toasts on success. `shape` ∈
 translated once per locale. `name` is a short noun: a brand (`Slack`), a data value (the
 invite email, the arch/type name), or a feature noun key (`humanTest.envNoun`).
 
-| Unit                                                                                       | Status |
-| ------------------------------------------------------------------------------------------ | ------ |
-| `useConfirmAction.ts` + generic `common.confirm.*` / `common.toast.*` copy                 | done   |
+| Unit                                                                                        | Status |
+| ------------------------------------------------------------------------------------------- | ------ |
+| `useConfirmAction.ts` + generic `common.confirm.*` / `common.toast.*` copy                  | done   |
 | Confirm + toast: revoke API key (`ApiKeysSection`)                                          | done   |
-| Confirm + toast: revoke team invite / disconnect email (`AccountTeamSettings`)             | done   |
-| Confirm + toast: disconnect observability / incident (`ObservabilityConnectionPanel`)      | done   |
-| Confirm + toast: clear release-health config (`ServiceReleaseHealthConfig`)                | done   |
-| Confirm + toast: destroy human-test env (`HumanTestWindow`)                                | done   |
-| Confirm + toast: remove custom manifest type (`CustomManifestTypeEditor`)                  | done   |
-| Confirm + toast: remove reference architecture (`BootstrapModal`)                          | done   |
-| Confirm: disconnect task/document source (`Task/DocumentSourceConnectModal` — toast kept)  | done   |
-| Confirm: remove provider connection (`ProviderConnectionTab` — toast kept)                 | done   |
+| Confirm + toast: revoke team invite / disconnect email (`AccountTeamSettings`)              | done   |
+| Confirm + toast: disconnect observability / incident (`ObservabilityConnectionPanel`)       | done   |
+| Confirm + toast: clear release-health config (`ServiceReleaseHealthConfig`)                 | done   |
+| Confirm + toast: destroy human-test env (`HumanTestWindow`)                                 | done   |
+| Confirm + toast: remove custom manifest type (`CustomManifestTypeEditor`)                   | done   |
+| Confirm + toast: remove reference architecture (`BootstrapModal`)                           | done   |
+| Confirm: disconnect task/document source (`Task/DocumentSourceConnectModal` — toast kept)   | done   |
+| Confirm: remove provider connection (`ProviderConnectionTab` — toast kept)                  | done   |
 | Confirm: remove kube handler / override / custom (`InfraHandlersConfigurator` — toast kept) | done   |
-| Confirm: clear Slack / Linear / web-search (`AccountDeploymentSettings` — toast kept)      | done   |
+| Confirm: clear Slack / Linear / web-search (`AccountDeploymentSettings` — toast kept)       | done   |
 | i18n keys (8 locales) + patch changeset                                                     | done   |
 
 Empty-state (category C) surfaced no genuine new gaps this sweep — the remaining empty

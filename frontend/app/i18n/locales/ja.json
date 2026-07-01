@@ -29,7 +29,8 @@
         "revoke": "{name} を取り消しますか？",
         "clear": "{name} をクリアしますか？",
         "destroy": "{name} を破棄しますか？"
-      }
+      },
+      "reconfigureHint": "後で再設定できます。"
     },
     "copied": "クリップボードにコピーしました",
     "disconnect": "切断",
@@ -3166,7 +3167,8 @@
       "failed": "失敗",
       "inProgress": "進行中"
     },
-    "envNoun": "テスト環境"
+    "envNoun": "テスト環境",
+    "destroyFailed": "環境を破棄できませんでした"
   },
   "testing": {
     "title": "テストレポート",

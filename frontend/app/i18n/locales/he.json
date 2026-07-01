@@ -29,7 +29,8 @@
         "revoke": "לבטל את {name}?",
         "clear": "לנקות את {name}?",
         "destroy": "להשמיד את {name}?"
-      }
+      },
+      "reconfigureHint": "אפשר להגדיר זאת שוב מאוחר יותר."
     },
     "copied": "הועתק ללוח",
     "disconnect": "נתק",
@@ -3164,7 +3165,8 @@
       "failed": "נכשל",
       "inProgress": "בתהליך"
     },
-    "envNoun": "סביבת הבדיקה"
+    "envNoun": "סביבת הבדיקה",
+    "destroyFailed": "לא ניתן להשמיד את הסביבה"
   },
   "testing": {
     "title": "דוח בדיקה",

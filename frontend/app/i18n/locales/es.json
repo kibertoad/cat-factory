@@ -29,7 +29,8 @@
         "revoke": "¿Revocar {name}?",
         "clear": "¿Borrar {name}?",
         "destroy": "¿Destruir {name}?"
-      }
+      },
+      "reconfigureHint": "Puedes volver a configurarlo más tarde."
     },
     "copied": "Copiado al portapapeles",
     "disconnect": "Desconectar",
@@ -3153,7 +3154,8 @@
       "failed": "fallido",
       "inProgress": "en curso"
     },
-    "envNoun": "el entorno de prueba"
+    "envNoun": "el entorno de prueba",
+    "destroyFailed": "No se pudo destruir el entorno"
   },
   "testing": {
     "title": "Informe de pruebas",

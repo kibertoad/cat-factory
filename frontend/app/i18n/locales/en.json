@@ -27,7 +27,8 @@
         "revoke": "Revoke {name}?",
         "clear": "Clear {name}?",
         "destroy": "Destroy {name}?"
-      }
+      },
+      "reconfigureHint": "You can set it up again later."
     },
     "block": "Block",
     "@block": {
@@ -3276,7 +3277,8 @@
       "failed": "failed",
       "inProgress": "in progress"
     },
-    "envNoun": "the test environment"
+    "envNoun": "the test environment",
+    "destroyFailed": "Could not destroy the environment"
   },
   "testing": {
     "title": "Test report",

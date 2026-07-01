@@ -29,7 +29,8 @@
         "revoke": "{name} iptal edilsin mi?",
         "clear": "{name} temizlensin mi?",
         "destroy": "{name} yok edilsin mi?"
-      }
+      },
+      "reconfigureHint": "Bunu daha sonra yeniden yapılandırabilirsiniz."
     },
     "copied": "Panoya kopyalandı",
     "disconnect": "Bağlantıyı kes",
@@ -3166,7 +3167,8 @@
       "failed": "başarısız",
       "inProgress": "devam ediyor"
     },
-    "envNoun": "test ortamı"
+    "envNoun": "test ortamı",
+    "destroyFailed": "Ortam yok edilemedi"
   },
   "testing": {
     "title": "Test raporu",

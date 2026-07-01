@@ -53,7 +53,9 @@ const SHAPE_META: Record<
   },
   clear: {
     titleKey: 'common.confirm.titles.clear',
-    bodyKey: 'common.confirm.irreversible',
+    // A cleared config/connection is re-enterable, so warn it must be reconfigured — not
+    // the harsher `irreversible` copy the remove/revoke/destroy shapes use.
+    bodyKey: 'common.confirm.reconfigureHint',
     labelKey: 'common.clear',
     icon: 'i-lucide-eraser',
     toastKey: 'common.toast.cleared',
