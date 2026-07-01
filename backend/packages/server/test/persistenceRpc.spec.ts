@@ -191,9 +191,15 @@ function makeRegistry(): {
     },
     requirementReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      deleteByBlock: async () => undefined,
     },
     clarityReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      deleteByBlock: async () => undefined,
     },
     brainstormSessionRepository: {
       getByBlockStage: async (ws: string, blockId: string, stage: string) => ({
@@ -201,6 +207,19 @@ function makeRegistry(): {
         blockId,
         stage,
       }),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      deleteByBlockStage: async () => undefined,
+    },
+    consensusSessionRepository: {
+      get: async (ws: string, id: string) => ({ ws, id }),
+      getByStep: async (ws: string, executionId: string, stepIndex: number) => ({
+        ws,
+        executionId,
+        stepIndex,
+      }),
+      getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      upsert: async () => undefined,
     },
     // The post-release-health settings surface: reads/deletes echo their workspaceId (arg0);
     // the record-based `upsert` binds on the record's `workspaceId` FIELD.
@@ -828,5 +847,67 @@ describe('post-release-health settings surface (observability / release-health /
         })
       })
     }
+  }
+})
+
+describe('advanced review / session management surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The clarity-review / brainstorm / consensus windows: run + re-read + persist/replace as the
+  // window iterates. Every method takes the workspaceId as arg0 (the `upsert(workspaceId, review)`
+  // signature carries it positionally → the `workspace` rule). `args` are the trailing arguments
+  // after it; value-returning methods (`echoes: true`) echo the workspaceId, void writes resolve.
+  const METHODS: Array<{ repo: string; method: string; args: unknown[]; echoes?: boolean }> = [
+    // requirement-review: getByBlock/get/upsert were exposed earlier; deleteByBlock completes it.
+    { repo: 'requirementReviewRepository', method: 'get', args: ['rev_1'], echoes: true },
+    { repo: 'requirementReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
+    { repo: 'requirementReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
+    // clarity-review (bug-report triage).
+    { repo: 'clarityReviewRepository', method: 'get', args: ['rev_1'], echoes: true },
+    { repo: 'clarityReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
+    { repo: 'clarityReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
+    // brainstorm (structured dialogue, keyed by block+stage).
+    { repo: 'brainstormSessionRepository', method: 'get', args: ['sess_1'], echoes: true },
+    { repo: 'brainstormSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
+    {
+      repo: 'brainstormSessionRepository',
+      method: 'deleteByBlockStage',
+      args: ['blk_1', 'discovery'],
+    },
+    // consensus (multi-strategy orchestration, keyed by run step).
+    { repo: 'consensusSessionRepository', method: 'get', args: ['sess_1'], echoes: true },
+    { repo: 'consensusSessionRepository', method: 'getByStep', args: ['ex_1', 0], echoes: true },
+    { repo: 'consensusSessionRepository', method: 'getByBlock', args: ['blk_1'], echoes: true },
+    { repo: 'consensusSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
+  ]
+
+  for (const { repo, method, args, echoes } of METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoes) {
+        const echoed = Array.isArray(result) ? result[0] : result
+        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
   }
 })
