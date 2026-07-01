@@ -44,7 +44,7 @@ build on. Link the merged pilot PR here once it lands.
 | 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
-| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | _pending_                                                 |
+| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
 | 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
