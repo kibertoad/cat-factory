@@ -328,8 +328,9 @@ export class AgentContextBuilder {
    * the context stays unchanged for backend services. Each `service` binding whose bound
    * service has a LIVE ephemeral env (status `ready` + a URL) becomes the service under test
    * (its real URL); every other upstream is left for the harness to mock. The live env URLs
-   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by block
-   * id (no per-binding point read), so this is a single query regardless of binding count.
+   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by the
+   * service-frame id (no per-binding point read), so this is a single query regardless of
+   * binding count.
    */
   async resolveFrontendConfig(
     workspaceId: string,
@@ -351,13 +352,19 @@ export class AgentContextBuilder {
       // per-binding `getByBlock` loop (the N+1 the "reuse an already-fetched list" rule bans).
       // A binding's `serviceBlockId` names a service FRAME, so match on the env's `frameId` (the
       // deployer's block walked up to its frame), NOT `blockId` (the task the deployer ran on).
+      // A frame can hold more than one live env (two tasks under it each ran a deployer, since
+      // supersede is per-task `blockId`), so keep the NEWEST by `createdAt` — the same
+      // "current env wins" rule the tester point-read applies via `ORDER BY created_at DESC`.
+      const newestAt = new Map<string, number>()
       for (const handle of await this.deps.environmentProvisioning.listHandles(workspaceId)) {
         if (
           handle.frameId &&
           handle.url &&
           handle.status === 'ready' &&
-          serviceBlockIds.has(handle.frameId)
+          serviceBlockIds.has(handle.frameId) &&
+          handle.createdAt >= (newestAt.get(handle.frameId) ?? Number.NEGATIVE_INFINITY)
         ) {
+          newestAt.set(handle.frameId, handle.createdAt)
           liveServiceEnvUrls.set(handle.frameId, handle.url)
         }
       }
