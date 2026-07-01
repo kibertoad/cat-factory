@@ -13,6 +13,13 @@
     "cancel": "Cancel",
     "retry": "Retry",
     "copy": "Copy",
+    "copied": "Copied to clipboard",
+    "delete": "Delete",
+    "remove": "Remove",
+    "confirm": {
+      "defaultTitle": "Are you sure?",
+      "confirm": "Confirm"
+    },
     "block": "Block",
     "@block": {
       "description": "Generic fallback NOUN for a board item whose title is unknown (a service / module / task node). Not the verb 'to block'."
@@ -21,7 +28,9 @@
     "close": "Close",
     "@close": {
       "description": "Verb meaning dismiss / shut (a panel, drawer, dialog), NOT the adjective 'near'. Used as an aria-label on close affordances - translate as the imperative verb."
-    }
+    },
+    "disconnect": "Disconnect",
+    "copyFailed": "Couldn't copy to clipboard"
   },
   "nav": {
     "menu": "Navigation menu",
@@ -250,6 +259,10 @@
       "blockedByDependenciesTitle": "Blocked by dependencies",
       "noPipelineTitle": "No pipeline defined",
       "noPipelineBody": "Create one in the builder first.",
+      "startedToast": {
+        "title": "Run started",
+        "body": "Running \"{name}\"."
+      },
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Open {pr} on GitHub",
@@ -359,6 +372,10 @@
         "step2": "Open the credentials file Codex wrote at ~/.codex/auth.json (on Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Copy the entire contents of auth.json, paste it below, and choose a personal password to protect it."
       }
+    },
+    "confirmDisconnect": {
+      "title": "Disconnect this subscription?",
+      "body": "Your \"{vendor}\" subscription will be disconnected. This can't be undone."
     }
   },
   "inspector": {
@@ -551,7 +568,11 @@
       "merged": "Merged",
       "notMerged": "Not merged yet",
       "empty": "No dependencies. Can run any time.",
-      "blocked": "Blocked until dependencies merge."
+      "blocked": "Blocked until dependencies merge.",
+      "confirmRemove": {
+        "title": "Remove this dependency?",
+        "body": "This task will no longer wait for \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Estimate",
@@ -564,6 +585,10 @@
         "incorporating": "Incorporating…",
         "reviewing": "Re-reviewing…",
         "recommending": "Recommending…"
+      },
+      "empty": {
+        "title": "No runs yet",
+        "body": "Start a pipeline to see execution history here."
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
@@ -706,7 +731,9 @@
           "done": "Finishing up"
         },
         "id": "Container",
-        "url": "Address"
+        "url": "Address",
+        "copyId": "Copy container id",
+        "copyUrl": "Copy address"
       },
       "subtasks": "Subtasks · {completed}/{total}",
       "standardsApplied": "Standards applied",
@@ -779,6 +806,24 @@
       "deleteTask": "Delete task",
       "deleteModule": "Delete module",
       "deleteService": "Delete service",
+      "confirmDelete": {
+        "task": {
+          "title": "Delete this task?",
+          "body": "\"{name}\" and its run history will be removed. This can't be undone."
+        },
+        "module": {
+          "title": "Delete this module?",
+          "body": "\"{name}\" and everything inside it will be removed. This can't be undone."
+        },
+        "service": {
+          "title": "Delete this service?",
+          "body": "\"{name}\" and everything inside it will be removed. This can't be undone."
+        },
+        "recurring": {
+          "title": "Delete this recurring pipeline?",
+          "body": "\"{name}\", its schedule and its run history will be removed. This can't be undone."
+        }
+      },
       "titlePlaceholder": "Title…",
       "reworkedRequirements": "Reworked requirements",
       "agentStepsUseDocument": "Agent steps use this document.",
@@ -1103,6 +1148,10 @@
         "openBoardFailed": "Could not open board",
         "boardDeleted": "Board deleted",
         "deleteBoardFailed": "Could not delete board"
+      },
+      "confirmDelete": {
+        "title": "Delete this board?",
+        "body": "\"{name}\" and everything in it will be removed. This can't be undone."
       }
     },
     "notifications": {
@@ -1110,6 +1159,10 @@
       "overdue": "Overdue",
       "openPr": "Open PR",
       "dismiss": "Dismiss",
+      "toast": {
+        "acted": "Marked as handled",
+        "dismissed": "Dismissed"
+      },
       "action": {
         "merge_review": "Merge",
         "pipeline_complete": "Confirm & merge",
@@ -1244,7 +1297,8 @@
         "serviceFragmentDefaults": "Default service best practices",
         "accountSettings": "Account settings",
         "localModels": "My local runners",
-        "sandbox": "Open Sandbox"
+        "sandbox": "Open Sandbox",
+        "shortcuts": "Keyboard shortcuts"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -1263,8 +1317,16 @@
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware",
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate"
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
+        "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help"
       }
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "commandBar": "Open the command bar",
+      "deselect": "Deselect / close the inspector",
+      "deleteBlock": "Delete the selected block",
+      "help": "Show this cheatsheet"
     },
     "integrationsHub": {
       "title": "Integrations",
@@ -1344,6 +1406,10 @@
       "subtitle": "Presets that map a model to every agent. A task picks one; tasks default to the workspace default preset.",
       "back": "Back",
       "closeEsc": "Close (Esc)",
+      "confirmDelete": {
+        "title": "Delete this model preset?",
+        "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
+      },
       "quota": "quota",
       "list": {
         "intro": "Each preset sets a {baseModel} for every agent, with optional per-agent overrides. A model pinned on an individual task still overrides the preset.",
@@ -1713,11 +1779,19 @@
         "saveFailed": "Could not save secret",
         "removed": "Secret removed",
         "removeFailed": "Could not remove secret"
+      },
+      "confirmRemove": {
+        "title": "Remove this secret?",
+        "body": "\"{name}\" will be removed. This can't be undone."
       }
     },
     "mergeThresholds": {
       "intro": "Named auto-merge policies a task can choose. After CI passes, the {merger} agent scores the PR on complexity, risk and impact (0-100%); the PR auto-merges only when every score is at or below the preset's ceilings, otherwise a review notification is raised. The default preset governs any task that picks none.",
       "mergerAgent": "merger",
+      "confirmDelete": {
+        "title": "Delete this merge preset?",
+        "body": "\"{name}\" will be removed. Tasks using it fall back to the workspace default."
+      },
       "concern": {
         "none": "None (always stop)",
         "low": "Low",
@@ -1969,6 +2043,10 @@
         "saveFailed": "Could not save runner",
         "removed": "Runner removed",
         "removeFailed": "Could not remove runner"
+      },
+      "confirmRemove": {
+        "title": "Remove this runner?",
+        "body": "\"{name}\" will be removed. This can't be undone."
       }
     }
   },
@@ -2136,6 +2214,10 @@
           "step2": "Copy the API key. Agent steps will run via Claude Code against DeepSeek's Anthropic endpoint with full context.",
           "step3": "Paste the key below."
         }
+      },
+      "confirmRemove": {
+        "title": "Remove this credential?",
+        "body": "\"{name}\" will be removed. This can't be undone."
       }
     }
   },
@@ -2232,6 +2314,10 @@
         "createBranch": "Could not create branch",
         "openPr": "Could not open pull request",
         "merge": "Could not merge"
+      },
+      "confirmDisconnect": {
+        "title": "Disconnect GitHub?",
+        "body": "The app will lose access to your repositories until you reconnect."
       }
     },
     "addService": {
@@ -2343,6 +2429,10 @@
       "disconnect": "Could not disconnect Slack",
       "saveRouting": "Could not save routing",
       "saveMap": "Could not save member map"
+    },
+    "confirmDisconnect": {
+      "title": "Disconnect Slack?",
+      "body": "Slack notifications will stop until you reconnect."
     }
   },
   "documents": {
@@ -2539,6 +2629,10 @@
       "clone": "Clone",
       "edit": "Edit this pipeline",
       "delete": "Delete this pipeline",
+      "confirmDeletePipeline": {
+        "title": "Delete this pipeline?",
+        "body": "\"{name}\" will be removed. This can't be undone."
+      },
       "disabledStepTooltip": "Disabled, skipped at run",
       "cancelEdit": "Cancel edit",
       "clear": "Clear",
@@ -3530,6 +3624,10 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source"
+    },
+    "confirmRemove": {
+      "title": "Delete this fragment?",
+      "body": "\"{name}\" will be removed. This can't be undone."
     }
   },
   "sandbox": {

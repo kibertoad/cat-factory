@@ -87,7 +87,18 @@ async function run() {
   // the start was refused — the store surfaces the actionable toast itself). Revert the
   // optimistic state; on success the button unmounts once the stream pushes in_progress.
   const started = await execution.start(props.taskId, pipeline)
-  if (!started) starting.value = false
+  if (started) {
+    // Confirm the (optimistic) start landed — the button unmounts once the stream pushes
+    // in_progress, so without this the successful action gives no feedback.
+    toast.add({
+      title: t('board.task.startedToast.title'),
+      description: t('board.task.startedToast.body', { name: pipeline.name }),
+      color: 'success',
+      icon: 'i-lucide-play',
+    })
+  } else {
+    starting.value = false
+  }
 }
 
 function review() {

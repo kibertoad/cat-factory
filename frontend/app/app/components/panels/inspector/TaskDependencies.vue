@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const { depLabel } = useDepLabels()
+const { confirm } = useConfirm()
 const { t } = useI18n()
 
 const deps = computed(() =>
@@ -27,8 +29,15 @@ const depMenu = computed(() => {
     }))
 })
 
-function removeDep(depId: string) {
-  board.removeDependency(props.block.id, depId)
+async function removeDep(dep: Block) {
+  const ok = await confirm({
+    title: t('inspector.dependencies.confirmRemove.title'),
+    description: t('inspector.dependencies.confirmRemove.body', { name: label(dep) }),
+    variant: 'destructive',
+    confirmLabel: t('common.remove'),
+    icon: 'i-lucide-unlink',
+  })
+  if (ok) board.removeDependency(props.block.id, dep.id)
 }
 </script>
 
@@ -61,13 +70,18 @@ function removeDep(depId: string) {
             ? t('inspector.dependencies.merged')
             : t('inspector.dependencies.notMerged')
         "
-        @click="removeDep(d.id)"
+        @click="removeDep(d)"
       >
         {{ label(d) }}
         <UIcon name="i-lucide-x" class="ms-0.5 h-3 w-3" />
       </UBadge>
     </div>
-    <div v-else class="text-[11px] text-slate-500">{{ t('inspector.dependencies.empty') }}</div>
+    <EmptyState
+      v-else
+      compact
+      icon="i-lucide-git-branch"
+      :title="t('inspector.dependencies.empty')"
+    />
     <div v-if="!runnable" class="mt-1 text-[10px] text-amber-400">
       {{ t('inspector.dependencies.blocked') }}
     </div>

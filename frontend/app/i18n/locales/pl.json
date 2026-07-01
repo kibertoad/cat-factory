@@ -15,7 +15,16 @@
     "copy": "Kopiuj",
     "actionFailed": "Akcja nie powiodła się",
     "close": "Zamknij",
-    "block": "Blok"
+    "block": "Blok",
+    "delete": "Usuń",
+    "remove": "Usuń",
+    "confirm": {
+      "defaultTitle": "Na pewno?",
+      "confirm": "Potwierdź"
+    },
+    "copied": "Skopiowano do schowka",
+    "disconnect": "Rozłącz",
+    "copyFailed": "Nie udało się skopiować do schowka"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -235,7 +244,11 @@
       "module": "Moduł: {name}",
       "buildSteps": "Kroki budowania",
       "reviewAndApprove": "Przejrzyj i zatwierdź",
-      "clickToViewStep": "Kliknij, aby zobaczyć szczegóły i wynik kroku"
+      "clickToViewStep": "Kliknij, aby zobaczyć szczegóły i wynik kroku",
+      "startedToast": {
+        "title": "Uruchomiono",
+        "body": "Trwa wykonywanie \"{name}\"."
+      }
     },
     "epic": {
       "label": "Epik",
@@ -322,6 +335,10 @@
         "step2": "Otwórz plik poświadczeń zapisany przez Codex w ~/.codex/auth.json (w systemie Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Skopiuj całą zawartość auth.json, wklej ją poniżej i wybierz osobiste hasło, aby ją chronić."
       }
+    },
+    "confirmDisconnect": {
+      "title": "Rozłączyć tę subskrypcję?",
+      "body": "Twoja subskrypcja \"{vendor}\" zostanie rozłączona. Tej operacji nie można cofnąć."
     }
   },
   "inspector": {
@@ -514,7 +531,11 @@
       "merged": "Scalone",
       "notMerged": "Jeszcze nie scalone",
       "empty": "Brak zależności. Można uruchomić w dowolnym momencie.",
-      "blocked": "Zablokowane do czasu scalenia zależności."
+      "blocked": "Zablokowane do czasu scalenia zależności.",
+      "confirmRemove": {
+        "title": "Usunąć tę zależność?",
+        "body": "To zadanie nie będzie już czekać na \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Szacunek",
@@ -559,7 +580,11 @@
       "companionOf": "{label} (towarzysz)",
       "merged": "Scalone",
       "open": "Otwarty",
-      "mergePr": "Scal PR"
+      "mergePr": "Scal PR",
+      "empty": {
+        "title": "Brak uruchomień",
+        "body": "Uruchom pipeline, aby zobaczyć tutaj historię uruchomień."
+      }
     },
     "structure": {
       "module": "Moduł",
@@ -689,7 +714,9 @@
           "done": "Kończenie"
         },
         "id": "Kontener",
-        "url": "Adres"
+        "url": "Adres",
+        "copyId": "Kopiuj id kontenera",
+        "copyUrl": "Kopiuj adres"
       }
     },
     "stepDetail": {
@@ -759,7 +786,25 @@
       "viewRequirements": "Wyświetl wymagania",
       "reRun": "Uruchom ponownie",
       "run": "Uruchom",
-      "focus": "Skup"
+      "focus": "Skup",
+      "confirmDelete": {
+        "task": {
+          "title": "Usunąć to zadanie?",
+          "body": "\"{name}\" i jego historia uruchomień zostaną usunięte. Tej operacji nie można cofnąć."
+        },
+        "module": {
+          "title": "Usunąć ten moduł?",
+          "body": "\"{name}\" i cała jego zawartość zostaną usunięte. Tej operacji nie można cofnąć."
+        },
+        "service": {
+          "title": "Usunąć tę usługę?",
+          "body": "\"{name}\" i cała jego zawartość zostaną usunięte. Tej operacji nie można cofnąć."
+        },
+        "recurring": {
+          "title": "Usunąć ten cykliczny pipeline?",
+          "body": "\"{name}\", jego harmonogram i historia uruchomień zostaną usunięte. Tej operacji nie można cofnąć."
+        }
+      }
     }
   },
   "observability": {
@@ -1063,6 +1108,10 @@
         "openBoardFailed": "Nie udało się otworzyć tablicy",
         "boardDeleted": "Tablica usunięta",
         "deleteBoardFailed": "Nie udało się usunąć tablicy"
+      },
+      "confirmDelete": {
+        "title": "Usunąć tę tablicę?",
+        "body": "\"{name}\" i cała jego zawartość zostaną usunięte. Tej operacji nie można cofnąć."
       }
     },
     "notifications": {
@@ -1084,6 +1133,10 @@
         "human_review": "Oznacz jako przeczytane",
         "followup_pending": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane"
+      },
+      "toast": {
+        "acted": "Oznaczono jako obsłużone",
+        "dismissed": "Odrzucono"
       }
     },
     "aiProvidersBanner": {
@@ -1204,7 +1257,8 @@
         "serviceFragmentDefaults": "Domyślne dobre praktyki usługi",
         "accountSettings": "Ustawienia konta",
         "localModels": "Moje lokalne silniki",
-        "sandbox": "Otwórz piaskownicę"
+        "sandbox": "Otwórz piaskownicę",
+        "shortcuts": "Skróty klawiszowe"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -1223,7 +1277,8 @@
         "serviceFragmentDefaults": "fragment dobre praktyki wytyczna usługa domyślna świadoma kodu",
         "accountSettings": "konto zespół członkowie role zaproszenia e-mail klucze api fragment dobre praktyki biblioteka kontekst organizacja osobiste",
         "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena"
+        "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena",
+        "shortcuts": "skróty klawiatura klawisze pomoc"
       }
     },
     "integrationsHub": {
@@ -1296,6 +1351,13 @@
           "description": "Twoje silniki modeli na własnej maszynie (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Skróty klawiszowe",
+      "commandBar": "Otwórz pasek poleceń",
+      "deselect": "Odznacz / zamknij inspektora",
+      "deleteBlock": "Usuń wybrany blok",
+      "help": "Pokaż tę ściągę"
     }
   },
   "settings": {
@@ -1338,6 +1400,10 @@
         "nameRequiredTitle": "Wymagana nazwa",
         "nameRequiredBody": "Nadaj ustawieniu nazwę.",
         "saveFailed": "Nie udało się zapisać ustawienia"
+      },
+      "confirmDelete": {
+        "title": "Usunąć ten preset modelu?",
+        "body": "\"{name}\" zostanie usunięty. Zadania go używające wrócą do domyślnego ustawienia obszaru roboczego."
       }
     },
     "account": {
@@ -1557,6 +1623,10 @@
         "saveFailed": "Nie udało się zapisać sekretu",
         "removed": "Sekret usunięty",
         "removeFailed": "Nie udało się usunąć sekretu"
+      },
+      "confirmRemove": {
+        "title": "Usunąć ten sekret?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     },
     "mergeThresholds": {
@@ -1603,7 +1673,11 @@
         "deleteFailed": "Nie można usunąć ustawienia"
       },
       "autoMergeOnHint": "Scalaj automatycznie, gdy mieści się w progach.",
-      "autoMergeOffHint": "Zawsze kieruj PR do recenzji człowieka."
+      "autoMergeOffHint": "Zawsze kieruj PR do recenzji człowieka.",
+      "confirmDelete": {
+        "title": "Usunąć ten preset scalania?",
+        "body": "\"{name}\" zostanie usunięty. Zadania go używające wrócą do domyślnego ustawienia obszaru roboczego."
+      }
     },
     "observabilityConnection": {
       "title": "Kondycja po wydaniu",
@@ -1810,6 +1884,10 @@
         "saveFailed": "Nie udało się zapisać runnera",
         "removed": "Runner usunięty",
         "removeFailed": "Nie udało się usunąć runnera"
+      },
+      "confirmRemove": {
+        "title": "Usunąć ten runner?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     },
     "infrastructure": {
@@ -2071,6 +2149,10 @@
           "step2": "Skopiuj klucz API. Kroki agenta będą działać przez Claude Code na endpoincie Anthropic firmy DeepSeek z pełnym kontekstem.",
           "step3": "Wklej klucz poniżej."
         }
+      },
+      "confirmRemove": {
+        "title": "Usunąć te dane logowania?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     }
   },
@@ -2167,6 +2249,10 @@
         "createBranch": "Nie udało się utworzyć gałęzi",
         "openPr": "Nie udało się otworzyć pull requesta",
         "merge": "Nie udało się scalić"
+      },
+      "confirmDisconnect": {
+        "title": "Rozłączyć GitHub?",
+        "body": "Aplikacja utraci dostęp do Twoich repozytoriów do ponownego połączenia."
       }
     },
     "addService": {
@@ -2275,6 +2361,10 @@
       "disconnect": "Nie udalo sie rozlaczyc Slacka",
       "saveRouting": "Nie udalo sie zapisac routingu",
       "saveMap": "Nie udalo sie zapisac mapy czlonkow"
+    },
+    "confirmDisconnect": {
+      "title": "Rozłączyć Slack?",
+      "body": "Powiadomienia Slack zostaną wstrzymane do ponownego połączenia."
     }
   },
   "documents": {
@@ -2492,6 +2582,10 @@
         "cloned": "Sklonowano \"{name}\" — trwa edycja \"{copy}\"",
         "cloneFailed": "Nie udało się sklonować pipeline'u",
         "updateFailed": "Nie udało się zaktualizować pipeline'u"
+      },
+      "confirmDeletePipeline": {
+        "title": "Usunąć ten pipeline?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     },
     "progress": {
@@ -3401,6 +3495,10 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła"
+    },
+    "confirmRemove": {
+      "title": "Usunąć ten fragment?",
+      "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
     }
   },
   "sandbox": {

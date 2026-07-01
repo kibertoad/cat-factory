@@ -105,6 +105,9 @@ export const useUiStore = defineStore('ui', () => {
   // Command bar (⌘K) — searchable launcher for every navbar action.
   const commandBarOpen = ref(false)
 
+  // Keyboard-shortcuts cheatsheet (?) — a modal listing every global shortcut.
+  const shortcutsHelpOpen = ref(false)
+
   // Mobile navigation drawer: on compact (< lg) viewports the SideBar is an
   // off-canvas drawer toggled by a hamburger; on lg+ it is a static aside and this
   // flag is ignored. Closed on any nav action so the board is revealed immediately.
@@ -459,6 +462,15 @@ export const useUiStore = defineStore('ui', () => {
   function toggleCommandBar() {
     commandBarOpen.value = !commandBarOpen.value
   }
+  function openShortcutsHelp() {
+    shortcutsHelpOpen.value = true
+  }
+  function closeShortcutsHelp() {
+    shortcutsHelpOpen.value = false
+  }
+  function toggleShortcutsHelp() {
+    shortcutsHelpOpen.value = !shortcutsHelpOpen.value
+  }
   function openMobileNav() {
     mobileNavOpen.value = true
   }
@@ -767,6 +779,7 @@ export const useUiStore = defineStore('ui', () => {
     slackOpen,
     fragmentLibraryOpen,
     commandBarOpen,
+    shortcutsHelpOpen,
     mobileNavOpen,
     integrationsOpen,
     cameFromIntegrations,
@@ -845,6 +858,9 @@ export const useUiStore = defineStore('ui', () => {
     openCommandBar,
     closeCommandBar,
     toggleCommandBar,
+    openShortcutsHelp,
+    closeShortcutsHelp,
+    toggleShortcutsHelp,
     openMobileNav,
     closeMobileNav,
     toggleMobileNav,
