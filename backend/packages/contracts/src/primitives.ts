@@ -7,6 +7,8 @@ import * as v from 'valibot'
 export const blockTypeSchema = v.picklist([
   'frontend',
   'service',
+  'library',
+  'document',
   'api',
   'database',
   'queue',
@@ -15,6 +17,22 @@ export const blockTypeSchema = v.picklist([
   'environment',
 ])
 export type BlockType = v.InferOutput<typeof blockTypeSchema>
+
+/**
+ * The repository roles a human can pick when importing an existing repo or bootstrapping a
+ * new one. Unlike the full {@link blockTypeSchema} (which also carries cosmetic-only labels
+ * like `api`/`database`), these four are BEHAVIOURAL frame kinds:
+ *   - `service`  — a backend service (full pipelines, ephemeral env, testers).
+ *   - `frontend` — a frontend app (backend links + the self-contained UI-test flow).
+ *   - `library`  — a published package (build/test/merge, no deploy/env, no tester infra).
+ *   - `document` — a document repository (only `spike`/`document` tasks + doc pipelines).
+ * The onboarding UIs offer exactly this set; `service` is the default.
+ */
+export const frameRepoTypeSchema = v.picklist(['service', 'frontend', 'library', 'document'])
+export type FrameRepoType = v.InferOutput<typeof frameRepoTypeSchema>
+
+/** The behavioural repo roles, in display order. Shared by the import + bootstrap selectors. */
+export const FRAME_REPO_TYPES = ['service', 'frontend', 'library', 'document'] as const
 
 export const blockStatusSchema = v.picklist([
   'planned',

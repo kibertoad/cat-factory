@@ -2143,7 +2143,9 @@
         "addedTitle": "Servicio añadido",
         "addedDescription": "{title} está en el tablero, configúralo abajo.",
         "addFailedTitle": "No se pudo añadir el servicio"
-      }
+      },
+      "repoType": "Tipo de repositorio",
+      "repoTypeHint": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
     },
     "repoTree": {
       "root": "raíz",
@@ -3533,6 +3535,10 @@
       "bootstrapFailed": "No se pudo inicializar",
       "saveArchFailed": "No se pudo guardar la arquitectura de referencia",
       "deleteFailed": "No se pudo eliminar"
+    },
+    "repoType": {
+      "label": "Tipo de repositorio",
+      "help": "Qué es este repositorio: un servicio backend, una aplicación frontend, una biblioteca compartida o un repositorio de documentación (solo documentos/spikes)."
     }
   },
   "mergePreset": {

@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { agentFailureSchema, stepSubtasksSchema } from './entities.js'
+import { frameRepoTypeSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Repo-bootstrap wire contracts. A "reference architecture" is a named base repo
@@ -165,6 +166,11 @@ export const bootstrapRepoSchema = v.pipe(
     referenceArchitectureId: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1)))),
     /** Name for the new repository. */
     repoName: slugField,
+    /**
+     * The repository role for the bootstrapped frame (backend service / frontend / library /
+     * document repository). Omitted → `service`, so existing callers are unchanged.
+     */
+    type: v.optional(frameRepoTypeSchema),
     /** Description applied to the new repository. */
     description: v.optional(descriptionField, ''),
     /** Whether the new repository is private (defaults to private). */

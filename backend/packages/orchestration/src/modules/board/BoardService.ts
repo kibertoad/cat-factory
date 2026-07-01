@@ -350,13 +350,15 @@ export class BoardService {
     const frames = blocks.filter((b) => b.level === 'frame').length
     const title = directory ? (directory.split('/').pop() ?? repo.name) : repo.name
     const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
+    const frameType = input.type ?? 'service'
+    const roleLabel = BLOCK_TYPE_LABEL[frameType]
     const block: Block = {
       id: this.idGenerator.next('blk'),
       title,
-      type: 'service',
+      type: frameType,
       description: directory
-        ? `Service backed by ${repo.owner}/${repo.name} (${directory}/).`
-        : `Service backed by ${repo.owner}/${repo.name}.`,
+        ? `${roleLabel} backed by ${repo.owner}/${repo.name} (${directory}/).`
+        : `${roleLabel} backed by ${repo.owner}/${repo.name}.`,
       position: input.position ?? { x: 80 + (frames % 5) * 48, y: 80 + (frames % 5) * 48 },
       status: 'ready',
       progress: 0,
@@ -399,6 +401,13 @@ export class BoardService {
     const blocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
     const siblings = tasksOf(blocks, containerId).length
     const service = serviceOf(blocks, container)
+    const taskType = input.taskType ?? 'feature'
+    // A document repository is authored, not implemented: it accepts only document/spike
+    // tasks (there is no code-producing pipeline for it). Gate at creation so the board
+    // never holds an un-runnable feature/bug task under a doc frame.
+    if (service?.type === 'document' && taskType !== 'document' && taskType !== 'spike') {
+      throw new ValidationError('A document repository only accepts document or spike tasks')
+    }
     const block: Block = {
       id: this.idGenerator.next('task'),
       title: input.title.trim(),
@@ -412,7 +421,7 @@ export class BoardService {
       level: 'task',
       parentId: containerId,
       // The kind of work, chosen on the create form; defaults to a feature task.
-      taskType: input.taskType ?? 'feature',
+      taskType,
     }
     // Small per-type form fields (bug severity / repro, spike timebox, …), when given.
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {

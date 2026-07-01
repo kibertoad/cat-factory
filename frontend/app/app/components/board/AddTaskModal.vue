@@ -41,6 +41,16 @@ const container = computed(() =>
   ui.addTaskContainerId ? board.getBlock(ui.addTaskContainerId) : undefined,
 )
 
+// The enclosing service frame: the container itself when it's a frame, else its parent
+// frame (a module's parent). Drives which task types are offered — a document repository
+// only authors documents/spikes, so the other kinds are hidden (and rejected server-side).
+const frame = computed(() => {
+  const c = container.value
+  if (!c) return undefined
+  return c.level === 'frame' ? c : c.parentId ? board.getBlock(c.parentId) : undefined
+})
+const isDocRepo = computed(() => frame.value?.type === 'document')
+
 const title = ref('')
 const description = ref('')
 const saving = ref(false)
@@ -53,13 +63,27 @@ const technical = ref(false)
 // delegates to <RecurringPipelineModal> instead of creating a one-off task here.
 type TaskTypeChoice = CreateTaskType | 'recurring'
 const taskType = ref<TaskTypeChoice>('feature')
-const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => [
-  { value: 'feature', label: t('board.addTask.types.feature'), icon: 'i-lucide-sparkles' },
-  { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
-  { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
-  { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
-  { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
-])
+const TASK_TYPES = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => {
+  const all: { value: TaskTypeChoice; label: string; icon: string }[] = [
+    { value: 'feature', label: t('board.addTask.types.feature'), icon: 'i-lucide-sparkles' },
+    { value: 'bug', label: t('board.addTask.types.bug'), icon: 'i-lucide-bug' },
+    { value: 'document', label: t('board.addTask.types.document'), icon: 'i-lucide-file-text' },
+    { value: 'spike', label: t('board.addTask.types.spike'), icon: 'i-lucide-flask-conical' },
+    { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
+  ]
+  // A document repository only accepts document/spike tasks (see BoardService.addTask).
+  return isDocRepo.value ? all.filter((k) => k.value === 'document' || k.value === 'spike') : all
+})
+// Keep the selection valid when the target is a document repo (default to document).
+watch(
+  isDocRepo,
+  (doc) => {
+    if (doc && taskType.value !== 'document' && taskType.value !== 'spike') {
+      taskType.value = 'document'
+    }
+  },
+  { immediate: true },
+)
 const isRecurring = computed(() => taskType.value === 'recurring')
 
 // Per-type fields (only the ones relevant to the chosen type are shown / sent).

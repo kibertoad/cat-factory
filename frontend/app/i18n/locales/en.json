@@ -2181,6 +2181,8 @@
       "connectFirst": "Connect this workspace to GitHub first. Link an installation the App is already on, or install it.",
       "repository": "Repository",
       "repositoryHint": "Repositories the GitHub App can access. Don't see yours? Grant the App access below, then refresh.",
+      "repoType": "Repository type",
+      "repoTypeHint": "What this repo is: a backend service, a frontend app, a shared library, or a document repository (docs/spikes only).",
       "noReposAvailable": "No repositories available yet. Grant the App access to one below, then refresh.",
       "searchPlaceholder": "Search repositories by owner or name…",
       "searchMinChars": "Type at least {min} character to search. | Type at least {min} characters to search.",
@@ -3608,6 +3610,10 @@
     "grantAccess": {
       "label": "Grant the App access to this repo",
       "title": "Open the App's installation settings to grant it access to the new repo"
+    },
+    "repoType": {
+      "label": "Repository type",
+      "help": "What this repo is: a backend service, a frontend app, a shared library, or a document repository (docs/spikes only)."
     },
     "description": {
       "label": "Description",

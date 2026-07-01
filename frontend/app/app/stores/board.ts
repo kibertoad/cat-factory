@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { UpdateBlockInput } from '@cat-factory/contracts'
-import type { Block, BlockType, CreateTaskType, TaskTypeFields } from '~/types/domain'
+import type {
+  Block,
+  BlockType,
+  CreateTaskType,
+  FrameRepoType,
+  TaskTypeFields,
+} from '~/types/domain'
 import { useServicesStore } from '~/stores/services'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBlockQueries } from '~/composables/useBlockQueries'
@@ -79,12 +85,13 @@ export const useBoardStore = defineStore('board', () => {
    */
   async function addServiceFromRepo(
     repoGithubId: number,
-    opts?: { directory?: string; isMonorepo?: boolean },
+    opts?: { directory?: string; isMonorepo?: boolean; type?: FrameRepoType },
   ): Promise<Block> {
     const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), {
       repoGithubId,
       ...(opts?.directory ? { directory: opts.directory } : {}),
       ...(opts?.isMonorepo !== undefined ? { isMonorepo: opts.isMonorepo } : {}),
+      ...(opts?.type ? { type: opts.type } : {}),
     })
     upsert(block)
     return block

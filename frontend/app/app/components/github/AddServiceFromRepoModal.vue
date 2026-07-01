@@ -11,12 +11,24 @@
 // browses its tree and picks the service's directory before adding (and may add
 // more than one, a subset of the repo's services).
 import { refDebounced } from '@vueuse/core'
+import { FRAME_REPO_TYPES } from '@cat-factory/contracts'
+import type { FrameRepoType } from '~/types/domain'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
+import { BLOCK_TYPE_META } from '~/utils/catalog'
 
 const { t } = useI18n()
+
+// The behavioural repo role for the imported frame. `service` (backend) is the default so
+// existing muscle memory is unchanged; the options are the four onboardable roles.
+const selectedType = ref<FrameRepoType>('service')
+const typeItems = FRAME_REPO_TYPES.map((value) => ({
+  value,
+  label: BLOCK_TYPE_META[value].label,
+  icon: BLOCK_TYPE_META[value].icon,
+}))
 const ui = useUiStore()
 const github = useGitHubStore()
 const board = useBoardStore()
@@ -157,6 +169,7 @@ function resetSelection() {
   isMonorepo.value = false
   configuredBlockId.value = undefined
   repoSearch.value = ''
+  selectedType.value = 'service'
 }
 
 // Clear the current repo selection (the combobox's trailing ✕) so the user can pick a
@@ -219,6 +232,7 @@ async function add() {
     const block = await board.addServiceFromRepo(selectedRepoId.value, {
       directory: isMonorepo.value ? selectedDirectory.value : undefined,
       isMonorepo: isMonorepo.value,
+      type: selectedType.value,
     })
     // Refresh the projection so the new repo↔block link is reflected locally.
     await github.load()
@@ -322,6 +336,13 @@ function done() {
                 }}
               </p>
             </div>
+          </UFormField>
+
+          <UFormField
+            :label="t('github.addService.repoType')"
+            :description="t('github.addService.repoTypeHint')"
+          >
+            <USelect v-model="selectedType" :items="typeItems" value-key="value" class="w-full" />
           </UFormField>
 
           <!-- monorepo handling: flag + directory picker -->

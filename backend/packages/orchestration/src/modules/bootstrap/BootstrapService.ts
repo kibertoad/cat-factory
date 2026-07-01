@@ -328,7 +328,11 @@ export class BootstrapService {
 
     // Accepted: materialise the provisional service frame and record it on the job
     // so the board shows a live "bootstrapping…" card the poll loop then updates.
-    const frame = await this.createServiceFrame(workspaceId, input.repoName)
+    const frame = await this.createServiceFrame(
+      workspaceId,
+      input.repoName,
+      input.type ?? 'service',
+    )
     const started = { blockId: frame.id, updatedAt: this.deps.clock.now() }
     await this.deps.bootstrapJobRepository.update(workspaceId, record.id, started)
     const job = toBootstrapJob({ ...record, ...started })
@@ -630,10 +634,14 @@ export class BootstrapService {
   }
 
   /** Create the provisional, in-progress service frame a bootstrap run materialises. */
-  private async createServiceFrame(workspaceId: string, repoName: string): Promise<Block> {
+  private async createServiceFrame(
+    workspaceId: string,
+    repoName: string,
+    frameType: BlockType = 'service',
+  ): Promise<Block> {
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     const frames = blocks.filter((b) => b.level === 'frame').length
-    const type: BlockType = 'service'
+    const type: BlockType = frameType
     const serviceFragmentIds = await this.defaultServiceFragmentIds(workspaceId)
     const block: Block = {
       id: this.deps.idGenerator.next('blk'),
