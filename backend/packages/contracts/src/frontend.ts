@@ -13,6 +13,16 @@ import * as v from 'valibot'
 // job-body builder fills the defaults (pnpm, `build`, `dist`, static serve, …).
 // ---------------------------------------------------------------------------
 
+/**
+ * Default WireMock `--root-dir` in the FE repo when a `frontend` frame declares no
+ * {@link frontendConfigSchema.mockMappingsPath}. The single source of truth shared by the
+ * frontend-aware mocker prompt (`@cat-factory/agents`) and the harness `frontend` infra spec —
+ * WireMock reads stubs from `<dir>/mappings/*.json` + `<dir>/__files/` under it. (The harness
+ * package keeps its own literal copy because bumping it is an image-tag change; keep the two in
+ * lock-step.)
+ */
+export const DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH = 'mocks/'
+
 /** The package manager the frontend build uses. Defaults to `pnpm`. */
 export const frontendPackageManagerSchema = v.picklist(['pnpm', 'npm', 'yarn'])
 export type FrontendPackageManager = v.InferOutput<typeof frontendPackageManagerSchema>

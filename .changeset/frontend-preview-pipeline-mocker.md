@@ -1,6 +1,7 @@
 ---
 '@cat-factory/kernel': minor
 '@cat-factory/agents': minor
+'@cat-factory/contracts': patch
 ---
 
 feat(frontend): `pl_frontend` pipeline + frontend-aware mocker (slice 4 of the
@@ -24,4 +25,7 @@ merger`). For a `type: 'frontend'` frame the engine already resolves the frame's
   under test), and do NOT wire a docker-compose stack — the platform serves the app + WireMock
   directly. The live service(s) under test are named and explicitly excluded from mocking. A
   backend-service mocker run is unchanged (the section is absent without a resolved frontend
-  context).
+  context). The section explicitly OVERRIDES the docker-compose stand-up guidance in the
+  (backend-oriented) mocker role prompt so the two do not contradict for a frontend run, and the
+  default WireMock root (`mocks/`) is now the shared `DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH` constant
+  in `@cat-factory/contracts` rather than a private literal.

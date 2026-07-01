@@ -55,8 +55,10 @@ describe('mockFrontendSection', () => {
     // Uses the frame's configured root, trailing slash trimmed, and the mappings/__files layout.
     expect(section).toContain('`wiremock/mappings/*.json`')
     expect(section).toContain('`wiremock/__files/`')
-    // Steers away from the backend docker-compose model.
+    // Steers away from the backend docker-compose model, and explicitly overrides the
+    // docker-compose stand-up guidance the (backend-oriented) mocker role prompt carries.
     expect(section).toContain('NOT a docker-compose stack')
+    expect(section).toContain('OVERRIDES the docker-compose')
   })
 
   it('defaults to `mocks/` when the frame declares no mappings path', () => {

@@ -46,6 +46,7 @@ build on. Link the merged pilot PR here once it lands.
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
 | 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | todo   | —                                                         |
+| 4c  | Surface/gate frontend pipelines (`pl_frontend`/`pl_visual`) to `frontend` frames     | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
@@ -159,3 +160,14 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     pipeline + prompt. `pl_frontend` runs fully self-contained for a mock-only frontend today; the
     live-env e2e assertion lands with 4b. Do it as a deployer-keying change, NOT a reverse-walk
     hack in `resolveFrontendConfig`.
+  - **Frontend pipelines are not yet frame-type-gated (slice 4c).** Nothing restricts `pl_frontend`
+    (or `pl_visual`) to `type: 'frontend'` frames — run on a backend task the `mocker` frontend
+    section correctly drops out (it is keyed on `context.frontend`), but `tester-ui` then has no
+    app/infra to drive. This is pre-existing (shared with `pl_visual`) and out of scope for the
+    runtime-neutral pipeline+prompt slice; surfacing/gating frontend pipelines to frontend frames
+    is tracked as **slice 4c**.
+  - **The frontend mocker default lives in one place.** `DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH`
+    (`@cat-factory/contracts`) is the single backend source of truth for WireMock's default
+    `--root-dir` (`mocks/`); the mocker prompt imports it instead of a private literal. The harness
+    keeps its own literal copy (`frontend-infra.ts` `DEFAULTS`) because changing it is an image-tag
+    bump — keep the two in lock-step.

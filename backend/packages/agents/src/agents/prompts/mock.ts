@@ -1,4 +1,5 @@
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
+import { DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH } from '@cat-factory/contracts'
 import { STANDARDS_FOOTER } from './shared.js'
 
 // Built-out role prompt for the mock-builder agent. This kind stands up
@@ -56,9 +57,6 @@ export function isMockKind(kind: AgentKind): boolean {
   return kind === MOCK_AGENT_KIND
 }
 
-/** Default WireMock `--root-dir` in the frontend repo when the frame declares none. */
-const DEFAULT_MOCK_MAPPINGS_PATH = 'mocks/'
-
 /**
  * The frontend-specific mocking guidance for a `mocker` run whose frame is a `type: 'frontend'`
  * app (the self-contained UI-test flow). A frontend's mocks are consumed very differently from a
@@ -66,8 +64,8 @@ const DEFAULT_MOCK_MAPPINGS_PATH = 'mocks/'
  * docker-compose, no DinD), reading the stub mappings straight from a directory in the FRONTEND
  * repo. So the mocker must author WireMock mappings under that directory in WireMock's `--root-dir`
  * layout — NOT wire a docker-compose stack — for exactly the upstreams the harness will point at
- * WireMock (every binding whose backend is not a LIVE service under test). Returns '' for a
- * backend run, so callers can append it unconditionally.
+ * WireMock (every binding whose backend is not a LIVE service under test). Returns `undefined` for
+ * a backend run (or a non-mocker kind), so callers can append it unconditionally.
  *
  * Kept in lock-step with the harness `frontend` infra spec (server `testerInfraSpec` /
  * `buildFrontendInfraSpec`): the served app reads each upstream URL from an injected env var, and
@@ -77,7 +75,7 @@ const DEFAULT_MOCK_MAPPINGS_PATH = 'mocks/'
 export function mockFrontendSection(context: AgentRunContext): string | undefined {
   if (!isMockKind(context.agentKind) || !context.frontend) return undefined
   const { config, bindings } = context.frontend
-  const root = config.mockMappingsPath?.trim() || DEFAULT_MOCK_MAPPINGS_PATH
+  const root = config.mockMappingsPath?.trim() || DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH
   const dir = root.replace(/\/+$/, '')
   // The upstreams the harness will serve from WireMock: every resolved binding with no live
   // `serviceUrl` (a `mock` source, or a `service` whose ephemeral env isn't live). A binding WITH
@@ -90,6 +88,9 @@ export function mockFrontendSection(context: AgentRunContext): string | undefine
     'self-contained UI-test flow, NOT a docker-compose stack. The platform builds and serves the',
     'app and runs WireMock in the SAME container (no docker-compose, no Docker-in-Docker), reading',
     `your stub mappings from the frontend repo. Author them there instead of wiring compose:`,
+    '- This OVERRIDES the docker-compose / `docker-compose up` / CI-service-container stand-up',
+    '  instructions in your role above: they describe the BACKEND-service flow and do NOT apply to',
+    '  this frontend run. Do not create or edit any docker-compose file here.',
     `- Put WireMock stubs under \`${dir}/mappings/*.json\` and their response bodies under`,
     `  \`${dir}/__files/\` (this is WireMock's \`--root-dir\` layout — a bare \`${dir}/\` with no`,
     '  `mappings/` inside starts an empty WireMock that 404s every mocked call).',
