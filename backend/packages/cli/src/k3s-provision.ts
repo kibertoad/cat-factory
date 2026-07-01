@@ -253,7 +253,17 @@ export interface ProvisionDeps {
   io: Io
   /** Delay between token-Secret read attempts (real setTimeout; a no-op in tests). */
   sleep?: (ms: number) => Promise<void>
+  /**
+   * How many times to poll the freshly-applied token Secret for a populated `.data.token` before
+   * giving up (500ms between attempts). Absent ⇒ {@link DEFAULT_TOKEN_READ_ATTEMPTS} (a snappy
+   * fail-fast for an interactive user). The integration suite raises it, since a busy CI cluster's
+   * token controller can take longer than the interactive budget to populate the Secret.
+   */
+  tokenReadAttempts?: number
 }
+
+/** Default poll budget for {@link readSaToken}: 20 attempts × 500ms = 10s. */
+export const DEFAULT_TOKEN_READ_ATTEMPTS = 20
 
 const realSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -297,7 +307,7 @@ async function confirmStep(io: Io, options: CliOptions, prompt: string): Promise
  */
 async function readSaToken(deps: ProvisionDeps, context?: string): Promise<string> {
   const sleep = deps.sleep ?? realSleep
-  const attempts = 20
+  const attempts = deps.tokenReadAttempts ?? DEFAULT_TOKEN_READ_ATTEMPTS
   for (let i = 0; i < attempts; i++) {
     const result = await runOrThrow(
       deps.shell,

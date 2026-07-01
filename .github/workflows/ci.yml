@@ -64,6 +64,15 @@ jobs:
               - 'backend/packages/contracts/src/environments.ts'
               - 'backend/packages/kernel/src/ports/runner-transport.ts'
               - 'backend/packages/kernel/src/ports/environment-provider.ts'
+              # The CLI's guided k3s setup (`cat-factory k3s`) has its own integration suite that
+              # provisions against the SAME k3d cluster (`test-k8s`), so changes to its probe /
+              # provisioning logic or its integration config run the job too. `host-shell.ts` is
+              # included because its real, process-backed `createNodeShell()` is exercised ONLY by
+              # this integration suite (every unit test injects a fake shell) — so a change to the
+              # spawn/stdin/watchdog logic must run the one test that covers it for real.
+              - 'backend/packages/cli/src/k3s*.ts'
+              - 'backend/packages/cli/src/host-shell.ts'
+              - 'backend/packages/cli/vitest.integration.config.ts'
               - '.github/workflows/ci.yml'
             # The deploy-harness integration suite (also in `test-k8s`) drives `handleDeploy`
             # against the SAME k3d cluster with real kubectl/kustomize, so it only runs when the
@@ -759,6 +768,16 @@ jobs:
         env:
           K8S_IT_NAMESPACE: cat-factory-it
         run: pnpm --filter @cat-factory/deploy-harness run test:integration
+
+      # CLI guided-setup (`cat-factory k3s`) integration suite: runs the CLI's REAL probe +
+      # provisioning logic over a process-backed shell against the SAME cf-it cluster (the current
+      # kubeconfig context is `k3d-cf-it`), validating the idempotent re-run behaviour — the token
+      # stays identical across re-provisions, `kubectl apply` reconciles, nothing is duplicated.
+      # It provisions + tears down its own `cat-factory` namespace, so it can't collide with the
+      # `cat-factory-it` namespace the suites above use. Gated on the same `kubernetes` filter.
+      - name: CLI k3s integration tests
+        if: ${{ needs.changes.outputs.kubernetes == 'true' }}
+        run: pnpm --filter @cat-factory/cli run test:integration
 
       - name: Tear down k3d cluster
         if: ${{ always() }}

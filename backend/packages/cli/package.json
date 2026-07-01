@@ -39,7 +39,8 @@
     "start": "node dist/bin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.6.0"
