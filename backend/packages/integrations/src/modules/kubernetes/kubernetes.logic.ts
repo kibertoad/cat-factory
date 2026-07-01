@@ -376,3 +376,26 @@ export function assertApiServerUrlSafe(rawUrl: string): void {
     )
   }
 }
+
+/**
+ * Reject a config that carries custom TLS trust material (a private CA / insecure-skip)
+ * on a runtime that can't honor it. Custom TLS is honored only on a runtime with undici
+ * (Node/local); the Cloudflare Worker sets `customTlsSupported: false`, so we fail up
+ * front here instead of letting the connection save and then die at every dispatch.
+ * Shared by the Kubernetes runner + environment backends.
+ */
+export function assertCustomTlsSupported(
+  config: { caCertPem?: string; insecureSkipTlsVerify?: boolean },
+  opts?: { customTlsSupported?: boolean },
+): void {
+  const needsCustomTls = !!config.caCertPem || !!config.insecureSkipTlsVerify
+  if (needsCustomTls && opts?.customTlsSupported === false) {
+    // Caller-input error (a config this runtime can't honor) → ValidationError (422 with
+    // the reason), not a plain Error (a generic 500 the connect form can't surface).
+    throw new ValidationError(
+      'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
+        '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
+        'run this workspace on the Node/local deployment.',
+    )
+  }
+}

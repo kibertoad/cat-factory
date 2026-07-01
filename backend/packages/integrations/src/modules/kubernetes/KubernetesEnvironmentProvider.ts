@@ -36,6 +36,7 @@ import {
   namespaceUrl,
   parseKubernetesEnvConfig,
   parseManifests,
+  renderTemplate,
   resolveNamespace,
   resourceUrl,
   templateVars,
@@ -81,17 +82,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
     const config = parseKubernetesEnvConfig(req.manifest)
     const client = new KubernetesApiClient(config, req.resolveSecret)
-    const inputs = req.inputs
-    const namespace = resolveNamespace(config, inputs)
-    const image = config.imageTemplate ? renderImage(config.imageTemplate, inputs) : undefined
-    const vars = templateVars(inputs, namespace, image)
+    const { namespace, vars } = this.provisionContext(config, req.inputs)
 
     await this.ensureNamespace(client, config, namespace)
 
     const texts = await this.readManifests(req, config)
     const resources: KubernetesResource[] = []
     for (const text of texts) {
-      resources.push(...parseManifests(text, vars, namespace, inputs.blockId, config.labels))
+      resources.push(...parseManifests(text, vars, namespace, req.inputs.blockId, config.labels))
     }
     if (resources.length === 0) {
       throw new Error('No Kubernetes manifests were found at the configured source path')
@@ -210,12 +208,12 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
           'image overrides / secret injections), but the deploy inputs were not provided.',
       )
     }
-    const vars = this.provisionVars(config, req.inputs)
+    const { namespace, vars } = this.provisionContext(config, req.inputs)
     const spec = buildDeployJobSpec({
       jobId: deploy.ref.jobId,
       config,
       vars,
-      namespace: resolveNamespace(config, req.inputs),
+      namespace,
       clone: deploy.clone,
       resolveSecret: req.resolveSecret,
     })
@@ -233,17 +231,21 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     req: ProvisionEnvironmentRequest,
   ): ProvisionedEnvironment {
     const config = parseKubernetesEnvConfig(req.manifest)
-    return mapDeployOutcome(view, this.provisionVars(config, req.inputs))
+    return mapDeployOutcome(view, this.provisionContext(config, req.inputs).vars)
   }
 
-  /** The `{{var}}` substitution map for templates (inputs + namespace + optional image). */
-  private provisionVars(
+  /**
+   * Resolve the per-PR namespace and the `{{var}}` substitution map (inputs + namespace +
+   * optional rendered image) in one place, so `provision()`, `buildProvisionJob()`, and
+   * `finalizeProvision()` derive them identically.
+   */
+  private provisionContext(
     config: KubernetesProvisionConfig,
     inputs: Record<string, string>,
-  ): Record<string, string> {
+  ): { namespace: string; vars: Record<string, string> } {
     const namespace = resolveNamespace(config, inputs)
-    const image = config.imageTemplate ? renderImage(config.imageTemplate, inputs) : undefined
-    return templateVars(inputs, namespace, image)
+    const image = config.imageTemplate ? renderTemplate(config.imageTemplate, inputs) : undefined
+    return { namespace, vars: templateVars(inputs, namespace, image) }
   }
 
   private async ensureNamespace(
@@ -360,39 +362,30 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   ): Promise<string | null> {
     const url = config.url
     if (url.source === 'serviceStatus') {
-      const res = await client.fetch(
-        'GET',
-        resourceUrl(config, 'v1', 'Service', namespace, url.serviceName),
-        undefined,
-        READ_TIMEOUT_MS,
+      const svc = await this.getByNameOrFirst(
+        client,
+        config,
+        'v1',
+        'Service',
+        namespace,
+        url.serviceName,
       )
-      return res.ok ? extractLoadBalancerAddress(await res.json()) : null
+      return svc ? extractLoadBalancerAddress(svc) : null
     }
     if (url.source === 'gatewayStatus') return this.readGatewayHost(client, config, namespace)
     if (url.source === 'httpRouteStatus') return this.readHttpRouteHost(client, config, namespace)
     // ingressTemplate is resolved by the caller; only ingressStatus reaches here.
     if (url.source !== 'ingressStatus') return null
     // ingressStatus: a named Ingress, else the only Ingress in the namespace.
-    if (url.ingressName) {
-      const res = await client.fetch(
-        'GET',
-        resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace, url.ingressName),
-        undefined,
-        READ_TIMEOUT_MS,
-      )
-      return res.ok ? extractLoadBalancerAddress(await res.json()) : null
-    }
-    const res = await client.fetch(
-      'GET',
-      resourceUrl(config, 'networking.k8s.io/v1', 'Ingress', namespace),
-      undefined,
-      READ_TIMEOUT_MS,
+    const ingress = await this.getByNameOrFirst(
+      client,
+      config,
+      'networking.k8s.io/v1',
+      'Ingress',
+      namespace,
+      url.ingressName,
     )
-    if (!res.ok) return null
-    const body = (await res.json()) as { items?: unknown[] }
-    const items = Array.isArray(body.items) ? body.items : []
-    if (items.length === 0) return null
-    return extractLoadBalancerAddress(items[0])
+    return ingress ? extractLoadBalancerAddress(ingress) : null
   }
 
   /**
@@ -406,7 +399,14 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   ): Promise<string | null> {
     const url = config.url
     if (url.source !== 'gatewayStatus') return null
-    const gw = await this.getGateway(client, config, namespace, url.gatewayName)
+    const gw = await this.getByNameOrFirst(
+      client,
+      config,
+      GATEWAY_API_VERSION,
+      'Gateway',
+      namespace,
+      url.gatewayName,
+    )
     if (!gw) return null
     return extractGatewayListenerHost(gw) ?? extractGatewayAddress(gw)
   }
@@ -423,56 +423,51 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   ): Promise<string | null> {
     const url = config.url
     if (url.source !== 'httpRouteStatus') return null
-    let route: unknown
-    if (url.httpRouteName) {
-      const res = await client.fetch(
-        'GET',
-        resourceUrl(config, GATEWAY_API_VERSION, 'HTTPRoute', namespace, url.httpRouteName),
-        undefined,
-        READ_TIMEOUT_MS,
-      )
-      route = res.ok ? await res.json() : null
-    } else {
-      const res = await client.fetch(
-        'GET',
-        resourceUrl(config, GATEWAY_API_VERSION, 'HTTPRoute', namespace),
-        undefined,
-        READ_TIMEOUT_MS,
-      )
-      route = res.ok ? firstListItem(await res.json()) : null
-    }
+    const route = await this.getByNameOrFirst(
+      client,
+      config,
+      GATEWAY_API_VERSION,
+      'HTTPRoute',
+      namespace,
+      url.httpRouteName,
+    )
     if (!route) return null
     const host = extractHttpRouteHost(route)
     if (host) return host
     const parent = httpRouteParentRef(route)
     if (!parent) return null
-    const gw = await this.getGateway(client, config, parent.namespace ?? namespace, parent.name)
+    const gw = await this.getByNameOrFirst(
+      client,
+      config,
+      GATEWAY_API_VERSION,
+      'Gateway',
+      parent.namespace ?? namespace,
+      parent.name,
+    )
     return gw ? extractGatewayAddress(gw) : null
   }
 
-  /** GET a `Gateway` by name, or the first one in the namespace when `name` is omitted. */
-  private async getGateway(
+  /** GET a URL, returning the parsed JSON body, or null on any non-OK response. */
+  private async getJson(client: KubernetesApiClient, url: string): Promise<unknown | null> {
+    const res = await client.fetch('GET', url, undefined, READ_TIMEOUT_MS)
+    return res.ok ? await res.json() : null
+  }
+
+  /**
+   * GET a namespaced resource by name, or the first item of its collection when `name` is
+   * omitted. Returns null when the resource/collection is absent or empty.
+   */
+  private async getByNameOrFirst(
     client: KubernetesApiClient,
     config: KubernetesEnvironmentConfig,
+    apiVersion: string,
+    kind: string,
     namespace: string,
     name?: string,
-  ): Promise<unknown> {
-    if (name) {
-      const res = await client.fetch(
-        'GET',
-        resourceUrl(config, GATEWAY_API_VERSION, 'Gateway', namespace, name),
-        undefined,
-        READ_TIMEOUT_MS,
-      )
-      return res.ok ? await res.json() : null
-    }
-    const res = await client.fetch(
-      'GET',
-      resourceUrl(config, GATEWAY_API_VERSION, 'Gateway', namespace),
-      undefined,
-      READ_TIMEOUT_MS,
-    )
-    return res.ok ? firstListItem(await res.json()) : null
+  ): Promise<unknown | null> {
+    const body = await this.getJson(client, resourceUrl(config, apiVersion, kind, namespace, name))
+    if (body === null) return null
+    return name ? body : firstListItem(body)
   }
 
   /** Read the manifest file(s) from the configured source (co-located or separate repo). */
@@ -516,9 +511,4 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     if (!single) throw new Error(`No manifests found at '${path}'`)
     return [single.content]
   }
-}
-
-/** Render the optional image template over the provision inputs. */
-function renderImage(template: string, inputs: Record<string, string>): string {
-  return template.replace(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g, (_m, key: string) => inputs[key] ?? '')
 }

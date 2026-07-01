@@ -56,11 +56,6 @@ const RESOURCE_KINDS: Record<string, { plural: string; namespaced: boolean }> = 
   Gateway: { plural: 'gateways', namespaced: true },
 }
 
-/** Whether a manifest kind is supported by the apply loop. `Namespace` is owned by us. */
-export function isSupportedKind(kind: string): boolean {
-  return kind in RESOURCE_KINDS
-}
-
 /**
  * Read the per-workspace Kubernetes config off the stored manifest's `providerConfig`.
  * The config was Valibot-validated at the connect controller boundary, so this trusts
