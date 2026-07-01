@@ -10,7 +10,6 @@
   },
   "common": {
     "save": "Save",
-    "saved": "Saved",
     "cancel": "Cancel",
     "retry": "Retry",
     "copy": "Copy",
@@ -258,6 +257,10 @@
       "blockedByDependenciesTitle": "Blocked by dependencies",
       "noPipelineTitle": "No pipeline defined",
       "noPipelineBody": "Create one in the builder first.",
+      "startedToast": {
+        "title": "Run started",
+        "body": "Running \"{name}\"."
+      },
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Open {pr} on GitHub",
@@ -722,7 +725,9 @@
           "done": "Finishing up"
         },
         "id": "Container",
-        "url": "Address"
+        "url": "Address",
+        "copyId": "Copy container id",
+        "copyUrl": "Copy address"
       },
       "subtasks": "Subtasks · {completed}/{total}",
       "standardsApplied": "Standards applied",
@@ -1144,6 +1149,10 @@
       "overdue": "Overdue",
       "openPr": "Open PR",
       "dismiss": "Dismiss",
+      "toast": {
+        "acted": "Marked as handled",
+        "dismissed": "Dismissed"
+      },
       "action": {
         "merge_review": "Merge",
         "pipeline_complete": "Confirm & merge",
@@ -1257,7 +1266,8 @@
         "serviceFragmentDefaults": "Default service best practices",
         "accountSettings": "Account settings",
         "localModels": "My local runners",
-        "sandbox": "Open Sandbox"
+        "sandbox": "Open Sandbox",
+        "shortcuts": "Keyboard shortcuts"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain",
@@ -1276,8 +1286,16 @@
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware",
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate"
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate",
+        "shortcuts": "keyboard shortcuts keys hotkeys cheatsheet help"
       }
+    },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "commandBar": "Open the command bar",
+      "deselect": "Deselect / close the inspector",
+      "deleteBlock": "Delete the selected block",
+      "help": "Show this cheatsheet"
     },
     "integrationsHub": {
       "title": "Integrations",

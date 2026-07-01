@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useClipboard } from '@vueuse/core'
 import type { PipelineStep, RunContainerStatus } from '~/types/execution'
 import { containerPhaseLabel } from '~/utils/pipelineRender'
 
@@ -61,6 +62,15 @@ const CONTAINER_STATUS_META: Record<
 
 // The friendly phase label (clone → "Preparing workspace", …); only meaningful while up.
 const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phase, { t, te }))
+
+// Make the container id / URL one-click copyable (they're long and used to be
+// select-and-copy-by-hand), with a toast confirming the copy landed.
+const toast = useToast()
+const { copy } = useClipboard()
+async function copyText(text: string) {
+  await copy(text)
+  toast.add({ title: t('common.copied'), color: 'success', icon: 'i-lucide-check' })
+}
 </script>
 
 <template>
@@ -94,6 +104,16 @@ const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phas
           <dd class="truncate font-mono text-[11px] text-slate-300" :title="step.container.id">
             {{ step.container.id }}
           </dd>
+          <UButton
+            icon="i-lucide-copy"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="ms-auto shrink-0"
+            :title="t('panels.stepMeta.container.copyId')"
+            :aria-label="t('panels.stepMeta.container.copyId')"
+            @click="copyText(step.container.id)"
+          />
         </div>
         <div v-if="step.container?.url" class="flex items-center gap-2">
           <dt class="shrink-0 text-[11px] uppercase tracking-wide text-slate-500">
@@ -109,6 +129,16 @@ const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phas
               {{ step.container.url }}
             </a>
           </dd>
+          <UButton
+            icon="i-lucide-copy"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="ms-auto shrink-0"
+            :title="t('panels.stepMeta.container.copyUrl')"
+            :aria-label="t('panels.stepMeta.container.copyUrl')"
+            @click="copyText(step.container.url)"
+          />
         </div>
       </dl>
     </div>

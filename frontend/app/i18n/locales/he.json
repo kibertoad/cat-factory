@@ -21,7 +21,8 @@
     "confirm": {
       "defaultTitle": "האם אתה בטוח?",
       "confirm": "אישור"
-    }
+    },
+    "copied": "הועתק ללוח"
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -241,7 +242,11 @@
       "module": "מודול: {name}",
       "buildSteps": "שלבי בנייה",
       "reviewAndApprove": "סקור ואשר",
-      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט"
+      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט",
+      "startedToast": {
+        "title": "ההרצה החלה",
+        "body": "מריץ את \"{name}\"."
+      }
     },
     "epic": {
       "label": "אפיק",
@@ -683,7 +688,9 @@
           "done": "מסיים"
         },
         "id": "מכולה",
-        "url": "כתובת"
+        "url": "כתובת",
+        "copyId": "העתק את מזהה הקונטיינר",
+        "copyUrl": "העתק כתובת"
       },
       "subtasks": "תת-משימות · {completed}/{total}",
       "standardsApplied": "תקנים שהוחלו",
@@ -1116,6 +1123,10 @@
         "human_review": "סמן כנקרא",
         "followup_pending": "סמן כנקרא",
         "markRead": "סמן כנקרא"
+      },
+      "toast": {
+        "acted": "סומן כטופל",
+        "dismissed": "נדחה"
       }
     },
     "aiProvidersBanner": {
@@ -1215,7 +1226,8 @@
         "serviceFragmentDefaults": "שיטות עבודה מומלצות לשירות כברירת מחדל",
         "accountSettings": "הגדרות חשבון",
         "localModels": "המריצים המקומיים שלי",
-        "sandbox": "פתח ארגז חול"
+        "sandbox": "פתח ארגז חול",
+        "shortcuts": "קיצורי מקלדת"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -1234,7 +1246,8 @@
         "serviceFragmentDefaults": "מקטע שיטת עבודה מומלצת הנחיה שירות ברירת מחדל מודע-קוד",
         "accountSettings": "חשבון צוות חברים תפקידים הזמנות אימייל מפתחות api מקטע ספריית שיטות עבודה מומלצות הקשר ארגון אישי",
         "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה"
+        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה",
+        "shortcuts": "קיצורים מקלדת מקשים עזרה"
       }
     },
     "integrationsHub": {
@@ -1307,6 +1320,13 @@
           "description": "מריצי מודלים על המכונה שלך (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "קיצורי מקלדת",
+      "commandBar": "פתח את שורת הפקודות",
+      "deselect": "בטל בחירה / סגור את המפקח",
+      "deleteBlock": "מחק את הבלוק הנבחר",
+      "help": "הצג את דף העזר הזה"
     }
   },
   "settings": {

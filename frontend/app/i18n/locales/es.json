@@ -21,7 +21,8 @@
     "confirm": {
       "defaultTitle": "¿Estás seguro?",
       "confirm": "Confirmar"
-    }
+    },
+    "copied": "Copiado al portapapeles"
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -241,7 +242,11 @@
       "module": "Módulo: {name}",
       "buildSteps": "Pasos de build",
       "reviewAndApprove": "Revisar y aprobar",
-      "clickToViewStep": "Haz clic para ver los detalles y la salida del paso"
+      "clickToViewStep": "Haz clic para ver los detalles y la salida del paso",
+      "startedToast": {
+        "title": "Ejecución iniciada",
+        "body": "Ejecutando \"{name}\"."
+      }
     },
     "epic": {
       "label": "Épica",
@@ -703,7 +708,9 @@
           "done": "Finalizando"
         },
         "id": "Contenedor",
-        "url": "Dirección"
+        "url": "Dirección",
+        "copyId": "Copiar id del contenedor",
+        "copyUrl": "Copiar dirección"
       }
     },
     "stepDetail": {
@@ -1116,6 +1123,10 @@
         "human_review": "Marcar como leída",
         "followup_pending": "Marcar como leída",
         "markRead": "Marcar como leída"
+      },
+      "toast": {
+        "acted": "Marcado como resuelto",
+        "dismissed": "Descartado"
       }
     },
     "aiProvidersBanner": {
@@ -1215,7 +1226,8 @@
         "serviceFragmentDefaults": "Buenas prácticas del servicio por defecto",
         "accountSettings": "Ajustes de la cuenta",
         "localModels": "Mis ejecutores locales",
-        "sandbox": "Abrir el entorno de pruebas"
+        "sandbox": "Abrir el entorno de pruebas",
+        "shortcuts": "Atajos de teclado"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -1234,7 +1246,8 @@
         "serviceFragmentDefaults": "fragmento buenas prácticas directriz servicio por defecto consciente del código",
         "accountSettings": "cuenta equipo miembros roles invitaciones correo claves api fragmento buenas prácticas biblioteca contexto organización personal",
         "localModels": "modelo local ejecutor ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar"
+        "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar",
+        "shortcuts": "atajos teclado teclas ayuda"
       }
     },
     "integrationsHub": {
@@ -1307,6 +1320,13 @@
           "description": "Tus ejecutores de modelos en tu propia máquina (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Atajos de teclado",
+      "commandBar": "Abrir la barra de comandos",
+      "deselect": "Deseleccionar / cerrar el inspector",
+      "deleteBlock": "Eliminar el bloque seleccionado",
+      "help": "Mostrar esta ayuda"
     }
   },
   "settings": {

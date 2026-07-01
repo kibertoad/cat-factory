@@ -1,5 +1,5 @@
 ---
-"@cat-factory/app": patch
+'@cat-factory/app': patch
 ---
 
 UX quality-of-life pass (part 1): add a reusable confirmation dialog + `useConfirm()`

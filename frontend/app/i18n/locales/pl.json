@@ -21,7 +21,8 @@
     "confirm": {
       "defaultTitle": "Na pewno?",
       "confirm": "Potwierdź"
-    }
+    },
+    "copied": "Skopiowano do schowka"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -241,7 +242,11 @@
       "module": "Moduł: {name}",
       "buildSteps": "Kroki budowania",
       "reviewAndApprove": "Przejrzyj i zatwierdź",
-      "clickToViewStep": "Kliknij, aby zobaczyć szczegóły i wynik kroku"
+      "clickToViewStep": "Kliknij, aby zobaczyć szczegóły i wynik kroku",
+      "startedToast": {
+        "title": "Uruchomiono",
+        "body": "Trwa wykonywanie \"{name}\"."
+      }
     },
     "epic": {
       "label": "Epik",
@@ -703,7 +708,9 @@
           "done": "Kończenie"
         },
         "id": "Kontener",
-        "url": "Adres"
+        "url": "Adres",
+        "copyId": "Kopiuj id kontenera",
+        "copyUrl": "Kopiuj adres"
       }
     },
     "stepDetail": {
@@ -1116,6 +1123,10 @@
         "human_review": "Oznacz jako przeczytane",
         "followup_pending": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane"
+      },
+      "toast": {
+        "acted": "Oznaczono jako obsłużone",
+        "dismissed": "Odrzucono"
       }
     },
     "aiProvidersBanner": {
@@ -1215,7 +1226,8 @@
         "serviceFragmentDefaults": "Domyślne dobre praktyki usługi",
         "accountSettings": "Ustawienia konta",
         "localModels": "Moje lokalne silniki",
-        "sandbox": "Otwórz piaskownicę"
+        "sandbox": "Otwórz piaskownicę",
+        "shortcuts": "Skróty klawiszowe"
       },
       "keywords": {
         "newPipeline": "potok agenci łańcuch pipeline",
@@ -1234,7 +1246,8 @@
         "serviceFragmentDefaults": "fragment dobre praktyki wytyczna usługa domyślna świadoma kodu",
         "accountSettings": "konto zespół członkowie role zaproszenia e-mail klucze api fragment dobre praktyki biblioteka kontekst organizacja osobiste",
         "localModels": "model lokalny silnik ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena"
+        "sandbox": "piaskownica prompt model test eksperyment sędzia fixture benchmark ocena",
+        "shortcuts": "skróty klawiatura klawisze pomoc"
       }
     },
     "integrationsHub": {
@@ -1307,6 +1320,13 @@
           "description": "Twoje silniki modeli na własnej maszynie (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Skróty klawiszowe",
+      "commandBar": "Otwórz pasek poleceń",
+      "deselect": "Odznacz / zamknij inspektora",
+      "deleteBlock": "Usuń wybrany blok",
+      "help": "Pokaż tę ściągę"
     }
   },
   "settings": {

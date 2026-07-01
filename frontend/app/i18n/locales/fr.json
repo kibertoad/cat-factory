@@ -21,7 +21,8 @@
     "confirm": {
       "defaultTitle": "Êtes-vous sûr ?",
       "confirm": "Confirmer"
-    }
+    },
+    "copied": "Copié dans le presse-papiers"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -241,7 +242,11 @@
       "module": "Module : {name}",
       "buildSteps": "Étapes de build",
       "reviewAndApprove": "Revoir et approuver",
-      "clickToViewStep": "Cliquez pour voir les détails et la sortie de l’étape"
+      "clickToViewStep": "Cliquez pour voir les détails et la sortie de l’étape",
+      "startedToast": {
+        "title": "Exécution démarrée",
+        "body": "Exécution de \"{name}\"."
+      }
     },
     "epic": {
       "label": "Épopée",
@@ -703,7 +708,9 @@
           "done": "Finalisation"
         },
         "id": "Conteneur",
-        "url": "Adresse"
+        "url": "Adresse",
+        "copyId": "Copier l'id du conteneur",
+        "copyUrl": "Copier l'adresse"
       }
     },
     "stepDetail": {
@@ -1116,6 +1123,10 @@
         "human_review": "Marquer comme lu",
         "followup_pending": "Marquer comme lu",
         "markRead": "Marquer comme lu"
+      },
+      "toast": {
+        "acted": "Marqué comme traité",
+        "dismissed": "Ignoré"
       }
     },
     "aiProvidersBanner": {
@@ -1215,7 +1226,8 @@
         "serviceFragmentDefaults": "Bonnes pratiques de service par défaut",
         "accountSettings": "Paramètres du compte",
         "localModels": "Mes exécuteurs locaux",
-        "sandbox": "Ouvrir le bac à sable"
+        "sandbox": "Ouvrir le bac à sable",
+        "shortcuts": "Raccourcis clavier"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -1234,7 +1246,8 @@
         "serviceFragmentDefaults": "fragment bonnes pratiques directive service par défaut sensible au code",
         "accountSettings": "compte équipe membres rôles invitations e-mail clés api fragment bonnes pratiques bibliothèque contexte organisation personnel",
         "localModels": "modèle local exécuteur ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer"
+        "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer",
+        "shortcuts": "raccourcis clavier touches aide"
       }
     },
     "integrationsHub": {
@@ -1307,6 +1320,13 @@
           "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Raccourcis clavier",
+      "commandBar": "Ouvrir la barre de commandes",
+      "deselect": "Désélectionner / fermer l'inspecteur",
+      "deleteBlock": "Supprimer le bloc sélectionné",
+      "help": "Afficher cet aide-mémoire"
     }
   },
   "settings": {

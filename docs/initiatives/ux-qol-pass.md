@@ -42,33 +42,33 @@ Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`),
 
 ### PR 1 — Primitives + destructive safety + empty states
 
-| Unit                                                                                 | Status | PR      |
-| ------------------------------------------------------------------------------------ | ------ | ------- |
-| Tracker document                                                                     | done   | PR 1 |
-| `useConfirm.ts` + `ConfirmDialog.vue` + mount in `index.vue`                         | done   | PR 1 |
-| `useBlockDeletion.ts`                                                                | done   | PR 1 |
-| Confirm: delete task/module/service/recurring (`InspectorPanel`)                     | done   | PR 1 |
-| Confirm: delete pipeline (`PipelineBuilder`)                                         | done   | PR 1 |
-| Confirm: delete merge preset (`MergeThresholdsPanel`)                                | done   | PR 1 |
-| Confirm: delete model preset (`ModelConfigurationPanel`)                             | done   | PR 1 |
-| Confirm: remove dependency edge (`TaskDependencies`)                                 | done   | PR 1 |
-| `EmptyState.vue`                                                                     | done   | PR 1 |
-| EmptyState: context pickers, dependencies, execution history (preset panels skipped — a default preset always exists, so the empty case is unreachable) | done | PR 1 |
-| `data-testid`s for e2e (confirm-dialog/accept/cancel, empty-state, inspector-delete) | done   | PR 1 |
-| i18n keys (8 locales) + patch changeset                                              | done   | PR 1 |
+| Unit                                                                                                                                                    | Status | PR   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| Tracker document                                                                                                                                        | done   | PR 1 |
+| `useConfirm.ts` + `ConfirmDialog.vue` + mount in `index.vue`                                                                                            | done   | PR 1 |
+| `useBlockDeletion.ts`                                                                                                                                   | done   | PR 1 |
+| Confirm: delete task/module/service/recurring (`InspectorPanel`)                                                                                        | done   | PR 1 |
+| Confirm: delete pipeline (`PipelineBuilder`)                                                                                                            | done   | PR 1 |
+| Confirm: delete merge preset (`MergeThresholdsPanel`)                                                                                                   | done   | PR 1 |
+| Confirm: delete model preset (`ModelConfigurationPanel`)                                                                                                | done   | PR 1 |
+| Confirm: remove dependency edge (`TaskDependencies`)                                                                                                    | done   | PR 1 |
+| `EmptyState.vue`                                                                                                                                        | done   | PR 1 |
+| EmptyState: context pickers, dependencies, execution history (preset panels skipped — a default preset always exists, so the empty case is unreachable) | done   | PR 1 |
+| `data-testid`s for e2e (confirm-dialog/accept/cancel, empty-state, inspector-delete)                                                                    | done   | PR 1 |
+| i18n keys (8 locales) + patch changeset                                                                                                                 | done   | PR 1 |
 
 ### PR 2 — Feedback toasts + keyboard shortcuts + help
 
-| Unit                                                                | Status | PR  |
-| ------------------------------------------------------------------- | ------ | --- |
-| Toast: run started (`TaskCard`)                                     | todo   | —   |
-| Toast: notification acted/dismissed (`NotificationsInbox`)          | todo   | —   |
-| Toast: settings saved (`WorkspaceSettingsPanel`, `TaskRunSettings`) | todo   | —   |
-| Copyable container id/url + toast (`StepContainerStatus`)           | todo   | —   |
-| `useKeyboardShortcuts.ts` (Escape / Delete / ?)                     | todo   | —   |
-| `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                | todo   | —   |
-| Command-bar "Keyboard shortcuts" entry                              | todo   | —   |
-| i18n keys + patch changeset                                         | todo   | —   |
+| Unit                                                                | Status | PR   |
+| ------------------------------------------------------------------- | ------ | ---- |
+| Toast: run started (`TaskCard`)                                     | done   | PR 2 |
+| Toast: notification acted/dismissed (`NotificationsInbox`)          | done   | PR 2 |
+| Toast: settings saved (`WorkspaceSettingsPanel` already toasts; `TaskRunSettings` skipped — inline auto-save, a toast per field-change is noise) | done | PR 2 |
+| Copyable container id/url + toast (`StepContainerStatus`)           | done   | PR 2 |
+| `useKeyboardShortcuts.ts` (Escape / Delete / ?)                     | done   | PR 2 |
+| `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                | done   | PR 2 |
+| Command-bar "Keyboard shortcuts" entry                              | done   | PR 2 |
+| i18n keys (8 locales) + patch changeset                             | done   | PR 2 |
 
 ## Conventions & gotchas (carried between iterations)
 

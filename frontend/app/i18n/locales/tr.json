@@ -21,7 +21,8 @@
     "confirm": {
       "defaultTitle": "Emin misiniz?",
       "confirm": "Onayla"
-    }
+    },
+    "copied": "Panoya kopyalandı"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -241,7 +242,11 @@
       "module": "Modül: {name}",
       "buildSteps": "Derleme adımları",
       "reviewAndApprove": "İncele ve onayla",
-      "clickToViewStep": "Adım ayrıntılarını ve çıktısını görüntülemek için tıklayın"
+      "clickToViewStep": "Adım ayrıntılarını ve çıktısını görüntülemek için tıklayın",
+      "startedToast": {
+        "title": "Çalıştırma başladı",
+        "body": "\"{name}\" çalıştırılıyor."
+      }
     },
     "epic": {
       "label": "Epik",
@@ -683,7 +688,9 @@
           "done": "Tamamlanıyor"
         },
         "id": "Konteyner",
-        "url": "Adres"
+        "url": "Adres",
+        "copyId": "Konteyner kimliğini kopyala",
+        "copyUrl": "Adresi kopyala"
       },
       "subtasks": "Alt görevler · {completed}/{total}",
       "standardsApplied": "Uygulanan standartlar",
@@ -1116,6 +1123,10 @@
         "human_review": "Okundu işaretle",
         "followup_pending": "Okundu işaretle",
         "markRead": "Okundu işaretle"
+      },
+      "toast": {
+        "acted": "İşlendi olarak işaretlendi",
+        "dismissed": "Kapatıldı"
       }
     },
     "aiProvidersBanner": {
@@ -1215,7 +1226,8 @@
         "serviceFragmentDefaults": "Varsayılan servis en iyi uygulamaları",
         "accountSettings": "Hesap ayarları",
         "localModels": "Yerel çalıştırıcılarım",
-        "sandbox": "Sandbox'ı aç"
+        "sandbox": "Sandbox'ı aç",
+        "shortcuts": "Klavye kısayolları"
       },
       "keywords": {
         "newPipeline": "boru hattı ajanlar zincir",
@@ -1234,7 +1246,8 @@
         "serviceFragmentDefaults": "parça en iyi uygulama yönerge servis varsayılan kod-farkında",
         "accountSettings": "hesap ekip üyeler roller davetler e-posta api anahtarlar parça en iyi uygulama kitaplık bağlam organizasyon kişisel",
         "localModels": "yerel model çalıştırıcı ollama lm studio llamacpp vllm uç nokta",
-        "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir"
+        "sandbox": "sandbox prompt model test deney yargıç fikstür benchmark değerlendir",
+        "shortcuts": "kısayollar klavye tuşlar yardım"
       }
     },
     "integrationsHub": {
@@ -1307,6 +1320,13 @@
           "description": "Kendi makinenizdeki model runner'ları (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Klavye kısayolları",
+      "commandBar": "Komut çubuğunu aç",
+      "deselect": "Seçimi kaldır / denetçiyi kapat",
+      "deleteBlock": "Seçili bloğu sil",
+      "help": "Bu kısayol listesini göster"
     }
   },
   "settings": {

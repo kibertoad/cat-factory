@@ -21,7 +21,8 @@
     "confirm": {
       "defaultTitle": "よろしいですか？",
       "confirm": "確認"
-    }
+    },
+    "copied": "クリップボードにコピーしました"
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -241,7 +242,11 @@
       "module": "モジュール: {name}",
       "buildSteps": "ビルドステップ",
       "reviewAndApprove": "レビューして承認",
-      "clickToViewStep": "クリックしてステップの詳細と出力を表示"
+      "clickToViewStep": "クリックしてステップの詳細と出力を表示",
+      "startedToast": {
+        "title": "実行を開始しました",
+        "body": "「{name}」を実行中です。"
+      }
     },
     "epic": {
       "label": "エピック",
@@ -683,7 +688,9 @@
           "done": "仕上げ中"
         },
         "id": "コンテナ",
-        "url": "アドレス"
+        "url": "アドレス",
+        "copyId": "コンテナIDをコピー",
+        "copyUrl": "アドレスをコピー"
       },
       "subtasks": "サブタスク · {completed}/{total}",
       "standardsApplied": "適用された基準",
@@ -1116,6 +1123,10 @@
         "human_review": "既読にする",
         "followup_pending": "既読にする",
         "markRead": "既読にする"
+      },
+      "toast": {
+        "acted": "対応済みにしました",
+        "dismissed": "却下しました"
       }
     },
     "aiProvidersBanner": {
@@ -1215,7 +1226,8 @@
         "serviceFragmentDefaults": "デフォルトのサービスベストプラクティス",
         "accountSettings": "アカウント設定",
         "localModels": "マイローカルランナー",
-        "sandbox": "Sandbox を開く"
+        "sandbox": "Sandbox を開く",
+        "shortcuts": "キーボードショートカット"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -1234,7 +1246,8 @@
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware フラグメント ベストプラクティス ガイドライン サービス デフォルト コード対応",
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal アカウント チーム メンバー ロール 招待 メール APIキー フラグメント ベストプラクティス ライブラリ コンテキスト 組織 個人",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
-        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価"
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価",
+        "shortcuts": "キーボード ショートカット キー ヘルプ"
       }
     },
     "integrationsHub": {
@@ -1307,6 +1320,13 @@
           "description": "自分のマシンで動かすモデルランナー (Ollama、LM Studio、vLLM…)。"
         }
       }
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "commandBar": "コマンドバーを開く",
+      "deselect": "選択を解除 / インスペクターを閉じる",
+      "deleteBlock": "選択したブロックを削除",
+      "help": "このチートシートを表示"
     }
   },
   "settings": {
