@@ -12,8 +12,21 @@ import * as v from 'valibot'
 // expose a {@link ConnectionTestResult}-returning probe the UI calls before save.
 // ---------------------------------------------------------------------------
 
-/** How a config field is rendered/collected. */
-export const providerConfigFieldTypeSchema = v.picklist(['text', 'password', 'select'])
+/**
+ * How a config field is rendered/collected. `text`/`password`/`select` are the originals;
+ * `number`, `checkbox`, and `textarea` were added so a NATIVE backend's typed flat fields
+ * (a numeric port, a boolean skip-TLS toggle, a multi-line PEM CA bundle) render generically
+ * instead of forcing a bespoke per-backend form. The wire value stays a string in every case
+ * (`"8080"`, `"true"`, the PEM text); the backend coerces + Valibot-validates it on register.
+ */
+export const providerConfigFieldTypeSchema = v.picklist([
+  'text',
+  'password',
+  'select',
+  'number',
+  'checkbox',
+  'textarea',
+])
 export type ProviderConfigFieldType = v.InferOutput<typeof providerConfigFieldTypeSchema>
 
 /** One config value a provider needs, rendered as a single form field. */
@@ -101,6 +114,24 @@ export const providerDescriptorSchema = v.object({
    * connection yet.
    */
   savedManifest: v.optional(v.record(v.string(), v.unknown())),
+  /**
+   * The runner-backend analogue of `manifestTemplate`/`savedManifest` for a NATIVE backend
+   * whose config is a discriminated `{ kind, <payload> }` object (Kubernetes, EKS, …) rather
+   * than a manifest. It is the base config object the SPA overlays the flat `configFields`
+   * onto: every non-secret field is written to the SINGLE non-`kind` payload key, each secret
+   * field to the write-only bundle, and the assembled `{ kind, <payload> }` is POSTed as the
+   * register `config`. When a connection exists this is the STORED config, so a re-save
+   * preserves advanced API-only fields (resources / nodeSelector / …) the flat form never
+   * renders; on a first connect it is the empty skeleton. Absent ⇒ a manifest-style provider
+   * (use `manifestTemplate`/the manifest editor instead). Carries NO secret values.
+   */
+  configTemplate: v.optional(v.record(v.string(), v.unknown())),
+  /**
+   * Current stored NON-SECRET flat values (keyed by `configFields[].key`) for prefilling a
+   * native flat-field form, so an edit shows the live config instead of blanks. Secrets are
+   * never included (write-only). Absent ⇒ no connection yet.
+   */
+  values: v.optional(v.record(v.string(), v.string())),
 })
 export type ProviderDescriptor = v.InferOutput<typeof providerDescriptorSchema>
 

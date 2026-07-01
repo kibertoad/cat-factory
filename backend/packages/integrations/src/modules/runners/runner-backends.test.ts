@@ -67,4 +67,34 @@ describe('runner-backend registry', () => {
     }
     expect(() => registry.get('kubernetes')!.assertConfigSafe(config)).toThrow(/https/)
   })
+
+  it('exposes a native `form` descriptor the SPA renders generically', () => {
+    const form = registry.get('kubernetes')!.form!
+    expect(form).toBeDefined()
+    const keys = form.fields().map((f) => f.key)
+    // The shared apiserver fields + the ServiceAccount-token secret.
+    expect(keys).toEqual(
+      expect.arrayContaining(['label', 'apiServerUrl', 'namespace', 'image', 'apiToken']),
+    )
+    expect(form.fields().find((f) => f.key === 'apiToken')?.secret).toBe(true)
+    expect(form.skeleton()).toEqual({ kind: 'kubernetes', kubernetes: {} })
+    // Typed fields round-trip through the string-valued form (number/boolean stringified).
+    const values = form.valuesFromConfig({
+      kind: 'kubernetes',
+      kubernetes: {
+        label: 'Prod',
+        apiServerUrl: 'https://k8s.example:6443',
+        namespace: 'cat-factory',
+        image: 'img',
+        harnessPort: 9090,
+        insecureSkipTlsVerify: true,
+      },
+    })
+    expect(values).toMatchObject({
+      label: 'Prod',
+      harnessPort: '9090',
+      insecureSkipTlsVerify: 'true',
+    })
+    expect(values).not.toHaveProperty('apiToken')
+  })
 })
