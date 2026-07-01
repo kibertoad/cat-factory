@@ -137,6 +137,7 @@ async function manageInfra(
   dir: string,
   infra: AgentInfraSpec,
   signal: AbortSignal | undefined,
+  onActivity: (() => void) | undefined,
   logger: Logger,
 ): Promise<{
   note?: string
@@ -145,7 +146,9 @@ async function manageInfra(
   cleanup: () => Promise<void>
 }> {
   if (infra.kind === 'frontend') {
-    const fe = await standUpFrontend(dir, infra, signal, logger)
+    // `onActivity` feeds the inactivity watchdog through the frontend build/serve stand-up,
+    // which (unlike docker-compose's 5-min-capped `up`) can run past the inactivity window.
+    const fe = await standUpFrontend(dir, infra, signal, onActivity, logger)
     return {
       ...(fe.note ? { note: fe.note } : {}),
       ...(fe.serveUrl ? { serveUrl: fe.serveUrl } : {}),
@@ -243,7 +246,9 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // The run-mode guidance itself lives in the backend-composed system/user prompt; the
       // harness only manages the lifecycle + this dynamic stand-up note.
       const infra = job.infra
-      const managed = infra ? await manageInfra(dir, infra, opts.signal, logger) : undefined
+      const managed = infra
+        ? await manageInfra(dir, infra, opts.signal, opts.onActivity, logger)
+        : undefined
       // Fold the stand-up outcome into the agent prompt: a stand-up problem (build/compose
       // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
       // app it just built + served (the backend env resolution already reached the harness).
@@ -257,7 +262,10 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       if (managed?.serveUrl) {
         infraNotes.push(
           `The frontend under test is built and served at ${managed.serveUrl}, with its other ` +
-            `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}.`,
+            `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}. ` +
+            `If a call to a live backend fails with a CORS / cross-origin error, that is an infra ` +
+            `gap (the backend must allow the ${managed.serveUrl} origin), not an app defect — flag ` +
+            `it as a concern rather than a failing test.`,
         )
       }
       const userPrompt = infraNotes.length

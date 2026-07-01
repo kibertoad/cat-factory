@@ -7,11 +7,12 @@ import type { FrontendConfig } from '@cat-factory/kernel'
 // once via listHandles) and ExecutionService translates the gate verdict into a ConflictError;
 // keeping the branching here makes the whole matrix trivially testable.
 //
-// The model: a frontend declares backend BINDINGS (env-var name → where its URL resolves). A
-// `service` binding whose bound service has a LIVE ephemeral env is the "service under test"
-// (its real URL); every `mock` binding — and every `service` with no live env — is left for the
-// harness to mock with WireMock. A UI test needs at least one live service under test, else the
-// service-under-test URL is missing and there is nothing meaningful to exercise.
+// The model: a frontend declares backend BINDINGS (env-var name → where its URL resolves). EACH
+// `service` binding whose bound service has a LIVE ephemeral env resolves to that service's real
+// URL (a "service under test" — there may be more than one live at once); every `mock` binding —
+// and every `service` with no live env — is left for the harness to mock with WireMock. A UI test
+// needs at least ONE live service under test, else no real upstream URL resolved and there is
+// nothing meaningful to exercise.
 
 /** A frontend backend binding resolved to a concrete upstream for the UI-test run. */
 export interface ResolvedFrontendBinding {

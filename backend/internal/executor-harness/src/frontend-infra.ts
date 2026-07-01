@@ -78,10 +78,18 @@ export async function standUpFrontend(
   dir: string,
   infra: FrontendInfraSpec,
   signal: AbortSignal | undefined,
+  onActivity: (() => void) | undefined,
   logger: Logger = log,
 ): Promise<FrontendStandUp> {
   const startedAt = Date.now()
   const processes: ChildProcess[] = []
+  // Keep the run's inactivity watchdog fed while the (activity-silent) install → build → serve
+  // stand-up runs. A real frontend's `install` + `build` can exceed the harness inactivity
+  // window (default 10 min, JOB_INACTIVITY_MS) — and unlike the Pi phase this stand-up emits
+  // no activity events of its own — so without this heartbeat the watchdog would abort the job
+  // MID-BUILD with a misleading "likely hung". `unref()` so it never itself holds the loop open.
+  const heartbeat = setInterval(() => onActivity?.(), 30_000)
+  if (typeof heartbeat.unref === 'function') heartbeat.unref()
   const servePort = infra.servePort ?? DEFAULTS.servePort
   const wiremockPort = infra.wiremockPort ?? DEFAULTS.wiremockPort
   const serveUrl = `http://localhost:${servePort}`
@@ -192,6 +200,9 @@ export async function standUpFrontend(
     const e = err as { stdout?: unknown; stderr?: unknown }
     pushOutput(e.stdout, e.stderr)
     return { processes, note, record: record({ error: redactSecrets(note) }) }
+  } finally {
+    // The stand-up is done (handed off, or failed) — the Pi phase feeds the watchdog from here.
+    clearInterval(heartbeat)
   }
 }
 
@@ -211,10 +222,12 @@ export async function tearDownFrontend(
 
 /**
  * Start WireMock standalone as a background process on `wiremockPort`, seeded from the FE
- * repo's mappings dir (`mockMappingsPath`, WireMock's `--root-dir`) when it exists. A missing
- * jar / JRE surfaces asynchronously as a process `'error'` (swallowed by {@link guardProcess})
- * and is then caught by the caller's WireMock health-check; a missing mappings dir is non-fatal
- * (WireMock still binds the port and 404s unmatched requests).
+ * repo's mappings dir (`mockMappingsPath`, passed verbatim as WireMock's `--root-dir`) when it
+ * exists. WireMock reads stub JSON from a `mappings/` subdirectory (and bodies from `__files/`)
+ * UNDER that root — so the default `mocks/` means `mocks/mappings/*.json`. A missing jar / JRE
+ * surfaces asynchronously as a process `'error'` (swallowed by {@link guardProcess}) and is then
+ * caught by the caller's WireMock health-check; a missing root dir is non-fatal (WireMock still
+ * binds the port and 404s unmatched requests).
  */
 async function startWireMock(
   dir: string,
@@ -236,8 +249,11 @@ async function startWireMock(
  * Serve the built app on `servePort`: a static file server of `outputDir` (`static` mode), or
  * the FE's own serve script (`command` mode, e.g. `preview`). In `command` mode the port is
  * passed as the `PORT` env var, so the script MUST honour it (else it binds its own default
- * port and the health-check — which polls `servePort` — never sees it). Returns the background
- * process. The static server (`serve`) is provided by the UI image.
+ * port and the health-check — which polls `servePort` — never sees it), and the resolved
+ * backend URLs (`infra.env`) are ALSO forwarded so a runtime-reading dev/preview server sees
+ * them (a static server needs no env — build/runtime injection already baked/shim'd the URLs
+ * into the output it serves). Returns the background process; the static server (`serve`) is
+ * provided by the UI image.
  */
 function startServe(
   dir: string,
@@ -257,7 +273,9 @@ function startServe(
       spawn(pm, ['run', infra.serveScript], {
         cwd: dir,
         stdio: 'ignore',
-        env: { ...process.env, PORT: String(servePort) },
+        // Reserved names were already filtered from `infra.env` at parse; PORT wins last so
+        // the health-check's port is authoritative even if a binding tried to set it.
+        env: { ...process.env, ...(infra.env ?? {}), PORT: String(servePort) },
       }),
       'serve',
       logger,

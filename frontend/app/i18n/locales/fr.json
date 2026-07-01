@@ -392,6 +392,7 @@
       "serveScript": "Script de service",
       "servePort": "Port de service",
       "mockMappingsPath": "Chemin des mappages de simulation",
+      "mockMappingsHint": "Répertoire racine de WireMock. Placez les JSON de stub dans un sous-dossier mappings/ à l'intérieur (et les corps de réponse dans __files/), p. ex. mocks/mappings/. Un dossier sans mappings/ à l'intérieur lance un mock vide.",
       "envInjection": "Injection de variables d'environnement",
       "envBuild": "À la compilation",
       "envRuntime": "À l'exécution",

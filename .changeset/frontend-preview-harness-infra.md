@@ -40,6 +40,17 @@ it works on Cloudflare and Apple `container` too.
   are de-duplicated in the harness. The frontend UI-test gate's batch env read
   (`environmentRegistryRepository.listByWorkspace`) is added to the mothership remote-persistence
   allow-list so the gate resolves in mothership mode.
+- **Hardening (second review round)**: the frontend stand-up now feeds the run's inactivity
+  watchdog with a heartbeat while it installs/builds/serves — a real frontend's `install` +
+  `build` can exceed the 10-min inactivity window, and the (activity-silent) stand-up would
+  otherwise be killed mid-build with a misleading "likely hung". `serveMode: 'command'` now also
+  forwards the resolved backend URLs (`env`) to the serve process, so a runtime-reading
+  dev/preview server sees them (previously only `PORT` was passed). Reserved env-var names are
+  now also dropped in the backend infra-spec builder (defence in depth, not just the harness).
+  The `mockMappingsPath` docs + inspector hint clarify WireMock's `--root-dir` layout (stubs go
+  in a `mappings/` subfolder), and the env-injection hint notes the build-tool prefix caveat
+  (e.g. Vite only exposes `VITE_*`). The UI-tester prompt flags a live-backend CORS failure as an
+  infra gap rather than an app defect.
 
 BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
 (`service` | `frontend`); the default backend-service tester shape is unchanged.

@@ -392,6 +392,7 @@
       "serveScript": "Скрипт обслуговування",
       "servePort": "Порт обслуговування",
       "mockMappingsPath": "Шлях зіставлень моків",
+      "mockMappingsHint": "Кореневий каталог WireMock. Розмістіть JSON-стаби у підпапці mappings/ всередині нього (а тіла відповідей у __files/), напр. mocks/mappings/. Папка без mappings/ всередині запускає порожній мок.",
       "envInjection": "Впровадження змінних середовища",
       "envBuild": "Під час збірки",
       "envRuntime": "Під час виконання",

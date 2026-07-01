@@ -392,6 +392,7 @@
       "serveScript": "配信スクリプト",
       "servePort": "配信ポート",
       "mockMappingsPath": "モックマッピングのパス",
+      "mockMappingsHint": "WireMock のルートディレクトリ。スタブ JSON はその中の mappings/ サブフォルダーに置きます（レスポンス本文は __files/ に）。例: mocks/mappings/。中に mappings/ がないフォルダーは空のモックを起動します。",
       "envInjection": "環境変数の注入",
       "envBuild": "ビルド時",
       "envRuntime": "ランタイム",

@@ -293,6 +293,22 @@ const FRONTEND_SERVE_PORT = 4173
 const HARNESS_JOB_PORT = 8080
 
 /**
+ * Env-var names never injected from a frontend binding: they are spread over `process.env` at
+ * build time in the container, so a binding named `PATH` / `NODE_OPTIONS` / … would clobber the
+ * toolchain (or enable code injection) rather than name an upstream URL. The harness re-filters
+ * these on the way in (defence in depth); we also drop them here so a reserved name never leaves
+ * the backend as an injected env var. Matched exactly (Linux env is case-sensitive).
+ */
+const RESERVED_ENV_NAMES = new Set([
+  'PATH',
+  'HOME',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+])
+
+/**
  * The served port for a frontend UI test: the user's `servePort` unless it collides with a
  * reserved in-container port (the harness job server on 8080, or WireMock on 8089), in which
  * case it would fail to bind (or steal WireMock's port), so we fall back to the default. The
@@ -348,7 +364,7 @@ function buildFrontendInfraSpec(
   const wiremockUrl = `http://localhost:${FRONTEND_WIREMOCK_PORT}`
   const env: Record<string, string> = {}
   for (const binding of bindings) {
-    if (!binding.envVar) continue
+    if (!binding.envVar || RESERVED_ENV_NAMES.has(binding.envVar)) continue
     env[binding.envVar] = binding.serviceUrl ?? wiremockUrl
   }
   return {

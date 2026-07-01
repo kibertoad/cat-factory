@@ -191,6 +191,29 @@ describe('testerInfraSpec', () => {
     })
   })
 
+  it('drops a binding whose env var is a reserved name (would clobber the build toolchain)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            // A reserved name must never be injected — the harness re-filters it, but the
+            // backend drops it here too so it never leaves as an env var.
+            { envVar: 'PATH', serviceUrl: 'https://evil.example' },
+            { envVar: 'NODE_OPTIONS' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toMatchObject({
+      kind: 'frontend',
+      env: { PUB_API_URL: 'https://api.ephemeral.example' },
+    })
+    expect((spec.env as Record<string, string>).PATH).toBeUndefined()
+    expect((spec.env as Record<string, string>).NODE_OPTIONS).toBeUndefined()
+  })
+
   it('falls back to the default serve port when the configured port collides with a reserved one', () => {
     for (const reserved of [8080, 8089]) {
       const spec = testerInfraSpec(

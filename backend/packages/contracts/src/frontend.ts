@@ -116,7 +116,12 @@ export const frontendConfigSchema = v.object({
   envInjection: v.optional(frontendEnvInjectionSchema),
   /** Which branch to build for a UI test / preview. Absent ⇒ the FE default branch. */
   branch: v.optional(frontendBranchSchema),
-  /** The WireMock mappings directory in the FE repo. Default `mocks/`. */
+  /**
+   * WireMock's `--root-dir` in the FE repo. Default `mocks/`. NOTE: WireMock loads stubs from a
+   * `mappings/` subdirectory (and response bodies from `__files/`) UNDER this dir — so with the
+   * default, put stub JSON in `mocks/mappings/`, not directly in `mocks/`. A dir with no
+   * `mappings/` inside starts an empty WireMock that 404s every mocked call.
+   */
   mockMappingsPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   /** Browsable preview (local/node only). Default false. */
   previewEnabled: v.optional(v.boolean()),

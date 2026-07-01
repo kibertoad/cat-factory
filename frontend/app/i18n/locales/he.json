@@ -392,6 +392,7 @@
       "serveScript": "סקריפט הגשה",
       "servePort": "פורט הגשה",
       "mockMappingsPath": "נתיב מיפויי הדמיה",
+      "mockMappingsHint": "תיקיית השורש של WireMock. הניחו קובצי JSON של stub בתת-תיקייה mappings/ בתוכה (וגופי תגובה ב-__files/), למשל mocks/mappings/. תיקייה ללא mappings/ בתוכה מפעילה mock ריק.",
       "envInjection": "הזרקת משתני סביבה",
       "envBuild": "בזמן בנייה",
       "envRuntime": "בזמן ריצה",

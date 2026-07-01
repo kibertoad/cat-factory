@@ -392,6 +392,7 @@
       "serveScript": "Skrypt serwowania",
       "servePort": "Port serwowania",
       "mockMappingsPath": "Ścieżka mapowań mocków",
+      "mockMappingsHint": "Katalog główny WireMock. Umieść pliki JSON stubów w podfolderze mappings/ w jego wnętrzu (a treści odpowiedzi w __files/), np. mocks/mappings/. Folder bez mappings/ w środku uruchamia pusty mock.",
       "envInjection": "Wstrzykiwanie zmiennych środowiskowych",
       "envBuild": "W czasie budowania",
       "envRuntime": "W czasie działania",
