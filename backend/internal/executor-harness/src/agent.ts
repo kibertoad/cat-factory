@@ -2,7 +2,14 @@ import { join } from 'node:path'
 import { mkdir, opendir } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { AgentInfraSpec, AgentJob, AgentResult, InfraSetupRecord } from './job.js'
+import type {
+  AgentInfraSpec,
+  AgentJob,
+  AgentResult,
+  InfraSetupRecord,
+  ServiceInfraSpec,
+} from './job.js'
+import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
 import { redactSecrets } from './redact.js'
 import {
   cloneRepo,
@@ -88,7 +95,7 @@ function captureInfraLogs(stdout: unknown, stderr: unknown): string | undefined 
  */
 async function standUpInfra(
   dir: string,
-  infra: AgentInfraSpec,
+  infra: ServiceInfraSpec,
   signal: AbortSignal | undefined,
   logger: Logger,
 ): Promise<{ started: boolean; note?: string; record?: InfraSetupRecord }> {
@@ -139,8 +146,43 @@ async function standUpInfra(
   }
 }
 
+/**
+ * Stand the run's infra up and return a single cleanup handle, dispatching on the spec's
+ * `kind`: the frontend UI-test flow (`kind: 'frontend'`) builds/serves the app + WireMock as
+ * processes (torn down by killing them); the default backend-service flow stands the
+ * docker-compose stack up (torn down with `docker compose down`). Unifying the two here keeps
+ * `runExploreMode` free of the branch and guarantees the matching teardown runs in its finally.
+ */
+async function manageInfra(
+  dir: string,
+  infra: AgentInfraSpec,
+  signal: AbortSignal | undefined,
+  logger: Logger,
+): Promise<{
+  note?: string
+  serveUrl?: string
+  record?: InfraSetupRecord
+  cleanup: () => Promise<void>
+}> {
+  if (infra.kind === 'frontend') {
+    const fe = await standUpFrontend(dir, infra, signal, logger)
+    return {
+      ...(fe.note ? { note: fe.note } : {}),
+      ...(fe.serveUrl ? { serveUrl: fe.serveUrl } : {}),
+      record: fe.record,
+      cleanup: () => tearDownFrontend(fe.processes, logger),
+    }
+  }
+  const standUp = await standUpInfra(dir, infra, signal, logger)
+  return {
+    ...(standUp.note ? { note: standUp.note } : {}),
+    ...(standUp.record ? { record: standUp.record } : {}),
+    cleanup: () => tearDownInfra(dir, infra),
+  }
+}
+
 /** Tear the docker-compose dependencies down (best-effort; a no-op when none were started). */
-async function tearDownInfra(dir: string, infra: AgentInfraSpec): Promise<void> {
+async function tearDownInfra(dir: string, infra: ServiceInfraSpec): Promise<void> {
   if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) return
   try {
     await exec('docker', ['compose', '-f', infra.composePath, 'down', '-v'], {
@@ -221,18 +263,31 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // The run-mode guidance itself lives in the backend-composed system/user prompt; the
       // harness only manages the lifecycle + this dynamic stand-up note.
       const infra = job.infra
-      const standUp = infra
-        ? await standUpInfra(dir, infra, opts.signal, logger)
-        : { started: false }
-      const userPrompt = standUp.note
-        ? `${job.userPrompt}\n\nNote: standing the infra up reported a problem (${standUp.note}). ` +
-          `Test what you can and flag any dependency-related gaps as concerns.`
+      const managed = infra ? await manageInfra(dir, infra, opts.signal, logger) : undefined
+      // Fold the stand-up outcome into the agent prompt: a stand-up problem (build/compose
+      // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
+      // app it just built + served (the backend env resolution already reached the harness).
+      const infraNotes: string[] = []
+      if (managed?.note) {
+        infraNotes.push(
+          `standing the infra up reported a problem (${managed.note}). Test what you can and ` +
+            `flag any dependency-related gaps as concerns.`,
+        )
+      }
+      if (managed?.serveUrl) {
+        infraNotes.push(
+          `The frontend under test is built and served at ${managed.serveUrl}, with its other ` +
+            `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}.`,
+        )
+      }
+      const userPrompt = infraNotes.length
+        ? `${job.userPrompt}\n\nNote: ${infraNotes.join(' ')}`
         : job.userPrompt
-      // The compose stand-up record (success or failure, with its captured logs) rides back on
-      // EVERY result branch — the backend surfaces it on the Tester step regardless of whether
-      // the agent then produced a usable report.
-      const infraSetupFields: { infraSetup?: InfraSetupRecord } = standUp.record
-        ? { infraSetup: standUp.record }
+      // The stand-up record (success or failure, with its captured logs) rides back on EVERY
+      // result branch — the backend surfaces it on the Tester step regardless of whether the
+      // agent then produced a usable report.
+      const infraSetupFields: { infraSetup?: InfraSetupRecord } = managed?.record
+        ? { infraSetup: managed.record }
         : {}
 
       try {
@@ -350,14 +405,21 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         // Stamp the run's actual environment authoritatively onto the structured result when
         // infra was managed (the tester): which env the suite ran in is decided by the job's
         // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
-        // even when the model omits it from its JSON (or a structured repair drops it).
-        if (infra && typeof custom === 'object') {
-          ;(custom as Record<string, unknown>).environment = infra.environment
+        // even when the model omits it from its JSON (or a structured repair drops it). A
+        // frontend run tests the app against its live ephemeral backend(s), so it reports
+        // `ephemeral` (the TestReport env vocabulary has no separate frontend value).
+        const reportedEnvironment = infra
+          ? infra.kind === 'frontend'
+            ? 'ephemeral'
+            : infra.environment
+          : undefined
+        if (reportedEnvironment && typeof custom === 'object') {
+          ;(custom as Record<string, unknown>).environment = reportedEnvironment
         }
         logger.info('agent(explore): done (structured)', { ...stats })
         return { summary, custom, stats, ...(usage ? { usage } : {}), ...infraSetupFields }
       } finally {
-        if (infra) await tearDownInfra(dir, infra)
+        if (managed) await managed.cleanup()
       }
     },
   )

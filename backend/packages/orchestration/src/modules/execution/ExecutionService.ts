@@ -123,6 +123,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
+import { hasLiveServiceBinding } from './frontend-infra.logic.js'
 
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -825,6 +826,25 @@ export class ExecutionService {
    * integration), like the other optional start guards.
    */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
+    // A `frontend` frame (the self-contained UI-test flow) is gated on having a live service
+    // under test, NOT on a provision type — resolved first and short-circuiting the backend
+    // branch. Only enforce it when the environment seam is wired (else, like the other optional
+    // start guards, pass through so tests / no-env deployments run unchanged).
+    const frontend = await this.contextBuilder.resolveFrontendConfig(workspaceId, block)
+    if (frontend) {
+      if (!this.environmentProvisioning) return
+      const decision = decideTesterInfra({
+        frontend: { hasLiveService: hasLiveServiceBinding(frontend.bindings) },
+        provisionType: undefined,
+        localTestInfraSupported: this.localTestInfraSupported,
+        hasComposePath: false,
+        handlerResolves: true,
+      })
+      if (decision.ok) return
+      throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
+        infraReason: decision.reason,
+      })
+    }
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
     const provisioning = service?.provisioning
     // Only `kubernetes`/`custom` need a workspace handler resolved; resolve it lazily and

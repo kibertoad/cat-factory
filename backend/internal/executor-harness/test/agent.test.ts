@@ -105,6 +105,53 @@ describe('parseAgentJob', () => {
     expect(job.infra).toBeUndefined()
   })
 
+  it('carries the frontend UI-test infra spec through (the self-contained tester-ui flow)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured' },
+      infra: {
+        kind: 'frontend',
+        packageManager: 'pnpm',
+        buildScript: 'build',
+        outputDir: 'dist',
+        serveMode: 'static',
+        servePort: 4173,
+        envInjection: 'build',
+        env: { PUB_API_URL: 'https://api.ephemeral.example', PUB_OTHER_URL: 'http://localhost:8089' },
+        wiremockMappingsPath: 'mocks/',
+        wiremockPort: 8089,
+      },
+    })
+    expect(job.infra).toEqual({
+      kind: 'frontend',
+      packageManager: 'pnpm',
+      buildScript: 'build',
+      outputDir: 'dist',
+      serveMode: 'static',
+      servePort: 4173,
+      envInjection: 'build',
+      env: { PUB_API_URL: 'https://api.ephemeral.example', PUB_OTHER_URL: 'http://localhost:8089' },
+      wiremockMappingsPath: 'mocks/',
+      wiremockPort: 8089,
+    })
+  })
+
+  it('drops non-string env entries and unrecognised knobs from a frontend infra spec', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: {
+        kind: 'frontend',
+        packageManager: 'bun', // unrecognised → dropped
+        serveMode: 'weird', // unrecognised → dropped
+        env: { GOOD: 'https://ok', BAD: 42, ALSO_BAD: null },
+        servePort: -3, // not a positive int → dropped
+      },
+    })
+    expect(job.infra).toEqual({ kind: 'frontend', env: { GOOD: 'https://ok' } })
+  })
+
   it('accepts a coding job with a fresh branch + PR', () => {
     const job = parseAgentJob({
       ...base,

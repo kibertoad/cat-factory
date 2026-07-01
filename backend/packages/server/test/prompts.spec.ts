@@ -152,6 +152,54 @@ describe('testerInfraSpec', () => {
     )
     expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://env-1.example' })
   })
+
+  it('builds the frontend infra spec when the frame is a frontend (service under test + mocks)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: {
+            packageManager: 'pnpm',
+            buildScript: 'build',
+            outputDir: 'dist',
+            serveMode: 'static',
+            mockMappingsPath: 'mocks/',
+            backendBindings: [],
+          },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            { envVar: 'PUB_OTHER_URL' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({
+      kind: 'frontend',
+      packageManager: 'pnpm',
+      buildScript: 'build',
+      outputDir: 'dist',
+      serveMode: 'static',
+      // Defaulted server port (NOT 8080 — the harness's own job server owns that).
+      servePort: 4173,
+      env: {
+        // The live service under test keeps its real ephemeral URL...
+        PUB_API_URL: 'https://api.ephemeral.example',
+        // ...every other upstream is pointed at the in-container WireMock.
+        PUB_OTHER_URL: 'http://localhost:8089',
+      },
+      wiremockMappingsPath: 'mocks/',
+      wiremockPort: 8089,
+    })
+  })
+
+  it('takes the frontend branch even when a provisioned env URL is also present', () => {
+    const spec = testerInfraSpec(
+      context({
+        environment: { url: 'https://env.example' },
+        frontend: { config: { backendBindings: [] }, bindings: [] },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
+  })
 })
 
 describe('prBody', () => {

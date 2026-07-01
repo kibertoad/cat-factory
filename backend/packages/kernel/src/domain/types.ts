@@ -135,6 +135,10 @@ export type {
   InfraEngine,
   ManifestId,
   ServiceProvisioning,
+  // Frontend-frame config (build/serve/mock knobs + backend bindings that double as links).
+  FrontendConfig,
+  FrontendBackendBinding,
+  FrontendBackendSource,
   KubernetesEngineConfig,
   InfraHandlerConfig,
   CustomManifestType,

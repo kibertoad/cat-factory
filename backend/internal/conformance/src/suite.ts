@@ -4246,6 +4246,61 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.infraSetup).toEqual(infraSetup)
       })
 
+      it('refuses a frontend UI-tester with no live service under test, reading frontend_config on both stores', async () => {
+        // Slice 3 (frontend-preview-ui-testing): a `tester-ui` on a task under a `type: 'frontend'`
+        // frame is gated on the frame's `frontendConfig` — it needs at least one bound service with
+        // a LIVE ephemeral env (the "service under test"). With the env integration ON (this suite's
+        // default) but nothing provisioned, every binding resolves to a mock, so the start is refused
+        // with `frontend-no-live-service`. This pins the D1 ⇄ Drizzle parity of reading the
+        // `frontend_config` JSON column DURING A RUN: a facade that dropped/mismapped the column
+        // would resolve to "no frontend config", fall through to the (empty) backend-service branch,
+        // and let the run START (201) instead of refusing it (409). The pure binding→URL resolution
+        // (the live service-under-test URL) is covered by the `resolveFrontendBindings` unit tests.
+        // Binary storage is wired so this refusal is the FRONTEND gate, not the storage gate.
+        const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // A frontend frame + its config (a service binding with no live env, plus a mock binding).
+        const frame = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'frontend',
+          position: { x: 1600, y: 80 },
+        })
+        expect(frame.status).toBe(201)
+        const frameId = frame.body.id!
+        const patched = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/${frameId}`, {
+          frontendConfig: {
+            packageManager: 'pnpm',
+            buildScript: 'build',
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+              { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } },
+            ],
+          },
+        })
+        expect(patched.status).toBe(200)
+
+        // A task inside the frontend frame, and a UI-tester pipeline run against it.
+        const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/${frameId}/tasks`, {
+          title: 'Exercise the dashboard',
+        })
+        expect(task.status).toBe(201)
+        const taskId = task.body.id!
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + UI test',
+          agentKinds: ['coder', 'tester-ui'],
+        })
+        const blocked = await app.call<{
+          error: { code: string; details?: { reason?: string; infraReason?: string } }
+        }>('POST', `/workspaces/${wsId}/blocks/${taskId}/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(blocked.status).toBe(409)
+        expect(blocked.body.error.code).toBe('conflict')
+        expect(blocked.body.error.details?.reason).toBe('tester_infra_unsupported')
+        expect(blocked.body.error.details?.infraReason).toBe('frontend-no-live-service')
+      })
+
       it('refuses to start a UI-tester pipeline when the account has no binary storage', async () => {
         // The `tester-ui` step uploads its screenshots to the binary-artifact store, so the
         // engine refuses to START the pipeline when the account has none configured — a clear

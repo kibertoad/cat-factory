@@ -242,11 +242,22 @@ export type AgentMode = 'explore' | 'coding'
 
 /**
  * Explore mode: how a container agent stands its dependencies up before the run (the
- * tester). `local` brings the service's docker-compose infra up on localhost for the
- * duration of the run; `ephemeral` is a no-op stand-up (the env is already deployed and
- * its URL reaches the agent through its prompt). Absent ⇒ the harness manages no infra.
+ * tester). Two shapes, discriminated by `kind` (absent ⇒ `service`, the backend tester):
+ *   - `service` — a backend service under test: `local` brings the service's
+ *     docker-compose infra up on localhost for the run; `ephemeral` is a no-op stand-up
+ *     (the env is already deployed and its URL reaches the agent through its prompt).
+ *   - `frontend` — a frontend app under test (the self-contained UI-test flow): build the
+ *     frontend, stand WireMock up for its mocked upstreams, serve the built app, and point
+ *     the (`tester-ui`) agent at it. Everything runs as localhost PROCESSES in the one
+ *     container (no Docker-in-Docker), so it works on Cloudflare + Apple `container` too.
+ * Absent ⇒ the harness manages no infra.
  */
-export interface AgentInfraSpec {
+export type AgentInfraSpec = ServiceInfraSpec | FrontendInfraSpec
+
+/** Backend-service tester infra (docker-compose local, or a deployed ephemeral env). */
+export interface ServiceInfraSpec {
+  /** Discriminant. Absent ⇒ `service` (the backend tester). */
+  kind?: 'service'
   /** `local` stands infra up via docker-compose; `ephemeral` tests a deployed env. */
   environment: 'local' | 'ephemeral'
   /** Local mode: the service declared no infra dependencies (spin nothing up). */
@@ -255,6 +266,41 @@ export interface AgentInfraSpec {
   composePath?: string
   /** Ephemeral mode: the provisioned environment URL (echoed for context only). */
   environmentUrl?: string
+}
+
+/**
+ * Frontend UI-test infra (the self-contained `tester-ui` flow). The backend has already
+ * resolved every backend upstream to a concrete URL — the bound service's live ephemeral
+ * env URL for the service under test, `http://localhost:<wiremockPort>` for every mocked
+ * upstream — and handed them here as {@link env}. The harness installs, builds (injecting
+ * `env` at build time, or writing a `window.env` shim for runtime injection), stands
+ * WireMock up on {@link wiremockPort} seeded from {@link wiremockMappingsPath}, serves the
+ * built app on {@link servePort}, health-checks it, and tells the agent the serve URL.
+ */
+export interface FrontendInfraSpec {
+  kind: 'frontend'
+  /** Package manager for install/build. Default `pnpm`. */
+  packageManager?: 'pnpm' | 'npm' | 'yarn'
+  /** Explicit install command, overriding the one derived from `packageManager`. */
+  install?: string
+  /** package.json script that produces the built app. Default `build`. */
+  buildScript?: string
+  /** The build's output directory, served in `static` mode. Default `dist`. */
+  outputDir?: string
+  /** How the built app is served: static server of `outputDir`, or run `serveScript`. */
+  serveMode?: 'static' | 'command'
+  /** package.json script to run when `serveMode: 'command'` (e.g. `preview`). */
+  serveScript?: string
+  /** The port the served app listens on inside the container. Default 4173. */
+  servePort?: number
+  /** Build-time env vars vs a runtime `window.env` shim. Default `build`. */
+  envInjection?: 'build' | 'runtime'
+  /** Resolved backend upstream env vars (name → URL) to inject. Empty names filtered out. */
+  env?: Record<string, string>
+  /** The WireMock mappings directory in the FE repo. Default `mocks/`. */
+  wiremockMappingsPath?: string
+  /** The port WireMock listens on inside the container. Default 8089. */
+  wiremockPort?: number
 }
 
 /**
@@ -510,6 +556,7 @@ function parseContextFiles(value: unknown): ContextFileSpec[] {
 function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const o = value as Record<string, unknown>
+  if (o.kind === 'frontend') return parseFrontendInfraSpec(o)
   const environment =
     o.environment === 'local' ? 'local' : o.environment === 'ephemeral' ? 'ephemeral' : undefined
   if (!environment) return undefined
@@ -520,6 +567,44 @@ function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
     ...(typeof o.environmentUrl === 'string' && o.environmentUrl
       ? { environmentUrl: o.environmentUrl }
       : {}),
+  }
+}
+
+/** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
+function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
+  const packageManager =
+    o.packageManager === 'pnpm' || o.packageManager === 'npm' || o.packageManager === 'yarn'
+      ? o.packageManager
+      : undefined
+  const serveMode =
+    o.serveMode === 'static' || o.serveMode === 'command' ? o.serveMode : undefined
+  const envInjection =
+    o.envInjection === 'build' || o.envInjection === 'runtime' ? o.envInjection : undefined
+  // Only string→string entries survive; a non-string value is dropped so a malformed
+  // binding can't inject `[object Object]` (or undefined) as an upstream URL.
+  const env: Record<string, string> = {}
+  if (typeof o.env === 'object' && o.env !== null) {
+    for (const [key, val] of Object.entries(o.env as Record<string, unknown>)) {
+      if (key && typeof val === 'string') env[key] = val
+    }
+  }
+  const servePort = posInt(o.servePort)
+  const wiremockPort = posInt(o.wiremockPort)
+  return {
+    kind: 'frontend',
+    ...(packageManager ? { packageManager } : {}),
+    ...(typeof o.install === 'string' && o.install ? { install: o.install } : {}),
+    ...(typeof o.buildScript === 'string' && o.buildScript ? { buildScript: o.buildScript } : {}),
+    ...(typeof o.outputDir === 'string' && o.outputDir ? { outputDir: o.outputDir } : {}),
+    ...(serveMode ? { serveMode } : {}),
+    ...(typeof o.serveScript === 'string' && o.serveScript ? { serveScript: o.serveScript } : {}),
+    ...(servePort !== undefined ? { servePort } : {}),
+    ...(envInjection ? { envInjection } : {}),
+    ...(Object.keys(env).length ? { env } : {}),
+    ...(typeof o.wiremockMappingsPath === 'string' && o.wiremockMappingsPath
+      ? { wiremockMappingsPath: o.wiremockMappingsPath }
+      : {}),
+    ...(wiremockPort !== undefined ? { wiremockPort } : {}),
   }
 }
 

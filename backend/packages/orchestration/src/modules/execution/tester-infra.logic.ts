@@ -18,6 +18,15 @@ import type { ProvisionType } from '@cat-factory/kernel'
 //     resolve for the service's type (else there's nothing to test against).
 
 export interface TesterInfraInput {
+  /**
+   * Frontend UI-test infra (the self-contained `tester-ui` flow). Present ONLY when the
+   * frame under test is a `type: 'frontend'` app — and then it takes precedence over the
+   * backend-service branch below (a frontend declares `frontendConfig`, not `provisioning`).
+   * A frontend needs no Docker-in-Docker (WireMock + a static server are plain processes),
+   * so the only gate is that at least one bound service has a LIVE ephemeral env to be the
+   * "service under test"; without one there is no real backend to exercise.
+   */
+  frontend?: { hasLiveService: boolean }
   /** The service frame's declared provision type, or undefined when none is set. */
   provisionType: ProvisionType | undefined
   /** Whether the runtime can run an in-container docker-compose stack via Docker-in-Docker. */
@@ -45,14 +54,22 @@ export type TesterInfraDecision =
   | { ok: false; reason: 'compose-unconfigured' }
   // A `kubernetes`/`custom` service with no workspace handler that resolves for its type.
   | { ok: false; reason: 'provision-type-unhandled' }
+  // A `frontend` frame with no bound service that has a live ephemeral env (no service under test).
+  | { ok: false; reason: 'frontend-no-live-service' }
 
 /**
- * Decide whether a Tester pipeline may start, from the service's declared provision type.
- * `infraless`/none always passes (the Tester stands nothing up); `docker-compose` passes
- * only on a DinD-capable runtime AND when a compose path is declared; `kubernetes`/`custom`
- * passes only when a workspace handler resolves for the type.
+ * Decide whether a Tester pipeline may start. A `frontend` frame (the self-contained UI-test
+ * flow) is decided FIRST and needs only a live service under test. Otherwise the backend
+ * service branch: `infraless`/none always passes (the Tester stands nothing up);
+ * `docker-compose` passes only on a DinD-capable runtime AND when a compose path is declared;
+ * `kubernetes`/`custom` passes only when a workspace handler resolves for the type.
  */
 export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision {
+  if (input.frontend) {
+    return input.frontend.hasLiveService
+      ? { ok: true }
+      : { ok: false, reason: 'frontend-no-live-service' }
+  }
   const type = input.provisionType
   if (!type || type === 'infraless') return { ok: true }
   if (type === 'docker-compose') {
@@ -80,4 +97,8 @@ export const TESTER_INFRA_MESSAGES: Record<
     "This workspace has no handler configured for the service's provision type, so the " +
     'Tester has no environment to run against. Configure an infrastructure handler for the ' +
     'type (Settings → Infrastructure), or mark the service `infraless`, before starting.',
+  'frontend-no-live-service':
+    'This frontend has no bound backend service with a live ephemeral environment, so the ' +
+    'UI test has no service under test to run against. Provision an environment for one of ' +
+    'the services this frontend binds (its `service` binding), or bind one, before starting.',
 }

@@ -282,7 +282,21 @@ export function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): st
  * `noInfraDependencies`). The harness `infra` wire shape is unchanged — only its source moved
  * from the old `tester.environment` config to the service's `provisioning` + the run env.
  */
+/** The in-container port WireMock binds for a frontend UI test (backend-chosen, not user config). */
+const FRONTEND_WIREMOCK_PORT = 8089
+/**
+ * The default in-container port the built frontend is served on. Deliberately NOT 8080 (the
+ * harness's own job HTTP server owns 8080 in the same container) and NOT the WireMock port.
+ */
+const FRONTEND_SERVE_PORT = 4173
+
 export function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
+  // A `frontend` frame under the self-contained UI-test flow builds + serves the app and stands
+  // WireMock up for its other upstreams — all as in-container processes (no DinD). The backend
+  // has already resolved each binding to a concrete URL (the service-under-test's live ephemeral
+  // env, or absent ⇒ mock); this turns that into the harness `frontend` infra spec.
+  if (context.frontend) return buildFrontendInfraSpec(context.frontend)
+
   const provisioning = context.service?.provisioning
   const type = provisioning?.type
   const envUrl = context.environment?.url
@@ -301,6 +315,39 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     ...(type === 'docker-compose' && provisioning?.composePath
       ? { composePath: provisioning.composePath }
       : {}),
+  }
+}
+
+/**
+ * The harness `frontend` infra spec for a self-contained UI test, from the frame's resolved
+ * frontend context. Maps the config's build/serve/mock knobs onto the harness wire shape and
+ * turns each resolved binding into an env var: the service-under-test's live ephemeral env URL
+ * when one resolved, else the in-container WireMock URL (every OTHER upstream is mocked). The
+ * bindings were already env-var-filtered upstream, so no empty var reaches the injected env.
+ */
+function buildFrontendInfraSpec(
+  frontend: NonNullable<AgentRunContext['frontend']>,
+): Record<string, unknown> {
+  const { config, bindings } = frontend
+  const wiremockUrl = `http://localhost:${FRONTEND_WIREMOCK_PORT}`
+  const env: Record<string, string> = {}
+  for (const binding of bindings) {
+    if (!binding.envVar) continue
+    env[binding.envVar] = binding.serviceUrl ?? wiremockUrl
+  }
+  return {
+    kind: 'frontend',
+    ...(config.packageManager ? { packageManager: config.packageManager } : {}),
+    ...(config.installCommand ? { install: config.installCommand } : {}),
+    ...(config.buildScript ? { buildScript: config.buildScript } : {}),
+    ...(config.outputDir ? { outputDir: config.outputDir } : {}),
+    ...(config.serveMode ? { serveMode: config.serveMode } : {}),
+    ...(config.serveScript ? { serveScript: config.serveScript } : {}),
+    servePort: config.servePort ?? FRONTEND_SERVE_PORT,
+    ...(config.envInjection ? { envInjection: config.envInjection } : {}),
+    ...(Object.keys(env).length ? { env } : {}),
+    ...(config.mockMappingsPath ? { wiremockMappingsPath: config.mockMappingsPath } : {}),
+    wiremockPort: FRONTEND_WIREMOCK_PORT,
   }
 }
 

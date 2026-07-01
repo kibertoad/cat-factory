@@ -62,6 +62,34 @@ describe('decideTesterInfra', () => {
     })
   })
 
+  describe('frontend (self-contained UI test)', () => {
+    it('passes when at least one bound service has a live ephemeral env (the service under test)', () => {
+      expect(
+        decideTesterInfra({ ...base, frontend: { hasLiveService: true } }),
+      ).toEqual({ ok: true })
+    })
+
+    it('refuses when no bound service has a live env (no service under test)', () => {
+      expect(
+        decideTesterInfra({ ...base, frontend: { hasLiveService: false } }),
+      ).toEqual({ ok: false, reason: 'frontend-no-live-service' })
+    })
+
+    it('takes precedence over the provision-type branch (a frontend declares no provisioning)', () => {
+      // A frontend with a live service passes even though the (irrelevant) backend inputs would
+      // otherwise refuse — the frontend branch is decided first and ignores provisionType.
+      expect(
+        decideTesterInfra({
+          frontend: { hasLiveService: true },
+          provisionType: 'docker-compose',
+          localTestInfraSupported: false,
+          hasComposePath: false,
+          handlerResolves: false,
+        }),
+      ).toEqual({ ok: true })
+    })
+  })
+
   describe('kubernetes / custom (provisioned by a workspace handler)', () => {
     for (const provisionType of ['kubernetes', 'custom'] as const) {
       it(`passes a ${provisionType} service when a handler resolves`, () => {
