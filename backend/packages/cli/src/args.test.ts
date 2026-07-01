@@ -51,10 +51,18 @@ describe('parseArgs', () => {
   })
 
   it('parses the k3s command and its flags', () => {
-    const o = parseArgs(['k3s', '--cluster-name', 'dev', '--runtime=kind', '--yes'])
+    const o = parseArgs([
+      'k3s',
+      '--cluster-name',
+      'dev',
+      '--runtime=kind',
+      '--app-url=http://localhost:4000',
+      '--yes',
+    ])
     expect(o.command).toBe('k3s')
     expect(o.clusterName).toBe('dev')
     expect(o.k3sRuntime).toBe('kind')
+    expect(o.appUrl).toBe('http://localhost:4000')
     expect(o.yes).toBe(true)
   })
 
