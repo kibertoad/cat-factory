@@ -59,9 +59,24 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
    */
   const envConfigRepairJobs = ref<EnvConfigRepairJob[]>([])
 
-  /** Replace the cached bootstrap runs with a server snapshot. */
+  /**
+   * Reconcile the cached bootstrap runs with a server snapshot. A snapshot is
+   * authoritative EXCEPT where a live event has already advanced a run past what
+   * this (possibly stale) read observed: a `board` event triggers a debounced
+   * `workspace.refresh()`, and that snapshot read can resolve AFTER a newer
+   * `bootstrap` event already landed. A blind replace would then REGRESS a terminal
+   * run — e.g. a `failed` bootstrap reverting to `running`, leaving the frame stuck
+   * on the "bootstrapping…" badge with no further event to correct it (a failed run
+   * emits nothing more). Keep the newer-by-`updatedAt` version per id so a lagging
+   * refresh can't clobber a live transition.
+   */
   function hydrate(jobs: BootstrapJob[]) {
-    bootstrapJobs.value = [...jobs].sort((a, b) => b.createdAt - a.createdAt)
+    const held = new Map(bootstrapJobs.value.map((j) => [j.id, j]))
+    const reconciled = jobs.map((incoming) => {
+      const current = held.get(incoming.id)
+      return current && current.updatedAt > incoming.updatedAt ? current : incoming
+    })
+    bootstrapJobs.value = reconciled.sort((a, b) => b.createdAt - a.createdAt)
   }
 
   /** Replace the cached env-config-repair runs with a server snapshot. */
@@ -92,8 +107,11 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
    */
   function upsertBootstrap(job: BootstrapJob) {
     const i = bootstrapJobs.value.findIndex((j) => j.id === job.id)
-    if (i >= 0) bootstrapJobs.value[i] = job
-    else bootstrapJobs.value.unshift(job)
+    // Monotonic by `updatedAt`: never let a stale/out-of-order event regress a run a
+    // newer one already advanced (same guard as {@link hydrate}).
+    if (i >= 0) {
+      if (job.updatedAt >= bootstrapJobs.value[i]!.updatedAt) bootstrapJobs.value[i] = job
+    } else bootstrapJobs.value.unshift(job)
   }
 
   /**

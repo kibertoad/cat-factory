@@ -84,10 +84,11 @@ const repoBootstrapper = new E2eRepoBootstrapper(profiles)
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
 // shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
 // (Playwright's request context — not the browser), keyed to its own freshly-seeded
-// workspace, BEFORE it starts the run. Listens on `PORT + 1` (or `E2E_CONTROL_PORT`); the
-// `setFakeProfile` helper derives the same address.
+// workspace, BEFORE it starts the run. Listens on `PORT + 1` (or `E2E_CONTROL_PORT`) — the
+// SAME derivation the `setFakeProfile` helper uses, so PORT drives both ends. Bound to
+// loopback: it's reached only from the local Playwright process, never publicly.
 const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
-createServer((req, res) => {
+const controlServer = createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/fake-profile') {
     const chunks: Buffer[] = []
     req.on('data', (c) => chunks.push(c as Buffer))
@@ -106,7 +107,16 @@ createServer((req, res) => {
     return
   }
   res.writeHead(404).end()
-}).listen(controlPort)
+})
+// Fail LOUDLY if the control port can't be bound (e.g. a stale process on `PORT + 1`):
+// crash the boot with a clear message rather than letting an unhandled `error` event take
+// the process down opaquely — every profile-dependent spec would otherwise silently run on
+// base behaviour.
+controlServer.on('error', (err) => {
+  console.error(`[e2e] fake-profile control channel failed to bind on ${controlPort}:`, err)
+  process.exit(1)
+})
+controlServer.listen(controlPort, '127.0.0.1')
 
 // A non-secret, fixed encryption key (32 zero bytes, base64). The always-on task-source
 // integration makes config load require ENCRYPTION_KEY; a fixed value keeps any encrypted
@@ -121,10 +131,11 @@ const env: NodeJS.ProcessEnv = {
   // ENVIRONMENT so the flag is honoured. Mirrors the conformance test env.
   TESTING_NO_AUTH: 'true',
   ENVIRONMENT: 'test',
-  // Poll durable async agent jobs + gates every second instead of the 15s/30s production
-  // cadence, so a polled `awaiting_job` run (an async agent kind) reaches a terminal state
-  // well within the suite's LIVE/RUN_TERMINAL timeouts. Inline specs don't poll, so this is
-  // a no-op for them; the fakes are deterministic, so a faster cadence changes no outcome.
+  // Poll durable async work every second instead of the 15s/30s production cadence: an async
+  // agent kind's `awaiting_job` loop, a gate, AND the bootstrap drive (which polls at
+  // `JOB_POLL_INTERVAL` too) all settle well within the suite's LIVE/RUN_TERMINAL timeouts.
+  // Inline specs don't poll, so this is a no-op for them; the fakes are deterministic, so a
+  // faster cadence changes no outcome.
   JOB_POLL_INTERVAL: process.env.JOB_POLL_INTERVAL ?? '1 second',
   CI_POLL_INTERVAL: process.env.CI_POLL_INTERVAL ?? '1 second',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,

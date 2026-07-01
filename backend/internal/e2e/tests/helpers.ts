@@ -1,4 +1,8 @@
 import { type APIRequestContext, type Locator, type Page, expect } from '@playwright/test'
+// The wire shape is owned by the backend seam (`src/fakeProfile.ts`); import it here so the
+// test side can't drift from the control-channel payload the backend parses. Type-only, so it
+// pulls in none of that module's runtime deps (`@cat-factory/conformance`).
+import type { FakeProfile } from '../src/fakeProfile.ts'
 
 // The backend origin the specs seed/trigger state against. The auth gate is open in the
 // e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
@@ -13,26 +17,12 @@ export const CONTROL_URL =
   process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
 
 /**
- * The per-workspace fake behaviour a spec can request (mirrors the backend `FakeProfile`).
- * All fields optional; absent ⇒ the base backend behaviour. Set this for a workspace BEFORE
- * starting its run — the backend reads it when the run's first agent step dispatches.
+ * Re-export the backend `FakeProfile` so specs get the per-workspace fake-behaviour shape
+ * (all fields optional; absent ⇒ base backend behaviour) from the same source of truth as the
+ * control channel that consumes it. Set a profile BEFORE starting a run — the backend reads it
+ * when the run's first agent step dispatches.
  */
-export interface FakeProfile {
-  /** Confidence the fake reports on the final step (drives auto-merge vs merge-review). */
-  confidence?: number
-  /** Step indices that raise a one-shot decision. Pass `[]` to disable the default gate. */
-  decisionOnSteps?: number[]
-  /** Agent kinds driven as a POLLED async job (surfacing subtask bars) instead of inline. */
-  asyncKinds?: string[]
-  /** Agent kinds whose container dispatch THROWS (the run faults with `failureKind: 'dispatch'`). */
-  dispatchThrowKinds?: string[]
-  /** Number of `running` polls an async job reports before `done` (default 2). */
-  asyncPolls?: number
-  /** Subtask snapshots the bootstrap run emits (one per running poll) before it finishes. */
-  bootstrapProgress?: { completed: number; inProgress: number; total: number }[]
-  /** When set, the bootstrap run reports FAILED on poll (the failure-banner + retry path). */
-  bootstrapFailWith?: string
-}
+export type { FakeProfile }
 
 /** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
 export async function setFakeProfile(
