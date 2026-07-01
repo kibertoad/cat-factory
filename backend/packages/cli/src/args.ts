@@ -124,7 +124,7 @@ export function parseArgs(argv: string[]): CliOptions {
         opts.k3sRuntime = parseK3sRuntime(takeValue(flag, inline, queue))
         break
       case '--app-url':
-        opts.appUrl = takeValue(flag, inline, queue)
+        opts.appUrl = parseAppUrl(takeValue(flag, inline, queue))
         break
       case '--no-open':
         opts.noOpen = true
@@ -170,6 +170,27 @@ function parsePort(value: string): number {
     throw new ArgError(`Invalid --port "${value}" (expected an integer 1-65535)`)
   }
   return n
+}
+
+/**
+ * Validate the SPA base URL the k3s hand-off deep-links. Rejected here (before probing/
+ * provisioning) rather than let a malformed value throw from `new URL(...)` at the very end of an
+ * otherwise-successful run — a missing scheme (`localhost:3000` parses to protocol `localhost:`) is
+ * an easy mistake, so require an absolute http(s) URL.
+ */
+function parseAppUrl(value: string): string {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new ArgError(
+      `Invalid --app-url "${value}" (expected an absolute http(s) URL, e.g. http://localhost:3000)`,
+    )
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ArgError(`Invalid --app-url "${value}" (expected an http:// or https:// URL)`)
+  }
+  return value
 }
 
 /** Resolved default values for any option the user didn't supply. */

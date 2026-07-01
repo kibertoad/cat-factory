@@ -69,4 +69,12 @@ describe('parseArgs', () => {
   it('rejects an invalid --runtime', () => {
     expect(() => parseArgs(['k3s', '--runtime', 'minikube'])).toThrow(ArgError)
   })
+
+  it('rejects a malformed --app-url up front (before any provisioning)', () => {
+    // A missing scheme is an easy mistake and would otherwise throw from `new URL(...)` at the very
+    // end of a successful run — reject it at parse time instead.
+    expect(() => parseArgs(['k3s', '--app-url', 'localhost'])).toThrow(ArgError)
+    expect(() => parseArgs(['k3s', '--app-url', 'localhost:3000'])).toThrow(ArgError)
+    expect(() => parseArgs(['k3s', '--app-url', 'ftp://example.com'])).toThrow(ArgError)
+  })
 })
