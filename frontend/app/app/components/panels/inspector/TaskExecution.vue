@@ -184,6 +184,9 @@ async function resetRun() {
           :key="i"
           class="rounded-md px-2 py-1"
           :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
+          data-testid="run-step"
+          :data-step-kind="s.agentKind"
+          :data-step-state="s.state"
         >
           <div class="flex items-center gap-2">
             <!-- Every agent is clickable: it opens the step-detail overlay (timing,
@@ -221,6 +224,7 @@ async function resetRun() {
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
               class="ms-auto font-mono text-[10px] tabular-nums text-slate-300"
+              data-testid="run-subtasks"
               :title="
                 s.subtasks.inProgress > 0
                   ? t('inspector.execution.subtasksProgress', {

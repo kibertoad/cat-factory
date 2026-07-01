@@ -53,6 +53,8 @@ async function retry() {
   <div
     class="nodrag rounded-lg border border-rose-900/60 bg-rose-950/40"
     :class="compact ? 'px-3 py-2' : 'px-3 py-2.5'"
+    data-testid="agent-failure-banner"
+    :data-run-kind="run.kind"
   >
     <div class="flex items-center gap-1.5" :class="compact ? 'text-[11px]' : 'text-xs'">
       <UIcon
@@ -95,6 +97,7 @@ async function retry() {
       class="nodrag mt-2 flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
       :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
       :disabled="retrying"
+      data-testid="agent-failure-retry"
       @click.stop="retry"
     >
       <UIcon

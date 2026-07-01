@@ -1,10 +1,38 @@
 import { type APIRequestContext, type Locator, type Page, expect } from '@playwright/test'
+// The wire shape is owned by the backend seam (`src/fakeProfile.ts`); import it here so the
+// test side can't drift from the control-channel payload the backend parses. Type-only, so it
+// pulls in none of that module's runtime deps (`@cat-factory/conformance`).
+import type { FakeProfile } from '../src/fakeProfile.ts'
 
 // The backend origin the specs seed/trigger state against. The auth gate is open in the
 // e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
 // backend runs on a non-default port.
 export const BACKEND_URL =
   process.env.E2E_BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 8787}`
+
+// The test-only control channel `testServer.ts` listens on (a separate port, so it never
+// couples to the app's CORS/auth). Defaults to `PORT + 1` — the same derivation the backend
+// uses. A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE starting a run.
+export const CONTROL_URL =
+  process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
+
+/**
+ * Re-export the backend `FakeProfile` so specs get the per-workspace fake-behaviour shape
+ * (all fields optional; absent ⇒ base backend behaviour) from the same source of truth as the
+ * control channel that consumes it. Set a profile BEFORE starting a run — the backend reads it
+ * when the run's first agent step dispatches.
+ */
+export type { FakeProfile }
+
+/** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
+export async function setFakeProfile(
+  request: APIRequestContext,
+  workspaceId: string,
+  profile: FakeProfile,
+): Promise<void> {
+  const res = await request.post(`${CONTROL_URL}/fake-profile`, { data: { workspaceId, profile } })
+  if (!res.ok()) throw new Error(`fake-profile control ${res.status()}: ${await res.text()}`)
+}
 
 // Shared timeouts for LIVE (WebSocket-pushed) assertions. A live run advances through
 // several durable pg-boss steps, so web-first assertions need headroom over the default
@@ -83,6 +111,40 @@ export async function startRun(
   await json(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}/executions`, {
       data: { pipelineId },
+    }),
+  )
+}
+
+/** One bootstrap job as the controller returns it (only the fields the specs read). */
+export interface BootstrapJob {
+  id: string
+  status: string
+  repoName: string
+  /** The provisional service frame the run materialises (the board node to assert on). */
+  blockId: string | null
+}
+
+/**
+ * Start a "bootstrap repo" run over REST (the same endpoint the launch modal calls). Returns
+ * immediately with a `running` job whose `blockId` is the provisional service frame now on the
+ * board — the spec asserts on that frame's live progress / failure. The fake bootstrapper (see
+ * `FakeProfile.bootstrapProgress` / `bootstrapFailWith`) drives the scripted lifecycle.
+ */
+export async function startBootstrap(
+  request: APIRequestContext,
+  workspaceId: string,
+  repoName: string,
+): Promise<BootstrapJob> {
+  return json<BootstrapJob>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/bootstrap/jobs`, {
+      data: {
+        referenceArchitectureId: null,
+        repoName,
+        description: 'e2e bootstrap',
+        private: true,
+        instructions: 'a small Hono API with a /health route',
+        type: 'service',
+      },
     }),
   )
 }
