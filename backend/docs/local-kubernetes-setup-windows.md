@@ -180,6 +180,11 @@ $env:K8S_IT_RUNNER_IMAGE = 'cat-factory-mock-harness:it'
 Once the cluster is up, local mode (`@cat-factory/local-server`) can use it as a Tester
 **environment** backend and/or the **agent runner** backend with no code change — connect a
 native `kubernetes` backend (`apiServerUrl: https://127.0.0.1:6443`, the ServiceAccount token,
-`insecureSkipTlsVerify` for a throwaway cluster). The RBAC manifest, the runner-callback /
-`PUBLIC_URL` networking details, and the URL-safety knobs are documented in
+`insecureSkipTlsVerify` for a throwaway cluster).
+
+The quickest path is the guided **`cat-factory k3s`** command — it probes the cluster you just
+brought up (or creates a fresh k3d one), applies the least-privilege ServiceAccount + RBAC, mints
+a token, and opens the Infrastructure form pre-filled for you (the **environment** backend). The
+RBAC manifest, the runner-callback / `PUBLIC_URL` networking details, the URL-safety knobs, and
+the manual wire-it-yourself steps are documented in
 [`local-k3s-environments.md`](./local-k3s-environments.md).

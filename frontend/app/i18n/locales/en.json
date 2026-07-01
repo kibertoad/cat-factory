@@ -12,6 +12,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "retry": "Retry",
+    "copy": "Copy",
     "block": "Block",
     "@block": {
       "description": "Generic fallback NOUN for a board item whose title is unknown (a service / module / task node). Not the verb 'to block'."
@@ -1353,6 +1354,10 @@
       },
       "kubernetesEngine": {
         "localK3sHint": "Prefilled for a local k3s/k3d/kind cluster on this machine. Bind a ServiceAccount to a role, mint its token with `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+), and paste it below. Then choose how the environment URL is derived, and edit the API server URL if your cluster listens on a different port.",
+        "autoSetup": {
+          "title": "Auto-setup with the CLI",
+          "description": "Run this in your terminal to probe or provision a local cluster, mint a ServiceAccount token, and open this form pre-filled. Paste the token it prints, then Test and Save."
+        },
         "label": "Connection label",
         "labelPlaceholder": "Preview cluster",
         "apiServerUrl": "API server URL",

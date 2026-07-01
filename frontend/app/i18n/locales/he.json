@@ -12,6 +12,7 @@
     "save": "שמור",
     "cancel": "ביטול",
     "retry": "נסה שוב",
+    "copy": "העתק",
     "block": "בלוק",
     "actionFailed": "הפעולה נכשלה",
     "close": "סגור"
@@ -1311,6 +1312,10 @@
       },
       "kubernetesEngine": {
         "localK3sHint": "מולא מראש עבור אשכול k3s/k3d/kind מקומי במחשב הזה. קשרו ServiceAccount לתפקיד, הנפיקו עבורו token באמצעות `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) והדביקו אותו למטה. לאחר מכן בחרו כיצד נגזרת כתובת ה-URL של הסביבה, וערכו את כתובת ה-API server אם האשכול שלכם מאזין ביציאה אחרת.",
+        "autoSetup": {
+          "title": "הגדרה אוטומטית באמצעות ה-CLI",
+          "description": "הרץ זאת בטרמינל כדי לזהות או להקצות אשכול מקומי, ליצור אסימון ServiceAccount ולפתוח טופס זה כשהוא ממולא מראש. הדבק את האסימון המוצג, ולאחר מכן בצע בדיקה ושמירה."
+        },
         "label": "תווית החיבור",
         "labelPlaceholder": "אשכול תצוגה מקדימה",
         "apiServerUrl": "כתובת ה-API server",

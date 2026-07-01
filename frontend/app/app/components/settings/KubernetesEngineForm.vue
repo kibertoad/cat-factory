@@ -13,6 +13,7 @@ import type {
   InfraEngine,
   InfraHandlerConfig,
 } from '@cat-factory/contracts'
+import type { K3sSetupPrefill } from '~/stores/ui'
 
 // The kube branch of the discriminated handler config this form produces (the `local-k3s` /
 // `remote-kubernetes` engines share `kubernetesEngineConfigSchema`). Emitting this typed
@@ -30,6 +31,11 @@ const props = defineProps<{
   testing: boolean
   busy: boolean
   testResult: { ok: boolean; message?: string } | null
+  /**
+   * Non-secret values from a `cat-factory k3s` CLI deep-link, seeded into a FRESH `local-k3s`
+   * form so the user only pastes the token + saves. Ignored when editing a saved handler.
+   */
+  prefill?: K3sSetupPrefill | null
 }>()
 
 const emit = defineEmits<{
@@ -144,6 +150,27 @@ watch(
   { immediate: true },
 )
 
+// Seed a FRESH `local-k3s` form from a `cat-factory k3s` CLI deep-link (see the ui store's
+// `consumeK3sSetupDeepLink`). Applied AFTER the engine-default seed above so the CLI's concrete
+// values win, but never over a saved handler (an edit is authoritative) and only for the engine
+// the link targets. Non-empty fields only, so a partial link falls back to the loopback defaults.
+watch(
+  () => props.prefill,
+  (prefill) => {
+    if (!prefill || props.handler || props.engine !== 'local-k3s') return
+    if (prefill.label.trim()) form.label = prefill.label.trim()
+    if (prefill.apiServerUrl.trim()) form.apiServerUrl = prefill.apiServerUrl.trim()
+    if (prefill.insecureSkipTlsVerify !== undefined)
+      form.insecureSkipTlsVerify = prefill.insecureSkipTlsVerify
+    if (prefill.namespaceTemplate.trim()) form.namespaceTemplate = prefill.namespaceTemplate.trim()
+    if (prefill.hostTemplate.trim()) {
+      form.urlSource = 'ingressTemplate'
+      form.hostTemplate = prefill.hostTemplate.trim()
+    }
+  },
+  { immediate: true },
+)
+
 const servicePortValid = computed(() => {
   const raw = form.servicePort.trim()
   if (!raw) return true
@@ -202,6 +229,14 @@ function buildPayload(): KubeHandlerPayload {
 function optional(label: string): string {
   return t('settings.providerConnection.form.optionalLabel', { label })
 }
+
+// The guided-setup CLI command shown in the local-k3s "Auto-setup" affordance. A literal command
+// example (not prose), so it stays inline rather than in the i18n catalog — mirroring the format
+// examples the i18n rules keep out of message bodies.
+const AUTO_SETUP_COMMAND = 'cat-factory k3s'
+async function copyAutoSetupCommand() {
+  await navigator.clipboard?.writeText(AUTO_SETUP_COMMAND)
+}
 </script>
 
 <template>
@@ -220,6 +255,37 @@ function optional(label: string): string {
     >
       {{ t('settings.infrastructure.kubernetesEngine.localK3sHint') }}
     </p>
+
+    <!-- Auto-setup: point the user at the `cat-factory k3s` CLI, which probes/provisions a local
+         cluster, mints the ServiceAccount token, and deep-links back here to pre-fill this form
+         (the token is pasted, never in the link). -->
+    <div
+      v-if="engine === 'local-k3s'"
+      class="rounded-md border border-slate-700 bg-slate-900/40 p-2 space-y-1.5"
+    >
+      <p class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
+        <UIcon name="i-lucide-wand-2" class="h-3.5 w-3.5 text-slate-400" />
+        {{ t('settings.infrastructure.kubernetesEngine.autoSetup.title') }}
+      </p>
+      <p class="text-[11px] text-slate-400">
+        {{ t('settings.infrastructure.kubernetesEngine.autoSetup.description') }}
+      </p>
+      <div class="flex items-center gap-1.5">
+        <code
+          class="flex-1 rounded bg-slate-950 px-2 py-1 font-mono text-[11px] text-slate-200 select-all"
+        >
+          {{ AUTO_SETUP_COMMAND }}
+        </code>
+        <UButton
+          icon="i-lucide-copy"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :aria-label="t('common.copy')"
+          @click="copyAutoSetupCommand"
+        />
+      </div>
+    </div>
 
     <UFormField :label="t('settings.infrastructure.kubernetesEngine.label')">
       <UInput

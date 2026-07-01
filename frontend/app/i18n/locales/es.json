@@ -12,6 +12,7 @@
     "save": "Guardar",
     "cancel": "Cancelar",
     "retry": "Reintentar",
+    "copy": "Copiar",
     "actionFailed": "La acción falló",
     "close": "Cerrar",
     "block": "Bloque"
@@ -1762,6 +1763,10 @@
       },
       "kubernetesEngine": {
         "localK3sHint": "Precargado para un clúster local k3s/k3d/kind en esta máquina. Vincula una ServiceAccount a un rol, genera su token con `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) y pégalo abajo. Luego elige cómo se deriva la URL del entorno y edita la URL del API server si tu clúster escucha en otro puerto.",
+        "autoSetup": {
+          "title": "Configuración automática con la CLI",
+          "description": "Ejecútalo en tu terminal para detectar o aprovisionar un clúster local, generar un token de ServiceAccount y abrir este formulario ya rellenado. Pega el token que muestra y luego pulsa Probar y Guardar."
+        },
         "label": "Etiqueta de la conexión",
         "labelPlaceholder": "Clúster de vista previa",
         "apiServerUrl": "URL del API server",

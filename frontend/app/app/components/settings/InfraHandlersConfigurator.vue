@@ -29,6 +29,7 @@ import CustomManifestTypeEditor from '~/components/settings/CustomManifestTypeEd
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const auth = useAuthStore()
+const ui = useUiStore()
 const toast = useToast()
 
 const isLocal = computed(() => auth.localMode?.enabled === true)
@@ -73,6 +74,18 @@ watch(
     } else if (!engines.includes(selectedKubeEngine.value)) {
       selectedKubeEngine.value = engines[0]!
     }
+  },
+  { immediate: true },
+)
+
+// A `cat-factory k3s` CLI deep-link (captured by the ui store on app load) always targets the
+// `local-k3s` engine — select it so the workspace form below seeds from the prefill, provided the
+// mode offers it (it's local-mode only). Runs after the handler/engine watcher above so the CLI
+// hand-off wins over the saved-handler default.
+watch(
+  () => ui.k3sSetupPrefill,
+  (prefill) => {
+    if (prefill && kubeEngines.value.includes('local-k3s')) selectedKubeEngine.value = 'local-k3s'
   },
   { immediate: true },
 )
@@ -384,6 +397,7 @@ function notifyError(e: unknown) {
         :testing="kubeTesting"
         :busy="busy"
         :test-result="kubeTestResult"
+        :prefill="ui.k3sSetupPrefill"
         @test="testKube"
         @save="saveKube"
       />

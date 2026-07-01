@@ -44,7 +44,32 @@ is rejected with a clear error.
 
 Local mode (`@cat-factory/local-server`) inherits the Node facade's environment wiring, so a
 developer running a local k3s (k3d, Rancher Desktop, k3s-in-docker, or k3s in WSL2 on Windows)
-can use the `kubernetes` backend with no extra code:
+can use the `kubernetes` backend with no extra code.
+
+### Guided setup (recommended): `cat-factory k3s`
+
+The [`@cat-factory/cli`](../packages/cli) ships a guided command that does the whole dance below
+**on your behalf** — probe the host for a reachable cluster (or a running k3d/kind), offer to
+create a k3d cluster (Docker, no root — the default) or guide a `sudo` k3s install, apply the
+least-privilege ServiceAccount + RBAC, mint a long-lived token, read the apiserver URL from the
+kubeconfig, then open the Infrastructure → Test environments form **pre-filled** with everything
+except the token (a secret is never put in a URL):
+
+```sh
+cat-factory k3s              # probe → offer → provision → open the pre-filled form
+cat-factory k3s --yes        # non-interactive: accept every mutating step (automation)
+```
+
+Every mutating step (cluster create, RBAC apply) asks for an explicit confirmation first; the k3s
+`curl | sh` install is only ever **printed**, never run. When it finishes, the CLI prints the
+minted ServiceAccount token once — paste it into the opened form, then **Test → Save**. The form's
+**Auto-setup with the CLI** hint surfaces the same command in-app. Useful flags: `--cluster-name`,
+`--runtime`, `--app-url` (default `http://localhost:3000`), and `--no-open`. See `cat-factory k3s
+--help` for the full list.
+
+### Manual setup (the advanced / escape-hatch path)
+
+If you'd rather wire it by hand (or the guided flow can't run on your host), do it directly:
 
 1. Bring up a cluster and create a ServiceAccount + token with RBAC to create/patch/delete the
    namespaced resources above (and `namespaces`).
@@ -194,8 +219,9 @@ proxy, so they need none of it.
 
 ## Future: managed local k3s lifecycle
 
-Today local mode points at an **existing** cluster. A follow-up could have local mode manage the
-cluster lifecycle itself — a cluster adapter analogous to the per-run `ContainerRuntimeAdapter`
+The **guided one-shot setup** described above (`cat-factory k3s`) already provisions a cluster and
+mints/wires credentials on demand. What is still future is having local mode **own the cluster's
+ongoing lifecycle** — a cluster adapter analogous to the per-run `ContainerRuntimeAdapter`
 (`runtimes/local/src/runtimes/*`). Sketch of what that needs:
 
 - **Bring-up / tear-down**: create a k3s cluster on demand (k3d `cluster create`, or k3s in a

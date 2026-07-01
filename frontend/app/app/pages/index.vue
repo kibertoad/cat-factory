@@ -114,7 +114,12 @@ const ui = useUiStore()
 const aiReadiness = useAiReadiness()
 
 // Load the board from the backend before rendering it.
-onMounted(() => workspace.init())
+onMounted(() => {
+  void workspace.init()
+  // Honour a `cat-factory k3s` CLI hand-off (`?infraSetup=local-k3s&…`): open the Infrastructure
+  // window pre-seeded with the provisioned connection so the user only pastes the token + saves.
+  ui.consumeK3sSetupDeepLink()
+})
 
 // Per-session guards so each AI-onboarding dialog auto-opens at most once (later opens are
 // user-driven from the banner). Reset on workspace switch by the catalog watcher below.

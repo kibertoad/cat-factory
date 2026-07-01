@@ -142,7 +142,7 @@ the descriptor-driven flat fields when your provider implements
 ### Also register a custom manifest type (for `remote-custom` backends)
 
 Registering the backend only teaches the platform **how** a `custom`-type environment is stood
-up (the `remote-custom` "how"). It does **not** by itself let a service *choose* `custom`
+up (the `remote-custom` "how"). It does **not** by itself let a service _choose_ `custom`
 provisioning: a service pins a **`manifestId`** drawn from the **custom-manifest-type catalog**,
 and a `remote-custom` handler declares which id it `acceptsManifestId`. If that catalog is empty,
 the service inspector's provisioning picker shows _"No custom manifest types are defined yet. Add

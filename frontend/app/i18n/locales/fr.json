@@ -12,6 +12,7 @@
     "save": "Enregistrer",
     "cancel": "Annuler",
     "retry": "Réessayer",
+    "copy": "Copier",
     "actionFailed": "Échec de l’action",
     "close": "Fermer",
     "block": "Bloc"
@@ -1762,6 +1763,10 @@
       },
       "kubernetesEngine": {
         "localK3sHint": "Prérempli pour un cluster local k3s/k3d/kind sur cette machine. Liez un ServiceAccount à un rôle, générez son token avec `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) et collez-le ci-dessous. Choisissez ensuite comment l'URL de l'environnement est dérivée, et modifiez l'URL de l'API server si votre cluster écoute sur un autre port.",
+        "autoSetup": {
+          "title": "Configuration automatique avec la CLI",
+          "description": "Exécutez-le dans votre terminal pour détecter ou provisionner un cluster local, générer un jeton de ServiceAccount et ouvrir ce formulaire prérempli. Collez le jeton affiché, puis cliquez sur Tester et Enregistrer."
+        },
         "label": "Libellé de la connexion",
         "labelPlaceholder": "Cluster de prévisualisation",
         "apiServerUrl": "URL de l'API server",
