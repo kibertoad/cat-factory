@@ -3180,6 +3180,7 @@
       "showLogs": "Show stand-up logs",
       "hideLogs": "Hide stand-up logs"
     },
+    "readyBanner": "Test environment is up. The tester is starting its work.",
     "footer": "Scenarios are the areas the Tester chose to exercise (its spec acceptance scenarios). Outcomes and concerns are grouped under them by name.",
     "@screenshotAlt": {
       "description": "Alt text for a captured screenshot thumbnail; {view} is the screen/view name. The literal word 'screenshot' should be localized."

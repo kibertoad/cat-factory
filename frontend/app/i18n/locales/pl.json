@@ -3052,6 +3052,7 @@
       "blocking": "({count} blokujące) | ({count} blokujące) | ({count} blokujących)"
     },
     "environment": "Środowisko",
+    "readyBanner": "Środowisko testowe jest gotowe. Tester rozpoczyna pracę.",
     "footer": "Scenariusze to obszary, które Tester postanowił sprawdzić (jego scenariusze akceptacyjne ze specyfikacji). Wyniki i zastrzeżenia są pod nimi grupowane według nazwy.",
     "infrastructure": "Infrastruktura",
     "standup": {

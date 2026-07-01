@@ -3073,6 +3073,7 @@
       "showLogs": "Başlatma günlüklerini göster",
       "hideLogs": "Başlatma günlüklerini gizle"
     },
+    "readyBanner": "Test ortamı hazır. Test aracı çalışmaya başlıyor.",
     "footer": "Senaryolar, Tester'ın test etmek için seçtiği alanlardır (spesifikasyon kabul senaryoları). Sonuçlar ve endişeler ada göre bunların altında gruplanır."
   },
   "visualConfirm": {

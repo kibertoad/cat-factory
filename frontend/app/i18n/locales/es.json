@@ -3052,6 +3052,7 @@
       "blocking": "({count} bloqueante) | ({count} bloqueantes)"
     },
     "environment": "Entorno",
+    "readyBanner": "El entorno de pruebas está listo. El Tester está comenzando su trabajo.",
     "footer": "Los escenarios son las áreas que el Tester decidió ejercitar (sus escenarios de aceptación de la especificación). Los resultados y las incidencias se agrupan bajo ellos por nombre.",
     "infrastructure": "Infraestructura",
     "standup": {
