@@ -19,4 +19,4 @@ removed, leaking neither processes nor disk. The `preview` result carries the in
 URL (the runtime publishes the serve port to a host port and forms the browsable URL from that).
 The success/failure boundary is a pure `buildPreviewOutcome` helper with unit coverage.
 
-Runner image bumped to 1.29.0 (the `src/**` change ships in the image consumed by local/node).
+Runner image bumped to 1.30.0 (the `src/**` change ships in the image consumed by local/node).
