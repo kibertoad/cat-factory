@@ -52,6 +52,35 @@ section). You don't need `GITHUB_PAT` to boot: with it unset the service starts 
 UI shows a banner linking to GitHub's token page (scopes pre-selected); set the token
 and restart to actually run repo-operating agent steps.
 
+## Keeping the executor-harness image current
+
+Every agent step runs in a per-run container built from `LOCAL_HARNESS_IMAGE`. The
+harness is versioned as **its own Docker image**, separately from the `@cat-factory/*`
+npm packages, so the image can fall behind a fix that already shipped. The trap: a
+container runtime **never re-pulls a tag it already has locally, and never notices that a
+locally-built image is out of date** — so a plain rerun keeps launching agent containers
+from a stale image, reproducing an already-fixed bug even though the orchestrator is
+current. (Concrete example: a harness fix that stopped sending a since-deprecated
+`temperature` param kept failing locally purely because the image was days old.)
+
+To prevent that, `predev` and `prestart` run
+[`scripts/refresh-harness-image.mjs`](./scripts/refresh-harness-image.mjs) before boot,
+so `pnpm dev` / `pnpm start` self-heal. Run it on demand with `pnpm harness:refresh`. It
+handles both ways `LOCAL_HARNESS_IMAGE` is set:
+
+- **A registry ref** (e.g. `ghcr.io/…/cat-factory-executor:latest`) — it `pull`s the
+  image so a mutable tag is refreshed every run (a digest-pinned ref makes it a fast
+  no-op), reports whether the digest changed, and — if the registry is unreachable —
+  falls back to the local copy instead of blocking startup.
+- **A locally-built tag** (the example default `cat-factory-executor:local`) — there is
+  nothing to pull, so it verifies the image exists and reminds you to **rebuild it after
+  updating the harness** (`docker build -t cat-factory-executor:local
+backend/internal/executor-harness`). `pull` only ever fetches the newest _published_
+  image; a fix that lives only in your working tree needs a rebuild.
+
+For reproducible runs, pin an explicit version (or an `@sha256` digest) instead of a
+mutable tag and bump it deliberately; the script prints a reminder when it sees one.
+
 ## Using Cloudflare AI
 
 At least one model provider must be configured or the picker shows nothing selectable
