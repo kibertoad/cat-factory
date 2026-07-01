@@ -438,8 +438,11 @@ The allow-list is `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. The polic
   `src/**`, `Dockerfile`, `tsconfig.json` or the pinned `PI_*` args). Bump
   `@cat-factory/executor-harness`'s `version` AND the matching tag in BOTH
   `deploy/backend/package.json` (`image:publish`) and `deploy/backend/wrangler.toml`
-  (`[[containers]] image`), then `pnpm image:publish` + `pnpm deploy` from
-  `deploy/backend`. The deployment serves the **Cloudflare managed-registry** image
+  (`[[containers]] image`), AND `RECOMMENDED_HARNESS_IMAGE` in
+  `backend/runtimes/local/src/harnessImage.ts` (the tag local mode pins + pulls at boot,
+  so the image and the Node/local backend stay a matched set — a changeset-published
+  `@cat-factory/local-server` then carries the right image), then `pnpm image:publish` +
+  `pnpm deploy` from `deploy/backend`. The deployment serves the **Cloudflare managed-registry** image
   (`registry.cloudflare.com/<acct>/cat-factory-executor:<tag>`), NOT the GHCR image,
   so the GHCR auto-publish does not roll it out. Reusing the same tag does NOT
   deploy: `wrangler deploy` diffs the image by tag string, reports

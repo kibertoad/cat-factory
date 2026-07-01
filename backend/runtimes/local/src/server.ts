@@ -7,6 +7,13 @@ import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl } from './github.js'
+import {
+  RECOMMENDED_HARNESS_IMAGE,
+  type ImageExec,
+  refreshHarnessImage,
+  resolveHarnessImage,
+  resolveRefreshMode,
+} from './harnessImage.js'
 import { isMothershipMode } from './mothership.js'
 import { createRuntimeAdapter, resolveRuntimeId } from './runtimes/index.js'
 
@@ -44,6 +51,14 @@ export async function startLocal(
   // alias the harness will use to reach this service, and probe that the CLI is present.
   // A misconfigured runtime then fails loud at boot rather than on the first dispatch.
   await preflightRuntime(localized)
+
+  // Harness-image preflight: resolve the effective image (an explicit LOCAL_HARNESS_IMAGE, else
+  // the backend-matched RECOMMENDED_HARNESS_IMAGE) and refresh it so a rerun can't launch a
+  // stale — or, via a mutable `:latest`, a too-new — harness image. Fire-and-forget so a slow
+  // (potentially multi-GB) pull never delays serving the board: it never throws, and the
+  // container transport is built lazily on first dispatch, so the refresh races ahead of any
+  // actual use. Disable with LOCAL_HARNESS_IMAGE_REFRESH=off.
+  void preflightHarnessImage(localized).catch(() => {})
 
   // NB: reaping per-run containers a previous run orphaned (a crash/hard kill leaves exited
   // managed containers behind) + draining pool orphans + pre-warming is done on the SERVING
@@ -182,5 +197,39 @@ async function preflightRuntime(localized: NodeJS.ProcessEnv): Promise<void> {
         `steps will fail until it is installed and on PATH (or set LOCAL_DOCKER_BINARY / ` +
         `LOCAL_CONTAINER_RUNTIME).`,
     )
+  }
+}
+
+/**
+ * Resolve + refresh the executor-harness image at boot so a rerun uses the version this backend
+ * is matched to rather than a stale local copy. Delegates the logic (and its logging) to
+ * {@link refreshHarnessImage}; this wrapper only supplies the runtime binary + a real exec seam.
+ */
+async function preflightHarnessImage(localized: NodeJS.ProcessEnv): Promise<void> {
+  const adapter = createRuntimeAdapter(localized)
+  await refreshHarnessImage({
+    image: resolveHarnessImage(localized),
+    recommended: RECOMMENDED_HARNESS_IMAGE,
+    binary: adapter.binary,
+    runtimeId: resolveRuntimeId(localized),
+    mode: resolveRefreshMode(localized),
+    exec: makeImageExec(adapter.binary),
+    log: { info: (m) => logger.info(m), warn: (m) => logger.warn(m) },
+  })
+}
+
+/** A container-CLI runner that captures stdout + a normalised exit status (0 = success). */
+function makeImageExec(binary: string): ImageExec {
+  return async (args) => {
+    try {
+      const { stdout } = await execFileAsync(binary, args, {
+        timeout: 120_000,
+        maxBuffer: 10 * 1024 * 1024,
+      })
+      return { status: 0, stdout: stdout ?? '' }
+    } catch (err) {
+      const e = err as { code?: number; stdout?: string }
+      return { status: typeof e.code === 'number' ? e.code : 1, stdout: e.stdout ?? '' }
+    }
   }
 }
