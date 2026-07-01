@@ -7,6 +7,7 @@
 // them once the block exists (see useContextLinking). A search hit / pasted ref
 // carries `needsImport: true` so it's fetched + persisted before linking.
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */
@@ -245,15 +246,18 @@ onMounted(() => {
         </span>
       </button>
 
-      <p v-if="empty" class="px-2 py-1.5 text-[11px] text-slate-500">
-        {{
+      <EmptyState
+        v-if="empty"
+        compact
+        icon="i-lucide-search-x"
+        :title="
           query.trim()
             ? t('tasks.picker.noMatches')
             : searchable
               ? t('tasks.picker.emptySearchable')
               : t('tasks.picker.emptyRefOnly')
-        }}
-      </p>
+        "
+      />
     </div>
   </div>
 </template>

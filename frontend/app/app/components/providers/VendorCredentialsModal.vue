@@ -14,6 +14,7 @@ const ui = useUiStore()
 const workspace = useWorkspaceStore()
 const creds = useVendorCredentialsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const open = computed({
   get: () => ui.vendorCredentialsOpen,
@@ -139,9 +140,17 @@ async function add() {
   }
 }
 
-async function remove(id: string) {
+async function remove(cred: { id: string; label: string }) {
+  const ok = await confirm({
+    title: t('providers.vendorCredentials.confirmRemove.title'),
+    description: t('providers.vendorCredentials.confirmRemove.body', { name: cred.label }),
+    variant: 'destructive',
+    confirmLabel: t('common.remove'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   try {
-    await creds.remove(id)
+    await creds.remove(cred.id)
   } catch (e) {
     toast.add({
       title: t('providers.vendorCredentials.toast.removeFailed'),
@@ -258,7 +267,7 @@ function vendorLabel(v: SubscriptionVendor): string {
                   color="error"
                   variant="ghost"
                   size="xs"
-                  @click="remove(c.id)"
+                  @click="remove(c)"
                 />
               </div>
             </div>

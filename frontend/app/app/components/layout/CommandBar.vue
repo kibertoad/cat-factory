@@ -212,6 +212,14 @@ const commands = computed<Command[]>(() => {
     keywords: t('layout.commandBar.keywords.sandbox'),
     run: () => ui.openSandbox(),
   })
+  list.push({
+    id: 'keyboard-shortcuts',
+    label: t('layout.commandBar.cmd.shortcuts'),
+    group: groupWorkspace,
+    icon: 'i-lucide-keyboard',
+    keywords: t('layout.commandBar.keywords.shortcuts'),
+    run: () => ui.openShortcutsHelp(),
+  })
 
   return list
 })

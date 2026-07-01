@@ -15,7 +15,16 @@
     "copy": "コピー",
     "block": "ブロック",
     "actionFailed": "操作に失敗しました",
-    "close": "閉じる"
+    "close": "閉じる",
+    "delete": "削除",
+    "remove": "削除",
+    "confirm": {
+      "defaultTitle": "よろしいですか？",
+      "confirm": "確認"
+    },
+    "copied": "クリップボードにコピーしました",
+    "disconnect": "切断",
+    "copyFailed": "クリップボードにコピーできませんでした"
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -235,7 +244,11 @@
       "module": "モジュール: {name}",
       "buildSteps": "ビルドステップ",
       "reviewAndApprove": "レビューして承認",
-      "clickToViewStep": "クリックしてステップの詳細と出力を表示"
+      "clickToViewStep": "クリックしてステップの詳細と出力を表示",
+      "startedToast": {
+        "title": "実行を開始しました",
+        "body": "「{name}」を実行中です。"
+      }
     },
     "epic": {
       "label": "エピック",
@@ -322,6 +335,10 @@
         "step2": "Codex が書き込んだ認証情報ファイル ~/.codex/auth.json (Windows では %USERPROFILE%\\.codex\\auth.json) を開きます。",
         "step3": "auth.json の内容全体をコピーして下に貼り付け、保護用の個人パスワードを設定してください。"
       }
+    },
+    "confirmDisconnect": {
+      "title": "このサブスクリプションを切断しますか？",
+      "body": "「{vendor}」のサブスクリプションが切断されます。 この操作は取り消せません。"
     }
   },
   "inspector": {
@@ -514,7 +531,11 @@
       "merged": "マージ済み",
       "notMerged": "未マージ",
       "empty": "依存関係はありません。いつでも実行できます。",
-      "blocked": "依存関係がマージされるまでブロックされます。"
+      "blocked": "依存関係がマージされるまでブロックされます。",
+      "confirmRemove": {
+        "title": "この依存関係を削除しますか？",
+        "body": "このタスクは今後「{name}」を待たなくなります。"
+      }
     },
     "estimate": {
       "title": "見積もり",
@@ -559,7 +580,11 @@
       "companionOf": "{label} (コンパニオン)",
       "merged": "マージ済み",
       "open": "開く",
-      "mergePr": "PR をマージ"
+      "mergePr": "PR をマージ",
+      "empty": {
+        "title": "実行履歴はまだありません",
+        "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
+      }
     },
     "structure": {
       "module": "モジュール",
@@ -669,7 +694,9 @@
           "done": "仕上げ中"
         },
         "id": "コンテナ",
-        "url": "アドレス"
+        "url": "アドレス",
+        "copyId": "コンテナIDをコピー",
+        "copyUrl": "アドレスをコピー"
       },
       "subtasks": "サブタスク · {completed}/{total}",
       "standardsApplied": "適用された基準",
@@ -759,7 +786,25 @@
       "viewRequirements": "要件を表示",
       "reRun": "再実行",
       "run": "実行",
-      "focus": "フォーカス"
+      "focus": "フォーカス",
+      "confirmDelete": {
+        "task": {
+          "title": "このタスクを削除しますか？",
+          "body": "「{name}」と実行履歴が削除されます。この操作は取り消せません。"
+        },
+        "module": {
+          "title": "このモジュールを削除しますか？",
+          "body": "「{name}」とその中のすべてが削除されます。この操作は取り消せません。"
+        },
+        "service": {
+          "title": "このサービスを削除しますか？",
+          "body": "「{name}」とその中のすべてが削除されます。この操作は取り消せません。"
+        },
+        "recurring": {
+          "title": "この定期パイプラインを削除しますか？",
+          "body": "「{name}」、そのスケジュール、実行履歴が削除されます。この操作は取り消せません。"
+        }
+      }
     }
   },
   "observability": {
@@ -1063,6 +1108,10 @@
         "openBoardFailed": "ボードを開けませんでした",
         "boardDeleted": "ボードを削除しました",
         "deleteBoardFailed": "ボードを削除できませんでした"
+      },
+      "confirmDelete": {
+        "title": "このボードを削除しますか？",
+        "body": "「{name}」とその中のすべてが削除されます。 この操作は取り消せません。"
       }
     },
     "notifications": {
@@ -1084,6 +1133,10 @@
         "human_review": "既読にする",
         "followup_pending": "既読にする",
         "markRead": "既読にする"
+      },
+      "toast": {
+        "acted": "対応済みにしました",
+        "dismissed": "却下しました"
       }
     },
     "aiProvidersBanner": {
@@ -1183,7 +1236,8 @@
         "serviceFragmentDefaults": "デフォルトのサービスベストプラクティス",
         "accountSettings": "アカウント設定",
         "localModels": "マイローカルランナー",
-        "sandbox": "Sandbox を開く"
+        "sandbox": "Sandbox を開く",
+        "shortcuts": "キーボードショートカット"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -1202,7 +1256,8 @@
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware フラグメント ベストプラクティス ガイドライン サービス デフォルト コード対応",
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal アカウント チーム メンバー ロール 招待 メール APIキー フラグメント ベストプラクティス ライブラリ コンテキスト 組織 個人",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
-        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価"
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価",
+        "shortcuts": "キーボード ショートカット キー ヘルプ"
       }
     },
     "integrationsHub": {
@@ -1275,6 +1330,13 @@
           "description": "自分のマシンで動かすモデルランナー (Ollama、LM Studio、vLLM…)。"
         }
       }
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "commandBar": "コマンドバーを開く",
+      "deselect": "選択を解除 / インスペクターを閉じる",
+      "deleteBlock": "選択したブロックを削除",
+      "help": "このチートシートを表示"
     }
   },
   "settings": {
@@ -1317,6 +1379,10 @@
         "nameRequiredTitle": "名前が必要です",
         "nameRequiredBody": "プリセットに名前を付けてください。",
         "saveFailed": "プリセットを保存できませんでした"
+      },
+      "confirmDelete": {
+        "title": "このモデルプリセットを削除しますか？",
+        "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
       }
     },
     "account": {
@@ -1649,6 +1715,10 @@
         "saveFailed": "シークレットを保存できませんでした",
         "removed": "シークレットを削除しました",
         "removeFailed": "シークレットを削除できませんでした"
+      },
+      "confirmRemove": {
+        "title": "このシークレットを削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     },
     "mergeThresholds": {
@@ -1695,7 +1765,11 @@
         "deleteFailed": "プリセットを削除できませんでした"
       },
       "autoMergeOnHint": "しきい値内なら自動的にマージします。",
-      "autoMergeOffHint": "常にPRを人間のレビューに回します。"
+      "autoMergeOffHint": "常にPRを人間のレビューに回します。",
+      "confirmDelete": {
+        "title": "このマージプリセットを削除しますか？",
+        "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
+      }
     },
     "observabilityConnection": {
       "title": "リリース後のヘルス",
@@ -1902,6 +1976,10 @@
         "saveFailed": "ランナーを保存できませんでした",
         "removed": "ランナーを削除しました",
         "removeFailed": "ランナーを削除できませんでした"
+      },
+      "confirmRemove": {
+        "title": "このランナーを削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     }
   },
@@ -2063,6 +2141,10 @@
           "step2": "API キーをコピーします。エージェントステップは Claude Code 経由で DeepSeek の Anthropic エンドポイントに対し、完全なコンテキストで実行されます。",
           "step3": "下にキーを貼り付けます。"
         }
+      },
+      "confirmRemove": {
+        "title": "この認証情報を削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     }
   },
@@ -2159,6 +2241,10 @@
         "createBranch": "ブランチを作成できませんでした",
         "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
+      },
+      "confirmDisconnect": {
+        "title": "GitHub を切断しますか？",
+        "body": "再接続するまでアプリはリポジトリにアクセスできなくなります。"
       }
     },
     "addService": {
@@ -2267,6 +2353,10 @@
       "disconnect": "Slackの接続を解除できませんでした",
       "saveRouting": "ルーティングを保存できませんでした",
       "saveMap": "メンバーマップを保存できませんでした"
+    },
+    "confirmDisconnect": {
+      "title": "Slack を切断しますか？",
+      "body": "再接続するまで Slack の通知が停止します。"
     }
   },
   "documents": {
@@ -2484,6 +2574,10 @@
         "cloned": "「{name}」を複製しました、「{copy}」を編集中です",
         "cloneFailed": "パイプラインを複製できませんでした",
         "updateFailed": "パイプラインを更新できませんでした"
+      },
+      "confirmDeletePipeline": {
+        "title": "このパイプラインを削除しますか？",
+        "body": "「{name}」が削除されます。この操作は取り消せません。"
       }
     },
     "progress": {
@@ -3393,6 +3487,10 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+    },
+    "confirmRemove": {
+      "title": "このフラグメントを削除しますか？",
+      "body": "「{name}」が削除されます。 この操作は取り消せません。"
     }
   },
   "sandbox": {

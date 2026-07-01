@@ -15,7 +15,16 @@
     "copy": "העתק",
     "block": "בלוק",
     "actionFailed": "הפעולה נכשלה",
-    "close": "סגור"
+    "close": "סגור",
+    "delete": "מחק",
+    "remove": "הסר",
+    "confirm": {
+      "defaultTitle": "האם אתה בטוח?",
+      "confirm": "אישור"
+    },
+    "copied": "הועתק ללוח",
+    "disconnect": "נתק",
+    "copyFailed": "לא ניתן להעתיק ללוח"
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -235,7 +244,11 @@
       "module": "מודול: {name}",
       "buildSteps": "שלבי בנייה",
       "reviewAndApprove": "סקור ואשר",
-      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט"
+      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט",
+      "startedToast": {
+        "title": "ההרצה החלה",
+        "body": "מריץ את \"{name}\"."
+      }
     },
     "epic": {
       "label": "אפיק",
@@ -322,6 +335,10 @@
         "step2": "פתח את קובץ אישורי הגישה ש-Codex כתב ב-~/.codex/auth.json (ב-Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "העתק את כל תוכן auth.json, הדבק אותו למטה ובחר סיסמה אישית כדי להגן עליו."
       }
+    },
+    "confirmDisconnect": {
+      "title": "לנתק את המנוי הזה?",
+      "body": "המנוי שלך ל־\"{vendor}\" ינותק. לא ניתן לבטל פעולה זו."
     }
   },
   "inspector": {
@@ -514,7 +531,11 @@
       "merged": "מוזג",
       "notMerged": "טרם מוזג",
       "empty": "אין תלויות. יכול לרוץ בכל עת.",
-      "blocked": "חסום עד שהתלויות ימוזגו."
+      "blocked": "חסום עד שהתלויות ימוזגו.",
+      "confirmRemove": {
+        "title": "להסיר את התלות הזו?",
+        "body": "משימה זו כבר לא תמתין ל־\"{name}\"."
+      }
     },
     "estimate": {
       "title": "הערכה",
@@ -559,7 +580,11 @@
       "companionOf": "{label} (מלווה)",
       "merged": "מוזג",
       "open": "פתוח",
-      "mergePr": "מזג PR"
+      "mergePr": "מזג PR",
+      "empty": {
+        "title": "אין הרצות עדיין",
+        "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
+      }
     },
     "structure": {
       "module": "מודול",
@@ -669,7 +694,9 @@
           "done": "מסיים"
         },
         "id": "מכולה",
-        "url": "כתובת"
+        "url": "כתובת",
+        "copyId": "העתק את מזהה הקונטיינר",
+        "copyUrl": "העתק כתובת"
       },
       "subtasks": "תת-משימות · {completed}/{total}",
       "standardsApplied": "תקנים שהוחלו",
@@ -759,7 +786,25 @@
       "viewRequirements": "הצג דרישות",
       "reRun": "הרץ מחדש",
       "run": "הרץ",
-      "focus": "מקד"
+      "focus": "מקד",
+      "confirmDelete": {
+        "task": {
+          "title": "למחוק את המשימה הזו?",
+          "body": "\"{name}\" והיסטוריית ההרצות שלה יימחקו. לא ניתן לבטל פעולה זו."
+        },
+        "module": {
+          "title": "למחוק את המודול הזה?",
+          "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
+        },
+        "service": {
+          "title": "למחוק את השירות הזה?",
+          "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
+        },
+        "recurring": {
+          "title": "למחוק את ה־pipeline החוזר הזה?",
+          "body": "\"{name}\", התזמון שלו והיסטוריית ההרצות יימחקו. לא ניתן לבטל פעולה זו."
+        }
+      }
     }
   },
   "observability": {
@@ -1063,6 +1108,10 @@
         "openBoardFailed": "לא ניתן היה לפתוח את הלוח",
         "boardDeleted": "הלוח נמחק",
         "deleteBoardFailed": "לא ניתן היה למחוק את הלוח"
+      },
+      "confirmDelete": {
+        "title": "למחוק את הלוח הזה?",
+        "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
       }
     },
     "notifications": {
@@ -1084,6 +1133,10 @@
         "human_review": "סמן כנקרא",
         "followup_pending": "סמן כנקרא",
         "markRead": "סמן כנקרא"
+      },
+      "toast": {
+        "acted": "סומן כטופל",
+        "dismissed": "נדחה"
       }
     },
     "aiProvidersBanner": {
@@ -1183,7 +1236,8 @@
         "serviceFragmentDefaults": "שיטות עבודה מומלצות לשירות כברירת מחדל",
         "accountSettings": "הגדרות חשבון",
         "localModels": "המריצים המקומיים שלי",
-        "sandbox": "פתח ארגז חול"
+        "sandbox": "פתח ארגז חול",
+        "shortcuts": "קיצורי מקלדת"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -1202,7 +1256,8 @@
         "serviceFragmentDefaults": "מקטע שיטת עבודה מומלצת הנחיה שירות ברירת מחדל מודע-קוד",
         "accountSettings": "חשבון צוות חברים תפקידים הזמנות אימייל מפתחות api מקטע ספריית שיטות עבודה מומלצות הקשר ארגון אישי",
         "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה"
+        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה",
+        "shortcuts": "קיצורים מקלדת מקשים עזרה"
       }
     },
     "integrationsHub": {
@@ -1275,6 +1330,13 @@
           "description": "מריצי מודלים על המכונה שלך (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "קיצורי מקלדת",
+      "commandBar": "פתח את שורת הפקודות",
+      "deselect": "בטל בחירה / סגור את המפקח",
+      "deleteBlock": "מחק את הבלוק הנבחר",
+      "help": "הצג את דף העזר הזה"
     }
   },
   "settings": {
@@ -1317,6 +1379,10 @@
         "nameRequiredTitle": "נדרש שם",
         "nameRequiredBody": "תן לתצורה שם.",
         "saveFailed": "לא ניתן היה לשמור את התצורה"
+      },
+      "confirmDelete": {
+        "title": "למחוק את קדם־הגדרת המודל הזו?",
+        "body": "\"{name}\" יימחק. משימות המשתמשות בו יחזרו לברירת המחדל של סביבת העבודה."
       }
     },
     "account": {
@@ -1647,6 +1713,10 @@
         "saveFailed": "לא ניתן היה לשמור את הסוד",
         "removed": "הסוד הוסר",
         "removeFailed": "לא ניתן היה להסיר את הסוד"
+      },
+      "confirmRemove": {
+        "title": "להסיר את הסוד הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     },
     "mergeThresholds": {
@@ -1693,7 +1763,11 @@
         "deleteFailed": "לא ניתן היה למחוק את התצורה"
       },
       "autoMergeOnHint": "מזג אוטומטית כשבתוך הספים.",
-      "autoMergeOffHint": "נתב תמיד את ה-PR לבדיקה אנושית."
+      "autoMergeOffHint": "נתב תמיד את ה-PR לבדיקה אנושית.",
+      "confirmDelete": {
+        "title": "למחוק את קדם־הגדרת המיזוג הזו?",
+        "body": "\"{name}\" יימחק. משימות המשתמשות בו יחזרו לברירת המחדל של סביבת העבודה."
+      }
     },
     "observabilityConnection": {
       "title": "בריאות שלאחר שחרור",
@@ -1900,6 +1974,10 @@
         "saveFailed": "לא ניתן היה לשמור מריץ",
         "removed": "המריץ הוסר",
         "removeFailed": "לא ניתן היה להסיר מריץ"
+      },
+      "confirmRemove": {
+        "title": "להסיר את ה־runner הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     }
   },
@@ -2061,6 +2139,10 @@
           "step2": "העתק את מפתח ה-API. שלבי הסוכן ירוצו דרך Claude Code מול נקודת הקצה של Anthropic של DeepSeek עם הקשר מלא.",
           "step3": "הדבק את המפתח למטה."
         }
+      },
+      "confirmRemove": {
+        "title": "להסיר את פרטי הגישה האלה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     }
   },
@@ -2157,6 +2239,10 @@
         "createBranch": "לא ניתן היה ליצור ענף",
         "openPr": "לא ניתן היה לפתוח בקשת משיכה",
         "merge": "לא ניתן היה למזג"
+      },
+      "confirmDisconnect": {
+        "title": "לנתק את GitHub?",
+        "body": "האפליקציה תאבד גישה למאגרים שלך עד לחיבור מחדש."
       }
     },
     "addService": {
@@ -2265,6 +2351,10 @@
       "disconnect": "לא ניתן לנתק את Slack",
       "saveRouting": "לא ניתן לשמור את הניתוב",
       "saveMap": "לא ניתן לשמור את מפת החברים"
+    },
+    "confirmDisconnect": {
+      "title": "לנתק את Slack?",
+      "body": "התראות Slack ייפסקו עד לחיבור מחדש."
     }
   },
   "documents": {
@@ -2482,6 +2572,10 @@
         "cloned": "שוכפל \"{name}\" — עורך כעת את \"{copy}\"",
         "cloneFailed": "לא ניתן לשכפל את הצינור",
         "updateFailed": "לא ניתן לעדכן את הצינור"
+      },
+      "confirmDeletePipeline": {
+        "title": "למחוק את ה־pipeline הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     },
     "progress": {
@@ -3391,6 +3485,10 @@
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",
       "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור"
+    },
+    "confirmRemove": {
+      "title": "למחוק את המקטע הזה?",
+      "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
     }
   },
   "sandbox": {

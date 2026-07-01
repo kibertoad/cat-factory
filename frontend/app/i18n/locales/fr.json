@@ -15,7 +15,16 @@
     "copy": "Copier",
     "actionFailed": "Échec de l’action",
     "close": "Fermer",
-    "block": "Bloc"
+    "block": "Bloc",
+    "delete": "Supprimer",
+    "remove": "Retirer",
+    "confirm": {
+      "defaultTitle": "Êtes-vous sûr ?",
+      "confirm": "Confirmer"
+    },
+    "copied": "Copié dans le presse-papiers",
+    "disconnect": "Déconnecter",
+    "copyFailed": "Échec de la copie dans le presse-papiers"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -235,7 +244,11 @@
       "module": "Module : {name}",
       "buildSteps": "Étapes de build",
       "reviewAndApprove": "Revoir et approuver",
-      "clickToViewStep": "Cliquez pour voir les détails et la sortie de l’étape"
+      "clickToViewStep": "Cliquez pour voir les détails et la sortie de l’étape",
+      "startedToast": {
+        "title": "Exécution démarrée",
+        "body": "Exécution de \"{name}\"."
+      }
     },
     "epic": {
       "label": "Épopée",
@@ -322,6 +335,10 @@
         "step2": "Ouvrez le fichier d'identifiants que Codex a écrit dans ~/.codex/auth.json (sous Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Copiez tout le contenu de auth.json, collez-le ci-dessous et choisissez un mot de passe personnel pour le protéger."
       }
+    },
+    "confirmDisconnect": {
+      "title": "Déconnecter cet abonnement ?",
+      "body": "Votre abonnement \"{vendor}\" sera déconnecté. Cette action est irréversible."
     }
   },
   "inspector": {
@@ -514,7 +531,11 @@
       "merged": "Fusionné",
       "notMerged": "Pas encore fusionné",
       "empty": "Aucune dépendance. Peut s'exécuter à tout moment.",
-      "blocked": "Bloqué jusqu'à la fusion des dépendances."
+      "blocked": "Bloqué jusqu'à la fusion des dépendances.",
+      "confirmRemove": {
+        "title": "Retirer cette dépendance ?",
+        "body": "Cette tâche n'attendra plus \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Estimation",
@@ -559,7 +580,11 @@
       "companionOf": "{label} (compagnon)",
       "merged": "Fusionné",
       "open": "Ouvert",
-      "mergePr": "Fusionner la PR"
+      "mergePr": "Fusionner la PR",
+      "empty": {
+        "title": "Aucune exécution pour l'instant",
+        "body": "Lancez un pipeline pour voir l'historique d'exécution ici."
+      }
     },
     "structure": {
       "module": "Module",
@@ -689,7 +714,9 @@
           "done": "Finalisation"
         },
         "id": "Conteneur",
-        "url": "Adresse"
+        "url": "Adresse",
+        "copyId": "Copier l'id du conteneur",
+        "copyUrl": "Copier l'adresse"
       }
     },
     "stepDetail": {
@@ -759,7 +786,25 @@
       "viewRequirements": "Voir les exigences",
       "reRun": "Relancer",
       "run": "Exécuter",
-      "focus": "Cibler"
+      "focus": "Cibler",
+      "confirmDelete": {
+        "task": {
+          "title": "Supprimer cette tâche ?",
+          "body": "\"{name}\" et son historique d'exécution seront supprimés. Cette action est irréversible."
+        },
+        "module": {
+          "title": "Supprimer ce module ?",
+          "body": "\"{name}\" et tout son contenu seront supprimés. Cette action est irréversible."
+        },
+        "service": {
+          "title": "Supprimer ce service ?",
+          "body": "\"{name}\" et tout son contenu seront supprimés. Cette action est irréversible."
+        },
+        "recurring": {
+          "title": "Supprimer ce pipeline récurrent ?",
+          "body": "\"{name}\", sa planification et son historique d'exécution seront supprimés. Cette action est irréversible."
+        }
+      }
     }
   },
   "observability": {
@@ -1063,6 +1108,10 @@
         "openBoardFailed": "Impossible d'ouvrir le tableau",
         "boardDeleted": "Tableau supprimé",
         "deleteBoardFailed": "Impossible de supprimer le tableau"
+      },
+      "confirmDelete": {
+        "title": "Supprimer ce tableau ?",
+        "body": "\"{name}\" et tout son contenu seront supprimés. Cette action est irréversible."
       }
     },
     "notifications": {
@@ -1084,6 +1133,10 @@
         "human_review": "Marquer comme lu",
         "followup_pending": "Marquer comme lu",
         "markRead": "Marquer comme lu"
+      },
+      "toast": {
+        "acted": "Marqué comme traité",
+        "dismissed": "Ignoré"
       }
     },
     "aiProvidersBanner": {
@@ -1183,7 +1236,8 @@
         "serviceFragmentDefaults": "Bonnes pratiques de service par défaut",
         "accountSettings": "Paramètres du compte",
         "localModels": "Mes exécuteurs locaux",
-        "sandbox": "Ouvrir le bac à sable"
+        "sandbox": "Ouvrir le bac à sable",
+        "shortcuts": "Raccourcis clavier"
       },
       "keywords": {
         "newPipeline": "pipeline agents chaîne",
@@ -1202,7 +1256,8 @@
         "serviceFragmentDefaults": "fragment bonnes pratiques directive service par défaut sensible au code",
         "accountSettings": "compte équipe membres rôles invitations e-mail clés api fragment bonnes pratiques bibliothèque contexte organisation personnel",
         "localModels": "modèle local exécuteur ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer"
+        "sandbox": "bac à sable prompt modèle test expérience juge fixture benchmark évaluer",
+        "shortcuts": "raccourcis clavier touches aide"
       }
     },
     "integrationsHub": {
@@ -1275,6 +1330,13 @@
           "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Raccourcis clavier",
+      "commandBar": "Ouvrir la barre de commandes",
+      "deselect": "Désélectionner / fermer l'inspecteur",
+      "deleteBlock": "Supprimer le bloc sélectionné",
+      "help": "Afficher cet aide-mémoire"
     }
   },
   "settings": {
@@ -1317,6 +1379,10 @@
         "nameRequiredTitle": "Nom requis",
         "nameRequiredBody": "Donnez un nom au préréglage.",
         "saveFailed": "Impossible d'enregistrer le préréglage"
+      },
+      "confirmDelete": {
+        "title": "Supprimer ce préréglage de modèle ?",
+        "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront au préréglage par défaut de l'espace de travail."
       }
     },
     "account": {
@@ -1536,6 +1602,10 @@
         "saveFailed": "Impossible d'enregistrer le secret",
         "removed": "Secret supprimé",
         "removeFailed": "Impossible de supprimer le secret"
+      },
+      "confirmRemove": {
+        "title": "Supprimer ce secret ?",
+        "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       }
     },
     "mergeThresholds": {
@@ -1582,7 +1652,11 @@
         "deleteFailed": "Impossible de supprimer le préréglage"
       },
       "autoMergeOnHint": "Fusionner automatiquement si dans les seuils.",
-      "autoMergeOffHint": "Toujours envoyer la PR en revue humaine."
+      "autoMergeOffHint": "Toujours envoyer la PR en revue humaine.",
+      "confirmDelete": {
+        "title": "Supprimer ce préréglage de fusion ?",
+        "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront au préréglage par défaut de l'espace de travail."
+      }
     },
     "observabilityConnection": {
       "title": "Santé post-publication",
@@ -1789,6 +1863,10 @@
         "saveFailed": "Impossible d'enregistrer le runner",
         "removed": "Runner supprimé",
         "removeFailed": "Impossible de supprimer le runner"
+      },
+      "confirmRemove": {
+        "title": "Supprimer ce runner ?",
+        "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       }
     },
     "infrastructure": {
@@ -2050,6 +2128,10 @@
           "step2": "Copiez la clé d'API. Les étapes d'agent s'exécuteront via Claude Code sur l'endpoint Anthropic de DeepSeek avec le contexte complet.",
           "step3": "Collez la clé ci-dessous."
         }
+      },
+      "confirmRemove": {
+        "title": "Retirer ces identifiants ?",
+        "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       }
     }
   },
@@ -2146,6 +2228,10 @@
         "createBranch": "Impossible de créer la branche",
         "openPr": "Impossible d'ouvrir la pull request",
         "merge": "Impossible de fusionner"
+      },
+      "confirmDisconnect": {
+        "title": "Déconnecter GitHub ?",
+        "body": "L'application perdra l'accès à vos dépôts jusqu'à la reconnexion."
       }
     },
     "addService": {
@@ -2254,6 +2340,10 @@
       "disconnect": "Impossible de deconnecter Slack",
       "saveRouting": "Impossible d'enregistrer le routage",
       "saveMap": "Impossible d'enregistrer la carte des membres"
+    },
+    "confirmDisconnect": {
+      "title": "Déconnecter Slack ?",
+      "body": "Les notifications Slack seront interrompues jusqu'à la reconnexion."
     }
   },
   "documents": {
@@ -2471,6 +2561,10 @@
         "cloned": "\"{name}\" cloné — édition de \"{copy}\" en cours",
         "cloneFailed": "Impossible de cloner le pipeline",
         "updateFailed": "Impossible de mettre à jour le pipeline"
+      },
+      "confirmDeletePipeline": {
+        "title": "Supprimer ce pipeline ?",
+        "body": "\"{name}\" sera supprimé. Cette action est irréversible."
       }
     },
     "progress": {
@@ -3380,6 +3474,10 @@
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",
       "unlinkSourceFailed": "Impossible de dissocier la source"
+    },
+    "confirmRemove": {
+      "title": "Supprimer ce fragment ?",
+      "body": "\"{name}\" sera supprimé. Cette action est irréversible."
     }
   },
   "sandbox": {
