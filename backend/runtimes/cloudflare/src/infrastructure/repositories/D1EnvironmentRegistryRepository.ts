@@ -9,6 +9,7 @@ interface EnvironmentRow {
   id: string
   workspace_id: string
   block_id: string | null
+  frame_id: string | null
   execution_id: string | null
   provider_id: string
   external_id: string | null
@@ -29,6 +30,7 @@ function rowToRecord(row: EnvironmentRow): EnvironmentRecord {
     id: row.id,
     workspaceId: row.workspace_id,
     blockId: row.block_id,
+    frameId: row.frame_id ?? null,
     executionId: row.execution_id,
     providerId: row.provider_id,
     externalId: row.external_id,
@@ -70,15 +72,16 @@ export class D1EnvironmentRegistryRepository implements EnvironmentRegistryRepos
     await this.db
       .prepare(
         `INSERT INTO environments
-          (id, workspace_id, block_id, execution_id, provider_id, external_id, url, status,
+          (id, workspace_id, block_id, frame_id, execution_id, provider_id, external_id, url, status,
            access_cipher, provision_fields_cipher, created_at, expires_at, last_error, deleted_at,
            provision_type, engine)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       )
       .bind(
         record.id,
         record.workspaceId,
         record.blockId,
+        record.frameId,
         record.executionId,
         record.providerId,
         record.externalId,

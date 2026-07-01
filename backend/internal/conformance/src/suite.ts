@@ -4325,6 +4325,188 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(blocked.body.error.details?.infraReason).toBe('frontend-no-live-service')
       })
 
+      it('gates a visual pipeline to a frame with a UI (refuse on a bare service, allow once a frontend links it)', async () => {
+        // Slice 4c (frontend-preview-ui-testing): a pipeline with a VISUAL step (`tester-ui` /
+        // `visual-confirmation`) may run only where there is a UI to exercise — a `frontend` frame,
+        // or a frame a `frontend` frame links to. `task_login` lives under the `blk_auth` SERVICE
+        // frame, which has no frontend linked in the seed, so a visual pipeline is refused up-front
+        // with `visual_pipeline_no_frontend`. Once the seeded frontend frame BINDS `blk_auth`
+        // (a frontend→service link), the same run is allowed and starts. This pins the D1 ⇄ Drizzle
+        // parity of reading `frontend_config` to discover the link during a run-start gate: a facade
+        // that dropped/mismapped the column would find no link and refuse the allowed case too.
+        // Binary storage is wired so the allowed run isn't refused by the storage gate instead.
+        const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Visual build',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+
+        // No frontend links `blk_auth` yet ⇒ the visual pipeline is refused on `task_login`.
+        const refused = await app.call<{
+          error: { code: string; details?: { reason?: string; frameType?: string | null } }
+        }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(refused.status).toBe(409)
+        expect(refused.body.error.code).toBe('conflict')
+        expect(refused.body.error.details?.reason).toBe('visual_pipeline_no_frontend')
+        expect(refused.body.error.details?.frameType).toBe('service')
+
+        // Link the seeded frontend frame to `blk_auth`: now the service HAS a frontend, so the same
+        // visual pipeline is allowed to start on its task.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
+        const started = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(started.status).toBe(201)
+      })
+
+      // Skipped on the mothership harness: this test runs a real `deployer` (registering an
+      // environment connection + provisioning through it), which drives the env connect/provision
+      // write surface. That surface is deliberately NOT exposed over the mothership RPC boundary
+      // yet (see `packages/server/src/persistence/rpc.ts`: `environmentRegistryRepository` is
+      // read-only there and `environmentConnectionRepository` is unproxied — "the connect/provision
+      // surface ... is a later slice"), so it 500s on that node. The sibling refusal test above
+      // stays mothership-safe because it only reads/PATCHes seeded blocks. Every OTHER harness
+      // (node/local/worker, real persistence) exercises the full provision path here.
+      it.skipIf(harness.name === 'mothership')(
+        'resolves a frontend `service` binding to a live env keyed by the service FRAME id',
+        async () => {
+          // Slice 4b (frontend-preview-ui-testing): a `deployer` keys its ephemeral env under the
+          // task `block_id` it ran on, but a `frontend` frame's `service` binding names a service
+          // FRAME id. So the env now also records the resolved service `frame_id`, and
+          // `resolveFrontendConfig` matches handles on THAT. This asserts both cross-runtime facts:
+          //   (1) the `frame_id` column round-trips through each facade's registry repo (D1 ⇄
+          //       Drizzle) — a facade that dropped/mismapped it would key the env under `null`, and
+          //   (2) with the bound service's env live under its frame, the frontend infra gate is
+          //       SATISFIED and the UI-tester run STARTS (201) — the mirror of the sibling refusal
+          //       test, where the same binding had no live env and was refused (409).
+          // The deployer runs on `task_login` (a task under the seeded `blk_auth` service frame), so
+          // the env keys under `blk_auth`; the frontend binds `blk_auth` and resolves to its URL.
+          const provider = {
+            provision: async () => ({
+              externalId: 'auth-env-1',
+              status: 'ready',
+              url: 'https://auth-live.example',
+              expiresAt: null,
+              access: null,
+              fields: {},
+            }),
+            status: async () =>
+              ({
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+              }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+            resolveBinaryArtifactStore: STORAGE_ON,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // A registered connection gives `provision` its manifest (the legacy single-connection
+          // path), so the deployer reaches the injected provider rather than failing on "no connection".
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: { method: 'POST', pathTemplate: '/environments' },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // Provision the auth service's live env by running a `deployer` on a task inside its frame.
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy auth',
+            agentKinds: ['deployer'],
+          })
+          const startDeploy = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            {
+              pipelineId: deployPipeline.body.id,
+            },
+          )
+          expect(startDeploy.status).toBe(201)
+          await app.drive(wsId)
+
+          // The env is keyed by the service FRAME (`blk_auth`) AND the task the deployer ran on —
+          // the `frame_id` column round-trip across each facade's registry repo.
+          const envs = await app.call<
+            {
+              blockId: string | null
+              frameId?: string | null
+              status: string
+              url: string | null
+            }[]
+          >('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(1)
+          expect(envs.body[0]!.blockId).toBe('task_login')
+          expect(envs.body[0]!.frameId).toBe('blk_auth')
+          expect(envs.body[0]!.status).toBe('ready')
+
+          // Bind the frontend frame to that service FRAME (plus a mock upstream).
+          const patched = await app.call<Block>(
+            'PATCH',
+            `/workspaces/${wsId}/blocks/blk_frontend`,
+            {
+              frontendConfig: {
+                packageManager: 'pnpm',
+                buildScript: 'build',
+                backendBindings: [
+                  {
+                    envVar: 'PUB_API_URL',
+                    source: { kind: 'service', serviceBlockId: 'blk_auth' },
+                  },
+                  { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } },
+                ],
+              },
+            },
+          )
+          expect(patched.status).toBe(200)
+
+          // A UI-tester run against the frontend now STARTS: the live service-under-test resolved via
+          // `frame_id`, so the frontend infra gate is satisfied instead of refusing the run.
+          const task = await app.call<Block>(
+            'POST',
+            `/workspaces/${wsId}/blocks/blk_frontend/tasks`,
+            {
+              title: 'Exercise the dashboard',
+            },
+          )
+          const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Build + UI test',
+            agentKinds: ['coder', 'tester-ui'],
+          })
+          const started = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+            {
+              pipelineId: uiPipeline.body.id,
+            },
+          )
+          expect(started.status).toBe(201)
+        },
+      )
+
       it('refuses to start a UI-tester pipeline when the account has no binary storage', async () => {
         // The `tester-ui` step uploads its screenshots to the binary-artifact store, so the
         // engine refuses to START the pipeline when the account has none configured — a clear
@@ -4337,6 +4519,18 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         })
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
+        // Slice 4c: a visual pipeline (`tester-ui` / `visual-confirmation`) is gated to a frame
+        // with a UI. This run targets `task_login` under the `blk_auth` SERVICE frame, so first
+        // link the seeded frontend frame to `blk_auth` (making it "a service with a frontend
+        // linked to it") — otherwise the run is refused by the frame-type gate BEFORE it can reach
+        // the binary-storage gate this test asserts.
+        await call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
         const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test (no storage)',
           agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
@@ -4376,6 +4570,15 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+        // Slice 4c: link the seeded frontend frame to `blk_auth` so the visual pipeline is allowed
+        // to run on `task_login` (under that service frame) — see the binary-storage test above.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test + visual confirmation',
@@ -4431,6 +4634,15 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+        // Slice 4c: link the seeded frontend frame to `blk_auth` so the visual pipeline is allowed
+        // to run on `task_login` (under that service frame) — see the binary-storage test above.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test + visual confirmation (fix)',

@@ -117,6 +117,26 @@ async function testKube(payload: { config: KubeHandlerConfig; secrets: Record<st
   }
 }
 
+// Test the ALREADY-SAVED workspace kube handler as-is (from its stored non-secret config), so
+// an operator can verify an established connection straight from the list without re-opening the
+// form or re-typing the token — the backend fills the stored token for the probe (empty secrets
+// here ⇒ "use the saved one"). Distinct state from the form's own test so results don't cross.
+const kubeSavedTesting = ref(false)
+const kubeSavedTestResult = ref<TestResult>(null)
+async function testSavedKube() {
+  const config = kubeHandler.value?.config
+  if (!config) return
+  kubeSavedTesting.value = true
+  kubeSavedTestResult.value = null
+  try {
+    kubeSavedTestResult.value = await infra.testHandler({ config, secrets: {} })
+  } catch (e) {
+    kubeSavedTestResult.value = { ok: false, message: e instanceof Error ? e.message : String(e) }
+  } finally {
+    kubeSavedTesting.value = false
+  }
+}
+
 async function testKubeOverride(payload: {
   config: KubeHandlerConfig
   secrets: Record<string, string>
@@ -359,22 +379,57 @@ function notifyError(e: unknown) {
       <h3 class="text-sm font-semibold text-slate-200">
         {{ t('inspector.testConfig.provisionTypes.kubernetes') }}
       </h3>
-      <p
+      <!-- Established-connection card: a prominent checkbox signals a connection is stored, and
+           a Test button verifies the SAVED connection (the token is reused server-side) without
+           re-opening the form. Absent ⇒ the "not connected yet" hint. -->
+      <div
         v-if="kubeHandler"
-        class="flex items-center justify-between gap-2 text-[12px] text-slate-300"
+        class="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-2.5"
       >
-        <span>
+        <div class="flex items-start justify-between gap-2">
+          <UCheckbox
+            :model-value="true"
+            disabled
+            size="lg"
+            :label="t('settings.infrastructure.handler.connectionEstablished')"
+            :ui="{ label: 'text-[13px] font-semibold text-emerald-300' }"
+          />
+          <UButton
+            icon="i-lucide-trash-2"
+            color="error"
+            variant="ghost"
+            size="xs"
+            :disabled="busy"
+            :aria-label="t('settings.infrastructure.handler.disconnect')"
+            @click="removeKube"
+          />
+        </div>
+        <p class="pl-7 text-[11px] text-slate-300">
           {{ t('settings.infrastructure.handler.activeEngine') }}
           <span class="text-slate-200">{{ kubeHandlerEngineLabel }}</span>
-        </span>
-        <UButton
-          icon="i-lucide-trash-2"
-          color="error"
-          variant="ghost"
-          size="xs"
-          :disabled="busy"
-          @click="removeKube"
-        />
+        </p>
+        <div class="flex items-center gap-2 pl-7">
+          <UButton
+            color="neutral"
+            variant="soft"
+            size="xs"
+            icon="i-lucide-plug-zap"
+            :loading="kubeSavedTesting"
+            @click="testSavedKube"
+          >
+            {{ t('settings.providerConnection.test.button') }}
+          </UButton>
+          <span v-if="kubeSavedTestResult?.ok" class="text-xs text-emerald-400">
+            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.ok') }}
+          </span>
+          <span v-else-if="kubeSavedTestResult" class="text-xs text-rose-400">
+            {{ kubeSavedTestResult.message ?? t('settings.providerConnection.test.failed') }}
+          </span>
+        </div>
+      </div>
+      <p v-else class="flex items-center gap-1.5 text-[12px] text-slate-500">
+        <UIcon name="i-lucide-circle-dashed" class="h-3.5 w-3.5" />
+        {{ t('settings.infrastructure.handler.notConnected') }}
       </p>
 
       <div class="space-y-1">

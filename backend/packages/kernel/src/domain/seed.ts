@@ -457,14 +457,14 @@ export function seedPipelines(): Pipeline[] {
     // WireMock mappings exist (it is frontend-aware: it authors them under `mocks/mappings`).
     // `conflicts` / `ci` / `merger` gate and ship the PR like every other build pipeline.
     //
-    // EXPERIMENTAL (labelled as such): two deploy-/keying-time steps remain before this is
-    // fully end-to-end. (1) `image: 'ui'` per-step routing is not wired yet — a run's first
-    // step fixes the container image (see slice 3's `Dockerfile.ui` note), so `tester-ui` only
-    // gets the frontend toolchain when the whole run uses the `ui` image. (2) A bound LIVE
-    // service's env is still keyed by the task the `deployer` ran on, not the service FRAME the
-    // binding names, so a live-service binding resolves to WireMock until that keying lands; a
-    // MOCK-ONLY frontend already runs fully self-contained today. The `experimental` label keeps
-    // the pipeline discoverable but clearly flagged until both land.
+    // EXPERIMENTAL (labelled as such): one deploy-time step remains before this is fully
+    // end-to-end. `image: 'ui'` per-step routing is not wired yet — a run's first step fixes the
+    // container image (see slice 3's `Dockerfile.ui` note), so `tester-ui` only gets the frontend
+    // toolchain when the whole run uses the `ui` image. (Live-service env keying landed in slice
+    // 4b: a bound service's ephemeral env is now recorded under the service FRAME the binding
+    // names, so a live-service binding resolves to its real URL instead of WireMock; a MOCK-ONLY
+    // frontend also runs fully self-contained.) The `experimental` label keeps the pipeline
+    // discoverable but clearly flagged until the `ui`-image routing lands.
     {
       id: 'pl_frontend',
       name: 'Frontend build & UI test',

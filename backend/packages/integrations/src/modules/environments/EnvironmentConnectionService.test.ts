@@ -903,4 +903,140 @@ describe('EnvironmentConnectionService — testHandler (per-type handler probe)'
       }),
     ).rejects.toThrow()
   })
+
+  const kubeCandidate = {
+    engine: 'remote-kubernetes',
+    kubernetes: {
+      label: 'Cluster',
+      apiServerUrl: 'https://cluster.test:6443',
+      url: { source: 'ingressStatus' },
+    },
+  } as const
+
+  it('falls back to the SAVED token when the probe omits it (test an existing connection)', async () => {
+    const { backend, calls } = recordingKubeBackend()
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentBackendRegistry: new EnvironmentBackendRegistry().register(backend),
+    })
+    // Save a handler with a token the edit form will never surface again.
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeCandidate,
+      secrets: { apiToken: 'stored-sa-token' },
+    })
+
+    // Retest with NO secrets (as the edit form does — the token field is blank) → the stored
+    // token must reach the provider, so the probe authenticates.
+    const result = await service.testHandler('ws1', { config: kubeCandidate })
+    expect(result.ok).toBe(true)
+    expect(calls.at(-1)?.token).toBe('stored-sa-token')
+  })
+
+  it('prefers a freshly-supplied token over the stored one when re-testing', async () => {
+    const { backend, calls } = recordingKubeBackend()
+    const service = new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentBackendRegistry: new EnvironmentBackendRegistry().register(backend),
+    })
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeCandidate,
+      secrets: { apiToken: 'stored-sa-token' },
+    })
+
+    const result = await service.testHandler('ws1', {
+      config: kubeCandidate,
+      secrets: { apiToken: 'freshly-typed' },
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.at(-1)?.token).toBe('freshly-typed')
+  })
+})
+
+// Editing a saved handler must PRESERVE its write-only token when the operator leaves the
+// secret field blank (the edit form omits it), and REPLACE it only when a new value is typed.
+describe('EnvironmentConnectionService — registerHandler secret preservation', () => {
+  const kubeConfig = {
+    engine: 'remote-kubernetes',
+    kubernetes: {
+      label: 'Cluster',
+      apiServerUrl: 'https://cluster.example.test:6443',
+      url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.example.test' },
+    },
+  } as const
+
+  it('keeps the stored token when re-registered with no secrets (non-secret edit)', async () => {
+    const service = makeService(fakeConnections())
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeConfig,
+      secrets: { apiToken: 'original-token' },
+    })
+
+    // Re-save with a changed label and NO secrets — must not wipe the token (would 422 on the
+    // missing referenced key if it weren't preserved), and must still report the key as set.
+    const view = await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: {
+        engine: 'remote-kubernetes',
+        kubernetes: { ...kubeConfig.kubernetes, label: 'Renamed cluster' },
+      },
+      secrets: {},
+    })
+    expect(view.label).toBe('Renamed cluster')
+    expect(view.secretKeys).toContain('apiToken')
+
+    const resolved = await service.resolveProviderForType('ws1', {
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+    })
+    expect(resolved.resolveSecret('apiToken')).toBe('original-token')
+  })
+
+  it('replaces the stored token when a new value is supplied', async () => {
+    const service = makeService(fakeConnections())
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeConfig,
+      secrets: { apiToken: 'original-token' },
+    })
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeConfig,
+      secrets: { apiToken: 'rotated-token' },
+    })
+
+    const resolved = await service.resolveProviderForType('ws1', {
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+    })
+    expect(resolved.resolveSecret('apiToken')).toBe('rotated-token')
+  })
+
+  it('treats a blank secret value as "keep the stored token" (not a wipe)', async () => {
+    const service = makeService(fakeConnections())
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeConfig,
+      secrets: { apiToken: 'original-token' },
+    })
+    await service.registerHandler('ws1', {
+      provisionType: 'kubernetes',
+      config: kubeConfig,
+      secrets: { apiToken: '   ' },
+    })
+
+    const resolved = await service.resolveProviderForType('ws1', {
+      type: 'kubernetes',
+      manifestSource: { type: 'colocated', path: 'deploy/k8s' },
+    })
+    expect(resolved.resolveSecret('apiToken')).toBe('original-token')
+  })
 })

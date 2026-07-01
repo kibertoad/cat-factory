@@ -294,7 +294,8 @@
         "github_not_connected": "GitHub non connecté",
         "bootstrap_not_retryable": "L’initialisation ne peut pas être relancée",
         "bootstrap_reference_missing": "L’architecture de référence a disparu",
-        "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline"
+        "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline",
+        "visual_pipeline_no_frontend": "Aucun frontend à tester"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
       "providersUnconfigured": {
@@ -1948,6 +1949,9 @@
         "apiServerUrlHelp": "La racine du kube-apiserver, p. ex. https://my-cluster.example:6443.",
         "apiToken": "Jeton ServiceAccount",
         "apiTokenHelp": "En écriture seule ; ressaisissez-le pour le faire tourner. Stocké chiffré, jamais renvoyé.",
+        "apiTokenHelpStored": "Un jeton est enregistré et réutilisé pour les tests. Laissez vide pour le conserver, ou saisissez-en un nouveau pour le remplacer.",
+        "apiTokenPlaceholderStored": "Laissez vide pour conserver le jeton enregistré",
+        "tokenSaved": "Enregistré",
         "urlSourceLabel": "Source de l'URL de l'environnement",
         "urlIngressTemplate": "Modèle d'hôte Ingress",
         "urlIngressStatus": "Statut de l'Ingress",
@@ -2000,6 +2004,9 @@
       "handler": {
         "intro": "Configurez la manière dont chaque type de provisionnement déclaré par un service est géré: le moteur et la connexion. Les manifestes ou le chemin compose d'un service (le quoi/où) se définissent sur le service.",
         "activeEngine": "Moteur :",
+        "connectionEstablished": "Connexion établie",
+        "notConnected": "Aucune connexion configurée pour l'instant",
+        "disconnect": "Supprimer la connexion",
         "engineLabel": "Moteur",
         "customHandlerTitle": "Gestionnaire remote-custom",
         "customTypeLabel": "Type personnalisé",

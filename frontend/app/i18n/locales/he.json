@@ -294,7 +294,8 @@
         "github_not_connected": "GitHub אינו מחובר",
         "bootstrap_not_retryable": "לא ניתן להריץ מחדש את האתחול",
         "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה",
-        "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו"
+        "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו",
+        "visual_pipeline_no_frontend": "אין frontend לבדיקה"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
       "providersUnconfigured": {
@@ -1481,6 +1482,9 @@
         "apiServerUrlHelp": "שורש ה-kube-apiserver, לדוגמה https://my-cluster.example:6443.",
         "apiToken": "אסימון ServiceAccount",
         "apiTokenHelp": "לכתיבה בלבד; הזן מחדש כדי להחליף. נשמר מוצפן ולעולם לא מוחזר.",
+        "apiTokenHelpStored": "אסימון שמור ונעשה בו שימוש חוזר לבדיקות. השאר ריק כדי לשמור אותו, או הזן חדש כדי להחליף.",
+        "apiTokenPlaceholderStored": "השאר ריק כדי לשמור את האסימון השמור",
+        "tokenSaved": "נשמר",
         "urlSourceLabel": "מקור כתובת הסביבה",
         "urlIngressTemplate": "תבנית מארח של Ingress",
         "urlIngressStatus": "סטטוס Ingress",
@@ -1533,6 +1537,9 @@
       "handler": {
         "intro": "הגדר כיצד מטופל כל סוג אספקה שהשירות מצהיר עליו: המנוע והחיבור. המניפסטים או נתיב ה-compose של שירות (מה/היכן) מוגדרים על השירות.",
         "activeEngine": "מנוע:",
+        "connectionEstablished": "החיבור נוצר",
+        "notConnected": "עדיין לא הוגדר חיבור",
+        "disconnect": "הסר חיבור",
         "engineLabel": "מנוע",
         "customHandlerTitle": "מטפל remote-custom",
         "customTypeLabel": "סוג מותאם",

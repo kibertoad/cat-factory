@@ -294,7 +294,8 @@
         "github_not_connected": "GitHub nie jest połączony",
         "bootstrap_not_retryable": "Inicjalizacji nie można ponowić",
         "bootstrap_reference_missing": "Architektura referencyjna zniknęła",
-        "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku"
+        "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku",
+        "visual_pipeline_no_frontend": "Brak frontendu do przetestowania"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {
@@ -1948,6 +1949,9 @@
         "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://my-cluster.example:6443.",
         "apiToken": "Token ServiceAccount",
         "apiTokenHelp": "Tylko do zapisu; wprowadź ponownie, aby zmienić. Przechowywany w postaci zaszyfrowanej, nigdy nie jest zwracany.",
+        "apiTokenHelpStored": "Token jest zapisany i używany ponownie do testów. Pozostaw puste, aby go zachować, lub wpisz nowy, aby go zastąpić.",
+        "apiTokenPlaceholderStored": "Pozostaw puste, aby zachować zapisany token",
+        "tokenSaved": "Zapisano",
         "urlSourceLabel": "Źródło URL środowiska",
         "urlIngressTemplate": "Szablon hosta Ingress",
         "urlIngressStatus": "Status Ingress",
@@ -2000,6 +2004,9 @@
       "handler": {
         "intro": "Skonfiguruj, jak obsługiwany jest każdy typ provisioningu zadeklarowany przez usługę: silnik i połączenie. Manifesty lub ścieżka compose usługi (co/gdzie) są ustawiane na usłudze.",
         "activeEngine": "Silnik:",
+        "connectionEstablished": "Połączenie nawiązane",
+        "notConnected": "Nie skonfigurowano jeszcze połączenia",
+        "disconnect": "Usuń połączenie",
         "engineLabel": "Silnik",
         "customHandlerTitle": "Handler remote-custom",
         "customTypeLabel": "Typ niestandardowy",

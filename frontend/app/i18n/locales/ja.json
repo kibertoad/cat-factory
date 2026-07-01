@@ -294,7 +294,8 @@
         "github_not_connected": "GitHub が接続されていません",
         "bootstrap_not_retryable": "ブートストラップは再試行できません",
         "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません",
-        "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません"
+        "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません",
+        "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
       "providersUnconfigured": {
@@ -1483,6 +1484,9 @@
         "apiServerUrlHelp": "kube-apiserver のルート。例: https://my-cluster.example:6443。",
         "apiToken": "ServiceAccount トークン",
         "apiTokenHelp": "書き込み専用。ローテーションするには再入力してください。暗号化して保存され、返却されることはありません。",
+        "apiTokenHelpStored": "トークンは保存され、テストで再利用されます。空欄のままにすると保持され、新しい値を入力すると置き換えられます。",
+        "apiTokenPlaceholderStored": "保存済みトークンを保持するには空欄のままにします",
+        "tokenSaved": "保存済み",
         "urlSourceLabel": "環境 URL の取得元",
         "urlIngressTemplate": "Ingress ホストテンプレート",
         "urlIngressStatus": "Ingress ステータス",
@@ -1535,6 +1539,9 @@
       "handler": {
         "intro": "サービスが宣言する各プロビジョニングタイプの処理方法（エンジンと接続）を構成します。サービスのマニフェストや compose パス（何を/どこで）はサービス側で設定します。",
         "activeEngine": "エンジン:",
+        "connectionEstablished": "接続が確立されました",
+        "notConnected": "まだ接続が構成されていません",
+        "disconnect": "接続を削除",
         "engineLabel": "エンジン",
         "customHandlerTitle": "remote-custom ハンドラー",
         "customTypeLabel": "カスタムタイプ",

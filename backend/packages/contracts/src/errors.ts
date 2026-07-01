@@ -30,6 +30,9 @@ export const CONFLICT_REASONS = [
   // No workspace handler is configured for a service's declared provision type (the
   // per-service provision-type model — the deployer/tester can't stand the env up).
   'provision_type_unhandled',
+  // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) was started on a frame
+  // with no UI to exercise — neither a `frontend` frame nor a frame a frontend links to.
+  'visual_pipeline_no_frontend',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

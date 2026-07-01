@@ -147,6 +147,13 @@ export type ProvisionDispatch =
 export interface ProvisionArgs {
   workspaceId: string
   blockId?: string | null
+  /**
+   * The service FRAME the provisioning block belongs to (the deployer's block walked up to its
+   * enclosing frame). Recorded on the env so a cross-frame consumer — a `frontend` frame's
+   * `service` binding — can resolve the live env by the bound service FRAME id, not the task the
+   * deployer ran on (`blockId`). Absent ⇒ null (a manual/frame-less provision).
+   */
+  frameId?: string | null
   executionId?: string | null
   inputs?: Record<string, string>
   /** Typed git/PR/repo context; passed to the provider and flattened into `inputs`. */
@@ -541,6 +548,7 @@ export class EnvironmentProvisioningService {
     const record = this.buildEnvironmentRecord({
       workspaceId,
       blockId: args.blockId ?? null,
+      frameId: args.frameId ?? null,
       executionId: args.executionId ?? null,
       providerId: manifest.providerId,
       externalId: provisioned.externalId,
@@ -824,6 +832,7 @@ export class EnvironmentProvisioningService {
       const record = this.buildEnvironmentRecord({
         workspaceId,
         blockId: args.blockId ?? null,
+        frameId: args.frameId ?? null,
         executionId: args.executionId ?? null,
         providerId: manifest.providerId,
         externalId: null,

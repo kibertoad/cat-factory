@@ -185,30 +185,76 @@ function toView(context: AgentRunContext): UserPromptView {
   }
 }
 
+/** The reachable coordinates of a provisioned environment, parsed from its URL. */
+interface EnvironmentCoordinates {
+  host: string
+  /** Port — explicit from the URL, else the scheme default (443/80), else null. */
+  port: number | null
+  /** URL scheme without the trailing colon (e.g. `https`). */
+  scheme: string
+}
+
+/**
+ * Derive standardized coordinates from an environment URL, or null when there is no URL or
+ * it does not parse. Having one deriver means the Tester prompt gets a consistent
+ * host/port/scheme breakdown regardless of which provider stood the environment up — no
+ * per-provider change required. When the URL omits an explicit port, fall back to the
+ * scheme default (`https`→443, `http`→80) so the Tester always has a concrete port.
+ */
+function deriveEnvironmentCoordinates(
+  url: string | null | undefined,
+): EnvironmentCoordinates | null {
+  if (!url) return null
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  const scheme = parsed.protocol.replace(/:$/, '')
+  const port = parsed.port
+    ? Number(parsed.port)
+    : scheme === 'https'
+      ? 443
+      : scheme === 'http'
+        ? 80
+        : null
+  return { host: parsed.hostname, port, scheme }
+}
+
 /**
  * Render the "ephemeral environment under test" section from the run context, or
- * an empty string when no environment is attached. The auth scheme is described
- * so the agent knows how to reach the env, but the raw access token/password is
- * deliberately NOT placed in the prompt — it must not be sent to the LLM
- * provider; programmatic consumers read it from `context.environment.access`.
+ * an empty string when no environment is attached. Surfaces the standardized
+ * coordinates (URL + host/port/scheme, derived once via {@link deriveEnvironmentCoordinates})
+ * so the agent has an unambiguous target, plus the FULL endpoint access credentials.
+ *
+ * These are TEST-environment access credentials (a throwaway ingress token / basic
+ * login for an ephemeral env), treated by the system as non-sensitive: the Tester
+ * cannot authenticate without them and they reach the model regardless of channel, so
+ * they go straight into the prompt rather than a fictional "out of band" path (the empty
+ * version of which is exactly what left earlier Testers unable to reach the environment).
  */
 export function environmentSection(context: AgentRunContext): string {
   const env = context.environment
   if (!env) return ''
-  const lines = [
-    '',
-    'Ephemeral environment under test:',
-    `- URL: ${env.url ?? '(pending)'}`,
-    `- Status: ${env.status}`,
-  ]
+  const coords = deriveEnvironmentCoordinates(env.url)
+  const lines = ['', 'Ephemeral environment under test:', `- URL: ${env.url ?? '(pending)'}`]
+  if (coords) {
+    lines.push(
+      `- Host: ${coords.host}   Port: ${coords.port ?? '(default)'}   Scheme: ${coords.scheme}`,
+    )
+  }
+  lines.push(`- Status: ${env.status}`)
   const access = env.access
   if (access && access.scheme !== 'none') {
-    if (access.scheme === 'bearer') {
-      lines.push('- Auth: Bearer token (provided to the test harness out of band)')
-    } else if (access.scheme === 'basic') {
-      lines.push('- Auth: HTTP Basic credentials (provided to the test harness out of band)')
+    if (access.scheme === 'bearer' && access.token) {
+      lines.push(`- Auth: Bearer token \`${access.token}\` (send as \`Authorization: Bearer …\`)`)
+    } else if (access.scheme === 'basic' && access.username !== undefined) {
+      lines.push(
+        `- Auth: HTTP Basic — username \`${access.username}\`, password \`${access.password ?? ''}\``,
+      )
     } else if (access.scheme === 'custom_header' && access.headerName) {
-      lines.push(`- Auth: \`${access.headerName}\` header (value provided out of band)`)
+      lines.push(`- Auth: header \`${access.headerName}: ${access.headerValue ?? ''}\``)
     }
   }
   return lines.join('\n')

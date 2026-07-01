@@ -14,7 +14,12 @@ import type {
   TicketTrackerProvider,
   IssueWritebackProvider,
 } from '@cat-factory/kernel'
-import { DEFAULT_COMPANION_MAX_ATTEMPTS, isLocalRunner } from '@cat-factory/contracts'
+import {
+  DEFAULT_COMPANION_MAX_ATTEMPTS,
+  frameAllowsVisualPipeline,
+  isLocalRunner,
+  pipelineHasVisualStep,
+} from '@cat-factory/contracts'
 import {
   BINARY_STORAGE_TRAIT,
   companionFor,
@@ -839,6 +844,39 @@ export class ExecutionService {
    * otherwise. Passes through when the provisioning seam is unwired (tests / no environment
    * integration), like the other optional start guards.
    */
+  /**
+   * Guard a run start when the pipeline carries a VISUAL step (`tester-ui` /
+   * `visual-confirmation`): such a step exercises a rendered UI, so it only makes sense where
+   * there is a UI to drive — a `type: 'frontend'` frame (it owns the app under test) or a frame
+   * a `frontend` frame links to (the linked frontend is the UI a change to that service is
+   * validated through). On any other frame (a service with no linked frontend, a `library` /
+   * `document` repo) a `tester-ui` step would have nothing to drive, so refuse the start with an
+   * actionable {@link ConflictError} (`visual_pipeline_no_frontend`). The frontend surfaces the
+   * SAME rule (via the shared `frameAllowsVisualPipeline`) so it only offers these pipelines
+   * where they can run; this is the server-side guarantee. A non-visual pipeline passes through.
+   * The workspace block list is read ONCE (for the frontend→service links), never per-frame.
+   */
+  private async assertPipelineFrameTypeAllowed(
+    workspaceId: string,
+    block: Block,
+    pipeline: Pipeline,
+  ): Promise<void> {
+    if (!pipelineHasVisualStep(pipeline)) return
+    const frame = await this.contextBuilder.resolveServiceFrame(workspaceId, block.id)
+    // A `frontend` frame is always allowed without listing the workspace; only a non-frontend
+    // frame needs the link scan, so defer the (single) block-list read until then.
+    if (frame?.type === 'frontend') return
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    if (frameAllowsVisualPipeline(frame, blocks)) return
+    throw new ConflictError(
+      'This pipeline includes a UI-testing step, so it can only run on a frontend service (or a ' +
+        'backend service that has a frontend linked to it). Move the task under a frontend, link ' +
+        'a frontend to this service, or pick a pipeline without UI-testing steps.',
+      'visual_pipeline_no_frontend',
+      { frameType: frame?.type ?? null },
+    )
+  }
+
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
     // A `frontend` frame (the self-contained UI-test flow) is gated on having a live service
     // under test, NOT on a provision type — resolved first and short-circuiting the backend
@@ -1069,6 +1107,12 @@ export class ExecutionService {
     // rejects these at save, but a pipeline can become invalid out of band, so a run
     // refuses to START as well (the same shared check).
     validatePipelineShape(pipeline)
+
+    // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
+    // it can only run on a `frontend` frame (which owns the app under test) or a frame a frontend
+    // links to. Refuse it on any other frame up-front with an actionable, machine-readable
+    // conflict, rather than dispatching a `tester-ui` step that has no app to drive.
+    await this.assertPipelineFrameTypeAllowed(workspaceId, block, pipeline)
 
     // A pipeline with a Tester needs the service's declared provisioning to be runnable —
     // `infraless`/none runs with no infra, `docker-compose` needs DinD, `kubernetes`/`custom`

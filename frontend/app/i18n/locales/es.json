@@ -294,7 +294,8 @@
         "github_not_connected": "GitHub no conectado",
         "bootstrap_not_retryable": "La inicialización no se puede reintentar",
         "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido",
-        "preset_unsatisfiable": "El preajuste de modelo no puede ejecutar esta canalización"
+        "preset_unsatisfiable": "El preajuste de modelo no puede ejecutar esta canalización",
+        "visual_pipeline_no_frontend": "No hay frontend que probar"
       },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
       "providersUnconfigured": {
@@ -1948,6 +1949,9 @@
         "apiServerUrlHelp": "La raíz del kube-apiserver, p. ej. https://my-cluster.example:6443.",
         "apiToken": "Token de ServiceAccount",
         "apiTokenHelp": "Solo escritura; vuelve a introducirlo para rotarlo. Se guarda cifrado y nunca se devuelve.",
+        "apiTokenHelpStored": "Hay un token guardado que se reutiliza para las pruebas. Déjalo en blanco para conservarlo o introduce uno nuevo para reemplazarlo.",
+        "apiTokenPlaceholderStored": "Déjalo en blanco para conservar el token guardado",
+        "tokenSaved": "Guardado",
         "urlSourceLabel": "Origen de la URL del entorno",
         "urlIngressTemplate": "Plantilla de host de Ingress",
         "urlIngressStatus": "Estado de Ingress",
@@ -2000,6 +2004,9 @@
       "handler": {
         "intro": "Configura cómo se gestiona cada tipo de aprovisionamiento que declara un servicio: el motor y la conexión. Los manifiestos o la ruta de compose de un servicio (el qué/dónde) se definen en el servicio.",
         "activeEngine": "Motor:",
+        "connectionEstablished": "Conexión establecida",
+        "notConnected": "Aún no hay ninguna conexión configurada",
+        "disconnect": "Eliminar conexión",
         "engineLabel": "Motor",
         "customHandlerTitle": "Gestor remote-custom",
         "customTypeLabel": "Tipo personalizado",
