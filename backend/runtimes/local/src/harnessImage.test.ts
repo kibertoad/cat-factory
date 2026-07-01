@@ -6,6 +6,7 @@ import {
   RECOMMENDED_HARNESS_IMAGE,
   refreshHarnessImage,
   resolveHarnessImage,
+  resolveRefreshMode,
 } from './harnessImage.js'
 
 describe('resolveHarnessImage', () => {
@@ -16,6 +17,23 @@ describe('resolveHarnessImage', () => {
 
   it('lets an explicit value win (trimmed)', () => {
     expect(resolveHarnessImage({ LOCAL_HARNESS_IMAGE: '  my/image:1  ' })).toBe('my/image:1')
+  })
+})
+
+describe('resolveRefreshMode', () => {
+  it('defaults to pull when unset or blank', () => {
+    expect(resolveRefreshMode({})).toBe('pull')
+    expect(resolveRefreshMode({ LOCAL_HARNESS_IMAGE_REFRESH: '  ' })).toBe('pull')
+  })
+
+  it('treats every off-style value (not just the literal "off") as disabled', () => {
+    for (const off of ['false', '0', 'off', 'no', 'none', 'disabled', 'OFF', ' Off ']) {
+      expect(resolveRefreshMode({ LOCAL_HARNESS_IMAGE_REFRESH: off })).toBe('off')
+    }
+  })
+
+  it('pulls for an unrecognised value', () => {
+    expect(resolveRefreshMode({ LOCAL_HARNESS_IMAGE_REFRESH: 'yes' })).toBe('pull')
   })
 })
 
@@ -115,6 +133,22 @@ describe('refreshHarnessImage', () => {
     expect(
       info.some((m) => m.includes('updated') && m.includes('sha256:a') && m.includes('sha256:b')),
     ).toBe(true)
+  })
+
+  it('reports a first-time pull (image absent before) as pulled, not up to date', async () => {
+    const { exec } = fakeExec({ digestAfter: 'sha256:new' })
+    const { log, info } = fakeLog()
+    await refreshHarnessImage({
+      image: REMOTE,
+      recommended: REMOTE,
+      binary: 'docker',
+      runtimeId: 'docker',
+      mode: 'pull',
+      exec,
+      log,
+    })
+    expect(info.some((m) => m.includes('pulled') && m.includes('sha256:new'))).toBe(true)
+    expect(info.some((m) => m.includes('up to date'))).toBe(false)
   })
 
   it('falls back to the local copy when the pull fails but the image is present', async () => {

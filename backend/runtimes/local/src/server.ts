@@ -12,6 +12,7 @@ import {
   type ImageExec,
   refreshHarnessImage,
   resolveHarnessImage,
+  resolveRefreshMode,
 } from './harnessImage.js'
 import { isMothershipMode } from './mothership.js'
 import { createRuntimeAdapter, resolveRuntimeId } from './runtimes/index.js'
@@ -53,9 +54,11 @@ export async function startLocal(
 
   // Harness-image preflight: resolve the effective image (an explicit LOCAL_HARNESS_IMAGE, else
   // the backend-matched RECOMMENDED_HARNESS_IMAGE) and refresh it so a rerun can't launch a
-  // stale — or, via a mutable `:latest`, a too-new — harness image. Best-effort and
-  // non-blocking; disable with LOCAL_HARNESS_IMAGE_REFRESH=off.
-  await preflightHarnessImage(localized)
+  // stale — or, via a mutable `:latest`, a too-new — harness image. Fire-and-forget so a slow
+  // (potentially multi-GB) pull never delays serving the board: it never throws, and the
+  // container transport is built lazily on first dispatch, so the refresh races ahead of any
+  // actual use. Disable with LOCAL_HARNESS_IMAGE_REFRESH=off.
+  void preflightHarnessImage(localized).catch(() => {})
 
   // NB: reaping per-run containers a previous run orphaned (a crash/hard kill leaves exited
   // managed containers behind) + draining pool orphans + pre-warming is done on the SERVING
@@ -209,7 +212,7 @@ async function preflightHarnessImage(localized: NodeJS.ProcessEnv): Promise<void
     recommended: RECOMMENDED_HARNESS_IMAGE,
     binary: adapter.binary,
     runtimeId: resolveRuntimeId(localized),
-    mode: localized.LOCAL_HARNESS_IMAGE_REFRESH?.trim().toLowerCase() === 'off' ? 'off' : 'pull',
+    mode: resolveRefreshMode(localized),
     exec: makeImageExec(adapter.binary),
     log: { info: (m) => logger.info(m), warn: (m) => logger.warn(m) },
   })

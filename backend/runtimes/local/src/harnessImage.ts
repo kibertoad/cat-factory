@@ -32,6 +32,19 @@ export function resolveHarnessImage(env: NodeJS.ProcessEnv): string {
   return env.LOCAL_HARNESS_IMAGE?.trim() || RECOMMENDED_HARNESS_IMAGE
 }
 
+/** Values that explicitly DISABLE the boot refresh — the same convention as `LOCAL_NATIVE_AGENTS`. */
+const REFRESH_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
+
+/**
+ * Resolve the boot-refresh mode from `LOCAL_HARNESS_IMAGE_REFRESH`. Any off-style value
+ * (`false`/`0`/`off`/`no`/`none`/`disabled`, matching the repo's other flags) disables the
+ * pull; unset or anything else refreshes.
+ */
+export function resolveRefreshMode(env: NodeJS.ProcessEnv): 'pull' | 'off' {
+  const raw = env.LOCAL_HARNESS_IMAGE_REFRESH?.trim().toLowerCase()
+  return raw && REFRESH_OFF_VALUES.has(raw) ? 'off' : 'pull'
+}
+
 /** One container-CLI invocation, normalised to an exit status + captured stdout. */
 export type ImageExec = (args: string[]) => Promise<{ status: number; stdout: string }>
 
@@ -129,6 +142,9 @@ export async function refreshHarnessImage(opts: RefreshHarnessImageOptions): Pro
   const after = await repoDigest(exec, image)
   if (before && after && before !== after) {
     log.info(`local mode: updated harness image ${image} (${before} -> ${after}).`)
+  } else if (!before && after) {
+    // The image wasn't present before the pull, so this was a first-time download, not a no-op.
+    log.info(`local mode: pulled harness image ${image} (${after}).`)
   } else {
     log.info(`local mode: harness image ${image} is up to date.`)
   }

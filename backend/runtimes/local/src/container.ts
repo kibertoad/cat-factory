@@ -298,11 +298,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     return resolveContainerTransport()
   }
 
-  // Eagerly kick off the serving transport's boot housekeeping (reap + pre-warm) when an
-  // image is configured, so a warm pool is ready before the first run rather than warming
-  // on first dispatch. Skipped without an image (the board still boots; only container
-  // kinds fail, loudly). Fire-and-forget: dispatch reuses the same cached promise.
-  if (env.LOCAL_HARNESS_IMAGE?.trim()) void resolveContainerTransport().catch(() => {})
+  // Eagerly kick off the serving transport's boot housekeeping (reap + pre-warm), so a warm
+  // pool is ready before the first run rather than warming on first dispatch. The harness image
+  // always resolves now (an explicit LOCAL_HARNESS_IMAGE, else the backend-matched pin — see
+  // resolveHarnessImage), so this is no longer gated on the raw env var; a container runtime
+  // that's down just makes the fire-and-forget promise reject harmlessly (dispatch reuses the
+  // same cached promise and fails loudly then).
+  void resolveContainerTransport().catch(() => {})
 
   // The DEPLOY job client (the async container-backed Kubernetes render lifecycle). Local runs
   // it on a DEDICATED deploy backend — the developer's host `kubectl`/`kustomize`/`helm` (native
