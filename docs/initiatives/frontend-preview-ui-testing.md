@@ -43,7 +43,7 @@ build on. Link the merged pilot PR here once it lands.
 | --- | ------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------- |
 | 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
-| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | (this PR)                                                 |
+| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
