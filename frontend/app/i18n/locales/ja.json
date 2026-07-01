@@ -151,6 +151,7 @@
       "environmentFailed": "環境のプロビジョニングに失敗しました",
       "bootstrapFailed": "ブートストラップに失敗しました",
       "runFailed": "実行に失敗しました",
+      "stalled": "実行が停止しました",
       "retryBootstrap": "ブートストラップを再試行",
       "retryRun": "実行を再試行",
       "showDetail": "詳細を表示",

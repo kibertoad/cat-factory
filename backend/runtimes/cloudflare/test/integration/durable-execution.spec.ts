@@ -308,8 +308,17 @@ describe('durable execution: sweeper', () => {
         redrove.push(ref)
       },
       finalizeOrphan: async () => {},
+      // Mirror the production `failStalled` (index.ts): actually fail the run so the DB
+      // assertions below exercise the real terminal transition, not just the callback.
       failStalled: async (ref) => {
         stalledRuns.push(ref)
+        await starter.executionService.failRun(
+          ref.workspaceId,
+          ref.id,
+          'Run stalled: its durable driver was lost and automatic recovery could not resume it.',
+          'stalled',
+          null,
+        )
       },
       clock,
       leaseMs: -60_000,

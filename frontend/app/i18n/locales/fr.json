@@ -151,6 +151,7 @@
       "environmentFailed": "Échec du provisionnement de l’environnement",
       "bootstrapFailed": "L’initialisation a échoué",
       "runFailed": "L’exécution a échoué",
+      "stalled": "L’exécution est bloquée",
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
       "showDetail": "Afficher le détail",
