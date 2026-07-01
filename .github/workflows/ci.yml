@@ -29,6 +29,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
+      eks: ${{ steps.filter.outputs.eks }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -79,6 +80,17 @@ jobs:
             # harness itself changes.
             deployHarness:
               - 'backend/internal/deploy-harness/**'
+              - '.github/workflows/ci.yml'
+            # The EKS integration suite (`test-eks`) boots a floci-emulated EKS cluster (a real
+            # k3s behind the AWS EKS API), so it only runs when the EKS package, the wire
+            # contracts that define its config, or the ports it implements change. This job is
+            # NON-BLOCKING (not in the aggregated `Test` gate) while floci support settles.
+            eks:
+              - 'backend/packages/eks/**'
+              - 'backend/packages/contracts/src/runners.ts'
+              - 'backend/packages/contracts/src/environments.ts'
+              - 'backend/packages/contracts/src/primitives.ts'
+              - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -783,10 +795,101 @@ jobs:
         if: ${{ always() }}
         run: k3d cluster delete cf-it || true
 
+  # EKS integration suite. NON-BLOCKING (intentionally NOT in the aggregated `Test` gate's
+  # `needs`, like `test-e2e`) while floci support settles — the EKS unit tests (the SigV4/STS
+  # golden vector + the contract round-trip) already run in the required `test` lane. This job
+  # boots floci (a local AWS emulator that stands up a REAL k3s cluster per EKS cluster and
+  # fronts it with the aws-iam-authenticator webhook), creates a cluster via the AWS CLI, exports
+  # its endpoint/CA + test credentials as `EKS_IT_*`, and runs the suite. The floci bootstrap is
+  # best-effort (`continue-on-error`): if it can't stand a cluster up, the suite self-skips on the
+  # missing `EKS_IT_*` env rather than failing.
+  test-eks:
+    name: Test EKS (floci)
+    needs: changes
+    if: ${{ needs.changes.outputs.eks == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The integration specs import the built `dist` of the workspace libraries.
+      - name: Build libraries
+        run: pnpm build
+
+      # Boot floci + create an EKS cluster via the AWS CLI, then export EKS_IT_* for the suite.
+      # Best-effort: any failure leaves EKS_IT_* unset, so the suite self-skips (never reds this
+      # non-blocking job). Refine the floci invocation here as its tooling stabilises.
+      - name: Boot floci + provision EKS cluster
+        continue-on-error: true
+        run: |
+          set -x
+          CLUSTER=cat-factory-it
+          REGION=us-east-1
+          # floci exposes the AWS API on :4566 (LocalStack-compatible endpoint).
+          docker run -d --name floci -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/floci-io/floci:latest || exit 0
+          for i in $(seq 1 30); do curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1 && break; sleep 2; done
+          export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=$REGION
+          AWS="aws --endpoint-url=http://localhost:4566 --region $REGION"
+          $AWS eks create-cluster --name "$CLUSTER" \
+            --role-arn arn:aws:iam::000000000000:role/eks-service-role \
+            --resources-vpc-config '{}' || exit 0
+          for i in $(seq 1 60); do
+            STATUS="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.status' --output text 2>/dev/null || echo PENDING)"
+            [ "$STATUS" = "ACTIVE" ] && break
+            sleep 3
+          done
+          ENDPOINT="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.endpoint' --output text)"
+          CA="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.certificateAuthority.data' --output text | base64 -d)"
+          [ -n "$ENDPOINT" ] || exit 0
+          {
+            echo "EKS_IT_APISERVER=$ENDPOINT"
+            echo "EKS_IT_REGION=$REGION"
+            echo "EKS_IT_CLUSTER_NAME=$CLUSTER"
+            echo "EKS_IT_ACCESS_KEY_ID=test"
+            echo "EKS_IT_SECRET_ACCESS_KEY=test"
+            echo "EKS_IT_STS_HOST=localhost:4566"
+            echo "EKS_IT_INSECURE=1"
+            echo 'EKS_IT_CA_PEM<<EKS_CA_EOF'
+            echo "$CA"
+            echo 'EKS_CA_EOF'
+          } >> "$GITHUB_ENV"
+
+      # Build + import the mock-harness image the runner suite drives, into floci's k3s.
+      - name: Build + import mock-harness image
+        continue-on-error: true
+        run: |
+          docker build -t cat-factory-mock-harness:it \
+            backend/packages/integrations/src/modules/kubernetes/test-support/mock-harness
+          echo "EKS_IT_RUNNER_IMAGE=cat-factory-mock-harness:it" >> "$GITHUB_ENV"
+
+      - name: EKS integration tests
+        env:
+          EKS_IT_NAMESPACE: cat-factory-it
+        run: pnpm --filter @cat-factory/eks run test:integration
+
+      - name: Tear down floci
+        if: ${{ always() }}
+        run: docker rm -f floci || true
+
   # Single aggregated status named "Test" so branch protection can require one
   # check regardless of the job/shard layout. Fails unless every test job passed.
-  # NOTE: `test-e2e` is intentionally NOT in `needs` — it's non-blocking for now (see the
-  # job comment above), so its result does not gate this required status.
+  # NOTE: `test-e2e` and `test-eks` are intentionally NOT in `needs` — they're non-blocking for
+  # now (see their job comments above), so their result does not gate this required status.
   test-gate:
     name: Test
     needs: [test-worker, test-units, test-db, test-k8s]

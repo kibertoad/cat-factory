@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // The runtime-neutral SigV4 token minter uses Web Platform globals (`crypto.subtle`,
+    // `TextEncoder`) present on both Node and workerd; the tests use Node globals
+    // (`process`, `Buffer`). @types/node supplies them all — mirrors the Node runtime facade.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

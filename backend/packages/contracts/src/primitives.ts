@@ -168,6 +168,43 @@ export function customBackendKindSchema(reserved: readonly string[]) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// AWS EKS backend shared bits. An EKS cluster's apiserver IS a standard Kubernetes
+// apiserver, so the EKS runner + environment configs are the corresponding Kubernetes
+// config PLUS these two non-secret AWS fields (region + cluster name); the AWS
+// credentials ride the encrypted secret bundle under the keys below. Defined here once so
+// the runner (`runners.ts`) and environment (`environments.ts`) subsystems can't drift.
+// The actual auth (a SigV4-presigned STS token minted from these) lives in `@cat-factory/eks`.
+// ---------------------------------------------------------------------------
+
+/** Secret-bundle key the AWS access key id is read from. */
+export const EKS_ACCESS_KEY_ID_SECRET_KEY = 'awsAccessKeyId'
+/** Secret-bundle key the AWS secret access key is read from. */
+export const EKS_SECRET_ACCESS_KEY_SECRET_KEY = 'awsSecretAccessKey'
+/** Optional secret-bundle key for an AWS session token (temporary STS credentials). */
+export const EKS_SESSION_TOKEN_SECRET_KEY = 'awsSessionToken'
+
+/** The non-secret EKS fields both the runner + environment configs add on top of the K8s shape. */
+export const eksClusterFieldsSchema = v.object({
+  /** AWS region of the EKS cluster — the regional STS endpoint + the SigV4 credential scope. */
+  region: v.pipe(
+    v.string(),
+    v.trim(),
+    v.regex(/^[a-z0-9-]+$/, 'must be an AWS region slug'),
+    v.minLength(1),
+    v.maxLength(64),
+  ),
+  /** EKS cluster name — bound into the presigned STS token via the signed `x-k8s-aws-id` header. */
+  clusterName: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  /**
+   * Override the STS host the apiserver token is presigned against. Defaults to the regional
+   * public endpoint `sts.<region>.amazonaws.com`. Set it for a VPC/FIPS/GovCloud STS endpoint —
+   * or, in the integration tests, a local EKS emulator (floci) STS endpoint.
+   */
+  stsHost: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(255))),
+})
+export type EksClusterFields = v.InferOutput<typeof eksClusterFieldsSchema>
+
 export const positionSchema = v.object({
   x: v.number(),
   y: v.number(),

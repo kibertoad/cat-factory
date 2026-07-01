@@ -20,12 +20,27 @@ export interface KubernetesClientConfig {
   insecureSkipTlsVerify?: boolean
 }
 
+/**
+ * Resolves the Bearer token used to authenticate to the apiserver. The default source is a
+ * static ServiceAccount token read synchronously from the secret bundle, but a backend can
+ * inject an ASYNC provider that mints a short-lived token per call — this is the seam the AWS
+ * EKS backend (`@cat-factory/eks`) uses to supply a SigV4-presigned STS token (which expires,
+ * so it can't be a stored static secret). Keeping this generic and AWS-free lets the whole
+ * Kubernetes transport/provider stack be reused verbatim behind a different auth scheme.
+ */
+export type KubernetesTokenProvider = () => string | Promise<string>
+
 export class KubernetesApiClient {
   constructor(
     private readonly config: KubernetesClientConfig,
     private readonly resolveSecret: SecretResolver,
     /** Secret-bundle key the Bearer token is read from (default `apiToken`). */
     private readonly tokenKey: string = KUBERNETES_TOKEN_KEY,
+    /**
+     * Optional async token source. When supplied it REPLACES the static `resolveSecret(tokenKey)`
+     * lookup (the EKS minting path); when omitted the client behaves exactly as before.
+     */
+    private readonly tokenProvider?: KubernetesTokenProvider,
   ) {}
 
   /**
@@ -42,7 +57,9 @@ export class KubernetesApiClient {
     timeoutMs: number,
     contentType?: string,
   ): Promise<Response> {
-    const token = this.resolveSecret(this.tokenKey)
+    const token = this.tokenProvider
+      ? await this.tokenProvider()
+      : this.resolveSecret(this.tokenKey)
     if (!token) throw new Error(`Missing Kubernetes ServiceAccount token ('${this.tokenKey}')`)
     const headers: Record<string, string> = {
       authorization: `Bearer ${token}`,

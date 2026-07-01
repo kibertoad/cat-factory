@@ -40,6 +40,7 @@
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/consensus": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/eks": "workspace:*",
     "@cat-factory/gates": "workspace:*",
     "@cat-factory/gitlab": "workspace:*",
     "@cat-factory/integrations": "workspace:*",

@@ -5,6 +5,12 @@ import {
   resolveAgentConfig,
   isProxyableProvider,
 } from '@cat-factory/agents'
+// Opt-in AWS EKS backends (runner + environment). The Node/local facades can honor the custom
+// CA + minted IAM token EKS needs (the Cloudflare Worker cannot verify a private CA), so they
+// register the backends here by reference. They are pass-throughs until a workspace actually
+// connects an `eks` backend, and carry NO runtime AWS SDK dependency (the token is minted with
+// WebCrypto), so this adds no cost to a deployment that never uses EKS.
+import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import {
   ConfluenceProvider,
   FigmaProvider,
@@ -1238,6 +1244,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
   const { environmentBackendRegistry, runnerBackendRegistry, customManifestTypeRegistry } =
     options.backendRegistries ?? createBackendRegistries()
+
+  // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
+  // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
+  // pass-through until a workspace connects an `eks` backend. Registered only on Node/local
+  // (never the Worker) since EKS clusters present a private CA the Worker can't verify.
+  runnerBackendRegistry.register(eksRunnerBackend)
+  environmentBackendRegistry.register(eksEnvironmentBackend)
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
