@@ -10,7 +10,7 @@ import type {
   ServiceInfraSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
-import { redactSecrets } from './redact.js'
+import { captureRedactedOutput, redactSecrets } from './redact.js'
 import {
   cloneRepo,
   commitAll,
@@ -61,26 +61,6 @@ import { log, type Logger } from './logger.js'
 
 const exec = promisify(execFile)
 
-/** Cap on the captured compose output kept on the record (tail-biased — failures show last). */
-const MAX_INFRA_LOG_CHARS = 16_000
-
-/**
- * Combine, redact and tail-bound captured compose stdout+stderr into the stored `logs`
- * string. Keeps the LAST {@link MAX_INFRA_LOG_CHARS} (where a failure's error lives),
- * prefixed with a truncation marker when trimmed. Returns undefined for empty output so
- * the record stays sparse.
- */
-function captureInfraLogs(stdout: unknown, stderr: unknown): string | undefined {
-  const merged = [String(stdout ?? ''), String(stderr ?? '')]
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join('\n')
-  if (!merged) return undefined
-  const redacted = redactSecrets(merged)
-  if (redacted.length <= MAX_INFRA_LOG_CHARS) return redacted
-  return `…(${redacted.length - MAX_INFRA_LOG_CHARS} earlier chars trimmed)\n${redacted.slice(-MAX_INFRA_LOG_CHARS)}`
-}
-
 /**
  * Bring the service's docker-compose dependencies up (local infra only). Best-effort:
  * runs `docker compose -f <path> up -d --wait` in the checkout. A missing Docker daemon
@@ -112,7 +92,7 @@ async function standUpInfra(
       ['compose', '-f', infra.composePath, 'up', '-d', '--wait'],
       { cwd: dir, signal, timeout: 5 * 60_000, maxBuffer: 16 * 1024 * 1024 },
     )
-    const logs = captureInfraLogs(stdout, stderr)
+    const logs = captureRedactedOutput(stdout, stderr)
     return {
       started: true,
       record: {
@@ -130,7 +110,7 @@ async function standUpInfra(
     // so the stored logs explain the failure (a port clash, a pull-auth error, an exited
     // dependency), not just the one-line exit message.
     const e = err as { stdout?: unknown; stderr?: unknown }
-    const logs = captureInfraLogs(e.stdout, e.stderr)
+    const logs = captureRedactedOutput(e.stdout, e.stderr)
     return {
       started: false,
       note,

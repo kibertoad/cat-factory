@@ -5,6 +5,7 @@
 '@cat-factory/server': minor
 '@cat-factory/local-server': patch
 '@cat-factory/contracts': patch
+'@cat-factory/app': patch
 ---
 
 Self-contained frontend UI-test infra (slice 3 of the frontend-preview + in-context
@@ -25,7 +26,17 @@ it works on Cloudflare and Apple `container` too.
   `frontendConfig` plus its backend bindings resolved to concrete upstreams — a bound service's
   live ephemeral env URL for the service under test, else a WireMock mock). The engine's
   `testerInfraSpec` turns it into the harness spec, and the tester-infra start gate refuses a
-  frontend UI test that has no live service under test. Empty-envVar bindings are filtered.
+  frontend UI test only when it binds a live-backend `service` with none actually live (a
+  mock-only / no-backend frontend passes — WireMock + the static server fully stand it up).
+  Empty-envVar bindings are filtered.
+- **Hardening** (review follow-ups): the harness's WireMock / serve child processes get an
+  `'error'` listener (a spawn failure is captured, not an uncaught crash of the job server),
+  WireMock is now health-checked alongside the served app (a dead mock becomes a prompt note,
+  not a test-time ECONNREFUSED), reserved env-var names (`PATH`, `NODE_OPTIONS`, …) are dropped
+  from the injected build env, and a configured `servePort` that collides with a reserved
+  in-container port (8080 harness job server, 8089 WireMock) falls back to the default. The
+  inspector's servePort placeholder now shows 4173. Shared `pathExists` / log-capture helpers
+  are de-duplicated in the harness.
 
 BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
 (`service` | `frontend`); the default backend-service tester shape is unchanged.

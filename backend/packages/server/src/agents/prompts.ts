@@ -289,6 +289,22 @@ const FRONTEND_WIREMOCK_PORT = 8089
  * harness's own job HTTP server owns 8080 in the same container) and NOT the WireMock port.
  */
 const FRONTEND_SERVE_PORT = 4173
+/** The port the harness's own job HTTP server binds inside the container — never serve on it. */
+const HARNESS_JOB_PORT = 8080
+
+/**
+ * The served port for a frontend UI test: the user's `servePort` unless it collides with a
+ * reserved in-container port (the harness job server on 8080, or WireMock on 8089), in which
+ * case it would fail to bind (or steal WireMock's port), so we fall back to the default. The
+ * inspector steers users to 4173, but nothing stops them typing a reserved port, so guard here.
+ */
+function resolveServePort(requested: number | undefined): number {
+  if (requested === undefined) return FRONTEND_SERVE_PORT
+  if (requested === HARNESS_JOB_PORT || requested === FRONTEND_WIREMOCK_PORT) {
+    return FRONTEND_SERVE_PORT
+  }
+  return requested
+}
 
 export function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
   // A `frontend` frame under the self-contained UI-test flow builds + serves the app and stands
@@ -343,7 +359,7 @@ function buildFrontendInfraSpec(
     ...(config.outputDir ? { outputDir: config.outputDir } : {}),
     ...(config.serveMode ? { serveMode: config.serveMode } : {}),
     ...(config.serveScript ? { serveScript: config.serveScript } : {}),
-    servePort: config.servePort ?? FRONTEND_SERVE_PORT,
+    servePort: resolveServePort(config.servePort),
     ...(config.envInjection ? { envInjection: config.envInjection } : {}),
     ...(Object.keys(env).length ? { env } : {}),
     ...(config.mockMappingsPath ? { wiremockMappingsPath: config.mockMappingsPath } : {}),

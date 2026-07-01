@@ -191,6 +191,21 @@ describe('testerInfraSpec', () => {
     })
   })
 
+  it('falls back to the default serve port when the configured port collides with a reserved one', () => {
+    for (const reserved of [8080, 8089]) {
+      const spec = testerInfraSpec(
+        context({
+          frontend: {
+            config: { servePort: reserved, backendBindings: [] },
+            bindings: [],
+          },
+        } as Record<string, unknown>),
+      )
+      // 8080 is the harness job server, 8089 is WireMock — neither is usable, so fall back to 4173.
+      expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
+    }
+  })
+
   it('takes the frontend branch even when a provisioned env URL is also present', () => {
     const spec = testerInfraSpec(
       context({

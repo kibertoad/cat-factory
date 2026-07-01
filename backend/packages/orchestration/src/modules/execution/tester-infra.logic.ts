@@ -22,11 +22,13 @@ export interface TesterInfraInput {
    * Frontend UI-test infra (the self-contained `tester-ui` flow). Present ONLY when the
    * frame under test is a `type: 'frontend'` app — and then it takes precedence over the
    * backend-service branch below (a frontend declares `frontendConfig`, not `provisioning`).
-   * A frontend needs no Docker-in-Docker (WireMock + a static server are plain processes),
-   * so the only gate is that at least one bound service has a LIVE ephemeral env to be the
-   * "service under test"; without one there is no real backend to exercise.
+   * A frontend needs no Docker-in-Docker (WireMock + a static server are plain processes), so
+   * the gate is narrow: a frontend that declares one or more live-backend `service` bindings
+   * (`hasServiceBindings`) needs at least one of them actually LIVE (`hasLiveService`) to be
+   * the "service under test". A frontend that binds no `service` at all (only mocks, or none)
+   * is fully stood up by WireMock + the static server, so it passes with nothing to gate.
    */
-  frontend?: { hasLiveService: boolean }
+  frontend?: { hasServiceBindings: boolean; hasLiveService: boolean }
   /** The service frame's declared provision type, or undefined when none is set. */
   provisionType: ProvisionType | undefined
   /** Whether the runtime can run an in-container docker-compose stack via Docker-in-Docker. */
@@ -59,14 +61,16 @@ export type TesterInfraDecision =
 
 /**
  * Decide whether a Tester pipeline may start. A `frontend` frame (the self-contained UI-test
- * flow) is decided FIRST and needs only a live service under test. Otherwise the backend
- * service branch: `infraless`/none always passes (the Tester stands nothing up);
- * `docker-compose` passes only on a DinD-capable runtime AND when a compose path is declared;
- * `kubernetes`/`custom` passes only when a workspace handler resolves for the type.
+ * flow) is decided FIRST: it passes unless it declares live-backend `service` bindings with
+ * none actually live (nothing to exercise as the service under test); a mock-only / no-binding
+ * frontend passes. Otherwise the backend service branch: `infraless`/none always passes (the
+ * Tester stands nothing up); `docker-compose` passes only on a DinD-capable runtime AND when a
+ * compose path is declared; `kubernetes`/`custom` passes only when a workspace handler resolves.
  */
 export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision {
   if (input.frontend) {
-    return input.frontend.hasLiveService
+    const { hasServiceBindings, hasLiveService } = input.frontend
+    return !hasServiceBindings || hasLiveService
       ? { ok: true }
       : { ok: false, reason: 'frontend-no-live-service' }
   }

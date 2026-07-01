@@ -123,7 +123,7 @@ import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
-import { hasLiveServiceBinding } from './frontend-infra.logic.js'
+import { hasLiveServiceBinding, hasServiceBinding } from './frontend-infra.logic.js'
 
 export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -834,7 +834,10 @@ export class ExecutionService {
     if (frontend) {
       if (!this.environmentProvisioning) return
       const decision = decideTesterInfra({
-        frontend: { hasLiveService: hasLiveServiceBinding(frontend.bindings) },
+        frontend: {
+          hasServiceBindings: hasServiceBinding(frontend.config),
+          hasLiveService: hasLiveServiceBinding(frontend.bindings),
+        },
         provisionType: undefined,
         localTestInfraSupported: this.localTestInfraSupported,
         hasComposePath: false,

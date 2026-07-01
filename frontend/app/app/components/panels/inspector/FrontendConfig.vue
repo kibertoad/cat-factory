@@ -226,7 +226,7 @@ function removeBinding(index: number) {
           step="1"
           size="xs"
           class="font-mono"
-          placeholder="8080"
+          placeholder="4173"
           @blur="(e: FocusEvent) => saveServePort((e.target as HTMLInputElement).value)"
         />
       </div>

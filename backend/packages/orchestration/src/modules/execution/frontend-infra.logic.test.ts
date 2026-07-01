@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { FrontendConfig } from '@cat-factory/kernel'
-import { hasLiveServiceBinding, resolveFrontendBindings } from './frontend-infra.logic.js'
+import {
+  hasLiveServiceBinding,
+  hasServiceBinding,
+  resolveFrontendBindings,
+} from './frontend-infra.logic.js'
 
 /** A minimal frontend config with the given bindings (defaults for the build/serve knobs). */
 function config(backendBindings: FrontendConfig['backendBindings']): FrontendConfig {
@@ -71,5 +75,33 @@ describe('hasLiveServiceBinding', () => {
 
   it('is false for an empty binding list', () => {
     expect(hasLiveServiceBinding([])).toBe(false)
+  })
+})
+
+describe('hasServiceBinding', () => {
+  it('is true when any binding has a (non-empty) service source', () => {
+    expect(
+      hasServiceBinding(
+        config([{ envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } }]),
+      ),
+    ).toBe(true)
+  })
+
+  it('is false for a mock-only frontend', () => {
+    expect(hasServiceBinding(config([{ envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } }]))).toBe(
+      false,
+    )
+  })
+
+  it('is false when the only service binding has an empty env var (an unfinished row)', () => {
+    expect(
+      hasServiceBinding(
+        config([{ envVar: '  ', source: { kind: 'service', serviceBlockId: 'blk_api' } }]),
+      ),
+    ).toBe(false)
+  })
+
+  it('is false for an empty binding list', () => {
+    expect(hasServiceBinding(config([]))).toBe(false)
   })
 })

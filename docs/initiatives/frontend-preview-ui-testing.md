@@ -94,18 +94,33 @@ build on. Link the merged pilot PR here once it lands.
     same container, so a frontend served on 8080 would clash. The contract's default note was
     corrected to 4173; WireMock defaults to 8089. Both are backend-chosen in `testerInfraSpec`.
   - **The tester-infra start gate** (`decideTesterInfra` + `assertTesterInfraConfigured`) grew a
-    frontend branch: a `frontend` frame is refused (`frontend-no-live-service`) unless at least
-    one bound service has a LIVE ephemeral env (the service under test). It is decided BEFORE the
-    backend provision-type branch and passes through when the env seam is unwired (tests). The
-    cross-runtime conformance asserts this refusal (a facade that dropped `frontend_config` would
-    let the run start instead) — the D1 ⇄ Drizzle parity of reading the column during a run.
-  - **Env keying (carried forward):** a binding's `service` source resolves the live env by the
-    bound block id directly (the design's `getHandleForBlock(serviceBlockId)` semantics). Today a
-    `deployer` keys the env under the block it ran on (a task, `block.id`), so wiring HOW a service
-    frame's ephemeral env becomes resolvable by the FRAME id it's bound to is part of the
-    end-to-end `pl_frontend` flow (slice 4) + manual verification. The happy-path binding→URL math
-    is covered by the `resolveFrontendBindings` unit tests; the live-env e2e assertion lands with
-    slice 4.
+    frontend branch: a `frontend` frame is refused (`frontend-no-live-service`) only when it binds
+    a live-backend `service` (`hasServiceBinding`) with none actually live (`hasLiveServiceBinding`).
+    A mock-only / no-backend frontend PASSES — WireMock + the static server fully stand it up, so
+    there is nothing to gate on. It is decided BEFORE the backend provision-type branch and passes
+    through when the env seam is unwired (tests). The cross-runtime conformance asserts the refusal
+    for a frontend that DOES bind a (non-live) service (a facade that dropped `frontend_config`
+    would let the run start instead) — the D1 ⇄ Drizzle parity of reading the column during a run.
+  - **Env keying (carried forward — the frame-id ⇄ task-id gap):** a binding's `service` source
+    resolves the live env by the bound block id directly (the design's
+    `getHandleForBlock(serviceBlockId)` semantics, where `serviceBlockId` is the service FRAME id).
+    Today a `deployer` keys the env under the block it ran on (a task, `block.id`), NOT the frame,
+    so `resolveFrontendConfig`'s `handle.blockId === serviceBlockId` match never hits and a frontend
+    that binds a live service is still refused. Reconciling this (making a service frame's ephemeral
+    env resolvable by the FRAME id it's bound to) is DELIBERATELY deferred to the end-to-end
+    `pl_frontend` flow (slice 4) — it's a deployer-keying change, not a reverse-walk hack bolted on
+    here. The happy-path binding→URL math is covered by the `resolveFrontendBindings` unit tests;
+    the live-env e2e assertion lands with slice 4.
+  - **Harness stand-up hardening (review follow-ups):** the WireMock / serve child processes each
+    get an `'error'` listener (`guardProcess`) — a `ChildProcess` `'error'` with no listener is an
+    UNCAUGHT exception that would crash the whole job server (matches the pattern in `pi.ts` /
+    `agent-runner.ts`). WireMock is now health-checked (`/__admin/`) alongside the served app, so a
+    dead mock becomes a prompt note instead of a test-time ECONNREFUSED. Reserved env-var names
+    (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD`, …) are dropped in `parseFrontendInfraSpec` (they are
+    spread over `process.env` at build time, so a binding named `PATH` would break the toolchain).
+    A `servePort` colliding with 8080 (harness job server) or 8089 (WireMock) falls back to 4173 in
+    `testerInfraSpec`. Shared `pathExists` (`fs-utils.ts`) + `captureRedactedOutput` (`redact.ts`)
+    helpers replace the per-file copies.
   - **`ui`-image routing is still the remaining deploy-time step** (unchanged by slice 3, see
     `Dockerfile.ui`). Both Cloudflare and local use a per-RUN container with a single image, so
     `image: 'ui'` per-step routing isn't wired (a run's first step fixes the image; later steps

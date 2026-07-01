@@ -570,6 +570,20 @@ function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   }
 }
 
+/**
+ * Env-var names never injected from a frontend binding: spread over `process.env` at build
+ * time, so any of these would break the toolchain (or enable injection) rather than name an
+ * upstream URL. Matched exactly (Linux env is case-sensitive).
+ */
+const RESERVED_ENV_NAMES = new Set([
+  'PATH',
+  'HOME',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+])
+
 /** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
 function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const packageManager =
@@ -580,11 +594,14 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const envInjection =
     o.envInjection === 'build' || o.envInjection === 'runtime' ? o.envInjection : undefined
   // Only string→string entries survive; a non-string value is dropped so a malformed
-  // binding can't inject `[object Object]` (or undefined) as an upstream URL.
+  // binding can't inject `[object Object]` (or undefined) as an upstream URL. Reserved names
+  // that would break the toolchain or enable injection (PATH, NODE_OPTIONS, LD_PRELOAD, …) are
+  // dropped too: they are spread over `process.env` at build time, so a binding named `PATH`
+  // would replace it with a URL and the build would no longer find its tools.
   const env: Record<string, string> = {}
   if (typeof o.env === 'object' && o.env !== null) {
     for (const [key, val] of Object.entries(o.env as Record<string, unknown>)) {
-      if (key && typeof val === 'string') env[key] = val
+      if (key && !RESERVED_ENV_NAMES.has(key) && typeof val === 'string') env[key] = val
     }
   }
   const servePort = posInt(o.servePort)

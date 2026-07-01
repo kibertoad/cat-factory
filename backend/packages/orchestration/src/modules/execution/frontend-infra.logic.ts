@@ -49,3 +49,14 @@ export function resolveFrontendBindings(
 export function hasLiveServiceBinding(bindings: readonly ResolvedFrontendBinding[]): boolean {
   return bindings.some((b) => b.serviceUrl !== undefined)
 }
+
+/**
+ * Whether the frontend declares any live-backend `service` binding (a real upstream it expects
+ * to test against, as opposed to a `mock`). A frontend with none is fully served by WireMock +
+ * the static server, so the start gate lets it run even with no live service under test.
+ */
+export function hasServiceBinding(config: FrontendConfig): boolean {
+  return config.backendBindings.some(
+    (b) => b.source.kind === 'service' && b.envVar.trim().length > 0,
+  )
+}

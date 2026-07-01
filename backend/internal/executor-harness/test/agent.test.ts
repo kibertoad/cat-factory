@@ -148,7 +148,8 @@ describe('parseAgentJob', () => {
         kind: 'frontend',
         packageManager: 'bun', // unrecognised → dropped
         serveMode: 'weird', // unrecognised → dropped
-        env: { GOOD: 'https://ok', BAD: 42, ALSO_BAD: null },
+        // PATH is reserved (would clobber the build's toolchain env) → dropped.
+        env: { GOOD: 'https://ok', BAD: 42, ALSO_BAD: null, PATH: 'https://evil' },
         servePort: -3, // not a positive int → dropped
       },
     })
