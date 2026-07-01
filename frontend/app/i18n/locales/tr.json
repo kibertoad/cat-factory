@@ -377,6 +377,34 @@
       "manageBoard": "Bu pano'nun fragman kütüphanesini yönet…",
       "manageAccount": "Hesap fragmanlarını yönet…"
     },
+    "frontendConfig": {
+      "title": "Frontend",
+      "hint": "Bağımsız bir arayüz testi için bu frontend'in nasıl derleneceği, sunulacağı ve taklit edileceği. Aşağıdaki bağlamalar onu çağırdığı backend hizmetlerine bağlar.",
+      "packageManager": "Paket yöneticisi",
+      "installCommand": "Kurulum komutu",
+      "buildScript": "Derleme betiği",
+      "outputDir": "Çıktı dizini",
+      "serveMode": "Sunma modu",
+      "serveStatic": "Statik",
+      "serveCommand": "Komut",
+      "serveModeHint": "Statik, derleme çıktı dizinini sunar; Komut, bir package.json betiğini (örn. preview) çalıştırır.",
+      "serveScript": "Sunma betiği",
+      "servePort": "Sunma bağlantı noktası",
+      "mockMappingsPath": "Taklit eşleme yolu",
+      "envInjection": "Ortam değişkeni enjeksiyonu",
+      "envBuild": "Derleme zamanı",
+      "envRuntime": "Çalışma zamanı",
+      "envInjectionHint": "Derleme zamanı, backend URL'lerini derleme ortam değişkenleri olarak enjekte eder; Çalışma zamanı, bunları bir window.env shim'ine yazar.",
+      "previewEnabled": "Göz atılabilir önizlemeyi etkinleştir",
+      "previewHint": "Tıklanabilir bir URL ile sunulan bir önizlemeyi çalışır durumda tutar. Yalnızca Local ve Node çalışma zamanları.",
+      "bindings": {
+        "title": "Backend bağlamaları",
+        "hint": "Frontend'in bir üst akış URL'si için okuduğu her ortam değişkeni ve nerede çözümlendiği: bağlı bir hizmetin geçici ortamı veya bir WireMock saplaması.",
+        "mock": "Taklit (WireMock)",
+        "remove": "Bağlamayı kaldır",
+        "empty": "Backend bağlaması yok. Bir ortam değişkenini bir hizmete veya taklide yönlendirmek için bir tane ekleyin."
+      }
+    },
     "releaseHealth": {
       "title": "Sürüm sonrası sağlık",
       "clear": "Temizle",

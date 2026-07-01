@@ -377,6 +377,34 @@
       "manageBoard": "נהל את ספריית הקטעים של לוח זה…",
       "manageAccount": "נהל קטעי חשבון…"
     },
+    "frontendConfig": {
+      "title": "Frontend",
+      "hint": "כיצד לבנות, להגיש ולדמות את ה-frontend הזה לבדיקת ממשק עצמאית. הקישורים למטה מחברים אותו לשירותי ה-backend שהוא קורא אליהם.",
+      "packageManager": "מנהל חבילות",
+      "installCommand": "פקודת התקנה",
+      "buildScript": "סקריפט בנייה",
+      "outputDir": "תיקיית פלט",
+      "serveMode": "מצב הגשה",
+      "serveStatic": "סטטי",
+      "serveCommand": "פקודה",
+      "serveModeHint": "סטטי מגיש את תיקיית פלט הבנייה; פקודה מריצה סקריפט מ-package.json (למשל preview).",
+      "serveScript": "סקריפט הגשה",
+      "servePort": "פורט הגשה",
+      "mockMappingsPath": "נתיב מיפויי הדמיה",
+      "envInjection": "הזרקת משתני סביבה",
+      "envBuild": "בזמן בנייה",
+      "envRuntime": "בזמן ריצה",
+      "envInjectionHint": "בזמן בנייה מזריק את כתובות ה-backend כמשתני סביבה של בנייה; בזמן ריצה כותב אותן ל-shim של window.env.",
+      "previewEnabled": "הפעל תצוגה מקדימה לגלישה",
+      "previewHint": "משאיר תצוגה מקדימה מוגשת פועלת עם כתובת URL לחיצה. רק בסביבות Local ו-Node.",
+      "bindings": {
+        "title": "קישורי backend",
+        "hint": "כל משתנה סביבה שה-frontend קורא עבור כתובת URL במעלה הזרם, והיכן הוא נפתר: הסביבה הזמנית של שירות מקושר, או stub של WireMock.",
+        "mock": "הדמיה (WireMock)",
+        "remove": "הסר קישור",
+        "empty": "אין קישורי backend. הוסף אחד כדי להפנות משתנה סביבה לשירות או להדמיה."
+      }
+    },
     "releaseHealth": {
       "title": "תקינות לאחר שחרור",
       "clear": "נקה",

@@ -42,7 +42,7 @@ build on. Link the merged pilot PR here once it lands.
 | #   | Slice                                                                                | Status | PR                                                        |
 | --- | ------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------- |
 | 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
-| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | todo   | —                                                         |
+| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#607](https://github.com/kibertoad/cat-factory/pull/607) |
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | todo   | —                                                         |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
@@ -72,3 +72,14 @@ build on. Link the merged pilot PR here once it lands.
   is a genuine local/node differentiator, capability-gated (`frontendPreviewSupported`).
 - Any change to the runner image (slice 3: WireMock + JRE + static server + pnpm in the `ui`
   variant) MUST bump `@cat-factory/executor-harness` and the image tag in `deploy/backend`.
+- `frontendConfig` (slice 2) is stored serialized on the frame block via `optJsonField`, exactly
+  like `provisioning` — a single `frontend_config` JSON column, mirrored D1 (`0029_frontend_config.sql`)
+  ⇄ Drizzle (`blocks.frontend_config`) with a conformance round-trip. The backend does NOT gate it
+  to `type: 'frontend'` frames (mirrors `provisioning`, which any frame may carry); only the inspector
+  panel is type-gated. The whole config flows through the generic `updateBlock` PATCH.
+- `FrontendConfig.backendBindings[].envVar` intentionally allows the EMPTY string (its schema has
+  no `minLength`): a freshly-added inspector binding row starts blank and is persisted immediately,
+  so a strict schema would 422 the PATCH mid-edit. Slice 3's infra/job-body builder MUST filter
+  `envVar === ''` bindings so an unfinished row is inert (not injected as an empty env var).
+- The board frontend→service edges (cyan, `TaskDependencyEdges.vue`) are derived from the
+  `service`-sourced bindings, deduped per target service. A binding's `mock` source draws no edge.

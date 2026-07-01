@@ -377,6 +377,34 @@
       "manageBoard": "Zarządzaj biblioteką fragmentów tej tablicy…",
       "manageAccount": "Zarządzaj fragmentami konta…"
     },
+    "frontendConfig": {
+      "title": "Frontend",
+      "hint": "Jak zbudować, uruchomić i zamockować ten frontend na potrzeby samodzielnego testu interfejsu. Powiązania poniżej łączą go z usługami backendu, które wywołuje.",
+      "packageManager": "Menedżer pakietów",
+      "installCommand": "Polecenie instalacji",
+      "buildScript": "Skrypt budowania",
+      "outputDir": "Katalog wyjściowy",
+      "serveMode": "Tryb serwowania",
+      "serveStatic": "Statyczny",
+      "serveCommand": "Polecenie",
+      "serveModeHint": "Statyczny serwuje katalog wyjściowy budowania; Polecenie uruchamia skrypt z package.json (np. preview).",
+      "serveScript": "Skrypt serwowania",
+      "servePort": "Port serwowania",
+      "mockMappingsPath": "Ścieżka mapowań mocków",
+      "envInjection": "Wstrzykiwanie zmiennych środowiskowych",
+      "envBuild": "W czasie budowania",
+      "envRuntime": "W czasie działania",
+      "envInjectionHint": "W czasie budowania wstrzykuje adresy URL backendu jako zmienne środowiskowe budowania; W czasie działania zapisuje je w shimie window.env.",
+      "previewEnabled": "Włącz przeglądalny podgląd",
+      "previewHint": "Utrzymuje działający serwowany podgląd z klikalnym adresem URL. Tylko środowiska Local i Node.",
+      "bindings": {
+        "title": "Powiązania backendu",
+        "hint": "Każda zmienna środowiskowa, którą frontend odczytuje dla adresu URL nadrzędnego, oraz miejsce jej rozwiązania: efemeryczne środowisko powiązanej usługi lub zaślepka WireMock.",
+        "mock": "Mock (WireMock)",
+        "remove": "Usuń powiązanie",
+        "empty": "Brak powiązań backendu. Dodaj jedno, aby skierować zmienną środowiskową do usługi lub mocka."
+      }
+    },
     "releaseHealth": {
       "title": "Kondycja po wydaniu",
       "clear": "Wyczyść",

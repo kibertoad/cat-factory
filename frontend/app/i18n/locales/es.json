@@ -377,6 +377,34 @@
       "manageBoard": "Gestionar la biblioteca de fragmentos de este tablero…",
       "manageAccount": "Gestionar los fragmentos de la cuenta…"
     },
+    "frontendConfig": {
+      "title": "Frontend",
+      "hint": "Cómo compilar, servir y simular este frontend para una prueba de interfaz autónoma. Las vinculaciones de abajo lo conectan con los servicios de backend a los que llama.",
+      "packageManager": "Gestor de paquetes",
+      "installCommand": "Comando de instalación",
+      "buildScript": "Script de compilación",
+      "outputDir": "Directorio de salida",
+      "serveMode": "Modo de servicio",
+      "serveStatic": "Estático",
+      "serveCommand": "Comando",
+      "serveModeHint": "Estático sirve el directorio de salida de la compilación; Comando ejecuta un script de package.json (p. ej. preview).",
+      "serveScript": "Script de servicio",
+      "servePort": "Puerto de servicio",
+      "mockMappingsPath": "Ruta de asignaciones de simulación",
+      "envInjection": "Inyección de variables de entorno",
+      "envBuild": "En compilación",
+      "envRuntime": "En ejecución",
+      "envInjectionHint": "En compilación inyecta las URL del backend como variables de entorno de compilación; En ejecución las escribe en un shim de window.env.",
+      "previewEnabled": "Activar vista previa navegable",
+      "previewHint": "Mantiene una vista previa servida en ejecución con una URL clicable. Solo en los entornos Local y Node.",
+      "bindings": {
+        "title": "Vinculaciones del backend",
+        "hint": "Cada variable de entorno que el frontend lee para una URL upstream, y dónde se resuelve: el entorno efímero de un servicio vinculado, o un stub de WireMock.",
+        "mock": "Simulación (WireMock)",
+        "remove": "Eliminar vinculación",
+        "empty": "No hay vinculaciones de backend. Añade una para apuntar una variable de entorno a un servicio o a una simulación."
+      }
+    },
     "releaseHealth": {
       "title": "Salud posterior al lanzamiento",
       "clear": "Limpiar",

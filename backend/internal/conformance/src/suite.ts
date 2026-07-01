@@ -605,6 +605,44 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         )
       })
 
+      it('round-trips a frontend frame config (the JSON column + backend bindings) on every store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // A frontend frame's `frontendConfig` (build/serve/mock knobs + the backend bindings
+        // that double as board links) is a JSON object on the frame block, mirroring
+        // `provisioning`. A runtime that forgot to map the `frontend_config` column drops it on
+        // write — so this asserts it survives PATCH + a fresh snapshot read on D1 and Postgres.
+        const frontendConfig = {
+          packageManager: 'pnpm' as const,
+          buildScript: 'build',
+          outputDir: 'dist',
+          serveMode: 'static' as const,
+          servePort: 8080,
+          envInjection: 'build' as const,
+          mockMappingsPath: 'mocks/',
+          previewEnabled: true,
+          backendBindings: [
+            {
+              envVar: 'PUB_BACKEND_URL',
+              source: { kind: 'service' as const, serviceBlockId: 'blk_auth' },
+            },
+            { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' as const } },
+          ],
+        }
+        const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          frontendConfig,
+        })
+        expect(patched.status).toBe(200)
+        expect(patched.body.frontendConfig).toEqual(frontendConfig)
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.frontendConfig).toEqual(
+          frontendConfig,
+        )
+      })
+
       it('rejects a dependency edge that would create a cycle', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
