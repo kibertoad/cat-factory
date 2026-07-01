@@ -49,4 +49,16 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(ArgError)
     expect(() => parseArgs(['--dir'])).toThrow(/Missing value/)
   })
+
+  it('parses the k3s command and its flags', () => {
+    const o = parseArgs(['k3s', '--cluster-name', 'dev', '--runtime=kind', '--yes'])
+    expect(o.command).toBe('k3s')
+    expect(o.clusterName).toBe('dev')
+    expect(o.k3sRuntime).toBe('kind')
+    expect(o.yes).toBe(true)
+  })
+
+  it('rejects an invalid --runtime', () => {
+    expect(() => parseArgs(['k3s', '--runtime', 'minikube'])).toThrow(ArgError)
+  })
 })

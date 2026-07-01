@@ -1,5 +1,14 @@
 # @cat-factory/agents
 
+## 0.24.11
+
+### Patch Changes
+
+- Updated dependencies [77c6842]
+  - @cat-factory/contracts@0.71.0
+  - @cat-factory/kernel@0.63.3
+  - @cat-factory/prompt-fragments@0.9.26
+
 ## 0.24.10
 
 ### Patch Changes
