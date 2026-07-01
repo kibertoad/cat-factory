@@ -18,12 +18,14 @@ function scriptShell(map: Record<string, Partial<ShellResult>> = {}): HostShell 
   }
 }
 
-/** Scripted Io that records every info line and returns queued selects. */
-function captureIo(selects: string[] = []): Io & { lines: string[] } {
+/** Scripted Io that records every info line, returns queued selects, and tracks opened URLs. */
+function captureIo(selects: string[] = []): Io & { lines: string[]; opened: string[] } {
   const lines: string[] = []
+  const opened: string[] = []
   const sel = [...selects]
   return {
     lines,
+    opened,
     info: (m) => {
       lines.push(m)
     },
@@ -35,7 +37,10 @@ function captureIo(selects: string[] = []): Io & { lines: string[] } {
       Promise.resolve((sel.shift() as T | undefined) ?? d),
     secret: () => Promise.resolve(''),
     confirm: (_p, d) => Promise.resolve(d),
-    openBrowser: () => Promise.resolve(),
+    openBrowser: (url) => {
+      opened.push(url)
+      return Promise.resolve()
+    },
   }
 }
 
@@ -218,6 +223,31 @@ describe('setupK3s', () => {
     expect(chosen).toBe('use-existing')
     expect(connection).toBeUndefined()
     expect(io.lines.join('\n')).toContain('does not look like a local cluster')
+  })
+
+  it('hands off with the pre-filled deep-link and opens it in an interactive run', async () => {
+    // Reachable local cluster, interactive (not --yes): select falls back to the recommendation,
+    // confirms default to yes, so provisioning succeeds and the hand-off opens the browser.
+    const io = captureIo()
+    const { connection } = await setupK3s(opts({ appUrl: 'http://localhost:4000' }), {
+      io,
+      shell: scriptShell({ ...REACHABLE, ...PROVISION }),
+    })
+    expect(connection).toBeDefined()
+    expect(io.opened).toEqual([
+      'http://localhost:4000/?infraSetup=local-k3s' +
+        '&label=Local+k3s&apiServerUrl=https%3A%2F%2F127.0.0.1%3A6443' +
+        '&namespaceTemplate=cf-env-%7B%7BpullNumber%7D%7D' +
+        '&hostTemplate=%7B%7Bbranch%7D%7D.127.0.0.1.nip.io&insecureSkipTlsVerify=1',
+    ])
+    expect(io.lines.join('\n')).toContain('pre-filled Local k3s connect form')
+  })
+
+  it('prints the deep-link but does not open a browser in --yes / --no-open runs', async () => {
+    const io = captureIo()
+    await setupK3s(opts({ yes: true }), { io, shell: scriptShell({ ...REACHABLE, ...PROVISION }) })
+    expect(io.opened).toEqual([])
+    expect(io.lines.join('\n')).toContain('infraSetup=local-k3s')
   })
 
   it('aborts a provisioning path when the user declines a confirm', async () => {

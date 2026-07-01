@@ -1,4 +1,5 @@
 import { type CliOptions, OPTION_DEFAULTS } from './args.js'
+import { buildK3sHandler, buildK3sSetupUrl } from './k3s-handler.js'
 import { createNodeShell, type HostShell } from './host-shell.js'
 import { createConsoleIo, type Io } from './io.js'
 import { type HostState, type Offer, type OfferId, probeHost } from './k3s-probe.js'
@@ -68,7 +69,30 @@ export async function setupK3s(options: CliOptions, deps: K3sDeps = {}): Promise
   }
 
   printConnectionSummary(connection, io)
+  await handOff(connection, options, io)
   return { state, chosen, connection }
+}
+
+/**
+ * Hand off the resolved connection to the SPA: print the pre-filled connect-form deep-link and
+ * open it (unless `--no-open` / non-interactive `--yes`). The user pastes the token — printed once
+ * by {@link printConnectionSummary}, deliberately kept OUT of the URL — then runs Test → Save,
+ * reusing the #557 probe + registration. A hands-free `--register` flag is a planned follow-up.
+ */
+async function handOff(connection: ResolvedConnection, options: CliOptions, io: Io): Promise<void> {
+  const spaUrl = options.appUrl ?? OPTION_DEFAULTS.appUrl
+  const link = buildK3sSetupUrl(spaUrl, buildK3sHandler(connection))
+  io.info(
+    [
+      '',
+      'Open the pre-filled Local k3s connect form (everything except the token is filled in):',
+      '',
+      `  ${link}`,
+    ].join('\n'),
+  )
+  // Skip the browser spawn for non-interactive/automation runs, or when the user opted out.
+  if (options.noOpen || options.yes) return
+  await io.openBrowser(link)
 }
 
 /** Render the human-readable findings report from the classified host state. */

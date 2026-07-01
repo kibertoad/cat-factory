@@ -184,18 +184,32 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
   The token is surfaced only to the user (printed once, to paste into the form) — never written to
   disk/logs by cat-factory. Slice 3 turns the `ResolvedConnection` into the handler + deep-link.
 
-### Slice 3 — wire + verify (todo)
+### Slice 3 — wire + verify (DONE, this PR)
 
-- **`k3s-handler.ts`** (pure) — `buildK3sHandler(resolved): RegisterEnvironmentHandlerInput`
-  producing `{ provisionType: 'kubernetes', config: { engine: 'local-k3s', kubernetes: { label,
-apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hostTemplate:
-'{{branch}}.127.0.0.1.nip.io' }, namespaceTemplate: 'cf-env-{{pullNumber}}' } }, secrets:
-{ apiToken } }`. Unit-tested against the contract schema (`registerEnvironmentHandlerSchema`).
-- **Hand-off (primary):** print the values + open the SPA form deep-linked/pre-filled; the user
-  runs **Test → Save**, reusing `EnvironmentConnectionService.testHandler` (the
-  `POST /workspaces/:ws/environments/handlers/test` probe from #557) + `registerHandler`. No new
-  backend endpoint for slice 1. On failure the probe already surfaces the apiserver's message.
-- Document the follow-up `--register` flag (CLI POSTs to the local API) as the hands-free variant.
+- **`k3s-handler.ts`** (pure) — `buildK3sHandler(resolved): K3sHandlerInput` producing
+  `{ provisionType: 'kubernetes', config: { engine: 'local-k3s', kubernetes: { label, apiServerUrl,
+insecureSkipTlsVerify: true, namespaceTemplate: 'cf-env-{{pullNumber}}', url: { source:
+'ingressTemplate', hostTemplate: '{{branch}}.127.0.0.1.nip.io' } } }, secrets: { apiToken } }`.
+  The handler shape is **mirrored structurally in the CLI** (not imported) so the package keeps its
+  single `@clack/prompts` runtime dep; `@cat-factory/contracts` is a **devDependency** only, and
+  `k3s-handler.test.ts` parses a built value through the real `registerEnvironmentHandlerSchema` so
+  any drift from the contract fails a test. The minted token rides ONLY in the write-only `secrets`
+  bundle — asserted never to appear in the config or the deep-link.
+- **`buildK3sSetupUrl(spaBaseUrl, handler)`** (pure) — the deep-link that opens the SPA's Local k3s
+  connect form pre-filled with the **non-secret** fields (`infraSetup=local-k3s`, `label`,
+  `apiServerUrl`, `namespaceTemplate`, `hostTemplate`, `insecureSkipTlsVerify`). The token is
+  deliberately omitted (a secret in a URL leaks into history/logs); the user pastes it (printed once
+  to the terminal) then runs Test → Save. Param names mirror the form fields; **slice 4 teaches the
+  SPA to read them**.
+- **Hand-off wiring (`k3s.ts` `handOff`)** — after `printConnectionSummary`, print the deep-link and
+  open it in the browser, EXCEPT under `--no-open` or non-interactive `--yes` (automation). New
+  `--app-url` flag (default `http://localhost:3000`, the local-mode SPA URL) + help text.
+- **Verify** is unchanged: the user runs **Test → Save**, reusing
+  `EnvironmentConnectionService.testHandler` (the `POST /workspaces/:ws/environments/handlers/test`
+  probe from #557) + `registerHandler`. No new backend endpoint. On failure the probe already
+  surfaces the apiserver's message.
+- The hands-free **`--register`** flag (CLI POSTs the handler to the local API directly) is
+  documented in the k3s help text as a planned follow-up, not implemented here.
 
 ### Slice 4 — SPA guided entry point + deep-link (todo)
 
@@ -203,6 +217,13 @@ apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hos
   an **"Auto-setup with the CLI"** affordance: shows the `cat-factory k3s` command and accepts the
   CLI's deep-link to pre-fill the form (URL param → prefill → Test/Save). All copy through i18n
   under `settings.infrastructure.kubernetesEngine.*`; add keys to `i18n/locales/en.json` only.
+- **Deep-link contract (established in slice 3, `buildK3sSetupUrl`):** the CLI opens the SPA base
+  URL with query params `infraSetup=local-k3s` (the trigger + engine), `label`, `apiServerUrl`,
+  `namespaceTemplate`, `hostTemplate`, and `insecureSkipTlsVerify=1` — param names mirror the
+  connect-form fields. The ServiceAccount **token is NOT in the URL** (secret): the SPA prefills
+  everything else and leaves the user to paste the token, then Test → Save. On load, read
+  `route.query.infraSetup === 'local-k3s'` → open the InfrastructureWindow + Kubernetes engine form
+  seeded from the params.
 - (Optional, later) a full in-app wizard modal mirroring `BootstrapModal.vue` for the
   _non-privileged_ k3d path — deferred; the deep-link covers the UI angle for the first cut.
 
@@ -222,6 +243,6 @@ apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hos
 | Decide surface (CLI vs in-app wizard)                       | resolved | —    |
 | Slice 1 — CLI surface + pure probe planner + shell-out seam | done     | #569 |
 | Slice 2 — provision actions (k3d default; guided k3s)       | done     | #578 |
-| Slice 3 — wire handler (build + hand-off) + verify probe    | todo     | —    |
+| Slice 3 — wire handler (build + hand-off) + verify probe    | done     | this |
 | Slice 4 — SPA guided entry point + deep-link                | todo     | —    |
 | Slice 5 — docs + escape hatch + tracker update              | todo     | —    |

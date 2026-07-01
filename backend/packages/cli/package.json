@@ -45,8 +45,10 @@
     "@clack/prompts": "^1.6.0"
   },
   "devDependencies": {
+    "@cat-factory/contracts": "workspace:*",
     "@types/node": "^26.0.1",
     "typescript": "7.0.1-rc",
+    "valibot": "^1.4.2",
     "vitest": "^4.1.9"
   }
 }

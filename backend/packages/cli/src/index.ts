@@ -20,6 +20,15 @@ export {
 } from './host-shell.js'
 export { K3S_INSTALL_COMMAND, type K3sDeps, type K3sResult, setupK3s } from './k3s.js'
 export {
+  buildK3sHandler,
+  buildK3sSetupUrl,
+  DEFAULT_INGRESS_HOST_TEMPLATE,
+  DEFAULT_NAMESPACE_TEMPLATE,
+  handlerLabel,
+  type K3sHandlerInput,
+  KUBERNETES_ENV_TOKEN_SECRET_KEY,
+} from './k3s-handler.js'
+export {
   classifyHost,
   hasServerVersion,
   type HostDetections,

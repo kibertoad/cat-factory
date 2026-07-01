@@ -24,6 +24,8 @@ export interface CliOptions {
   clusterName?: string
   /** `k3s` command: the Kubernetes distribution to provision/target. */
   k3sRuntime?: K3sRuntime
+  /** `k3s` command: base URL of the running SPA, opened (deep-linked) to wire the handler. */
+  appUrl?: string
   /** Skip opening the browser at the token-creation URL (still prints it). */
   noOpen: boolean
   /** Non-interactive: never prompt; use defaults/flags. Fails if a required value is missing. */
@@ -121,6 +123,9 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--runtime':
         opts.k3sRuntime = parseK3sRuntime(takeValue(flag, inline, queue))
         break
+      case '--app-url':
+        opts.appUrl = parseAppUrl(takeValue(flag, inline, queue))
+        break
       case '--no-open':
         opts.noOpen = true
         break
@@ -167,6 +172,27 @@ function parsePort(value: string): number {
   return n
 }
 
+/**
+ * Validate the SPA base URL the k3s hand-off deep-links. Rejected here (before probing/
+ * provisioning) rather than let a malformed value throw from `new URL(...)` at the very end of an
+ * otherwise-successful run — a missing scheme (`localhost:3000` parses to protocol `localhost:`) is
+ * an easy mistake, so require an absolute http(s) URL.
+ */
+function parseAppUrl(value: string): string {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new ArgError(
+      `Invalid --app-url "${value}" (expected an absolute http(s) URL, e.g. http://localhost:3000)`,
+    )
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ArgError(`Invalid --app-url "${value}" (expected an http:// or https:// URL)`)
+  }
+  return value
+}
+
 /** Resolved default values for any option the user didn't supply. */
 export const OPTION_DEFAULTS = {
   projectName: 'cat-factory',
@@ -182,6 +208,9 @@ export const OPTION_DEFAULTS = {
   // `k3s` command defaults.
   k3sClusterName: 'cat-factory',
   k3sRuntime: 'k3d' as K3sRuntime,
+  // The local-mode SPA URL (matches the frontend served by `cat-factory init`) — the deep-link the
+  // guided k3s hand-off opens to pre-fill the Local k3s connect form.
+  appUrl: 'http://localhost:3000',
 } as const
 
 export const HELP_TEXT = `cat-factory — bootstrap a local cat-factory deployment
@@ -217,5 +246,11 @@ Options (init):
 Options (k3s):
       --cluster-name <n>  Name for a provisioned local cluster (default: cat-factory)
       --runtime <r>       Kubernetes distribution: k3d | kind | k3s (default: k3d)
+      --app-url <url>     SPA base URL to deep-link for wiring (default: http://localhost:3000)
+      --no-open           Don't open the browser at the pre-filled connect form (still prints it)
   -y, --yes               Non-interactive: pick the recommended path + skip confirms
+
+  After provisioning, the values are printed and the SPA's Local k3s connect form is opened
+  pre-filled (paste the token, then Test -> Save). A hands-free --register flag that POSTs the
+  handler to the local API directly is a planned follow-up.
 `
