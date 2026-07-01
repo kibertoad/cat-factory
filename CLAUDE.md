@@ -220,6 +220,11 @@ Keep the symmetric D1 migration (a fresh numbered `*.sql` under
 
 ## Layout
 
+> Naming/vocabulary traps (block vs task vs card, `runtimes/cloudflare` = `@cat-factory/worker`,
+> runner/executor/transport, where gates / agent kinds / migration parity live) are resolved in
+> [`docs/glossary.md`](./docs/glossary.md). Each `backend/packages/*` and `backend/runtimes/*`
+> also carries an `AGENTS.md` with its public entry point + a "where things live" map.
+
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:
 **published libraries** live in `backend/packages/*` + `frontend/app`, the
 **runtime facades** (one per deployment target) in `backend/runtimes/*`, **private
@@ -276,6 +281,32 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
     opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
     allow-list** that throws `Unsupported Bedrock model` for anything outside it.
     Mixed into a facade's registry only when configured.
+  - `backend/packages/provider-cloudflare` — `@cat-factory/provider-cloudflare`, the
+    opt-in **Cloudflare Workers AI** resolver added to a `CompositeModelProvider` (the
+    in-process binding on the Worker, OpenAI-compatible REST elsewhere). Like the other
+    `provider-*` packages, mixed into a facade's registry only when configured.
+  - `backend/packages/provider-s3` — `@cat-factory/provider-s3`, the opt-in **AWS S3**
+    blob backend implementing the kernel `BinaryBlobBackend` port over an S3 bucket
+    (the alternative to the runtime-default blob storage).
+  - `backend/packages/consensus` — `@cat-factory/consensus`, the opt-in
+    **consensus-orchestration** mechanism (specialist panel / debate / ranked voting via
+    `ConsensusAgentExecutor` + `src/strategies/*`) that fans an agent step across several
+    runs and reconciles them, gated by a task-estimate. Wired only when enabled.
+  - `backend/packages/gitlab` — `@cat-factory/gitlab`, the opt-in **GitLab VCS provider**:
+    implements the provider-neutral `VcsClient`/webhook/provisioning ports against the
+    GitLab REST v4 API (`FetchGitLabClient`) and self-registers via
+    `registerVcsProvider('gitlab')`. Kernel + contracts only; the GitHub analogue lives in
+    `@cat-factory/server`/`integrations`.
+  - `backend/packages/observability-langfuse` — `@cat-factory/observability-langfuse`,
+    an opt-in **Langfuse trace sink**: a fetch-based `LlmTraceSink` that streams LLM
+    generations + container tool spans to Langfuse, running unchanged on both the Worker
+    (workerd) and Node facades.
+  - `backend/packages/sandbox` — `@cat-factory/sandbox`, the **parallel prompt/model
+    testing surface** (versioned prompt candidates, experiment matrices, judge + objective
+    grading), deliberately isolated from the core product so it can be extracted;
+    `backend/packages/sandbox-fixtures` — `@cat-factory/sandbox-fixtures`, the hand-authored
+    graded no-repo fixtures (inline requirements/clarity/code-review/architecture inputs +
+    expectations) the sandbox grades against.
   - `backend/packages/gates` — `@cat-factory/gates`, the **built-in polling-gate suite**
     (`ci`, `conflicts`, `post-release-health` + the `on-call` escalation), authored entirely
     through the public `registerGate` seam (kernel + contracts only, never the engine). A
@@ -356,6 +387,17 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   `scripts/publish-image.sh`).
 - `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
   private, not published.
+- `backend/internal/smoketest-harness` — `@cat-factory/smoketest-harness`, a headless
+  **smoketest** for the Pi coding agent (`cat-smoke`): runs real coding tasks through the
+  actual Pi setup against Cloudflare AI, captures the full transcript, and flags breakage /
+  dead-ends / non-productive loops (no grading — that's the benchmark harness). Private.
+- `backend/internal/deploy-harness` — `@cat-factory/deploy-harness`, the container payload
+  that renders a service's **Kubernetes manifests** (kubectl/kustomize/helm) and applies
+  them to a per-PR namespace for ephemeral environments. Carries no secrets (the per-job
+  cluster + git tokens arrive in the job body). Private; its own Docker image.
+- `backend/internal/e2e` — `@cat-factory/e2e`, the **Playwright end-to-end suite** (see
+  "End-to-end (assembled-product) coverage" below): a real Chromium drives the real SPA
+  against a real Node backend, only the external deps faked. Private.
 - `backend/internal/conformance` — `@cat-factory/conformance`, the private
   **cross-runtime conformance suite** + the single canonical deterministic
   `FakeAgentExecutor`. `defineConformanceSuite(harness)` runs the key backend

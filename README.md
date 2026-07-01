@@ -116,6 +116,15 @@ deploy both halves on their end.
 | [`backend/packages/workspaces`](./backend/packages/workspaces)             | `@cat-factory/workspaces`       | Workspace + account services.                                                                                                                                                                                     |
 | [`backend/packages/server`](./backend/packages/server)                     | `@cat-factory/server`           | Runtime-neutral **HTTP layer** shared by every facade: all Hono controllers, middleware (auth/authz/CORS/error), request helpers, the gateway seams, the `AppConfig` contract, and the shared row↔domain mappers. |
 | [`backend/packages/prompt-fragments`](./backend/packages/prompt-fragments) | `@cat-factory/prompt-fragments` | The built-in tier of best-practice prompt fragments. See [its README](./backend/packages/prompt-fragments/README.md).                                                                                             |
+| [`backend/packages/gates`](./backend/packages/gates)                       | `@cat-factory/gates`            | The built-in polling-gate suite (CI, merge-conflicts, post-release health + on-call escalation), authored through the public `registerGate` seam; a facade imports it and wires each gate's provider.              |
+| [`backend/packages/consensus`](./backend/packages/consensus)               | `@cat-factory/consensus`        | Opt-in consensus orchestration (specialist panel / debate / ranked voting) that fans an agent step across runs and reconciles them, with task-estimate gating.                                                    |
+| [`backend/packages/gitlab`](./backend/packages/gitlab)                     | `@cat-factory/gitlab`           | Opt-in GitLab VCS provider: the provider-neutral `VcsClient`/webhook/provisioning ports over GitLab REST v4, self-registered via `registerVcsProvider('gitlab')`.                                                  |
+| [`backend/packages/provider-cloudflare`](./backend/packages/provider-cloudflare) | `@cat-factory/provider-cloudflare` | Opt-in Cloudflare Workers AI model registry mixed into a `CompositeModelProvider` (in-process binding on the Worker, OpenAI-compatible REST elsewhere).                                                    |
+| [`backend/packages/provider-s3`](./backend/packages/provider-s3)           | `@cat-factory/provider-s3`      | Opt-in AWS S3 blob backend implementing the kernel `BinaryBlobBackend` port over an S3 bucket.                                                                                                                    |
+| [`backend/packages/observability-langfuse`](./backend/packages/observability-langfuse) | `@cat-factory/observability-langfuse` | Opt-in Langfuse trace sink: a fetch-based `LlmTraceSink` streaming LLM generations + tool spans; runs on both the Worker and Node facades. See [its README](./backend/packages/observability-langfuse/README.md). |
+| [`backend/packages/sandbox`](./backend/packages/sandbox)                   | `@cat-factory/sandbox`          | Parallel prompt/model testing surface: versioned prompt candidates, experiment matrices, judge + objective grading. Isolated so it can be extracted.                                                              |
+| [`backend/packages/sandbox-fixtures`](./backend/packages/sandbox-fixtures) | `@cat-factory/sandbox-fixtures` | Hand-authored, graded no-repo fixtures (inline requirements/clarity/code-review/architecture inputs + expectations) the sandbox grades against.                                                                   |
+| [`backend/packages/cli`](./backend/packages/cli)                           | `@cat-factory/cli`              | Bootstrap CLI (`cat-factory init`): scaffolds a local-mode deployment on your machine — generates crypto secrets, mints a GitHub/GitLab PAT, writes gitignored `.env`. See [its README](./backend/packages/cli/README.md). |
 
 **Runtime facades** (one per deployment target; serve the same `@cat-factory/server` app):
 
@@ -123,6 +132,7 @@ deploy both halves on their end.
 | -------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`backend/runtimes/cloudflare`](./backend/runtimes/cloudflare) | `@cat-factory/worker`      | Cloudflare Worker facade: D1 repos, Durable Objects, Workflows, per-run Containers, queues/cron, the CF gateway impls. Thin `createApp()`/`buildContainer()` over `@cat-factory/server`; ships the D1 `migrations/`. |
 | [`backend/runtimes/node`](./backend/runtimes/node)             | `@cat-factory/node-server` | Node.js service facade: serves the shared app via `@hono/node-server` with Drizzle/Postgres repos + pg-boss durable execution. `start()` / `createServer()`; `DATABASE_URL` selects the database.                    |
+| [`backend/runtimes/local`](./backend/runtimes/local)           | `@cat-factory/local-server` | Local-mode facade: the Node stack with agent jobs run as local Docker/Podman containers and GitHub reached via a PAT, so a developer runs the whole product on their own machine. `startLocal()`.                    |
 
 **Internal** (private; not published to npm):
 
@@ -131,6 +141,10 @@ deploy both halves on their end.
 | [`backend/internal/executor-harness`](./backend/internal/executor-harness)   | `@cat-factory/executor-harness`  | The payload that runs **inside** each per-run container (the Pi coding-agent harness). Published as a public multi-arch **Docker image to GHCR + Docker Hub** (not npm). See [its README](./backend/internal/executor-harness/README.md). |
 | [`backend/internal/benchmark-harness`](./backend/internal/benchmark-harness) | `@cat-factory/benchmark-harness` | Headless agent benchmarking (`cat-bench`); internal. See [its README](./backend/internal/benchmark-harness/README.md).                                                                                                                    |
 | [`backend/internal/conformance`](./backend/internal/conformance)             | `@cat-factory/conformance`       | Cross-runtime conformance suite + the canonical deterministic `FakeAgentExecutor`; run by both runtime facades' test suites to mandate feature parity.                                                                                    |
+| [`backend/internal/e2e`](./backend/internal/e2e)                             | `@cat-factory/e2e`               | Playwright end-to-end suite: a real Chromium drives the real SPA against a real Node backend (real Postgres + WebSocket push), only external deps faked. See [its README](./backend/internal/e2e/README.md).                              |
+| [`backend/internal/smoketest-harness`](./backend/internal/smoketest-harness) | `@cat-factory/smoketest-harness` | Headless Pi-agent smoketest (`cat-smoke`): runs real coding tasks through the actual Pi setup against Cloudflare AI and flags breakage / dead-ends / loops (no grading). See [its README](./backend/internal/smoketest-harness/README.md). |
+| [`backend/internal/deploy-harness`](./backend/internal/deploy-harness)       | `@cat-factory/deploy-harness`    | Container payload that renders a service's Kubernetes manifests (kubectl/kustomize/helm) into a per-PR namespace for ephemeral environments; carries no secrets. See [its README](./backend/internal/deploy-harness/README.md).           |
+| [`backend/internal/example-custom-agent`](./backend/internal/example-custom-agent) | `@cat-factory/example-custom-agent` | Worked example of a company-authored agent package registered purely via the public `registerAgentKind` + `registerPipeline` seams — a repo-writing agent that ships with zero harness changes.                            |
 
 **Deployments** (examples; copy these to deploy on your own infra):
 
@@ -139,6 +153,7 @@ deploy both halves on their end.
 | [`deploy/backend`](./deploy/backend)   | `@cat-factory/deploy-backend`  | Cloudflare Worker deployment: re-exports `@cat-factory/worker` + the production `wrangler.toml`. See [its README](./deploy/backend/README.md).                                   |
 | [`deploy/node`](./deploy/node)         | `@cat-factory/deploy-node`     | Node.js service deployment: calls `@cat-factory/node-server`'s `start()` (Postgres + pg-boss); ships a `Dockerfile` + `.env.example`. See [its README](./deploy/node/README.md). |
 | [`deploy/frontend`](./deploy/frontend) | `@cat-factory/deploy-frontend` | Pages deployment: a thin Nuxt app that `extends` `@cat-factory/app` + the Pages `wrangler.toml`. See [its README](./deploy/frontend/README.md).                                  |
+| [`deploy/local`](./deploy/local)       | `@cat-factory/deploy-local`    | Local-mode deployment: calls `@cat-factory/local-server`'s `startLocal()` — agent jobs as local Docker containers, GitHub via a PAT, a local Postgres. See [its README](./deploy/local/README.md). |
 
 In this repo the deployments depend on the libraries via `workspace:*`; in your
 own copy you swap that for the published npm version. The backend is a hexagonal
@@ -204,6 +219,11 @@ Each capability has a deeper write-up; start here and follow the link.
 - [`CLAUDE.md`](./CLAUDE.md) — the cross-cutting runtime flows (execution + events,
   bootstrap, blueprints, requirements review, the board/repo-linkage model) in one
   place for quick lookup.
+- [`docs/glossary.md`](./docs/glossary.md) — vocabulary + naming map (block vs task vs
+  card, the dir↔package names, runner/executor/transport, and where gates / agent kinds /
+  migration parity live).
+- [`AGENTS.md`](./AGENTS.md) — orientation for coding agents; each `backend/packages/*` and
+  `backend/runtimes/*` also carries its own `AGENTS.md` with a "where things live" map.
 
 **Integrations & features**
 
