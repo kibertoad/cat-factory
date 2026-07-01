@@ -4261,13 +4261,13 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
-        // A frontend frame + its config (a service binding with no live env, plus a mock binding).
-        const frame = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
-          type: 'frontend',
-          position: { x: 1600, y: 80 },
-        })
-        expect(frame.status).toBe(201)
-        const frameId = frame.body.id!
+        // Configure the SEEDED `blk_frontend` frame (a `type: 'frontend'` frame in the board seed)
+        // rather than creating one via `POST /blocks`: addFrame registers an account-owned service
+        // (serviceRepository.insert), which the mothership harness's read-scoped remote proxy can't
+        // write — so a fresh frame would 500 there. The seeded frame exists on every harness, so
+        // this exercises the frontend gate uniformly. PATCH its config: one `service` binding with
+        // no live env, plus a mock binding.
+        const frameId = 'blk_frontend'
         const patched = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/${frameId}`, {
           frontendConfig: {
             packageManager: 'pnpm',
