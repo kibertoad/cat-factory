@@ -409,10 +409,11 @@
       "serveScript": "Skrypt serwowania",
       "servePort": "Port serwowania",
       "mockMappingsPath": "Ścieżka mapowań mocków",
+      "mockMappingsHint": "Katalog główny WireMock. Umieść pliki JSON stubów w podfolderze mappings/ w jego wnętrzu (a treści odpowiedzi w __files/), np. mocks/mappings/. Folder bez mappings/ w środku uruchamia pusty mock.",
       "envInjection": "Wstrzykiwanie zmiennych środowiskowych",
       "envBuild": "W czasie budowania",
       "envRuntime": "W czasie działania",
-      "envInjectionHint": "W czasie budowania wstrzykuje adresy URL backendu jako zmienne środowiskowe budowania; W czasie działania zapisuje je w shimie window.env.",
+      "envInjectionHint": "W czasie budowania wstrzykuje adresy URL backendu jako zmienne środowiskowe budowania; W czasie działania zapisuje je w shimie window.env. Pamiętaj, że Twoje narzędzie budujące może udostępniać przeglądarce tylko zmienne z prefiksem (np. VITE_), więc nazywaj powiązania zgodnie z jego konwencją.",
       "previewEnabled": "Włącz przeglądalny podgląd",
       "previewHint": "Utrzymuje działający serwowany podgląd z klikalnym adresem URL. Tylko środowiska Local i Node.",
       "bindings": {

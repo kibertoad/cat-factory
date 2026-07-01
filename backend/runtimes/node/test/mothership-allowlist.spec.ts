@@ -274,7 +274,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   environmentRegistryRepository: {
     insert: 'pending',
     update: 'pending',
-    listByWorkspace: 'pending',
+    // listByWorkspace is now allow-listed (REMOTE_PERSISTENCE_METHODS) — the frontend UI-test
+    // gate's batch env read + the environments list endpoint. Classified there, not here.
     listExpired: 'sweeper',
     softDelete: 'pending',
   },

@@ -6,6 +6,7 @@ import type {
   ConsensusStepConfig,
   EnvironmentAccessHandle,
   EnvironmentStatus,
+  FrontendConfig,
   InstanceSize,
   PullRequestRef,
   ServiceProvisioning,
@@ -210,6 +211,22 @@ export interface AgentRunContext {
     provisioning?: ServiceProvisioning
     cloudProvider?: CloudProvider
     instanceSize?: InstanceSize
+  }
+  /**
+   * Frontend-frame configuration resolved by the engine when this run's frame is a
+   * `type: 'frontend'` app (the self-contained UI-test flow). Carries the frame's
+   * `config` (build/serve/mock knobs; the harness applies the defaults) and the frame's
+   * backend bindings ALREADY RESOLVED to concrete upstreams: each surviving binding's
+   * env var plus the bound service's live ephemeral env URL (the "service under test")
+   * when one is live, else absent (the harness mocks it with WireMock). Empty-envVar
+   * bindings are dropped here so an unfinished inspector row is never injected. Present
+   * only for a `frontend` frame with a `frontendConfig`; the `testerInfraSpec` builder
+   * turns it into the harness's `frontend` infra spec, and the tester-infra start gate
+   * uses `bindings.some(b => b.serviceUrl)` (a live service under test) to admit the run.
+   */
+  frontend?: {
+    config: FrontendConfig
+    bindings: { envVar: string; serviceUrl?: string }[]
   }
   /**
    * If this step previously raised a decision that a human has now resolved,

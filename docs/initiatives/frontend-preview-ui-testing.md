@@ -43,7 +43,7 @@ build on. Link the merged pilot PR here once it lands.
 | --- | ------------------------------------------------------------------------------------ | ------ | --------------------------------------------------------- |
 | 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
-| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | todo   | —                                                         |
+| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
@@ -83,3 +83,50 @@ build on. Link the merged pilot PR here once it lands.
   `envVar === ''` bindings so an unfinished row is inert (not injected as an empty env var).
 - The board frontend→service edges (cyan, `TaskDependencyEdges.vue`) are derived from the
   `service`-sourced bindings, deduped per target service. A binding's `mock` source draws no edge.
+- Slice 3 conventions & gotchas:
+  - The harness `AgentInfraSpec` is now a discriminated union (`ServiceInfraSpec` |
+    `FrontendInfraSpec`), keyed on `kind` (absent ⇒ `service`). The backend builds the
+    `frontend` variant in `testerInfraSpec` (server `agents/prompts.ts`) from a new
+    `AgentRunContext.frontend` slice; `AgentContextBuilder.resolveFrontendConfig` resolves it
+    (walk to the frame → read `frontendConfig` → resolve each `service` binding to its live env
+    URL via a SINGLE `listHandles` read indexed by block id, never a per-binding point read).
+  - **servePort default is 4173, NOT 8080.** The harness's own job HTTP server owns 8080 in the
+    same container, so a frontend served on 8080 would clash. The contract's default note was
+    corrected to 4173; WireMock defaults to 8089. Both are backend-chosen in `testerInfraSpec`.
+  - **The tester-infra start gate** (`decideTesterInfra` + `assertTesterInfraConfigured`) grew a
+    frontend branch: a `frontend` frame is refused (`frontend-no-live-service`) only when it binds
+    a live-backend `service` (`hasServiceBinding`) with none actually live (`hasLiveServiceBinding`).
+    A mock-only / no-backend frontend PASSES — WireMock + the static server fully stand it up, so
+    there is nothing to gate on. It is decided BEFORE the backend provision-type branch and passes
+    through when the env seam is unwired (tests). The cross-runtime conformance asserts the refusal
+    for a frontend that DOES bind a (non-live) service (a facade that dropped `frontend_config`
+    would let the run start instead) — the D1 ⇄ Drizzle parity of reading the column during a run.
+  - **Env keying (carried forward — the frame-id ⇄ task-id gap):** a binding's `service` source
+    resolves the live env by the bound block id directly (the design's
+    `getHandleForBlock(serviceBlockId)` semantics, where `serviceBlockId` is the service FRAME id).
+    Today a `deployer` keys the env under the block it ran on (a task, `block.id`), NOT the frame,
+    so `resolveFrontendConfig`'s `handle.blockId === serviceBlockId` match never hits and a frontend
+    that binds a live service is still refused. Reconciling this (making a service frame's ephemeral
+    env resolvable by the FRAME id it's bound to) is DELIBERATELY deferred to the end-to-end
+    `pl_frontend` flow (slice 4) — it's a deployer-keying change, not a reverse-walk hack bolted on
+    here. The happy-path binding→URL math is covered by the `resolveFrontendBindings` unit tests;
+    the live-env e2e assertion lands with slice 4.
+  - **Harness stand-up hardening (review follow-ups):** the WireMock / serve child processes each
+    get an `'error'` listener (`guardProcess`) — a `ChildProcess` `'error'` with no listener is an
+    UNCAUGHT exception that would crash the whole job server (matches the pattern in `pi.ts` /
+    `agent-runner.ts`). WireMock is now health-checked (`/__admin/`) alongside the served app, so a
+    dead mock becomes a prompt note instead of a test-time ECONNREFUSED. Reserved env-var names
+    (`PATH`, `NODE_OPTIONS`, `LD_PRELOAD`, …) are dropped in `parseFrontendInfraSpec` (they are
+    spread over `process.env` at build time, so a binding named `PATH` would break the toolchain).
+    A `servePort` colliding with 8080 (harness job server) or 8089 (WireMock) falls back to 4173 in
+    `testerInfraSpec`. Shared `pathExists` (`fs-utils.ts`) + `captureRedactedOutput` (`redact.ts`)
+    helpers replace the per-file copies.
+  - **`ui`-image routing is still the remaining deploy-time step** (unchanged by slice 3, see
+    `Dockerfile.ui`). Both Cloudflare and local use a per-RUN container with a single image, so
+    `image: 'ui'` per-step routing isn't wired (a run's first step fixes the image; later steps
+    re-attach). Slice 3 added the frontend tooling to the `ui` variant and bumped the image
+    (1.28.0) so it's ready; actually routing `tester-ui` to that image (a Cloudflare `[[containers]]`
+    class + a per-step image seam on the transports) is a separate follow-up, tracked here.
+  - **WireMock mappings convention:** `mockMappingsPath` (default `mocks/`) is WireMock's
+    `--root-dir` (it reads `<root>/mappings` + `<root>/__files`). A missing dir is non-fatal —
+    WireMock still binds its port (unmatched requests 404, gentler than ECONNREFUSED).

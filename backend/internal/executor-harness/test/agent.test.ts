@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseAgentJob } from '../src/job.js'
+import { buildInfraNotes } from '../src/agent.js'
+import { installCommand } from '../src/frontend-infra.js'
 
 // The generic, manifest-driven agent kind's body validator. The handler itself
 // (handleAgent) spawns Pi + git, so it is covered by the acceptance suite; here we
@@ -103,6 +105,102 @@ describe('parseAgentJob', () => {
       infra: { composePath: 'docker-compose.yml' },
     })
     expect(job.infra).toBeUndefined()
+  })
+
+  it('carries the frontend UI-test infra spec through (the self-contained tester-ui flow)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured' },
+      infra: {
+        kind: 'frontend',
+        packageManager: 'pnpm',
+        buildScript: 'build',
+        outputDir: 'dist',
+        serveMode: 'static',
+        servePort: 4173,
+        envInjection: 'build',
+        env: {
+          PUB_API_URL: 'https://api.ephemeral.example',
+          PUB_OTHER_URL: 'http://localhost:8089',
+        },
+        wiremockMappingsPath: 'mocks/',
+        wiremockPort: 8089,
+      },
+    })
+    expect(job.infra).toEqual({
+      kind: 'frontend',
+      packageManager: 'pnpm',
+      buildScript: 'build',
+      outputDir: 'dist',
+      serveMode: 'static',
+      servePort: 4173,
+      envInjection: 'build',
+      env: { PUB_API_URL: 'https://api.ephemeral.example', PUB_OTHER_URL: 'http://localhost:8089' },
+      wiremockMappingsPath: 'mocks/',
+      wiremockPort: 8089,
+    })
+  })
+
+  it('drops non-string env entries and unrecognised knobs from a frontend infra spec', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: {
+        kind: 'frontend',
+        packageManager: 'bun', // unrecognised → dropped
+        serveMode: 'weird', // unrecognised → dropped
+        // PATH is reserved (would clobber the build's toolchain env) → dropped.
+        env: { GOOD: 'https://ok', BAD: 42, ALSO_BAD: null, PATH: 'https://evil' },
+        servePort: -3, // not a positive int → dropped
+      },
+    })
+    expect(job.infra).toEqual({ kind: 'frontend', env: { GOOD: 'https://ok' } })
+  })
+
+  it('drops reserved env NAMES and reserved FAMILIES from a frontend infra spec', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: {
+        kind: 'frontend',
+        env: {
+          PUB_API_URL: 'https://ok', // kept
+          NODE_EXTRA_CA_CERTS: '/evil.pem', // reserved name → dropped
+          BASH_ENV: '/evil.sh', // reserved name → dropped
+          npm_config_registry: 'https://evil', // reserved family (npm_config_*) → dropped
+          GIT_SSH_COMMAND: 'ssh -oProxyCommand=evil', // reserved family (GIT_*) → dropped
+        },
+      },
+    })
+    expect(job.infra).toEqual({ kind: 'frontend', env: { PUB_API_URL: 'https://ok' } })
+  })
+
+  it('drops reserved env FAMILIES case-insensitively (npm reads npm_config_* regardless of case)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: {
+        kind: 'frontend',
+        env: {
+          PUB_API_URL: 'https://ok', // kept
+          NPM_CONFIG_REGISTRY: 'https://evil', // upper-cased npm_config_* → npm honours it → dropped
+          Npm_Config_Cafile: '/evil.pem', // mixed case → still dropped
+          Git_Ssh_Command: 'ssh -oProxyCommand=evil', // mixed-case git family → dropped
+        },
+      },
+    })
+    expect(job.infra).toEqual({ kind: 'frontend', env: { PUB_API_URL: 'https://ok' } })
+  })
+
+  it('drops an out-of-range frontend servePort / wiremockPort (can never bind)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      infra: { kind: 'frontend', servePort: 70000, wiremockPort: 0 },
+    })
+    // Both are outside 1..65535, so they fall back to the harness defaults (absent here).
+    expect(job.infra).toEqual({ kind: 'frontend' })
   })
 
   it('accepts a coding job with a fresh branch + PR', () => {
@@ -272,5 +370,55 @@ describe('parseAgentJob', () => {
         repo: { ...base.repo, serviceDirectory: '../secrets' },
       }),
     ).toThrow(/serviceDirectory/)
+  })
+})
+
+describe('installCommand (frontend stand-up)', () => {
+  it('derives the install command from the package manager (default pnpm)', () => {
+    expect(installCommand({ kind: 'frontend' })).toEqual(['pnpm', 'install'])
+    expect(installCommand({ kind: 'frontend', packageManager: 'yarn' })).toEqual([
+      'yarn',
+      'install',
+    ])
+  })
+
+  it('splits an explicit install command, which overrides the package manager', () => {
+    expect(
+      installCommand({
+        kind: 'frontend',
+        packageManager: 'npm',
+        install: 'pnpm i --frozen-lockfile',
+      }),
+    ).toEqual(['pnpm', 'i', '--frozen-lockfile'])
+  })
+})
+
+describe('buildInfraNotes (agent prompt folding)', () => {
+  it('is empty when the stand-up reported neither a problem nor a serve URL', () => {
+    expect(buildInfraNotes({})).toEqual([])
+  })
+
+  it('flags a stand-up problem as a concern', () => {
+    const [note] = buildInfraNotes({ note: 'compose exited 1' })
+    expect(note).toContain('compose exited 1')
+    expect(note).toContain('flag any dependency-related gaps as concerns')
+  })
+
+  it('points the UI tester at the serve URL and pre-empts a CORS mis-report', () => {
+    const notes = buildInfraNotes({ serveUrl: 'http://localhost:4173' })
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toContain('http://localhost:4173')
+    expect(notes[0]).toContain('CORS')
+    expect(notes[0]).toContain('not an app defect')
+  })
+
+  it('orders a problem note before the serve-URL note when both are present', () => {
+    const notes = buildInfraNotes({
+      note: 'WireMock never came up',
+      serveUrl: 'http://localhost:4173',
+    })
+    expect(notes).toHaveLength(2)
+    expect(notes[0]).toContain('WireMock never came up')
+    expect(notes[1]).toContain('Drive your UI tests against http://localhost:4173')
   })
 })

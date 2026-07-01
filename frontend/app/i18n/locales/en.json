@@ -446,10 +446,11 @@
       "serveScript": "Serve script",
       "servePort": "Serve port",
       "mockMappingsPath": "Mock mappings path",
+      "mockMappingsHint": "WireMock's root directory. Put stub JSON in a mappings/ subfolder inside it (and response bodies in __files/), e.g. mocks/mappings/. A folder with no mappings/ inside runs an empty mock.",
       "envInjection": "Env injection",
       "envBuild": "Build-time",
       "envRuntime": "Runtime",
-      "envInjectionHint": "Build-time injects the backend URLs as build env vars; Runtime writes them into a window.env shim.",
+      "envInjectionHint": "Build-time injects the backend URLs as build env vars; Runtime writes them into a window.env shim. Note your build tool may only expose prefixed vars (e.g. VITE_) to the browser, so name bindings to match its convention.",
       "previewEnabled": "Enable browsable preview",
       "previewHint": "Keeps a served preview running with a clickable URL. Local and Node runtimes only.",
       "bindings": {

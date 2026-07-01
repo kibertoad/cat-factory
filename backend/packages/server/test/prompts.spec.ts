@@ -152,6 +152,128 @@ describe('testerInfraSpec', () => {
     )
     expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://env-1.example' })
   })
+
+  it('builds the frontend infra spec when the frame is a frontend (service under test + mocks)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: {
+            packageManager: 'pnpm',
+            buildScript: 'build',
+            outputDir: 'dist',
+            serveMode: 'static',
+            mockMappingsPath: 'mocks/',
+            backendBindings: [],
+          },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            { envVar: 'PUB_OTHER_URL' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({
+      kind: 'frontend',
+      packageManager: 'pnpm',
+      buildScript: 'build',
+      outputDir: 'dist',
+      serveMode: 'static',
+      // Defaulted server port (NOT 8080 — the harness's own job server owns that).
+      servePort: 4173,
+      env: {
+        // The live service under test keeps its real ephemeral URL...
+        PUB_API_URL: 'https://api.ephemeral.example',
+        // ...every other upstream is pointed at the in-container WireMock.
+        PUB_OTHER_URL: 'http://localhost:8089',
+      },
+      wiremockMappingsPath: 'mocks/',
+      wiremockPort: 8089,
+    })
+  })
+
+  it('drops a binding whose env var is a reserved name (would clobber the build toolchain)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            // A reserved name must never be injected — the harness re-filters it, but the
+            // backend drops it here too so it never leaves as an env var.
+            { envVar: 'PATH', serviceUrl: 'https://evil.example' },
+            { envVar: 'NODE_OPTIONS' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toMatchObject({
+      kind: 'frontend',
+      env: { PUB_API_URL: 'https://api.ephemeral.example' },
+    })
+    expect((spec.env as Record<string, string>).PATH).toBeUndefined()
+    expect((spec.env as Record<string, string>).NODE_OPTIONS).toBeUndefined()
+  })
+
+  it('drops a binding whose env var is in a reserved FAMILY (npm_config_* / GIT_*)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            // These reconfigure the package manager / git DURING the build → never injected.
+            { envVar: 'npm_config_registry', serviceUrl: 'https://evil.example' },
+            { envVar: 'GIT_SSH_COMMAND', serviceUrl: 'https://evil.example' },
+            { envVar: 'NODE_EXTRA_CA_CERTS', serviceUrl: 'https://evil.example' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec.env).toEqual({ PUB_API_URL: 'https://api.ephemeral.example' })
+  })
+
+  it('drops a reserved FAMILY binding case-insensitively (npm honours NPM_CONFIG_* in any case)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            // npm reads its config env with a case-insensitive `/^npm_config_/i`, so the
+            // upper/mixed-cased forms must be dropped too (a case-sensitive filter would leak them).
+            { envVar: 'NPM_CONFIG_REGISTRY', serviceUrl: 'https://evil.example' },
+            { envVar: 'Git_Ssh_Command', serviceUrl: 'https://evil.example' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec.env).toEqual({ PUB_API_URL: 'https://api.ephemeral.example' })
+  })
+
+  it('falls back to the default serve port when the configured port collides with a reserved one', () => {
+    for (const reserved of [8080, 8089]) {
+      const spec = testerInfraSpec(
+        context({
+          frontend: {
+            config: { servePort: reserved, backendBindings: [] },
+            bindings: [],
+          },
+        } as Record<string, unknown>),
+      )
+      // 8080 is the harness job server, 8089 is WireMock — neither is usable, so fall back to 4173.
+      expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
+    }
+  })
+
+  it('takes the frontend branch even when a provisioned env URL is also present', () => {
+    const spec = testerInfraSpec(
+      context({
+        environment: { url: 'https://env.example' },
+        frontend: { config: { backendBindings: [] }, bindings: [] },
+      } as Record<string, unknown>),
+    )
+    expect(spec).toMatchObject({ kind: 'frontend', servePort: 4173, wiremockPort: 8089 })
+  })
 })
 
 describe('prBody', () => {

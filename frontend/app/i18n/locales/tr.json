@@ -409,10 +409,11 @@
       "serveScript": "Sunma betiği",
       "servePort": "Sunma bağlantı noktası",
       "mockMappingsPath": "Taklit eşleme yolu",
+      "mockMappingsHint": "WireMock'un kök dizini. Stub JSON dosyalarını içindeki bir mappings/ alt klasörüne koyun (ve yanıt gövdelerini __files/ içine), örn. mocks/mappings/. İçinde mappings/ olmayan bir klasör boş bir mock çalıştırır.",
       "envInjection": "Ortam değişkeni enjeksiyonu",
       "envBuild": "Derleme zamanı",
       "envRuntime": "Çalışma zamanı",
-      "envInjectionHint": "Derleme zamanı, backend URL'lerini derleme ortam değişkenleri olarak enjekte eder; Çalışma zamanı, bunları bir window.env shim'ine yazar.",
+      "envInjectionHint": "Derleme zamanı, backend URL'lerini derleme ortam değişkenleri olarak enjekte eder; Çalışma zamanı, bunları bir window.env shim'ine yazar. Derleme aracınızın tarayıcıya yalnızca önekli değişkenleri (ör. VITE_) sunabileceğini unutmayın; bu nedenle bağlamaları onun kuralına göre adlandırın.",
       "previewEnabled": "Göz atılabilir önizlemeyi etkinleştir",
       "previewHint": "Tıklanabilir bir URL ile sunulan bir önizlemeyi çalışır durumda tutar. Yalnızca Local ve Node çalışma zamanları.",
       "bindings": {
