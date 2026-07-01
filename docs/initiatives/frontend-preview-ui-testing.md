@@ -41,7 +41,7 @@ build on. Link the merged pilot PR here once it lands.
 
 | #   | Slice                                                                                | Status      | PR        |
 | --- | ------------------------------------------------------------------------------------ | ----------- | --------- |
-| 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | in-progress | (this PR) |
+| 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done        | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | todo        | —         |
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | todo        | —         |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo        | —         |
