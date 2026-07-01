@@ -151,6 +151,28 @@ const canSave = computed(
     urlValid.value,
 )
 
+// Why the Connect button is disabled, surfaced as a red hint next to it so a mandatory-field gap
+// is visible rather than a dead button. Lists the empty required fields by their on-screen label;
+// falls back to a generic message for the format/range invalidities (repo shape, service port).
+const connectBlockedReason = computed(() => {
+  if (canSave.value) return ''
+  const missing: string[] = []
+  if (!form.label.trim()) missing.push(t('settings.providerConnection.kubernetesEnv.label'))
+  if (!form.apiServerUrl.trim())
+    missing.push(t('settings.providerConnection.kubernetesEnv.apiServerUrl'))
+  if (!apiToken.value.trim()) missing.push(t('settings.providerConnection.kubernetesEnv.apiToken'))
+  if (form.manifestSourceType === 'separate' && !form.manifestRepo.trim())
+    missing.push(t('settings.providerConnection.kubernetesEnv.repo'))
+  if (!form.manifestPath.trim()) missing.push(t('settings.providerConnection.kubernetesEnv.path'))
+  if (form.urlSource === 'ingressTemplate' && !form.hostTemplate.trim())
+    missing.push(t('settings.providerConnection.kubernetesEnv.hostTemplate'))
+  if (form.urlSource === 'serviceStatus' && !form.serviceName.trim())
+    missing.push(t('settings.providerConnection.kubernetesEnv.serviceName'))
+  if (missing.length)
+    return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+  return t('settings.providerConnection.kubernetesEnv.invalidFields')
+})
+
 function buildManifestSource(): Record<string, unknown> {
   if (form.manifestSourceType === 'separate') {
     const src: Record<string, unknown> = {
@@ -368,7 +390,10 @@ function optional(label: string): string {
       </span>
     </div>
 
-    <div class="flex justify-end">
+    <div class="flex items-center justify-end gap-3">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+        {{ connectBlockedReason }}
+      </p>
       <UButton
         color="primary"
         size="sm"

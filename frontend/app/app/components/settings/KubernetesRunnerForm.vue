@@ -88,6 +88,20 @@ const canSave = computed(
     !!apiToken.value.trim(),
 )
 
+// Why the Connect button is disabled, surfaced as a red hint next to it so a mandatory-field gap
+// is visible rather than a dead button. Lists the empty required fields by their on-screen label.
+const connectBlockedReason = computed(() => {
+  if (canSave.value) return ''
+  const missing: string[] = []
+  if (!form.label.trim()) missing.push(t('settings.providerConnection.kubernetes.label'))
+  if (!form.apiServerUrl.trim())
+    missing.push(t('settings.providerConnection.kubernetes.apiServerUrl'))
+  if (!form.namespace.trim()) missing.push(t('settings.providerConnection.kubernetes.namespace'))
+  if (!form.image.trim()) missing.push(t('settings.providerConnection.kubernetes.image'))
+  if (!apiToken.value.trim()) missing.push(t('settings.providerConnection.kubernetes.apiToken'))
+  return t('settings.providerConnection.form.missingFields', { fields: missing.join(', ') })
+})
+
 function buildPayload(): { config: Record<string, unknown>; secrets: Record<string, string> } {
   const kubernetes: Record<string, unknown> = {
     label: form.label.trim(),
@@ -216,7 +230,10 @@ function buildPayload(): { config: Record<string, unknown>; secrets: Record<stri
       </span>
     </div>
 
-    <div class="flex justify-end">
+    <div class="flex items-center justify-end gap-3">
+      <p v-if="connectBlockedReason" class="flex-1 text-left text-xs text-rose-400">
+        {{ connectBlockedReason }}
+      </p>
       <UButton
         color="primary"
         size="sm"
