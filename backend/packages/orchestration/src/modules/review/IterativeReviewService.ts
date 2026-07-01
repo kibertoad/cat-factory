@@ -422,7 +422,7 @@ export abstract class IterativeReviewService<
     const fallback = this.deps.modelRef
     const runsInline = this.deps.runsInline
     const resolve = (ref: ModelRef): ModelRef =>
-      inlineModelRef(ref, fallback ?? ref, (runsInline ? { runsInline } : {}))
+      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
     const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
     if (fromBlock) return resolve(fromBlock)
     const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
