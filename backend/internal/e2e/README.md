@@ -31,16 +31,39 @@ LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup
 
 - named timeouts are in [`tests/helpers.ts`](./tests/helpers.ts).
 
-| Spec                    | Covers                                                                                                                                                                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `boot.spec.ts`          | The product boots: the real SPA renders a seeded board from the real backend, no login gate.                                                                                                                                                                |
-| `run.spec.ts`           | Flagship: start a run → it parks on a decision live → resolve it in the UI → it reaches a terminal state, all over the WebSocket.                                                                                                                           |
-| `notifications.spec.ts` | A merger-less run raises a `pipeline_complete` notification live; the inbox bell + item render and acting / dismissing resolves it. (The real PR merge needs GitHub and is covered by the backend conformance suites, not here.)                            |
-| `create-task.spec.ts`   | Create a task through the real add-task modal → the new card appears on the board.                                                                                                                                                                          |
-| `approval-gate.spec.ts` | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.)                                                                                     |
-| `reset-run.spec.ts`     | The destructive run-lifecycle control: **Reset** a parked run from the task inspector → the `cancelExecution` path discards it and the task returns to `planned` live. (The dual of resolving/approving — nothing else covers cancel/reset.)                |
-| `mobile-shell.spec.ts`  | The responsive shell at a phone viewport (390×844): the sidebar is an off-canvas drawer toggled by the hamburger (open via the trigger, close via the backdrop), the inspector opens as a bottom sheet, and the board chrome doesn't overflow horizontally. |
-| `mobile-canvas.spec.ts` | The board canvas at a phone viewport (390×844): the toolbar's zoom-out / zoom-in / fit-view camera controls stay reachable and no minimap is rendered (it was removed altogether). (Touch pan/pinch themselves are a Vue Flow config; not driven here.)     |
+| Spec                          | Covers                                                                                                                                                                                                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boot.spec.ts`                | The product boots: the real SPA renders a seeded board from the real backend, no login gate.                                                                                                                                                                        |
+| `run.spec.ts`                 | Flagship: start a run → it parks on a decision live → resolve it in the UI → it reaches a terminal state, all over the WebSocket.                                                                                                                                   |
+| `notifications.spec.ts`       | A merger-less run raises a `pipeline_complete` notification live; the inbox bell + item render and acting / dismissing resolves it. (The real PR merge needs GitHub and is covered by the backend conformance suites, not here.)                                    |
+| `create-task.spec.ts`         | Create a task through the real add-task modal → the new card appears on the board.                                                                                                                                                                                  |
+| `approval-gate.spec.ts`       | A per-step human **approval** gate parks the run; Approve in the full-screen step-detail rail and it advances. (Distinct from the agent-raised decision in `run.spec`.)                                                                                             |
+| `reset-run.spec.ts`           | The destructive run-lifecycle control: **Reset** a parked run from the task inspector → the `cancelExecution` path discards it and the task returns to `planned` live. (The dual of resolving/approving — nothing else covers cancel/reset.)                        |
+| `mobile-shell.spec.ts`        | The responsive shell at a phone viewport (390×844): the sidebar is an off-canvas drawer toggled by the hamburger (open via the trigger, close via the backdrop), the inspector opens as a bottom sheet, and the board chrome doesn't overflow horizontally.         |
+| `mobile-canvas.spec.ts`       | The board canvas at a phone viewport (390×844): the toolbar's zoom-out / zoom-in / fit-view camera controls stay reachable and no minimap is rendered (it was removed altogether). (Touch pan/pinch themselves are a Vue Flow config; not driven here.)             |
+| `agent-failure-retry.spec.ts` | A container-dispatch failure faults the run → the block goes `blocked` with the shared `<AgentFailureCard>` (banner + retry) live; the retry control re-drives it. The unified failure/retry surface — nothing else covers a FAILED run through the SPA.            |
+| `merge-review.spec.ts`        | A pipeline ending in a low-confidence `merger` step declines to auto-merge → raises a `merge_review` notification live and leaves the task `pr_ready`; dismissing clears the inbox. (Complements `notifications.spec`'s merger-less `pipeline_complete`.)           |
+| `pipeline-progress.spec.ts`   | A polled async agent kind (the durable `awaiting_job` loop) surfaces live subtask counts in the inspector run panel and drives the run to a terminal state — the async path `run.spec`'s inline decision run never touches.                                         |
+| `bootstrap-live.spec.ts`      | The repo-bootstrap flow: a run materialises a provisional service frame with a live progress badge that then clears; a failed bootstrap surfaces the shared `<AgentFailureCard>` (banner + retry) on the frame. (Triggered over REST; the real GitHub push is off.) |
+
+### Per-run fake behaviour (the `setFakeProfile` seam)
+
+The backend boots ONCE and serves every spec (one shared Node process + one production frontend
+build), so the fake-agent knobs below can't be flipped globally per spec. Instead a spec sets a
+**`FakeProfile`** for its OWN freshly-seeded workspace over a test-only control channel and the
+fakes resolve that per-workspace behaviour on each call — the same way existing specs vary
+behaviour by choosing a pipeline SHAPE over REST. Call it BEFORE starting the run:
+
+```ts
+await setFakeProfile(request, workspaceId, { decisionOnSteps: [], dispatchThrowKinds: ['coder'] })
+```
+
+`FakeProfile` (see [`tests/helpers.ts`](./tests/helpers.ts)): `confidence`, `decisionOnSteps`,
+`asyncKinds`, `dispatchThrowKinds`, `asyncPolls`, `bootstrapProgress`, `bootstrapFailWith`. A
+workspace with no profile gets the base backend behaviour, so the pre-existing specs are
+unchanged. The channel is a tiny separate HTTP listener on `PORT + 1` (`E2E_CONTROL_PORT`),
+posted to from Node (Playwright's `request`), never from the browser — see
+[`src/testServer.ts`](./src/testServer.ts) + [`src/fakeProfile.ts`](./src/fakeProfile.ts).
 
 ## Mocking other externals (when a spec needs a real outbound call)
 
@@ -81,16 +104,21 @@ add a `globalSetup` that truncates rather than relying on ordering.
 
 ### Knobs
 
+These env vars set the **base** fake behaviour every workspace inherits. A spec overrides them
+per-workspace at runtime via `setFakeProfile` (see the seam above); prefer that over the globals,
+which mainly exist so a whole-suite run can shift the defaults.
+
 - `E2E_DECISION_ON_STEPS` (default `0`) — agent-step indices where the fake agent raises a
-  one-shot human decision, so the decision-gate flow can be exercised. Empty disables it.
-- `E2E_DISPATCH_THROW_KINDS` / `E2E_ASYNC_KINDS` — comma-separated agent kinds. When either is
-  set the backend builds the **async** fake (`AsyncFakeAgentExecutor`): `E2E_ASYNC_KINDS` drives
-  those kinds through the polled `awaiting_job` loop, and `E2E_DISPATCH_THROW_KINDS` makes their
-  container dispatch throw (so the engine's dispatch-failure path runs). Empty ⇒ the default
-  inline fake (the existing specs are byte-identical). Reserved for a future failure/retry spec
-  booted via its own `webServer`.
+  one-shot human decision, so the decision-gate flow can be exercised. Empty disables it. (A
+  spec that wants no gate passes `decisionOnSteps: []` in its profile.)
+- `E2E_DISPATCH_THROW_KINDS` / `E2E_ASYNC_KINDS` — comma-separated agent kinds that drive the
+  polled `awaiting_job` loop (`E2E_ASYNC_KINDS`) or throw on container dispatch
+  (`E2E_DISPATCH_THROW_KINDS`). Normally set PER WORKSPACE via `setFakeProfile` instead.
 - `E2E_CONFIDENCE` (default `1`) — the confidence the fake reports on the final step (drives
-  auto-merge vs PR-ready).
+  auto-merge vs merge-review). Normally set per-workspace via `setFakeProfile`.
+- `JOB_POLL_INTERVAL` / `CI_POLL_INTERVAL` (default `1 second` in the e2e backend) — how often
+  the durable driver polls an async job / a gate. Shortened from the 15s/30s production cadence
+  so a polled `awaiting_job` run settles within the suite timeouts; inline specs never poll.
 - `E2E_CHROMIUM_PATH` — opt-in: launch Chromium from this path instead of a `playwright
 install` download. For sandboxes that ship a preinstalled browser and block the download
   (e.g. `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`). Unset in CI.

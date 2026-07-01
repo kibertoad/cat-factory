@@ -16,6 +16,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const github = useGitHubStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const open = computed({
   get: () => ui.githubOpen,
@@ -46,6 +47,14 @@ function notifyError(title: string, e: unknown) {
 }
 
 async function disconnect() {
+  const ok = await confirm({
+    title: t('github.panel.confirmDisconnect.title'),
+    description: t('github.panel.confirmDisconnect.body'),
+    variant: 'destructive',
+    confirmLabel: t('common.disconnect'),
+    icon: 'i-lucide-unplug',
+  })
+  if (!ok) return
   try {
     await github.disconnect()
     toast.add({ title: t('github.panel.toast.disconnected'), icon: 'i-lucide-unplug' })

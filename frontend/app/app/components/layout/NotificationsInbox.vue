@@ -12,6 +12,7 @@ const { t, te } = useI18n()
 const notifications = useNotificationsStore()
 const ui = useUiStore()
 const execution = useExecutionStore()
+const toast = useToast()
 
 const busy = ref<string | null>(null)
 
@@ -92,6 +93,11 @@ async function act(n: Notification) {
   busy.value = n.id
   try {
     await notifications.act(n.id)
+    toast.add({
+      title: t('layout.notifications.toast.acted'),
+      color: 'success',
+      icon: 'i-lucide-check',
+    })
   } finally {
     busy.value = null
   }
@@ -101,6 +107,11 @@ async function dismiss(n: Notification) {
   busy.value = n.id
   try {
     await notifications.dismiss(n.id)
+    toast.add({
+      title: t('layout.notifications.toast.dismissed'),
+      color: 'neutral',
+      icon: 'i-lucide-check',
+    })
   } finally {
     busy.value = null
   }

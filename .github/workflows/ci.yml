@@ -452,11 +452,13 @@ jobs:
   # check instead of a green one — but, being out of `test-gate.needs`, it still doesn't
   # block the merge. Promote it into `test-gate.needs` once it has proven stable.
   #
-  # SHARDED across 2 jobs via Playwright's --shard (deterministic file partition), mirroring
+  # SHARDED across 3 jobs via Playwright's --shard (deterministic file partition), mirroring
   # the `test-worker` vitest sharding above. Each shard is its own job, so the Postgres
   # service below is instantiated per shard — every shard gets a fresh, private datastore,
   # which keeps the serial `workers: 1` config valid within a shard. Each shard emits a
-  # `blob` report; the `test-e2e-report` job merges them into one HTML report.
+  # `blob` report; the `test-e2e-report` job merges them into one HTML report. (Bumped 2 → 3
+  # as the spec count grew — each shard runs its files serially, so more shards keeps the
+  # per-shard wall-clock bounded as coverage expands.)
   test-e2e:
     name: Test e2e (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
@@ -465,7 +467,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:18
@@ -533,7 +535,7 @@ jobs:
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       - name: Run e2e shard
-        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/2
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/3
 
       # Each shard uploads its `blob` report (mergeable) so `test-e2e-report` can recombine
       # them into a single HTML report. `test-results/` carries the per-failure trace + video

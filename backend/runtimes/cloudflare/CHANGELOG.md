@@ -1,5 +1,80 @@
 # @cat-factory/worker
 
+## 0.51.3
+
+### Patch Changes
+
+- 3135ae8: Make GitLab a first-class auth identity on the hosted (Cloudflare Worker + Node) path.
+
+  **Wire hosted PAT sign-in into the Cloudflare Worker.** The Worker now registers the PAT-login
+  identity registry (`vcsIdentity`) like the Node facade — GitHub always, GitLab when a GitLab
+  connection is configured (`GITLAB_TOKEN` / `config.gitlab.enabled`) — so a user can sign in by
+  pasting their own GitHub **or** GitLab PAT at `/auth/pat`. Previously the Worker wired none,
+  leaving it OAuth-only; since GitLab has no OAuth browser flow, a GitLab user had no way to sign
+  in to a Worker deployment at all, even though its engine already gated CI and merged on GitLab.
+  `/auth/config` now advertises `patLogin.providers` accordingly, so the SPA renders the PAT form.
+
+  **Implement `GitLabIdentityResolver.resolveOrgs`.** A hosted deployment admits a pasted PAT only
+  when the account's login, an org/group it belongs to, or its email domain is allowlisted. Only
+  `GitHubIdentityResolver` implemented `resolveOrgs`, so `isPatIdentityAllowed`'s org branch was
+  skipped for GitLab — a GitLab account could be a primary identity via `AUTH_ALLOWED_LOGINS` or
+  `AUTH_ALLOWED_EMAIL_DOMAINS`, but never `AUTH_ALLOWED_ORGS`. The resolver now enumerates the
+  user's GitLab **group** memberships (`GET /groups?min_access_level=10`, lowercased full paths, so
+  only groups the user actually belongs to admit), bringing group-based admission to parity with
+  GitHub org admission.
+
+  **Bound and diagnose PAT-login org/group admission.** Both `resolveOrgs` implementations
+  (GitHub `/user/orgs`, GitLab `/groups`) now follow `Link: rel="next"` pagination up to a ~1000-entry
+  cap (and `logger.warn` on truncation, wired from each facade — Node included), so a user whose only
+  allowlisted org/group sat past the first 100 is no longer wrongly denied. When org enumeration fails
+  because a token can authenticate `/user` but lacks the broader org/group-read scope
+  (`read:org` / `read_api`), the `/auth/pat` 403 now hints at the missing scope instead of a flat
+  "not allowed", and a hosted deployment's missing-token prompt tells the user to paste their PAT
+  rather than to set an env var they don't control.
+
+  Comment-only touches to `@cat-factory/server`'s `AuthController`, the kernel `VcsIdentityRegistry`
+  doc, and the SPA login screen to correct the now-stale "hosted facades are OAuth-only" notes.
+
+- Updated dependencies [3135ae8]
+  - @cat-factory/gitlab@0.4.28
+  - @cat-factory/server@0.63.3
+
+## 0.51.2
+
+### Patch Changes
+
+- 39534d6: Mothership mode: allow-list `agentRunRepository.getRef`, so the board's run controls (retry /
+  stop a failed or running run) are functional for execution runs in a no-Postgres mothership-mode
+  local node.
+
+  Wiring fix (both facades): `agentRunRepository` is the one repo surfaced on the container OUTSIDE
+  `CoreDependencies`, so the mothership `repositories` registry (`ServerContainer.repositories`,
+  reflected by `/internal/persistence`) was built from `dependencies` alone and did not carry it —
+  a remote `getRef` call came back `Repository 'agentRunRepository.getRef' is not wired`. Both
+  `buildNodeContainer` and the Cloudflare `buildContainer` now fold it into the registry explicitly,
+  so either facade acting as a mothership serves the retry/stop `getRef` read.
+
+  `AgentRunController` (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`) resolves a run's KIND via
+  `agentRunRepository.getRef(workspaceId, id)` before dispatching to the matching service. That read
+  was the last thing on the execution-run retry/stop path still coming back `unknown_method` over
+  `/internal/persistence`. It is now allow-listed, workspace-scoped on arg0 (reusing the existing
+  `workspace` rule — resolve the owning account, reject out-of-scope as 404). Every downstream
+  read+write the execution retry/stop services make (`executionRepository.get`/`deleteByBlock`/
+  `upsert`/`markFailed`, `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage
+  prechecks) was already exposed on the run/start path, so `getRef` is the only new entry.
+
+  The bootstrap + env-config-repair retry BRANCHES read their own repos (`bootstrapJobRepository.get`,
+  `referenceArchitectureRepository.get`, …) and stay `pending` — a later slice. The sweeper-only
+  `agentRunRepository.listStale`/`liveRunIds` stay mothership-internal.
+
+  Server-only allow-list change, symmetric by construction (the dispatcher reflects over each facade's
+  registry). Round-trip + cross-account-scope + off-allow-list unit tests cover it; the static
+  allow-list drift guard moves `getRef` out of `pending`; and the fake-mothership integration test
+  asserts the retry endpoint resolves a run's kind over the real RPC and 404s an unknown run id.
+
+- Updated dependencies [39534d6]
+  - @cat-factory/server@0.63.2
+
 ## 0.51.1
 
 ### Patch Changes

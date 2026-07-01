@@ -68,8 +68,10 @@ export interface VcsIdentityEntry {
 }
 
 /**
- * The per-provider PAT-login registry a facade assembles (local mode wires it; hosted
- * facades leave it undefined and the `/auth/pat` endpoint 503s). Keyed by provider so the
- * login layer stays branch-free across N providers.
+ * The per-provider PAT-login registry a facade assembles. Both local mode AND the hosted
+ * facades (Node + Cloudflare Worker) wire it — GitHub always, GitLab when a GitLab connection
+ * is configured — so a user can sign in by pasting their own PAT; only a facade that wires
+ * none leaves it undefined and the `/auth/pat` endpoint 503s. Keyed by provider so the login
+ * layer stays branch-free across N providers.
  */
 export type VcsIdentityRegistry = Partial<Record<VcsProvider, VcsIdentityEntry>>

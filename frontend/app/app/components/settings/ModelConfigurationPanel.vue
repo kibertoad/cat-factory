@@ -25,6 +25,7 @@ const agents = useAgentsStore()
 const creds = useVendorCredentialsStore()
 const workspace = useWorkspaceStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const open = computed({
   get: () => ui.modelConfigOpen,
@@ -144,6 +145,14 @@ async function setDefault(p: ModelPreset) {
 }
 
 async function remove(p: ModelPreset) {
+  const ok = await confirm({
+    title: t('settings.modelConfiguration.confirmDelete.title'),
+    description: t('settings.modelConfiguration.confirmDelete.body', { name: p.name }),
+    variant: 'destructive',
+    confirmLabel: t('common.delete'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   busy.value = true
   try {
     await presets.remove(p.id)

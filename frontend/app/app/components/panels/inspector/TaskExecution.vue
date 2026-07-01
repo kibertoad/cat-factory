@@ -8,6 +8,7 @@ import {
   containerPhaseLabel,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -34,6 +35,16 @@ const reviewStageLabel = computed(() =>
 )
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
+
+// Nothing to show yet: no run, no failed run, no PR, and not awaiting a merge — render an
+// empty state instead of a blank gap so the section reads as "no runs yet" rather than broken.
+const isEmpty = computed(
+  () =>
+    !instance.value &&
+    !failedRun.value &&
+    !props.block.pullRequest &&
+    props.block.status !== 'pr_ready',
+)
 // A failed run is no longer executing: a step left mid-flight must stop showing
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
@@ -184,6 +195,9 @@ async function resetRun() {
           :key="i"
           class="rounded-md px-2 py-1"
           :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
+          data-testid="run-step"
+          :data-step-kind="s.agentKind"
+          :data-step-state="s.state"
         >
           <div class="flex items-center gap-2">
             <!-- Every agent is clickable: it opens the step-detail overlay (timing,
@@ -221,6 +235,7 @@ async function resetRun() {
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
               class="ms-auto font-mono text-[10px] tabular-nums text-slate-300"
+              data-testid="run-subtasks"
               :title="
                 s.subtasks.inProgress > 0
                   ? t('inspector.execution.subtasksProgress', {
@@ -398,6 +413,15 @@ async function resetRun() {
         <span class="truncate" :title="pr.branch">{{ pr.branch }}</span>
       </p>
     </div>
+
+    <!-- No run yet: read as "nothing here" rather than a blank gap. -->
+    <EmptyState
+      v-if="isEmpty"
+      compact
+      icon="i-lucide-play-circle"
+      :title="t('inspector.execution.empty.title')"
+      :description="t('inspector.execution.empty.body')"
+    />
 
     <!-- PR ready: merge -->
     <UButton

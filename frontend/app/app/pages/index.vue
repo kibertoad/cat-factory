@@ -18,6 +18,8 @@ import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
+import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
+import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue'
 
 // Heavy, rarely-open panels — code-split into their own chunks via defineAsyncComponent
 // and mounted only while their ui open-flag is set (the v-if gates in the template), so
@@ -112,6 +114,10 @@ const github = useGitHubStore()
 const models = useModelsStore()
 const ui = useUiStore()
 const aiReadiness = useAiReadiness()
+
+// App-wide keyboard shortcuts (Escape to deselect, Delete to remove the selected block, ?
+// for the cheatsheet). Registered ONCE here so a single global listener owns them.
+useKeyboardShortcuts()
 
 // Load the board from the backend before rendering it.
 onMounted(() => {
@@ -307,6 +313,8 @@ watch(
       <AddTaskModal />
       <CommandBar />
       <PersonalCredentialModal />
+      <ConfirmDialog />
+      <KeyboardShortcutsHelp />
 
       <!-- Lazy panels: mounted only while their ui open-flag is set, so each loads on
            first open (its own chunk) rather than bloating the initial bundle. -->

@@ -13,6 +13,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useLocalModelsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const open = computed({
   get: () => ui.localModelsOpen,
@@ -140,6 +141,16 @@ async function save() {
 }
 
 async function remove(p: LocalRunner) {
+  const ok = await confirm({
+    title: t('settings.localModelEndpoints.confirmRemove.title'),
+    description: t('settings.localModelEndpoints.confirmRemove.body', {
+      name: LOCAL_RUNNER_LABELS[p],
+    }),
+    variant: 'destructive',
+    confirmLabel: t('common.remove'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   busy.value = true
   try {
     await store.remove(p)

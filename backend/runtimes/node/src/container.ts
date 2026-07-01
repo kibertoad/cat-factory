@@ -450,11 +450,11 @@ function buildNodeAppRegistry(
  */
 function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
   const registry: VcsIdentityRegistry = {
-    github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase }) },
+    github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase, logger }) },
   }
   if (config.gitlab?.enabled) {
     registry.gitlab = {
-      resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase }),
+      resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase, logger }),
     }
   }
   return registry
