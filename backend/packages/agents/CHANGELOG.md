@@ -1,5 +1,83 @@
 # @cat-factory/agents
 
+## 0.25.0
+
+### Minor Changes
+
+- f70c273: feat(frontend): `pl_frontend` pipeline + frontend-aware mocker (slice 4 of the
+  frontend-preview + in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  Builds on slice 3's self-contained UI-test infra with the pipeline that drives it and a mocker
+  that authors the mocks it needs.
+
+  - **`pl_frontend` built-in pipeline** (`coder → reviewer → mocker → tester-ui → conflicts → ci →
+merger`). For a `type: 'frontend'` frame the engine already resolves the frame's
+    `frontendConfig` + backend bindings and stands the app + WireMock up in one container (slice 3),
+    so this pipeline is just the step order that exercises it end to end: implement → review → mock
+    → browser-test → the standard mergeability/CI/merge tail. Labelled `experimental` — two
+    deploy-/keying-time steps remain (the `ui`-image per-step routing, and keying a bound service's
+    ephemeral env by its FRAME id so a live-service binding resolves instead of falling back to
+    WireMock); a mock-only frontend already runs fully self-contained today.
+  - **Frontend-aware mocker.** When a `mocker` step runs on a task under a `frontend` frame, its
+    user prompt now carries a frontend section: author WireMock stub mappings under the frontend
+    repo's mock dir in WireMock's `--root-dir` layout (`<dir>/mappings/*.json` + `<dir>/__files/`)
+    for exactly the upstreams the harness points at WireMock (every binding with no live service
+    under test), and do NOT wire a docker-compose stack — the platform serves the app + WireMock
+    directly. The live service(s) under test are named and explicitly excluded from mocking. A
+    backend-service mocker run is unchanged (the section is absent without a resolved frontend
+    context). The section explicitly OVERRIDES the docker-compose stand-up guidance in the
+    (backend-oriented) mocker role prompt so the two do not contradict for a frontend run, and the
+    default WireMock root (`mocks/`) is now the shared `DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH` constant
+    in `@cat-factory/contracts` rather than a private literal.
+
+- 6c51e31: Run inline LLM steps through the ambient Claude Code / Codex CLI in local mode, and refuse to
+  start a pipeline whose model preset can't satisfy every step.
+
+  - **Local inline harness execution**: with native agents enabled (`LOCAL_NATIVE_AGENTS`), the
+    inline steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) now run
+    on the developer's ambient `claude`/`codex` subscription CLI as a host subprocess — the inline
+    analogue of the existing container ambient-auth path. Previously a subscription-only preset
+    (e.g. Claude Opus) degraded these inline steps to the routing default and failed against an
+    unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
+    Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
+    local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
+    degrading it. The consensus executor (an inline path) threads the same predicate, so a
+    subscription-only consensus participant model is kept inline in local mode too.
+  - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
+    inline-usability, not just container-usability. A subscription-only model that satisfies the
+    container agents but can't run the inline reviewers (and this deployment has no inline harness)
+    is refused up front with a new `preset_unsatisfiable` conflict reason and an actionable message,
+    instead of failing mid-run. The SPA maps the new reason to a translated toast.
+
+  Breaking: `inlineModelRef` gains an optional third `opts` argument; the `ConflictReason` wire
+  union gains `preset_unsatisfiable`.
+
+### Patch Changes
+
+- 33687cf: fix(tester): give the Tester standardized env coordinates + real access credentials in its prompt
+
+  The tester prompt claimed a deployed environment's URL and access credentials were "provided to
+  the test harness out of band" — but nothing delivered them, so Testers aborted with "no deployed
+  URL or credentials found". `environmentSection()` now renders the standardized coordinates
+  (URL + derived host/port/scheme) and the FULL endpoint access credentials (bearer token / HTTP
+  basic username+password / custom header name+value) directly in the run context.
+
+  These are test-environment access credentials, treated as non-sensitive: the Tester cannot
+  authenticate without them reaching the model regardless of channel, so they go straight into the
+  prompt rather than a fictional out-of-band path. The tester system prompts and run-mode wording
+  now point at the concrete "Ephemeral environment under test" section.
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [6c51e31]
+  - @cat-factory/contracts@0.77.0
+  - @cat-factory/kernel@0.67.0
+  - @cat-factory/prompt-fragments@0.9.32
+
 ## 0.24.16
 
 ### Patch Changes
