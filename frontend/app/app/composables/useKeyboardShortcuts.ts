@@ -8,10 +8,12 @@ import { onBeforeUnmount, onMounted } from 'vue'
  *   · Escape    — deselect the current block / close the inspector, but ONLY when no modal
  *                 is open (every modal is a `UModal` with `role="dialog"`, which already
  *                 handles its own Escape, so we must not also steal it).
- *   · Delete /  — delete the selected block, through the SAME confirm-gated path the
- *     Backspace   inspector button uses (`useBlockDeletion`). Guarded so it never fires
- *                 while the user is typing in a field.
- *   · ?         — open the keyboard-shortcuts cheatsheet.
+ *   · Delete    — delete the selected block, through the SAME confirm-gated path the
+ *                 inspector button uses (`useBlockDeletion`). Guarded so it never fires
+ *                 while the user is typing in a field. NOTE: only `Delete`, deliberately
+ *                 NOT `Backspace` — `Backspace` collides with "navigate back" muscle memory
+ *                 and would delete the selected block from anywhere on the board.
+ *   · ?         — toggle the keyboard-shortcuts cheatsheet.
  */
 export function useKeyboardShortcuts(): void {
   const ui = useUiStore()
@@ -38,8 +40,10 @@ export function useKeyboardShortcuts(): void {
   }
 
   function onKeydown(e: KeyboardEvent) {
-    // "?" — the cheatsheet. Shift+/ on most layouts; guard against typing.
-    if (e.key === '?' && !isEditableTarget(e) && !modalOpen()) {
+    // "?" — toggle the cheatsheet. Shift+/ on most layouts; guard against typing. The
+    // cheatsheet is itself a modal, so allow the toggle to close it (a plain `modalOpen()`
+    // guard would trap it open, since "?" could then only ever open, never close).
+    if (e.key === '?' && !isEditableTarget(e) && (!modalOpen() || ui.shortcutsHelpOpen)) {
       e.preventDefault()
       ui.toggleShortcutsHelp()
       return
@@ -55,7 +59,7 @@ export function useKeyboardShortcuts(): void {
       return
     }
 
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (e.key === 'Delete') {
       // Never destroy a block while the user is editing a title/description/query.
       if (isEditableTarget(e) || modalOpen()) return
       const id = ui.selectedBlockId

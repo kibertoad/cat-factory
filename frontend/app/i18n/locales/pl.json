@@ -22,7 +22,9 @@
       "defaultTitle": "Na pewno?",
       "confirm": "Potwierdź"
     },
-    "copied": "Skopiowano do schowka"
+    "copied": "Skopiowano do schowka",
+    "disconnect": "Rozłącz",
+    "copyFailed": "Nie udało się skopiować do schowka"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -333,6 +335,10 @@
         "step2": "Otwórz plik poświadczeń zapisany przez Codex w ~/.codex/auth.json (w systemie Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Skopiuj całą zawartość auth.json, wklej ją poniżej i wybierz osobiste hasło, aby ją chronić."
       }
+    },
+    "confirmDisconnect": {
+      "title": "Rozłączyć tę subskrypcję?",
+      "body": "Twoja subskrypcja \"{vendor}\" zostanie rozłączona. Tej operacji nie można cofnąć."
     }
   },
   "inspector": {
@@ -1102,6 +1108,10 @@
         "openBoardFailed": "Nie udało się otworzyć tablicy",
         "boardDeleted": "Tablica usunięta",
         "deleteBoardFailed": "Nie udało się usunąć tablicy"
+      },
+      "confirmDelete": {
+        "title": "Usunąć tę tablicę?",
+        "body": "\"{name}\" i cała jego zawartość zostaną usunięte. Tej operacji nie można cofnąć."
       }
     },
     "notifications": {
@@ -1592,6 +1602,10 @@
         "saveFailed": "Nie udało się zapisać sekretu",
         "removed": "Sekret usunięty",
         "removeFailed": "Nie udało się usunąć sekretu"
+      },
+      "confirmRemove": {
+        "title": "Usunąć ten sekret?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     },
     "mergeThresholds": {
@@ -1849,6 +1863,10 @@
         "saveFailed": "Nie udało się zapisać runnera",
         "removed": "Runner usunięty",
         "removeFailed": "Nie udało się usunąć runnera"
+      },
+      "confirmRemove": {
+        "title": "Usunąć ten runner?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     },
     "infrastructure": {
@@ -2110,6 +2128,10 @@
           "step2": "Skopiuj klucz API. Kroki agenta będą działać przez Claude Code na endpoincie Anthropic firmy DeepSeek z pełnym kontekstem.",
           "step3": "Wklej klucz poniżej."
         }
+      },
+      "confirmRemove": {
+        "title": "Usunąć te dane logowania?",
+        "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
       }
     }
   },
@@ -2206,6 +2228,10 @@
         "createBranch": "Nie udało się utworzyć gałęzi",
         "openPr": "Nie udało się otworzyć pull requesta",
         "merge": "Nie udało się scalić"
+      },
+      "confirmDisconnect": {
+        "title": "Rozłączyć GitHub?",
+        "body": "Aplikacja utraci dostęp do Twoich repozytoriów do ponownego połączenia."
       }
     },
     "addService": {
@@ -2314,6 +2340,10 @@
       "disconnect": "Nie udalo sie rozlaczyc Slacka",
       "saveRouting": "Nie udalo sie zapisac routingu",
       "saveMap": "Nie udalo sie zapisac mapy czlonkow"
+    },
+    "confirmDisconnect": {
+      "title": "Rozłączyć Slack?",
+      "body": "Powiadomienia Slack zostaną wstrzymane do ponownego połączenia."
     }
   },
   "documents": {
@@ -3444,6 +3474,10 @@
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",
       "unlinkSourceFailed": "Nie udało się odłączyć źródła"
+    },
+    "confirmRemove": {
+      "title": "Usunąć ten fragment?",
+      "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
     }
   },
   "sandbox": {

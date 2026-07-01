@@ -28,7 +28,9 @@
     "close": "Close",
     "@close": {
       "description": "Verb meaning dismiss / shut (a panel, drawer, dialog), NOT the adjective 'near'. Used as an aria-label on close affordances - translate as the imperative verb."
-    }
+    },
+    "disconnect": "Disconnect",
+    "copyFailed": "Couldn't copy to clipboard"
   },
   "nav": {
     "menu": "Navigation menu",
@@ -370,6 +372,10 @@
         "step2": "Open the credentials file Codex wrote at ~/.codex/auth.json (on Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Copy the entire contents of auth.json, paste it below, and choose a personal password to protect it."
       }
+    },
+    "confirmDisconnect": {
+      "title": "Disconnect this subscription?",
+      "body": "Your \"{vendor}\" subscription will be disconnected. This can't be undone."
     }
   },
   "inspector": {
@@ -1142,6 +1148,10 @@
         "openBoardFailed": "Could not open board",
         "boardDeleted": "Board deleted",
         "deleteBoardFailed": "Could not delete board"
+      },
+      "confirmDelete": {
+        "title": "Delete this board?",
+        "body": "\"{name}\" and everything in it will be removed. This can't be undone."
       }
     },
     "notifications": {
@@ -1748,6 +1758,10 @@
         "saveFailed": "Could not save secret",
         "removed": "Secret removed",
         "removeFailed": "Could not remove secret"
+      },
+      "confirmRemove": {
+        "title": "Remove this secret?",
+        "body": "\"{name}\" will be removed. This can't be undone."
       }
     },
     "mergeThresholds": {
@@ -2008,6 +2022,10 @@
         "saveFailed": "Could not save runner",
         "removed": "Runner removed",
         "removeFailed": "Could not remove runner"
+      },
+      "confirmRemove": {
+        "title": "Remove this runner?",
+        "body": "\"{name}\" will be removed. This can't be undone."
       }
     }
   },
@@ -2175,6 +2193,10 @@
           "step2": "Copy the API key. Agent steps will run via Claude Code against DeepSeek's Anthropic endpoint with full context.",
           "step3": "Paste the key below."
         }
+      },
+      "confirmRemove": {
+        "title": "Remove this credential?",
+        "body": "\"{name}\" will be removed. This can't be undone."
       }
     }
   },
@@ -2271,6 +2293,10 @@
         "createBranch": "Could not create branch",
         "openPr": "Could not open pull request",
         "merge": "Could not merge"
+      },
+      "confirmDisconnect": {
+        "title": "Disconnect GitHub?",
+        "body": "The app will lose access to your repositories until you reconnect."
       }
     },
     "addService": {
@@ -2382,6 +2408,10 @@
       "disconnect": "Could not disconnect Slack",
       "saveRouting": "Could not save routing",
       "saveMap": "Could not save member map"
+    },
+    "confirmDisconnect": {
+      "title": "Disconnect Slack?",
+      "body": "Slack notifications will stop until you reconnect."
     }
   },
   "documents": {
@@ -3573,6 +3603,10 @@
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
       "unlinkSourceFailed": "Could not unlink source"
+    },
+    "confirmRemove": {
+      "title": "Delete this fragment?",
+      "body": "\"{name}\" will be removed. This can't be undone."
     }
   },
   "sandbox": {

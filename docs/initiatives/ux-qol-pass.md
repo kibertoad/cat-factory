@@ -59,16 +59,37 @@ Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`),
 
 ### PR 2 — Feedback toasts + keyboard shortcuts + help
 
-| Unit                                                                | Status | PR   |
-| ------------------------------------------------------------------- | ------ | ---- |
-| Toast: run started (`TaskCard`)                                     | done   | PR 2 |
-| Toast: notification acted/dismissed (`NotificationsInbox`)          | done   | PR 2 |
-| Toast: settings saved (`WorkspaceSettingsPanel` already toasts; `TaskRunSettings` skipped — inline auto-save, a toast per field-change is noise) | done | PR 2 |
-| Copyable container id/url + toast (`StepContainerStatus`)           | done   | PR 2 |
-| `useKeyboardShortcuts.ts` (Escape / Delete / ?)                     | done   | PR 2 |
-| `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                | done   | PR 2 |
-| Command-bar "Keyboard shortcuts" entry                              | done   | PR 2 |
-| i18n keys (8 locales) + patch changeset                             | done   | PR 2 |
+| Unit                                                                                                                                             | Status | PR   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ---- |
+| Toast: run started (`TaskCard`)                                                                                                                  | done   | PR 2 |
+| Toast: notification acted/dismissed (`NotificationsInbox`)                                                                                       | done   | PR 2 |
+| Toast: settings saved (`WorkspaceSettingsPanel` already toasts; `TaskRunSettings` skipped — inline auto-save, a toast per field-change is noise) | done   | PR 2 |
+| Copyable container id/url + toast (`StepContainerStatus`)                                                                                        | done   | PR 2 |
+| `useKeyboardShortcuts.ts` (Escape / Delete / ?)                                                                                                  | done   | PR 2 |
+| `KeyboardShortcutsHelp.vue` + `ui.shortcutsHelpOpen`                                                                                             | done   | PR 2 |
+| Command-bar "Keyboard shortcuts" entry                                                                                                           | done   | PR 2 |
+| i18n keys (8 locales) + patch changeset                                                                                                          | done   | PR 2 |
+
+### Review follow-up — complete the destructive-confirm coverage + hardening
+
+Review found the confirm gate covered board blocks/presets/pipelines/dependency edges but
+**not** several equally-destructive actions, plus a few sharp edges. Addressed on this same
+branch (same two changesets):
+
+| Unit                                                                           | Status |
+| ------------------------------------------------------------------------------ | ------ |
+| Confirm: revoke vendor credential (`VendorCredentialsModal`)                   | done   |
+| Confirm: disconnect personal subscription (`PersonalSubscriptionSection`)      | done   |
+| Confirm: remove user secret (`UserSecretsSection`)                             | done   |
+| Confirm: remove local model runner (`LocalModelEndpointsPanel`)                | done   |
+| Confirm: delete prompt fragment (`FragmentLibraryManager`)                     | done   |
+| Confirm: delete board (`BoardSwitcher`)                                        | done   |
+| Confirm: disconnect Slack (`SlackPanel`) / GitHub (`GitHubPanel`)              | done   |
+| Copy toast only on real success; error toast on failed/unsupported clipboard   | done   |
+| Drop `Backspace` from the delete shortcut (`Delete`-only) — back-nav collision | done   |
+| `?` toggles the cheatsheet closed (was trapped open by the modal guard)        | done   |
+| Confirm dialog: primary button `autofocus` so Enter confirms                   | done   |
+| `KeyboardShortcutsHelp`: drop deprecated `navigator.platform`                  | done   |
 
 ## Conventions & gotchas (carried between iterations)
 
@@ -77,8 +98,10 @@ Conventions the primitives follow: `UModal` (`v-model:open`, `#body`/`#footer`),
   modal. `useFocusTrap.ts` is for non-UModal surfaces only.
 - **The confirm singleton must resolve `false`** on backdrop/Escape/route-change dismiss and
   when superseded by a newer `confirm()` call — otherwise the awaiting promise hangs forever.
-- **Delete-while-typing guard is mandatory** — the global Delete/Backspace handler must bail
-  when the event target is an `<input>`, `<textarea>`, `[contenteditable]`, or inside one.
+- **Delete-while-typing guard is mandatory** — the global Delete handler must bail when the
+  event target is an `<input>`, `<textarea>`, `[contenteditable]`, or inside one. Bind only
+  `Delete`, **not** `Backspace`: `Backspace` collides with browser "navigate back" muscle
+  memory and would delete the selected block from anywhere on the board.
 - **Escape-vs-modal guard** — the global Escape (deselect) handler must bail when a modal is
   open. Use a DOM check (`document.querySelector('[role="dialog"]')`, every modal is a
   `UModal`) rather than enumerating the ~25 `*Open` flags in `stores/ui.ts`.

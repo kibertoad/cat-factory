@@ -11,7 +11,13 @@ const open = computed({
 })
 
 // Each row: the display keys + the action label. `mod` renders as ⌘ on Apple, Ctrl elsewhere.
-const isApple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '')
+// `navigator.platform` is deprecated; prefer the userAgentData hint, fall back to userAgent.
+const nav = typeof navigator !== 'undefined' ? navigator : undefined
+const platformHint =
+  (nav as { userAgentData?: { platform?: string } } | undefined)?.userAgentData?.platform ??
+  nav?.userAgent ??
+  ''
+const isApple = /Mac|iPhone|iPad/.test(platformHint)
 const modKey = isApple ? '⌘' : 'Ctrl'
 
 const shortcuts = computed(() => [

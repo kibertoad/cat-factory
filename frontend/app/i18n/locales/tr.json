@@ -22,7 +22,9 @@
       "defaultTitle": "Emin misiniz?",
       "confirm": "Onayla"
     },
-    "copied": "Panoya kopyalandı"
+    "copied": "Panoya kopyalandı",
+    "disconnect": "Bağlantıyı kes",
+    "copyFailed": "Panoya kopyalanamadı"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -333,6 +335,10 @@
         "step2": "Codex'in ~/.codex/auth.json (Windows'ta %USERPROFILE%\\.codex\\auth.json) konumuna yazdığı kimlik bilgileri dosyasını açın.",
         "step3": "auth.json içeriğinin tamamını kopyalayın, aşağıya yapıştırın ve korumak için bir kişisel parola seçin."
       }
+    },
+    "confirmDisconnect": {
+      "title": "Bu abonelik bağlantısı kesilsin mi?",
+      "body": "\"{vendor}\" aboneliğinizin bağlantısı kesilecek. Bu işlem geri alınamaz."
     }
   },
   "inspector": {
@@ -1102,6 +1108,10 @@
         "openBoardFailed": "Pano açılamadı",
         "boardDeleted": "Pano silindi",
         "deleteBoardFailed": "Pano silinemedi"
+      },
+      "confirmDelete": {
+        "title": "Bu pano silinsin mi?",
+        "body": "\"{name}\" ve içindeki her şey kaldırılacak. Bu işlem geri alınamaz."
       }
     },
     "notifications": {
@@ -1705,6 +1715,10 @@
         "saveFailed": "Gizli bilgi kaydedilemedi",
         "removed": "Gizli bilgi kaldırıldı",
         "removeFailed": "Gizli bilgi kaldırılamadı"
+      },
+      "confirmRemove": {
+        "title": "Bu gizli anahtar kaldırılsın mı?",
+        "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       }
     },
     "mergeThresholds": {
@@ -1962,6 +1976,10 @@
         "saveFailed": "Çalıştırıcı kaydedilemedi",
         "removed": "Çalıştırıcı kaldırıldı",
         "removeFailed": "Çalıştırıcı kaldırılamadı"
+      },
+      "confirmRemove": {
+        "title": "Bu runner kaldırılsın mı?",
+        "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       }
     }
   },
@@ -2123,6 +2141,10 @@
           "step2": "API anahtarını kopyalayın. Agent adımları, tam bağlamla DeepSeek'in Anthropic uç noktasına karşı Claude Code üzerinden çalışacaktır.",
           "step3": "Anahtarı aşağıya yapıştırın."
         }
+      },
+      "confirmRemove": {
+        "title": "Bu kimlik bilgisi kaldırılsın mı?",
+        "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       }
     }
   },
@@ -2219,6 +2241,10 @@
         "createBranch": "Dal oluşturulamadı",
         "openPr": "Pull request açılamadı",
         "merge": "Birleştirilemedi"
+      },
+      "confirmDisconnect": {
+        "title": "GitHub bağlantısı kesilsin mi?",
+        "body": "Yeniden bağlanana kadar uygulama depolarınıza erişimini kaybedecek."
       }
     },
     "addService": {
@@ -2327,6 +2353,10 @@
       "disconnect": "Slack bağlantısı kesilemedi",
       "saveRouting": "Yönlendirme kaydedilemedi",
       "saveMap": "Üye eşlemesi kaydedilemedi"
+    },
+    "confirmDisconnect": {
+      "title": "Slack bağlantısı kesilsin mi?",
+      "body": "Yeniden bağlanana kadar Slack bildirimleri duracak."
     }
   },
   "documents": {
@@ -3457,6 +3487,10 @@
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
       "unlinkSourceFailed": "Kaynak bağlantısı kaldırılamadı"
+    },
+    "confirmRemove": {
+      "title": "Bu parça silinsin mi?",
+      "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
     }
   },
   "sandbox": {

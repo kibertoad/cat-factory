@@ -12,6 +12,7 @@ const accounts = useAccountsStore()
 const workspace = useWorkspaceStore()
 const ui = useUiStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const busy = ref(false)
 
@@ -142,6 +143,16 @@ async function switchBoard(id: string) {
 async function removeBoard() {
   const id = workspace.workspaceId
   if (!id) return
+  const ok = await confirm({
+    title: t('layout.boardSwitcher.confirmDelete.title'),
+    description: t('layout.boardSwitcher.confirmDelete.body', {
+      name: workspace.activeWorkspace?.name ?? t('layout.boardSwitcher.boardFallback'),
+    }),
+    variant: 'destructive',
+    confirmLabel: t('common.delete'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   busy.value = true
   try {
     await workspace.remove(id)

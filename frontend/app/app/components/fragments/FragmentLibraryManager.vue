@@ -31,6 +31,7 @@ const library =
 const documents = useDocumentsStore()
 const toast = useToast()
 const { t, d } = useI18n()
+const { confirm } = useConfirm()
 
 const isWorkspace = props.kind === 'workspace'
 /** Linking a document at the account scope needs a workspace connection to fetch through. */
@@ -121,6 +122,15 @@ async function createFragment() {
 }
 
 async function removeFragment(id: string) {
+  const name = library.fragments.find((f) => f.id === id)?.title ?? ''
+  const ok = await confirm({
+    title: t('fragments.confirmRemove.title'),
+    description: t('fragments.confirmRemove.body', { name }),
+    variant: 'destructive',
+    confirmLabel: t('common.delete'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   try {
     await library.remove(id)
     toast.add({ title: t('fragments.toast.removed'), icon: 'i-lucide-trash-2' })

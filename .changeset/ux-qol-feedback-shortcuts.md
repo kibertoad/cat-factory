@@ -1,5 +1,5 @@
 ---
-"@cat-factory/app": patch
+'@cat-factory/app': patch
 ---
 
 UX quality-of-life pass (part 2): confirm silent actions with feedback toasts (run

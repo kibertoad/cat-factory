@@ -22,7 +22,9 @@
       "defaultTitle": "האם אתה בטוח?",
       "confirm": "אישור"
     },
-    "copied": "הועתק ללוח"
+    "copied": "הועתק ללוח",
+    "disconnect": "נתק",
+    "copyFailed": "לא ניתן להעתיק ללוח"
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -333,6 +335,10 @@
         "step2": "פתח את קובץ אישורי הגישה ש-Codex כתב ב-~/.codex/auth.json (ב-Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "העתק את כל תוכן auth.json, הדבק אותו למטה ובחר סיסמה אישית כדי להגן עליו."
       }
+    },
+    "confirmDisconnect": {
+      "title": "לנתק את המנוי הזה?",
+      "body": "המנוי שלך ל־\"{vendor}\" ינותק. לא ניתן לבטל פעולה זו."
     }
   },
   "inspector": {
@@ -1102,6 +1108,10 @@
         "openBoardFailed": "לא ניתן היה לפתוח את הלוח",
         "boardDeleted": "הלוח נמחק",
         "deleteBoardFailed": "לא ניתן היה למחוק את הלוח"
+      },
+      "confirmDelete": {
+        "title": "למחוק את הלוח הזה?",
+        "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
       }
     },
     "notifications": {
@@ -1703,6 +1713,10 @@
         "saveFailed": "לא ניתן היה לשמור את הסוד",
         "removed": "הסוד הוסר",
         "removeFailed": "לא ניתן היה להסיר את הסוד"
+      },
+      "confirmRemove": {
+        "title": "להסיר את הסוד הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     },
     "mergeThresholds": {
@@ -1960,6 +1974,10 @@
         "saveFailed": "לא ניתן היה לשמור מריץ",
         "removed": "המריץ הוסר",
         "removeFailed": "לא ניתן היה להסיר מריץ"
+      },
+      "confirmRemove": {
+        "title": "להסיר את ה־runner הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     }
   },
@@ -2121,6 +2139,10 @@
           "step2": "העתק את מפתח ה-API. שלבי הסוכן ירוצו דרך Claude Code מול נקודת הקצה של Anthropic של DeepSeek עם הקשר מלא.",
           "step3": "הדבק את המפתח למטה."
         }
+      },
+      "confirmRemove": {
+        "title": "להסיר את פרטי הגישה האלה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     }
   },
@@ -2217,6 +2239,10 @@
         "createBranch": "לא ניתן היה ליצור ענף",
         "openPr": "לא ניתן היה לפתוח בקשת משיכה",
         "merge": "לא ניתן היה למזג"
+      },
+      "confirmDisconnect": {
+        "title": "לנתק את GitHub?",
+        "body": "האפליקציה תאבד גישה למאגרים שלך עד לחיבור מחדש."
       }
     },
     "addService": {
@@ -2325,6 +2351,10 @@
       "disconnect": "לא ניתן לנתק את Slack",
       "saveRouting": "לא ניתן לשמור את הניתוב",
       "saveMap": "לא ניתן לשמור את מפת החברים"
+    },
+    "confirmDisconnect": {
+      "title": "לנתק את Slack?",
+      "body": "התראות Slack ייפסקו עד לחיבור מחדש."
     }
   },
   "documents": {
@@ -3455,6 +3485,10 @@
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",
       "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור"
+    },
+    "confirmRemove": {
+      "title": "למחוק את המקטע הזה?",
+      "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
     }
   },
   "sandbox": {

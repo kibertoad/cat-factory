@@ -66,10 +66,17 @@ const phaseLabel = computed(() => containerPhaseLabel(props.step.container?.phas
 // Make the container id / URL one-click copyable (they're long and used to be
 // select-and-copy-by-hand), with a toast confirming the copy landed.
 const toast = useToast()
-const { copy } = useClipboard()
+const { copy, isSupported } = useClipboard()
 async function copyText(text: string) {
-  await copy(text)
-  toast.add({ title: t('common.copied'), color: 'success', icon: 'i-lucide-check' })
+  // Only claim success once the write actually landed — a failed/unsupported clipboard
+  // (insecure context, denied permission) must not show a misleading "Copied" toast.
+  try {
+    if (!isSupported.value) throw new Error('clipboard unsupported')
+    await copy(text)
+    toast.add({ title: t('common.copied'), color: 'success', icon: 'i-lucide-check' })
+  } catch {
+    toast.add({ title: t('common.copyFailed'), color: 'error', icon: 'i-lucide-x' })
+  }
 }
 </script>
 

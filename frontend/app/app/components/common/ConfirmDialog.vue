@@ -48,6 +48,7 @@ const isDestructive = computed(() => current.value?.variant === 'destructive')
         <UButton
           :color="isDestructive ? 'error' : 'primary'"
           data-testid="confirm-accept"
+          autofocus
           @click="accept"
         >
           {{ current?.confirmLabel ?? t('common.confirm.confirm') }}

@@ -13,6 +13,7 @@ const workspace = useWorkspaceStore()
 const models = useModelsStore()
 const toast = useToast()
 const { t, d } = useI18n()
+const { confirm } = useConfirm()
 
 // Personal subscriptions are stored per-user, so they need a signed-in user. When there
 // isn't one (a deployment running without sign-in), block the form so the user doesn't
@@ -141,6 +142,14 @@ async function connect() {
 }
 
 async function disconnect(v: SubscriptionVendor) {
+  const ok = await confirm({
+    title: t('personalSubscriptions.confirmDisconnect.title'),
+    description: t('personalSubscriptions.confirmDisconnect.body', { vendor: vendorLabel(v) }),
+    variant: 'destructive',
+    confirmLabel: t('common.disconnect'),
+    icon: 'i-lucide-unplug',
+  })
+  if (!ok) return
   try {
     await personal.remove(v)
     // Removing the subscription may drop the workspace's last usable model — refresh so the

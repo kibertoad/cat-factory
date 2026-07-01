@@ -22,7 +22,9 @@
       "defaultTitle": "よろしいですか？",
       "confirm": "確認"
     },
-    "copied": "クリップボードにコピーしました"
+    "copied": "クリップボードにコピーしました",
+    "disconnect": "切断",
+    "copyFailed": "クリップボードにコピーできませんでした"
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -333,6 +335,10 @@
         "step2": "Codex が書き込んだ認証情報ファイル ~/.codex/auth.json (Windows では %USERPROFILE%\\.codex\\auth.json) を開きます。",
         "step3": "auth.json の内容全体をコピーして下に貼り付け、保護用の個人パスワードを設定してください。"
       }
+    },
+    "confirmDisconnect": {
+      "title": "このサブスクリプションを切断しますか？",
+      "body": "「{vendor}」のサブスクリプションが切断されます。 この操作は取り消せません。"
     }
   },
   "inspector": {
@@ -1102,6 +1108,10 @@
         "openBoardFailed": "ボードを開けませんでした",
         "boardDeleted": "ボードを削除しました",
         "deleteBoardFailed": "ボードを削除できませんでした"
+      },
+      "confirmDelete": {
+        "title": "このボードを削除しますか？",
+        "body": "「{name}」とその中のすべてが削除されます。 この操作は取り消せません。"
       }
     },
     "notifications": {
@@ -1705,6 +1715,10 @@
         "saveFailed": "シークレットを保存できませんでした",
         "removed": "シークレットを削除しました",
         "removeFailed": "シークレットを削除できませんでした"
+      },
+      "confirmRemove": {
+        "title": "このシークレットを削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     },
     "mergeThresholds": {
@@ -1962,6 +1976,10 @@
         "saveFailed": "ランナーを保存できませんでした",
         "removed": "ランナーを削除しました",
         "removeFailed": "ランナーを削除できませんでした"
+      },
+      "confirmRemove": {
+        "title": "このランナーを削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     }
   },
@@ -2123,6 +2141,10 @@
           "step2": "API キーをコピーします。エージェントステップは Claude Code 経由で DeepSeek の Anthropic エンドポイントに対し、完全なコンテキストで実行されます。",
           "step3": "下にキーを貼り付けます。"
         }
+      },
+      "confirmRemove": {
+        "title": "この認証情報を削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     }
   },
@@ -2219,6 +2241,10 @@
         "createBranch": "ブランチを作成できませんでした",
         "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
+      },
+      "confirmDisconnect": {
+        "title": "GitHub を切断しますか？",
+        "body": "再接続するまでアプリはリポジトリにアクセスできなくなります。"
       }
     },
     "addService": {
@@ -2327,6 +2353,10 @@
       "disconnect": "Slackの接続を解除できませんでした",
       "saveRouting": "ルーティングを保存できませんでした",
       "saveMap": "メンバーマップを保存できませんでした"
+    },
+    "confirmDisconnect": {
+      "title": "Slack を切断しますか？",
+      "body": "再接続するまで Slack の通知が停止します。"
     }
   },
   "documents": {
@@ -3457,6 +3487,10 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+    },
+    "confirmRemove": {
+      "title": "このフラグメントを削除しますか？",
+      "body": "「{name}」が削除されます。 この操作は取り消せません。"
     }
   },
   "sandbox": {

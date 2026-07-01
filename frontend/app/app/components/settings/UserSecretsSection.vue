@@ -12,6 +12,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useUserSecretsStore()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const open = computed({
   get: () => ui.userSecretsOpen,
@@ -117,6 +118,16 @@ async function save() {
 }
 
 async function remove() {
+  const ok = await confirm({
+    title: t('settings.userSecrets.confirmRemove.title'),
+    description: t('settings.userSecrets.confirmRemove.body', {
+      name: descriptor.value?.label ?? t('settings.userSecrets.secretFallback'),
+    }),
+    variant: 'destructive',
+    confirmLabel: t('common.remove'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   busy.value = true
   try {
     await store.remove(kind.value)
