@@ -64,4 +64,63 @@ describe('GitHubIdentityResolver', () => {
     })
     await expect(resolver.resolveIdentity('bad')).rejects.toThrow(/HTTP 401/)
   })
+
+  describe('resolveOrgs (org-membership admission)', () => {
+    it('lists the account orgs by lowercased login', async () => {
+      const captured: { url?: string; auth?: string } = {}
+      const resolver = new GitHubIdentityResolver({
+        apiBase: 'https://api.github.com',
+        fetchImpl: (async (url: string | URL, init?: RequestInit) => {
+          captured.url = String(url)
+          captured.auth = ((init?.headers ?? {}) as Record<string, string>).authorization
+          return new Response(JSON.stringify([{ login: 'Acme' }, { login: 'Widgets' }, {}]), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        }) as unknown as typeof fetch,
+      })
+      const orgs = await resolver.resolveOrgs('ghp_abc')
+      expect(captured.url).toBe('https://api.github.com/user/orgs?per_page=100')
+      expect(captured.auth).toBe('Bearer ghp_abc')
+      expect(orgs).toEqual(['acme', 'widgets'])
+    })
+
+    it('throws on a non-2xx orgs response (e.g. token lacks read:org)', async () => {
+      const resolver = new GitHubIdentityResolver({
+        apiBase: 'https://api.github.com',
+        fetchImpl: (async () =>
+          new Response(JSON.stringify({ message: 'Requires read:org' }), {
+            status: 403,
+            headers: { 'content-type': 'application/json' },
+          })) as unknown as typeof fetch,
+      })
+      await expect(resolver.resolveOrgs('tok')).rejects.toThrow(/HTTP 403/)
+    })
+
+    it('follows `Link: rel="next"` pagination across pages', async () => {
+      const urls: string[] = []
+      const page2 = 'https://api.github.com/user/orgs?per_page=100&page=2'
+      const resolver = new GitHubIdentityResolver({
+        apiBase: 'https://api.github.com',
+        fetchImpl: (async (url: string | URL) => {
+          const u = String(url)
+          urls.push(u)
+          const first = !u.includes('page=2')
+          return new Response(
+            JSON.stringify(first ? [{ login: 'acme' }] : [{ login: 'widgets' }]),
+            {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+                ...(first ? { link: `<${page2}>; rel="next"` } : {}),
+              },
+            },
+          )
+        }) as unknown as typeof fetch,
+      })
+      const orgs = await resolver.resolveOrgs('tok')
+      expect(urls).toEqual(['https://api.github.com/user/orgs?per_page=100', page2])
+      expect(orgs).toEqual(['acme', 'widgets'])
+    })
+  })
 })

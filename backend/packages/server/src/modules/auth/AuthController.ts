@@ -212,19 +212,29 @@ async function isPatIdentityAllowed(
   resolver: VcsIdentityResolver,
   identity: VcsIdentity,
   pat: string,
-): Promise<boolean> {
-  if (cfg.allowedLogins.includes(identity.login.toLowerCase())) return true
-  if (identity.email && emailDomainAllowed(identity.email, cfg)) return true
+): Promise<{ allowed: boolean; orgLookupFailed: boolean }> {
+  if (cfg.allowedLogins.includes(identity.login.toLowerCase())) {
+    return { allowed: true, orgLookupFailed: false }
+  }
+  if (identity.email && emailDomainAllowed(identity.email, cfg)) {
+    return { allowed: true, orgLookupFailed: false }
+  }
+  let orgLookupFailed = false
   if (cfg.allowedOrgs.length > 0 && resolver.resolveOrgs) {
     try {
       const orgs = await resolver.resolveOrgs(pat)
-      if (orgs.some((org) => cfg.allowedOrgs.includes(org.toLowerCase()))) return true
+      if (orgs.some((org) => cfg.allowedOrgs.includes(org.toLowerCase()))) {
+        return { allowed: true, orgLookupFailed: false }
+      }
     } catch {
-      // Org enumeration failed (the token lacks org-read scope, or a transient API error).
-      // Treat as "no qualifying org" rather than admitting — fail closed.
+      // Org enumeration failed (the token lacks org/group-read scope, or a transient API error).
+      // Treat as "no qualifying org" rather than admitting — fail closed — but flag it so the
+      // caller can hint that the token may simply be missing the org/group-read scope, instead of
+      // a flat "not allowed" that reads as a permanent denial.
+      orgLookupFailed = true
     }
   }
-  return false
+  return { allowed: false, orgLookupFailed }
 }
 
 // Best-effort in-process throttle for the password endpoints. It bounds naive online
@@ -532,15 +542,13 @@ export function authController(): Hono<AppEnv> {
     }
     const pat = token ?? entry.configuredToken
     if (!pat) {
-      return c.json(
-        {
-          error: {
-            code: 'validation',
-            message: `No ${provider} token configured. Set ${provider === 'gitlab' ? 'GITLAB_PAT' : 'GITHUB_PAT'} in your environment to sign in.`,
-          },
-        },
-        400,
-      )
+      // Local mode has a server-configured one-click token, so guide the operator to set it;
+      // a hosted (multi-user) deployment has none — each user pastes their OWN PAT, so guide
+      // the user to do that rather than to set an env var they don't control.
+      const message = container.config.localMode
+        ? `No ${provider} token configured. Set ${provider === 'gitlab' ? 'GITLAB_PAT' : 'GITHUB_PAT'} in your environment to sign in.`
+        : `Paste your ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} personal access token to sign in.`
+      return c.json({ error: { code: 'validation', message } }, 400)
     }
     let identity
     try {
@@ -560,14 +568,25 @@ export function authController(): Hono<AppEnv> {
     // login/org/domain allowlist as OAuth — a valid token alone must not admit an arbitrary
     // account. Local mode (a single developer's own machine) is exempt and signs in any valid
     // token, as before.
-    if (
-      !container.config.localMode &&
-      !(await isPatIdentityAllowed(cfg, entry.resolver, identity, pat))
-    ) {
-      return c.json(
-        { error: { code: 'forbidden', message: `@${identity.login} is not allowed to sign in` } },
-        403,
-      )
+    if (!container.config.localMode) {
+      const gate = await isPatIdentityAllowed(cfg, entry.resolver, identity, pat)
+      if (!gate.allowed) {
+        // When admission would only have come from group/org membership but enumerating it
+        // failed (the common cause: the token can authenticate `/user` but lacks the broader
+        // org/group-read scope), say so — otherwise a scope problem looks like a hard denial.
+        const scopeHint = gate.orgLookupFailed
+          ? ` If you belong to an allowed ${provider === 'gitlab' ? 'group' : 'organization'}, make sure the token grants ${provider === 'gitlab' ? 'the read_api scope' : 'the read:org scope'}.`
+          : ''
+        return c.json(
+          {
+            error: {
+              code: 'forbidden',
+              message: `@${identity.login} is not allowed to sign in.${scopeHint}`,
+            },
+          },
+          403,
+        )
+      }
     }
     const user = await container.userService.findOrCreateByIdentity(provider, identity.externalId, {
       name: identity.name,

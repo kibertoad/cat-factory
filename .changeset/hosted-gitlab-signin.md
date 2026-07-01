@@ -1,6 +1,7 @@
 ---
 '@cat-factory/gitlab': patch
 '@cat-factory/worker': patch
+'@cat-factory/node-server': patch
 '@cat-factory/server': patch
 ---
 
@@ -23,5 +24,14 @@ user's GitLab **group** memberships (`GET /groups?min_access_level=10`, lowercas
 only groups the user actually belongs to admit), bringing group-based admission to parity with
 GitHub org admission.
 
-Comment-only touch to `@cat-factory/server`'s `AuthController` to correct the now-stale "hosted
-facades authenticate via OAuth" note.
+**Bound and diagnose PAT-login org/group admission.** Both `resolveOrgs` implementations
+(GitHub `/user/orgs`, GitLab `/groups`) now follow `Link: rel="next"` pagination up to a ~1000-entry
+cap (and `logger.warn` on truncation, wired from each facade — Node included), so a user whose only
+allowlisted org/group sat past the first 100 is no longer wrongly denied. When org enumeration fails
+because a token can authenticate `/user` but lacks the broader org/group-read scope
+(`read:org` / `read_api`), the `/auth/pat` 403 now hints at the missing scope instead of a flat
+"not allowed", and a hosted deployment's missing-token prompt tells the user to paste their PAT
+rather than to set an env var they don't control.
+
+Comment-only touches to `@cat-factory/server`'s `AuthController`, the kernel `VcsIdentityRegistry`
+doc, and the SPA login screen to correct the now-stale "hosted facades are OAuth-only" notes.
