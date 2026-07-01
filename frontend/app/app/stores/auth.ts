@@ -141,7 +141,8 @@ export const useAuthStore = defineStore(
         // Surface the failure so the login screen shows it, rather than silently dropping the
         // user back on the sign-in button as if the click did nothing. The captured session is
         // already stripped from the URL, so recovery is a fresh "Sign in via mothership".
-        mothershipError.value = err instanceof Error ? err.message : 'Could not connect to the mothership'
+        mothershipError.value =
+          err instanceof Error ? err.message : 'Could not connect to the mothership'
       }
       return true
     }

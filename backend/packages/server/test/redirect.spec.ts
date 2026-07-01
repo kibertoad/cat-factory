@@ -58,7 +58,11 @@ describe('pickPostLoginRedirect', () => {
 
   it('does not treat a look-alike host as loopback', () => {
     // Guard the regex: only the real loopback block, not a domain that merely starts with 127.
-    expect(pickPostLoginRedirect('https://localhost.evil.example/x', ORIGIN, cfg)).toBe(`${ORIGIN}/`)
-    expect(pickPostLoginRedirect('https://127.0.0.1.evil.example/x', ORIGIN, cfg)).toBe(`${ORIGIN}/`)
+    expect(pickPostLoginRedirect('https://localhost.evil.example/x', ORIGIN, cfg)).toBe(
+      `${ORIGIN}/`,
+    )
+    expect(pickPostLoginRedirect('https://127.0.0.1.evil.example/x', ORIGIN, cfg)).toBe(
+      `${ORIGIN}/`,
+    )
   })
 })
