@@ -220,7 +220,11 @@ describe('ConsensusAgentExecutor', () => {
     // A subscription-only participant/base model must NOT degrade to the routing default when
     // local mode can serve the harness inline — otherwise the consensus panel strands on the
     // unconfigured fallback provider (the exact bug the inline-harness change fixes elsewhere).
-    const claudeSub: ModelRef = { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' }
+    const claudeSub: ModelRef = {
+      provider: 'anthropic',
+      model: 'claude-opus-4-8',
+      harness: 'claude-code',
+    }
     const runWith = async (runsInline?: (ref: ModelRef) => boolean): Promise<ModelRef[]> => {
       const resolved: ModelRef[] = []
       const provider: ModelProvider = {
@@ -237,7 +241,13 @@ describe('ConsensusAgentExecutor', () => {
       })
       await exec.run(
         makeContext({
-          block: { id: 'blk', title: 'T', type: 'service', description: 'D', modelId: 'claude-opus' },
+          block: {
+            id: 'blk',
+            title: 'T',
+            type: 'service',
+            description: 'D',
+            modelId: 'claude-opus',
+          },
           consensus: { enabled: true, strategy: 'specialist-panel', participants: twoParticipants },
         }),
       )

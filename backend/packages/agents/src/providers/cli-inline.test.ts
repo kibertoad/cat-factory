@@ -11,7 +11,11 @@ describe('CliInlineLanguageModel', () => {
     const seen: InlineCliRequest[] = []
     const model = new CliInlineLanguageModel('anthropic', 'claude-opus-4-8', async (req) => {
       seen.push(req)
-      return { text: 'REVIEW OK', finishReason: 'stop', usage: { inputTokens: 12, outputTokens: 3 } }
+      return {
+        text: 'REVIEW OK',
+        finishReason: 'stop',
+        usage: { inputTokens: 12, outputTokens: 3 },
+      }
     })
 
     const result = await generateText({

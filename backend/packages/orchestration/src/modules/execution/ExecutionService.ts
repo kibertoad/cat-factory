@@ -1074,6 +1074,58 @@ export class ExecutionService {
     return !isLocalRunner(ref.provider)
   }
 
+  /**
+   * The config/resource preconditions a run must satisfy to START **or** RETRY: everything
+   * that depends on the workspace environment + the pipeline's steps, and NOT on whether this
+   * is a fresh run or a replacement. Both entry points call this so they can't drift — a guard
+   * added to one but silently missing from the other is exactly how a subscription-only preset
+   * slipped past retry and failed mid-run against the routing default. All checks are read-only
+   * and run BEFORE any side effects, each throwing an actionable {@link ConflictError}.
+   *
+   * The concurrency (task-limit) and dependency gates are deliberately NOT here — they are
+   * start-only (a retry replaces the failed run rather than adding a new concurrent one, and a
+   * re-drive of an already-started task isn't re-gated on its dependencies).
+   */
+  private async assertRunnable(
+    workspaceId: string,
+    block: Block,
+    pipeline: Pipeline,
+    initiatedBy: string | null | undefined,
+  ): Promise<void> {
+    // Reject a structurally-invalid pipeline (a misplaced companion or estimate-gating without a
+    // preceding task-estimator). The builder also rejects these at save, but a pipeline can
+    // become invalid out of band.
+    validatePipelineShape(pipeline)
+
+    // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
+    // it can only run on a `frontend` frame or a frame a frontend links to — else a `tester-ui`
+    // step has no app to drive.
+    await this.assertPipelineFrameTypeAllowed(workspaceId, block, pipeline)
+
+    // A pipeline with a Tester needs the service's declared provisioning to be runnable
+    // (`infraless`/none = no infra, `docker-compose` = DinD, `kubernetes`/`custom` = a handler).
+    if (pipeline.agentKinds.some(isTesterKind)) {
+      await this.assertTesterInfraConfigured(workspaceId, block)
+    }
+
+    // A pipeline carrying an agent that relies on binary-artifact storage (the UI Tester uploads
+    // screenshots) needs the account to have storage configured.
+    await this.assertBinaryStorageConfigured(workspaceId, pipeline.agentKinds)
+
+    // A workspace that delegates container agents to a runner pool needs that pool registered
+    // (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and when delegation is off.
+    await this.assertAgentBackendConfigured?.(workspaceId)
+
+    // Every step's canonical model must have a usable provider — a container step needs any
+    // usable flavour, an INLINE step needs an inline-usable one (a subscription-only model can't
+    // run inline without an inline harness). This is the gate a retry used to skip.
+    await this.assertProvidersConfiguredForPipeline(workspaceId, block, pipeline, initiatedBy)
+
+    // Refuse a metered run once the spend budget is reached (a clear error rather than a silent
+    // mid-run pause). A local/subscription-only pipeline is exempt.
+    await this.assertBudgetAllowsPipeline(workspaceId, block, pipeline, initiatedBy)
+  }
+
   /** Start a pipeline against a block, replacing any prior run on it. */
   async start(
     workspaceId: string,
@@ -1102,47 +1154,18 @@ export class ExecutionService {
       pipelineId,
     )
 
-    // Reject a structurally-invalid pipeline before any side effects — a misplaced
-    // companion or estimate-gating without a preceding task-estimator. The builder also
-    // rejects these at save, but a pipeline can become invalid out of band, so a run
-    // refuses to START as well (the same shared check).
-    validatePipelineShape(pipeline)
+    // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
+    // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry
+    // runs, so the two can't drift. See assertRunnable.
+    await this.assertRunnable(workspaceId, block, pipeline, initiatedBy)
 
-    // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
-    // it can only run on a `frontend` frame (which owns the app under test) or a frame a frontend
-    // links to. Refuse it on any other frame up-front with an actionable, machine-readable
-    // conflict, rather than dispatching a `tester-ui` step that has no app to drive.
-    await this.assertPipelineFrameTypeAllowed(workspaceId, block, pipeline)
-
-    // A pipeline with a Tester needs the service's declared provisioning to be runnable —
-    // `infraless`/none runs with no infra, `docker-compose` needs DinD, `kubernetes`/`custom`
-    // needs a workspace handler. Block the start with a clear, actionable error otherwise —
-    // before any side effects (activation mint / prior-run teardown).
-    if (pipeline.agentKinds.some(isTesterKind)) {
-      await this.assertTesterInfraConfigured(workspaceId, block)
-    }
-
-    // Block the start when the pipeline carries an agent that relies on binary-artifact
-    // storage (the UI Tester uploads screenshots) but the account has none configured —
-    // before any side effects, with an actionable error pointing at the storage settings.
-    await this.assertBinaryStorageConfigured(workspaceId, pipeline.agentKinds)
-
-    // Block the start when the workspace delegates container agents to a runner pool that
-    // isn't registered (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and
-    // when delegation is off; a missing local pool still also fails loudly at dispatch.
-    await this.assertAgentBackendConfigured?.(workspaceId)
-
-    // Block the start when a step's canonical model has no usable provider (no direct
-    // key, no subscription, no Cloudflare) — before any side effects.
-    await this.assertProvidersConfiguredForPipeline(workspaceId, block, pipeline, initiatedBy)
+    // START-ONLY gates below: a retry REPLACES the failed run rather than adding a new one, so
+    // the concurrency limit doesn't apply to it, and a re-drive of an already-started task isn't
+    // re-gated on its dependencies.
 
     // Enforce the workspace's per-service running-task limit (off by default) — a clear,
     // actionable error before any side effects, so the human knows why the start was refused.
     await this.assertWithinTaskLimit(workspaceId, block)
-
-    // Refuse a metered run once the spend budget is reached (a clear error rather than a
-    // silent mid-run pause). A local/subscription-only pipeline is exempt and starts.
-    await this.assertBudgetAllowsPipeline(workspaceId, block, pipeline, initiatedBy)
 
     // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
     // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
@@ -2391,24 +2414,21 @@ export class ExecutionService {
     }
     const block = await this.requireBlock(workspaceId, previous.blockId)
 
-    // Same up-front budget gate as start(): refuse a metered retry once the budget is
-    // reached (local/subscription-only pipelines still retry). Before any side effects.
+    // Run the SAME config/resource preconditions start() does (shape, frame type, tester infra,
+    // binary storage, agent backend, provider/preset satisfiability, budget), so a retry can't
+    // silently proceed on a config a fresh start would refuse — the drift that let a
+    // subscription-only preset fail mid-run against the routing default. Before any side effects.
     const pipeline = await this.pipelineRepository.get(workspaceId, previous.pipelineId)
     if (pipeline) {
-      await this.assertBudgetAllowsPipeline(
+      await this.assertRunnable(workspaceId, block, pipeline, initiatedBy ?? previous.initiatedBy)
+    } else {
+      // The pipeline definition is gone, so there's nothing to validate the steps against; still
+      // honour the binary-storage precondition over the stored steps (as retry always has).
+      await this.assertBinaryStorageConfigured(
         workspaceId,
-        block,
-        pipeline,
-        initiatedBy ?? previous.initiatedBy,
+        previous.steps.map((s) => s.agentKind),
       )
     }
-
-    // Same binary-storage precondition as start(): a retry of a run carrying a
-    // storage-reliant kind (the UI Tester) is refused when the account has no storage.
-    await this.assertBinaryStorageConfigured(
-      workspaceId,
-      previous.steps.map((s) => s.agentKind),
-    )
 
     const { steps, currentStep } = planResumedSteps(previous)
     // Mint the activation before replacing the failed run, so a bad password aborts

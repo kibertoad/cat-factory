@@ -302,7 +302,7 @@ export class KaizenService {
     const fallback = this.deps.modelRef
     const runsInline = this.deps.runsInline
     const resolve = (ref: ModelRef): ModelRef =>
-      inlineModelRef(ref, fallback ?? ref, (runsInline ? { runsInline } : {}))
+      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
     const fromBlock = this.deps.resolveBlockModel?.(block?.modelId)
     if (fromBlock) return resolve(fromBlock)
