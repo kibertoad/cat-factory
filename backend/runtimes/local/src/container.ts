@@ -59,6 +59,7 @@ import {
   type LocalProcessRunnerTransport,
   createLocalProcessTransportFromEnv,
 } from './LocalProcessRunnerTransport.js'
+import { resolveHarnessImage } from './harnessImage.js'
 import { createRuntimeAdapter, resolveRuntimeId, runtimeProfile } from './runtimes/index.js'
 import { createDockerComposeRuntime } from './compose.js'
 
@@ -210,9 +211,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   })
 
   // The local container transport is constructed LAZILY on first dispatch, so the service
-  // still boots to serve the board (and inline kinds) when LOCAL_HARNESS_IMAGE is unset —
-  // only repo-operating container kinds then fail, loudly and with a clear message,
-  // mirroring how the Node facade treats a missing runner backend.
+  // still boots to serve the board (and inline kinds) even when no container runtime is up.
+  // LOCAL_HARNESS_IMAGE is optional — unset ⇒ the backend-matched RECOMMENDED_HARNESS_IMAGE —
+  // so container kinds run on the matched image by default; they fail loudly (with a clear
+  // message) only when the runtime/image genuinely can't be reached, mirroring how the Node
+  // facade treats a missing runner backend.
   //
   // Native mode does NOT blanket-route every dispatch to the host process: a host process
   // has no sandbox, so only the steps that actually use the developer's ambient CLI login
@@ -434,8 +437,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     execution: {
       available: ['local-docker', 'runner-pool'],
       active: 'local-docker',
-      // Prefill the image of a low-config k3s runner preset — local mode knows its harness ref.
-      suggestedExecutorImage: env.LOCAL_HARNESS_IMAGE?.trim() || undefined,
+      // Prefill the image of a low-config k3s runner preset — local mode knows its harness ref
+      // (an explicit LOCAL_HARNESS_IMAGE, else the backend-matched RECOMMENDED_HARNESS_IMAGE).
+      suggestedExecutorImage: resolveHarnessImage(env),
     },
     testEnv: {
       available: localTestInfraSupported

@@ -6,10 +6,9 @@
   "type": "module",
   "scripts": {
     "secrets": "node scripts/generate-secrets.mjs",
-    "harness:refresh": "node scripts/refresh-harness-image.mjs",
-    "predev": "pnpm --filter @cat-factory/local-server run build && node scripts/refresh-harness-image.mjs",
+    "predev": "pnpm --filter @cat-factory/local-server run build",
     "dev": "node --watch --env-file-if-exists=.env src/main.ts",
-    "prestart": "pnpm --filter @cat-factory/local-server run build && node scripts/refresh-harness-image.mjs",
+    "prestart": "pnpm --filter @cat-factory/local-server run build",
     "start": "node --env-file-if-exists=.env src/main.ts",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",

@@ -24,11 +24,11 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 - A container runtime running locally — used both for Postgres and for the per-run
   agent containers. Docker, Podman, OrbStack, Colima and Apple `container` all work; see
   [Container runtimes](#container-runtimes) for selecting and configuring one.
-- The executor-harness image available locally. Pull the published image (GHCR or
-  Docker Hub), or build it from source:
+- The executor-harness image. You don't need to fetch it yourself — it's **pinned to the
+  version this backend was released against and pulled at boot** (see
+  [The executor-harness image](#the-executor-harness-image-pinned--auto-refreshed)). Only
+  build it manually if you want to run your own:
   ```sh
-  docker pull ghcr.io/kibertoad/cat-factory-executor:latest
-  # or build locally:
   docker build -t cat-factory-executor:local ../../backend/internal/executor-harness
   ```
 - A GitHub PAT (fine-grained, scoped to your target repo(s), with contents +
@@ -37,7 +37,7 @@ Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 ## Run it
 
 ```sh
-cp .env.example .env          # then fill in GITHUB_PAT (+ LOCAL_HARNESS_IMAGE)
+cp .env.example .env          # then fill in GITHUB_PAT (LOCAL_HARNESS_IMAGE is optional)
 pnpm db:up                    # start the local Postgres
 pnpm start                    # migrate + boot the service on :8787
 ```
@@ -52,34 +52,28 @@ section). You don't need `GITHUB_PAT` to boot: with it unset the service starts 
 UI shows a banner linking to GitHub's token page (scopes pre-selected); set the token
 and restart to actually run repo-operating agent steps.
 
-## Keeping the executor-harness image current
+## The executor-harness image (pinned + auto-refreshed)
 
-Every agent step runs in a per-run container built from `LOCAL_HARNESS_IMAGE`. The
-harness is versioned as **its own Docker image**, separately from the `@cat-factory/*`
-npm packages, so the image can fall behind a fix that already shipped. The trap: a
-container runtime **never re-pulls a tag it already has locally, and never notices that a
-locally-built image is out of date** — so a plain rerun keeps launching agent containers
-from a stale image, reproducing an already-fixed bug even though the orchestrator is
-current. (Concrete example: a harness fix that stopped sending a since-deprecated
-`temperature` param kept failing locally purely because the image was days old.)
+Every agent step runs in a per-run container built from the executor-harness image, which
+is versioned as **its own Docker image**, separately from the `@cat-factory/*` npm
+packages. `LOCAL_HARNESS_IMAGE` is **optional**: unset, `@cat-factory/local-server` uses
+the image version it was released against, so the image and the backend always match — no
+"too stale", no "too new" (this project has no cross-version compatibility guarantee, so a
+`:latest` that's newer than your backend can break).
 
-To prevent that, `predev` and `prestart` run
-[`scripts/refresh-harness-image.mjs`](./scripts/refresh-harness-image.mjs) before boot,
-so `pnpm dev` / `pnpm start` self-heal. Run it on demand with `pnpm harness:refresh`. It
-handles both ways `LOCAL_HARNESS_IMAGE` is set:
+`startLocal()` **refreshes the resolved image at boot**, so `pnpm dev` / `pnpm start`
+can't launch a stale copy — a container runtime never re-pulls a tag it already has, nor
+notices a locally-built image is out of date, which is how an already-fixed harness bug
+keeps reproducing. It's best-effort: an unreachable registry falls back to the local copy
+rather than blocking boot.
 
-- **A registry ref** (e.g. `ghcr.io/…/cat-factory-executor:latest`) — it `pull`s the
-  image so a mutable tag is refreshed every run (a digest-pinned ref makes it a fast
-  no-op), reports whether the digest changed, and — if the registry is unreachable —
-  falls back to the local copy instead of blocking startup.
-- **A locally-built tag** (the example default `cat-factory-executor:local`) — there is
-  nothing to pull, so it verifies the image exists and reminds you to **rebuild it after
-  updating the harness** (`docker build -t cat-factory-executor:local
-backend/internal/executor-harness`). `pull` only ever fetches the newest _published_
-  image; a fix that lives only in your working tree needs a rebuild.
-
-For reproducible runs, pin an explicit version (or an `@sha256` digest) instead of a
-mutable tag and bump it deliberately; the script prints a reminder when it sees one.
+- **Leave `LOCAL_HARNESS_IMAGE` unset** to run the matched, pinned image (recommended).
+- **Set it to a custom build or a different pin** to override — boot warns if your value
+  differs from the matched version, or if it's a mutable tag like `:latest`.
+- **Set a bare local tag** (`cat-factory-executor:local`) to run an image you build
+  yourself; boot then only checks it exists and reminds you to rebuild after harness
+  changes (`docker build -t cat-factory-executor:local ../../backend/internal/executor-harness`).
+- **Disable the boot refresh** with `LOCAL_HARNESS_IMAGE_REFRESH=off`.
 
 ## Using Cloudflare AI
 
