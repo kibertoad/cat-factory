@@ -918,9 +918,10 @@ export const repairCustomManifestSchema = v.object({
   repo: v.pipe(v.string(), v.minLength(1)),
   /** Branch the agent clones from and pushes the fix back onto; absent ⇒ the default branch. */
   gitRef: v.optional(v.pipe(v.string(), v.minLength(1))),
-  /** Service subdirectory within the repo (monorepo); absent ⇒ the repo root. */
-  directory: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
-  /** The target manifest path to create/fix (entered value, else the type's default). */
+  /**
+   * The target manifest path to create/fix, REPO-root-relative (the caller roots the type's
+   * default under the service subtree before sending, exactly as auto-detection does).
+   */
   manifestPath: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
   /** Optional VCS provider hint; absent ⇒ the workspace's connected provider. */
   provider: v.optional(v.picklist(['github', 'gitlab'])),

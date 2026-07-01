@@ -132,21 +132,23 @@ function buildCustomManifestRepairPrompt(args: {
   const situation = exists
     ? `The manifest file at \`${manifestPath}\` already exists but may be invalid or incomplete — validate it and make the minimal edits needed to bring it into a valid state.`
     : `The manifest file at \`${manifestPath}\` does not exist yet — create it.`
-  const issueList = issues.length
-    ? `\n\nValidation reported these issues to address:\n${issues.map((i) => `- [${i.severity}] ${i.path ? `${i.path}: ` : ''}${i.message}`).join('\n')}`
-    : ''
-  const prompt = [
+  // Build the sections explicitly and join with blank lines so each stays its own paragraph.
+  // (Don't push `''` separators through `filter(Boolean)` — it strips them, collapsing the
+  // structure.) The issue list is conditional, included only when validation found something.
+  const sections = [
     `You are setting up the "${label}" custom deployment manifest for a service.`,
     situation,
-    '',
     basePrompt,
-    issueList,
-    '',
-    `Write ONLY the manifest at \`${manifestPath}\` (create the directory if needed); leave the rest of the repository untouched. Commit and push your changes; do NOT open a pull request.`,
   ]
-    .filter(Boolean)
-    .join('\n')
-  return { prompt }
+  if (issues.length) {
+    sections.push(
+      `Validation reported these issues to address:\n${issues.map((i) => `- [${i.severity}] ${i.path ? `${i.path}: ` : ''}${i.message}`).join('\n')}`,
+    )
+  }
+  sections.push(
+    `Write ONLY the manifest at \`${manifestPath}\` (create the directory if needed); leave the rest of the repository untouched. Commit and push your changes; do NOT open a pull request.`,
+  )
+  return { prompt: sections.join('\n\n') }
 }
 
 // EnvironmentConnectionService: owns the binding between a workspace and an

@@ -165,14 +165,33 @@ function setKubeRenderer(value: KubernetesRenderer) {
   commitManifestSource()
 }
 
+// Root a service-relative default under the service subtree, normalizing `.`/`..`/empty segments
+// (mirrors the backend `joinPath`). A stored `manifestPath` is always REPO-root-relative — the
+// same form auto-detection produces — so prefill and generate agree with detect.
+function rootUnderDirectory(directory: string | null | undefined, path: string): string {
+  const segs: string[] = []
+  for (const part of [directory ?? '', path]) {
+    for (const seg of part.split('/')) {
+      if (!seg || seg === '.') continue
+      if (seg === '..') segs.pop()
+      else segs.push(seg)
+    }
+  }
+  return segs.join('/')
+}
+
 function setCustomManifestId(value: string) {
-  // Prefill the manifest path with the selected type's default (verbatim; editable afterwards).
-  // Leave the existing path untouched when the type declares no default.
+  // Prefill the manifest path with the selected type's default, rooted under the service subtree
+  // (repo-root-relative, editable afterwards) so a monorepo service targets the right location
+  // even without running Detect. Leave the existing path untouched when the type declares no default.
   const type = infra.customTypes.find((c) => c.manifestId === value)
+  const rooted = type?.defaultManifestPath
+    ? rootUnderDirectory(repoContext.value?.directory, type.defaultManifestPath)
+    : ''
   patchProvisioning({
     type: 'custom',
     manifestId: value || undefined,
-    ...(type?.defaultManifestPath ? { manifestPath: type.defaultManifestPath } : {}),
+    ...(rooted ? { manifestPath: rooted } : {}),
   })
 }
 
@@ -194,7 +213,11 @@ async function generateOrFixManifest() {
   const type = selectedCustomType.value
   if (!ctx || !type?.fixerPrompt) return
   const repo = github.repoFor(ctx.githubId)
-  const path = customManifestPath.value.trim() || type.defaultManifestPath
+  // `manifestPath` is already repo-root-relative (prefill/detect root it); the fallback default
+  // still needs rooting for the rare case where nothing was prefilled yet.
+  const path =
+    customManifestPath.value.trim() ||
+    (type.defaultManifestPath ? rootUnderDirectory(ctx.directory, type.defaultManifestPath) : '')
   if (!repo || !path) {
     manifestRepairError.value = true
     return
@@ -208,7 +231,6 @@ async function generateOrFixManifest() {
       owner: repo.owner,
       repo: repo.name,
       manifestPath: path,
-      ...(ctx.directory ? { directory: ctx.directory } : {}),
     })
     manifestRepairJobId.value = res.repairJobId ?? null
     if (!res.usedAgent) manifestRepairError.value = true

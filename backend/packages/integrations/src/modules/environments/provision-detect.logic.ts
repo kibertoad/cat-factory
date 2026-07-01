@@ -1168,10 +1168,15 @@ export async function detectCustomManifest(
     }
   }
 
-  // 2c. Not found anywhere — pre-fill the default LOCATION so "generate" writes there.
-  return rec(false, exact, {
+  // 2c. Not found anywhere. Keep a path the user deliberately entered (they may be pointing at a
+  // file to be generated); only fall back to the default location when there's no current value —
+  // never silently overwrite an explicit entry. Either way "generate" writes to the kept path.
+  const target = currentPath || exact
+  return rec(false, target, {
     field: 'manifestPath',
     confidence: 'low',
-    message: `No custom manifest found; pre-filled the default location ${exact}. It will be created when you generate the manifest.`,
+    message: currentPath
+      ? `No custom manifest found; kept the entered path ${target}. It will be created when you generate the manifest.`
+      : `No custom manifest found; pre-filled the default location ${target}. It will be created when you generate the manifest.`,
   })
 }

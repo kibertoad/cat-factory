@@ -614,6 +614,21 @@ describe('detectCustomManifest', () => {
     expect(rec.provisioning.manifestPath).toBe('services/api/deploy/preview.yaml')
   })
 
+  it('keeps a deliberately-entered current path (not yet on disk) instead of the default location', async () => {
+    // The user typed a path for a manifest they intend to generate; detect must not silently
+    // overwrite it with the type default just because the file does not exist yet.
+    const reader = makeReader({ 'services/api/README.md': '# api' })
+    const rec = await detectCustomManifest(reader, {
+      directory: 'services/api',
+      manifestId: 'kargo',
+      defaultPath: 'deploy/preview.yaml',
+      currentPath: 'services/api/config/prod-kargo.yaml',
+    })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.manifestPath).toBe('services/api/config/prod-kargo.yaml')
+    expect(rec.notes[0]!.confidence).toBe('low')
+  })
+
   it('has nothing to detect without a default or current path', async () => {
     const reader = makeReader({ 'services/api/README.md': '# api' })
     const rec = await detectCustomManifest(reader, {
