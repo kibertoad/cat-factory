@@ -24,16 +24,6 @@ export function isMothershipMode(env: NodeJS.ProcessEnv): boolean {
   return !!env.LOCAL_MOTHERSHIP_URL?.trim()
 }
 
-/** Resolve the on-disk path for the local credential SQLite store (`:memory:` honoured for tests). */
-function credentialDbPath(env: NodeJS.ProcessEnv): string {
-  return localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite')
-}
-
-/** Resolve the on-disk path for the durable execution work queue (`:memory:` honoured for tests). */
-function workQueueDbPath(env: NodeJS.ProcessEnv): string {
-  return localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite')
-}
-
 /**
  * Resolve a local SQLite file path: an explicit override wins (incl. `:memory:` for tests), else a
  * stable per-user file under `~/.cat-factory` so the store survives restarts (the whole point of a
@@ -93,8 +83,10 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   }
   const client = new HttpPersistenceRpcClient({ baseUrl, token })
   const repos = createRemoteRepositoryRegistry(client) as unknown as CoreRepositories
-  const credentialStore = createLocalCredentialStore(credentialDbPath(env))
-  const workQueue = createWorkQueue(workQueueDbPath(env))
+  const credentialStore = createLocalCredentialStore(
+    localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
+  )
+  const workQueue = createWorkQueue(localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'))
   return {
     repos,
     credentialStore,
