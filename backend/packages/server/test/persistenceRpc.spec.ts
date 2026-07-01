@@ -202,6 +202,24 @@ function makeRegistry(): {
         stage,
       }),
     },
+    // The post-release-health settings surface: reads/deletes echo their workspaceId (arg0);
+    // the record-based `upsert` binds on the record's `workspaceId` FIELD.
+    observabilityConnectionRepository: {
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      delete: async () => undefined,
+    },
+    releaseHealthConfigRepository: {
+      getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      delete: async () => undefined,
+    },
+    incidentEnrichmentConnectionRepository: {
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      delete: async () => undefined,
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -716,4 +734,86 @@ describe('agent-run control surface (retry/stop entry — workspace-scoped)', ()
     // `listStale` is wired on the fake repo but sweeper-internal — never remotely callable.
     await expect(remoteRegistry().agentRunRepository!.listStale!(0)).rejects.toThrow(/not callable/)
   })
+})
+
+describe('post-release-health settings surface (observability / release-health / incident)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The workspace-scoped reads/deletes (arg0 = workspaceId → the `workspace` rule). Value-returning
+  // methods (`echoes: true`) echo the workspaceId so we prove the call reached the bound workspace;
+  // void deletes just resolve.
+  const WORKSPACE_METHODS: Array<{
+    repo: string
+    method: string
+    args: unknown[]
+    echoes?: boolean
+  }> = [
+    { repo: 'observabilityConnectionRepository', method: 'get', args: [], echoes: true },
+    { repo: 'observabilityConnectionRepository', method: 'delete', args: [] },
+    { repo: 'releaseHealthConfigRepository', method: 'getByBlock', args: ['blk_1'], echoes: true },
+    { repo: 'releaseHealthConfigRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'releaseHealthConfigRepository', method: 'delete', args: ['blk_1'] },
+    { repo: 'incidentEnrichmentConnectionRepository', method: 'get', args: [], echoes: true },
+    { repo: 'incidentEnrichmentConnectionRepository', method: 'delete', args: [] },
+  ]
+
+  for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoes) {
+        const echoed = Array.isArray(result) ? result[0] : result
+        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // The record-based `upsert(record)` methods bind on the record's `workspaceId` FIELD (the
+  // `workspaceField` rule): the write targets exactly `record.workspaceId`, so an out-of-scope
+  // workspace in the record is refused before any repo write.
+  const UPSERTS = [
+    'observabilityConnectionRepository',
+    'releaseHealthConfigRepository',
+    'incidentEnrichmentConnectionRepository',
+  ]
+
+  for (const repo of UPSERTS) {
+    it(`forwards ${repo}.upsert when the record targets an in-scope workspace`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ workspaceId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.upsert when the record targets an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ workspaceId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has no workspaceId field (404)`, async () => {
+      // A record with no bindable workspaceId cannot be scope-checked, so it fails closed.
+      await expect(remoteRegistry()[repo]!.upsert!({})).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
 })
