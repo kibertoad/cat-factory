@@ -64,10 +64,13 @@ describe('deployer agent + environment discovery', () => {
     expect(tester.environment!.status).toBe('ready')
     expect(tester.environment!.access).toEqual({ scheme: 'bearer', token: 'env-access-tok' })
 
-    // The environment is in the registry, keyed off the deployed block.
+    // The environment is in the registry, keyed off the deployed block (the task) AND its
+    // enclosing service frame — the frame id is the cross-frame discovery key a `frontend`
+    // frame's `service` binding resolves the live env by (slice 4b).
     const envs = await app.call<EnvironmentHandle[]>('GET', `/workspaces/${ws}/environments`)
     expect(envs.body).toHaveLength(1)
     expect(envs.body[0]!.blockId).toBe(task.body.id)
+    expect(envs.body[0]!.frameId).toBe(frame.body.id)
     expect(envs.body[0]!.status).toBe('ready')
   })
 })

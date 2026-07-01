@@ -159,6 +159,13 @@ export interface EnvironmentRecord {
   id: string
   workspaceId: string
   blockId: string | null
+  /**
+   * The service FRAME this env belongs to (the deployer block walked up to its enclosing frame).
+   * The cross-frame discovery key — a `frontend` frame's `service` binding resolves the live env
+   * by the bound service FRAME id, which is this column, not `blockId` (the task the deployer ran
+   * on). Null for legacy rows / a frame-less provision.
+   */
+  frameId: string | null
   executionId: string | null
   providerId: string
   externalId: string | null

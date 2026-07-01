@@ -349,14 +349,16 @@ export class AgentContextBuilder {
     if (this.deps.environmentProvisioning && serviceBlockIds.size > 0) {
       // One list read, then index the ready-with-URL handles for the bound services — never a
       // per-binding `getByBlock` loop (the N+1 the "reuse an already-fetched list" rule bans).
+      // A binding's `serviceBlockId` names a service FRAME, so match on the env's `frameId` (the
+      // deployer's block walked up to its frame), NOT `blockId` (the task the deployer ran on).
       for (const handle of await this.deps.environmentProvisioning.listHandles(workspaceId)) {
         if (
-          handle.blockId &&
+          handle.frameId &&
           handle.url &&
           handle.status === 'ready' &&
-          serviceBlockIds.has(handle.blockId)
+          serviceBlockIds.has(handle.frameId)
         ) {
-          liveServiceEnvUrls.set(handle.blockId, handle.url)
+          liveServiceEnvUrls.set(handle.frameId, handle.url)
         }
       }
     }

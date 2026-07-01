@@ -1295,6 +1295,10 @@ export const environments = pgTable(
     id: text('id').primaryKey(),
     workspace_id: text('workspace_id').notNull(),
     block_id: text('block_id'),
+    // The service FRAME this env belongs to (the deployer block walked up to its frame). The
+    // cross-frame discovery key — a `frontend` frame's `service` binding resolves the live env
+    // by the bound service FRAME id, not the task the deployer ran on (`block_id`).
+    frame_id: text('frame_id'),
     execution_id: text('execution_id'),
     provider_id: text('provider_id').notNull(),
     external_id: text('external_id'),
