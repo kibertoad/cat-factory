@@ -73,6 +73,57 @@ function snapshotBackendKinds(registries: {
   }
 }
 
+/**
+ * The per-area infrastructure-setup status for a workspace, computed from whatever THIS
+ * deployment actually wired (so it's runtime-symmetric by construction — the shared controller
+ * derives it, no per-facade code). Each area is:
+ *  - `not_applicable` — the integration isn't wired for this runtime (nothing to configure). The
+ *    runner-pool executor is only wired on remote Node; Cloudflare has built-in per-run
+ *    containers and local runs agents on the host, so it's `not_applicable` there. Binary storage
+ *    is `not_applicable` when the facade wired no artifact-store resolver at all.
+ *  - `not_defined`    — the deployment CAN use it but the operator hasn't set it up (banner-worthy):
+ *    no environment/runner-pool connection registered, or the account selected no content-storage
+ *    backend (Node defaults to `off`).
+ *  - `configured`     — a connection / backend is defined.
+ */
+async function snapshotInfraSetup(
+  container: {
+    environments?: { connectionService: { getConnection(ws: string): Promise<unknown> } }
+    runners?: { connectionService: { getConnection(ws: string): Promise<unknown> } }
+    resolveBinaryArtifactStore?: (ws: string) => Promise<unknown>
+  },
+  workspaceId: string,
+) {
+  const [environmentConnection, runnerConnection, binaryStore] = await Promise.all([
+    container.environments
+      ? container.environments.connectionService.getConnection(workspaceId)
+      : Promise.resolve(undefined),
+    container.runners
+      ? container.runners.connectionService.getConnection(workspaceId)
+      : Promise.resolve(undefined),
+    container.resolveBinaryArtifactStore
+      ? container.resolveBinaryArtifactStore(workspaceId)
+      : Promise.resolve(undefined),
+  ])
+  return {
+    ephemeralEnvironments: !container.environments
+      ? ('not_applicable' as const)
+      : environmentConnection
+        ? ('configured' as const)
+        : ('not_defined' as const),
+    agentExecutor: !container.runners
+      ? ('not_applicable' as const)
+      : runnerConnection
+        ? ('configured' as const)
+        : ('not_defined' as const),
+    binaryStorage: !container.resolveBinaryArtifactStore
+      ? ('not_applicable' as const)
+      : binaryStore
+        ? ('configured' as const)
+        : ('not_defined' as const),
+  }
+}
+
 function deploymentModelDefaults(routing: AgentRouting) {
   const ref = (r: ModelRef) => `${r.provider}:${r.model}`
   return {
@@ -141,6 +192,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
+        infraSetup: await snapshotInfraSetup(container, snapshot.workspace.id),
       },
       201,
     )
@@ -229,6 +281,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
+        infraSetup: await snapshotInfraSetup(container, workspaceId),
       },
       200,
     )

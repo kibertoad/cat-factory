@@ -7,6 +7,7 @@ import TranslationWarningBanner from '~/components/layout/TranslationWarningBann
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
+import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
 // Always-mounted, fast-path surfaces (opened frequently during a run / board edits, or
 // store-driven so they must react from anywhere — kept eager for snappy open/close).
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
@@ -141,6 +142,8 @@ watch(
       autoOpenedSetup.value = false
       autoOpenedPreset.value = false
       ui.resetAiOnboarding()
+      // Infra-setup banner session dismissals are per-workspace too — clear them on switch.
+      ui.resetInfraSetupDismissals()
       // A different board has its own pipeline library, so re-arm the once-per-session advisory.
       ui.pipelineHealthSeen = false
     }
@@ -246,6 +249,9 @@ watch(
     <AiProvidersBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
     <!-- Infrastructure provider prompt (env/runner-pool wired but missing mandatory config). -->
     <ProviderConfigBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
+    <!-- Infra-setup prompt (this deployment needs an executor / test env / storage that the
+         operator hasn't defined yet, so a class of agents can't run). -->
+    <InfraSetupBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
     <div

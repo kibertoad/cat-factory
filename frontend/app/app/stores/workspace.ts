@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { SpendStatus, Workspace, WorkspaceSnapshot } from '~/types/domain'
+import type { InfraSetup, SpendStatus, Workspace, WorkspaceSnapshot } from '~/types/domain'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
@@ -49,6 +49,12 @@ export const useWorkspaceStore = defineStore(
     const error = ref<string | null>(null)
     /** Latest spend-safeguard status from the server (null until first load). */
     const spend = ref<SpendStatus | null>(null)
+    /**
+     * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
+     * storage) from the snapshot, driving the infra-setup banner. Null on an older backend that
+     * doesn't compute it (⇒ no banner).
+     */
+    const infraSetup = ref<InfraSetup | null>(null)
 
     /** The boards belonging to the active account (all boards when auth is off). */
     const accountWorkspaces = computed(() => {
@@ -78,6 +84,7 @@ export const useWorkspaceStore = defineStore(
       }
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null
+      infraSetup.value = snapshot.infraSetup ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename).
       const i = workspaces.value.findIndex((w) => w.id === snapshot.workspace.id)
       if (i >= 0) workspaces.value[i] = snapshot.workspace
@@ -236,6 +243,7 @@ export const useWorkspaceStore = defineStore(
       ready,
       error,
       spend,
+      infraSetup,
       init,
       switchTo,
       selectAccount,

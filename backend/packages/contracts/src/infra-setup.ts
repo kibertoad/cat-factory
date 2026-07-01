@@ -1,0 +1,54 @@
+import * as v from 'valibot'
+
+// ---------------------------------------------------------------------------
+// Infrastructure-setup tracking. A small per-workspace status projection carried
+// on the workspace snapshot so the SPA can nag (a loud banner) when a workspace
+// runs on a deployment that REQUIRES a piece of infrastructure to be configured
+// but the operator hasn't defined it yet. Deliberately an explicit tri-state per
+// area (rather than an inferred boolean/absence) so "the operator never made a
+// decision" (`not_defined`) is tracked distinctly from "this runtime doesn't need
+// it" (`not_applicable`) and "it's set up" (`configured`).
+//
+// Computed server-side (WorkspaceController) from whatever each facade actually
+// wired, so it is runtime-symmetric by construction and needs no persistence:
+//   - ephemeral environments — the environment provider connection (all runtimes
+//     that wire the environments integration). Unset ⇒ testing agents can't run.
+//   - agent executor — the self-hosted runner-pool connection. Only the remote
+//     Node facade delegates container agents to a pool (Cloudflare has built-in
+//     per-run containers, local runs them on the host), so this is `not_applicable`
+//     everywhere except an unconfigured Node deployment. Unset ⇒ NO agents can run.
+//   - binary storage — the per-account content-storage backend. On the Node facade
+//     it defaults to `off`; Cloudflare binds R2 and local defaults to a filesystem
+//     store, so this is `not_applicable`/`configured` there. Unset ⇒ screenshot /
+//     reference-image storage (the UI-tester + visual-confirmation gate) is off.
+// ---------------------------------------------------------------------------
+
+/**
+ * The configuration state of one infrastructure area for a workspace:
+ *  - `not_defined`    — the deployment can use it, but the operator hasn't set it up
+ *                       (the banner-worthy state).
+ *  - `configured`     — a connection / backend is defined.
+ *  - `not_applicable` — this runtime doesn't need it (the integration isn't wired),
+ *                       so there is nothing to nag about.
+ */
+export const infraSetupStatusSchema = v.picklist(['not_defined', 'configured', 'not_applicable'])
+export type InfraSetupStatus = v.InferOutput<typeof infraSetupStatusSchema>
+
+/** The per-area infrastructure-setup status projection carried on the snapshot. */
+export const infraSetupSchema = v.object({
+  /** Ephemeral test environments (deployer / provisioning). Relevant on every runtime. */
+  ephemeralEnvironments: infraSetupStatusSchema,
+  /** The container agent executor (self-hosted runner pool). Relevant only on remote Node. */
+  agentExecutor: infraSetupStatusSchema,
+  /** Binary/object storage for UI screenshots + reference images. Relevant on remote Node. */
+  binaryStorage: infraSetupStatusSchema,
+})
+export type InfraSetup = v.InferOutput<typeof infraSetupSchema>
+
+/** The infrastructure areas the setup banner surfaces (leaf names mirror {@link infraSetupSchema}). */
+export const infraSetupAreaSchema = v.picklist([
+  'ephemeralEnvironments',
+  'agentExecutor',
+  'binaryStorage',
+])
+export type InfraSetupArea = v.InferOutput<typeof infraSetupAreaSchema>
