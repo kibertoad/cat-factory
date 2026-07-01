@@ -453,7 +453,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     kind: string,
     namespace: string,
     name?: string,
-  ): Promise<unknown> {
+  ): Promise<unknown | null> {
     const body = await this.getJson(client, resourceUrl(config, apiVersion, kind, namespace, name))
     if (body === null) return null
     return name ? body : firstListItem(body)
