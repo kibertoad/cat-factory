@@ -44,7 +44,8 @@ build on. Link the merged pilot PR here once it lands.
 | 1   | Repo type selector + `library`/`document` types + task/pipeline gating               | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
-| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | todo   | —                                                         |
+| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | _pending_                                                 |
+| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
@@ -107,10 +108,11 @@ build on. Link the merged pilot PR here once it lands.
     Today a `deployer` keys the env under the block it ran on (a task, `block.id`), NOT the frame,
     so `resolveFrontendConfig`'s `handle.blockId === serviceBlockId` match never hits and a frontend
     that binds a live service is still refused. Reconciling this (making a service frame's ephemeral
-    env resolvable by the FRAME id it's bound to) is DELIBERATELY deferred to the end-to-end
-    `pl_frontend` flow (slice 4) — it's a deployer-keying change, not a reverse-walk hack bolted on
-    here. The happy-path binding→URL math is covered by the `resolveFrontendBindings` unit tests;
-    the live-env e2e assertion lands with slice 4.
+    env resolvable by the FRAME id it's bound to) is DELIBERATELY deferred — it's a deployer-keying
+    change, not a reverse-walk hack bolted on here. Slice 4 (below) landed the `pl_frontend`
+    pipeline + the frontend-aware mocker; this keying change was split out as **slice 4b**. The
+    happy-path binding→URL math is covered by the `resolveFrontendBindings` unit tests; the
+    live-env e2e assertion lands with slice 4b.
   - **Harness stand-up hardening (review follow-ups):** the WireMock / serve child processes each
     get an `'error'` listener (`guardProcess`) — a `ChildProcess` `'error'` with no listener is an
     UNCAUGHT exception that would crash the whole job server (matches the pattern in `pi.ts` /
@@ -130,3 +132,30 @@ build on. Link the merged pilot PR here once it lands.
   - **WireMock mappings convention:** `mockMappingsPath` (default `mocks/`) is WireMock's
     `--root-dir` (it reads `<root>/mappings` + `<root>/__files`). A missing dir is non-fatal —
     WireMock still binds its port (unmatched requests 404, gentler than ECONNREFUSED).
+- Slice 4 conventions & gotchas:
+  - **`pl_frontend` is a step order, not new engine machinery.** Slice 3 wired all the frontend
+    infra (`context.frontend` resolution, `testerInfraSpec` → the harness `frontend` spec, the
+    tester-infra start gate). The pipeline (`coder → reviewer → mocker → tester-ui → conflicts →
+ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_frontend` needed no
+    facade/persistence changes and stays runtime-neutral by construction. It is labelled
+    `experimental` for the same two reasons the pipeline comment names: the `ui`-image per-step
+    routing (above) and the live-service env keying (slice 4b) both remain.
+  - **The mocker is frontend-aware via the USER prompt, not a second system prompt.** `mocker`
+    isn't a standard phase, so it flows through the generic `buildBaseUserPrompt`; the new
+    `mockFrontendSection(context)` (agents `prompts/mock.js`) is appended there exactly like
+    `testerEnvironmentSection`, keyed on `context.frontend` being present. The mocker's system
+    prompt (`mock.ts` `SYSTEM_PROMPT`) is unchanged and is NOT under version control in
+    `versions.ts`, so no prompt-version bump was needed. Keep the section in lock-step with
+    `buildFrontendInfraSpec` (server): the upstreams to mock are the resolved bindings with **no**
+    `serviceUrl` (a `mock` source, or a `service` with no live env); a binding WITH a `serviceUrl`
+    is the real service under test and must NOT be mocked.
+  - **Slice 4b (the deferred deployer-keying) is the live-binding enabler.** The frame-id ⇄
+    task-id gap above still holds: a `deployer` keys the env under the task `block.id` it ran on,
+    so `resolveFrontendConfig`'s `handle.blockId === serviceBlockId` (a service FRAME id) never
+    hits and a live `service` binding resolves to WireMock. Making a service frame's ephemeral env
+    resolvable by the FRAME id is a genuine cross-runtime change (it touches env keying + likely a
+    D1 ⇄ Drizzle registry column + the mothership allow-list + a conformance/e2e assertion), so it
+    was split OUT of this slice as **4b** rather than rushed in alongside the runtime-neutral
+    pipeline + prompt. `pl_frontend` runs fully self-contained for a mock-only frontend today; the
+    live-env e2e assertion lands with 4b. Do it as a deployer-keying change, NOT a reverse-walk
+    hack in `resolveFrontendConfig`.

@@ -445,6 +445,32 @@ export function seedPipelines(): Pipeline[] {
         'merger',
       ],
     },
+    // A self-contained FRONTEND build + UI-test pipeline: implement → review → mock →
+    // `tester-ui` drives a real browser against the frontend the platform stood up for it.
+    // Unlike `pl_visual` (a human `visual-confirmation` gate over uploaded reference designs),
+    // this is the fully-automated, self-contained flow slice 3 wired: for a `type: 'frontend'`
+    // frame the engine resolves the frame's `frontendConfig` + backend bindings, and the `ui`
+    // container builds the app from its branch, injects the resolved backend URLs (a bound
+    // service's live ephemeral env, else WireMock), stands WireMock up for every OTHER upstream
+    // from the frontend repo's `mocks/` mappings, serves the built app, and runs `tester-ui`
+    // against the two together — no docker-compose, no DinD. `mocker` runs first so those
+    // WireMock mappings exist (it is frontend-aware: it authors them under `mocks/mappings`).
+    // `conflicts` / `ci` / `merger` gate and ship the PR like every other build pipeline.
+    //
+    // EXPERIMENTAL (labelled as such): two deploy-/keying-time steps remain before this is
+    // fully end-to-end. (1) `image: 'ui'` per-step routing is not wired yet — a run's first
+    // step fixes the container image (see slice 3's `Dockerfile.ui` note), so `tester-ui` only
+    // gets the frontend toolchain when the whole run uses the `ui` image. (2) A bound LIVE
+    // service's env is still keyed by the task the `deployer` ran on, not the service FRAME the
+    // binding names, so a live-service binding resolves to WireMock until that keying lands; a
+    // MOCK-ONLY frontend already runs fully self-contained today. The `experimental` label keeps
+    // the pipeline discoverable but clearly flagged until both land.
+    {
+      id: 'pl_frontend',
+      name: 'Frontend build & UI test',
+      labels: ['experimental'],
+      agentKinds: ['coder', 'reviewer', 'mocker', 'tester-ui', 'conflicts', 'ci', 'merger'],
+    },
     // Recurring-pipeline presets. "Dependency updates" is a plain implement →
     // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
     // a special `tracker` step (files a GitHub issue / Jira ticket from the
