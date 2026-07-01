@@ -13,7 +13,11 @@ import {
 // has the vitest runner; kernel does not) since these functions gate the requirements reviewer +
 // the preset satisfiability guard.
 
-const CLAUDE_SUB: ModelRef = { provider: 'anthropic', model: 'claude-opus-4-8', harness: 'claude-code' }
+const CLAUDE_SUB: ModelRef = {
+  provider: 'anthropic',
+  model: 'claude-opus-4-8',
+  harness: 'claude-code',
+}
 const GLM_SUB: ModelRef = { provider: 'zai', model: 'glm-5.2', harness: 'claude-code' }
 const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' }
 const QWEN_DIRECT: ModelRef = { provider: 'qwen', model: 'qwen3-max' }

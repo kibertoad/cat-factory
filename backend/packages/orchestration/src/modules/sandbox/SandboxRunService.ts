@@ -345,7 +345,11 @@ export class SandboxRunService {
   private refFor(modelId: string): ModelRef {
     const resolved = this.deps.resolveModelId?.(modelId) ?? parseModelCatalogId(modelId)
     const runsInline = this.deps.runsInline
-    return inlineModelRef(resolved, this.deps.defaultModelRef ?? resolved, (runsInline ? { runsInline } : {}))
+    return inlineModelRef(
+      resolved,
+      this.deps.defaultModelRef ?? resolved,
+      runsInline ? { runsInline } : {},
+    )
   }
 
   private detail(workspaceId: string, experimentId: string): Promise<SandboxExperimentDetail> {

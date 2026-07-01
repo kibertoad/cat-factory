@@ -100,9 +100,7 @@ export class CliInlineLanguageModel implements LanguageModelV3 {
 
   async doStream(options: LanguageModelV3CallOptions): Promise<LanguageModelV3StreamResult> {
     const generated = await this.doGenerate(options)
-    const text = generated.content
-      .map((part) => (part.type === 'text' ? part.text : ''))
-      .join('')
+    const text = generated.content.map((part) => (part.type === 'text' ? part.text : '')).join('')
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start(controller) {
         controller.enqueue({ type: 'stream-start', warnings: generated.warnings })
