@@ -220,6 +220,11 @@ Keep the symmetric D1 migration (a fresh numbered `*.sql` under
 
 ## Layout
 
+> Naming/vocabulary traps (block vs task vs card, `runtimes/cloudflare` = `@cat-factory/worker`,
+> runner/executor/transport, where gates / agent kinds / migration parity live) are resolved in
+> [`docs/glossary.md`](./docs/glossary.md). Each `backend/packages/*` and `backend/runtimes/*`
+> also carries an `AGENTS.md` with its public entry point + a "where things live" map.
+
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:
 **published libraries** live in `backend/packages/*` + `frontend/app`, the
 **runtime facades** (one per deployment target) in `backend/runtimes/*`, **private

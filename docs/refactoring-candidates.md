@@ -235,6 +235,24 @@ rewrites both facade boot paths at once and must be conformance-verified on both
 
 ---
 
+## Documentation follow-ups
+
+Not code refactors, but recorded here so they aren't lost. The package-map completeness +
+drift guard, the per-package `AGENTS.md` orientation layer, and `docs/glossary.md` have
+landed; the remaining optional item:
+
+- **Slim `CLAUDE.md` + move the flow narratives to co-located `docs/flows/*`.** `CLAUDE.md`
+  is ~1,400 lines loaded every session, mixing durable working rules with long runtime-flow
+  narratives (execution, bootstrap, blueprints, requirements review, merge/gate lifecycle,
+  post-release health). Those narratives are the deepest well of otherwise-undocumented
+  knowledge but live nowhere near the code they describe. A future pass could keep the rules +
+  a concept index in `CLAUDE.md` and move each flow into a `docs/flows/<flow>.md` linked from
+  both `CLAUDE.md` and the owning package's `AGENTS.md` — cutting per-session tokens and
+  drift. Deferred because it is high-blast-radius (every inbound "CLAUDE.md → section" link
+  moves) and pure documentation; do it as its own change, not folded into unrelated work.
+
+---
+
 ## Recently landed
 
 Removed from the active list because they have shipped. Kept here as a short audit trail.

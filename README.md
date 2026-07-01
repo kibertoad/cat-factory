@@ -219,6 +219,11 @@ Each capability has a deeper write-up; start here and follow the link.
 - [`CLAUDE.md`](./CLAUDE.md) — the cross-cutting runtime flows (execution + events,
   bootstrap, blueprints, requirements review, the board/repo-linkage model) in one
   place for quick lookup.
+- [`docs/glossary.md`](./docs/glossary.md) — vocabulary + naming map (block vs task vs
+  card, the dir↔package names, runner/executor/transport, and where gates / agent kinds /
+  migration parity live).
+- [`AGENTS.md`](./AGENTS.md) — orientation for coding agents; each `backend/packages/*` and
+  `backend/runtimes/*` also carries its own `AGENTS.md` with a "where things live" map.
 
 **Integrations & features**
 
