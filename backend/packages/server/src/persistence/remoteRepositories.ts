@@ -90,18 +90,25 @@ export class HttpPersistenceRpcClient implements PersistenceRpcClient {
   constructor(
     private readonly opts: {
       baseUrl: string
-      token: string
+      /**
+       * The machine token to present, as a fixed string OR a provider read PER REQUEST. A
+       * provider lets a mothership-mode node pick up a token cached AFTER boot (by the
+       * `/local/mothership/connect` login flow) without a restart, and yields `null` when no
+       * token is available yet — every call then comes back 403 until the node is connected.
+       */
+      token: string | (() => string | null)
       fetchImpl?: typeof fetch
     },
   ) {}
 
   async call(request: PersistenceRpcRequest): Promise<PersistenceRpcResponse> {
     const fetchImpl = this.opts.fetchImpl ?? fetch
+    const token = typeof this.opts.token === 'function' ? this.opts.token() : this.opts.token
     const res = await fetchImpl(`${this.opts.baseUrl.replace(/\/$/, '')}/internal/persistence`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${this.opts.token}`,
+        authorization: `Bearer ${token ?? ''}`,
       },
       body: JSON.stringify(request),
     })

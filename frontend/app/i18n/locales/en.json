@@ -869,6 +869,10 @@
     "userMenu": {
       "mySetup": "My setup",
       "signOut": "Sign out"
+    },
+    "mothership": {
+      "signIn": "Sign in via mothership",
+      "hint": "Your projects and identity live on the hosted mothership — sign in there to connect this node."
     }
   },
   "layout": {

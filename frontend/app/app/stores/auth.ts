@@ -109,9 +109,53 @@ export const useAuthStore = defineStore(
       history.replaceState(null, '', window.location.pathname + window.location.search)
     }
 
+    /**
+     * Mothership mode: when the mothership OAuth redirect returns here (flagged
+     * `?mothership_connect=1`), the URL fragment carries a MOTHERSHIP session — not a local one.
+     * Hand it to our OWN node, which exchanges it for a cached machine token and returns a LOCAL
+     * session for the same user. Returns true when it handled the redirect (so the caller skips
+     * the normal `consumeRedirectToken`, which would wrongly store the mothership session locally).
+     */
+    async function maybeConnectMothership(): Promise<boolean> {
+      if (typeof window === 'undefined') return false
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('mothership_connect') !== '1') return false
+      const match = /(?:^#|[#&])token=([^&]+)/.exec(window.location.hash)
+      const session = match ? decodeURIComponent(match[1]!) : null
+      // Clean the flag + fragment from the URL regardless of outcome, so it isn't left in history.
+      params.delete('mothership_connect')
+      const qs = params.toString()
+      history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+      if (!session) return true
+      try {
+        const result = await api.connectMothership(session)
+        applySession({ token: result.session, user: result.user })
+      } catch {
+        // Leave the user on the login screen to retry; the node stays unconnected.
+      }
+      return true
+    }
+
+    /**
+     * Mothership mode: sign in through the hosted mothership. The mothership owns identity + the
+     * allowlist, so we send the browser to ITS OAuth and return here flagged for the connect
+     * exchange (`maybeConnectMothership`). No-op if the mothership URL isn't known.
+     */
+    function signInViaMothership() {
+      if (typeof window === 'undefined') return
+      const base = localMode.value?.mothershipUrl
+      if (!base) return
+      const here = new URL(window.location.origin + window.location.pathname)
+      here.searchParams.set('mothership_connect', '1')
+      const redirect = new URLSearchParams({ redirect: here.toString() })
+      window.location.href = `${base.replace(/\/$/, '')}/auth/login?${redirect}`
+    }
+
     /** Resolve auth state: capture any redirect token, then check the backend. */
     async function bootstrap() {
-      consumeRedirectToken()
+      // A returning mothership-connect redirect is handled first (it carries a mothership session,
+      // which must be exchanged — not stored as a local token by `consumeRedirectToken`).
+      if (!(await maybeConnectMothership())) consumeRedirectToken()
       try {
         const config = await api.getAuthConfig()
         required.value = config.enabled
@@ -284,6 +328,7 @@ export const useAuthStore = defineStore(
       bootstrap,
       login,
       loginWithGoogle,
+      signInViaMothership,
       signup,
       passwordLogin,
       patLogin,

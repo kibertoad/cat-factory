@@ -829,6 +829,10 @@
     "userMenu": {
       "mySetup": "Kurulumum",
       "signOut": "Oturumu kapat"
+    },
+    "mothership": {
+      "signIn": "Ana sunucu üzerinden oturum aç",
+      "hint": "Projeleriniz ve kimliğiniz barındırılan ana sunucuda tutulur — bu düğümü bağlamak için orada oturum açın."
     }
   },
   "layout": {

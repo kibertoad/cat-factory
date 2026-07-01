@@ -8,6 +8,7 @@ import {
   googleLoginContract,
   logoutContract,
   meContract,
+  mintMachineTokenContract,
   passwordLoginContract,
   patLoginContract,
   peekInvitationContract,
@@ -21,6 +22,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { GitHubOAuth } from '../../auth/GitHubOAuth.js'
 import { GoogleOAuth } from '../../auth/GoogleOAuth.js'
 import { verifySession } from '../../auth/middleware.js'
+import { mintMachineToken } from '../../auth/machineToken.js'
 import {
   HmacSigner,
   type SessionPayload,
@@ -560,6 +562,88 @@ export function authController(): Hono<AppEnv> {
     const session = sessionUser(user, identity.login)
     const sessionToken = await mintSession(cfg, session)
     return c.json({ token: sessionToken, user: session }, 200)
+  })
+
+  // ---- Machine-token minting (mothership mode) ----------------------------
+
+  // Exchange the caller's mothership SESSION for a `machine`-audience token scoped to the
+  // user's accounts, which a mothership-mode local node caches and presents on every
+  // `/internal/persistence` call. This is a privilege boundary: a session becomes an
+  // account-scoped machine credential, so the scope is derived ONLY from what the user
+  // actually owns (`accountService.listForUser`), and `requestedAccountIds` may only NARROW
+  // that set (intersection), never widen it. Served by any facade acting as a mothership
+  // (its repository registry attached); 503 otherwise.
+  buildHonoRoute(app, mintMachineTokenContract, async (c) => {
+    const cfg = authConfig(c)
+    const container = c.get('container')
+    if (!container.repositories) {
+      return c.json(
+        { error: { code: 'unavailable', message: 'This deployment is not a mothership' } },
+        503,
+      )
+    }
+    const secret = cfg.sessionSecret
+    // Verify the presented bearer as a SESSION token directly (pinned `aud: session`), NOT via
+    // the authGate — `/internal`-style machine calls bypass that gate, and pinning the audience
+    // stops a container/ws/machine token from being replayed to mint a fresh machine token.
+    const presented = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
+    const session = secret
+      ? await new HmacSigner(secret).verify<SessionPayload>(presented, {
+          aud: TOKEN_AUDIENCE.session,
+        })
+      : null
+    if (!session) {
+      return c.json(
+        { error: { code: 'forbidden', message: 'A valid session is required to mint a token' } },
+        403,
+      )
+    }
+    const body = c.req.valid('json')
+    const accounts = await container.accountService.listForUser({
+      id: session.id,
+      login: session.login,
+      name: session.name,
+    })
+    let accountIds = accounts.map((a) => a.id)
+    if (body.requestedAccountIds) {
+      const owned = new Set(accountIds)
+      accountIds = body.requestedAccountIds.filter((id) => owned.has(id))
+    }
+    // Fail closed: a node with no in-scope account can do nothing useful and must not be handed
+    // a token (e.g. a `requestedAccountIds` naming only accounts the user does not own).
+    if (accountIds.length === 0) {
+      return c.json(
+        { error: { code: 'forbidden', message: 'No accounts in scope for this user' } },
+        403,
+      )
+    }
+    const nodeId = body.nodeId ?? `node_${crypto.randomUUID()}`
+    const exp = Date.now() + cfg.machineTokenTtlMs
+    const token = await mintMachineToken(secret, {
+      userId: session.id,
+      accountIds,
+      nodeId,
+      ttlMs: cfg.machineTokenTtlMs,
+    })
+    return c.json(
+      {
+        token,
+        exp,
+        nodeId,
+        userId: session.id,
+        accountIds,
+        // Echo the verified user so a mothership-mode node can mint its own local session for
+        // the same person after connecting.
+        user: {
+          id: session.id,
+          login: session.login,
+          name: session.name,
+          avatarUrl: session.avatarUrl,
+          email: session.email ?? null,
+        },
+      },
+      200,
+    )
   })
 
   // ---- Forgot / reset password --------------------------------------------

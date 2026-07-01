@@ -829,6 +829,10 @@
     "userMenu": {
       "mySetup": "Mi configuración",
       "signOut": "Cerrar sesión"
+    },
+    "mothership": {
+      "signIn": "Iniciar sesión con la central",
+      "hint": "Tus proyectos e identidad están en la central alojada: inicia sesión allí para conectar este nodo."
     }
   },
   "layout": {

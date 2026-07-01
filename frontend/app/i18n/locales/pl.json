@@ -829,6 +829,10 @@
     "userMenu": {
       "mySetup": "Moja konfiguracja",
       "signOut": "Wyloguj się"
+    },
+    "mothership": {
+      "signIn": "Zaloguj się przez serwer centralny",
+      "hint": "Twoje projekty i tożsamość znajdują się na hostowanym serwerze centralnym — zaloguj się tam, aby połączyć ten węzeł."
     }
   },
   "layout": {

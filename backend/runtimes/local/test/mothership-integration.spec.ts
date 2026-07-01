@@ -7,6 +7,7 @@ import {
   buildNodeContainer,
   createApp as createNodeApp,
 } from '@cat-factory/node-server'
+import { HmacSigner, TOKEN_AUDIENCE } from '@cat-factory/server'
 import type { Account, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type { Pipeline } from '@cat-factory/contracts'
 import { buildLocalContainer } from '../src/container.js'
@@ -70,12 +71,25 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
   let account: Account
   let workspaceId: string
   let machineToken: string
+  // The mothership app (loopback) — kept so tests can call its mint endpoint directly.
+  let mothershipApp: ReturnType<typeof createNodeApp>
   // The mothership-mode local node, with no database, talking to the loopback mothership.
   let local: ReturnType<typeof buildNodeApp>
 
+  /** Mint a mothership SESSION token for `user` (aud: session), as the OAuth callback would. */
+  function mintSession(user: { id: string; login: string; name: string | null }): Promise<string> {
+    return new HmacSigner(SESSION_SECRET).sign({
+      ...user,
+      avatarUrl: null,
+      email: null,
+      aud: TOKEN_AUDIENCE.session,
+      exp: Date.now() + 60_000,
+    })
+  }
+
   // Build the local mothership-mode app over the running loopback mothership. A deterministic
   // FakeAgentExecutor stands in for real containers; everything else is the real local wiring.
-  function buildNodeApp() {
+  function buildNodeApp(token: string | undefined = machineToken) {
     const container = buildLocalContainer({
       // No Postgres on the laptop: org/durable state is remote, credentials are local sqlite.
       env: {
@@ -86,9 +100,12 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         ENCRYPTION_KEY,
         AUTH_SESSION_SECRET: SESSION_SECRET,
         LOCAL_MOTHERSHIP_URL: mothershipUrl,
-        LOCAL_MOTHERSHIP_TOKEN: machineToken,
+        // Omitted (undefined) for the connect-flow test: the node boots inert and acquires its
+        // token via `/local/mothership/connect` instead of a static env token.
+        LOCAL_MOTHERSHIP_TOKEN: token,
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
         LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
+        LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
         // Opt the local node into the ephemeral-environment integration so `createCore` builds
         // the provisioning service — that is what makes `AgentContextBuilder` actually resolve
         // the block's environment per dispatch (`environmentRegistryRepository.getByBlock`,
@@ -125,7 +142,7 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
 
     // The mothership backend + its machine API, over real Postgres.
     const mothership = buildNodeContainer({ db, env: MOTHERSHIP_ENV })
-    const mothershipApp = createNodeApp(mothership, MOTHERSHIP_ENV)
+    mothershipApp = createNodeApp(mothership, MOTHERSHIP_ENV)
 
     // Seed an ORG-owned workspace with the demo board directly on the mothership (dev-open has
     // no signed-in user, so go through the services, exactly like the conformance org helper).
@@ -229,5 +246,68 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
       env: MOTHERSHIP_ENV,
     }).executionRepository.getByBlock(workspaceId, 'task_login')) as ExecutionInstance | null
     expect(persisted?.status).toBe('done')
+  })
+
+  it('mints a machine token from a whitelisted session (scoped to the user accounts)', async () => {
+    // A mothership SESSION for the org owner — as the OAuth callback would produce.
+    const session = await mintSession(ORG_OWNER)
+    const res = await mothershipApp.fetch(
+      new Request(`${mothershipUrl}/auth/machine-token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${session}` },
+        body: JSON.stringify({ nodeId: 'node_minted' }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { token: string; accountIds: string[]; user: { id: string } }
+    // The owner is a member of the seeded org account (+ their personal account) — the org must
+    // be in scope, so the minted token can load the org board.
+    expect(body.accountIds).toContain(account.id)
+    expect(body.user.id).toBe(ORG_OWNER.id)
+
+    // The MINTED token satisfies the persistence RPC end-to-end: a fresh local node using it as
+    // its machine token loads the org board.
+    const mintedNode = buildNodeApp(body.token)
+    const board = await mintedNode.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    expect(board.status).toBe(200)
+    expect(board.body.workspace.id).toBe(workspaceId)
+  })
+
+  it('connects a token-less node via /local/mothership/connect (SPA login flow)', async () => {
+    // A node that booted with NO static token — inert until it connects.
+    const node = buildNodeApp(undefined)
+
+    // The SPA captured a mothership session (OAuth fragment) and hands it to its own node.
+    const session = await mintSession(ORG_OWNER)
+    const connected = await node.call<{
+      accountIds: string[]
+      session: string
+      user: { id: string }
+    }>('POST', '/local/mothership/connect', { session })
+    expect(connected.status).toBe(200)
+    expect(connected.body.accountIds).toContain(account.id)
+    // The node minted its OWN local session for the same user, so the SPA is signed in locally.
+    expect(connected.body.user.id).toBe(ORG_OWNER.id)
+    expect(connected.body.session).toBeTruthy()
+
+    // With the token now cached, the SAME node loads the board over the RPC.
+    const board = await node.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+    expect(board.status).toBe(200)
+    expect(board.body.workspace.id).toBe(workspaceId)
+  })
+
+  it('rejects a connect with a forged session (bad secret)', async () => {
+    const node = buildNodeApp(undefined)
+    const forged = await new HmacSigner('not-the-mothership-secret').sign({
+      id: ORG_OWNER.id,
+      login: ORG_OWNER.login,
+      name: ORG_OWNER.name,
+      avatarUrl: null,
+      email: null,
+      aud: TOKEN_AUDIENCE.session,
+      exp: Date.now() + 60_000,
+    })
+    const res = await node.call('POST', '/local/mothership/connect', { session: forged })
+    expect(res.status).toBe(403)
   })
 })

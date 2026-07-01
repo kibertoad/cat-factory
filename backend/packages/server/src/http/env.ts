@@ -20,7 +20,7 @@ import type {
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
-import type { SessionPayload } from '../auth/signing.js'
+import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
 import type { PersistenceRegistry } from '../persistence/rpc.js'
 import type { RuntimeGateways } from '../runtime/gateways.js'
@@ -175,6 +175,23 @@ export interface ServerContainer extends Core {
    * is not a mothership ⇒ the persistence endpoint 503s. See `../persistence/rpc.ts`.
    */
   repositories?: PersistenceRegistry
+  /**
+   * Local-mode mothership login seam: exchange a mothership SESSION token for a machine token
+   * and cache it locally, so the node can talk to the mothership without a pasted static token.
+   * Wired ONLY on the local-mode facade in mothership mode; `POST /local/mothership/connect`
+   * 503s when absent. See docs/initiatives/mothership-mode.md.
+   */
+  mothershipConnect?: MothershipConnector
+}
+
+/** Exchanges a mothership session for a cached machine token (local-mode mothership login). */
+export interface MothershipConnector {
+  connect(
+    session: string,
+  ): Promise<
+    | { ok: true; accountIds: string[]; exp: number; user: SessionUser }
+    | { ok: false; status: number; message: string }
+  >
 }
 
 /** Hono generics shared by the cross-runtime controllers (Variables only — no Bindings). */

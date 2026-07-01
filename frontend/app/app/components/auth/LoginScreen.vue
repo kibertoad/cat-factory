@@ -32,6 +32,9 @@ const configuredProviders = computed<PatProvider[]>(
 )
 const isLocalMode = computed(() => auth.localMode?.enabled === true)
 const hasConfiguredPat = computed(() => configuredProviders.value.length > 0)
+// Mothership mode: identity + org data live on a hosted mothership, so the primary sign-in is a
+// round-trip to the mothership's OAuth (the node then exchanges the session for a machine token).
+const isMothership = computed(() => auth.localMode?.mothership === true)
 
 const patBusy = ref(false)
 const patError = ref<string | null>(null)
@@ -184,6 +187,22 @@ const noSignInMethod = computed(
             invite ? t('auth.login.inviteSubtitle') : t('auth.login.subtitle')
           }}</template>
         </p>
+      </div>
+
+      <!-- Mothership mode: sign in through the hosted mothership (it owns identity + the
+           allowlist). The node exchanges the returned session for a machine token. -->
+      <div v-if="isMothership && mode !== 'forgot'" class="mb-4 space-y-2">
+        <UButton
+          block
+          size="lg"
+          color="primary"
+          icon="i-lucide-cloud"
+          data-testid="mothership-signin"
+          @click="auth.signInViaMothership()"
+        >
+          {{ t('auth.mothership.signIn') }}
+        </UButton>
+        <p class="px-1 text-xs text-slate-400">{{ t('auth.mothership.hint') }}</p>
       </div>
 
       <!-- Local mode: sign in with the env-configured source-control PAT. The token lives

@@ -829,6 +829,10 @@
     "userMenu": {
       "mySetup": "Ma configuration",
       "signOut": "Se déconnecter"
+    },
+    "mothership": {
+      "signIn": "Se connecter via le serveur central",
+      "hint": "Vos projets et votre identité sont sur le serveur central hébergé — connectez-vous là-bas pour relier ce nœud."
     }
   },
   "layout": {

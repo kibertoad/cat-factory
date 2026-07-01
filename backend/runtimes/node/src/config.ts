@@ -14,6 +14,7 @@ import type {
   PrivilegedAppConfig,
   TasksConfig,
 } from '@cat-factory/server'
+import { resolveMachineTokenTtlMs } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import { DEFAULT_SPEND_PRICING, modelCostResolver } from '@cat-factory/spend'
 
@@ -323,6 +324,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       apiBase: env.GITHUB_API_BASE?.trim() || 'https://api.github.com',
       oauthBase: env.GITHUB_OAUTH_BASE?.trim() || 'https://github.com',
       sessionTtlMs: (ttlHours !== undefined && ttlHours > 0 ? ttlHours : 168) * 60 * 60 * 1000,
+      machineTokenTtlMs: resolveMachineTokenTtlMs(env.AUTH_MACHINE_TOKEN_TTL_MS),
       successRedirectUrl: env.AUTH_SUCCESS_REDIRECT_URL?.trim() || '',
       callbackUrl: env.AUTH_CALLBACK_URL?.trim() || '',
       passwordEnabled,

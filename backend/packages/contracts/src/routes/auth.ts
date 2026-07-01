@@ -52,6 +52,12 @@ export const localModeConfigSchema = v.object({
    */
   mothership: v.optional(v.boolean()),
   /**
+   * In mothership mode, the base URL of the hosted mothership. The SPA sends the user there to
+   * sign in (the mothership owns identity + the allowlist), then exchanges the returned session
+   * for a machine token via the local node. Present only when `mothership` is true.
+   */
+  mothershipUrl: v.optional(v.string()),
+  /**
    * When local mode runs WITHOUT a GitHub PAT, a github.com URL with the needed scopes
    * pre-selected so the developer can create one in a click. Absent once a PAT is set.
    */
@@ -233,6 +239,59 @@ export const patLoginContract = defineApiContract({
     token: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4000))),
   }),
   responsesByStatusCode: { 200: loginResultSchema, ...errorResponses },
+})
+
+// ---- Machine-token minting (mothership mode) ------------------------------
+
+// Exchange the caller's mothership SESSION (Authorization: Bearer) for a `machine`-audience
+// token scoped to the user's accounts, which a mothership-mode local node then caches and
+// presents on every `/internal/persistence` call. Served by any facade acting as a mothership
+// (503 otherwise). `requestedAccountIds` may only NARROW the scope to a subset the user owns;
+// it can never widen it.
+export const mintMachineTokenContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/machine-token',
+  requestBodySchema: v.object({
+    nodeId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))),
+    requestedAccountIds: v.optional(v.array(v.string())),
+  }),
+  responsesByStatusCode: {
+    200: v.object({
+      token: v.string(),
+      exp: v.number(),
+      nodeId: v.string(),
+      userId: v.string(),
+      accountIds: v.array(v.string()),
+      // The verified session's user, so a local node can mint its OWN local session for the
+      // same person after connecting (the local SPA then has a usable session).
+      user: sessionUserViewSchema,
+    }),
+    ...errorResponses,
+  },
+})
+
+// Local-mode ONLY: hand the local node a mothership SESSION token (captured by the SPA from
+// the mothership OAuth redirect fragment). The node forwards it to the mothership's
+// `/auth/machine-token`, caches the returned opaque machine token in its local store, and
+// reports the resulting scope. 503 on any non-local facade. Mounted at the app root, so the
+// path is absolute (NOT under `/auth`).
+export const connectMothershipContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/local/mothership/connect',
+  requestBodySchema: v.object({
+    session: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(8000)),
+  }),
+  responsesByStatusCode: {
+    // A LOCAL session (minted by the node for the connected mothership user) + the resulting
+    // account scope, so the SPA is signed into its own node right after connecting.
+    200: v.object({
+      accountIds: v.array(v.string()),
+      exp: v.number(),
+      session: v.string(),
+      user: sessionUserViewSchema,
+    }),
+    ...errorResponses,
+  },
 })
 
 // ---- Forgot / reset password ----------------------------------------------

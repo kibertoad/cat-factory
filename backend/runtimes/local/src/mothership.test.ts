@@ -5,8 +5,10 @@ import {
   SqliteWorkRunner,
   type SqliteWorkRunnerOptions,
   composeMothership,
+  createMothershipConnector,
   isMothershipMode,
 } from './mothership.js'
+import { createLocalMachineTokenStore } from './sqlite/machineTokenStore.js'
 import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 
 // Unit coverage for the mothership composition seam (docs/initiatives/mothership-mode.md):
@@ -18,6 +20,8 @@ import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 
 const BASE_ENV = (over: Record<string, string | undefined>): NodeJS.ProcessEnv => ({
   LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+  LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
+  LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   ...over,
 })
 
@@ -36,10 +40,84 @@ describe('isMothershipMode', () => {
 })
 
 describe('composeMothership', () => {
-  it('fails fast when the machine token is missing', () => {
-    expect(() => composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))).toThrow(
-      /LOCAL_MOTHERSHIP_TOKEN/,
+  it('boots inert (no throw) when no machine token is available yet, presenting an empty bearer', async () => {
+    // With neither the env override nor a cached token, the node must still BOOT (so the SPA can
+    // drive the login) — the token provider yields null and every RPC comes back with an empty
+    // bearer (which the mothership 403s). This replaces the old fail-fast-on-missing-token.
+    let sentAuth: string | null | undefined
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      sentAuth = new Headers(init.headers).get('authorization')
+      return new Response(
+        JSON.stringify({ ok: false, error: { code: 'forbidden', message: 'no' } }),
+        {
+          status: 403,
+          headers: { 'content-type': 'application/json' },
+        },
+      )
+    })
+    const { repos, close } = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    try {
+      await expect(repos.workspaceRepository.get('ws_1')).rejects.toThrow()
+      // `Headers.get` trims the trailing space of `Bearer ` (empty token).
+      expect(sentAuth).toBe('Bearer')
+    } finally {
+      close()
+    }
+  })
+
+  it('prefers the env token, else the cached token, treating an expired cached token as absent', async () => {
+    let sentAuth: string | null | undefined
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      sentAuth = new Headers(init.headers).get('authorization')
+      return new Response(JSON.stringify({ ok: true, value: null }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+
+    // 1. Env override wins outright.
+    const withEnv = composeMothership(
+      BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test', LOCAL_MOTHERSHIP_TOKEN: 'env-tok' }),
     )
+    await withEnv.repos.workspaceRepository.get('ws_1')
+    expect(sentAuth).toBe('Bearer env-tok')
+    // A cached token present alongside the env override is ignored (env wins).
+    withEnv.machineTokenStore.write({
+      token: 'cached-tok',
+      nodeId: 'node_x',
+      userId: 'usr_1',
+      accountIds: ['acc_1'],
+      exp: Date.now() + 60_000,
+      createdAt: Date.now(),
+    })
+    await withEnv.repos.workspaceRepository.get('ws_1')
+    expect(sentAuth).toBe('Bearer env-tok')
+    withEnv.close()
+
+    // 2. No env token: an unexpired cached token is used.
+    const noEnv = composeMothership(BASE_ENV({ LOCAL_MOTHERSHIP_URL: 'https://m.test' }))
+    noEnv.machineTokenStore.write({
+      token: 'cached-tok',
+      nodeId: 'node_x',
+      userId: 'usr_1',
+      accountIds: ['acc_1'],
+      exp: Date.now() + 60_000,
+      createdAt: Date.now(),
+    })
+    await noEnv.repos.workspaceRepository.get('ws_1')
+    expect(sentAuth).toBe('Bearer cached-tok')
+    // 3. An EXPIRED cached token is treated as no token (empty bearer).
+    noEnv.machineTokenStore.write({
+      token: 'stale-tok',
+      nodeId: 'node_x',
+      userId: 'usr_1',
+      accountIds: ['acc_1'],
+      exp: Date.now() - 1,
+      createdAt: Date.now(),
+    })
+    await noEnv.repos.workspaceRepository.get('ws_1')
+    expect(sentAuth).toBe('Bearer')
+    noEnv.close()
   })
 
   it('routes org reads to the mothership over HTTP and keeps credentials local', async () => {
@@ -120,6 +198,103 @@ describe('composeMothership', () => {
     } finally {
       close()
     }
+  })
+})
+
+describe('createMothershipConnector', () => {
+  const mintResponse = {
+    token: 'machine-abc',
+    nodeId: 'node_1',
+    userId: 'usr_1',
+    accountIds: ['acc_1', 'acc_2'],
+    exp: Date.now() + 60_000,
+    user: { id: 'usr_1', login: 'dev', name: 'Dev', avatarUrl: null, email: 'dev@x.test' },
+  }
+
+  it('exchanges a session for a machine token, caches it, and reports the scope + user', async () => {
+    const seen: { url: string; auth: string | null; body: unknown }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      seen.push({
+        url,
+        auth: new Headers(init.headers).get('authorization'),
+        body: JSON.parse(String(init.body)),
+      })
+      return new Response(JSON.stringify(mintResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const store = createLocalMachineTokenStore(':memory:')
+    const connector = createMothershipConnector({ baseUrl: 'https://m.test/', store })
+
+    const result = await connector.connect('session-xyz')
+    expect(result).toMatchObject({
+      ok: true,
+      accountIds: ['acc_1', 'acc_2'],
+      user: { login: 'dev' },
+    })
+    // Forwarded the session to the mothership mint endpoint.
+    expect(seen[0]!.url).toBe('https://m.test/auth/machine-token')
+    expect(seen[0]!.auth).toBe('Bearer session-xyz')
+    // Cached the OPAQUE machine token for later RPCs.
+    expect(store.read()).toMatchObject({
+      token: 'machine-abc',
+      nodeId: 'node_1',
+      accountIds: ['acc_1', 'acc_2'],
+    })
+    store.close()
+  })
+
+  it('reuses a prior node id across reconnects', async () => {
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)))
+      return new Response(JSON.stringify(mintResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    const store = createLocalMachineTokenStore(':memory:')
+    store.write({
+      token: 't',
+      nodeId: 'node_prior',
+      userId: 'usr_1',
+      accountIds: ['acc_1'],
+      exp: Date.now() + 1000,
+      createdAt: Date.now(),
+    })
+    const connector = createMothershipConnector({ baseUrl: 'https://m.test', store })
+    await connector.connect('session-xyz')
+    expect(bodies[0]).toMatchObject({ nodeId: 'node_prior' })
+    store.close()
+  })
+
+  it('surfaces a rejected session (403) without caching anything', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(JSON.stringify({ error: { message: 'nope' } }), {
+          status: 403,
+          headers: { 'content-type': 'application/json' },
+        }),
+    )
+    const store = createLocalMachineTokenStore(':memory:')
+    const connector = createMothershipConnector({ baseUrl: 'https://m.test', store })
+    const result = await connector.connect('bad-session')
+    expect(result).toMatchObject({ ok: false, status: 403 })
+    expect(store.read()).toBeNull()
+    store.close()
+  })
+
+  it('surfaces an unreachable mothership as a 502 (network error)', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('ECONNREFUSED')
+    })
+    const store = createLocalMachineTokenStore(':memory:')
+    const connector = createMothershipConnector({ baseUrl: 'https://m.test', store })
+    const result = await connector.connect('session')
+    expect(result).toMatchObject({ ok: false, status: 502 })
+    store.close()
   })
 })
 
@@ -344,6 +519,7 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
     LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
+    LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   }
 
   it('composes the engine with NO db — remote repos + local credential store + in-process runner', () => {
