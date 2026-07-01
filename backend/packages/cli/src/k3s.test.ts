@@ -53,17 +53,28 @@ const REACHABLE = {
 
 /** The provisioning commands (RBAC apply, token read, apiserver read) every wiring path issues. */
 const TOKEN_B64 = Buffer.from('tok-abc').toString('base64')
-const PROVISION = {
-  'kubectl apply -f -': { code: 0, stdout: 'applied' },
-  'kubectl -n cat-factory get secret cat-factory-token -o jsonpath={.data.token}': {
-    code: 0,
-    stdout: TOKEN_B64,
-  },
-  'kubectl config view --minify -o jsonpath={.clusters[0].cluster.server}': {
-    code: 0,
-    stdout: 'https://127.0.0.1:6443',
-  },
+
+/**
+ * Build the provisioning-command map. Create paths carry an explicit `--context`; the reuse path
+ * (default `context: undefined`) operates on the current context.
+ */
+function provisionMap(context?: string): Record<string, Partial<ShellResult>> {
+  const ctx = context ? ` --context ${context}` : ''
+  return {
+    [`kubectl apply -f -${ctx}`]: { code: 0, stdout: 'applied' },
+    [`kubectl -n cat-factory get secret cat-factory-token -o jsonpath={.data.token}${ctx}`]: {
+      code: 0,
+      stdout: TOKEN_B64,
+    },
+    [`kubectl config view --minify -o jsonpath={.clusters[0].cluster.server}${ctx}`]: {
+      code: 0,
+      stdout: 'https://127.0.0.1:6443',
+    },
+  }
 }
+
+/** The reuse-path provisioning commands (current context, no `--context` suffix). */
+const PROVISION = provisionMap()
 
 describe('setupK3s', () => {
   it('in --yes mode provisions the recommended offer (reuse existing cluster)', async () => {
@@ -119,8 +130,7 @@ describe('setupK3s', () => {
       'k3d version': { code: 0, stdout: 'k3d version v5.6.0' },
       'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
       'k3d cluster create my-cluster --api-port 6443': { code: 0 },
-      'kubectl config use-context k3d-my-cluster': { code: 0 },
-      ...PROVISION,
+      ...provisionMap('k3d-my-cluster'),
     })
     const io = captureIo()
     const { chosen, connection } = await setupK3s(opts({ yes: true, clusterName: 'my-cluster' }), {
@@ -138,8 +148,7 @@ describe('setupK3s', () => {
       'kind version': { code: 0, stdout: 'kind v0.23.0' },
       'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
       'kind create cluster --name kd': { code: 0 },
-      'kubectl config use-context kind-kd': { code: 0 },
-      ...PROVISION,
+      ...provisionMap('kind-kd'),
     })
     const io = captureIo()
     const { chosen, connection } = await setupK3s(
@@ -166,8 +175,7 @@ describe('setupK3s', () => {
       'k3d cluster list --output json': { code: 0, stdout: '[{"name":"dupe"}]' },
       'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
       // NOTE: no `k3d cluster create` mapping — reuse must not attempt to create it.
-      'kubectl config use-context k3d-dupe': { code: 0 },
-      ...PROVISION,
+      ...provisionMap('k3d-dupe'),
     })
     const io = captureIo()
     const { chosen, connection } = await setupK3s(opts({ yes: true, clusterName: 'dupe' }), {
@@ -180,9 +188,10 @@ describe('setupK3s', () => {
   })
 
   it('reports (does not throw) when a provisioning command fails', async () => {
-    // Reachable cluster ⇒ use-existing path, but the RBAC apply fails.
+    // Reachable cluster ⇒ use-existing path; the apiserver read succeeds but the RBAC apply fails.
     const shell = scriptShell({
       ...REACHABLE,
+      ...PROVISION,
       'kubectl apply -f -': { code: 1, stderr: 'forbidden' },
     })
     const io = captureIo()
@@ -190,6 +199,25 @@ describe('setupK3s', () => {
     expect(chosen).toBe('use-existing')
     expect(connection).toBeUndefined()
     expect(io.lines.join('\n')).toContain('forbidden')
+  })
+
+  it('refuses to auto-provision a non-local reachable cluster in --yes mode', async () => {
+    const shell = scriptShell({
+      'kubectl version --output=json --request-timeout=3s': {
+        code: 0,
+        stdout: JSON.stringify({ serverVersion: { gitVersion: 'v1.30.0' } }),
+      },
+      'kubectl config current-context': { code: 0, stdout: 'prod' },
+      'kubectl config view --minify -o jsonpath={.clusters[0].cluster.server}': {
+        code: 0,
+        stdout: 'https://api.k8s.example.com:6443',
+      },
+    })
+    const io = captureIo()
+    const { chosen, connection } = await setupK3s(opts({ yes: true }), { io, shell })
+    expect(chosen).toBe('use-existing')
+    expect(connection).toBeUndefined()
+    expect(io.lines.join('\n')).toContain('does not look like a local cluster')
   })
 
   it('aborts a provisioning path when the user declines a confirm', async () => {

@@ -150,22 +150,32 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
 ### Slice 2 — provision actions (k3d default; guided k3s) (DONE, PR #578)
 
 - **`k3s-provision.ts`** (pure planners + a thin executor over `HostShell`):
-  - k3d/kind: plan `k3d cluster create <name> --api-port 6443` (or `kind create cluster --name`),
-    switch kubectl to the created context (`k3d-<name>` / `kind-<name>`), then read the kubeconfig
-    for the apiserver URL (`kubectl config view --minify …{.clusters[0].cluster.server}`).
-    (Local-image `k3d image import` wiring noted for the future managed-lifecycle work.)
-  - SA + **least-privilege** RBAC + token: `kubectl apply -f -` the `RBAC_MANIFEST` (namespace +
+  - k3d/kind: plan `k3d cluster create <name> --api-port 6443` (or `kind create cluster --name`)
+    under a 5-minute create watchdog (`CLUSTER_CREATE_TIMEOUT_MS` — the default 10s would SIGKILL
+    the node-image pull), then read the apiserver URL from the created context via an explicit
+    `--context k3d-<name>` / `--context kind-<name>` (`kubectl config view --minify …
+{.clusters[0].cluster.server}`) rather than mutating the user's global current-context. A
+    `0.0.0.0` bind address is normalized to `127.0.0.1`; a create that fails on the apiserver port
+    surfaces a collision hint. (Local-image `k3d image import` wiring noted for the future
+    managed-lifecycle work.)
+  - SA + **reduced-privilege** RBAC + token: `kubectl apply -f -` the `RBAC_MANIFEST` (namespace +
     ServiceAccount + a scoped `ClusterRole`/binding over the env backend's manifest kinds +
     `namespaces` create/delete + `pods`/`pods/proxy` for the runner — **NOT `cluster-admin`**) plus
     a long-lived `kubernetes.io/service-account-token` Secret (k8s ≥ 1.24 no longer auto-creates
     one), then read + base64-decode that Secret's token (retrying while the token controller
     populates it). Chosen over a short-lived `kubectl create token` so the wired handler doesn't
-    silently expire.
+    silently expire. Credential-bearing kinds (`secrets`, `serviceaccounts`) are granted WITHOUT
+    cluster-wide `list`/`watch` — that would let the token enumerate/read every Secret (hence every
+    other SA token), which on a single-node cluster is effectively cluster-admin; only single-object
+    create/get/patch/delete is granted.
   - **Idempotent**: probe-first; an existing cluster is reused (no create) and `kubectl apply`
     reconciles the SA/RBAC rather than duplicating.
-  - Each mutating step (cluster create, RBAC apply) is behind an **explicit confirm** (skipped only
-    by `--yes`); the `install-k3s` `curl | sh` path is still guidance-only — the command is PRINTED,
-    never run.
+  - Each mutating step (cluster create, RBAC apply) is behind an **explicit confirm** that names the
+    target context + apiserver (skipped only by `--yes`); the `install-k3s` `curl | sh` path is
+    still guidance-only — the command is PRINTED, never run. In `--yes` mode the `use-existing` path
+    **refuses** to provision a reachable cluster that doesn't look local (a local-looking context
+    name or a loopback/Docker-host apiserver), so a kubeconfig pointed at a shared/remote cluster
+    isn't silently mutated non-interactively.
 - **stdin seam**: `HostShell.run` gained an `input?` option so the manifest (and the token Secret it
   mints) is piped to `kubectl apply -f -` WITHOUT ever hitting a temp file on disk.
 - The pure layer returns the individual command specs + the rendered manifest; the executor
