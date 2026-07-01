@@ -1,5 +1,8 @@
-import { ValidationError } from '@cat-factory/kernel'
-import { assertApiServerUrlSafe, KUBERNETES_TOKEN_KEY } from './kubernetes.logic.js'
+import {
+  assertApiServerUrlSafe,
+  assertCustomTlsSupported,
+  KUBERNETES_TOKEN_KEY,
+} from './kubernetes.logic.js'
 import { KubernetesRunnerTransport } from './KubernetesRunnerTransport.js'
 // Type-only import of the registry seam so there is no runtime cycle: runner-backends.ts
 // imports this const (runtime) and registers it; this file only borrows the interface
@@ -30,19 +33,7 @@ export const kubernetesRunnerBackend: RunnerBackendProvider = {
   assertConfigSafe: (config, opts) => {
     if (!('kubernetes' in config)) return
     assertApiServerUrlSafe(config.kubernetes.apiServerUrl)
-    // Custom TLS trust material is honored only on a runtime with undici (Node/local).
-    // Reject it up front on a runtime that can't (the Cloudflare Worker) so the
-    // connection can't save and then fail at every dispatch.
-    const needsCustomTls =
-      !!config.kubernetes.caCertPem || !!config.kubernetes.insecureSkipTlsVerify
-    if (needsCustomTls && opts?.customTlsSupported === false) {
-      // Caller-input error → ValidationError (422 with the reason), not a plain Error (500).
-      throw new ValidationError(
-        'This runtime cannot verify a custom CA / skip TLS for the Kubernetes apiserver ' +
-          '(it requires the Node runtime). Use a publicly-trusted apiserver certificate, or ' +
-          'run this workspace on the Node/local deployment.',
-      )
-    }
+    assertCustomTlsSupported(config.kubernetes, opts)
   },
   buildTransport: (config, ctx) => {
     if (!('kubernetes' in config)) throw new Error('Expected a kubernetes runner config')

@@ -43,9 +43,10 @@ Worker that cannot shell out.
 At run time the `deployer` step **merges** the two (service source/render inputs +
 workspace/user engine config), resolves a provider via `resolveInfraHandler`
 (per-user override wins; `infraless` → no environment; pinned `custom` matches by key
-or `acceptsManifestId`), and stands the environment up. The resolved **provision type
-+ engine + provider** are recorded on the environment record and surfaced in run
-details.
+or `acceptsManifestId`), and stands the environment up. The resolved \*\*provision type
+
+- engine + provider\*\* are recorded on the environment record and surfaced in run
+  details.
 
 ### 2. One uniform path — no local/ephemeral toggle
 
