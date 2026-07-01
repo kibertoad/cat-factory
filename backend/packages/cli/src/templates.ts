@@ -6,8 +6,8 @@
 // so a scaffold is reproducible and the backend/frontend can't resolve to skewed releases; the
 // caret allows in-range patch/minor pickups. Bump these when cutting a CLI release against newer
 // libraries. (`@cat-factory/local-server` and `@cat-factory/app` version independently.)
-export const LOCAL_SERVER_VERSION = '^0.19.5'
-export const APP_VERSION = '^0.47.7'
+export const LOCAL_SERVER_VERSION = '^0.33.0'
+export const APP_VERSION = '^0.63.1'
 export const NUXT_VERSION = '^4.4.8'
 export const TYPES_NODE_VERSION = '^26.0.1'
 export const TYPESCRIPT_VERSION = '7.0.1-rc'
