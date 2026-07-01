@@ -45,7 +45,7 @@ build on. Link the merged pilot PR here once it lands.
 | 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
 | 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance    | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                   | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
-| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | done   | (this branch)                                             |
+| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e     | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
 | 4c  | Surface/gate frontend pipelines (`pl_frontend`/`pl_visual`) to `frontend` frames     | todo   | —                                                         |
 | 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate          | todo   | —                                                         |
 
