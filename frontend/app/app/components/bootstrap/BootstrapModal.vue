@@ -4,7 +4,7 @@
 // adapt it (in a sandbox container) — either by cloning a chosen reference
 // architecture, or from scratch following a freeform prompt. The modal pairs the
 // launch form with the managed base list.
-import type { BootstrapStatus, ReferenceArchitecture } from '~/types/domain'
+import type { BootstrapStatus, FrameRepoType, ReferenceArchitecture } from '~/types/domain'
 // Explicit import (see GitHubPanel): the auto-import name for github/GitHubConnect
 // doesn't match the `<GitHubConnect>` tag, so bind it directly.
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
@@ -73,6 +73,11 @@ const description = ref('')
 const isPrivate = ref(true)
 const instructions = ref('')
 const launching = ref(false)
+
+// The behavioural repo role for the bootstrapped frame; `service` (backend) by default. The
+// options are shared with the import modal via useFrameRepoTypeItems.
+const selectedType = ref<FrameRepoType>('service')
+const typeItems = useFrameRepoTypeItems()
 
 const usingReference = computed(() => mode.value === 'reference')
 
@@ -210,6 +215,7 @@ async function launch() {
       description: description.value.trim(),
       private: isPrivate.value,
       instructions: instructions.value.trim(),
+      type: selectedType.value,
     })
     if (job.status === 'failed') {
       // The container couldn't even start (pre-flight failure, e.g. the target
@@ -233,6 +239,8 @@ async function launch() {
       repoName.value = ''
       description.value = ''
       instructions.value = ''
+      // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
+      selectedType.value = 'service'
       // The run is now tracked on the board, so get out of the way: close the
       // dialog as soon as bootstrapping has actually started.
       ui.closeBootstrap()
@@ -467,6 +475,13 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
                 {{ t('bootstrap.grantAccess.label') }}
               </UButton>
             </div>
+          </UFormField>
+
+          <UFormField
+            :label="t('bootstrap.repoType.label')"
+            :description="t('bootstrap.repoType.help')"
+          >
+            <USelect v-model="selectedType" :items="typeItems" value-key="value" class="w-full" />
           </UFormField>
 
           <UFormField

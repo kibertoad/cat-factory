@@ -39,6 +39,12 @@
     "accountSettings": "アカウント設定"
   },
   "board": {
+    "repoTypes": {
+      "service": "サービス",
+      "frontend": "フロントエンド",
+      "library": "ライブラリ",
+      "document": "ドキュメントリポジトリ"
+    },
     "toolbar": {
       "addService": "サービスを追加",
       "decisionWord": "決定 | 決定",
@@ -2159,7 +2165,9 @@
         "addedTitle": "サービスを追加しました",
         "addedDescription": "{title}がボードに追加されました。以下で設定してください。",
         "addFailedTitle": "サービスを追加できませんでした"
-      }
+      },
+      "repoType": "リポジトリの種類",
+      "repoTypeHint": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。"
     },
     "repoTree": {
       "root": "ルート",
@@ -3550,6 +3558,10 @@
       "bootstrapFailed": "ブートストラップできませんでした",
       "saveArchFailed": "リファレンスアーキテクチャを保存できませんでした",
       "deleteFailed": "削除できませんでした"
+    },
+    "repoType": {
+      "label": "リポジトリの種類",
+      "help": "このリポジトリの種類: バックエンドサービス、フロントエンドアプリ、共有ライブラリ、またはドキュメントリポジトリ（ドキュメント/スパイクのみ）。"
     }
   },
   "mergePreset": {

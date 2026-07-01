@@ -39,6 +39,12 @@
     "infrastructure": "Infrastruktura"
   },
   "board": {
+    "repoTypes": {
+      "service": "Usługa",
+      "frontend": "Frontend",
+      "library": "Biblioteka",
+      "document": "Repozytorium dokumentacji"
+    },
     "toolbar": {
       "addService": "Dodaj usługę",
       "decisionWord": "decyzja | decyzje | decyzji",
@@ -2146,7 +2152,9 @@
         "addedTitle": "Dodano usługę",
         "addedDescription": "{title} jest na tablicy, skonfiguruj ją poniżej.",
         "addFailedTitle": "Nie udało się dodać usługi"
-      }
+      },
+      "repoType": "Typ repozytorium",
+      "repoTypeHint": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
     },
     "repoTree": {
       "root": "katalog główny",
@@ -3537,6 +3545,10 @@
       "bootstrapFailed": "Nie udało się zainicjować",
       "saveArchFailed": "Nie udało się zapisać architektury referencyjnej",
       "deleteFailed": "Nie udało się usunąć"
+    },
+    "repoType": {
+      "label": "Typ repozytorium",
+      "help": "Czym jest to repozytorium: usługą backendową, aplikacją frontendową, współdzieloną biblioteką lub repozytorium dokumentacji (tylko dokumenty/spike'i)."
     }
   },
   "mergePreset": {

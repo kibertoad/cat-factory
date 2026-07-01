@@ -209,6 +209,8 @@ export function modelForKindFromPreset(
 export const BLOCK_TYPE_LABEL: Record<BlockType, string> = {
   frontend: 'Frontend',
   service: 'Service',
+  library: 'Library',
+  document: 'Document repository',
   api: 'API',
   database: 'Database',
   queue: 'Queue',

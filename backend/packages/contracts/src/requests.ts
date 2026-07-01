@@ -8,6 +8,7 @@ import {
   agentKindSchema,
   blockTypeSchema,
   createTaskTypeSchema,
+  frameRepoTypeSchema,
   positionSchema,
   sizeSchema,
   taskTypeFieldsSchema,
@@ -60,6 +61,11 @@ export type AddFrameInput = v.InferOutput<typeof addFrameSchema>
 export const addServiceFromRepoSchema = v.object({
   repoGithubId: v.number(),
   position: v.optional(positionSchema),
+  /**
+   * The repository role for the imported frame (backend service / frontend / library /
+   * document repository). Omitted → `service`, so existing callers are unchanged.
+   */
+  type: v.optional(frameRepoTypeSchema),
   /**
    * For a monorepo repo, the subdirectory (relative to the repo root) this service
    * lives in, e.g. `packages/api`. Omitted/empty for a whole-repo service. The

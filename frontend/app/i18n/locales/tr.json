@@ -39,6 +39,12 @@
     "accountSettings": "Hesap ayarları"
   },
   "board": {
+    "repoTypes": {
+      "service": "Servis",
+      "frontend": "Frontend",
+      "library": "Kütüphane",
+      "document": "Doküman deposu"
+    },
     "toolbar": {
       "addService": "Servis ekle",
       "decisionWord": "karar | karar",
@@ -2159,7 +2165,9 @@
         "addedTitle": "Servis eklendi",
         "addedDescription": "{title} panoda, aşağıdan yapılandırın.",
         "addFailedTitle": "Servis eklenemedi"
-      }
+      },
+      "repoType": "Depo türü",
+      "repoTypeHint": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
     },
     "repoTree": {
       "root": "kök",
@@ -3550,6 +3558,10 @@
       "bootstrapFailed": "Başlatılamadı",
       "saveArchFailed": "Referans mimari kaydedilemedi",
       "deleteFailed": "Silinemedi"
+    },
+    "repoType": {
+      "label": "Depo türü",
+      "help": "Bu deponun türü: bir backend servisi, bir frontend uygulaması, paylaşılan bir kütüphane veya bir doküman deposu (yalnızca doküman/spike)."
     }
   },
   "mergePreset": {

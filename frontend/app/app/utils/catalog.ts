@@ -519,6 +519,8 @@ type BlockTypeMeta = { label: string; icon: string; accent: string }
 export const BLOCK_TYPE_META: Record<BlockType, BlockTypeMeta> = {
   frontend: { label: 'Frontend', icon: 'i-lucide-monitor', accent: '#60a5fa' },
   service: { label: 'Service', icon: 'i-lucide-server', accent: '#a78bfa' },
+  library: { label: 'Library', icon: 'i-lucide-package', accent: '#f472b6' },
+  document: { label: 'Document repository', icon: 'i-lucide-book-text', accent: '#c084fc' },
   api: { label: 'API', icon: 'i-lucide-route', accent: '#22d3ee' },
   database: { label: 'Database', icon: 'i-lucide-database', accent: '#34d399' },
   queue: { label: 'Queue', icon: 'i-lucide-list-ordered', accent: '#fbbf24' },

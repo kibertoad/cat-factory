@@ -39,6 +39,12 @@
     "infrastructure": "Infrastructure"
   },
   "board": {
+    "repoTypes": {
+      "service": "Service",
+      "frontend": "Frontend",
+      "library": "Bibliothèque",
+      "document": "Dépôt de documentation"
+    },
     "toolbar": {
       "addService": "Ajouter un service",
       "decisionWord": "décision | décisions",
@@ -2146,7 +2152,9 @@
         "addedTitle": "Service ajouté",
         "addedDescription": "{title} est sur le tableau, configurez-le ci-dessous.",
         "addFailedTitle": "Impossible d'ajouter le service"
-      }
+      },
+      "repoType": "Type de dépôt",
+      "repoTypeHint": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
     },
     "repoTree": {
       "root": "racine",
@@ -3537,6 +3545,10 @@
       "bootstrapFailed": "Impossible d'initialiser",
       "saveArchFailed": "Impossible d'enregistrer l'architecture de référence",
       "deleteFailed": "Impossible de supprimer"
+    },
+    "repoType": {
+      "label": "Type de dépôt",
+      "help": "Ce qu'est ce dépôt : un service backend, une application frontend, une bibliothèque partagée ou un dépôt de documentation (documents/spikes uniquement)."
     }
   },
   "mergePreset": {

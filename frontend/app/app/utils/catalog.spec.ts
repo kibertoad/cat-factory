@@ -39,6 +39,8 @@ const AGENT_KINDS: AgentKind[] = [
 const BLOCK_TYPES: BlockType[] = [
   'frontend',
   'service',
+  'library',
+  'document',
   'api',
   'database',
   'queue',
