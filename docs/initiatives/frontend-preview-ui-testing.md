@@ -47,7 +47,8 @@ build on. Link the merged pilot PR here once it lands.
 | 4   | Mocker frontend awareness + `pl_frontend` pipeline                                    | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
 | 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e      | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
 | 4c  | Surface/gate visual pipelines (`tester-ui`/`visual-confirmation`) to frames with a UI | done   | [#636](https://github.com/kibertoad/cat-factory/pull/636) |
-| 5   | Browsable preview (local/node) + `frontendPreviewSupported` capability gate           | todo   | —                                                         |
+| 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)    | done   | this PR                                                   |
+| 5b  | The long-lived browsable-serve mechanic (build+serve kept alive, URL surface, stop)   | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
 
@@ -226,3 +227,39 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     run-settings (`TaskRunSettings`), the run launchers (`InspectorPanel` / `BlockFocusView`), and
     the recurring schedule (`RecurringPipelineModal`). A new pipeline picker MUST reuse
     `pipelineAllowedForFrame` (`~/utils/pipeline`) so it stays consistent with the gate.
+- Slice 5a conventions & gotchas:
+  - **`frontendPreview.supported` is a NEW infrastructure-capability axis, not an `ExecutionService`
+    dependency.** It rides the SAME `/auth/config` `infrastructureCapabilitiesSchema` descriptor as
+    `execution`/`testEnv` (`contracts/routes/auth.ts`), built by the shared
+    `buildInfrastructureCapabilities` (`server/config/infrastructure.ts`) so all three facades emit
+    the same shape. It is a genuine per-facade **value** differentiator (Worker `false` — it only
+    runs the self-contained UI-test container that is torn down with the run; Node + local `true` —
+    they keep a built app served on a host-reachable URL). Deliberately NOT modelled like
+    `localTestInfraSupported` (a `CoreDependencies` flag feeding a run-start gate): a browsable
+    preview is a topology capability the SPA reads to gate the `previewEnabled` TOGGLE, not a
+    per-run infra precondition — so there is no `assertTesterInfraConfigured`-style engine gate for
+    it (adding a dead `CoreDependencies` field would be worse than the capability descriptor the
+    SPA actually consumes). The cross-runtime conformance suite pins only that the axis is present +
+    boolean (its value is a facade differentiator); the Worker `auth.spec` pins `false`, the Node
+    `auth-gate.spec` pins `true`.
+  - **The SPA gate is a disable-with-hint, not a hard removal.** `FrontendConfig.vue` reads
+    `useAuthStore().infrastructure?.frontendPreview?.supported` (defaulting true until the auth
+    handshake resolves so the toggle isn't briefly disabled on a runtime that DOES support it) and,
+    when unsupported, disables the `previewEnabled` checkbox + swaps the hint for
+    `inspector.frontendConfig.previewUnsupported`. `frontendConfig` is still persisted untouched, so
+    a config authored on local/node and later served from the Worker keeps its `previewEnabled` flag
+    (inert there) rather than being silently stripped — pre-1.0 breakage rules mean the flag just
+    does nothing on the Worker, no migration.
+  - **5b (the deferred serve mechanic) is the remaining half of the original slice 5.** 5a lands the
+    capability + the honest toggle gate; the long-lived build+serve+mock kept ALIVE (vs
+    `standUpFrontend`'s tear-down-with-the-run), the host-reachable URL surfaced to the SPA, and a
+    stop control are 5b. Concrete design to pick up (do NOT re-derive): reuse `standUpFrontend`
+    (harness) unchanged but drive it from a dedicated **preview job** on the local/node container
+    transport that (a) publishes the `servePort` to an ephemeral HOST port (local mode's
+    `ContainerRuntimeAdapter` already does exactly this for the harness job port — reuse
+    `docker port`) and (b) does NOT call `tearDownFrontend` until an explicit stop. Persist the
+    running preview like an ephemeral `environments` row (it already carries `url`/`status`/`frameId`
+    - a stop path) keyed by the `frontend` frame, so the SPA surfaces the clickable URL on the frame
+      inspector and a stop button reuses the env teardown path. Gate the whole flow on
+      `frontendPreview.supported` server-side too (a run-start / provision guard), since 5a only gates
+      the SPA toggle. Keep it a local/node differentiator — the Worker never wires the preview job.

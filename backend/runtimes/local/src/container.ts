@@ -475,6 +475,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         : ['environment-provider'],
       active: localTestInfraSupported ? 'local-compose' : 'environment-provider',
     },
+    // Local mode runs on the developer's own machine, so a built frontend can be served on a
+    // host-reachable URL for a browsable preview — the genuine local/node differentiator over
+    // the Worker's self-contained UI-test container.
+    frontendPreview: { supported: true },
   })
 
   // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with

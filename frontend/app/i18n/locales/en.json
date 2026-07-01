@@ -478,6 +478,7 @@
       "envInjectionHint": "Build-time injects the backend URLs as build env vars; Runtime writes them into a window.env shim. Note your build tool may only expose prefixed vars (e.g. VITE_) to the browser, so name bindings to match its convention.",
       "previewEnabled": "Enable browsable preview",
       "previewHint": "Keeps a served preview running with a clickable URL. Local and Node runtimes only.",
+      "previewUnsupported": "This deployment can't host a browsable preview. Run on a Local or Node deployment to keep a served preview with a clickable URL.",
       "bindings": {
         "title": "Backend bindings",
         "hint": "Each env var the frontend reads for an upstream URL, and where it resolves: a bound service's ephemeral environment, or a WireMock stub.",

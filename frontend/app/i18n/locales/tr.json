@@ -438,6 +438,7 @@
       "envInjectionHint": "Derleme zamanı, backend URL'lerini derleme ortam değişkenleri olarak enjekte eder; Çalışma zamanı, bunları bir window.env shim'ine yazar. Derleme aracınızın tarayıcıya yalnızca önekli değişkenleri (ör. VITE_) sunabileceğini unutmayın; bu nedenle bağlamaları onun kuralına göre adlandırın.",
       "previewEnabled": "Göz atılabilir önizlemeyi etkinleştir",
       "previewHint": "Tıklanabilir bir URL ile sunulan bir önizlemeyi çalışır durumda tutar. Yalnızca Local ve Node çalışma zamanları.",
+      "previewUnsupported": "Bu dağıtım göz atılabilir bir önizleme barındıramaz. Tıklanabilir bir URL ile sunulan bir önizlemeyi sürdürmek için Local veya Node dağıtımında çalıştırın.",
       "bindings": {
         "title": "Backend bağlamaları",
         "hint": "Frontend'in bir üst akış URL'si için okuduğu her ortam değişkeni ve nerede çözümlendiği: bağlı bir hizmetin geçici ortamı veya bir WireMock saplaması.",

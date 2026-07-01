@@ -1207,6 +1207,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   config.infrastructure ??= buildInfrastructureCapabilities({
     execution: { available: ['runner-pool'], active: 'runner-pool' },
     testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+    // Node can keep a built frontend served on a host-reachable URL, so a browsable preview is
+    // supported here (the local facade sets its own descriptor before this default is reached).
+    frontendPreview: { supported: true },
   })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()

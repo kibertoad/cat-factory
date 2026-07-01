@@ -109,6 +109,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           infrastructure?: {
             execution: { available: string[]; active: string }
             testEnv: { available: string[]; active: string }
+            frontendPreview: { supported: boolean }
           }
         }>('GET', '/auth/config')
         expect(res.status).toBe(200)
@@ -119,6 +120,11 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(infra!.execution.available).toContain(infra!.execution.active)
         expect(infra!.testEnv.available.length).toBeGreaterThan(0)
         expect(infra!.testEnv.available).toContain(infra!.testEnv.active)
+        // The browsable-preview capability is a required boolean axis on every facade (the SPA
+        // gates the `previewEnabled` toggle on it). Its VALUE is a per-facade differentiator
+        // (Worker false; Node/local true), so the shared suite pins only that it is present +
+        // boolean — each facade's own spec asserts its concrete value.
+        expect(typeof infra!.frontendPreview.supported).toBe('boolean')
       })
     })
 

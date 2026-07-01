@@ -438,6 +438,7 @@
       "envInjectionHint": "W czasie budowania wstrzykuje adresy URL backendu jako zmienne środowiskowe budowania; W czasie działania zapisuje je w shimie window.env. Pamiętaj, że Twoje narzędzie budujące może udostępniać przeglądarce tylko zmienne z prefiksem (np. VITE_), więc nazywaj powiązania zgodnie z jego konwencją.",
       "previewEnabled": "Włącz przeglądalny podgląd",
       "previewHint": "Utrzymuje działający serwowany podgląd z klikalnym adresem URL. Tylko środowiska Local i Node.",
+      "previewUnsupported": "To wdrożenie nie może hostować przeglądalnego podglądu. Uruchom na wdrożeniu Local lub Node, aby zachować serwowany podgląd z klikalnym adresem URL.",
       "bindings": {
         "title": "Powiązania backendu",
         "hint": "Każda zmienna środowiskowa, którą frontend odczytuje dla adresu URL nadrzędnego, oraz miejsce jej rozwiązania: efemeryczne środowisko powiązanej usługi lub zaślepka WireMock.",
