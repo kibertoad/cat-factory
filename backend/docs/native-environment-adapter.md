@@ -114,6 +114,9 @@ import { kargoEnvironmentBackend } from './my-org-backends.js'
 
 const backendRegistries = createBackendRegistries()
 backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)
+// A `remote-custom` backend ALSO needs a custom manifest type in the catalog, else no service can
+// pin it — see "Also register a custom manifest type" below.
+backendRegistries.customManifestTypeRegistry.register({ manifestId: 'kargo', label: 'Kargo PREnv' })
 
 await start({ buildContainer: (opts) => buildNodeContainer({ ...opts, backendRegistries }) })
 ```
@@ -135,6 +138,42 @@ service, controller, or UI window. It becomes a first-class option in the connec
 advertised to the SPA via the workspace snapshot's `environmentBackendKinds`; the form is
 the descriptor-driven flat fields when your provider implements
 `describeConfig`/`describeManifestTemplate`, else the raw manifest editor.
+
+### Also register a custom manifest type (for `remote-custom` backends)
+
+Registering the backend only teaches the platform **how** a `custom`-type environment is stood
+up (the `remote-custom` "how"). It does **not** by itself let a service *choose* `custom`
+provisioning: a service pins a **`manifestId`** drawn from the **custom-manifest-type catalog**,
+and a `remote-custom` handler declares which id it `acceptsManifestId`. If that catalog is empty,
+the service inspector's provisioning picker shows _"No custom manifest types are defined yet. Add
+one in the Infrastructure window."_ and your backend is unreachable — even though it is registered
+and declares `engines: ['remote-custom']`.
+
+The catalog (`aggregateCustomManifestTypes`,
+`backend/packages/integrations/src/modules/environments/custom-manifest-types.ts`) merges two
+sources by `manifestId`:
+
+- **Code-registered** entries in the injected `CustomManifestTypeRegistry` — the same by-reference
+  seam as the backend, so a deployment that ships a `remote-custom` backend registers a matching
+  type alongside it:
+
+  ```ts
+  backendRegistries.customManifestTypeRegistry.register({
+    manifestId: 'kargo', // what a service pins and the handler's `acceptsManifestId` matches
+    label: 'Kargo PREnv',
+    description: 'Kargo ephemeral preview environment, provisioned from the repo config.',
+  })
+  ```
+
+- **Workspace-defined**, UI-editable rows (the Infrastructure window's custom-type editor),
+  persisted in `custom_manifest_types` and merged over the code-registered set.
+
+So a self-hosted deployment that ships a bespoke `remote-custom` backend should register **both**
+the backend and its manifest type at boot — register the backend without the type and the picker
+stays empty. (A `kubernetes`/`docker-compose`/`local-*` backend needs no manifest type; only the
+open `custom` catalog is keyed this way.) See
+[`per-service-provisioning.md`](./per-service-provisioning.md#custom-manifest-types-the-open-custom-catalog)
+for the full catalog model.
 
 ### Per-workspace config rides the manifest
 
@@ -238,7 +277,9 @@ from `@cat-factory/integrations` (`environmentsLogic.assertSafeEnvironmentUrl`).
 This is the `EnvironmentProvider` (the port) that
 [`buildProvider`](#registering-the-backend) returns — wire it by defining a
 `kargoEnvironmentBackend` value whose `buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy)`
-and registering it by reference (`backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)`).
+and registering it by reference (`backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)`)
+— plus its custom manifest type (`backendRegistries.customManifestTypeRegistry.register({ manifestId: 'kargo', label: 'Kargo PREnv' })`),
+without which no service can pin the `custom` type (see [Also register a custom manifest type](#also-register-a-custom-manifest-type-for-remote-custom-backends)).
 
 ```ts
 import type {
