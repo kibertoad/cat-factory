@@ -815,5 +815,18 @@ describe('post-release-health settings surface (observability / release-health /
         code: 'not_found',
       })
     })
+
+    // A non-object arg (null / primitive) has no `workspaceId` to bind, so the `workspaceField`
+    // rule must fail closed rather than throw on the property access or reach the repo write.
+    for (const [label, arg] of [
+      ['null', null],
+      ['a non-string primitive', 'not-a-record'],
+    ] as const) {
+      it(`rejects ${repo}.upsert when the arg is ${label} (404, fail-closed)`, async () => {
+        await expect(remoteRegistry()[repo]!.upsert!(arg)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+    }
   }
 })

@@ -51,6 +51,15 @@
   observability / incident-enrichment / release-health-config surface is now remote). **Explicitly
   NOT in this slice:** decrypting a sealed connection cipher at gate-probe time (the later
   secrets-delegation slice) and `accountSettingsRepository` (account-scoped, a separate decision).
+  So the settings PANELS are functional end-to-end (persist + read back the redacted summary),
+  but a saved observability connection does NOT yet drive a post-release-health gate probe in
+  mothership mode — that waits on the secrets-delegation slice. Note the connection `get` returns
+  the full record (the sealed `credentials` blob) over the machine API, matching the
+  `environmentRegistryRepository.get` precedent (the RPC client is the trusted, account-scoped
+  local node; the blob is sealed). The `workspaceField` rule binds only the record's top-level
+  `workspaceId`; `releaseHealthConfigRepository`'s `blockId` is not re-validated over the RPC (the
+  service layer, bypassed here, owns block-existence), so a config can only ever land in the
+  caller's own in-scope workspace.
 - **Phase 3 follow-up (failed-run retry / stop control surface)** — the board's run controls
   (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`, `AgentRunController`) enter through the
   unified `agent_runs` table's `agentRunRepository.getRef(workspaceId, id)`, which resolves a run's

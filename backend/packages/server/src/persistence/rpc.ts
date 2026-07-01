@@ -77,6 +77,12 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *   - `workspaceField`— `args[arg]` is a record with a `workspaceId` string field (an
  *                       `upsert(record)` whose scope key is a property of the record, not a
  *                       positional arg); resolve that workspace's owning account like `workspace`.
+ *                       ONLY the top-level `workspaceId` is bound — sibling fields (e.g. a
+ *                       record's `blockId`) are NOT scope-validated here, exactly as the raw repo
+ *                       upsert doesn't cross-check them. That is safe because the row is stored
+ *                       under (and later read by) the bound `workspaceId`, so a stray sibling id
+ *                       only ever lands in the caller's own in-scope workspace; the service layer
+ *                       (bypassed by the RPC) is where block-existence is enforced.
  *   - `account`       — `args[arg]` IS an accountId.
  *   - `accountList`   — `args[arg]` is `string[]` of accountIds; ALL must be in scope.
  *   - `selfUser`      — `args[arg]` is a userId; must equal the token's `userId`.
@@ -391,8 +397,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // the record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the
   // `workspaceField` rule — the id is a property, not a positional arg). Exposing them makes
   // the observability / release-health / incident-enrichment editors functional (persist +
-  // read back), not read-only, in mothership mode. (Decrypting a sealed connection cipher at
-  // gate-probe time still belongs to the later secrets-delegation slice.)
+  // read back), not read-only, in mothership mode.
+  //
+  // Scope of what this unlocks: the settings PANELS work end-to-end (save + read back the
+  // redacted summary, which never decrypts). The saved connection cannot yet DRIVE a
+  // post-release-health gate probe in mothership mode — decrypting the sealed connection cipher
+  // at gate-probe time belongs to the later secrets-delegation slice. The connection `get` here
+  // returns the FULL record (the sealed `credentials` blob), not the redacted service view: the
+  // RPC client is the trusted local node, the blob is sealed and account-scoped, so this matches
+  // the existing `environmentRegistryRepository.get` precedent (sealed cipher over the machine
+  // API). The record-based `upsert` binds only the top-level `record.workspaceId` (see the
+  // `workspaceField` note above) — `releaseHealthConfigRepository`'s `blockId` is NOT
+  // re-validated here, so a config can only ever be planted into the caller's own in-scope
+  // workspace, never another's.
   observabilityConnectionRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },

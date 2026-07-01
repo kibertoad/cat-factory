@@ -24,3 +24,8 @@ record can only be persisted into an in-scope workspace; a missing/non-string fi
 out-of-scope workspace is refused as 404. Server-only allow-list change, symmetric by construction
 (the dispatcher reflects over each facade's registry). Round-trip + cross-account-scope tests cover
 every new method; the static drift guard moves them out of `pending`.
+
+Scope: this makes the settings PANELS functional end-to-end (persist + read back the redacted
+summary). It does NOT yet make a saved observability connection drive a post-release-health gate
+probe in mothership mode — decrypting the sealed connection cipher at gate-probe time is the later
+secrets-delegation slice.
