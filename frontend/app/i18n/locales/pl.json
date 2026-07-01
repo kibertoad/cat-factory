@@ -12,6 +12,7 @@
     "save": "Zapisz",
     "cancel": "Anuluj",
     "retry": "Ponów",
+    "copy": "Kopiuj",
     "actionFailed": "Akcja nie powiodła się",
     "close": "Zamknij",
     "block": "Blok"
@@ -1757,6 +1758,10 @@
       },
       "kubernetesEngine": {
         "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą, wygeneruj jego token poleceniem `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) i wklej go poniżej. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
+        "autoSetup": {
+          "title": "Automatyczna konfiguracja przez CLI",
+          "description": "Uruchom to w terminalu, aby wykryć lub udostępnić lokalny klaster, wygenerować token ServiceAccount i otworzyć ten formularz wstępnie wypełniony. Wklej wyświetlony token, a następnie kliknij Przetestuj i Zapisz."
+        },
         "label": "Etykieta połączenia",
         "labelPlaceholder": "Klaster podglądu",
         "apiServerUrl": "URL serwera API",

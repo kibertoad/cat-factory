@@ -14,6 +14,19 @@ export interface AddTaskPrefill {
   context?: PendingContext[]
 }
 
+/**
+ * Non-secret `local-k3s` connection values captured from the `cat-factory k3s` CLI deep-link
+ * (`?infraSetup=local-k3s&…`). Mirrors the params `buildK3sSetupUrl` emits (the CLI-side
+ * `k3s-handler.ts`); the ServiceAccount token is intentionally absent — the user pastes it.
+ */
+export interface K3sSetupPrefill {
+  label: string
+  apiServerUrl: string
+  namespaceTemplate: string
+  hostTemplate: string
+  insecureSkipTlsVerify: boolean
+}
+
 /** Transient UI state: selection, panels, zoom level. */
 export const useUiStore = defineStore('ui', () => {
   const selectedBlockId = ref<string | null>(null)
@@ -143,6 +156,11 @@ export const useUiStore = defineStore('ui', () => {
   // `openProviderConnection(kind)` remains for deep-links (a banner's "Configure…" button).
   const infrastructureOpen = ref(false)
   const infrastructureTab = ref<'environment' | 'runner-pool'>('runner-pool')
+  // Non-secret prefill captured from the `cat-factory k3s` CLI deep-link (see
+  // `consumeK3sSetupDeepLink`). When set, the Test-environments tab's kube engine form seeds the
+  // `local-k3s` connection from it; the ServiceAccount token is deliberately NOT in the link (a
+  // secret in a URL leaks into history/logs), so the user still pastes it before Test → Save.
+  const k3sSetupPrefill = ref<K3sSetupPrefill | null>(null)
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
@@ -530,6 +548,40 @@ export const useUiStore = defineStore('ui', () => {
   }
   function closeProviderConnection() {
     infrastructureOpen.value = false
+    // Drop any consumed CLI prefill so re-opening the window normally doesn't re-seed the form.
+    k3sSetupPrefill.value = null
+  }
+  // Capture a `cat-factory k3s` deep-link (`?infraSetup=local-k3s&…`) on app load: stash the
+  // non-secret connection values, open the Infrastructure window on the Test-environments tab so
+  // the kube engine form seeds from them, then strip the params from the URL (mirrors the
+  // `?invite=` handling in the auth store) so a reload doesn't re-trigger and the link isn't left
+  // in history. No-op when the query param is absent.
+  function consumeK3sSetupDeepLink() {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('infraSetup') !== 'local-k3s') return
+    k3sSetupPrefill.value = {
+      label: params.get('label') ?? 'Local k3s',
+      apiServerUrl: params.get('apiServerUrl') ?? '',
+      namespaceTemplate: params.get('namespaceTemplate') ?? '',
+      hostTemplate: params.get('hostTemplate') ?? '',
+      insecureSkipTlsVerify: params.get('insecureSkipTlsVerify') === '1',
+    }
+    resetHubReturn()
+    infrastructureTab.value = 'environment'
+    infrastructureOpen.value = true
+    for (const key of [
+      'infraSetup',
+      'label',
+      'apiServerUrl',
+      'namespaceTemplate',
+      'hostTemplate',
+      'insecureSkipTlsVerify',
+    ]) {
+      params.delete(key)
+    }
+    const qs = params.toString()
+    history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
   }
   function openModelConfig() {
     modelConfigOpen.value = true
@@ -792,6 +844,8 @@ export const useUiStore = defineStore('ui', () => {
     closeObservabilityConnection,
     openProviderConnection,
     closeProviderConnection,
+    k3sSetupPrefill,
+    consumeK3sSetupDeepLink,
     openModelConfig,
     closeModelConfig,
     openVendorCredentials,
