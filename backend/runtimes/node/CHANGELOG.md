@@ -1,5 +1,14 @@
 # @cat-factory/node-server
 
+## 0.54.1
+
+### Patch Changes
+
+- Updated dependencies [d4d4cbc]
+  - @cat-factory/server@0.62.1
+  - @cat-factory/integrations@0.51.1
+  - @cat-factory/orchestration@0.52.1
+
 ## 0.54.0
 
 ### Minor Changes
