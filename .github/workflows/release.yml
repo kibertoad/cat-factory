@@ -10,6 +10,24 @@ name: Release
 on:
   push:
     branches: [main]
+    # A docs-only merge must NOT trigger the publish flow — publishing a package
+    # whose only change is prose it doesn't ship is pointless. The exception is
+    # README files: those ARE shipped in the npm tarball, so a README change
+    # SHOULD republish. Changesets (.changeset/**) are what DRIVE a release, so a
+    # new changeset always triggers. Semantics: a push runs the workflow only if
+    # at least one changed file matches a positive pattern after the negations —
+    # last match wins per file, so a lone doc excludes itself while any code file
+    # (matched by '**') or a README/changeset re-includes.
+    paths:
+      - '**'
+      - '!**/*.md'
+      - '!docs/**'
+      - '!backend/docs/**'
+      # README ships in the published package tarball — republish on a change.
+      - 'README.md'
+      - '**/README.md'
+      # A new/changed changeset is the trigger for the release itself.
+      - '.changeset/**'
   workflow_dispatch:
 
 # Don't cancel an in-flight publish.
