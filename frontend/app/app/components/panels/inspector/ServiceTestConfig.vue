@@ -10,8 +10,11 @@ import type {
 import type {
   KubernetesManifestSource,
   KubernetesRenderer,
+  ProvisioningComposeServiceCandidate,
+  ProvisioningManifestRootCandidate,
   ProvisioningOverlayCandidate,
   ProvisioningRecommendation,
+  ProvisioningServiceDirCandidate,
 } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
@@ -204,6 +207,11 @@ function applyPicked() {
 const detecting = ref(false)
 const detectError = ref(false)
 const detectResult = ref<ProvisioningRecommendation | null>(null)
+// Advisory, LOCAL-ONLY selection: which compose `services:` key the user picked. It is NOT persisted
+// (the compose backend targets the file, not a single service), so it lives only in component state
+// and merely drives the chip highlight. Without it the highlight would compare `composePath` — which
+// every candidate shares — and light up ALL chips at once, making the picker look non-functional.
+const pickedComposeService = ref<string | null>(null)
 
 // A detection result is scoped to the inspected block — clear it (and any error) when the
 // selection changes, so block B never shows block A's stale recommendation / overlay chips.
@@ -212,6 +220,7 @@ watch(
   () => {
     detectResult.value = null
     detectError.value = false
+    pickedComposeService.value = null
   },
 )
 
@@ -235,6 +244,9 @@ async function detectFromRepo() {
       prefer: provisionType.value,
     })
     detectResult.value = rec
+    // Pre-select the recommended compose service so the picker opens on a real choice.
+    pickedComposeService.value =
+      rec.composeServiceCandidates?.find((c) => c.recommended)?.service ?? null
     // Only prefill when the detector actually inferred something. A `detected: false`
     // recommendation is `infraless`; applying it would WIPE the service's existing
     // provisioning (board.updateBlock persists immediately). Leave the current config
@@ -253,6 +265,25 @@ async function detectFromRepo() {
 // Switch the recommended manifest path to a different overlay candidate (the user's pick).
 function applyOverlay(candidate: ProvisioningOverlayCandidate) {
   setKubePath(candidate.path)
+}
+
+// Point the manifest path at a different k8s root (and match its renderer) the user picks.
+function applyManifestRoot(candidate: ProvisioningManifestRootCandidate) {
+  setKubePath(candidate.path)
+  setKubeRenderer(candidate.renderer)
+}
+
+// Point the manifest path at a different root-shared monorepo deploy slice the user picks.
+function applyServiceDir(candidate: ProvisioningServiceDirCandidate) {
+  setKubePath(candidate.path)
+}
+
+// Point the compose file at the picked candidate's file and record the advisory service selection.
+// The service KEY is not persisted (the compose backend targets the file, not a single service); the
+// picked key is tracked locally only to drive the chip highlight and the note.
+function applyComposeService(candidate: ProvisioningComposeServiceCandidate) {
+  setComposePath(candidate.composePath)
+  pickedComposeService.value = candidate.service
 }
 
 function provisionTypeLabel(type: ProvisionType): string {
@@ -350,6 +381,42 @@ function setSize(value: InstanceSize) {
             }}
           </p>
 
+          <div v-if="detectResult.serviceDirCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.serviceDirTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="s in detectResult.serviceDirCandidates"
+                :key="s.path"
+                :color="kubePath === s.path ? 'primary' : 'neutral'"
+                :variant="kubePath === s.path ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyServiceDir(s)"
+              >
+                {{ s.name }}
+              </UButton>
+            </div>
+          </div>
+
+          <div v-if="detectResult.manifestRootCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.manifestRootTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="r in detectResult.manifestRootCandidates"
+                :key="r.path"
+                :color="kubePath === r.path ? 'primary' : 'neutral'"
+                :variant="kubePath === r.path ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyManifestRoot(r)"
+              >
+                {{ r.name }}
+              </UButton>
+            </div>
+          </div>
+
           <div v-if="detectResult.overlayCandidates?.length" class="space-y-1">
             <span class="text-[11px] text-slate-400">{{
               t('inspector.testConfig.detect.overlayTitle')
@@ -364,6 +431,24 @@ function setSize(value: InstanceSize) {
                 @click="applyOverlay(o)"
               >
                 {{ o.name }}
+              </UButton>
+            </div>
+          </div>
+
+          <div v-if="detectResult.composeServiceCandidates?.length" class="space-y-1">
+            <span class="text-[11px] text-slate-400">{{
+              t('inspector.testConfig.detect.composeServiceTitle')
+            }}</span>
+            <div class="flex flex-wrap gap-1">
+              <UButton
+                v-for="c in detectResult.composeServiceCandidates"
+                :key="c.service"
+                :color="pickedComposeService === c.service ? 'primary' : 'neutral'"
+                :variant="pickedComposeService === c.service ? 'soft' : 'ghost'"
+                size="xs"
+                @click="applyComposeService(c)"
+              >
+                {{ c.service }}
               </UButton>
             </div>
           </div>
