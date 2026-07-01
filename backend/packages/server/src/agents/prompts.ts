@@ -315,12 +315,22 @@ const RESERVED_ENV_NAMES = new Set([
   'IFS',
 ])
 
-/** Env-var name prefixes never injected (reconfigure the package manager / git during the build). */
-const RESERVED_ENV_PREFIXES = ['npm_config_', 'GIT_']
+/**
+ * Env-var name prefixes never injected (reconfigure the package manager / git during the build).
+ * Compared case-INSENSITIVELY (lower-cased): npm reads its config env with a case-insensitive
+ * `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY` is honoured exactly like `npm_config_registry` — a
+ * case-sensitive match would let the upper-cased form through. Kept in sync with the harness list.
+ */
+const RESERVED_ENV_PREFIXES = ['npm_config_', 'git_']
 
-/** Whether an env-var name is reserved (an exact name or a reserved family prefix). */
+/**
+ * Whether an env-var name is reserved (an exact canonical name, matched verbatim, or a reserved
+ * family prefix, matched case-insensitively — see {@link RESERVED_ENV_PREFIXES}).
+ */
 function isReservedEnvName(key: string): boolean {
-  return RESERVED_ENV_NAMES.has(key) || RESERVED_ENV_PREFIXES.some((p) => key.startsWith(p))
+  if (RESERVED_ENV_NAMES.has(key)) return true
+  const lower = key.toLowerCase()
+  return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
 }
 
 /**

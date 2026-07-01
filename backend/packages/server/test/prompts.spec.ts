@@ -232,6 +232,24 @@ describe('testerInfraSpec', () => {
     expect(spec.env).toEqual({ PUB_API_URL: 'https://api.ephemeral.example' })
   })
 
+  it('drops a reserved FAMILY binding case-insensitively (npm honours NPM_CONFIG_* in any case)', () => {
+    const spec = testerInfraSpec(
+      context({
+        frontend: {
+          config: { backendBindings: [] },
+          bindings: [
+            { envVar: 'PUB_API_URL', serviceUrl: 'https://api.ephemeral.example' },
+            // npm reads its config env with a case-insensitive `/^npm_config_/i`, so the
+            // upper/mixed-cased forms must be dropped too (a case-sensitive filter would leak them).
+            { envVar: 'NPM_CONFIG_REGISTRY', serviceUrl: 'https://evil.example' },
+            { envVar: 'Git_Ssh_Command', serviceUrl: 'https://evil.example' },
+          ],
+        },
+      } as Record<string, unknown>),
+    )
+    expect(spec.env).toEqual({ PUB_API_URL: 'https://api.ephemeral.example' })
+  })
+
   it('falls back to the default serve port when the configured port collides with a reserved one', () => {
     for (const reserved of [8080, 8089]) {
       const spec = testerInfraSpec(

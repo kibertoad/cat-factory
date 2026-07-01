@@ -172,6 +172,33 @@ async function manageInfra(
   }
 }
 
+/**
+ * Build the dynamic infra notes appended to the agent's user prompt from a stand-up outcome.
+ * A stand-up problem (a failed build / compose) is flagged as a concern to test around; a
+ * frontend serve URL points the UI tester at the app that was just built + served and pre-empts
+ * a live-backend CORS failure being mis-reported as an app defect. Pure (no IO) so the exact
+ * wording + ordering is unit-tested; returns the notes in order (problem first, serve URL next).
+ */
+export function buildInfraNotes(managed: { note?: string; serveUrl?: string }): string[] {
+  const notes: string[] = []
+  if (managed.note) {
+    notes.push(
+      `standing the infra up reported a problem (${managed.note}). Test what you can and ` +
+        `flag any dependency-related gaps as concerns.`,
+    )
+  }
+  if (managed.serveUrl) {
+    notes.push(
+      `The frontend under test is built and served at ${managed.serveUrl}, with its other ` +
+        `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}. ` +
+        `If a call to a live backend fails with a CORS / cross-origin error, that is an infra ` +
+        `gap (the backend must allow the ${managed.serveUrl} origin), not an app defect — flag ` +
+        `it as a concern rather than a failing test.`,
+    )
+  }
+  return notes
+}
+
 /** Tear the docker-compose dependencies down (best-effort; a no-op when none were started). */
 async function tearDownInfra(dir: string, infra: ServiceInfraSpec): Promise<void> {
   if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) return
@@ -260,22 +287,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // Fold the stand-up outcome into the agent prompt: a stand-up problem (build/compose
       // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
       // app it just built + served (the backend env resolution already reached the harness).
-      const infraNotes: string[] = []
-      if (managed?.note) {
-        infraNotes.push(
-          `standing the infra up reported a problem (${managed.note}). Test what you can and ` +
-            `flag any dependency-related gaps as concerns.`,
-        )
-      }
-      if (managed?.serveUrl) {
-        infraNotes.push(
-          `The frontend under test is built and served at ${managed.serveUrl}, with its other ` +
-            `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}. ` +
-            `If a call to a live backend fails with a CORS / cross-origin error, that is an infra ` +
-            `gap (the backend must allow the ${managed.serveUrl} origin), not an app defect — flag ` +
-            `it as a concern rather than a failing test.`,
-        )
-      }
+      const infraNotes = managed ? buildInfraNotes(managed) : []
       const userPrompt = infraNotes.length
         ? `${job.userPrompt}\n\nNote: ${infraNotes.join(' ')}`
         : job.userPrompt

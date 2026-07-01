@@ -396,7 +396,7 @@
       "envInjection": "Injection de variables d'environnement",
       "envBuild": "À la compilation",
       "envRuntime": "À l'exécution",
-      "envInjectionHint": "À la compilation, injecte les URL du backend comme variables d'environnement de compilation ; À l'exécution, les écrit dans un shim window.env.",
+      "envInjectionHint": "À la compilation, injecte les URL du backend comme variables d'environnement de compilation ; À l'exécution, les écrit dans un shim window.env. Notez que votre outil de build peut n'exposer au navigateur que les variables préfixées (p. ex. VITE_) ; nommez donc les liaisons selon sa convention.",
       "previewEnabled": "Activer l'aperçu navigable",
       "previewHint": "Maintient un aperçu servi en cours d'exécution avec une URL cliquable. Uniquement pour les runtimes Local et Node.",
       "bindings": {

@@ -396,7 +396,7 @@
       "envInjection": "Ortam değişkeni enjeksiyonu",
       "envBuild": "Derleme zamanı",
       "envRuntime": "Çalışma zamanı",
-      "envInjectionHint": "Derleme zamanı, backend URL'lerini derleme ortam değişkenleri olarak enjekte eder; Çalışma zamanı, bunları bir window.env shim'ine yazar.",
+      "envInjectionHint": "Derleme zamanı, backend URL'lerini derleme ortam değişkenleri olarak enjekte eder; Çalışma zamanı, bunları bir window.env shim'ine yazar. Derleme aracınızın tarayıcıya yalnızca önekli değişkenleri (ör. VITE_) sunabileceğini unutmayın; bu nedenle bağlamaları onun kuralına göre adlandırın.",
       "previewEnabled": "Göz atılabilir önizlemeyi etkinleştir",
       "previewHint": "Tıklanabilir bir URL ile sunulan bir önizlemeyi çalışır durumda tutar. Yalnızca Local ve Node çalışma zamanları.",
       "bindings": {

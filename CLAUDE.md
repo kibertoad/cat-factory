@@ -1281,6 +1281,18 @@ string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
    `usePipelineErrorToast().present(...)`), which the scanner can't see as used — so an
    unused-key hard gate would fail spuriously and fight the incremental migration.
 
+4. A **locale-parity** CI check couples translations to `en.json` edits: a PR that adds,
+   changes, or removes an `en.json` message key MUST make the SAME change in every other locale
+   (`es/fr/he/ja/pl/tr/uk`), else it fails. It runs in the `build-typecheck` job via
+   `node frontend/app/scripts/i18n-locale-parity.mjs --since origin/<base>` (also
+   `pnpm --filter @cat-factory/app run i18n:parity`). This is **change-coupling against the PR
+   merge-base**, NOT full key-parity: it enforces ONLY the keys THIS PR touched in `en`, so the
+   pre-existing translation lag on untouched keys is left alone (it does not force a mass
+   back-translation). `@<key>` description siblings are en-only and ignored. Off a PR (no base
+   ref) it passes. **Consequence for the incremental rule below:** you may still add `en` keys
+   ahead of the components that use them, but when you do, add the translated value to all
+   locales in the SAME PR — an `en`-only string edit now fails CI.
+
 Migration is incremental — `usePipelineErrorToast` is the pilot; most components still hold
 inline strings, so **when you touch a component, lift its visible copy into the catalog**
 rather than adding more raw text.

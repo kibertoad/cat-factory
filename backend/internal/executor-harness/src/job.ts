@@ -605,12 +605,22 @@ const RESERVED_ENV_NAMES = new Set([
  * Env-var name PREFIXES never injected from a frontend binding. `npm_config_*` reconfigures the
  * package manager (registry, scripts, prefix), and `GIT_*` reconfigures git — both run during a
  * frontend install/build, so a binding in either family is toolchain control, not an upstream URL.
+ * Compared case-INSENSITIVELY (lower-cased here, matched lower-cased below): npm reads its config
+ * env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY` is honoured just like
+ * `npm_config_registry` — a case-sensitive prefix match would let the upper-cased form slip through.
  */
-const RESERVED_ENV_PREFIXES = ['npm_config_', 'GIT_']
+const RESERVED_ENV_PREFIXES = ['npm_config_', 'git_']
 
-/** Whether an env-var name is reserved (an exact name or a reserved family prefix). */
+/**
+ * Whether an env-var name is reserved (an exact name, or a reserved family prefix). The exact
+ * names are canonical upper-case env vars matched verbatim (Linux env is case-sensitive, so a
+ * distinct lower-cased `home` is a different, harmless var); the family PREFIXES are matched
+ * case-insensitively because npm interprets `npm_config_*` regardless of case (see above).
+ */
 function isReservedEnvName(key: string): boolean {
-  return RESERVED_ENV_NAMES.has(key) || RESERVED_ENV_PREFIXES.some((p) => key.startsWith(p))
+  if (RESERVED_ENV_NAMES.has(key)) return true
+  const lower = key.toLowerCase()
+  return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
 }
 
 /** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */

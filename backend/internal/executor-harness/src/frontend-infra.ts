@@ -45,7 +45,7 @@ export interface FrontendStandUp {
 }
 
 /** The install command for a package manager (an explicit `install` overrides this). */
-function installCommand(spec: FrontendInfraSpec): string[] {
+export function installCommand(spec: FrontendInfraSpec): string[] {
   if (spec.install) return spec.install.split(/\s+/).filter(Boolean)
   const pm = spec.packageManager ?? DEFAULTS.packageManager
   return [pm, 'install']
@@ -321,7 +321,13 @@ async function waitForHttp(
   while (Date.now() < deadline) {
     if (signal?.aborted) return false
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(5_000) })
+      // Abort a hung probe on the per-attempt 5s timeout AND on the run's own signal, so an
+      // aborted run doesn't wait out an in-flight fetch (the top-of-loop check only catches an
+      // abort BETWEEN attempts).
+      const attemptSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(5_000)])
+        : AbortSignal.timeout(5_000)
+      const res = await fetch(url, { signal: attemptSignal })
       // Any response (even a 404) means the server is up and accepting connections.
       if (res.status > 0) return true
     } catch {

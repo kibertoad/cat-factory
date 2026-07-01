@@ -21,6 +21,7 @@
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
     "i18n:check": "node scripts/i18n-check.mjs",
+    "i18n:parity": "node scripts/i18n-locale-parity.mjs",
     "test": "vitest",
     "test:run": "vitest run"
   },

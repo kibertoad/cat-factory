@@ -396,7 +396,7 @@
       "envInjection": "環境変数の注入",
       "envBuild": "ビルド時",
       "envRuntime": "ランタイム",
-      "envInjectionHint": "ビルド時はバックエンドの URL をビルド環境変数として注入します。ランタイムは window.env シムに書き込みます。",
+      "envInjectionHint": "ビルド時はバックエンドの URL をビルド環境変数として注入します。ランタイムは window.env シムに書き込みます。なお、ビルドツールはプレフィックス付きの変数（例: VITE_）のみをブラウザーに公開する場合があるため、その規約に合わせてバインディングに名前を付けてください。",
       "previewEnabled": "閲覧可能なプレビューを有効にする",
       "previewHint": "クリック可能な URL 付きの配信プレビューを実行し続けます。Local および Node ランタイムのみ。",
       "bindings": {

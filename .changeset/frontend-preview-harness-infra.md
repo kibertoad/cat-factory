@@ -67,6 +67,21 @@ it works on Cloudflare and Apple `container` too.
   gains `resolveServiceFrame` so the frontend-config resolution reuses the frame row the walk
   already loaded instead of re-fetching it. Fixes the `Lint & format` failure (an unnecessary
   `?? {}` empty-fallback spread in the serve env).
+- **Hardening (fourth review round)**: the reserved-env family filter (`npm_config_*` / `GIT_*`)
+  now matches **case-insensitively** in BOTH the harness parse and the backend infra-spec builder —
+  npm reads its config env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY`
+  (upper/mixed case) is honoured just like `npm_config_registry`; a case-sensitive prefix match
+  would have let the upper-cased form slip through and reconfigure the package manager during the
+  build. The frontend serve/WireMock health-check now also aborts an in-flight probe on the run's
+  own abort signal (not just the per-attempt timeout). The stale `envInjectionHint` translation is
+  synced across all locales, and the missed-translation class is now guarded in CI (see the app
+  note). The agent prompt-note assembly and the frontend `installCommand` are extracted as pure
+  helpers with unit coverage.
+
+`@cat-factory/app`: sync the `envInjectionHint` hint across all locales (the `en` update noting
+the build-tool prefix caveat, e.g. Vite only exposes `VITE_*`, had been left untranslated). A new
+CI **locale-parity guard** now fails a PR that changes an `en.json` message key without changing
+the same key in every other locale, so translations can't silently go stale.
 
 BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
 (`service` | `frontend`); the default backend-service tester shape is unchanged.
