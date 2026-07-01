@@ -1232,7 +1232,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
   // selectors. A deployment registers a custom backend by reference; the conformance suite
   // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
-  const { environmentBackendRegistry, runnerBackendRegistry } =
+  const { environmentBackendRegistry, runnerBackendRegistry, customManifestTypeRegistry } =
     options.backendRegistries ?? createBackendRegistries()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
@@ -1939,6 +1939,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
+    // The code-defined custom provision-type catalog, merged with the workspace rows by
+    // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
+    // per-service provisioning picker.
+    customManifestTypeRegistry,
     ...(accountSettings ? { accountSettings } : {}),
     // Resolves the per-account binary-artifact store (screenshots) for the visual-confirmation
     // gate; resolving to null (no storage configured) ⇒ the gate passes through.
