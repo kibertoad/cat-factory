@@ -1,5 +1,240 @@
 # @cat-factory/server
 
+## 0.64.0
+
+### Minor Changes
+
+- e0aa45e: Self-contained frontend UI-test infra (slice 3 of the frontend-preview + in-context
+  UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A `tester-ui` running on a task under a `type: 'frontend'` frame now builds and serves the
+  frontend, stands WireMock up for its OTHER backend upstreams, and drives the UI tests against
+  the two together — all as localhost processes in the one container (no Docker-in-Docker), so
+  it works on Cloudflare and Apple `container` too.
+
+  - **Harness**: a new `frontend` variant of the tester infra spec (`kind: 'frontend'`) that
+    installs, builds (injecting the resolved backend URLs at build time, or a `window.env` shim
+    for runtime injection), starts WireMock seeded from the frontend repo's mappings dir, serves
+    the built app, health-checks it, and points the agent at it. The `ui` image gains pnpm/yarn
+    (corepack), a static file server (`serve`), and a headless JRE + WireMock standalone
+    (executor-harness image bumped to 1.28.0).
+  - **Backend**: `AgentRunContext` carries a resolved `frontend` slice (the frame's
+    `frontendConfig` plus its backend bindings resolved to concrete upstreams — a bound service's
+    live ephemeral env URL for the service under test, else a WireMock mock). The engine's
+    `testerInfraSpec` turns it into the harness spec, and the tester-infra start gate refuses a
+    frontend UI test only when it binds a live-backend `service` with none actually live (a
+    mock-only / no-backend frontend passes — WireMock + the static server fully stand it up).
+    Empty-envVar bindings are filtered.
+  - **Hardening** (review follow-ups): the harness's WireMock / serve child processes get an
+    `'error'` listener (a spawn failure is captured, not an uncaught crash of the job server),
+    WireMock is now health-checked alongside the served app (a dead mock becomes a prompt note,
+    not a test-time ECONNREFUSED), reserved env-var names (`PATH`, `NODE_OPTIONS`, …) are dropped
+    from the injected build env, and a configured `servePort` that collides with a reserved
+    in-container port (8080 harness job server, 8089 WireMock) falls back to the default. The
+    inspector's servePort placeholder now shows 4173. Shared `pathExists` / log-capture helpers
+    are de-duplicated in the harness. The frontend UI-test gate's batch env read
+    (`environmentRegistryRepository.listByWorkspace`) is added to the mothership remote-persistence
+    allow-list so the gate resolves in mothership mode.
+  - **Hardening (second review round)**: the frontend stand-up now feeds the run's inactivity
+    watchdog with a heartbeat while it installs/builds/serves — a real frontend's `install` +
+    `build` can exceed the 10-min inactivity window, and the (activity-silent) stand-up would
+    otherwise be killed mid-build with a misleading "likely hung". `serveMode: 'command'` now also
+    forwards the resolved backend URLs (`env`) to the serve process, so a runtime-reading
+    dev/preview server sees them (previously only `PORT` was passed). Reserved env-var names are
+    now also dropped in the backend infra-spec builder (defence in depth, not just the harness).
+    The `mockMappingsPath` docs + inspector hint clarify WireMock's `--root-dir` layout (stubs go
+    in a `mappings/` subfolder), and the env-injection hint notes the build-tool prefix caveat
+    (e.g. Vite only exposes `VITE_*`). The UI-tester prompt flags a live-backend CORS failure as an
+    infra gap rather than an app defect.
+  - **Hardening (third review round)**: the frontend stand-up now runs in the run's SERVICE
+    SUBTREE (`workDir`), not the clone root — a monorepo frontend's `package.json` / `outputDir` /
+    `mocks/` live under its own subdirectory, so installing, building, serving and seeding WireMock
+    from the repo root would have targeted the wrong directory (the docker-compose stand-up still
+    runs at the root, where its repo-relative `composePath` resolves). The harness now bounds
+    frontend `servePort` / `wiremockPort` to 1..65535 at its untrusted-body boundary (an
+    out-of-range port can never bind, so it falls back to the default). The reserved-env filter —
+    in BOTH the harness parse and the backend infra-spec builder — grows the `NODE_EXTRA_CA_CERTS`
+    / `BASH_ENV` / `ENV` / `SHELL` / `IFS` names plus the `npm_config_*` and `GIT_*` FAMILIES, so a
+    binding that reconfigures the package manager, git, or the TLS trust store during the build is
+    dropped rather than injected. Runtime env injection under `serveMode: 'command'` now warns
+    (the `window.env` shim is only served in static mode; the forwarded `env` covers the command
+    server), and a failed shim write is logged instead of silently swallowed. `AgentContextBuilder`
+    gains `resolveServiceFrame` so the frontend-config resolution reuses the frame row the walk
+    already loaded instead of re-fetching it. Fixes the `Lint & format` failure (an unnecessary
+    `?? {}` empty-fallback spread in the serve env).
+  - **Hardening (fourth review round)**: the reserved-env family filter (`npm_config_*` / `GIT_*`)
+    now matches **case-insensitively** in BOTH the harness parse and the backend infra-spec builder —
+    npm reads its config env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY`
+    (upper/mixed case) is honoured just like `npm_config_registry`; a case-sensitive prefix match
+    would have let the upper-cased form slip through and reconfigure the package manager during the
+    build. The frontend serve/WireMock health-check now also aborts an in-flight probe on the run's
+    own abort signal (not just the per-attempt timeout). The stale `envInjectionHint` translation is
+    synced across all locales, and the missed-translation class is now guarded in CI (see the app
+    note). The agent prompt-note assembly and the frontend `installCommand` are extracted as pure
+    helpers with unit coverage.
+
+  `@cat-factory/app`: sync the `envInjectionHint` hint across all locales (the `en` update noting
+  the build-tool prefix caveat, e.g. Vite only exposes `VITE_*`, had been left untranslated). A new
+  CI **locale-parity guard** now fails a PR that changes an `en.json` message key without changing
+  the same key in every other locale, so translations can't silently go stale.
+
+  BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
+  (`service` | `frontend`); the default backend-service tester shape is unchanged.
+
+- f21279e: Warn when required infrastructure is undefined. The workspace snapshot now carries an
+  `infraSetup` projection (computed server-side in `WorkspaceController` from whatever the
+  deployment actually wired) that tracks three areas explicitly as `not_defined` /
+  `configured` / `not_applicable`:
+
+  - **Ephemeral environments** (all runtimes that wire the environments integration) —
+    `not_defined` when no environment provider connection is registered, so testing agents
+    that need a live environment can't run.
+  - **Agent executor** (stock/remote Node only — Cloudflare has built-in per-run containers, and
+    local mode runs agents in per-run HOST containers) — `not_defined` when no self-hosted runner
+    pool is registered, so NO container agents can run. This area fires only where the pool is the
+    SOLE executor (the new `agentExecutorRequiresRunnerPool` container flag, set by the Node facade
+    when it uses the default pool transport); Cloudflare and local both wire the runner surface but
+    keep a built-in executor, so the pool is optional there and the area is `not_applicable` — a bare
+    `!!container.runners` check would otherwise falsely nag on every local deployment.
+  - **Binary storage** (remote Node only — Cloudflare binds R2, local defaults to a filesystem
+    store) — `not_defined` when the account selected no content-storage backend, so UI
+    screenshots / reference images have nowhere to live.
+
+  The SPA surfaces each `not_defined` area as a loud, per-area setup banner with a deep-link
+  into the relevant configuration. Dismissing a banner asks whether to hide it just for this
+  session (re-nags next load) or permanently — "I'm OK with the limitations, don't notify me
+  again" — the latter persisted per-user in localStorage.
+
+  The advisory top-of-board banners (AI-readiness, provider-config, infra-setup) now render in a
+  single shared, click-through column so concurrent prompts on a fresh deployment stack vertically
+  instead of drawing on top of each other. The `RunnerPoolConnectionService` and
+  `EnvironmentConnectionService` gain a `hasConnection` presence probe (no secret decrypt) that the
+  projection uses on the hot board-load path.
+
+  Each area probe is additionally bounded by a timeout and its swallowed faults are logged, so a slow
+  or misconfigured backend read degrades that area to `not_applicable` (advisory-only, never 500s or
+  stalls the board load) while staying diagnosable. The banner's permanent-dismissal `localStorage`
+  key + the infra-setup area list are exported from `@cat-factory/contracts`
+  (`INFRA_SETUP_DISMISSED_STORAGE_KEY` / `INFRA_SETUP_AREAS`) so the SPA and the e2e seed share one
+  source of truth, and the stacked banner cards announce through a single polite live region instead
+  of one assertive alert each.
+
+- 6c51e31: Run inline LLM steps through the ambient Claude Code / Codex CLI in local mode, and refuse to
+  start a pipeline whose model preset can't satisfy every step.
+
+  - **Local inline harness execution**: with native agents enabled (`LOCAL_NATIVE_AGENTS`), the
+    inline steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) now run
+    on the developer's ambient `claude`/`codex` subscription CLI as a host subprocess — the inline
+    analogue of the existing container ambient-auth path. Previously a subscription-only preset
+    (e.g. Claude Opus) degraded these inline steps to the routing default and failed against an
+    unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
+    Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
+    local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
+    degrading it. The consensus executor (an inline path) threads the same predicate, so a
+    subscription-only consensus participant model is kept inline in local mode too.
+  - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
+    inline-usability, not just container-usability. A subscription-only model that satisfies the
+    container agents but can't run the inline reviewers (and this deployment has no inline harness)
+    is refused up front with a new `preset_unsatisfiable` conflict reason and an actionable message,
+    instead of failing mid-run. The SPA maps the new reason to a translated toast.
+
+  Breaking: `inlineModelRef` gains an optional third `opts` argument; the `ConflictReason` wire
+  union gains `preset_unsatisfiable`.
+
+### Patch Changes
+
+- 9e93fe8: feat(frontend): `frontendPreview` infrastructure capability + preview-toggle gate (slice 5a of the
+  frontend-preview + in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A browsable frontend preview keeps a built app served on a host-reachable URL, which needs a
+  long-lived host serve — so it is a genuine local/node differentiator. The Worker only runs the
+  self-contained UI-test container (built, tested, and torn down with the run), so it cannot host one.
+  Until now the `frontendConfig.previewEnabled` toggle (shipped as scaffolding in slice 2) was offered
+  on every runtime and read by nothing.
+
+  This lands the capability that makes the toggle honest, and gates it in the SPA where a preview can't
+  run. The long-lived build+serve-kept-alive mechanic itself is the remaining slice 5b.
+
+  - **New capability axis** on the `/auth/config` `infrastructureCapabilities` descriptor:
+    `frontendPreview: { supported: boolean }`, built by the shared `buildInfrastructureCapabilities`
+    so all three facades emit the same shape. Value is a per-facade differentiator — Worker `false`,
+    Node + local `true`.
+  - **SPA gate**: `FrontendConfig.vue` reads `infrastructure.frontendPreview.supported` (defaulting
+    true until the auth handshake resolves) and disables the `previewEnabled` checkbox with an
+    explanatory hint (`inspector.frontendConfig.previewUnsupported`, translated across every locale)
+    when unsupported. The stored config is left untouched, so a `previewEnabled` flag authored on
+    local/node is simply inert when served from the Worker (no migration; pre-1.0 breakage rules).
+  - **Conformance** pins that the axis is present + boolean on every facade (its value is a
+    differentiator); the Worker `auth.spec` pins `false`, the Node `auth-gate.spec` pins `true`.
+
+- 456a992: mothership: allow-list the advanced review / structured-dialogue session surface
+
+  In mothership mode the clarity-review (bug-report triage), brainstorm (structured dialogue) and
+  consensus (multi-strategy orchestration) session repositories were not fully remotely callable over
+  `/internal/persistence`, so a mothership-mode SPA could run/re-read the board-load view of a review
+  but could not persist or replace one as its window iterates (the write/delete methods came back
+  `unknown_method`). This widens `REMOTE_PERSISTENCE_METHODS` to their full read+write surface,
+  mirroring the requirements-review surface already exposed — member-level and workspace-scoped (none
+  of the review endpoints is admin-gated):
+
+  - `clarityReviewRepository` — `get` / `upsert` / `deleteByBlock` (`getByBlock` was already exposed).
+  - `brainstormSessionRepository` — `get` / `upsert` / `deleteByBlockStage` (`getByBlockStage` was
+    already exposed).
+  - `consensusSessionRepository` — `get` / `getByStep` / `getByBlock` / `upsert` (new repo entry).
+  - `requirementReviewRepository` — `deleteByBlock`, the pre-review-run drop that completes the repo.
+
+  Every method takes the workspaceId as arg0 (the `upsert(workspaceId, review)` signature carries it
+  positionally, so the existing `workspace` rule binds it — resolve the owning account, reject
+  out-of-scope as 404). These are core repos, so a mothership-mode node already sources them from the
+  full-surface remote registry — no `pickRepoSource` routing change, just the allow-list. Server-only,
+  symmetric by construction (the dispatcher reflects over each facade's registry). Round-trip +
+  cross-account-scope tests cover every new method; the static drift guard moves them out of `pending`.
+
+- 1d2684f: mothership: allow-list the post-release-health / observability settings surface
+
+  In mothership mode the observability connection, per-block release-health config, and
+  incident-enrichment connection repositories were not remotely callable over
+  `/internal/persistence`, so a mothership-mode SPA could not manage the post-release-health
+  flow's settings panels (every call came back `unknown_method`). This widens
+  `REMOTE_PERSISTENCE_METHODS` to their full management surface, member-level and workspace-scoped
+  (the controllers mount under `/workspaces/:workspaceId`, none is admin-gated) — matching the
+  settings-panel policy already exposed:
+
+  - `observabilityConnectionRepository` / `incidentEnrichmentConnectionRepository` — `get` +
+    `delete` via the `workspace` rule (arg0 = workspaceId), `upsert(record)` via a new
+    `workspaceField` scope rule.
+  - `releaseHealthConfigRepository` — `getByBlock` / `listByWorkspace` / `delete` via `workspace`,
+    `upsert(record)` via `workspaceField`.
+
+  The new `workspaceField` scope rule binds a call whose workspaceId is a FIELD of the record arg
+  (not a positional arg): the write targets exactly `record.workspaceId`, so binding on it means a
+  record can only be persisted into an in-scope workspace; a missing/non-string field or an
+  out-of-scope workspace is refused as 404. Server-only allow-list change, symmetric by construction
+  (the dispatcher reflects over each facade's registry). Round-trip + cross-account-scope tests cover
+  every new method; the static drift guard moves them out of `pending`.
+
+  Scope: this makes the settings PANELS functional end-to-end (persist + read back the redacted
+  summary). It does NOT yet make a saved observability connection drive a post-release-health gate
+  probe in mothership mode — decrypting the sealed connection cipher at gate-probe time is the later
+  secrets-delegation slice.
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [ab7d589]
+- Updated dependencies [6c51e31]
+- Updated dependencies [33687cf]
+  - @cat-factory/contracts@0.77.0
+  - @cat-factory/kernel@0.67.0
+  - @cat-factory/integrations@0.52.0
+  - @cat-factory/orchestration@0.54.0
+  - @cat-factory/agents@0.25.0
+  - @cat-factory/prompt-fragments@0.9.32
+  - @cat-factory/spend@0.10.62
+
 ## 0.63.3
 
 ### Patch Changes
