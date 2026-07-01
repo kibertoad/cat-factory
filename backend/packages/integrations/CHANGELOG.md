@@ -1,5 +1,30 @@
 # @cat-factory/integrations
 
+## 0.50.1
+
+### Patch Changes
+
+- b744822: Surface a Kubernetes environment that can't finish provisioning instead of leaving it spinning up forever.
+
+  Two gaps let a misconfigured ephemeral-environment (bad/insufficient ServiceAccount token, missing RBAC, or a rollout that never completes) sit at `provisioning` indefinitely with nothing shown in the run's "Infrastructure attempts":
+
+  - `KubernetesEnvironmentProvider`'s status read mapped **every** non-OK apiserver response — including `401`/`403` — to `provisioning`. A credential/permission error never self-heals, so the env never left "spinning up". It now throws a clear error on `401`/`403` (caught + logged by `refreshStatus`, after which the human-test gate degrades to manual mode) while transient `5xx`/`429` still keep polling.
+  - `EnvironmentProvisioningService.refreshStatus` only recorded a provisioning-log entry when the status read **threw**, so a reconciliation that flipped the env to `failed` without throwing (e.g. a rollout that exceeded its progress deadline, or a vanished namespace) left the "Infrastructure attempts" drawer empty. It now records a `failure` entry on the transition into `failed`.
+
+- c40736e: Simplify the Kubernetes integration module internally (behaviour-preserving).
+
+  - Remove the unused `isSupportedKind()` export from `kubernetes-environment.logic.ts`.
+  - Drop the `KubernetesEnvironmentProvider`'s private `renderImage()`, which duplicated the
+    shared `renderTemplate()`, and derive the per-PR namespace + template vars once through a
+    single `provisionContext()` helper reused by `provision`, `buildProvisionJob`, and
+    `finalizeProvision`.
+  - Collapse the repeated apiserver GET/parse and "by name, else first in list" logic in the
+    status/URL reads behind two small `getJson`/`getByNameOrFirst` helpers.
+  - Share the custom-TLS runtime-support check between the runner and environment backends via
+    a new `assertCustomTlsSupported()` in `kubernetes.logic.ts`.
+
+  No functional or wire-shape changes; covered by the existing unit suite.
+
 ## 0.50.0
 
 ### Minor Changes
