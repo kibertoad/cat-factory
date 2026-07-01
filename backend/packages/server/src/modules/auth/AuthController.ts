@@ -507,13 +507,16 @@ export function authController(): Hono<AppEnv> {
     return c.json({ token, user: sessionUser(user, user.email || user.id) }, 200)
   })
 
-  // ---- Source-control PAT login (local mode) ------------------------------
+  // ---- Source-control PAT login -------------------------------------------
 
-  // Log in as the account a GitHub/GitLab PAT belongs to. Served only where the facade
-  // wired identity resolvers (local mode); hosted facades authenticate via OAuth, so this
-  // 503s there. `token` omitted ⇒ use the deployment's configured PAT (one-click); present
-  // ⇒ the user pasted one. The resolved provider id is the SAME `(provider, subject)` key
-  // OAuth uses, so a PAT login and a GitHub OAuth login for the same person are one user.
+  // Log in as the account a GitHub/GitLab PAT belongs to. Served wherever the facade wired
+  // identity resolvers: local mode AND both hosted facades (Node + Cloudflare) register the
+  // registry (GitHub always, GitLab when a GitLab connection is configured), so a GitLab user
+  // can sign in to a hosted deployment too — not only via OAuth. Only a facade that wires none
+  // 503s. `token` omitted ⇒ use the deployment's configured PAT (local-mode one-click); present
+  // ⇒ the user pasted their own (the hosted path, held to the login/org/domain allowlist). The
+  // resolved provider id is the SAME `(provider, subject)` key OAuth uses, so a PAT login and a
+  // GitHub OAuth login for the same person are one user.
   buildHonoRoute(app, patLoginContract, async (c) => {
     const cfg = authConfig(c)
     const container = c.get('container')

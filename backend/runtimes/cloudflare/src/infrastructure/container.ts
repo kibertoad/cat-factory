@@ -18,6 +18,7 @@ import {
   type RunnerPoolProvider,
   type RunnerTransport,
   type TaskSourceProvider,
+  type VcsIdentityRegistry,
   type WorkRunner,
 } from '@cat-factory/kernel'
 import {
@@ -91,6 +92,7 @@ import {
   logger,
   buildInfrastructureCapabilities,
   createScopedModelProviderResolver,
+  GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
   type MintInstallationToken,
@@ -214,6 +216,7 @@ import {
 } from '@cat-factory/gates'
 import {
   buildGitLabEngineClient,
+  GitLabIdentityResolver,
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
@@ -1866,6 +1869,27 @@ function selectFragmentLibraryDeps(
   }
 }
 
+/**
+ * The hosted PAT-login registry: lets a user sign in by pasting their OWN source-control PAT,
+ * which the shared `/auth/pat` flow resolves to the account it belongs to (and holds to the
+ * server's login/org/domain allowlist — see `AuthController`). GitHub is always available;
+ * GitLab is added when a GitLab connection is configured. A remote deployment is multi-user, so
+ * there is NO `configuredToken` — each user supplies their own PAT. Symmetric with the Node
+ * facade's `buildNodeVcsIdentityRegistry` per "keep the runtimes symmetric": a GitLab-only Worker
+ * deployment must let a GitLab user sign in, not just gate/merge on GitLab under the hood.
+ */
+function buildWorkerVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
+  const registry: VcsIdentityRegistry = {
+    github: { resolver: new GitHubIdentityResolver({ apiBase: config.github.apiBase }) },
+  }
+  if (config.gitlab?.enabled) {
+    registry.gitlab = {
+      resolver: new GitLabIdentityResolver({ apiBase: config.gitlab.apiBase }),
+    }
+  }
+  return registry
+}
+
 export function buildContainer(
   env: Env,
   overrides: Partial<CoreDependencies> = {},
@@ -2199,6 +2223,12 @@ export function buildContainer(
   return {
     ...createCore(dependencies),
     config,
+    // Hosted source-control PAT login: a user signs in with their OWN GitHub/GitLab PAT (the
+    // shared `/auth/pat` flow resolves it to an account, held to the login/org/domain allowlist).
+    // GitHub always; GitLab when configured. Mirrors the Node facade so a GitLab-only Worker
+    // deployment lets a GitLab user sign in (previously the Worker wired none, leaving it
+    // OAuth-only / GitHub-only for sign-in even though the engine gated/merged on GitLab).
+    vcsIdentity: buildWorkerVcsIdentityRegistry(config),
     // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
     // the shared service-spec read controller can read the `spec/` artifact off main.
     resolveRunRepoContext: dependencies.resolveRunRepoContext,
