@@ -126,7 +126,7 @@ cannot be a bare endpoint that "prompts". Two homes were on the table:
   `EnvironmentConnectionService.testHandler`) probes the apiserver with the supplied token; wired
   into the engine form (workspace + per-user override). This is the verify step the guided flow reuses.
 
-### Slice 1 — CLI surface + pure probe planner + shell-out seam (todo)
+### Slice 1 — CLI surface + pure probe planner + shell-out seam (DONE, PR #569)
 
 New files under `backend/packages/cli/src/`, mirroring the `init` structure (pure planners +
 injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
@@ -147,20 +147,32 @@ injectable IO/FS seam, `@clack/prompts` confined to the real IO impl):
 - Tests: `k3s-probe.test.ts` (classification over injected detection fixtures); `k3s.test.ts`
   (orchestrator over `scriptIo`/`memFs`/`scriptShell`, no real cluster).
 
-### Slice 2 — provision actions (k3d default; guided k3s) (todo)
+### Slice 2 — provision actions (k3d default; guided k3s) (DONE, this PR)
 
 - **`k3s-provision.ts`** (pure planners + a thin executor over `HostShell`):
-  - k3d: plan `k3d cluster create <name> --api-port 6443`, then read the kubeconfig for the
-    apiserver URL. (Local-image `k3d image import` wiring noted for the future managed-lifecycle work.)
-  - SA + **least-privilege** RBAC + token: apply the runner Role plus a scoped `ClusterRole`/binding
-    for the namespace create/apply/delete the env backend needs (encode the manifest from
-    `backend/docs/local-k3s-environments.md` — NOT `cluster-admin` by default), then `kubectl
-create token cat-factory -n cat-factory` (k8s ≥ 1.24).
-  - **Idempotent**: probe-first; reuse an existing SA/cluster rather than duplicating.
-  - Each mutating step behind an **explicit confirm**; the k3s `curl | sh` path only ever _prints_
-    the command (or requires an elevated confirm), never auto-runs.
-- The pure layer returns the ordered action list + rendered manifests/commands; the executor runs
-  them through `HostShell` and captures the minted token (never logged).
+  - k3d/kind: plan `k3d cluster create <name> --api-port 6443` (or `kind create cluster --name`),
+    switch kubectl to the created context (`k3d-<name>` / `kind-<name>`), then read the kubeconfig
+    for the apiserver URL (`kubectl config view --minify …{.clusters[0].cluster.server}`).
+    (Local-image `k3d image import` wiring noted for the future managed-lifecycle work.)
+  - SA + **least-privilege** RBAC + token: `kubectl apply -f -` the `RBAC_MANIFEST` (namespace +
+    ServiceAccount + a scoped `ClusterRole`/binding over the env backend's manifest kinds +
+    `namespaces` create/delete + `pods`/`pods/proxy` for the runner — **NOT `cluster-admin`**) plus
+    a long-lived `kubernetes.io/service-account-token` Secret (k8s ≥ 1.24 no longer auto-creates
+    one), then read + base64-decode that Secret's token (retrying while the token controller
+    populates it). Chosen over a short-lived `kubectl create token` so the wired handler doesn't
+    silently expire.
+  - **Idempotent**: probe-first; an existing cluster is reused (no create) and `kubectl apply`
+    reconciles the SA/RBAC rather than duplicating.
+  - Each mutating step (cluster create, RBAC apply) is behind an **explicit confirm** (skipped only
+    by `--yes`); the `install-k3s` `curl | sh` path is still guidance-only — the command is PRINTED,
+    never run.
+- **stdin seam**: `HostShell.run` gained an `input?` option so the manifest (and the token Secret it
+  mints) is piped to `kubectl apply -f -` WITHOUT ever hitting a temp file on disk.
+- The pure layer returns the individual command specs + the rendered manifest; the executor
+  (`provisionCluster`) runs them through `HostShell`, captures the minted token, and returns a
+  `ResolvedConnection { engine:'local-k3s', apiServerUrl, apiToken, insecureSkipTlsVerify, clusterName? }`.
+  The token is surfaced only to the user (printed once, to paste into the form) — never written to
+  disk/logs by cat-factory. Slice 3 turns the `ResolvedConnection` into the handler + deep-link.
 
 ### Slice 3 — wire + verify (todo)
 
@@ -198,8 +210,8 @@ apiServerUrl, insecureSkipTlsVerify: true, url: { source: 'ingressTemplate', hos
 | ----------------------------------------------------------- | -------- | ---- |
 | Slice 0 — prefill + hint + handler test-connection probe    | done     | #557 |
 | Decide surface (CLI vs in-app wizard)                       | resolved | —    |
-| Slice 1 — CLI surface + pure probe planner + shell-out seam | todo     | —    |
-| Slice 2 — provision actions (k3d default; guided k3s)       | todo     | —    |
+| Slice 1 — CLI surface + pure probe planner + shell-out seam | done     | #569 |
+| Slice 2 — provision actions (k3d default; guided k3s)       | done     | TBD  |
 | Slice 3 — wire handler (build + hand-off) + verify probe    | todo     | —    |
 | Slice 4 — SPA guided entry point + deep-link                | todo     | —    |
 | Slice 5 — docs + escape hatch + tracker update              | todo     | —    |

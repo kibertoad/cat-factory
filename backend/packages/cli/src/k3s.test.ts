@@ -51,22 +51,50 @@ const REACHABLE = {
   'kubectl config current-context': { code: 0, stdout: 'k3d-cat-factory' },
 }
 
+/** The provisioning commands (RBAC apply, token read, apiserver read) every wiring path issues. */
+const TOKEN_B64 = Buffer.from('tok-abc').toString('base64')
+const PROVISION = {
+  'kubectl apply -f -': { code: 0, stdout: 'applied' },
+  'kubectl -n cat-factory get secret cat-factory-token -o jsonpath={.data.token}': {
+    code: 0,
+    stdout: TOKEN_B64,
+  },
+  'kubectl config view --minify -o jsonpath={.clusters[0].cluster.server}': {
+    code: 0,
+    stdout: 'https://127.0.0.1:6443',
+  },
+}
+
 describe('setupK3s', () => {
-  it('in --yes mode picks the recommended offer (reuse existing cluster)', async () => {
+  it('in --yes mode provisions the recommended offer (reuse existing cluster)', async () => {
     const io = captureIo()
-    const { state, chosen } = await setupK3s(opts({ yes: true }), {
+    const { state, chosen, connection } = await setupK3s(opts({ yes: true }), {
       io,
-      shell: scriptShell(REACHABLE),
+      shell: scriptShell({ ...REACHABLE, ...PROVISION }),
     })
     expect(state.detections.reachableCluster).toBe(true)
     expect(chosen).toBe('use-existing')
-    expect(io.lines.join('\n')).toContain('reachable cluster')
+    expect(connection).toEqual({
+      engine: 'local-k3s',
+      clusterName: undefined,
+      apiServerUrl: 'https://127.0.0.1:6443',
+      apiToken: 'tok-abc',
+      insecureSkipTlsVerify: true,
+    })
+    const out = io.lines.join('\n')
+    expect(out).toContain('reachable cluster')
+    expect(out).toContain('https://127.0.0.1:6443')
+    expect(out).toContain('tok-abc')
   })
 
   it('prints the k3s install command (never runs it) when nothing usable is present', async () => {
     const io = captureIo()
-    const { chosen } = await setupK3s(opts({ yes: true }), { io, shell: scriptShell({}) })
+    const { chosen, connection } = await setupK3s(opts({ yes: true }), {
+      io,
+      shell: scriptShell({}),
+    })
     expect(chosen).toBe('install-k3s')
+    expect(connection).toBeUndefined()
     const out = io.lines.join('\n')
     expect(out).toContain(K3S_INSTALL_COMMAND)
     expect(out).toContain('needs sudo')
@@ -79,37 +107,47 @@ describe('setupK3s', () => {
     expect(chosen).toBe('install-k3s')
   })
 
-  it('reports the findings and does not mutate the host', async () => {
+  it('reports the findings before doing anything', async () => {
     const io = captureIo()
-    await setupK3s(opts({ yes: true }), { io, shell: scriptShell(REACHABLE) })
+    await setupK3s(opts({ yes: true }), { io, shell: scriptShell({}) })
     const out = io.lines.join('\n')
     expect(out).toContain('Detected:')
-    expect(out).toContain('nothing was changed on your host')
   })
 
-  it('echoes the chosen cluster name for the k3d path', async () => {
+  it('creates + wires a k3d cluster with the chosen name', async () => {
     const shell = scriptShell({
       'k3d version': { code: 0, stdout: 'k3d version v5.6.0' },
       'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+      'k3d cluster create my-cluster --api-port 6443': { code: 0 },
+      'kubectl config use-context k3d-my-cluster': { code: 0 },
+      ...PROVISION,
     })
     const io = captureIo()
-    const { chosen } = await setupK3s(opts({ yes: true, clusterName: 'my-cluster' }), { io, shell })
-    expect(chosen).toBe('create-k3d')
-    expect(io.lines.join('\n')).toContain('my-cluster')
-  })
-
-  it('honors --runtime kind and echoes the kind cluster name', async () => {
-    const shell = scriptShell({
-      'kind version': { code: 0, stdout: 'kind v0.23.0' },
-      'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
-    })
-    const io = captureIo()
-    const { chosen } = await setupK3s(opts({ yes: true, k3sRuntime: 'kind', clusterName: 'kd' }), {
+    const { chosen, connection } = await setupK3s(opts({ yes: true, clusterName: 'my-cluster' }), {
       io,
       shell,
     })
+    expect(chosen).toBe('create-k3d')
+    expect(connection?.clusterName).toBe('my-cluster')
+    expect(connection?.apiToken).toBe('tok-abc')
+    expect(io.lines.join('\n')).toContain('my-cluster')
+  })
+
+  it('honors --runtime kind and wires the kind cluster', async () => {
+    const shell = scriptShell({
+      'kind version': { code: 0, stdout: 'kind v0.23.0' },
+      'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+      'kind create cluster --name kd': { code: 0 },
+      'kubectl config use-context kind-kd': { code: 0 },
+      ...PROVISION,
+    })
+    const io = captureIo()
+    const { chosen, connection } = await setupK3s(
+      opts({ yes: true, k3sRuntime: 'kind', clusterName: 'kd' }),
+      { io, shell },
+    )
     expect(chosen).toBe('create-kind')
-    expect(io.lines.join('\n')).toContain('kind cluster "kd"')
+    expect(connection?.clusterName).toBe('kd')
   })
 
   it('guides an already-installed k3s to start (not re-install)', async () => {
@@ -122,15 +160,49 @@ describe('setupK3s', () => {
     expect(out).not.toContain(K3S_INSTALL_COMMAND)
   })
 
-  it('warns when the chosen k3d cluster name already exists', async () => {
+  it('reuses (does not recreate) a k3d cluster whose name already exists', async () => {
     const shell = scriptShell({
       'k3d version': { code: 0, stdout: 'k3d version v5.6.0' },
       'k3d cluster list --output json': { code: 0, stdout: '[{"name":"dupe"}]' },
       'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+      // NOTE: no `k3d cluster create` mapping — reuse must not attempt to create it.
+      'kubectl config use-context k3d-dupe': { code: 0 },
+      ...PROVISION,
     })
     const io = captureIo()
-    const { chosen } = await setupK3s(opts({ yes: true, clusterName: 'dupe' }), { io, shell })
+    const { chosen, connection } = await setupK3s(opts({ yes: true, clusterName: 'dupe' }), {
+      io,
+      shell,
+    })
     expect(chosen).toBe('create-k3d')
-    expect(io.lines.join('\n')).toContain('already exists')
+    expect(connection?.apiServerUrl).toBe('https://127.0.0.1:6443')
+    expect(io.lines.join('\n')).toContain('Reusing the existing k3d cluster')
+  })
+
+  it('reports (does not throw) when a provisioning command fails', async () => {
+    // Reachable cluster ⇒ use-existing path, but the RBAC apply fails.
+    const shell = scriptShell({
+      ...REACHABLE,
+      'kubectl apply -f -': { code: 1, stderr: 'forbidden' },
+    })
+    const io = captureIo()
+    const { chosen, connection } = await setupK3s(opts({ yes: true }), { io, shell })
+    expect(chosen).toBe('use-existing')
+    expect(connection).toBeUndefined()
+    expect(io.lines.join('\n')).toContain('forbidden')
+  })
+
+  it('aborts a provisioning path when the user declines a confirm', async () => {
+    const io: Io & { lines: string[] } = { ...captureIo(), confirm: () => Promise.resolve(false) }
+    const { connection } = await setupK3s(opts({ clusterName: 'dupe' }), {
+      io,
+      shell: scriptShell({
+        'k3d version': { code: 0, stdout: 'k3d version v5.6.0' },
+        'docker version --format {{.Server.Version}}': { code: 0, stdout: '27.0.0' },
+        ...PROVISION,
+      }),
+    })
+    expect(connection).toBeUndefined()
+    expect(io.lines.join('\n')).toContain('Cancelled')
   })
 })

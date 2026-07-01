@@ -37,8 +37,16 @@ export interface HostShell {
    * rejects: a missing binary resolves to `{ code: COMMAND_NOT_FOUND }` so the probe can treat
    * "not installed" uniformly, and a command that overruns `timeoutMs` is killed and resolves to
    * `{ code: COMMAND_TIMED_OUT }`. Output is returned to the caller, never logged here.
+   *
+   * `opts.input`, when set, is written to the child's stdin and the stream is closed — used to
+   * feed a manifest to `kubectl apply -f -` WITHOUT writing it (or the token Secret it creates)
+   * to a temp file on disk.
    */
-  run(cmd: string, args: string[], opts?: { timeoutMs?: number }): Promise<ShellResult>
+  run(
+    cmd: string,
+    args: string[],
+    opts?: { timeoutMs?: number; input?: string },
+  ): Promise<ShellResult>
 }
 
 /** The real, process-backed {@link HostShell}. */
@@ -58,12 +66,21 @@ export function createNodeShell(): HostShell {
           resolve(result)
         }
 
+        // Feed stdin only when there's input; otherwise leave it closed (`ignore`).
+        const stdin = opts?.input !== undefined ? 'pipe' : 'ignore'
         let child: ReturnType<typeof spawn>
         try {
-          child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+          child = spawn(cmd, args, { stdio: [stdin, 'pipe', 'pipe'] })
         } catch {
           finish({ code: COMMAND_NOT_FOUND, stdout: '', stderr: `${cmd}: not found` })
           return
+        }
+
+        if (opts?.input !== undefined && child.stdin) {
+          // A child that exits before draining stdin raises EPIPE on the write; swallow it so a
+          // fast-failing command surfaces as its exit code, not an unhandled stream error.
+          child.stdin.on('error', () => {})
+          child.stdin.end(opts.input)
         }
 
         // Watchdog: kill a child that runs past the deadline (e.g. `kubectl` stuck dialing an
