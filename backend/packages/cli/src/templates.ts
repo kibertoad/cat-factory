@@ -5,11 +5,12 @@
 // Pinned library versions the scaffolded project depends on. Pinned (not the `latest` dist-tag)
 // so a scaffold is reproducible and the backend/frontend can't resolve to skewed releases. These
 // are `0.x` libraries, so the caret only picks up in-range PATCH releases (`^0.33.0` allows
-// `0.33.x` but NOT `0.34.0`) — every minor bump of a library needs a manual refresh here. Keep
-// the caret covering the current published versions of `@cat-factory/local-server` and
-// `@cat-factory/app`; `templates.pins.test.ts` fails the build if a pin drifts out of range of the
-// workspace version. Bump these when cutting a CLI release against newer libraries. (The two
-// libraries version independently.)
+// `0.33.x` but NOT `0.34.0`). A pin lagging a minor or two behind the library is fine — it just
+// resolves to a slightly older, still-published release — so it does NOT need a refresh on every
+// library bump. Refresh opportunistically (e.g. when cutting a CLI release) to keep scaffolds
+// current. The one hard rule `templates.pins.test.ts` enforces: a pin must never point AHEAD of
+// the current workspace version, because that references an unpublished release and makes the
+// scaffold's `pnpm install` unresolvable. (The two libraries version independently.)
 export const LOCAL_SERVER_VERSION = '^0.34.0'
 export const APP_VERSION = '^0.66.0'
 export const NUXT_VERSION = '^4.4.8'
