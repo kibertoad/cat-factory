@@ -634,7 +634,24 @@ export class BoardService {
         effective = rest
       } else if (effective.involvedServiceIds.length) {
         const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-        const error = involvedServiceIdsError(homeBlocks, block, effective.involvedServiceIds)
+        // A connection neighbor can be a service mounted from another workspace — the SPA
+        // offers those (it computes neighbors over the composed board), so validate against
+        // the same universe: resolve each selected id not homed here (cross-home aware) and
+        // fold its block in, so an INCOMING edge from a mounted foreign consumer counts as a
+        // neighbor too. A bounded user-authored list (contract-capped), not a data-sized loop.
+        const byId = new Set(homeBlocks.map((b) => b.id))
+        const foreign: Block[] = []
+        for (const sid of effective.involvedServiceIds) {
+          if (byId.has(sid)) continue
+          byId.add(sid)
+          const found = await this.resolveBlock(workspaceId, sid).catch(() => null)
+          if (found) foreign.push(found.block)
+        }
+        const error = involvedServiceIdsError(
+          [...homeBlocks, ...foreign],
+          block,
+          effective.involvedServiceIds,
+        )
         if (error) throw new ValidationError(error)
       }
     }

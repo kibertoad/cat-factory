@@ -118,6 +118,51 @@ describe('BoardService service-connection guards', () => {
     expect(updates[0]?.patch).toEqual({ title: 'Renamed' })
   })
 
+  it('accepts an involved service reachable only via a cross-home mounted consumer (incoming edge)', async () => {
+    // The task's own frame lives here (WS); the CONSUMER frame that names it is homed in
+    // another workspace and mounted into WS via a service. The SPA offers it (it computes
+    // neighbors over the composed board), so the write gate must resolve it cross-home too —
+    // a `listByWorkspace(WS)` read alone would miss the incoming edge and 422 a valid pick.
+    const own = block('own')
+    const task = block('t', { level: 'task', parentId: 'own' })
+    const foreignConsumer = block('foreign', { serviceConnections: [{ serviceBlockId: 'own' }] })
+    const local = new Map([own, task].map((b) => [b.id, b] as const))
+    const updates: Array<{ id: string; patch: Record<string, unknown> }> = []
+    const deps = {
+      workspaceRepository: { get: async (id: string) => ({ id }) },
+      serviceRepository: {},
+      workspaceMountRepository: {
+        get: async () => ({ workspaceId: WS, serviceId: 'svc_foreign' }),
+      },
+      blockRepository: {
+        get: async (ws: string, id: string) => (ws === WS ? (local.get(id) ?? null) : null),
+        findById: async (id: string) =>
+          id === 'foreign'
+            ? { workspaceId: 'ws_other', serviceId: 'svc_foreign', block: foreignConsumer }
+            : null,
+        listByWorkspace: async (ws: string) => (ws === WS ? [...local.values()] : []),
+        update: async (_ws: string, id: string, patch: Record<string, unknown>) => {
+          updates.push({ id, patch })
+          const cur = local.get(id)
+          if (cur) local.set(id, { ...cur, ...patch })
+        },
+      },
+      executionRepository: { deleteByBlock: async () => {}, getByBlock: async () => null },
+      idGenerator: { next: (prefix: string) => `${prefix}_new` },
+      clock: { now: () => 0 },
+      executionEventPublisher: {
+        async executionChanged() {},
+        async boardChanged() {},
+        async bootstrapChanged() {},
+        async notificationChanged() {},
+        async llmCallObserved() {},
+      },
+    } as unknown as BoardServiceDependencies
+    const service = new BoardService(deps)
+    const updated = await service.updateBlock(WS, 't', { involvedServiceIds: ['foreign'] })
+    expect(updated.involvedServiceIds).toEqual(['foreign'])
+  })
+
   it('deleting a frame prunes connections and involved selections pointing at it', async () => {
     const blocks = [
       block('own', {

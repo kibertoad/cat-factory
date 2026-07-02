@@ -176,8 +176,9 @@ export const updateBlockSchema = v.partial(
     // other services it uses (consumer→provider edges); an empty array clears them.
     serviceConnections: serviceConnectionsSchema,
     // Task-level: the connected service frames directly involved in this task beyond its
-    // own service; an empty array clears the selection.
-    involvedServiceIds: v.array(v.pipe(v.string(), v.maxLength(120))),
+    // own service; an empty array clears the selection. Capped like `serviceConnections`
+    // so the write-gate's per-id cross-home resolve stays a bounded loop, not data-sized.
+    involvedServiceIds: v.pipe(v.array(v.pipe(v.string(), v.maxLength(120))), v.maxLength(50)),
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
