@@ -2,26 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { FrontendRepoReader } from './frontend-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
 
-// In-memory RepoFiles-shaped reader built from a flat path→content map. `listDirectory`
-// derives the immediate children (file vs dir) from the keys, mirroring the contents API.
+// In-memory RepoFiles-shaped reader built from a flat path→content map. A missing path yields
+// `null` (mirroring the contents API), which is all the detector's targeted reads need.
 function makeReader(files: Record<string, string>): FrontendRepoReader {
-  const paths = Object.keys(files)
   return {
     async getFile(path) {
       return path in files ? { content: files[path]! } : null
-    },
-    async listDirectory(path) {
-      const prefix = path ? `${path}/` : ''
-      const children = new Map<string, 'file' | 'dir'>()
-      for (const full of paths) {
-        if (!full.startsWith(prefix)) continue
-        const rest = full.slice(prefix.length)
-        if (!rest) continue
-        const slash = rest.indexOf('/')
-        if (slash === -1) children.set(rest, 'file')
-        else children.set(rest.slice(0, slash), 'dir')
-      }
-      return [...children].map(([name, type]) => ({ name, type, path: prefix + name }))
     },
   }
 }
@@ -65,7 +51,7 @@ describe('detectFrontendConfig', () => {
     expect(rec.config.installCommand).toBe('yarn install --frozen-lockfile')
   })
 
-  it('flags Nuxt output dir as low confidence', async () => {
+  it('flags Nuxt output dir as low confidence and picks generate so build+output agree', async () => {
     const reader = makeReader({
       'pnpm-lock.yaml': 'x',
       'package.json': pkg({
@@ -75,6 +61,9 @@ describe('detectFrontendConfig', () => {
     })
     const rec = await detectFrontendConfig(reader)
     expect(rec.config.outputDir).toBe('.output/public')
+    // `.output/public` is the `nuxt generate` output, so the build script must be `generate`, not
+    // the SSR `build` that would populate a different directory.
+    expect(rec.config.buildScript).toBe('generate')
     expect(rec.notes.find((n) => n.field === 'outputDir')?.confidence).toBe('low')
   })
 
@@ -112,6 +101,35 @@ describe('detectFrontendConfig', () => {
     const rec = await detectFrontendConfig(reader)
     expect(rec.config.serveMode).toBe('static')
     expect(rec.config.serveScript).toBeUndefined()
+  })
+
+  it('does NOT treat a CRA "start" (dev server) as a serve script', async () => {
+    const reader = makeReader({
+      'package-lock.json': '{}',
+      'package.json': pkg({
+        scripts: { start: 'react-scripts start', build: 'react-scripts build' },
+        dependencies: { 'react-scripts': '^5' },
+      }),
+    })
+    const rec = await detectFrontendConfig(reader)
+    // `start` is CRA's dev server, not a preview of the built app ⇒ static, no serve script.
+    expect(rec.config.serveMode).toBe('static')
+    expect(rec.config.serveScript).toBeUndefined()
+    expect(rec.config.outputDir).toBe('build')
+  })
+
+  it('ignores prefixed non-URL env vars, keeping only URL-shaped ones', async () => {
+    const reader = makeReader({
+      'pnpm-lock.yaml': 'x',
+      'package.json': pkg({ scripts: { build: 'vite build' }, devDependencies: { vite: '^5' } }),
+      '.env.example':
+        'VITE_API_URL=http://localhost:3000\nVITE_APP_TITLE=My App\nNEXT_PUBLIC_GA_ID=UA-123\nVITE_SERVICE_ENDPOINT=\n',
+    })
+    const rec = await detectFrontendConfig(reader)
+    const envVars = rec.config.backendBindings.map((b) => b.envVar).sort()
+    // Only the URL/endpoint-shaped names — the title + analytics id (which merely share a public
+    // prefix) are dropped.
+    expect(envVars).toEqual(['VITE_API_URL', 'VITE_SERVICE_ENDPOINT'])
   })
 
   it('extracts backend URL env vars from .env.example as mock bindings', async () => {

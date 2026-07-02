@@ -146,7 +146,10 @@ function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
  * `..` segment) — the agent's cwd is built from this, so a hostile value must never
  * point outside the cloned repo.
  */
-function sanitizeServiceDirectory(value: unknown): string | undefined {
+function sanitizeServiceDirectory(
+  value: unknown,
+  field = 'repo.serviceDirectory',
+): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value
     .trim()
@@ -156,7 +159,7 @@ function sanitizeServiceDirectory(value: unknown): string | undefined {
   const segments = normalized.split('/').filter((s) => s !== '' && s !== '.')
   if (segments.length === 0) return undefined
   if (segments.some((s) => s === '..')) {
-    throw new Error("Invalid job: 'repo.serviceDirectory' must be a path inside the repo")
+    throw new Error(`Invalid job: '${field}' must be a path inside the repo`)
   }
   return segments.join('/')
 }
@@ -665,9 +668,13 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   }
   const servePort = port(o.servePort)
   const wiremockPort = port(o.wiremockPort)
+  // The app's monorepo subdirectory becomes the install/build/serve cwd, so it goes through the
+  // same escape-guard as `repo.serviceDirectory` — strip slashes and reject any `..` segment so a
+  // hostile value can't point the stand-up outside the cloned repo.
+  const directory = sanitizeServiceDirectory(o.directory, 'frontend.directory')
   return {
     kind: 'frontend',
-    ...(typeof o.directory === 'string' && o.directory ? { directory: o.directory } : {}),
+    ...(directory ? { directory } : {}),
     ...(packageManager ? { packageManager } : {}),
     ...(typeof o.install === 'string' && o.install ? { install: o.install } : {}),
     ...(typeof o.buildScript === 'string' && o.buildScript ? { buildScript: o.buildScript } : {}),

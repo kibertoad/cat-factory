@@ -139,11 +139,15 @@ async function detectFromRepo() {
   detectError.value = false
   detectResult.value = null
   try {
-    detectResult.value = await infra.detectFrontendConfig({
+    const result = await infra.detectFrontendConfig({
       owner: repo.owner,
       repo: repo.name,
       ...(config.value.directory ? { directory: config.value.directory } : {}),
     })
+    detectResult.value = result
+    // When nothing was detected the "none" hint tells the user to set the frontend directory —
+    // that field lives in the (collapsed) Build group, so open it so the advice is actionable.
+    if (!result.detected) showBuild.value = true
   } catch {
     detectError.value = true
   } finally {

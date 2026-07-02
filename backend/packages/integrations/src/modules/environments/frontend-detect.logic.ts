@@ -9,7 +9,7 @@ import type {
 // ---------------------------------------------------------------------------
 // Frontend-config AUTO-DETECTION: a deterministic, pure-TS heuristic that proposes a NON-BINDING
 // recommended `FrontendConfig` from a frontend repo, read CHECKOUT-FREE over a minimal
-// RepoFiles-shaped reader. No LLM, no clone — just targeted file reads + directory listings +
+// RepoFiles-shaped reader. No LLM, no clone — just targeted file reads +
 // package.json/dotenv parsing. The user always confirms/edits; nothing here is applied silently.
 // Mirrors the service-provisioning detector (`provision-detect.logic.ts`): high-confidence facts
 // (a lockfile ⇒ the package manager) are inferred deterministically; ambiguous ones (which build
@@ -23,10 +23,6 @@ import type {
  */
 export interface FrontendRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
-  listDirectory(
-    path: string,
-    gitRef?: string,
-  ): Promise<{ name: string; type: string; path: string }[]>
 }
 
 export interface DetectFrontendConfigOptions {
@@ -50,21 +46,17 @@ const INSTALL_COMMANDS: Record<FrontendPackageManager, string> = {
 }
 // Build-script names to try, in order; the first present one in package.json `scripts` wins.
 const BUILD_SCRIPT_CANDIDATES = ['build', 'build:prod', 'generate']
-// A script that serves a PRODUCTION preview of the build (⇒ serveMode `command`). `dev` is
-// deliberately excluded — it's a dev server, not a preview of the built app.
-const SERVE_SCRIPT_CANDIDATES = ['preview', 'serve', 'start']
+// A script that serves a PRODUCTION preview of the build (⇒ serveMode `command`). `dev` and
+// `start` are deliberately excluded — both are dev servers (e.g. `react-scripts start`), not a
+// preview of the built app, so proposing them would launch the wrong process for a UI test.
+const SERVE_SCRIPT_CANDIDATES = ['preview', 'serve']
 // dotenv example files whose KEYS name the frontend's env vars (values are the user's).
 const ENV_EXAMPLE_FILES = ['.env.example', '.env.sample', '.env.template', '.env.dist']
-// Env-var name patterns that read a backend/base URL (⇒ a backend binding, mock-sourced by default).
-const BACKEND_ENV_PATTERNS = [
-  /^VITE_/,
-  /^NUXT_PUBLIC_/,
-  /^PUBLIC_/,
-  /^NEXT_PUBLIC_/,
-  /_BASE_URL$/,
-  /BACKEND_URL$/,
-  /_API_URL$/,
-]
+// Env-var name SUFFIXES that denote a backend/base URL endpoint (⇒ a backend binding, mock-sourced
+// by default). Matched on the URL-ish suffix, NOT a framework prefix: `VITE_`/`NEXT_PUBLIC_`/… also
+// front feature flags, analytics IDs, and titles, so keying off the prefix would pull in non-URL
+// config (e.g. `VITE_APP_TITLE`, `NEXT_PUBLIC_GA_ID`).
+const BACKEND_ENV_PATTERNS = [/_URL$/, /_URI$/, /_ENDPOINT$/, /_API$/]
 // The most backend-binding rows we propose (bounds the output + keeps the UI sane).
 const MAX_BINDINGS = 12
 // Bounds the total reads so a pathological repo can't fan out unboundedly. Reads are intentionally
@@ -90,18 +82,25 @@ function joinPath(...parts: (string | undefined)[]): string {
 /** Stateful repo reader with a hard read budget so detection can't fan out without bound. */
 class Scanner {
   private reads = 0
+  private truncated = false
   constructor(
     private readonly reader: FrontendRepoReader,
     private readonly gitRef: string | undefined,
   ) {}
 
-  /** True once the read budget was hit — the scan may have stopped short of the full repo. */
+  /**
+   * True only once a read was ACTUALLY skipped because the budget was hit — so a complete scan
+   * that happens to spend exactly the budget doesn't spuriously report itself truncated.
+   */
   get exhausted(): boolean {
-    return this.reads >= READ_BUDGET
+    return this.truncated
   }
 
   async getFile(path: string): Promise<string | null> {
-    if (this.reads >= READ_BUDGET) return null
+    if (this.reads >= READ_BUDGET) {
+      this.truncated = true
+      return null
+    }
     this.reads++
     const file = await this.reader.getFile(path, this.gitRef)
     return file?.content ?? null
@@ -110,16 +109,6 @@ class Scanner {
   /** True when a file exists (a cheap presence probe that still spends one read). */
   async exists(path: string): Promise<boolean> {
     return (await this.getFile(path)) !== null
-  }
-
-  async listDir(path: string): Promise<{ name: string; type: string; path: string }[]> {
-    if (this.reads >= READ_BUDGET) return []
-    this.reads++
-    try {
-      return await this.reader.listDirectory(path, this.gitRef)
-    } catch {
-      return []
-    }
   }
 }
 
@@ -178,6 +167,12 @@ interface FrameworkGuess {
   outputDir: string
   confidence: 'high' | 'low'
   note: string
+  /**
+   * The package.json script that produces the static {@link outputDir} above, when it differs from
+   * the generic `build` (e.g. Nuxt's `.output/public` comes from `generate`, not `build`). Used to
+   * keep the proposed build script and output dir consistent.
+   */
+  staticBuildScript?: string
 }
 
 /**
@@ -206,7 +201,8 @@ async function detectFramework(
       name: 'Nuxt',
       outputDir: '.output/public',
       confidence: 'low',
-      note: 'Nuxt detected. For a static (SPA/prerendered) build the output is .output/public; a Nuxt app served via `nuxt preview` uses Command serve mode instead. Verify which your build produces.',
+      staticBuildScript: 'generate',
+      note: 'Nuxt detected. For a static (SPA/prerendered) build the output is .output/public, produced by `nuxt generate`; a Nuxt app served via `nuxt preview` uses Command serve mode instead. Verify which your build produces.',
     }
   }
   if (has('next') || (await anyConfig(['next.config']))) {
@@ -303,16 +299,37 @@ export async function detectFrontendConfig(
     })
   }
 
-  // 3) Build script from package.json scripts.
+  // 3) Framework guess ⇒ the output dir (+ the script that produces its static output).
+  const framework = await detectFramework(scanner, root, pkg)
+  if (framework) {
+    config.outputDir = framework.outputDir
+    notes.push({ field: 'outputDir', confidence: framework.confidence, message: framework.note })
+  } else {
+    notes.push({
+      field: 'outputDir',
+      confidence: 'low',
+      message:
+        'Could not identify the framework; leaving the output directory unset, so the harness default (dist) applies. Set it if your build outputs elsewhere.',
+    })
+  }
+
+  // 4) Build script from package.json scripts. When the framework names the script that produces
+  //    its detected static output (Nuxt ⇒ `generate` ⇒ .output/public), prefer that so the build
+  //    script and output dir agree rather than defaulting to a `build` that yields a different dir.
   if (pkg) {
-    const buildScript = BUILD_SCRIPT_CANDIDATES.find((s) => s in pkg.scripts)
+    const preferred =
+      framework?.staticBuildScript && framework.staticBuildScript in pkg.scripts
+        ? framework.staticBuildScript
+        : undefined
+    const buildScript = preferred ?? BUILD_SCRIPT_CANDIDATES.find((s) => s in pkg.scripts)
     if (buildScript) {
       config.buildScript = buildScript
       notes.push({
         field: 'buildScript',
-        confidence: buildScript === 'build' ? 'high' : 'low',
-        message:
-          buildScript === 'build'
+        confidence: !preferred && buildScript === 'build' ? 'high' : 'low',
+        message: preferred
+          ? `Using the "${buildScript}" script — it produces the ${framework?.name} static output (${framework?.outputDir}). Confirm it's the build you want served.`
+          : buildScript === 'build'
             ? 'Found a "build" script.'
             : `No "build" script; using "${buildScript}". Confirm it produces the deployable build.`,
       })
@@ -323,20 +340,6 @@ export async function detectFrontendConfig(
         message: 'No build/build:prod/generate script found — set the build script manually.',
       })
     }
-  }
-
-  // 4) Output dir from the framework guess.
-  const framework = await detectFramework(scanner, root, pkg)
-  if (framework) {
-    config.outputDir = framework.outputDir
-    notes.push({ field: 'outputDir', confidence: framework.confidence, message: framework.note })
-  } else {
-    notes.push({
-      field: 'outputDir',
-      confidence: 'low',
-      message:
-        'Could not identify the framework; leaving the output directory at the default (dist). Set it if your build outputs elsewhere.',
-    })
   }
 
   // 5) Serve mode: a production-preview script ⇒ command mode, else the static default.
