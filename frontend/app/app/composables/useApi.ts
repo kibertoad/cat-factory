@@ -18,6 +18,7 @@ import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
+import { packageRegistriesApi } from './api/packageRegistries'
 import { presetsApi } from './api/presets'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
@@ -112,6 +113,7 @@ export function useApi() {
     ...infraHandlersApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
+    ...packageRegistriesApi(ctx),
     ...previewApi(ctx),
     ...recurringApi(ctx),
     ...sandboxApi(ctx),

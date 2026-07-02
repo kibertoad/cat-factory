@@ -33,12 +33,26 @@ const MIN_HARVEST_LEN = 12
 const CREDENTIAL_ASSIGNMENT =
   /\b([A-Za-z0-9_]*(?:password|passwd|pwd|secret|token|key|credential)[A-Za-z0-9_]*\s*[:=]\s*)\S+/gi
 
+// Known-secret values registered per JOB (e.g. the job's private-registry tokens),
+// scrubbed on EVERY redaction — including the pattern-only `redactSecrets` call sites
+// that carry no per-call secret list. Accumulating across jobs on a reused container
+// is safe: redaction only ever widens.
+const REGISTERED_SECRETS = new Set<string>()
+
+/** Register known secret values to scrub on every subsequent redaction. */
+export function registerKnownSecrets(values: readonly string[]): void {
+  for (const value of values) {
+    if (value && value.length >= MIN_REDACT_LEN) REGISTERED_SECRETS.add(value)
+  }
+}
+
 /**
  * Strip credentials out of any string before it is logged or stored. Applies the
  * pattern rules (URL userinfo `https://user:pass@host`, `x-access-token:<token>`, bare
  * `ghs_`/`ghp_`/`gho_`/`github_pat_` shapes, and credential-named `KEY=value` / `KEY:
- * value` assignments) and then scrubs every supplied known-secret value. Idempotent —
- * safe to call on already-redacted text.
+ * value` assignments) and then scrubs every supplied known-secret value plus the
+ * module-registered ones ({@link registerKnownSecrets}). Idempotent — safe to call on
+ * already-redacted text.
  */
 export function redact(input: string, knownSecrets: readonly string[] = []): string {
   let out = input
@@ -46,14 +60,14 @@ export function redact(input: string, knownSecrets: readonly string[] = []): str
     .replace(/x-access-token:[^@\s]+/gi, 'x-access-token:***')
     .replace(/\b(gh[pso]_|github_pat_)[A-Za-z0-9_]+/g, '$1***')
     .replace(CREDENTIAL_ASSIGNMENT, '$1***')
-  for (const secret of knownSecrets) {
+  for (const secret of [...knownSecrets, ...REGISTERED_SECRETS]) {
     // Guard against scrubbing trivially-short values that would mangle output.
     if (secret.length >= MIN_REDACT_LEN) out = out.split(secret).join('***')
   }
   return out
 }
 
-/** Pattern-only redaction (no known values). Kept for callers without a secret list. */
+/** Pattern + registered-value redaction. Kept for callers without a per-call secret list. */
 export function redactSecrets(input: string): string {
   return redact(input)
 }

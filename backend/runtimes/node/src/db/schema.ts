@@ -1205,6 +1205,19 @@ export const observabilityConnections = pgTable('observability_connections', {
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
 
+// Private package-registry entries per workspace (npm private orgs, GitHub Packages), so
+// agent containers can resolve private dependencies on checkout (mirror of D1 migration
+// 0034's `package_registry_connections`). `entries` is ONE sealed JSON array of
+// { id, ecosystem, vendor, scopes, token } (domain tag 'cat-factory:package-registries');
+// `summary` is a non-secret display blob. Plaintext tokens only in memory.
+export const packageRegistryConnections = pgTable('package_registry_connections', {
+  workspace_id: text('workspace_id').primaryKey(),
+  entries: text('entries').notNull(),
+  summary: text('summary').notNull().default('[]'),
+  created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
+
 // Per-workspace incident-enrichment connection (PagerDuty + incident.io), moved out of
 // env onto a sealed row (mirror of D1 migration 0013's `incident_enrichment_connections`).
 // `credentials` is ONE sealed JSON blob { pagerDuty?, incidentIo? } (domain tag

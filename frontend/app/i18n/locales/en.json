@@ -1479,6 +1479,7 @@
         "documents": "Documents",
         "taskTrackers": "Task trackers",
         "observability": "Observability",
+        "development": "Development",
         "personal": "Personal (only you)"
       },
       "items": {
@@ -1515,6 +1516,10 @@
         "observability": {
           "label": "Post-release health",
           "description": "Watch monitors and SLOs after a release ships (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Private package registries",
+          "description": "npm and GitHub Packages tokens agents use to install private dependencies."
         },
         "githubPat": {
           "label": "My GitHub token",
@@ -2012,6 +2017,31 @@
       },
       "connectionNoun": "the observability connection",
       "incidentNoun": "the incident provider"
+    },
+    "packageRegistries": {
+      "title": "Private package registries",
+      "intro": "Connect the private registries your repositories install from. Agents receive them when they check out a repository, so private dependencies resolve during installs. Tokens are write-only: to change one, remove the entry and add it again.",
+      "entryNoun": "registry entry",
+      "list": {
+        "heading": "Connected registries",
+        "tokenTail": "token …{tail}",
+        "remove": "Remove entry"
+      },
+      "add": {
+        "heading": "Add a registry",
+        "vendor": "Registry",
+        "host": "The token is sent only to {host}.",
+        "scopes": "Package scopes",
+        "scopesHelp": "Comma-separated npm scopes, e.g. @my-org",
+        "token": "Access token",
+        "save": "Add registry"
+      },
+      "toast": {
+        "loadFailed": "Could not load package registries",
+        "added": "Registry added",
+        "addFailed": "Could not add the registry",
+        "removeFailed": "Could not remove the registry entry"
+      }
     },
     "localMode": {
       "title": "Local mode",

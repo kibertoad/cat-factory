@@ -1,6 +1,7 @@
 import type {
   AgentRunContext,
   ModelRef,
+  RecordAgentContextInput,
   RunnerDispatchKind,
   RunnerJobRef,
   RunnerJobResult,
@@ -195,6 +196,113 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('omits guardLimits for an un-tuned kind (the harness keeps its defaults)', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]!.spec.guardLimits).toBeUndefined()
+  })
+
+  it('omits packageRegistries when no resolver is wired', async () => {
+    await executor.startJob(context('coder'))
+    expect(captured[0]!.spec.packageRegistries).toBeUndefined()
+  })
+})
+
+describe('ContainerAgentExecutor private package registries', () => {
+  const REGISTRIES = [
+    {
+      ecosystem: 'npm' as const,
+      host: 'registry.npmjs.org',
+      scopes: ['@acme'],
+      token: 'npm_private_registry_token',
+    },
+  ]
+
+  function makeExecutorWithRegistries(recorded: RecordAgentContextInput[]): {
+    executor: ContainerAgentExecutor
+    captured: Captured[]
+  } {
+    const captured: Captured[] = []
+    const transport: RunnerTransport = {
+      async dispatch(ref, spec, kind) {
+        captured.push({ ref, spec, kind })
+      },
+      async poll() {
+        return { state: 'running' }
+      },
+    }
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: async () => transport,
+      agentRouting: routing,
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: async () => ({
+        installationId: 7,
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+      }),
+      mintInstallationToken: async () => 'GH-TOKEN',
+      sessionService: {
+        async mint() {
+          return 'SESSION-TOKEN'
+        },
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.test/v1',
+      githubApiBase: 'https://api.github.com',
+      ensureWorkBranch: async () => true,
+      resolvePackageRegistries: async () => REGISTRIES,
+      agentContextObservability: {
+        async record(input) {
+          recorded.push(input)
+        },
+      },
+    })
+    return { executor, captured }
+  }
+
+  it('forwards the resolved entries on a coding kind and an explore kind alike', async () => {
+    const { executor, captured } = makeExecutorWithRegistries([])
+    await executor.startJob(context('coder'))
+    await executor.startJob(context('architect'))
+    expect(captured[0]!.spec.packageRegistries).toEqual(REGISTRIES)
+    expect(captured[1]!.spec.packageRegistries).toEqual(REGISTRIES)
+  })
+
+  it('never leaks the registry token into the agent-context snapshot (allow-list projection)', async () => {
+    const recorded: RecordAgentContextInput[] = []
+    const { executor } = makeExecutorWithRegistries(recorded)
+    await executor.startJob(context('coder'))
+    expect(recorded).toHaveLength(1)
+    const serialized = JSON.stringify(recorded[0])
+    expect(serialized).not.toContain('npm_private_registry_token')
+    expect(serialized).not.toContain('packageRegistries')
+  })
+
+  it('propagates a resolution failure (a configured workspace must not run without auth)', async () => {
+    const transport: RunnerTransport = {
+      async dispatch() {},
+      async poll() {
+        return { state: 'running' }
+      },
+    }
+    const executor = new ContainerAgentExecutor({
+      resolveTransport: async () => transport,
+      agentRouting: routing,
+      resolveBlockModel: () => undefined,
+      resolveRepoTarget: async () => ({
+        installationId: 7,
+        owner: 'acme',
+        name: 'widgets',
+        baseBranch: 'main',
+      }),
+      mintInstallationToken: async () => 'GH-TOKEN',
+      sessionService: {
+        async mint() {
+          return 'SESSION-TOKEN'
+        },
+      } as unknown as ContainerSessionService,
+      proxyBaseUrl: 'https://proxy.test/v1',
+      resolvePackageRegistries: async () => {
+        throw new Error('decrypt failed')
+      },
+    })
+    await expect(executor.startJob(context('coder'))).rejects.toThrow('decrypt failed')
   })
 })
 

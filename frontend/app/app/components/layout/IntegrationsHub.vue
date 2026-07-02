@@ -20,6 +20,7 @@ const documents = useDocumentsStore()
 const tasks = useTasksStore()
 const tracker = useTrackerStore()
 const releaseHealth = useReleaseHealthStore()
+const packageRegistries = usePackageRegistriesStore()
 const userSecrets = useUserSecretsStore()
 const apiKeys = useApiKeysStore()
 const workspace = useWorkspaceStore()
@@ -49,6 +50,7 @@ watch(
     if (isOpen) {
       query.value = ''
       void releaseHealth.ensureLoaded().catch(() => {})
+      void packageRegistries.ensureLoaded().catch(() => {})
       void userSecrets.load().catch(() => {})
       // Drives the OpenRouter row's "Key connected" badge.
       if (workspace.workspaceId) void apiKeys.load(workspace.workspaceId).catch(() => {})
@@ -251,6 +253,27 @@ const groups = computed<IntegrationGroup[]>(() => {
             : undefined,
           connected: releaseHealth.connection.connected,
           onClick: () => go(ui.openObservabilityConnection),
+        },
+      ],
+    })
+  }
+
+  // --- Development (private package registries) -------------------------------
+  // Gated like observability: hidden until a probe confirms the module is wired
+  // (`available === true`), so an unconfigured backend doesn't show a dead row.
+  if (packageRegistries.available) {
+    const hasEntries = packageRegistries.entries.length > 0
+    out.push({
+      title: t('layout.integrationsHub.groups.development'),
+      items: [
+        {
+          key: 'package-registries',
+          icon: 'i-lucide-package',
+          label: t('layout.integrationsHub.items.packageRegistries.label'),
+          description: t('layout.integrationsHub.items.packageRegistries.description'),
+          status: hasEntries ? t('layout.integrationsHub.status.connected') : undefined,
+          connected: hasEntries,
+          onClick: () => go(ui.openPackageRegistries),
         },
       ],
     })

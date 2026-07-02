@@ -1426,6 +1426,7 @@
         "documents": "Belgeler",
         "taskTrackers": "Görev izleyiciler",
         "observability": "Gözlemlenebilirlik",
+        "development": "Geliştirme",
         "personal": "Kişisel (yalnızca siz)"
       },
       "items": {
@@ -1462,6 +1463,10 @@
         "observability": {
           "label": "Sürüm sonrası sağlık",
           "description": "Bir sürüm yayınlandıktan sonra monitörleri ve SLO'ları izleyin (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Özel paket kayıt defterleri",
+          "description": "Aracıların özel bağımlılıkları yüklemek için kullandığı npm ve GitHub Packages token'ları."
         },
         "githubPat": {
           "label": "GitHub token'ım",
@@ -1963,6 +1968,31 @@
       },
       "connectionNoun": "gözlemlenebilirlik bağlantısı",
       "incidentNoun": "olay sağlayıcısı"
+    },
+    "packageRegistries": {
+      "title": "Özel paket kayıt defterleri",
+      "intro": "Depolarınızın yükleme yaptığı özel kayıt defterlerini bağlayın. Aracılar bir depoyu çekerken bunları alır, böylece özel bağımlılıklar yükleme sırasında çözülür. Token'lar yalnızca yazılırdır: birini değiştirmek için girdiyi silin ve yeniden ekleyin.",
+      "entryNoun": "kayıt defteri girdisi",
+      "list": {
+        "heading": "Bağlı kayıt defterleri",
+        "tokenTail": "token …{tail}",
+        "remove": "Girdiyi kaldır"
+      },
+      "add": {
+        "heading": "Kayıt defteri ekle",
+        "vendor": "Kayıt defteri",
+        "host": "Token yalnızca {host} adresine gönderilir.",
+        "scopes": "Paket kapsamları",
+        "scopesHelp": "Virgülle ayrılmış npm kapsamları, örn. @my-org",
+        "token": "Erişim token'ı",
+        "save": "Kayıt defteri ekle"
+      },
+      "toast": {
+        "loadFailed": "Paket kayıt defterleri yüklenemedi",
+        "added": "Kayıt defteri eklendi",
+        "addFailed": "Kayıt defteri eklenemedi",
+        "removeFailed": "Kayıt defteri girdisi kaldırılamadı"
+      }
     },
     "localMode": {
       "title": "Yerel mod",

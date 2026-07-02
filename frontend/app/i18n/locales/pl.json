@@ -1426,6 +1426,7 @@
         "documents": "Dokumenty",
         "taskTrackers": "Narzędzia do śledzenia zadań",
         "observability": "Obserwowalność",
+        "development": "Programowanie",
         "personal": "Osobiste (tylko Ty)"
       },
       "items": {
@@ -1462,6 +1463,10 @@
         "observability": {
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Prywatne rejestry pakietów",
+          "description": "Tokeny npm i GitHub Packages, których agenci używają do instalowania prywatnych zależności."
         },
         "githubPat": {
           "label": "Mój token GitHub",
@@ -1841,6 +1846,31 @@
       },
       "connectionNoun": "połączenie obserwowalności",
       "incidentNoun": "dostawcę incydentów"
+    },
+    "packageRegistries": {
+      "title": "Prywatne rejestry pakietów",
+      "intro": "Połącz prywatne rejestry, z których instalują Twoje repozytoria. Agenci otrzymują je przy pobieraniu repozytorium, dzięki czemu prywatne zależności rozwiązują się podczas instalacji. Tokeny są tylko do zapisu: aby zmienić token, usuń wpis i dodaj go ponownie.",
+      "entryNoun": "wpis rejestru",
+      "list": {
+        "heading": "Połączone rejestry",
+        "tokenTail": "token …{tail}",
+        "remove": "Usuń wpis"
+      },
+      "add": {
+        "heading": "Dodaj rejestr",
+        "vendor": "Rejestr",
+        "host": "Token jest wysyłany tylko do {host}.",
+        "scopes": "Zakresy pakietów",
+        "scopesHelp": "Zakresy npm oddzielone przecinkami, np. @my-org",
+        "token": "Token dostępu",
+        "save": "Dodaj rejestr"
+      },
+      "toast": {
+        "loadFailed": "Nie udało się wczytać rejestrów pakietów",
+        "added": "Rejestr dodany",
+        "addFailed": "Nie udało się dodać rejestru",
+        "removeFailed": "Nie udało się usunąć wpisu rejestru"
+      }
     },
     "localMode": {
       "title": "Tryb lokalny",

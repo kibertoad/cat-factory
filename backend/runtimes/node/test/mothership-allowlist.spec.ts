@@ -220,6 +220,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // rule, the record-based `upsert` via the `workspaceField` rule.
   observabilityConnectionRepository: {},
   incidentEnrichmentConnectionRepository: {},
+  // The private package-registry connection surface is fully remote too (the registries
+  // panel's get/upsert/delete + the container dispatch's decrypt-time get).
+  packageRegistryConnectionRepository: {},
   accountSettingsRepository: { getByAccount: 'pending', upsert: 'pending', listAll: 'sweeper' },
   releaseHealthConfigRepository: {},
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },

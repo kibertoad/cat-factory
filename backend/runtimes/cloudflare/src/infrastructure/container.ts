@@ -71,6 +71,8 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
+  PACKAGE_REGISTRY_CIPHER_INFO,
+  resolvePackageRegistriesForDispatch,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -96,6 +98,7 @@ import {
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
+  type JobPackageRegistrySpec,
   type MintInstallationToken,
   type PersistenceRegistry,
   type ServerContainer,
@@ -195,6 +198,7 @@ import {
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
+import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
@@ -719,6 +723,44 @@ function selectReleaseHealthDeps(
     releaseHealthConfigRepository,
     observabilitySecretCipher,
   }
+}
+
+/**
+ * Wire the per-workspace private package-registry integration (npm private orgs, GitHub
+ * Packages). Wired whenever the shared encryption key is present (the cipher must exist
+ * to seal/unseal); a workspace with no entries is a no-op. The decrypted entries reach
+ * agent containers via the executor's `resolvePackageRegistries` seam.
+ */
+function selectPackageRegistryDeps(env: Env, db: D1Database): Partial<CoreDependencies> {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return {}
+  return {
+    packageRegistryConnectionRepository: new D1PackageRegistryConnectionRepository({ db }),
+    packageRegistrySecretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: PACKAGE_REGISTRY_CIPHER_INFO,
+    }),
+  }
+}
+
+/**
+ * The agent executor / bootstrapper `resolvePackageRegistries` seam: decrypt the
+ * workspace's private-registry entries onto the job body at dispatch. Built over the
+ * same repo + cipher the management API uses; undefined when the encryption key is
+ * absent (no registry auth is forwarded).
+ */
+function buildResolvePackageRegistries(
+  env: Env,
+  db: D1Database,
+): ((workspaceId: string) => Promise<JobPackageRegistrySpec[]>) | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  const repository = new D1PackageRegistryConnectionRepository({ db })
+  const cipher = new WebCryptoSecretCipher({
+    masterKeyBase64: encryptionKey,
+    info: PACKAGE_REGISTRY_CIPHER_INFO,
+  })
+  return (workspaceId) => resolvePackageRegistriesForDispatch(repository, cipher, workspaceId)
 }
 
 /**
@@ -1261,6 +1303,7 @@ function buildContainerExecutor(
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
   const webSearchSettings = buildAccountSettings(env, db, clock)
   const resolveWebSearchEnabled = webSearchSettings
     ? async (workspaceId: string): Promise<boolean> => {
@@ -1323,6 +1366,9 @@ function buildContainerExecutor(
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (see resolver above).
     ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    // Decrypt the workspace's private-registry entries onto the job body (rendered by
+    // the harness into ~/.npmrc), so private dependencies resolve on install.
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -1751,6 +1797,10 @@ function selectRepoBootstrapper(
     apiBase: config.github.apiBase,
   })
 
+  // The scaffolder installs dependencies too — forward the workspace's
+  // private-registry entries exactly as the implementation executor does.
+  const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
+
   return new ContainerRepoBootstrapper({
     resolveTransport,
     installationRepository,
@@ -1764,6 +1814,7 @@ function selectRepoBootstrapper(
     model: resolveAgentConfig(config.agents.routing, 'architect').ref,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     githubApiBase: config.github.apiBase,
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
   })
 }
 
@@ -2165,6 +2216,7 @@ export function buildContainer(
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
     ...selectIncidentEnrichmentDeps(env, db),
+    ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
