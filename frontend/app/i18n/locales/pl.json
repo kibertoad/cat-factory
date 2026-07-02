@@ -445,6 +445,17 @@
         "mock": "Mock (WireMock)",
         "remove": "Usuń powiązanie",
         "empty": "Brak powiązań backendu. Dodaj jedno, aby skierować zmienną środowiskową do usługi lub mocka."
+      },
+      "preview": {
+        "open": "Otwórz podgląd",
+        "start": "Uruchom podgląd",
+        "stop": "Zatrzymaj",
+        "status": {
+          "starting": "Uruchamianie…",
+          "ready": "Działa",
+          "failed": "Błąd",
+          "stopped": "Nie uruchomiono"
+        }
       }
     },
     "releaseHealth": {

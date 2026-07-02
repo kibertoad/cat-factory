@@ -485,6 +485,17 @@
         "mock": "Mock (WireMock)",
         "remove": "Remove binding",
         "empty": "No backend bindings. Add one to point an env var at a service or a mock."
+      },
+      "preview": {
+        "open": "Open preview",
+        "start": "Start preview",
+        "stop": "Stop",
+        "status": {
+          "starting": "Starting…",
+          "ready": "Running",
+          "failed": "Failed",
+          "stopped": "Not running"
+        }
       }
     },
     "releaseHealth": {

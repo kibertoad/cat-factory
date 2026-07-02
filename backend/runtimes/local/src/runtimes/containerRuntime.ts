@@ -80,6 +80,14 @@ export interface RunContainerSpec {
    * Absent ⇒ the classic per-run container (labelled by run id).
    */
   pool?: boolean
+  /**
+   * Extra in-container ports to publish to an ephemeral HOST port ALONGSIDE the harness
+   * `:8080` (read back via {@link ContainerRuntimeAdapter.endpoint} with the port argument).
+   * Used by the browsable-preview transport to reach the served app's port (e.g. 4173). The
+   * Docker family publishes each with `-p 127.0.0.1:0:<port>`; Apple `container` (per-container
+   * IP, no published-port model) ignores it — the port is reachable at the container's own IP.
+   */
+  publishPorts?: number[]
 }
 
 /**
@@ -99,8 +107,16 @@ export interface ContainerRuntimeAdapter {
   run(exec: ContainerExec, spec: RunContainerSpec): Promise<string>
   /** The (running-or-exited) container for a run, if any. */
   find(exec: ContainerExec, runId: string): Promise<string | undefined>
-  /** The host+port the orchestrator should connect to, or undefined if not ready. */
-  endpoint(exec: ContainerExec, containerId: string): Promise<ContainerEndpoint | undefined>
+  /**
+   * The host+port the orchestrator should connect to reach the container's `inContainerPort`
+   * (default {@link HARNESS_PORT}), or undefined if not ready. The preview transport passes the
+   * served-app port (published via {@link RunContainerSpec.publishPorts}) to reach the app.
+   */
+  endpoint(
+    exec: ContainerExec,
+    containerId: string,
+    inContainerPort?: number,
+  ): Promise<ContainerEndpoint | undefined>
   /** Whether the container is currently running. */
   isRunning(exec: ContainerExec, containerId: string): Promise<boolean>
   /**

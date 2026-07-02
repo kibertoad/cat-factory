@@ -60,6 +60,7 @@ import {
   type LocalProcessRunnerTransport,
   createLocalProcessTransportFromEnv,
 } from './LocalProcessRunnerTransport.js'
+import { createLocalPreviewTransportFromEnv } from './LocalPreviewTransport.js'
 import { resolveHarnessImage } from './harnessImage.js'
 import { createRuntimeAdapter, resolveRuntimeId, runtimeProfile } from './runtimes/index.js'
 import { createDockerComposeRuntime } from './compose.js'
@@ -549,6 +550,11 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
     // this the clone URL is always github.com, so a GitLab repo can't be cloned).
     ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
+    // Browsable frontend preview (slice 5c): the local Docker/Apple adapter can publish a served
+    // app's port to the host + keep the container alive, so local mode wires the real preview
+    // transport (buildNodeContainer builds the job builder from local's PAT-backed seams). The
+    // capability was already advertised `frontendPreview.supported: true` above.
+    previewTransport: createLocalPreviewTransportFromEnv(env),
     // Serve ambient-eligible subscription harness refs (Claude Code / Codex) as INLINE CLI
     // calls, so the inline reviewers/brainstorm/estimator + inline agent kinds run on the
     // developer's subscription — the inline analogue of the container ambient-auth path.

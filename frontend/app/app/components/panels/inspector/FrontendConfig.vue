@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import type {
   Block,
   FrontendBackendBinding,
@@ -7,6 +7,7 @@ import type {
   FrontendEnvInjection,
   FrontendPackageManager,
   FrontendServeMode,
+  PreviewStatus,
 } from '~/types/domain'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
@@ -19,6 +20,7 @@ const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
 const auth = useAuthStore()
+const preview = usePreviewStore()
 const { t } = useI18n()
 
 // A browsable preview needs a long-lived host serve, so it is a local/node runtime capability
@@ -94,6 +96,39 @@ function addBinding() {
 function removeBinding(index: number) {
   save({ backendBindings: bindings.value.filter((_, i) => i !== index) })
 }
+
+// ---- Browsable preview (live runtime state, distinct from the persisted toggle) ----------
+// The live preview is a separate resource fetched from the preview endpoints; the store keys it
+// by frame id and self-polls while it is `starting`. Only relevant on a preview-capable runtime
+// with the toggle on.
+const previewActive = computed(() => previewSupported.value && config.value.previewEnabled === true)
+const previewState = computed(() => preview.byFrame[props.block.id])
+const previewStatus = computed<PreviewStatus>(() => previewState.value?.status ?? 'stopped')
+const previewBusy = computed(() => preview.busy[props.block.id] === true)
+// A start/stop request error (e.g. an unsupported runtime 503s) — shown inline; distinct from a
+// `failed` preview (a build that came up then broke), which carries `previewState.error`.
+const previewRequestError = computed(() => preview.requestError[props.block.id])
+
+// Exhaustive status → catalog key (tier-2 guard for the runtime-built lookup): adding a
+// PreviewStatus value without a label trips the typecheck on this map.
+const PREVIEW_STATUS_KEYS: Record<PreviewStatus, string> = {
+  starting: 'inspector.frontendConfig.preview.status.starting',
+  ready: 'inspector.frontendConfig.preview.status.ready',
+  failed: 'inspector.frontendConfig.preview.status.failed',
+  stopped: 'inspector.frontendConfig.preview.status.stopped',
+}
+const previewStatusLabel = computed(() => t(PREVIEW_STATUS_KEYS[previewStatus.value]))
+
+// Load the current state when the preview surface becomes relevant (mount + toggling it on, or
+// selecting a different frontend frame), so the inspector reflects an already-running preview.
+function refreshPreview() {
+  if (previewActive.value) void preview.refresh(props.block.id)
+}
+onMounted(refreshPreview)
+watch(() => [previewActive.value, props.block.id], refreshPreview)
+// Stop the store's self-poll for this frame when the inspector closes, so a `starting` preview
+// doesn't keep polling in the background after the panel is gone.
+onUnmounted(() => preview.stopPolling(props.block.id))
 </script>
 
 <template>
@@ -359,6 +394,81 @@ function removeBinding(index: number) {
             : t('inspector.frontendConfig.previewUnsupported')
         }}
       </p>
+
+      <!-- Live preview control: start / open (clickable URL) / stop, reflecting the runtime state. -->
+      <div v-if="previewActive" class="mt-2 space-y-1.5" data-testid="preview-panel">
+        <div class="flex items-center gap-2">
+          <span
+            class="text-[11px] font-medium"
+            :class="{
+              'text-emerald-400': previewStatus === 'ready',
+              'text-amber-400': previewStatus === 'starting',
+              'text-rose-400': previewStatus === 'failed',
+              'text-slate-400': previewStatus === 'stopped',
+            }"
+            data-testid="preview-status"
+          >
+            {{ previewStatusLabel }}
+          </span>
+
+          <UButton
+            v-if="previewStatus === 'ready' && previewState?.url"
+            :to="previewState.url"
+            target="_blank"
+            rel="noopener"
+            size="xs"
+            variant="soft"
+            color="primary"
+            trailing-icon="i-lucide-external-link"
+            data-testid="preview-url"
+          >
+            {{ t('inspector.frontendConfig.preview.open') }}
+          </UButton>
+        </div>
+
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            v-if="previewStatus === 'stopped' || previewStatus === 'failed'"
+            size="xs"
+            variant="soft"
+            color="primary"
+            icon="i-lucide-play"
+            :loading="previewBusy"
+            data-testid="preview-start"
+            @click="preview.start(props.block.id)"
+          >
+            {{ t('inspector.frontendConfig.preview.start') }}
+          </UButton>
+          <UButton
+            v-if="previewStatus === 'ready' || previewStatus === 'starting'"
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-square"
+            :loading="previewBusy"
+            data-testid="preview-stop"
+            @click="preview.stop(props.block.id)"
+          >
+            {{ t('inspector.frontendConfig.preview.stop') }}
+          </UButton>
+        </div>
+
+        <p
+          v-if="previewStatus === 'failed' && previewState?.error"
+          class="text-[11px] leading-snug text-rose-400"
+          data-testid="preview-error"
+        >
+          {{ previewState.error }}
+        </p>
+
+        <p
+          v-if="previewRequestError"
+          class="text-[11px] leading-snug text-rose-400"
+          data-testid="preview-request-error"
+        >
+          {{ previewRequestError }}
+        </p>
+      </div>
     </div>
   </div>
 </template>
