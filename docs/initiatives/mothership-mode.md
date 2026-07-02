@@ -28,6 +28,33 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (bootstrap / reference-architecture / env-config-repair management surface)** —
+  the repo-bootstrap flow and the env-config-repair retry/stop path are now fully remotely callable,
+  so a mothership-mode SPA can not just LIST bootstrap/repair runs but START a bootstrap, poll a
+  single job's board card, RETRY a failed run, and STOP a running one — completing the
+  `AgentRunController` retry/stop surface for those two run kinds (the EXECUTION-run branch landed
+  earlier) and making the bootstrap modal + reference-architecture library functional. Previously
+  only the board-load reads (`bootstrapJobRepository.listByWorkspace`/`listByServices`,
+  `envConfigRepairJobRepository.listByWorkspace`) were remotely callable; the single-job reads and
+  the write methods came back `unknown_method`. Newly allow-listed: `bootstrapJobRepository`
+  `get`/`update` (workspaceId arg0 → `workspace` rule) + `insert` (record-based → `workspaceField`
+  rule on the job's `workspaceId` field); the whole `referenceArchitectureRepository`
+  (`get`/`listByWorkspace`/`update`/`softDelete` via `workspace`, `insert` via `workspaceField`);
+  and `envConfigRepairJobRepository` `get`/`update` (`workspace`) + `insert` (`workspaceField`).
+  Each is member-level (none of these endpoints is admin-gated) and workspace-scoped, matching the
+  block/pipeline mutation policy. The `insert` records' sibling ids (`blockId`,
+  `referenceArchitectureId`) are NOT re-validated over the RPC (the `workspaceField` rule binds only
+  the top-level `workspaceId`): the row is stored under — and later read by — the bound workspace, and
+  a foreign `referenceArchitectureId` is harmless because the retry run re-resolves it via the
+  workspace-scoped `referenceArchitectureRepository.get`, which 404s a cross-workspace id. These are
+  the non-core repos the Node/local facade routes through the `pickRepoSource` seam (already sourced
+  from the full-surface remote registry when `db` is undefined), so this is an allow-list change only,
+  symmetric by construction (the dispatcher reflects over each facade's registry). Round-trip +
+  cross-account-scope + missing-workspaceId fail-closed unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
+  `bootstrapJob` — bar the serviceId-keyed `listByService` + the `blockServiceId` helper —
+  `referenceArchitecture`, and `envConfigRepairJob` repos are now remote).
 - **Phase 3 follow-up (shared-service mount management surface)** — the org-catalog / shared-service
   mounting flow (`ServiceMountService` / `ServiceMountController` — mount / unmount / re-layout a
   shared account service onto a workspace board) is now fully remotely callable, so a mothership-mode
@@ -125,7 +152,8 @@
   `upsert`/`markFailed`, `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage
   prechecks — was already exposed on the run/start path, so `getRef` is the only new entry. The
   bootstrap + env-config-repair retry BRANCHES read their own repos (`bootstrapJobRepository.get`,
-  `referenceArchitectureRepository.get`, …) and stay `pending` (a later slice); the sweeper-only
+  `referenceArchitectureRepository.get`, …) and stayed `pending` at the time (_now landed — see the
+  bootstrap / reference-architecture / env-config-repair management surface entry above_); the sweeper-only
   `agentRunRepository.listStale`/`liveRunIds` stay mothership-internal. **Wiring fix (both facades):**
   `agentRunRepository` is the ONE repo surfaced on the container OUTSIDE `CoreDependencies`, so the
   reflected `repositories` registry (built from `dependencies`) didn't carry it — a remote `getRef`
