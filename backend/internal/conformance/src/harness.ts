@@ -3,12 +3,14 @@ import type { BackendRegistries, DeployJobClient } from '@cat-factory/integratio
 import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
+  BlockRepository,
   DeployCloneTarget,
   EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
   LlmCallActivity,
+  NotificationRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -147,6 +149,18 @@ export interface ConformanceApp {
    * filters out terminal runs (the local orphaned-container reap keys off it).
    */
   agentRunRepository(): AgentRunRepository
+  /**
+   * The facade's block repository over its real store, so the suite can assert the batched
+   * cross-workspace read (`findByIds`) resolves each block to its HOME workspace identically
+   * on D1 and Postgres.
+   */
+  blockRepository(): BlockRepository
+  /**
+   * The facade's notification repository over its real store, so the suite can assert the
+   * escalation sweep's single-statement `escalateStaleOpen` flips exactly the overdue open
+   * cards — and returns them for re-delivery — identically on D1 and Postgres.
+   */
+  notificationRepository(): NotificationRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

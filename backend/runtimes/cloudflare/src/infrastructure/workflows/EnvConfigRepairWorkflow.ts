@@ -41,6 +41,9 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
     step: WorkflowStep,
   ): Promise<void> {
     const { workspaceId, jobId } = event.payload
+    // One DI-graph assembly per wake (pure wiring over env bindings, no I/O) shared by
+    // every poll in this invocation; a hibernation wake replays `run()` and rebuilds.
+    const container = buildContainer(this.env)
     const execConfig = loadConfig(this.env).execution
     const pollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const log = logger.child({ workspaceId, jobId, workflow: 'env-config-repair' })
@@ -55,7 +58,6 @@ export class EnvConfigRepairWorkflow extends WorkflowEntrypoint<
       let result: EnvConfigRepairPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {
-          const container = buildContainer(this.env)
           if (!container.envConfigRepair) {
             throw new Error('Env config repair module is not configured')
           }

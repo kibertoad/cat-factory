@@ -47,6 +47,13 @@ export interface GitHubInstallation {
 export interface GitHubInstallationRepository {
   getByInstallationId(installationId: number): Promise<GitHubInstallation | null>
   /**
+   * The batched form of {@link getByInstallationId}: every stored binding (tombstoned rows
+   * included, like the point read) for the given installation ids in a single (chunked)
+   * query — used to annotate the connect UI's installation list without one round-trip per
+   * installation. Ids with no binding are simply absent. Empty input → empty result.
+   */
+  listByInstallationIds(installationIds: number[]): Promise<GitHubInstallation[]>
+  /**
    * The installation backing a workspace: its own direct binding, or one shared
    * via its account. Returns null when neither exists or is tombstoned.
    */

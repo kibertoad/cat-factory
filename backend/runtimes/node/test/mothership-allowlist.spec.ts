@@ -235,6 +235,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   githubInstallationRepository: {
     getByInstallationId: 'pending',
+    listByInstallationIds: 'pending',
     getByWorkspace: 'pending',
     listWorkspacesForInstallation: 'pending',
     listActive: 'sweeper',

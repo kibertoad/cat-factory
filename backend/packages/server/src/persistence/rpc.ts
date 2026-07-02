@@ -90,6 +90,11 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       scope so a node can never widen its own visibility.
  *   - `block`         — `args[arg]` is a blockId with NO workspace arg; resolve the block's
  *                       owning account server-side (block → home workspace → account).
+ *   - `blockList`     — `args[arg]` is `string[]` of blockIds; resolve each block's owning
+ *                       account server-side (block → home workspace → account), like `block`
+ *                       but batched. EVERY requested id must resolve to an in-scope account,
+ *                       so a missing or out-of-scope block fails closed — exactly the outcome
+ *                       the per-id `block` rule produced call by call. Empty input is allowed.
  *   - `serviceList`   — `args[arg]` is `string[]` of serviceIds; resolve each service's owning
  *                       account server-side (services are account-owned). EVERY requested id
  *                       must resolve to an in-scope account, so a missing or out-of-scope
@@ -118,6 +123,7 @@ export type ScopeRule =
   | { kind: 'selfUser'; arg: number }
   | { kind: 'visibility'; arg: number }
   | { kind: 'block'; arg: number }
+  | { kind: 'blockList'; arg: number }
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
@@ -180,6 +186,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteMany: { scope: { kind: 'workspace', arg: 0 } },
     // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
     findById: { scope: { kind: 'block', arg: 0 } },
+    // The batched form (the cross-workspace dependency resolution on the run-start path).
+    findByIds: { scope: { kind: 'blockList', arg: 0 } },
     // Cross-service: compose a board's blocks from every service it mounts.
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
   },
@@ -372,6 +380,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (`NotificationService`), not `upsertOpenForBlock`. Workspace-scoped, member-level (the
     // inbox act/dismiss endpoints are not admin-gated) — same policy as the writes above.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    // The escalation sweep's batched write (a local node runs the sweep too, so it must proxy
+    // like the listOpen + per-row upsert loop it replaced). Workspace-scoped like `upsert`.
+    escalateStaleOpen: { scope: { kind: 'workspace', arg: 0 } },
   },
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
@@ -517,6 +528,12 @@ export interface DispatchOptions {
    */
   resolveBlockAccountId?(blockId: string): Promise<string | null | undefined>
   /**
+   * Resolve each requested block id's owning account id, keyed by block id (a block that does
+   * not exist is absent from the map). Required for the `blockList` scope kind; a call hitting
+   * that kind with no resolver fails closed (404).
+   */
+  resolveBlockAccountIds?(blockIds: string[]): Promise<Map<string, string | null | undefined>>
+  /**
    * Resolve each requested service id's owning account id, keyed by service id (a service that
    * does not exist is absent from the map). Required for the `serviceList` scope kind; a call
    * hitting that kind with no resolver fails closed (404).
@@ -626,6 +643,21 @@ export async function dispatchPersistenceCall(
       const blockId = args[rule.arg]
       if (typeof blockId !== 'string' || !opts.resolveBlockAccountId) return denied
       if (!inScope(await opts.resolveBlockAccountId(blockId))) return denied
+      break
+    }
+    case 'blockList': {
+      // Bind via every requested block's owning account (block → home workspace → account),
+      // the batched form of `block`. EVERY id must resolve to an in-scope account; a missing
+      // or out-of-scope block fails closed — the same outcome the per-id `block` rule produced
+      // call by call. An empty list is a no-op read (it returns empty).
+      const ids = args[rule.arg]
+      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return denied
+      if (ids.length === 0) break
+      if (!opts.resolveBlockAccountIds) return denied
+      const accounts = await opts.resolveBlockAccountIds(ids as string[])
+      for (const id of ids as string[]) {
+        if (!inScope(accounts.get(id))) return denied
+      }
       break
     }
     case 'serviceList': {

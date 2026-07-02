@@ -33,7 +33,9 @@ import {
   DrizzleClarityReviewRepository,
   DrizzleRequirementReviewRepository,
   DrizzleServiceRepository,
+  createDrizzleRepositories,
 } from '../src/repositories/drizzle.js'
+import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
 import { createApp } from '../src/server.js'
 
 const BASE = 'https://cat-factory.test'
@@ -319,6 +321,8 @@ export function makeConformanceApp(
     seedIncorporatedClarityReview,
     executionRepository: () => container.executionRepository,
     agentRunRepository: () => container.agentRunRepository,
+    blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
+    notificationRepository: () => new DrizzleNotificationRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

@@ -42,6 +42,7 @@ import type {
   DeployCloneTarget,
   EnvironmentProvider,
   GateProbe,
+  Notification,
   PullRequestReviewProvider,
   PullRequestReviewSnapshot,
   RepoFiles,
@@ -817,6 +818,73 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           pipelineId: pipeline.body.id,
         })
         expect(blocked.status).toBe(409)
+      })
+
+      it('findByIds resolves blocks across workspaces in one batched read', async () => {
+        // The cross-workspace dependency gate resolves a dependent's foreign blockers via
+        // the batched `BlockRepository.findByIds` (never a point-read per id) — assert the
+        // batched read maps each block to its HOME workspace identically on every store.
+        const app = harness.makeApp()
+        const { workspace: wsA } = await app.createWorkspace()
+        const { workspace: wsB } = await app.createWorkspace()
+        const a = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+          title: 'Home task',
+        })
+        const b = await app.call<Block>('POST', `/workspaces/${wsB.id}/blocks/blk_auth/tasks`, {
+          title: 'Foreign task',
+        })
+        const repo = app.blockRepository()
+        const found = await repo.findByIds([a.body.id, b.body.id, 'blk_does_not_exist'])
+        // Both blocks resolve with their home workspace; the unknown id is simply absent.
+        expect(found).toHaveLength(2)
+        const byId = new Map(found.map((f) => [f.block.id, f]))
+        expect(byId.get(a.body.id)?.workspaceId).toBe(wsA.id)
+        expect(byId.get(b.body.id)?.workspaceId).toBe(wsB.id)
+        expect(byId.get(a.body.id)?.block.title).toBe('Home task')
+        // Empty input short-circuits to an empty result.
+        expect(await repo.findByIds([])).toEqual([])
+      })
+    })
+
+    describe('notifications', () => {
+      it('escalateStaleOpen flips exactly the overdue open normal cards in one statement', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const repo = app.notificationRepository()
+        const card = (id: string, overrides: Partial<Notification>): Notification =>
+          ({
+            id,
+            type: 'merge_review',
+            status: 'open',
+            severity: 'normal',
+            blockId: null,
+            executionId: null,
+            title: id,
+            body: 'body',
+            payload: null,
+            createdAt: 1_000,
+            resolvedAt: null,
+            ...overrides,
+          }) as Notification
+        await repo.upsert(wsId, card('ntf_overdue', {}))
+        await repo.upsert(wsId, card('ntf_recent', { createdAt: 50_000 }))
+        await repo.upsert(wsId, card('ntf_already_urgent', { severity: 'urgent' }))
+        await repo.upsert(wsId, card('ntf_dismissed', { status: 'dismissed', resolvedAt: 2_000 }))
+
+        // Only the open, still-normal card past the cutoff flips — and is returned for
+        // re-delivery (the real-time inbox re-render).
+        const escalated = await repo.escalateStaleOpen(wsId, 10_000)
+        expect(escalated.map((n) => n.id)).toEqual(['ntf_overdue'])
+        expect(escalated[0]?.severity).toBe('urgent')
+
+        const open = await repo.listOpen(wsId)
+        const severityById = new Map(open.map((n) => [n.id, n.severity]))
+        expect(severityById.get('ntf_overdue')).toBe('urgent')
+        expect(severityById.get('ntf_recent')).toBe('normal')
+        expect(severityById.get('ntf_already_urgent')).toBe('urgent')
+        // Idempotent: a second sweep finds nothing left to flip.
+        expect(await repo.escalateStaleOpen(wsId, 10_000)).toEqual([])
       })
     })
 

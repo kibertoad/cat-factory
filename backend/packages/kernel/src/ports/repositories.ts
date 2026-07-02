@@ -80,6 +80,15 @@ export interface BlockRepository {
     blockId: string,
   ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null>
   /**
+   * The batched form of {@link BlockRepository.findById}: resolve every id that exists, in a
+   * single (chunked) query — used to augment a board's block list with cross-workspace
+   * dependency blocks without one round-trip per id. Ids with no block are simply absent
+   * from the result. Empty input → empty result.
+   */
+  findByIds(
+    blockIds: string[],
+  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>>
+  /**
    * Insert a block. `serviceId` stamps the account-owned service the block belongs to
    * (so it can be rendered on every workspace that mounts the service); omit/undefined
    * for legacy, workspace-local blocks.
