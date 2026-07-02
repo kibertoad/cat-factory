@@ -35,4 +35,30 @@ describe('parseNativeHarnesses', () => {
     expect(parseNativeHarnesses('clyde')).toEqual([])
     expect(parseNativeHarnesses('enabled-maybe')).toEqual([])
   })
+
+  it('warns about unrecognised tokens instead of dropping them silently', () => {
+    // Fail-safe stays, but a typo'd `claudecode` must not disable native mode with ZERO
+    // signal — the developer would only notice when runs start leasing credentials again.
+    const warnings: string[] = []
+    expect(parseNativeHarnesses('claudecode', (m) => warnings.push(m))).toEqual([])
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/unrecognized value\(s\) 'claudecode'/)
+    expect(warnings[0]).toMatch(/native mode stays OFF/)
+  })
+
+  it('warns about a stray token even when another token did enable a harness', () => {
+    const warnings: string[] = []
+    expect(parseNativeHarnesses('claude, codx', (m) => warnings.push(m))).toEqual(['claude-code'])
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/'codx'/)
+    expect(warnings[0]).not.toMatch(/stays OFF/)
+  })
+
+  it('does not warn for recognised values or explicit off values', () => {
+    const warnings: string[] = []
+    parseNativeHarnesses('claude-code,codex', (m) => warnings.push(m))
+    parseNativeHarnesses('off', (m) => warnings.push(m))
+    parseNativeHarnesses(undefined, (m) => warnings.push(m))
+    expect(warnings).toEqual([])
+  })
 })
