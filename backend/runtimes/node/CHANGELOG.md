@@ -1,5 +1,70 @@
 # @cat-factory/node-server
 
+## 0.59.3
+
+### Patch Changes
+
+- 7f9d215: Fix critical/high race conditions from the July 2026 audit:
+
+  - **Spend-resume on Cloudflare (1.1):** a spend-paused run's `ExecutionWorkflow`
+    instance no longer returns (going terminal). It now stays alive **parked on a
+    `waitForEvent`** (like a human-decision wait, not a busy sleep-loop), so a long pause
+    no longer accretes unbounded durable steps. `/spend/resume` wakes it immediately via a
+    new `WorkRunner.signalResume` (a `spend-resume` event), and a 24h re-check chunk
+    auto-resumes it when the monthly budget frees — instead of the terminal-instance-id
+    trap that let the cron sweeper force-fail the "resumed" run.
+  - **Spend-resume on Node/local (parity):** Node/local now auto-resume spend-paused runs
+    when the monthly budget frees, via a new `agentRunRepository.listPausedExecutions`
+    polled by the reclaim sweeper (gated on `isOverBudget`, so a still-exhausted workspace
+    causes no churn) — matching the Cloudflare facade. Covered by a conformance assertion.
+  - **BootstrapWorkflow re-drive (1.2):** past the poll-read tolerance the workflow no
+    longer returns (going terminal, which made the sweeper force-fail a merely-busy
+    container). It keeps the instance alive and keeps polling, so a long clone/install
+    recovers.
+  - **One live execution run per block (2.1):** a new partial unique index on live
+    execution rows per block (D1 migration `0033` ⇄ Drizzle) plus an **atomic**
+    `ExecutionRepository.insertLive` that deletes the block's terminal rows (and the
+    caller's own `replaceId`) and inserts the new run **in one transaction** (D1
+    `db.batch` / Drizzle `transaction`). `start`/`retry`/`restartFromStep` no longer
+    `deleteByBlock` first, so a genuinely-concurrent double start is rejected with a 409
+    instead of the pre-delete wiping a concurrent winner and creating two live runs — two
+    drivers, two containers — on one branch. Covered by cross-runtime conformance
+    assertions (terminal cleanup + `replaceId` supersede).
+
+- 05d1b08: refactor(integrations): app-own the user-secret-kind registry (registry DI migration)
+
+  Migrates the per-user secret KIND registry off its module-global `Map` onto an app-owned
+  instance, the next slice of the registry-DI initiative (see
+  `docs/initiatives/registry-di-migration.md`). The composition root now owns the registry and
+  injects it, so a deployment-registered custom kind is seen by reference regardless of module
+  identity — the same footgun-free pattern as the environment/runner backend registries.
+
+  - New `UserSecretKindRegistry` class (`register`/`get`/`list`) + `defaultUserSecretKindRegistry()`
+    pre-loaded with the built-in `github_pat` kind, added to `BackendRegistries` /
+    `createBackendRegistries()`. `UserSecretService` reads the injected registry.
+  - **Breaking:** the free `registerUserSecretKind` / `getUserSecretKind` / `listUserSecretKinds`
+    exports are removed (pre-1.0, no back-compat). The built-in kind is now the exported
+    `githubPatUserSecretKind` handler, registered into the default registry.
+  - Wired symmetrically into the Worker + Node facades (local inherits via `buildNodeContainer`);
+    the cross-runtime conformance suite asserts a programmatically-registered custom kind is
+    described identically on every runtime.
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/consensus@0.8.12
+  - @cat-factory/gates@0.2.68
+  - @cat-factory/gitlab@0.4.39
+  - @cat-factory/observability-langfuse@0.7.111
+  - @cat-factory/provider-bedrock@0.7.117
+  - @cat-factory/provider-cloudflare@0.7.117
+  - @cat-factory/provider-s3@0.2.61
+  - @cat-factory/spend@0.10.72
+
 ## 0.59.2
 
 ### Patch Changes
