@@ -83,8 +83,8 @@ export class FragmentSourceService {
   }
 
   /** Unlink a source and tombstone every fragment it produced. */
-  async unlink(sourceId: string): Promise<void> {
-    const source = await this.require(sourceId)
+  async unlink(ownerKind: FragmentOwnerKind, ownerId: string, sourceId: string): Promise<void> {
+    const source = await this.require(ownerKind, ownerId, sourceId)
     const now = this.deps.clock.now()
     const fragments = await this.deps.promptFragmentRepository.listBySource(sourceId)
     for (const f of fragments) {
@@ -98,8 +98,12 @@ export class FragmentSourceService {
    * sha changed, tombstone files removed upstream, and stamp the new tree digest.
    * Idempotent — re-running with no upstream change touches nothing.
    */
-  async sync(sourceId: string): Promise<FragmentSyncResult> {
-    const source = await this.require(sourceId)
+  async sync(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    sourceId: string,
+  ): Promise<FragmentSyncResult> {
+    const source = await this.require(ownerKind, ownerId, sourceId)
     const entries = await this.readMarkdown(source)
     const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
     const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
@@ -140,8 +144,12 @@ export class FragmentSourceService {
   }
 
   /** Cheap "check for changes": compare the remote tree digest to the stored one. */
-  async status(sourceId: string): Promise<FragmentSourceStatus> {
-    const source = await this.require(sourceId)
+  async status(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    sourceId: string,
+  ): Promise<FragmentSourceStatus> {
+    const source = await this.require(ownerKind, ownerId, sourceId)
     const entries = await this.readMarkdown(source)
     const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
     const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
@@ -168,12 +176,21 @@ export class FragmentSourceService {
 
   // --- internals ----------------------------------------------------------
 
-  private async require(sourceId: string): Promise<FragmentSourceRecord> {
+  private async require(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    sourceId: string,
+  ): Promise<FragmentSourceRecord> {
     const source = assertFound(
       await this.deps.fragmentSourceRepository.get(sourceId),
       'FragmentSource',
       sourceId,
     )
+    // The route gates only authorize the addressed owner (account/workspace) prefix, so
+    // the record must belong to that owner; 404 hides other tenants' sources entirely.
+    if (source.ownerKind !== ownerKind || source.ownerId !== ownerId) {
+      throw new NotFoundError('FragmentSource', sourceId)
+    }
     if (source.deletedAt !== null) throw new NotFoundError('FragmentSource', sourceId)
     return source
   }

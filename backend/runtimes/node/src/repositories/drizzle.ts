@@ -267,26 +267,38 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
 class DrizzleBlockRepository implements BlockRepository {
   constructor(private readonly db: DrizzleDb) {}
 
+  // List reads order by `seq` (insertion order) for parity with the Cloudflare facade's
+  // `ORDER BY rowid` — Postgres heap order is otherwise non-deterministic.
   async listByWorkspace(workspaceId: string): Promise<Block[]> {
-    const rows = await this.db.select().from(blocks).where(eq(blocks.workspace_id, workspaceId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.workspace_id, workspaceId))
+      .orderBy(blocks.seq)
     // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByService(serviceId: string): Promise<Block[]> {
-    const rows = await this.db.select().from(blocks).where(eq(blocks.service_id, serviceId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.service_id, serviceId))
+      .orderBy(blocks.seq)
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByServices(serviceIds: string[]): Promise<Block[]> {
     if (serviceIds.length === 0) return []
     const out: Block[] = []
-    // Chunk the IN list to stay well under the bind-parameter limit.
+    // Chunk the IN list to stay well under the bind-parameter limit. Ordering is
+    // per-chunk, matching the D1 twin's per-chunk `ORDER BY rowid`.
     for (let i = 0; i < serviceIds.length; i += 500) {
       const rows = await this.db
         .select()
         .from(blocks)
         .where(inArray(blocks.service_id, serviceIds.slice(i, i + 500)))
+        .orderBy(blocks.seq)
       out.push(...tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id })))
     }
     return out
