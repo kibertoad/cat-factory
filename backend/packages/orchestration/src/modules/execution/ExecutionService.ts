@@ -2149,6 +2149,7 @@ export class ExecutionService {
     workspaceId: string,
     block: Block,
   ): Promise<{
+    name: string
     maxComplexity: number
     maxRisk: number
     maxImpact: number

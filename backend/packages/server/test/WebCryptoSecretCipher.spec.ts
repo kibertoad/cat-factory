@@ -26,8 +26,8 @@ describe('WebCryptoSecretCipher', () => {
     expect(err).toBeInstanceOf(Error)
     // Actionable — names ENCRYPTION_KEY and the likely rotation cause, not the opaque
     // Web Crypto "operation-specific reason" DOMException (which is kept as `cause`).
-    expect(err.message).toContain('ENCRYPTION_KEY')
-    expect(err.message).not.toBe('The operation failed for an operation-specific reason')
+    expect((err as Error).message).toContain('ENCRYPTION_KEY')
+    expect((err as Error).message).not.toBe('The operation failed for an operation-specific reason')
     expect((err as Error).cause).toBeDefined()
   })
 

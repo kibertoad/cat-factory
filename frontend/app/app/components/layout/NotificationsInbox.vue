@@ -16,6 +16,17 @@ const toast = useToast()
 
 const busy = ref<string | null>(null)
 
+/** Toast a failed act/dismiss — the store throws, so without this a failure was silent and the
+ * item just stayed in the inbox with no explanation. */
+function notifyError(title: string, e: unknown) {
+  toast.add({
+    title,
+    description: e instanceof Error ? e.message : String(e),
+    icon: 'i-lucide-triangle-alert',
+    color: 'error',
+  })
+}
+
 /** Per-type display metadata (icon, colour). The primary-action label is resolved
  * separately through the i18n catalog (`ACTION_KEYS`). */
 type Accent = 'warning' | 'primary' | 'error'
@@ -98,6 +109,8 @@ async function act(n: Notification) {
       color: 'success',
       icon: 'i-lucide-check',
     })
+  } catch (e) {
+    notifyError(t('layout.notifications.toast.actFailed'), e)
   } finally {
     busy.value = null
   }
@@ -112,6 +125,8 @@ async function dismiss(n: Notification) {
       color: 'neutral',
       icon: 'i-lucide-check',
     })
+  } catch (e) {
+    notifyError(t('layout.notifications.toast.dismissFailed'), e)
   } finally {
     busy.value = null
   }
