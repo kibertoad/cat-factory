@@ -1,4 +1,4 @@
-import { DEFAULT_FRONTEND_SERVE_PORT } from './frontend.js'
+import { resolveFrontendServePort } from './frontend.js'
 import type { Block, Pipeline } from './entities.js'
 
 // ---------------------------------------------------------------------------
@@ -76,9 +76,11 @@ export function frameAllowsVisualPipeline(
  * Only a binding with a NON-EMPTY `envVar` counts: an empty-`envVar` row is filtered out of the
  * injected env (the frontend never receives that backend's URL, so its browser never calls it,
  * so no cross-origin request to allow). Each contributing frontend emits its tester origin
- * `http://localhost:<servePort>` (the self-contained UI-test serves the app there). Deduped +
- * sorted for a stable comma-join. (The browsable-preview origin is a local-mode differentiator
- * added once the preview host port is pinned — see the frontend-preview initiative.)
+ * `http://localhost:<servePort>` — the port the app is ACTUALLY served on
+ * (`resolveFrontendServePort`, which sanitizes a reserved-port collision to the default), so the
+ * injected CORS origin can't drift from the served port. Deduped + sorted for a stable comma-join.
+ * (The browsable-preview origin is a local-mode differentiator added once the preview host port is
+ * pinned — see the frontend-preview initiative.)
  */
 export function frontendOriginsForService(
   serviceFrameId: string,
@@ -94,8 +96,7 @@ export function frontendOriginsForService(
         bind.envVar.trim().length > 0,
     )
     if (!bindsService) continue
-    const servePort = b.frontendConfig.servePort ?? DEFAULT_FRONTEND_SERVE_PORT
-    origins.add(`http://localhost:${servePort}`)
+    origins.add(`http://localhost:${resolveFrontendServePort(b.frontendConfig.servePort)}`)
   }
   return [...origins].sort()
 }

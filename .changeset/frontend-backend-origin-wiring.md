@@ -2,6 +2,7 @@
 '@cat-factory/contracts': patch
 '@cat-factory/orchestration': patch
 '@cat-factory/integrations': patch
+'@cat-factory/server': patch
 ---
 
 Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview initiative):
@@ -13,7 +14,10 @@ Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview init
   provider) or `{{frontendOrigins}}` (Kubernetes native adapter, flat scope), so an ephemeral
   frontend can reach an ephemeral backend. Derivation is automatic (`frontendOriginsForService`,
   a single workspace block-list read — no N+1); the CORS env-var mapping stays operator-authored,
-  and the backend must be re-provisioned to pick up a newly-linked frontend.
+  and the backend must be re-provisioned to pick up a newly-linked frontend. The served port is
+  resolved through the shared `resolveFrontendServePort` (contracts) — the same reserved-port
+  sanitization the harness infra spec uses — so a `servePort` set to a reserved in-container port
+  (8080/8089) injects the port the app is actually served on (4173), not the raw value.
 - **Binding-resolution correctness.** `resolveFrontendBindings` now dedupes a repeated `envVar`
   deterministically (last non-empty binding wins, matching the injected env map) instead of leaving
   it to insertion order. New `duplicateBindingEnvVars` predicate (contracts) surfaces the collision

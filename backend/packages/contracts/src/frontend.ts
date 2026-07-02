@@ -25,12 +25,36 @@ export const DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH = 'mocks/'
 
 /**
  * The default in-container port the built frontend is served on for a UI test / preview.
- * Deliberately NOT 8080 (the harness's own job HTTP server) nor the WireMock port. The single
- * source of truth shared by the server's `resolveServePort` and the reverse-origin derivation
- * (`frontendOriginsForService`) so the tester origin a backend must allow (CORS) can't drift
- * from the port the app is actually served on.
+ * Deliberately NOT 8080 (the harness's own job HTTP server) nor the WireMock port. Used via
+ * {@link resolveFrontendServePort} — the single source of truth for the served port, shared by
+ * the server's `resolveServePort` and the reverse-origin derivation (`frontendOriginsForService`)
+ * so the tester origin a backend must allow (CORS) can't drift from the port the app is actually
+ * served on.
  */
 export const DEFAULT_FRONTEND_SERVE_PORT = 4173
+
+/** The in-container port the harness's own job HTTP server binds — a frontend must never serve on it. */
+export const FRONTEND_HARNESS_JOB_PORT = 8080
+
+/** The in-container port WireMock binds for a frontend UI test (backend-chosen, not user config). */
+export const FRONTEND_WIREMOCK_PORT = 8089
+
+/**
+ * The port a `frontend` frame's app is ACTUALLY served on: the user's `servePort` unless it
+ * collides with a reserved in-container port ({@link FRONTEND_HARNESS_JOB_PORT} 8080, or
+ * {@link FRONTEND_WIREMOCK_PORT} 8089), in which case it would fail to bind (or steal WireMock's
+ * port), so we fall back to {@link DEFAULT_FRONTEND_SERVE_PORT}. The inspector steers users to
+ * 4173, but nothing stops them typing a reserved port, so guard here. Shared by the harness infra
+ * spec (`buildFrontendInfraSpec`) and the reverse-origin derivation (`frontendOriginsForService`)
+ * so the served port and the CORS origin a backend must allow can't drift.
+ */
+export function resolveFrontendServePort(requested: number | undefined): number {
+  if (requested === undefined) return DEFAULT_FRONTEND_SERVE_PORT
+  if (requested === FRONTEND_HARNESS_JOB_PORT || requested === FRONTEND_WIREMOCK_PORT) {
+    return DEFAULT_FRONTEND_SERVE_PORT
+  }
+  return requested
+}
 
 /** The package manager the frontend build uses. Defaults to `pnpm`. */
 export const frontendPackageManagerSchema = v.picklist(['pnpm', 'npm', 'yarn'])

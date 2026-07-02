@@ -1,5 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
+import { FRONTEND_WIREMOCK_PORT, resolveFrontendServePort } from '@cat-factory/contracts'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 
 /**
@@ -282,15 +283,6 @@ export function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): st
  * `noInfraDependencies`). The harness `infra` wire shape is unchanged — only its source moved
  * from the old `tester.environment` config to the service's `provisioning` + the run env.
  */
-/** The in-container port WireMock binds for a frontend UI test (backend-chosen, not user config). */
-const FRONTEND_WIREMOCK_PORT = 8089
-/**
- * The default in-container port the built frontend is served on. Deliberately NOT 8080 (the
- * harness's own job HTTP server owns 8080 in the same container) and NOT the WireMock port.
- */
-const FRONTEND_SERVE_PORT = 4173
-/** The port the harness's own job HTTP server binds inside the container — never serve on it. */
-const HARNESS_JOB_PORT = 8080
 
 /**
  * Env-var names never injected from a frontend binding: they are spread over `process.env` at
@@ -331,20 +323,6 @@ function isReservedEnvName(key: string): boolean {
   if (RESERVED_ENV_NAMES.has(key)) return true
   const lower = key.toLowerCase()
   return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
-}
-
-/**
- * The served port for a frontend UI test: the user's `servePort` unless it collides with a
- * reserved in-container port (the harness job server on 8080, or WireMock on 8089), in which
- * case it would fail to bind (or steal WireMock's port), so we fall back to the default. The
- * inspector steers users to 4173, but nothing stops them typing a reserved port, so guard here.
- */
-function resolveServePort(requested: number | undefined): number {
-  if (requested === undefined) return FRONTEND_SERVE_PORT
-  if (requested === HARNESS_JOB_PORT || requested === FRONTEND_WIREMOCK_PORT) {
-    return FRONTEND_SERVE_PORT
-  }
-  return requested
 }
 
 export function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
@@ -400,7 +378,7 @@ export function buildFrontendInfraSpec(
     ...(config.outputDir ? { outputDir: config.outputDir } : {}),
     ...(config.serveMode ? { serveMode: config.serveMode } : {}),
     ...(config.serveScript ? { serveScript: config.serveScript } : {}),
-    servePort: resolveServePort(config.servePort),
+    servePort: resolveFrontendServePort(config.servePort),
     ...(config.envInjection ? { envInjection: config.envInjection } : {}),
     ...(Object.keys(env).length ? { env } : {}),
     ...(config.mockMappingsPath ? { wiremockMappingsPath: config.mockMappingsPath } : {}),
