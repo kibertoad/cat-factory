@@ -37,7 +37,7 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
 | Board edges (emerald consumer→provider set in `TaskDependencyEdges.vue`)                        | done   |
 | Inspector: `ServiceConnections.vue` panel + `TaskRunSettings.vue` involved-services section     | done   |
 | i18n: `inspector.serviceConnections.*` + `inspector.runSettings.involvedServices*`, all locales | done   |
-| Conformance: JSON-column round-trip + write-gate 400s on both stores                            | done   |
+| Conformance: JSON-column round-trip + write-gate 422s on both stores                            | done   |
 | Design doc + this tracker                                                                       | done   |
 
 ### Phase 2 — multi-env provisioning (design in the doc, §Phase 2)

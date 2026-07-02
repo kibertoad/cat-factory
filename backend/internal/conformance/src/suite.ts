@@ -944,15 +944,16 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           providerId,
         ])
 
-        // Write-gate guards: a self-connection and an unconnected involved service are 400s.
+        // Write-gate guards: a self-connection and an unconnected involved service are
+        // ValidationErrors (422 per the shared error handler).
         const selfConn = await call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
           serviceConnections: [{ serviceBlockId: 'blk_auth' }],
         })
-        expect(selfConn.status).toBe(400)
+        expect(selfConn.status).toBe(422)
         const unconnected = await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
           involvedServiceIds: ['blk_db'],
         })
-        expect(unconnected.status).toBe(400)
+        expect(unconnected.status).toBe(422)
       })
 
       it('rejects a dependency edge that would create a cycle', async () => {

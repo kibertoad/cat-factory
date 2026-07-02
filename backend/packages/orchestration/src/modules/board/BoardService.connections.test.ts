@@ -71,7 +71,7 @@ describe('BoardService service-connection guards', () => {
     ])
   })
 
-  it('rejects a self-connection with a 400', async () => {
+  it('rejects a self-connection with a ValidationError', async () => {
     const { service } = build([block('a')])
     await expect(
       service.updateBlock(WS, 'a', { serviceConnections: [{ serviceBlockId: 'a' }] }),

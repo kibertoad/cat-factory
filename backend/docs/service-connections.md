@@ -52,7 +52,7 @@ connection links `type: 'service'` frames only.
 ### Validation (write gate: `BoardService.updateBlock`)
 
 Pure rules in `board.logic.ts` (`serviceConnectionsError` / `involvedServiceIdsError`),
-enforced as `ValidationError` → 400:
+enforced as `ValidationError` → 422:
 
 - No self-connection; no duplicate targets.
 - Each target must resolve (via the cross-home-aware `resolveBlock` path, so a service
