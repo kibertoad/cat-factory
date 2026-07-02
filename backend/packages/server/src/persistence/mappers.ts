@@ -9,11 +9,12 @@ import type {
 } from '@cat-factory/contracts'
 import {
   agentFailureKindSchema,
+  agentFailureSchema,
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
 } from '@cat-factory/contracts'
-import { array, string, type GenericSchema } from 'valibot'
+import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
 
 /** Contract for `blocks.depends_on`: a JSON array of block-id strings. */
@@ -539,6 +540,8 @@ interface ExecutionDetail {
   currentStep: number
   /** Internal user id of the run's initiator (individual-usage credential ownership). */
   initiatedBy: string | null
+  /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
+  failureHistory?: AgentFailure[]
 }
 
 // ---------------------------------------------------------------------------
@@ -564,19 +567,41 @@ export function isKnownAgentFailureKind(kind: string): boolean {
   return KNOWN_FAILURE_KINDS.has(kind)
 }
 
+/**
+ * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
+ * wire schema, not just `kind`/`message`: the SPA re-validates the whole snapshot against
+ * `agentFailureSchema` (both the `failure` field and the `failureHistory` array), so a
+ * structurally-incomplete record — a removed legacy kind, OR a known kind missing
+ * `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire workspace snapshot
+ * decode if surfaced. Dropping it here keeps the run readable (its `status`/`error` still
+ * describe what happened) and, for the history, means a retry can't make a bad record
+ * permanent. (`is()` rejects removed kinds too, since the picklist no longer lists them —
+ * subsuming the old `isKnownAgentFailureKind` check.)
+ */
+function isUsableFailure(o: unknown): o is AgentFailure {
+  return is(agentFailureSchema, o)
+}
+
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
 function parseAgentFailure(raw: string | null): AgentFailure | null {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as AgentFailure
-    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
+    if (isUsableFailure(o)) return o
   } catch {
     // fall through
   }
   return null
+}
+
+/**
+ * The prior-attempts failure trail packed into `detail`. Tolerant like
+ * {@link parseAgentFailure}: a non-array, or an entry that doesn't fully match the wire
+ * schema (removed legacy kind, or a structurally-incomplete record), is dropped rather
+ * than bricking the whole snapshot decode.
+ */
+function parseFailureHistory(list: unknown): AgentFailure[] {
+  return Array.isArray(list) ? list.filter(isUsableFailure) : []
 }
 
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
@@ -622,6 +647,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       id: row.id,
     }),
     failure: parseAgentFailure(row.failure),
+    // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
+    // no dedicated column); a run that never failed-then-retried simply has none.
+    failureHistory: parseFailureHistory(detail.failureHistory),
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
@@ -640,5 +668,8 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
+    // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
+    // never failed don't carry an empty array on every write.
+    failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
   } satisfies ExecutionDetail)
 }

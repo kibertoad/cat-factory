@@ -1,5 +1,68 @@
 # @cat-factory/node-server
 
+## 0.59.0
+
+### Minor Changes
+
+- 4e82496: Enable the prompt-fragment library by default and streamline linking GitHub-backed fragments.
+
+  - The prompt-fragment library (ADR 0006) is now **on by default** in both runtimes; opt out
+    with `PROMPT_LIBRARY_ENABLED=false`. Previously it was off unless `PROMPT_LIBRARY_ENABLED=true`
+    was set, so linking a GitHub document as a fragment failed with "Prompt-fragment library is
+    not configured" on a stock deployment.
+  - The fragment-library manager now reuses the same GitHub affordances as the other repo
+    windows: a **server-side repo search** (new `GitHubRepoSearchSelect`) plus the
+    `RepoTreeBrowser` to browse to a **file** (document-backed fragments) or **directory**
+    (repo sources), instead of hand-typing `owner`/`repo`/`path`/`ref`. Manual entry remains as
+    a fallback when the GitHub App isn't connected.
+  - When the library is explicitly disabled, the manager now shows a clear notice instead of
+    offering forms that fail with a raw 503.
+
+### Patch Changes
+
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+  - @cat-factory/server@0.66.4
+
+## 0.58.6
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/consensus@0.8.9
+  - @cat-factory/gates@0.2.66
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/prompt-fragments@0.9.40
+  - @cat-factory/spend@0.10.70
+  - @cat-factory/provider-bedrock@0.7.114
+  - @cat-factory/provider-cloudflare@0.7.114
+  - @cat-factory/observability-langfuse@0.7.109
+  - @cat-factory/provider-s3@0.2.59
+
+## 0.58.5
+
+### Patch Changes
+
+- fc8df61: Restore cross-runtime block-ordering parity: the Postgres block repository's list reads
+  (`listByWorkspace`/`listByService`/`listByServices`) had no `ORDER BY`, so block iteration
+  order was non-deterministic and diverged from the Cloudflare facade's `ORDER BY rowid`.
+  The `blocks` table gains a `seq` insert-sequence column (same pattern as `pipelines.seq`)
+  and all three list reads order by it. Existing rows are backfilled by the migration in
+  whatever order Postgres returns them (pre-1.0: close enough, self-heals as rows churn).
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/consensus@0.8.8
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/provider-bedrock@0.7.113
+  - @cat-factory/provider-cloudflare@0.7.113
+
 ## 0.58.4
 
 ### Patch Changes

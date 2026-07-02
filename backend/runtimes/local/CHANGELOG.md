@@ -1,5 +1,59 @@
 # @cat-factory/local-server
 
+## 0.38.5
+
+### Patch Changes
+
+- 6347d0e: Fix opaque "Failed to open PR (HTTP 422): No commits between ..." run failure when a
+  coding run resumes a work branch that has nothing ahead of its base (e.g. its earlier PR
+  was merged with a merge commit, leaving the branch reachable from base and its best-effort
+  delete skipped).
+
+  - `runCodingAgent` no longer treats a resumed branch as work unconditionally: when the
+    branch has no new commits this pass, it confirms the branch is actually ahead of the PR
+    base (new `branchAheadOfBase`, tri-state so an undeterminable result keeps the prior
+    resume-is-work behaviour) and records a clean no-op otherwise.
+  - `openPullRequest` now maps GitHub's `422 "No commits between ..."` to a no-op (returns
+    `null`) instead of a hard `HarnessFailure`, as a backstop.
+
+  Image-bumping: `@cat-factory/executor-harness` → 1.31.7 with the three runner-image pins
+  synced.
+
+- Updated dependencies [4e82496]
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+- Updated dependencies [6347d0e]
+  - @cat-factory/node-server@0.59.0
+  - @cat-factory/server@0.66.4
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.4
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/node-server@0.58.6
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.3
+
+### Patch Changes
+
+- Updated dependencies [fc8df61]
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/node-server@0.58.5
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/executor-harness@1.31.6
+
 ## 0.38.2
 
 ### Patch Changes

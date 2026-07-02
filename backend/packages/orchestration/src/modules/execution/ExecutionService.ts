@@ -129,7 +129,7 @@ import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
-import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
+import { carryForwardFailures, planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
 import { hasLiveServiceBinding, hasServiceBinding } from './frontend-infra.logic.js'
 
@@ -2539,6 +2539,9 @@ export class ExecutionService {
       currentStep,
       status: 'running',
       initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+      // Preserve the error trail: the failure this retry is clearing is appended to the
+      // history so it stays viewable after the top banner disappears on restart.
+      failureHistory: carryForwardFailures(previous),
     }
     await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
@@ -2644,6 +2647,9 @@ export class ExecutionService {
       currentStep,
       status: 'running',
       initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+      // Preserve the error trail across a restart too (a failed run is a valid restart
+      // source), so the prior failure stays viewable once the run is running again.
+      failureHistory: carryForwardFailures(previous),
     }
     await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length

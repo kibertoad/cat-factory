@@ -1,10 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "d6a48a90-c8f1-4ed7-a585-e62044a26ecf",
+  "id": "b94f60db-f390-4854-b9b0-2c58fcd50ff2",
   "prevIds": [
-    "53054df0-b6e9-4375-a327-356f69427198"
+    "78093022-a35b-4877-a09f-307613e8b223"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -1797,6 +1797,19 @@
       "generated": null,
       "identity": null,
       "name": "tracker_resolve_on_merge",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "serial",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "seq",
       "entityType": "columns",
       "schema": "public",
       "table": "blocks"
