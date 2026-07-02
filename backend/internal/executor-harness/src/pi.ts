@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { killChildProcess } from './process.js'
+import { killChildProcess, spawnDetached } from './process.js'
 import { pathExists } from './fs-utils.js'
 import { redactSecrets } from './redact.js'
 import { log } from './logger.js'
@@ -871,6 +871,8 @@ export function runPi(opts: {
         // stdin is piped (not 'ignore') so the prompt is delivered out-of-band
         // rather than on argv — see the function doc for the injection rationale.
         stdio: ['pipe', 'pipe', 'pipe'],
+        // Own process group (POSIX) so killChildProcess reaps Pi's grandchildren too.
+        detached: spawnDetached,
       },
     )
     // Hand Pi the prompt over stdin, then close it so print mode sees EOF and

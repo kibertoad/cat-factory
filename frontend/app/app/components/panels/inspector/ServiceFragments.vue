@@ -4,7 +4,8 @@ import type { Block } from '~/types/domain'
 // Service-level best-practice fragments (frame blocks). These are the programming
 // standards/guidelines for the whole service; at run time their bodies are folded
 // into the prompt of every `code-aware` agent on tasks under this service. Drawn from
-// the universal fragment pool (built-in + deployment-registered), grouped by category.
+// the board's merged fragment catalog (built-in ∪ registered ∪ account ∪ workspace,
+// via the fragments store; static pool when the library is off), grouped by category.
 const props = defineProps<{ block: Block }>()
 
 const board = useBoardStore()
@@ -17,10 +18,12 @@ onMounted(() => fragments.ensureLoaded())
 
 type MenuItem = { label: string; icon?: string; onSelect: () => void }
 
+// An id the catalog no longer resolves (removed/suppressed after selection) still
+// renders — labelled by its raw id — so it stays visible and removable.
 const selectedFragments = computed(() =>
-  (props.block.serviceFragmentIds ?? [])
-    .map((id) => fragments.getFragment(id))
-    .filter((f): f is NonNullable<typeof f> => !!f),
+  (props.block.serviceFragmentIds ?? []).map(
+    (id) => fragments.getFragment(id) ?? { id, title: id, summary: '' },
+  ),
 )
 
 // A trailing group that jumps from "attach a fragment" to authoring/editing the

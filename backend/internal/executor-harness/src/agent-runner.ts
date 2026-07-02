@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
-import { killChildProcess } from './process.js'
+import { killChildProcess, spawnDetached } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
 
 // The alternate (subscription) harness runners. The Pi harness reaches models
@@ -116,6 +116,8 @@ function streamCli(
       cwd: opts.cwd,
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
+      // Own process group (POSIX) so killChildProcess reaps the CLI's grandchildren too.
+      detached: spawnDetached,
     })
     child.stdin.on('error', () => {})
     child.stdin.end(prompt)

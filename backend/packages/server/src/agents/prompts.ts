@@ -372,6 +372,7 @@ export function buildFrontendInfraSpec(
   }
   return {
     kind: 'frontend',
+    ...(config.directory ? { directory: config.directory } : {}),
     ...(config.packageManager ? { packageManager: config.packageManager } : {}),
     ...(config.installCommand ? { install: config.installCommand } : {}),
     ...(config.buildScript ? { buildScript: config.buildScript } : {}),

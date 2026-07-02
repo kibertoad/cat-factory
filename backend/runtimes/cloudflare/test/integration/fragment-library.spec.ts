@@ -12,7 +12,12 @@ import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
 describe('prompt-fragment library (ADR 0006)', () => {
   describe('when the module is not configured', () => {
     it('reports the tier endpoint as unavailable (503)', async () => {
-      const app = makeApp()
+      // The library is on by default now, so simulate an explicit opt-out by
+      // un-wiring its repositories (what `PROMPT_LIBRARY_ENABLED=false` produces).
+      const app = makeApp(undefined, {
+        promptFragmentRepository: undefined,
+        fragmentSourceRepository: undefined,
+      })
       const { workspace } = await app.createWorkspace()
       const res = await app.call('GET', `/workspaces/${workspace.id}/prompt-fragments`)
       expect(res.status).toBe(503)
@@ -214,9 +219,11 @@ describe('prompt-fragment library (ADR 0006)', () => {
     })
   })
 
-  // NOTE: the tenant library no longer feeds the run path. The automatic per-run
-  // relevance selector was retired in favour of an explicit, service-scoped selection
-  // (a frame's `serviceFragmentIds`) folded only into `code-aware` agents — see the
-  // cross-runtime conformance suite's "service-scoped fragments + agent traits" tests.
-  // This file now covers the library's management surface (tier CRUD + repo sources) only.
+  // NOTE: the tenant library feeds the run path through `resolveBodiesForRun` (the
+  // engine's `fragmentResolver`): an explicit, service-scoped selection (a frame's
+  // `serviceFragmentIds`) plus block pins, resolved against the merged tenant catalog
+  // and folded only into `code-aware` agents — see the cross-runtime conformance
+  // suite's "service-scoped fragments + agent traits" tests. Only the automatic
+  // per-run relevance selector is retired. This file covers the library's management
+  // surface (tier CRUD + repo sources).
 })

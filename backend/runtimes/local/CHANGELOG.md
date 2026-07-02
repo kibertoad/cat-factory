@@ -1,5 +1,139 @@
 # @cat-factory/local-server
 
+## 0.38.9
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/integrations@0.56.0
+  - @cat-factory/server@0.67.0
+  - @cat-factory/executor-harness@1.31.12
+  - @cat-factory/agents@0.26.12
+  - @cat-factory/gitlab@0.4.40
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/orchestration@0.58.1
+  - @cat-factory/node-server@0.59.4
+
+## 0.38.8
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/node-server@0.59.3
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/gitlab@0.4.39
+  - @cat-factory/executor-harness@1.31.10
+
+## 0.38.7
+
+### Patch Changes
+
+- 9577c4a: Fix a batch of native-mode (`LOCAL_NATIVE_AGENTS`) agent-harness bugs:
+
+  - The harnesses (executor + deploy) now shut down gracefully on SIGTERM/SIGINT:
+    every running job is aborted (`JobRegistry.abortAll`) so in-flight `claude`/
+    `codex`/git/kubectl children are killed instead of being orphaned. Previously a
+    dev-server restart left the agent CLI running unsupervised on the developer's
+    login. The abort now targets the child's whole process group (POSIX), so the
+    CLI's own grandchildren (a shell tool, a build, its git) die with it rather than
+    reparenting to init. Shutdown exits as soon as the aborted jobs settle (capped at
+    6s) instead of always waiting the fixed window. Both harness servers also honor a
+    new `HARNESS_BIND_HOST` env, which the native transport sets to `127.0.0.1` so the
+    unsandboxed agent-spawning API is no longer reachable from the LAN (containers keep
+    binding all interfaces).
+  - The native host-process transport sanitizes the harness child's environment to an
+    allow-list (`LOCAL_HARNESS_ENV_ALLOW` extends it), so the orchestrator's secrets
+    (DATABASE_URL, ENCRYPTION_KEY, GITHUB_PAT, provider keys) no longer leak into the
+    ambient agent's env; the inline ambient CLI runner is sanitized the same way. The
+    allow-list keeps the TLS trust-anchor vars (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, ...)
+    alongside the proxy vars, so a corporate TLS-terminating proxy still works. The
+    deploy transport keeps full inheritance (kubectl/helm need ambient cluster env).
+  - Process-lifecycle fixes in `LocalProcessRunnerTransport`: a harness that never
+    becomes healthy is killed instead of leaking one process per retry, and
+    `shutdown()` racing an in-flight lazy start now kills the child instead of
+    resurrecting it. The local/Node graceful-shutdown path now invokes the
+    container's `onShutdown`, which stops the native harnesses; that call is isolated
+    in its own try so a failing pg-boss/pool teardown can't skip it.
+  - `NativeRoutingRunnerTransport` no longer reports a blanket eviction for refs it
+    doesn't know: after an orchestrator restart both `poll` and `release` fall back to
+    the container leg (which re-finds a per-run container by label), so a still-running
+    container job is re-attached / torn down instead of spuriously re-driven or leaked.
+  - Config typos are no longer silent: unrecognized `LOCAL_NATIVE_AGENTS` tokens and
+    an unrecognized/under-configured `LOCAL_DEPLOY_RUNTIME` now log a boot warning
+    (behavior still fails safe).
+
+- Updated dependencies [9577c4a]
+- Updated dependencies [4955639]
+  - @cat-factory/executor-harness@1.31.10
+  - @cat-factory/node-server@0.59.2
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+  - @cat-factory/server@0.66.6
+
+## 0.38.6
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/server@0.66.5
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/gitlab@0.4.38
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/node-server@0.59.1
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.5
+
+### Patch Changes
+
+- 6347d0e: Fix opaque "Failed to open PR (HTTP 422): No commits between ..." run failure when a
+  coding run resumes a work branch that has nothing ahead of its base (e.g. its earlier PR
+  was merged with a merge commit, leaving the branch reachable from base and its best-effort
+  delete skipped).
+
+  - `runCodingAgent` no longer treats a resumed branch as work unconditionally: when the
+    branch has no new commits this pass, it confirms the branch is actually ahead of the PR
+    base (new `branchAheadOfBase`, tri-state so an undeterminable result keeps the prior
+    resume-is-work behaviour) and records a clean no-op otherwise.
+  - `openPullRequest` now maps GitHub's `422 "No commits between ..."` to a no-op (returns
+    `null`) instead of a hard `HarnessFailure`, as a backstop.
+
+  Image-bumping: `@cat-factory/executor-harness` → 1.31.7 with the three runner-image pins
+  synced.
+
+- Updated dependencies [4e82496]
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+- Updated dependencies [6347d0e]
+  - @cat-factory/node-server@0.59.0
+  - @cat-factory/server@0.66.4
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.4
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/node-server@0.58.6
+  - @cat-factory/executor-harness@1.31.6
+
 ## 0.38.3
 
 ### Patch Changes

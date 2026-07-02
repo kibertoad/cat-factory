@@ -57,7 +57,7 @@ import {
   createLocalContainerTransportFromEnv,
 } from './LocalContainerRunnerTransport.js'
 import {
-  type LocalProcessRunnerTransport,
+  LocalProcessRunnerTransport,
   createLocalProcessTransportFromEnv,
 } from './LocalProcessRunnerTransport.js'
 import { createLocalPreviewTransportFromEnv } from './LocalPreviewTransport.js'
@@ -162,7 +162,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // a harness set so the executor flags `ambientAuth` ONLY for a listed harness whose vendor
   // is that CLI's native vendor (Claude/Codex), and the personal-credential gate skips just
   // those vendors. Default off — the container path is unchanged.
-  const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS)
+  const nativeHarnesses = parseNativeHarnesses(env.LOCAL_NATIVE_AGENTS, (message) =>
+    logger.warn(message),
+  )
   const nativeAgents = nativeHarnesses.length > 0
   // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
   // from env. `configured` providers (their PAT is set in env) offer a "Sign in with configured
@@ -311,12 +313,14 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // to the host process, the rest to a container), otherwise the warm-pool container
   // transport directly.
   let routed: RunnerTransport | undefined
+  // Held at this scope (not inside the resolver closure) so `onShutdown` below can stop the
+  // harness host process gracefully instead of relying on the parent-exit backstop kill.
+  let nativeProcessTransport: LocalProcessRunnerTransport | undefined
   const localAgentsResolve: ResolveRunnerTransport = () => {
     if (nativeAgents) {
       if (!routed) {
-        let proc: LocalProcessRunnerTransport | undefined
         routed = new NativeRoutingRunnerTransport(
-          () => (proc ??= createLocalProcessTransportFromEnv(env)),
+          () => (nativeProcessTransport ??= createLocalProcessTransportFromEnv(env)),
           resolveContainerTransport,
         )
       }
@@ -342,7 +346,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // `disableDefaultDeployJobClient` flag below stops `buildNodeContainer` falling back). The
   // clone target is inherited from `buildNodeContainer`'s default, which already uses local's PAT
   // mint + GitLab-aware `resolveRepoOrigin`.
-  const localDeployTransport = buildLocalDeployTransport(env)
+  const localDeployTransport = buildLocalDeployTransport(env, (message) => logger.warn(message))
   const deployJobClient = localDeployTransport
     ? new RunnerJobClient(() => Promise.resolve(localDeployTransport))
     : undefined
@@ -627,17 +631,21 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
           }),
         }
       : {}),
-    // On shutdown (mothership mode; the boot path calls this from its SIGTERM/SIGINT handler):
-    // stop the work runner's recovery poll FIRST so it can't touch the queue mid-close, then
-    // release both local SQLite handles (credentials + work queue). No-op otherwise.
-    ...(mothership
-      ? {
-          onShutdown: () => {
-            inProcessRunner?.stop()
-            mothership.close()
-          },
-        }
-      : {}),
+    // On shutdown (the boot paths call this from their SIGTERM/SIGINT handlers): stop the
+    // native host-process harnesses (agent + deploy) so a graceful exit tears them down —
+    // aborting their in-flight CLI children — rather than relying on the parent-exit
+    // backstop kill; in mothership mode ALSO stop the work runner's recovery poll FIRST so
+    // it can't touch the queue mid-close, then release both local SQLite handles.
+    onShutdown: async () => {
+      if (mothership) {
+        inProcessRunner?.stop()
+        mothership.close()
+      }
+      await nativeProcessTransport?.shutdown()
+      if (localDeployTransport instanceof LocalProcessRunnerTransport) {
+        await localDeployTransport.shutdown()
+      }
+    },
   }
 }
 
@@ -645,6 +653,8 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
 const NATIVE_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
 /** Affirmative values that enable BOTH native harnesses without naming one. */
 const NATIVE_ALL_VALUES = new Set(['true', '1', 'on', 'yes', 'all', 'both'])
+/** What an affirmative-with-no-harness value enables. */
+const BOTH_NATIVE_HARNESSES: HarnessKind[] = ['claude-code', 'codex']
 
 /**
  * Parse `LOCAL_NATIVE_AGENTS` into the set of subscription harnesses to run natively. The
@@ -657,18 +667,32 @@ const NATIVE_ALL_VALUES = new Set(['true', '1', 'on', 'yes', 'all', 'both'])
  * (e.g. a typo) ⇒ off, so an unintelligible setting fails safe rather than enabling an
  * unsandboxed, unmetered mode.
  */
-export function parseNativeHarnesses(raw: string | undefined): HarnessKind[] {
+export function parseNativeHarnesses(
+  raw: string | undefined,
+  onWarn?: (message: string) => void,
+): HarnessKind[] {
   const trimmed = raw?.trim().toLowerCase()
   if (!trimmed || NATIVE_OFF_VALUES.has(trimmed)) return []
   const out = new Set<HarnessKind>()
   let affirmative = false
+  const unrecognized: string[] = []
   for (const token of trimmed.split(',').map((s) => s.trim())) {
     if (token === 'claude-code' || token === 'claude') out.add('claude-code')
     else if (token === 'codex') out.add('codex')
     else if (NATIVE_ALL_VALUES.has(token)) affirmative = true
+    else if (token) unrecognized.push(token)
   }
-  if (out.size > 0) return [...out]
   // No harness named: enable both ONLY for an explicit affirmative keyword; anything else
   // unrecognised stays off (fail-safe — see the doc comment).
-  return affirmative ? ['claude-code', 'codex'] : []
+  const harnesses = out.size > 0 ? [...out] : affirmative ? BOTH_NATIVE_HARNESSES : []
+  // The fail-safe must not be SILENT: a typo (`claudecode`) would otherwise disable native
+  // mode with zero signal and the developer only notices when runs lease credentials.
+  if (unrecognized.length > 0) {
+    onWarn?.(
+      `LOCAL_NATIVE_AGENTS: ignoring unrecognized value(s) '${unrecognized.join("', '")}' ` +
+        `(expected claude-code, codex, or an on/off keyword)` +
+        (harnesses.length === 0 ? ' — native mode stays OFF' : ''),
+    )
+  }
+  return harnesses
 }

@@ -651,6 +651,36 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       ...(job.repo.provider ? { provider: job.repo.provider } : {}),
       signal: opts.signal,
     })
+    // `null` ⇒ the branch has nothing ahead of base, so there was no PR to open (a resumed
+    // branch whose earlier PR already merged). Record it as a clean no-op rather than a push,
+    // mirroring the no-changes outcome — the `runCodingAgent` guard normally catches this, so
+    // this is the belt-and-suspenders path when the ahead-of-base check couldn't determine it.
+    if (prUrl === null) {
+      if (job.noChangesIsError === false) {
+        return {
+          pushed: false,
+          branch: pushBranch,
+          summary,
+          stats,
+          ...(usage ? { usage } : {}),
+          ...(callMetrics ? { callMetrics } : {}),
+        }
+      }
+      return {
+        pushed: false,
+        branch: pushBranch,
+        summary,
+        stats,
+        error: noChangesReason(
+          'the work branch has no commits ahead of its base (nothing to open a PR for)',
+          stats,
+          stderrTail,
+        ),
+        failureCause: 'no-changes',
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      }
+    }
     return {
       pushed: true,
       prUrl,

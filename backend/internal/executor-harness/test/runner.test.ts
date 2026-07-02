@@ -216,3 +216,38 @@ describe('JobRegistry', () => {
     expect(view?.failureCause).toBe('max-duration')
   })
 })
+
+describe('JobRegistry.abortAll', () => {
+  const limits = { maxDurationMs: 60_000, inactivityMs: 60_000 }
+
+  it('aborts every running job (graceful shutdown) and skips settled ones', async () => {
+    const registry = new JobRegistry<TestJob, TestResult>(limits, (j, opts: RunOptions) => {
+      if (j.jobId === 'quick') return Promise.resolve({ summary: 'ok' })
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener(
+          'abort',
+          () => reject(opts.signal?.reason ?? new Error('aborted')),
+          { once: true },
+        )
+      })
+    })
+    registry.start('quick', { jobId: 'quick' })
+    registry.start('hung-1', { jobId: 'hung-1' })
+    registry.start('hung-2', { jobId: 'hung-2' })
+    await tick()
+    expect(registry.get('quick')?.state).toBe('done')
+    // The graceful-shutdown poll sees the two hung jobs still running (the settled one drops out).
+    expect(registry.runningCount()).toBe(2)
+
+    // Only the two still-running jobs are aborted; their views carry the shutdown reason.
+    expect(registry.abortAll('harness shutting down (SIGTERM)')).toBe(2)
+    await tick()
+    expect(registry.get('hung-1')?.state).toBe('failed')
+    expect(registry.get('hung-1')?.error).toMatch(/shutting down/)
+    expect(registry.get('hung-2')?.state).toBe('failed')
+
+    // Nothing left running: the shutdown poll can exit, and a second sweep is a no-op.
+    expect(registry.runningCount()).toBe(0)
+    expect(registry.abortAll('again')).toBe(0)
+  })
+})

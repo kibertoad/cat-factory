@@ -8,6 +8,7 @@ import {
   type ExecutionRow,
   blockInsertValues,
   blockPatchToColumns,
+  executionToDetail,
   rowToBlock,
   rowToExecution,
   rowToPipeline,
@@ -340,15 +341,81 @@ describe('rowToExecution', () => {
   })
 
   it('parses a valid failure but ignores garbage / partial shapes', () => {
-    const ok = rowToExecution({
-      ...base,
-      failure: JSON.stringify({ kind: 'agent', message: 'boom' }),
-    })
-    expect(ok.failure).toEqual({ kind: 'agent', message: 'boom' })
+    const complete = {
+      kind: 'agent' as const,
+      message: 'boom',
+      detail: null,
+      hint: null,
+      occurredAt: 1,
+      lastSubtasks: null,
+    }
+    const ok = rowToExecution({ ...base, failure: JSON.stringify(complete) })
+    expect(ok.failure).toEqual(complete)
     expect(rowToExecution({ ...base, failure: '{bad' }).failure).toBeNull()
+    // A known-kind but structurally-incomplete record is dropped: it can't satisfy the wire
+    // `agentFailureSchema` (missing occurredAt/detail/hint/lastSubtasks), so surfacing it would
+    // fail the SPA's snapshot re-validation.
+    expect(
+      rowToExecution({ ...base, failure: JSON.stringify({ kind: 'agent', message: 'boom' }) })
+        .failure,
+    ).toBeNull()
     expect(
       rowToExecution({ ...base, failure: JSON.stringify({ kind: 'agent' }) }).failure,
     ).toBeNull()
+  })
+
+  it('defaults the prior-attempts failureHistory to an empty array when absent', () => {
+    expect(rowToExecution(base).failureHistory).toEqual([])
+  })
+
+  it('round-trips a failure trail through detail and drops legacy/garbage entries', () => {
+    const good = {
+      kind: 'agent' as const,
+      message: 'first crash',
+      detail: null,
+      hint: null,
+      occurredAt: 1,
+      lastSubtasks: null,
+    }
+    const detail = JSON.stringify({
+      pipelineId: 'pl_1',
+      pipelineName: 'Quick',
+      steps: [],
+      currentStep: 0,
+      failureHistory: [
+        good,
+        // A pre-cutoff entry with a removed kind is dropped, not surfaced.
+        { kind: 'decision_timeout', message: 'stale', occurredAt: 2 },
+        // A structurally-broken entry is dropped too.
+        { message: 'no kind' },
+        // A known-kind but incomplete record (missing occurredAt/detail/hint/lastSubtasks)
+        // is dropped — surfacing it would fail the SPA's snapshot re-validation.
+        { kind: 'agent', message: 'partial' },
+      ],
+    })
+    const mapped = rowToExecution({ ...base, detail })
+    expect(mapped.failureHistory).toEqual([good])
+    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
+  })
+
+  it('executionToDetail persists a non-empty trail and omits an empty one', () => {
+    const failure = {
+      kind: 'agent' as const,
+      message: 'boom',
+      detail: null,
+      hint: null,
+      occurredAt: 1,
+      lastSubtasks: null,
+    }
+    const withTrail = rowToExecution({
+      ...base,
+      detail: executionToDetail({ ...rowToExecution(base), failureHistory: [failure] }),
+    })
+    expect(withTrail.failureHistory).toEqual([failure])
+
+    // An empty trail is not written into detail (the key is omitted), so it reads back as [].
+    const empty = executionToDetail({ ...rowToExecution(base), failureHistory: [] })
+    expect(JSON.parse(empty).failureHistory).toBeUndefined()
   })
 })
 

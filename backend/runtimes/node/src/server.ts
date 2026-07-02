@@ -289,6 +289,15 @@ export async function start(
     } catch (err) {
       logger.error({ err: err instanceof Error ? err.message : String(err) }, 'shutdown error')
     }
+    try {
+      // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
+      // released in their OWN try so a failing boss.stop()/pool.end() above can't skip them and
+      // orphan the in-flight agent children they abort. Graceful teardown beats the exit-hook
+      // backstop.
+      await container.onShutdown?.()
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'onShutdown error')
+    }
     process.exit(0)
   }
   process.once('SIGTERM', () => void shutdown('SIGTERM'))

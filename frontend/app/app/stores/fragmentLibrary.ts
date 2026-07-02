@@ -11,6 +11,7 @@ import type {
   UpdatePromptFragmentInput,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useFragmentsStore } from '~/stores/fragments'
 
 /**
  * Prompt-fragment library state (ADR 0006), scoped to a single owner — a board
@@ -83,6 +84,9 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
   }
 
   async function refreshResolved() {
+    // Every library mutation lands here: drop the picker catalog's cache so the
+    // per-service / per-block pickers see the edit on their next open.
+    useFragmentsStore().invalidate()
     if (!hasResolved) return
     resolved.value = await api.getResolvedFragments(requireOwnerId())
   }

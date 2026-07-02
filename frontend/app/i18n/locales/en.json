@@ -225,7 +225,13 @@
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "showDetail": "Show detail",
-      "retrying": "Retrying…"
+      "retrying": "Retrying…",
+      "history": {
+        "previousErrors": "{count} previous error | {count} previous errors",
+        "@previousErrors": {
+          "description": "Count-based tally of a run's earlier failed attempts, rendered as e.g. '3 previous errors' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        }
+      }
     },
     "stop": {
       "label": "Stop",
@@ -479,14 +485,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "How to build, serve, and mock this frontend for a self-contained UI test. Bindings below link it to the backend services it calls.",
+      "detect": {
+        "title": "Detect from repo",
+        "button": "Detect",
+        "hint": "Read the linked repo and propose a config to review before applying. Nothing is saved until you apply.",
+        "error": "Couldn't read the repo. Check the frontend is linked to a connected repository.",
+        "none": "Nothing frontend-shaped was detected. Set the frontend directory (for a monorepo) or fill the fields in manually.",
+        "apply": "Apply",
+        "dismiss": "Dismiss",
+        "confidenceHigh": "sure",
+        "confidenceLow": "guess"
+      },
+      "groups": {
+        "build": "Build",
+        "serve": "Serve",
+        "mocking": "Mocking",
+        "envInjection": "Env injection",
+        "bindings": "Backend bindings",
+        "preview": "Preview"
+      },
       "packageManager": "Package manager",
+      "directory": "Frontend directory",
+      "directoryHint": "The frontend app's subfolder in the repo (a monorepo, e.g. frontend/). Leave empty if the app is at the repo root.",
       "installCommand": "Install command",
       "buildScript": "Build script",
       "outputDir": "Output directory",
       "serveMode": "Serve mode",
       "serveStatic": "Static",
       "serveCommand": "Command",
-      "serveModeHint": "Static serves the build output directory; Command runs a package.json script (e.g. preview).",
+      "serveStaticDesc": "serves the built output directory as static files. Cheapest for a UI test of a fully built app.",
+      "serveCommandDesc": "runs a package.json script (e.g. preview) to serve the app, for builds that need a running server.",
+      "serveEnvAxisNote": "Separate from Env injection (build-time vs runtime) below, which controls how backend URLs reach the app, not how it is served.",
       "serveScript": "Serve script",
       "servePort": "Serve port",
       "mockMappingsPath": "Mock mappings path",
@@ -3717,7 +3746,8 @@
       "connectFirst": "Connect a document source (Confluence, Notion or GitHub) under Integrations first.",
       "refPlaceholder": "Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)",
       "tagsPlaceholder": "Tags, comma-separated (optional)",
-      "link": "Link as living fragment"
+      "link": "Link as living fragment",
+      "githubBrowseHint": "Browse the repo and pick the file to link."
     },
     "sources": {
       "metaSynced": "synced · ref {ref}",
@@ -3729,7 +3759,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dir path (e.g. guidelines)",
       "refPlaceholder": "ref (default HEAD)",
-      "link": "Link & sync"
+      "link": "Link & sync",
+      "browseHint": "Browse the repo and pick the directory of Markdown guidelines (or link the whole repo).",
+      "selectedDir": "Directory:",
+      "wholeRepo": "Whole repository (root)."
     },
     "toast": {
       "added": "Fragment added",
@@ -3753,7 +3786,8 @@
     "confirmRemove": {
       "title": "Delete this fragment?",
       "body": "\"{name}\" will be removed. This can't be undone."
-    }
+    },
+    "unavailable": "The prompt-fragment library isn't enabled for this deployment."
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",

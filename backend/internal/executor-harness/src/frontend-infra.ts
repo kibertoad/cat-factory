@@ -83,6 +83,9 @@ export async function standUpFrontend(
 ): Promise<FrontendStandUp> {
   const startedAt = Date.now()
   const processes: ChildProcess[] = []
+  // The frontend app's directory: the checkout root, or a monorepo subdirectory when the config
+  // named one. install/build/serve run here and `outputDir`/`mockMappingsPath` are relative to it.
+  const workDir = infra.directory ? join(dir, infra.directory) : dir
   // Keep the run's inactivity watchdog fed while the (activity-silent) install → build → serve
   // stand-up runs. A real frontend's `install` + `build` can exceed the harness inactivity
   // window (default 10 min, JOB_INACTIVITY_MS) — and unlike the Pi phase this stand-up emits
@@ -121,7 +124,7 @@ export async function standUpFrontend(
     const install = installCommand(infra)
     logger.info('agent(frontend): installing', { command: install.join(' ') })
     const installed = await exec(install[0]!, install.slice(1), {
-      cwd: dir,
+      cwd: workDir,
       signal,
       timeout: 8 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
@@ -133,7 +136,7 @@ export async function standUpFrontend(
     const buildScript = infra.buildScript ?? DEFAULTS.buildScript
     logger.info('agent(frontend): building', { buildScript })
     const built = await exec(pm, ['run', buildScript], {
-      cwd: dir,
+      cwd: workDir,
       signal,
       timeout: 12 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
@@ -158,7 +161,7 @@ export async function standUpFrontend(
         )
       }
       const shim = `window.env = ${JSON.stringify(infra.env)};\n`
-      await writeFile(join(dir, outputDir, 'env.js'), shim, 'utf8').catch((err) => {
+      await writeFile(join(workDir, outputDir, 'env.js'), shim, 'utf8').catch((err) => {
         // Best-effort, but no longer silent: a missing/renamed output dir would drop the shim
         // and the app would read no URLs, so surface it in the log for diagnosis.
         logger.warn('agent(frontend): could not write runtime env shim', {
@@ -170,10 +173,10 @@ export async function standUpFrontend(
 
     // 3) WireMock for the mocked upstreams. Seeded from the FE repo's mappings dir when present;
     // otherwise it still binds the port (unmatched requests 404, gentler than ECONNREFUSED).
-    processes.push(await startWireMock(dir, infra, wiremockPort, logger))
+    processes.push(await startWireMock(workDir, infra, wiremockPort, logger))
 
     // 4) Serve the built app.
-    processes.push(startServe(dir, infra, servePort, outputDir, logger))
+    processes.push(startServe(workDir, infra, servePort, outputDir, logger))
 
     // 5) Health-check the served app AND WireMock before handing off, concurrently (WireMock is
     // a JVM that cold-starts slower than the static server). A dead WireMock would otherwise let

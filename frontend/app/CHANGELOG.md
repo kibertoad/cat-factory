@@ -1,5 +1,126 @@
 # @cat-factory/app
 
+## 0.76.0
+
+### Minor Changes
+
+- 5ce03c6: Frontend-config inspector: add repo autodetection, a frontend-directory field, clearer serve-mode
+  help, and collapsible field groups.
+
+  - **Detect from repo**: a new deterministic, checkout-free detector proposes a frontend config
+    (package manager from the lockfile, install command, build script + output dir from
+    package.json/framework markers, serve mode/script, and backend-binding env-var names from dotenv
+    examples). Exposed as `POST /workspaces/:ws/environments/detect-frontend-config`
+    (`detectFrontendConfig` on the environments connection service) and surfaced in the panel as a
+    non-binding preview the user reviews and applies (backend bindings are appended, never
+    overwriting existing service links).
+  - **Frontend directory**: `FrontendConfig.directory` scopes a monorepo frontend's build/serve to a
+    subdirectory (threaded into the harness job-body builder).
+  - **Serve mode**: replaced the single hint with per-mode descriptions and a note distinguishing it
+    from the separate env-injection axis.
+  - **Grouping**: the panel's fields are now collapsible sections (Build / Serve / Mocking / Env
+    injection / Backend bindings / Preview), collapsed by default.
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+
+## 0.75.2
+
+### Patch Changes
+
+- 4955639: Fix five bugs in how best-practice prompt fragments are managed and applied:
+
+  - **Code-aware helper agents now receive the service fragments.** `ci-fixer`, `fixer`
+    and `on-call` are dispatched off their HOSTING step (a `ci`/`post-release-health`
+    gate, the tester, the human-test/visual-confirmation loops), and the fragment fold
+    keyed off that step's kind — so the helpers never received the service's standards
+    despite being marked `code-aware`. `AgentContextBuilder.buildContext` now takes an
+    explicit `agentKind` override and every helper dispatch passes it; the on-call job
+    body additionally folds the resolved fragments into its bespoke system prompt
+    (previously bypassed). A stale `step.selectedFragmentIds` is also cleared when a
+    re-dispatch resolves to nothing, so observability can't over-report.
+  - **Tier tombstones now stick on the run path.** `resolveBodiesForRun` used to fall
+    back to the static pool for any id missing from the merged catalog — which is
+    exactly what a tombstone does to a built-in, so suppressing a fragment a service
+    had selected silently resurrected it. The fallback is gone; a missing id is dropped.
+  - **Deployment-registered fragments join the tenant catalog.** The library's built-in
+    tier now reads the UNIVERSAL pool (shipped catalog + `registerPromptFragment`
+    entries, lazily) instead of the raw shipped array, so a registered override of a
+    built-in id actually reaches runs and the resolved catalog, and registered
+    fragments can be tier-shadowed/tombstoned like any built-in.
+  - **Repo-source resync no longer mishandles renames and id edits.** The tombstone
+    sweep is keyed by the fragment ids the current tree produces, not by stale paths:
+    renaming a file that pins an explicit frontmatter `id` no longer tombstones the
+    fragment the rename just updated, and changing a file's explicit `id` in place now
+    retires the old id instead of leaving a live duplicate forever. The GitHub
+    installation is also resolved once per sync instead of once per file, and the
+    requirement writer's fragment grounding resolves through the merged tenant catalog
+    when the library is wired.
+  - **The SPA pickers now offer the merged catalog.** The per-service / per-block /
+    workspace-default fragment pickers loaded only the static built-in pool, so
+    managed, repo-sourced and document-backed fragments could be authored but never
+    attached (and a managed id set via API rendered no chip). The fragments store now
+    loads the workspace's resolved catalog (falling back to the static pool when the
+    library is off), invalidates on library edits, and unknown selected ids render as
+    removable chips instead of disappearing. The catalog is per-board, so a workspace
+    switch now invalidates it and the task inspector reloads it on mount — otherwise the
+    task picker kept showing the previous board's fragments.
+
+  Review follow-ups: `AgentContextBuilder` now clears a stale `step.selectedFragmentIds`
+  on the non-code-aware and error paths too (not only when a code-aware resolve is empty);
+  the requirement-writer grounding resolves the merged catalog once (reused for titles and
+  bodies) instead of twice; a repo-source RENAME of an explicit-id file inherits the
+  fragment's `version`/`createdAt` by id instead of resetting them; and the source `status`
+  count no longer double-counts a pure rename.
+
+## 0.75.1
+
+### Patch Changes
+
+- 4a7a3f1: Preserve a task run's error trail across retries. A failed run's `failure` is now
+  appended to a new `failureHistory` on the fresh attempt (persisted in the shared
+  `agent_runs.detail`, so both runtimes get it with no migration), and cleared on the
+  running attempt — so the top failure banner disappears the moment the task restarts
+  while every previous error stays viewable in a "previous errors" history on the task
+  inspector. Applies to both retry (resume-from-failure) and restart-from-step.
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+
+## 0.75.0
+
+### Minor Changes
+
+- 4e82496: Enable the prompt-fragment library by default and streamline linking GitHub-backed fragments.
+
+  - The prompt-fragment library (ADR 0006) is now **on by default** in both runtimes; opt out
+    with `PROMPT_LIBRARY_ENABLED=false`. Previously it was off unless `PROMPT_LIBRARY_ENABLED=true`
+    was set, so linking a GitHub document as a fragment failed with "Prompt-fragment library is
+    not configured" on a stock deployment.
+  - The fragment-library manager now reuses the same GitHub affordances as the other repo
+    windows: a **server-side repo search** (new `GitHubRepoSearchSelect`) plus the
+    `RepoTreeBrowser` to browse to a **file** (document-backed fragments) or **directory**
+    (repo sources), instead of hand-typing `owner`/`repo`/`path`/`ref`. Manual entry remains as
+    a fallback when the GitHub App isn't connected.
+  - When the library is explicitly disabled, the manager now shows a clear notice instead of
+    offering forms that fail with a raw 503.
+
+## 0.74.3
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+
 ## 0.74.2
 
 ### Patch Changes

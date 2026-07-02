@@ -33,4 +33,31 @@ describe('buildLocalDeployTransport', () => {
     expect(typeof t!.poll).toBe('function')
     expect(typeof t!.release).toBe('function')
   })
+
+  it('warns on an unrecognized LOCAL_DEPLOY_RUNTIME value (typo falls back to native, loudly)', () => {
+    const warnings: string[] = []
+    const t = buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'containr' }, (m) =>
+      warnings.push(m),
+    )
+    expect(t).toBeNull() // native default with no entry ⇒ unwired
+    expect(warnings.some((m) => m.includes("unrecognized value 'containr'"))).toBe(true)
+  })
+
+  it('warns when an explicitly selected mode is missing its prerequisite', () => {
+    const containerWarnings: string[] = []
+    buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'container' }, (m) =>
+      containerWarnings.push(m),
+    )
+    expect(containerWarnings.some((m) => m.includes('LOCAL_DEPLOY_IMAGE'))).toBe(true)
+
+    const nativeWarnings: string[] = []
+    buildLocalDeployTransport({ LOCAL_DEPLOY_RUNTIME: 'native' }, (m) => nativeWarnings.push(m))
+    expect(nativeWarnings.some((m) => m.includes('LOCAL_DEPLOY_HARNESS_ENTRY'))).toBe(true)
+  })
+
+  it('does not warn when deploy is simply unused (no LOCAL_DEPLOY_RUNTIME set)', () => {
+    const warnings: string[] = []
+    expect(buildLocalDeployTransport({}, (m) => warnings.push(m))).toBeNull()
+    expect(warnings).toEqual([])
+  })
 })

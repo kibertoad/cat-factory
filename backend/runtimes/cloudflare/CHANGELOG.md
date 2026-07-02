@@ -1,5 +1,181 @@
 # @cat-factory/worker
 
+## 0.53.4
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/integrations@0.56.0
+  - @cat-factory/server@0.67.0
+  - @cat-factory/agents@0.26.12
+  - @cat-factory/consensus@0.8.13
+  - @cat-factory/gates@0.2.69
+  - @cat-factory/gitlab@0.4.40
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/orchestration@0.58.1
+  - @cat-factory/prompt-fragments@0.9.42
+  - @cat-factory/spend@0.10.73
+  - @cat-factory/provider-cloudflare@0.7.118
+  - @cat-factory/observability-langfuse@0.7.112
+
+## 0.53.3
+
+### Patch Changes
+
+- 7f9d215: Fix critical/high race conditions from the July 2026 audit:
+
+  - **Spend-resume on Cloudflare (1.1):** a spend-paused run's `ExecutionWorkflow`
+    instance no longer returns (going terminal). It now stays alive **parked on a
+    `waitForEvent`** (like a human-decision wait, not a busy sleep-loop), so a long pause
+    no longer accretes unbounded durable steps. `/spend/resume` wakes it immediately via a
+    new `WorkRunner.signalResume` (a `spend-resume` event), and a 24h re-check chunk
+    auto-resumes it when the monthly budget frees — instead of the terminal-instance-id
+    trap that let the cron sweeper force-fail the "resumed" run.
+  - **Spend-resume on Node/local (parity):** Node/local now auto-resume spend-paused runs
+    when the monthly budget frees, via a new `agentRunRepository.listPausedExecutions`
+    polled by the reclaim sweeper (gated on `isOverBudget`, so a still-exhausted workspace
+    causes no churn) — matching the Cloudflare facade. Covered by a conformance assertion.
+  - **BootstrapWorkflow re-drive (1.2):** past the poll-read tolerance the workflow no
+    longer returns (going terminal, which made the sweeper force-fail a merely-busy
+    container). It keeps the instance alive and keeps polling, so a long clone/install
+    recovers.
+  - **One live execution run per block (2.1):** a new partial unique index on live
+    execution rows per block (D1 migration `0033` ⇄ Drizzle) plus an **atomic**
+    `ExecutionRepository.insertLive` that deletes the block's terminal rows (and the
+    caller's own `replaceId`) and inserts the new run **in one transaction** (D1
+    `db.batch` / Drizzle `transaction`). `start`/`retry`/`restartFromStep` no longer
+    `deleteByBlock` first, so a genuinely-concurrent double start is rejected with a 409
+    instead of the pre-delete wiping a concurrent winner and creating two live runs — two
+    drivers, two containers — on one branch. Covered by cross-runtime conformance
+    assertions (terminal cleanup + `replaceId` supersede).
+
+- 05d1b08: refactor(integrations): app-own the user-secret-kind registry (registry DI migration)
+
+  Migrates the per-user secret KIND registry off its module-global `Map` onto an app-owned
+  instance, the next slice of the registry-DI initiative (see
+  `docs/initiatives/registry-di-migration.md`). The composition root now owns the registry and
+  injects it, so a deployment-registered custom kind is seen by reference regardless of module
+  identity — the same footgun-free pattern as the environment/runner backend registries.
+
+  - New `UserSecretKindRegistry` class (`register`/`get`/`list`) + `defaultUserSecretKindRegistry()`
+    pre-loaded with the built-in `github_pat` kind, added to `BackendRegistries` /
+    `createBackendRegistries()`. `UserSecretService` reads the injected registry.
+  - **Breaking:** the free `registerUserSecretKind` / `getUserSecretKind` / `listUserSecretKinds`
+    exports are removed (pre-1.0, no back-compat). The built-in kind is now the exported
+    `githubPatUserSecretKind` handler, registered into the default registry.
+  - Wired symmetrically into the Worker + Node facades (local inherits via `buildNodeContainer`);
+    the cross-runtime conformance suite asserts a programmatically-registered custom kind is
+    described identically on every runtime.
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/consensus@0.8.12
+  - @cat-factory/gates@0.2.68
+  - @cat-factory/gitlab@0.4.39
+  - @cat-factory/observability-langfuse@0.7.111
+  - @cat-factory/provider-cloudflare@0.7.117
+  - @cat-factory/spend@0.10.72
+
+## 0.53.2
+
+### Patch Changes
+
+- Updated dependencies [4955639]
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+  - @cat-factory/server@0.66.6
+  - @cat-factory/consensus@0.8.11
+  - @cat-factory/provider-cloudflare@0.7.116
+
+## 0.53.1
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/server@0.66.5
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/consensus@0.8.10
+  - @cat-factory/gates@0.2.67
+  - @cat-factory/gitlab@0.4.38
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/prompt-fragments@0.9.41
+  - @cat-factory/spend@0.10.71
+  - @cat-factory/provider-cloudflare@0.7.115
+  - @cat-factory/observability-langfuse@0.7.110
+
+## 0.53.0
+
+### Minor Changes
+
+- 4e82496: Enable the prompt-fragment library by default and streamline linking GitHub-backed fragments.
+
+  - The prompt-fragment library (ADR 0006) is now **on by default** in both runtimes; opt out
+    with `PROMPT_LIBRARY_ENABLED=false`. Previously it was off unless `PROMPT_LIBRARY_ENABLED=true`
+    was set, so linking a GitHub document as a fragment failed with "Prompt-fragment library is
+    not configured" on a stock deployment.
+  - The fragment-library manager now reuses the same GitHub affordances as the other repo
+    windows: a **server-side repo search** (new `GitHubRepoSearchSelect`) plus the
+    `RepoTreeBrowser` to browse to a **file** (document-backed fragments) or **directory**
+    (repo sources), instead of hand-typing `owner`/`repo`/`path`/`ref`. Manual entry remains as
+    a fallback when the GitHub App isn't connected.
+  - When the library is explicitly disabled, the manager now shows a clear notice instead of
+    offering forms that fail with a raw 503.
+
+### Patch Changes
+
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+  - @cat-factory/server@0.66.4
+
+## 0.52.10
+
+### Patch Changes
+
+- 9e55545: Stuck-run audit — Group A (Cloudflare recovery correctness): fix three ways a Worker run
+  could be wrongly killed instead of resumed.
+
+  - **F1** — the cron run-sweeper's hard-stall deadline now measures time-OBSERVED-orphaned via
+    a per-isolate `orphanedSince` clock (mirroring the Node sweeper), not raw lease age. A cron
+    outage / deploy freeze longer than the hard-stall window no longer fails a recoverable run on
+    the first post-outage tick; every orphan gets at least one re-drive attempt first.
+  - **F2** — `BootstrapWorkflow` / `EnvConfigRepairWorkflow` no longer return (making the
+    Workflows instance terminal) on a transient poll-read failure. A terminal instance for a
+    still-`running` job was being finalized as STOPPED by the sweeper, failing a bootstrap that
+    was merely slow or briefly unreachable. They now keep the instance alive and keep polling; a
+    genuinely vanished container still surfaces as a 404→`failed` poll result.
+  - **F5** — each workflow's per-wake DI construction is retried with durable sleeps
+    (`buildWorkflowRuntime`) so a transient throw can't kill a parked (`blocked`) instance
+    terminally and discard the human's resolved decision. A persistent misconfiguration still
+    fails loudly after the retries.
+
+## 0.52.9
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/consensus@0.8.9
+  - @cat-factory/gates@0.2.66
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/prompt-fragments@0.9.40
+  - @cat-factory/spend@0.10.70
+  - @cat-factory/provider-cloudflare@0.7.114
+  - @cat-factory/observability-langfuse@0.7.109
+
 ## 0.52.8
 
 ### Patch Changes

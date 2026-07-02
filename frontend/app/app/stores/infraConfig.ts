@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import type {
   CustomManifestType,
+  DetectFrontendConfigInput,
   DetectServiceProvisioningInput,
   EnvironmentHandlerView,
   ProvisionType,
@@ -114,6 +115,15 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
   }
 
   /**
+   * Auto-detect a NON-BINDING recommended frontend config from a frontend repo. The SPA prefills a
+   * preview the user applies; nothing is persisted server-side. Pure repo introspection.
+   */
+  async function detectFrontendConfig(input: DetectFrontendConfigInput) {
+    const ws = useWorkspaceStore()
+    return api.detectFrontendConfig(ws.requireId(), input)
+  }
+
+  /**
    * Generate (or fix) a service's custom manifest via the fixer coding agent. Dispatches a
    * durable async repair run and returns immediately with `usedAgent`/`repairJobId`; the run is
    * tracked via the workspace stream like the provider-config repair. Nothing persisted here.
@@ -192,6 +202,7 @@ export const useInfraConfigStore = defineStore('infraConfig', () => {
     registerHandler,
     testHandler,
     detectProvisioning,
+    detectFrontendConfig,
     repairCustomManifest,
     unregisterHandler,
     upsertCustomType,

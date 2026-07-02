@@ -15,6 +15,7 @@ import {
   nativeVendorForRef,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
+import { sanitizedChildEnv } from './childEnv.js'
 
 // Local-mode INLINE harness execution: run the developer's ambient `claude` / `codex` CLI as a
 // host subprocess to serve the inline LLM steps (requirements reviewer, brainstorm,
@@ -45,15 +46,22 @@ const DEFAULT_CLI_TIMEOUT_MS = 300_000
 // A CLI that ignores SIGTERM is escalated to SIGKILL after this grace period.
 const KILL_GRACE_MS = 2_000
 
-/** The default {@link CliExec}: a real `node:child_process` spawn with a timeout watchdog. */
-const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
+/** The default {@link CliExec}: a real `node:child_process` spawn with a timeout watchdog.
+ * Exported for its own tests (the sanitized-env contract); callers use the runner builders. */
+export const spawnCliExec: CliExec = (command, args, stdin, opts = {}) =>
   new Promise((resolve, reject) => {
     const { signal, timeoutMs = DEFAULT_CLI_TIMEOUT_MS } = opts
     if (signal?.aborted) {
       reject(new Error(`${command} aborted before start`))
       return
     }
-    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+    // The inline CLI runs IN the orchestrator process's environment — sanitize it down to
+    // the allow-list so the agent never inherits the backend's secrets (DATABASE_URL,
+    // ENCRYPTION_KEY, GITHUB_PAT, …), mirroring the host-process harness transport.
+    const child = spawn(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: sanitizedChildEnv(process.env),
+    })
     child.stdin.on('error', () => {})
     child.stdin.end(stdin)
     let stdout = ''

@@ -156,7 +156,8 @@ export type FrontendBranch = v.InferOutput<typeof frontendBranchSchema>
  * browsable preview). Stored serialized on the block. All fields optional except
  * {@link backendBindings}; the harness / job-body builder supplies the defaults
  * (packageManager `pnpm`, buildScript `build`, outputDir `dist`, serveMode
- * `static`, servePort 4173, envInjection `build`, mockMappingsPath `mocks/`).
+ * `static`, servePort 4173, envInjection `build`, mockMappingsPath `mocks/`, and
+ * the repo root when {@link directory} is absent).
  */
 export const frontendConfigSchema = v.object({
   /** Package manager for install/build. Default `pnpm`. */
@@ -167,6 +168,12 @@ export const frontendConfigSchema = v.object({
   buildScript: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
   /** The build's output directory, served in `static` mode. Default `dist`. */
   outputDir: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
+  /**
+   * The frontend app's subdirectory within the repo (a monorepo frontend, e.g. `frontend/` or
+   * `apps/web`). Absent ⇒ the repo root. When set, the harness runs install/build/serve there and
+   * every other path (`outputDir`, `mockMappingsPath`) is relative to it.
+   */
+  directory: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   /** How the built app is served. Default `static`. */
   serveMode: v.optional(frontendServeModeSchema),
   /** package.json script to run when `serveMode: 'command'` (e.g. `preview`). */
@@ -197,3 +204,63 @@ export const frontendConfigSchema = v.object({
   backendBindings: v.array(frontendBackendBindingSchema),
 })
 export type FrontendConfig = v.InferOutput<typeof frontendConfigSchema>
+
+// ---------------------------------------------------------------------------
+// Frontend config AUTO-DETECTION (the "Detect from repo" affordance): a deterministic,
+// checkout-free heuristic reads the frontend repo and proposes a NON-BINDING recommended
+// {@link FrontendConfig} — the package manager (from the lockfile), install command, build
+// script + output dir (from package.json + framework markers), serve mode/script, and the
+// backend-binding env-var names (from dotenv examples). The SPA shows the recommendation with
+// per-field confidence notes; the user always confirms/edits before it is applied. Mirrors the
+// service-provisioning detector (`detectServiceProvisioningSchema`/`provisioningRecommendationSchema`).
+// ---------------------------------------------------------------------------
+
+/** Confidence in a single inferred frontend-config aspect. */
+export const frontendDetectionConfidenceSchema = v.picklist(['high', 'low'])
+export type FrontendDetectionConfidence = v.InferOutput<typeof frontendDetectionConfidenceSchema>
+
+/** One inferred aspect of the frontend recommendation, with its confidence + a human rationale. */
+export const frontendDetectionNoteSchema = v.object({
+  /**
+   * Which field this note explains: `packageManager` | `installCommand` | `buildScript` |
+   * `outputDir` | `serveMode` | `backendBindings` (a leaf i18n key mirrors these verbatim).
+   */
+  field: v.string(),
+  confidence: frontendDetectionConfidenceSchema,
+  /** Rationale for the SPA to surface (e.g. "pnpm-lock.yaml present ⇒ pnpm"). */
+  message: v.pipe(v.string(), v.maxLength(500)),
+})
+export type FrontendDetectionNote = v.InferOutput<typeof frontendDetectionNoteSchema>
+
+/**
+ * A non-binding recommended {@link FrontendConfig} for a frontend repo, with per-field confidence
+ * notes. `detected` is false when the repo couldn't be read or nothing frontend-shaped was found
+ * (the `config` is then a bare `{ backendBindings: [] }`). Nothing is persisted — the SPA prefills
+ * a preview the user applies. `config` reuses {@link frontendConfigSchema} (every field optional,
+ * `backendBindings` always present), so an applied recommendation is a valid config patch.
+ */
+export const frontendConfigRecommendationSchema = v.object({
+  detected: v.boolean(),
+  /** The prefilled frontend config the user reviews/applies. */
+  config: frontendConfigSchema,
+  /** Per-field confidence + hints for the SPA. */
+  notes: v.array(frontendDetectionNoteSchema),
+})
+export type FrontendConfigRecommendation = v.InferOutput<typeof frontendConfigRecommendationSchema>
+
+/**
+ * Detect a recommended frontend config for a repo (nothing persisted). The repo is read at
+ * `gitRef` (absent ⇒ default branch); `directory` scopes detection to the frontend's subdirectory
+ * (absent ⇒ the repo root).
+ */
+export const detectFrontendConfigSchema = v.object({
+  owner: v.pipe(v.string(), v.minLength(1)),
+  repo: v.pipe(v.string(), v.minLength(1)),
+  /** Branch/tag/sha to read at; absent ⇒ the repo's default branch. */
+  gitRef: v.optional(v.pipe(v.string(), v.minLength(1))),
+  /** The frontend app's subdirectory within the repo; absent ⇒ the repo root. */
+  directory: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
+  /** Optional VCS provider hint; absent ⇒ the workspace's connected provider. */
+  provider: v.optional(v.picklist(['github', 'gitlab'])),
+})
+export type DetectFrontendConfigInput = v.InferOutput<typeof detectFrontendConfigSchema>

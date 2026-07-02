@@ -101,6 +101,88 @@ describe('LocalProcessRunnerTransport', () => {
     expect(view.error).toMatch(/container evicted or crashed/)
   })
 
+  it('kills the child when the harness never becomes healthy (no leaked process per retry)', async () => {
+    const child = fakeChild()
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 500 }))
+    const transport = new LocalProcessRunnerTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6003,
+      readyTimeoutMs: 10,
+    })
+    await expect(transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')).rejects.toThrow(
+      /Timed out waiting/,
+    )
+    expect(child.kill).toHaveBeenCalled()
+  })
+
+  it('shutdown during an in-flight start kills the child and refuses further dispatches', async () => {
+    const child = fakeChild()
+    // Health never OK, generous deadline: the start only settles when shutdown kills the child.
+    const fetchImpl = vi.fn(async () => new Response('starting', { status: 503 }))
+    const transport = new LocalProcessRunnerTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6004,
+      readyTimeoutMs: 30_000,
+    })
+    const dispatching = transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+    dispatching.catch(() => {}) // asserted below; avoid an unhandled rejection meanwhile
+    await transport.shutdown()
+    await expect(dispatching).rejects.toThrow()
+    expect(child.kill).toHaveBeenCalled()
+    // Terminal: a shut-down transport must not resurrect the harness.
+    await expect(transport.dispatch({ runId: 'r', jobId: 'j2' }, {}, 'agent')).rejects.toThrow(
+      /shut down/,
+    )
+  })
+
+  it('spawns the harness with a sanitized env (no orchestrator secrets) bound to loopback', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgres://secret')
+    vi.stubEnv('ENCRYPTION_KEY', 'k3y')
+    vi.stubEnv('MY_CUSTOM_VAR', 'passthrough')
+    vi.stubEnv('LOCAL_HARNESS_ENV_ALLOW', 'MY_CUSTOM_VAR')
+    const child = fakeChild()
+    const spawnImpl = vi.fn((_cmd: string, _args: readonly string[], _opts: unknown) => child)
+    const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
+    const transport = new LocalProcessRunnerTransport({
+      harnessEntry: '/h.js',
+      spawnImpl: spawnImpl as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6005,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'agent')
+    const opts = spawnImpl.mock.calls[0]![2] as { env: Record<string, string | undefined> }
+    // The orchestrator's secrets never reach the agent-spawning host process…
+    expect(opts.env.DATABASE_URL).toBeUndefined()
+    expect(opts.env.ENCRYPTION_KEY).toBeUndefined()
+    // …while the allow-list basics, the escape hatch, and the loopback bind do.
+    expect(opts.env.PATH).toBe(process.env.PATH)
+    expect(opts.env.MY_CUSTOM_VAR).toBe('passthrough')
+    expect(opts.env.HARNESS_BIND_HOST).toBe('127.0.0.1')
+    vi.unstubAllEnvs()
+  })
+
+  it("inherits the full env when envMode is 'inherit' (the deploy harness's ambient tooling)", async () => {
+    vi.stubEnv('KUBECONFIG', '/home/dev/.kube/config')
+    const child = fakeChild()
+    const spawnImpl = vi.fn((_cmd: string, _args: readonly string[], _opts: unknown) => child)
+    const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
+    const transport = new LocalProcessRunnerTransport({
+      harnessEntry: '/h.js',
+      envMode: 'inherit',
+      spawnImpl: spawnImpl as unknown as typeof import('node:child_process').spawn,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pickPort: async () => 6006,
+    })
+    await transport.dispatch({ runId: 'r', jobId: 'j' }, {}, 'deploy')
+    const opts = spawnImpl.mock.calls[0]![2] as { env: Record<string, string | undefined> }
+    expect(opts.env.KUBECONFIG).toBe('/home/dev/.kube/config')
+    vi.unstubAllEnvs()
+  })
+
   it('forwards the harness/ambientAuth fields the executor set (no injection, no rewrite)', async () => {
     const child = fakeChild()
     const fetchImpl = vi.fn(async (input: string | URL | Request, _init?: RequestInit) => {
