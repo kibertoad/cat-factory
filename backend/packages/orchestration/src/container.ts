@@ -2027,6 +2027,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         clock: dependencies.clock,
         recordPrompts: dependencies.recordLlmPrompts ?? true,
         traceSink: dependencies.llmTraceSink,
+        workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
       })
     : undefined
   // The provisioning event log lives in a separate high-churn store. When its
