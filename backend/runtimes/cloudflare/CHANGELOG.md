@@ -1,5 +1,191 @@
 # @cat-factory/worker
 
+## 0.52.3
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/orchestration@0.56.0
+  - @cat-factory/integrations@0.53.0
+  - @cat-factory/contracts@0.79.0
+  - @cat-factory/kernel@0.69.0
+  - @cat-factory/server@0.65.0
+  - @cat-factory/agents@0.26.2
+  - @cat-factory/consensus@0.8.3
+  - @cat-factory/gates@0.2.61
+  - @cat-factory/gitlab@0.4.32
+  - @cat-factory/prompt-fragments@0.9.35
+  - @cat-factory/spend@0.10.65
+  - @cat-factory/observability-langfuse@0.7.104
+  - @cat-factory/provider-cloudflare@0.7.108
+
+## 0.52.2
+
+### Patch Changes
+
+- Updated dependencies [16ee6cc]
+- Updated dependencies [16ee6cc]
+  - @cat-factory/orchestration@0.55.1
+  - @cat-factory/contracts@0.78.1
+  - @cat-factory/kernel@0.68.1
+  - @cat-factory/server@0.64.4
+  - @cat-factory/agents@0.26.1
+  - @cat-factory/consensus@0.8.2
+  - @cat-factory/gates@0.2.60
+  - @cat-factory/gitlab@0.4.31
+  - @cat-factory/integrations@0.52.2
+  - @cat-factory/prompt-fragments@0.9.34
+  - @cat-factory/spend@0.10.64
+  - @cat-factory/observability-langfuse@0.7.103
+  - @cat-factory/provider-cloudflare@0.7.107
+
+## 0.52.1
+
+### Patch Changes
+
+- Updated dependencies [6da6637]
+  - @cat-factory/server@0.64.3
+
+## 0.52.0
+
+### Minor Changes
+
+- 16621f8: feat(testing): test quality-control companion that loops the Tester on incomplete reports
+
+  The Tester gate concluded a step purely from `greenlight` + blocking concerns + failed
+  outcomes, so a report that claimed to exercise many areas (`tested`) but recorded a single
+  happy-path `outcome` could greenlight and "pass" — leaving most scenarios as "No discrete
+  check recorded" in the Test Report window while the step read as successfully completed.
+
+  Two changes address this:
+
+  - **Tester prompts now require one recorded `outcome` per `tested` area** (API + UI testers):
+    every scenario listed as tested must have a matching outcome with a concrete detail, and
+    describing results only in the prose `summary` does not count. Genuinely un-exercised areas
+    are recorded as `skipped` with a reason rather than dropped.
+  - **A new test quality-control companion** (`tester-qc`) audits each Tester report for
+    coverage/coherence BEFORE the greenlight/fixer decision. When the report is inadequate it
+    loops the Tester for a focused additional pass (folding the prior report + the flagged gaps
+    in, and carrying forward already-covered outcomes), bounded by a new merge-preset knob
+    `maxTesterQualityIterations` (default 3). Enabled by default; a per-Tester-step toggle in
+    the pipeline shape (`pipeline.testerQuality`) disables it or gates it on the task estimate.
+    The companion is an inline reviewer (no container) that resolves its model like the other
+    inline reviewers and is a pass-through when no model is wired.
+
+  Persistence: the merge preset gains a `max_tester_quality_iterations` column, mirrored across
+  the D1 and Drizzle stores (built-in preset seed `version` bumped 1 → 2). The QC loop state
+  lives on the execution step, so no new table is added.
+
+  The frontend pipeline-builder toggle + Test Report verdict surfacing land in a follow-up
+  (see `docs/initiatives/tester-quality-companion.md`).
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+  - @cat-factory/kernel@0.68.0
+  - @cat-factory/agents@0.26.0
+  - @cat-factory/orchestration@0.55.0
+  - @cat-factory/consensus@0.8.1
+  - @cat-factory/gates@0.2.59
+  - @cat-factory/gitlab@0.4.30
+  - @cat-factory/integrations@0.52.1
+  - @cat-factory/prompt-fragments@0.9.33
+  - @cat-factory/server@0.64.2
+  - @cat-factory/spend@0.10.63
+  - @cat-factory/observability-langfuse@0.7.102
+  - @cat-factory/provider-cloudflare@0.7.106
+
+## 0.51.5
+
+### Patch Changes
+
+- Updated dependencies [08be94c]
+  - @cat-factory/orchestration@0.54.1
+  - @cat-factory/server@0.64.1
+
+## 0.51.4
+
+### Patch Changes
+
+- 9e93fe8: feat(frontend): `frontendPreview` infrastructure capability + preview-toggle gate (slice 5a of the
+  frontend-preview + in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A browsable frontend preview keeps a built app served on a host-reachable URL, which needs a
+  long-lived host serve — so it is a genuine local/node differentiator. The Worker only runs the
+  self-contained UI-test container (built, tested, and torn down with the run), so it cannot host one.
+  Until now the `frontendConfig.previewEnabled` toggle (shipped as scaffolding in slice 2) was offered
+  on every runtime and read by nothing.
+
+  This lands the capability that makes the toggle honest, and gates it in the SPA where a preview can't
+  run. The long-lived build+serve-kept-alive mechanic itself is the remaining slice 5b.
+
+  - **New capability axis** on the `/auth/config` `infrastructureCapabilities` descriptor:
+    `frontendPreview: { supported: boolean }`, built by the shared `buildInfrastructureCapabilities`
+    so all three facades emit the same shape. Value is a per-facade differentiator — Worker `false`,
+    Node + local `true`.
+  - **SPA gate**: `FrontendConfig.vue` reads `infrastructure.frontendPreview.supported` (defaulting
+    true until the auth handshake resolves) and disables the `previewEnabled` checkbox with an
+    explanatory hint (`inspector.frontendConfig.previewUnsupported`, translated across every locale)
+    when unsupported. The stored config is left untouched, so a `previewEnabled` flag authored on
+    local/node is simply inert when served from the Worker (no migration; pre-1.0 breakage rules).
+  - **Conformance** pins that the axis is present + boolean on every facade (its value is a
+    differentiator); the Worker `auth.spec` pins `false`, the Node `auth-gate.spec` pins `true`.
+
+- 9b26ff1: feat(frontend): key a deployer's ephemeral env by its service FRAME so a live `service` binding
+  resolves (slice 4b of the frontend-preview + in-context UI-testing initiative,
+  docs/initiatives/frontend-preview-ui-testing.md).
+
+  A `frontend` frame's `service` binding names a service FRAME id, but a `deployer` keyed its
+  ephemeral env only under the task `block_id` it ran on — so `resolveFrontendConfig`'s
+  `handle === serviceBlockId` match never hit and a live-service binding fell back to WireMock even
+  when the backend's env was up (the deferred keying gap slices 3/4 flagged).
+
+  The env now also records the resolved service `frame_id` (the deployer's block walked up to its
+  enclosing frame), and the frontend binding resolution matches handles on THAT. The task-keyed
+  `block_id` — and the same-block deployer→tester env projection that reads it — is unchanged; this
+  is an additive column, not a re-key.
+
+  - **New `frame_id` column** on `environments`, mirrored D1 (`0030_environment_frame_id.sql`) ⇄
+    Drizzle (`environments.frame_id` + generated migration), threaded through `EnvironmentRecord`,
+    the `EnvironmentHandle` wire shape, and both registry repos.
+  - **Keying**: `RunDispatcher.deployerProvisionArgs` resolves the service frame id via the shared
+    frame walk and passes it on `ProvisionArgs.frameId`; the provisioning service persists it on both
+    the provisioned and the failed-record paths.
+  - **Resolution**: `AgentContextBuilder.resolveFrontendConfig` indexes the single `listHandles` read
+    by `handle.frameId` (still one batch read, no per-binding point read), so a `service` binding
+    resolves to its live ephemeral URL — and the frontend UI-test infra gate is satisfied instead of
+    refusing the run.
+  - **Conformance**: a new cross-runtime assertion provisions a service frame's env via a `deployer`,
+    then a UI-tester run against a frontend bound to that frame STARTS (the mirror of the existing
+    no-live-service refusal), pinning both the `frame_id` D1 ⇄ Drizzle round-trip and the
+    frame-keyed resolution.
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [ab7d589]
+- Updated dependencies [6c51e31]
+- Updated dependencies [456a992]
+- Updated dependencies [1d2684f]
+- Updated dependencies [33687cf]
+  - @cat-factory/contracts@0.77.0
+  - @cat-factory/server@0.64.0
+  - @cat-factory/kernel@0.67.0
+  - @cat-factory/integrations@0.52.0
+  - @cat-factory/orchestration@0.54.0
+  - @cat-factory/agents@0.25.0
+  - @cat-factory/consensus@0.8.0
+  - @cat-factory/gates@0.2.58
+  - @cat-factory/gitlab@0.4.29
+  - @cat-factory/prompt-fragments@0.9.32
+  - @cat-factory/spend@0.10.62
+  - @cat-factory/observability-langfuse@0.7.101
+  - @cat-factory/provider-cloudflare@0.7.105
+
 ## 0.51.3
 
 ### Patch Changes

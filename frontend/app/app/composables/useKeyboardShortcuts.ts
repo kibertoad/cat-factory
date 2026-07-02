@@ -20,9 +20,17 @@ export function useKeyboardShortcuts(): void {
   const board = useBoardStore()
   const { deleteBlock } = useBlockDeletion()
 
-  /** A modal (UModal) is on screen — let it own the keyboard; don't run global shortcuts. */
+  /** A modal / full-screen window is on screen — let it own the keyboard; don't run global
+   * shortcuts (else e.g. Delete would delete the selected block hidden BEHIND the window). The
+   * hand-rolled result-view + focus windows now carry `role="dialog"`, so the DOM check catches
+   * them; the store flags are belt-and-suspenders for the same windows. */
   function modalOpen(): boolean {
-    return ui.commandBarOpen || !!document.querySelector('[role="dialog"]')
+    return (
+      ui.commandBarOpen ||
+      !!ui.resultView ||
+      !!ui.focusBlockId ||
+      !!document.querySelector('[role="dialog"]')
+    )
   }
 
   /** The event originates from a text field, so printable/Delete keys are edits, not shortcuts. */

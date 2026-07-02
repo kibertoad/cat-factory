@@ -1,5 +1,278 @@
 # @cat-factory/kernel
 
+## 0.69.0
+
+### Minor Changes
+
+- dcc8b32: Browsable frontend preview — transport dispatch + `PreviewService` + controller + stop (slice 5c of
+  the frontend-preview + in-context UI-testing initiative,
+  docs/initiatives/frontend-preview-ui-testing.md).
+
+  Wire the harness `preview` mode (slice 5b) end to end: a `frontend` frame can now be built and
+  served on a HOST-reachable URL for a browsable preview, and stopped again. New pieces:
+
+  - A new optional `PreviewTransport` kernel port — the per-runtime half that publishes a served
+    app's port to an ephemeral host port and keeps the container alive past the build job. The local
+    facade wires the real one over its Docker/Podman/OrbStack/Colima/Apple adapter (a second
+    published port read back with `docker port` / the container IP); the Worker never wires it.
+  - A runtime-neutral `PreviewService` (start / get / stop) that persists the running preview like an
+    ephemeral `environments` row keyed by the `frontend` frame (reusing the existing table + soft-delete
+    stop path — no new migration), plus a `PreviewController` mounting
+    `GET|POST|DELETE /workspaces/:ws/frames/:frameId/preview`, gated server-side on the
+    `frontendPreview.supported` capability (503 on the Worker).
+  - The cross-runtime conformance suite drives the full start → serve → stop lifecycle on both Postgres
+    runtimes with a fake transport, pinning the ephemeral-env-row persistence parity.
+
+  Notes:
+
+  - `frontendPreview.supported` now tracks whether a preview transport is actually wired: a stock Node
+    build (runner pool, no host-port-publish primitive) advertises `false`, so the SPA never offers a
+    Start button that would 503; local mode (and any facade injecting a `previewTransport`) advertises
+    `true`.
+  - Preview rows share the `environments` table but carry a dedicated `preview` discriminator (outside
+    `provisionTypeSchema`), so the environment subsystem filters them out of its generic listing +
+    block-resolution paths — a preview never leaks into the deployer-env UI or tester env resolution.
+  - `PreviewService.get` re-polls a `ready` preview so a vanished/evicted container stops reporting a
+    stale, unreachable URL (it flips to `failed`); a healthy preview whose URL merely can't be
+    re-derived keeps its authoritative persisted URL.
+
+  Local/node differentiator; the SPA surface (the clickable URL + a stop button on the frame inspector)
+  lands in slice 5d. The harness is unchanged (no runner-image bump).
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/contracts@0.79.0
+
+## 0.68.1
+
+### Patch Changes
+
+- 16ee6cc: Surface the merger's verdict as a structured decision instead of raw JSON.
+
+  The engine now records a `MergeDecision` on the completed `merger` step (`step.custom`): the
+  assessment scores, the resolved preset ceilings, and — crucially — whether it auto-merged or routed
+  the PR to a human, and WHY (`within_thresholds` / `exceeded_thresholds` / `auto_merge_disabled` /
+  `no_rationale` / `no_assessment` / `merge_failed` — `no_rationale` distinguishes a scored-but-
+  unexplained assessment from a truly absent one). The SPA renders it in a dedicated `MergerResultView` (complexity /
+  risk / impact bars vs their ceilings + a plain-language decision banner — "Auto-merged — every score
+  is within the Balanced thresholds" / "Awaiting human review — risk exceeded the thresholds") instead
+  of the agent's raw JSON.
+
+  Also fixes the inspector showing a finished merger step as "Agent running": the run's shared container
+  is kept alive until the pipeline's final step, so a step whose state is already `done` (the merger
+  resolving mid-pipeline before a trailing gate) no longer displays the stale live container-phase label.
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+
+## 0.68.0
+
+### Minor Changes
+
+- 16621f8: feat(testing): test quality-control companion that loops the Tester on incomplete reports
+
+  The Tester gate concluded a step purely from `greenlight` + blocking concerns + failed
+  outcomes, so a report that claimed to exercise many areas (`tested`) but recorded a single
+  happy-path `outcome` could greenlight and "pass" — leaving most scenarios as "No discrete
+  check recorded" in the Test Report window while the step read as successfully completed.
+
+  Two changes address this:
+
+  - **Tester prompts now require one recorded `outcome` per `tested` area** (API + UI testers):
+    every scenario listed as tested must have a matching outcome with a concrete detail, and
+    describing results only in the prose `summary` does not count. Genuinely un-exercised areas
+    are recorded as `skipped` with a reason rather than dropped.
+  - **A new test quality-control companion** (`tester-qc`) audits each Tester report for
+    coverage/coherence BEFORE the greenlight/fixer decision. When the report is inadequate it
+    loops the Tester for a focused additional pass (folding the prior report + the flagged gaps
+    in, and carrying forward already-covered outcomes), bounded by a new merge-preset knob
+    `maxTesterQualityIterations` (default 3). Enabled by default; a per-Tester-step toggle in
+    the pipeline shape (`pipeline.testerQuality`) disables it or gates it on the task estimate.
+    The companion is an inline reviewer (no container) that resolves its model like the other
+    inline reviewers and is a pass-through when no model is wired.
+
+  Persistence: the merge preset gains a `max_tester_quality_iterations` column, mirrored across
+  the D1 and Drizzle stores (built-in preset seed `version` bumped 1 → 2). The QC loop state
+  lives on the execution step, so no new table is added.
+
+  The frontend pipeline-builder toggle + Test Report verdict surfacing land in a follow-up
+  (see `docs/initiatives/tester-quality-companion.md`).
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+
+## 0.67.0
+
+### Minor Changes
+
+- 9b26ff1: feat(frontend): key a deployer's ephemeral env by its service FRAME so a live `service` binding
+  resolves (slice 4b of the frontend-preview + in-context UI-testing initiative,
+  docs/initiatives/frontend-preview-ui-testing.md).
+
+  A `frontend` frame's `service` binding names a service FRAME id, but a `deployer` keyed its
+  ephemeral env only under the task `block_id` it ran on — so `resolveFrontendConfig`'s
+  `handle === serviceBlockId` match never hit and a live-service binding fell back to WireMock even
+  when the backend's env was up (the deferred keying gap slices 3/4 flagged).
+
+  The env now also records the resolved service `frame_id` (the deployer's block walked up to its
+  enclosing frame), and the frontend binding resolution matches handles on THAT. The task-keyed
+  `block_id` — and the same-block deployer→tester env projection that reads it — is unchanged; this
+  is an additive column, not a re-key.
+
+  - **New `frame_id` column** on `environments`, mirrored D1 (`0030_environment_frame_id.sql`) ⇄
+    Drizzle (`environments.frame_id` + generated migration), threaded through `EnvironmentRecord`,
+    the `EnvironmentHandle` wire shape, and both registry repos.
+  - **Keying**: `RunDispatcher.deployerProvisionArgs` resolves the service frame id via the shared
+    frame walk and passes it on `ProvisionArgs.frameId`; the provisioning service persists it on both
+    the provisioned and the failed-record paths.
+  - **Resolution**: `AgentContextBuilder.resolveFrontendConfig` indexes the single `listHandles` read
+    by `handle.frameId` (still one batch read, no per-binding point read), so a `service` binding
+    resolves to its live ephemeral URL — and the frontend UI-test infra gate is satisfied instead of
+    refusing the run.
+  - **Conformance**: a new cross-runtime assertion provisions a service frame's env via a `deployer`,
+    then a UI-tester run against a frontend bound to that frame STARTS (the mirror of the existing
+    no-live-service refusal), pinning both the `frame_id` D1 ⇄ Drizzle round-trip and the
+    frame-keyed resolution.
+
+- e0aa45e: Self-contained frontend UI-test infra (slice 3 of the frontend-preview + in-context
+  UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A `tester-ui` running on a task under a `type: 'frontend'` frame now builds and serves the
+  frontend, stands WireMock up for its OTHER backend upstreams, and drives the UI tests against
+  the two together — all as localhost processes in the one container (no Docker-in-Docker), so
+  it works on Cloudflare and Apple `container` too.
+
+  - **Harness**: a new `frontend` variant of the tester infra spec (`kind: 'frontend'`) that
+    installs, builds (injecting the resolved backend URLs at build time, or a `window.env` shim
+    for runtime injection), starts WireMock seeded from the frontend repo's mappings dir, serves
+    the built app, health-checks it, and points the agent at it. The `ui` image gains pnpm/yarn
+    (corepack), a static file server (`serve`), and a headless JRE + WireMock standalone
+    (executor-harness image bumped to 1.28.0).
+  - **Backend**: `AgentRunContext` carries a resolved `frontend` slice (the frame's
+    `frontendConfig` plus its backend bindings resolved to concrete upstreams — a bound service's
+    live ephemeral env URL for the service under test, else a WireMock mock). The engine's
+    `testerInfraSpec` turns it into the harness spec, and the tester-infra start gate refuses a
+    frontend UI test only when it binds a live-backend `service` with none actually live (a
+    mock-only / no-backend frontend passes — WireMock + the static server fully stand it up).
+    Empty-envVar bindings are filtered.
+  - **Hardening** (review follow-ups): the harness's WireMock / serve child processes get an
+    `'error'` listener (a spawn failure is captured, not an uncaught crash of the job server),
+    WireMock is now health-checked alongside the served app (a dead mock becomes a prompt note,
+    not a test-time ECONNREFUSED), reserved env-var names (`PATH`, `NODE_OPTIONS`, …) are dropped
+    from the injected build env, and a configured `servePort` that collides with a reserved
+    in-container port (8080 harness job server, 8089 WireMock) falls back to the default. The
+    inspector's servePort placeholder now shows 4173. Shared `pathExists` / log-capture helpers
+    are de-duplicated in the harness. The frontend UI-test gate's batch env read
+    (`environmentRegistryRepository.listByWorkspace`) is added to the mothership remote-persistence
+    allow-list so the gate resolves in mothership mode.
+  - **Hardening (second review round)**: the frontend stand-up now feeds the run's inactivity
+    watchdog with a heartbeat while it installs/builds/serves — a real frontend's `install` +
+    `build` can exceed the 10-min inactivity window, and the (activity-silent) stand-up would
+    otherwise be killed mid-build with a misleading "likely hung". `serveMode: 'command'` now also
+    forwards the resolved backend URLs (`env`) to the serve process, so a runtime-reading
+    dev/preview server sees them (previously only `PORT` was passed). Reserved env-var names are
+    now also dropped in the backend infra-spec builder (defence in depth, not just the harness).
+    The `mockMappingsPath` docs + inspector hint clarify WireMock's `--root-dir` layout (stubs go
+    in a `mappings/` subfolder), and the env-injection hint notes the build-tool prefix caveat
+    (e.g. Vite only exposes `VITE_*`). The UI-tester prompt flags a live-backend CORS failure as an
+    infra gap rather than an app defect.
+  - **Hardening (third review round)**: the frontend stand-up now runs in the run's SERVICE
+    SUBTREE (`workDir`), not the clone root — a monorepo frontend's `package.json` / `outputDir` /
+    `mocks/` live under its own subdirectory, so installing, building, serving and seeding WireMock
+    from the repo root would have targeted the wrong directory (the docker-compose stand-up still
+    runs at the root, where its repo-relative `composePath` resolves). The harness now bounds
+    frontend `servePort` / `wiremockPort` to 1..65535 at its untrusted-body boundary (an
+    out-of-range port can never bind, so it falls back to the default). The reserved-env filter —
+    in BOTH the harness parse and the backend infra-spec builder — grows the `NODE_EXTRA_CA_CERTS`
+    / `BASH_ENV` / `ENV` / `SHELL` / `IFS` names plus the `npm_config_*` and `GIT_*` FAMILIES, so a
+    binding that reconfigures the package manager, git, or the TLS trust store during the build is
+    dropped rather than injected. Runtime env injection under `serveMode: 'command'` now warns
+    (the `window.env` shim is only served in static mode; the forwarded `env` covers the command
+    server), and a failed shim write is logged instead of silently swallowed. `AgentContextBuilder`
+    gains `resolveServiceFrame` so the frontend-config resolution reuses the frame row the walk
+    already loaded instead of re-fetching it. Fixes the `Lint & format` failure (an unnecessary
+    `?? {}` empty-fallback spread in the serve env).
+  - **Hardening (fourth review round)**: the reserved-env family filter (`npm_config_*` / `GIT_*`)
+    now matches **case-insensitively** in BOTH the harness parse and the backend infra-spec builder —
+    npm reads its config env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY`
+    (upper/mixed case) is honoured just like `npm_config_registry`; a case-sensitive prefix match
+    would have let the upper-cased form slip through and reconfigure the package manager during the
+    build. The frontend serve/WireMock health-check now also aborts an in-flight probe on the run's
+    own abort signal (not just the per-attempt timeout). The stale `envInjectionHint` translation is
+    synced across all locales, and the missed-translation class is now guarded in CI (see the app
+    note). The agent prompt-note assembly and the frontend `installCommand` are extracted as pure
+    helpers with unit coverage.
+
+  `@cat-factory/app`: sync the `envInjectionHint` hint across all locales (the `en` update noting
+  the build-tool prefix caveat, e.g. Vite only exposes `VITE_*`, had been left untranslated). A new
+  CI **locale-parity guard** now fails a PR that changes an `en.json` message key without changing
+  the same key in every other locale, so translations can't silently go stale.
+
+  BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
+  (`service` | `frontend`); the default backend-service tester shape is unchanged.
+
+- f70c273: feat(frontend): `pl_frontend` pipeline + frontend-aware mocker (slice 4 of the
+  frontend-preview + in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  Builds on slice 3's self-contained UI-test infra with the pipeline that drives it and a mocker
+  that authors the mocks it needs.
+
+  - **`pl_frontend` built-in pipeline** (`coder → reviewer → mocker → tester-ui → conflicts → ci →
+merger`). For a `type: 'frontend'` frame the engine already resolves the frame's
+    `frontendConfig` + backend bindings and stands the app + WireMock up in one container (slice 3),
+    so this pipeline is just the step order that exercises it end to end: implement → review → mock
+    → browser-test → the standard mergeability/CI/merge tail. Labelled `experimental` — two
+    deploy-/keying-time steps remain (the `ui`-image per-step routing, and keying a bound service's
+    ephemeral env by its FRAME id so a live-service binding resolves instead of falling back to
+    WireMock); a mock-only frontend already runs fully self-contained today.
+  - **Frontend-aware mocker.** When a `mocker` step runs on a task under a `frontend` frame, its
+    user prompt now carries a frontend section: author WireMock stub mappings under the frontend
+    repo's mock dir in WireMock's `--root-dir` layout (`<dir>/mappings/*.json` + `<dir>/__files/`)
+    for exactly the upstreams the harness points at WireMock (every binding with no live service
+    under test), and do NOT wire a docker-compose stack — the platform serves the app + WireMock
+    directly. The live service(s) under test are named and explicitly excluded from mocking. A
+    backend-service mocker run is unchanged (the section is absent without a resolved frontend
+    context). The section explicitly OVERRIDES the docker-compose stand-up guidance in the
+    (backend-oriented) mocker role prompt so the two do not contradict for a frontend run, and the
+    default WireMock root (`mocks/`) is now the shared `DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH` constant
+    in `@cat-factory/contracts` rather than a private literal.
+
+- 6c51e31: Run inline LLM steps through the ambient Claude Code / Codex CLI in local mode, and refuse to
+  start a pipeline whose model preset can't satisfy every step.
+
+  - **Local inline harness execution**: with native agents enabled (`LOCAL_NATIVE_AGENTS`), the
+    inline steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) now run
+    on the developer's ambient `claude`/`codex` subscription CLI as a host subprocess — the inline
+    analogue of the existing container ambient-auth path. Previously a subscription-only preset
+    (e.g. Claude Opus) degraded these inline steps to the routing default and failed against an
+    unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
+    Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
+    local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
+    degrading it. The consensus executor (an inline path) threads the same predicate, so a
+    subscription-only consensus participant model is kept inline in local mode too.
+  - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
+    inline-usability, not just container-usability. A subscription-only model that satisfies the
+    container agents but can't run the inline reviewers (and this deployment has no inline harness)
+    is refused up front with a new `preset_unsatisfiable` conflict reason and an actionable message,
+    instead of failing mid-run. The SPA maps the new reason to a translated toast.
+
+  Breaking: `inlineModelRef` gains an optional third `opts` argument; the `ConflictReason` wire
+  union gains `preset_unsatisfiable`.
+
+### Patch Changes
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [6c51e31]
+  - @cat-factory/contracts@0.77.0
+
 ## 0.66.1
 
 ### Patch Changes

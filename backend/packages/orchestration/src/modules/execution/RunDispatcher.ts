@@ -1333,7 +1333,7 @@ export class RunDispatcher {
     let dispatch: ProvisionDispatch
     try {
       dispatch = await this.environmentProvisioning!.startProvision(
-        this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
+        await this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
         ref,
       )
     } catch (error) {
@@ -1427,7 +1427,7 @@ export class RunDispatcher {
     let handle
     try {
       handle = await this.environmentProvisioning!.finalizeProvision(
-        this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
+        await this.deployerProvisionArgs(workspaceId, instance, block, provisioning),
         view,
       )
     } catch (error) {
@@ -1446,15 +1446,22 @@ export class RunDispatcher {
   }
 
   /** The {@link ProvisionArgs} a `deployer` step provisions with (synchronous or async). */
-  private deployerProvisionArgs(
+  private async deployerProvisionArgs(
     workspaceId: string,
     instance: ExecutionInstance,
     block: Block,
     provisioning: ServiceProvisioning | undefined,
-  ): ProvisionArgs {
+  ): Promise<ProvisionArgs> {
+    // Record the service FRAME the deployer belongs to alongside the task `block.id`, so a
+    // cross-frame consumer (a `frontend` frame's `service` binding, keyed by the bound service
+    // FRAME id) can resolve this live env — `resolveFrontendConfig` matches on `frameId`, not the
+    // task the deployer ran on. Falls back to the block id itself when the walk finds no frame.
+    const frameId =
+      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
     return {
       workspaceId,
       blockId: block.id,
+      frameId,
       executionId: instance.id,
       inputs: this.deployInputs(block),
       context: this.deployContext(block),
@@ -2067,12 +2074,22 @@ export class RunDispatcher {
       {
         kind: MERGER_AGENT_KIND,
         applies: (result) => result.mergeAssessment !== undefined,
-        resolve: async ({ workspaceId, instance, result }) => {
+        resolve: async ({ workspaceId, instance, step, result }) => {
           // The real merge runs the engine GitHub client under the run initiator's
           // ambient context, so a per-user PAT (when set) authors the merge.
-          await this.runInitiatorScope(instance.initiatedBy, () =>
+          const decision = await this.runInitiatorScope(instance.initiatedBy, () =>
             this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
           )
+          // Record the structured verdict on the step so the SPA's dedicated merger result
+          // view renders the assessment + explains the auto-merge / awaiting-review decision,
+          // instead of showing the agent's raw JSON.
+          if (decision) {
+            step.custom = decision
+            // Drop the raw JSON only when we captured a structured assessment (the view
+            // renders it from `step.custom`). When the merger produced NO parseable
+            // assessment, keep the raw reply so an operator can still diagnose what it sent.
+            if (decision.assessment) step.output = ''
+          }
           return { ownsTerminalStatus: true }
         },
       },

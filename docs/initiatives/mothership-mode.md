@@ -28,6 +28,93 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (shared-service mount management surface)** — the org-catalog / shared-service
+  mounting flow (`ServiceMountService` / `ServiceMountController` — mount / unmount / re-layout a
+  shared account service onto a workspace board) is now fully remotely callable, so a mothership-mode
+  SPA can not just DISPLAY the catalog but MOUNT from it. Previously the catalog-badge reads
+  (`workspaceMountRepository.listByWorkspace` / `countByServiceIds`) were exposed, but the
+  single-service read the mount flow performs and the mount write/update/remove methods came back
+  `unknown_method`. Newly allow-listed: `serviceRepository.get(serviceId)` — bound by a **new
+  `service` scope kind** (a single serviceId → owning account, the single-id form of `serviceList`,
+  reusing the controller's existing service→account resolver, so no controller change; the
+  dispatched `get` is routed through the same per-request `listByIds` memo the scope check reads, so
+  a mount precheck resolves the service in ONE query) — and `workspaceMountRepository`
+  `get`/`update`/`remove` (arg0 = workspaceId → the `workspace` rule) + the record-based
+  `upsert(mount)` (bound by a **new `serviceMount` scope kind**). Each is member-level (the mount
+  endpoints are not admin-gated) and workspace-scoped. **Cross-org sharing stays enforced AT THE RPC
+  LAYER, not only in the bypassed service layer:** the `serviceMount` rule binds `upsert` on the
+  mount's `workspaceId` FIELD (out-of-scope workspace → refused) AND requires the mounted `serviceId`
+  to be owned by the SAME account as that workspace, so a raw `upsert` can never plant a cross-org
+  mount — including for a machine token that spans several accounts (a user in multiple orgs, where a
+  workspace-only bind would let one org's service be mounted onto another org's board). The local
+  node's `mount()` also reads `serviceRepository.get` first (the `service` rule 404s a foreign
+  service, so `assertFound` throws), and board composition (`listByServices`) stays account-scoped as
+  a second line of defence. The real-time fan-out reads
+  (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
+  (`removeByServices` / `serviceRepository.deleteMany` / `listByFrameBlocks`) stay off the SPA path —
+  mothership-internal / a later board-frame-deletion slice. **Known gap (a later slice):** without
+  the fan-out reads, mounting/unmounting a shared service does not live-update OTHER boards mounting
+  the same service in mothership mode (the acting user's own board is driven directly). These are
+  core repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
+  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
+  allow-list plus the two new scope kinds. Server-only, symmetric by construction (the dispatcher
+  reflects over each facade's registry). Round-trip + cross-account-scope tests for every new method
+  (incl. the `service` kind's out-of-scope / unknown-id / non-string fail-closed edges and the
+  `serviceMount` rule's cross-org / multi-account-token denials) are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
+- **Phase 3 follow-up (advanced review / structured-dialogue session surface)** — the clarity-review
+  (bug-report triage), brainstorm (structured dialogue) and consensus (multi-strategy orchestration)
+  session repositories are now fully allow-listed, so a mothership-mode SPA can not just READ the
+  board-load view of a review but PERSIST/REPLACE one as its window iterates (run → re-read →
+  upsert/delete). Previously only the board-load reads (`clarityReviewRepository.getByBlock`,
+  `brainstormSessionRepository.getByBlockStage`) were remotely callable; the write/delete methods came
+  back `unknown_method`. Newly allow-listed, mirroring the requirements-review surface: `clarityReview`
+  `get`/`upsert`/`deleteByBlock`, `brainstormSession` `get`/`upsert`/`deleteByBlockStage`,
+  `consensusSession` `get`/`getByStep`/`getByBlock`/`upsert` (a new repo entry), and
+  `requirementReview.deleteByBlock` (the pre-review-run drop that completes that repo). Every method
+  takes the workspaceId as arg0 — the `upsert(workspaceId, review)` signature carries it positionally,
+  so the existing `workspace` rule binds it (not `workspaceField`) — and each is member-level (none of
+  the review endpoints is admin-gated), matching the requirement-review policy. These are core repos
+  (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the full-surface
+  remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the allow-list.
+  Server-only, symmetric by construction (the dispatcher reflects over each facade's registry).
+  Round-trip + cross-account-scope unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
+  clarity-review / brainstorm / consensus / requirement-review session surface is now remote).
+- **Phase 3 follow-up (post-release-health / observability settings write surface)** — the
+  three settings repositories the post-release-health flow's panels manage are now allow-listed,
+  so a mothership-mode SPA can PERSIST (not just display) an observability connection, a per-block
+  monitor/SLO mapping, and an incident-enrichment connection. Previously none of these was remotely
+  callable, so every call came back `unknown_method`. Newly allow-listed:
+  `observabilityConnectionRepository` `get`/`upsert`/`delete`, `releaseHealthConfigRepository`
+  `getByBlock`/`listByWorkspace`/`upsert`/`delete`, and `incidentEnrichmentConnectionRepository`
+  `get`/`upsert`/`delete`. The reads/deletes take the workspaceId as arg0 (the existing `workspace`
+  rule); the record-based `upsert(record)` needed a **new `workspaceField` scope rule** — the
+  scope key is a `workspaceId` FIELD of the record, not a positional arg. Binding on
+  `record.workspaceId` is exactly right: the write targets that workspace, so the record can only be
+  persisted into an in-scope one; a missing/non-string field or an out-of-scope workspace is refused
+  as 404. Each is member-level (the controllers mount under `/workspaces/:workspaceId`, none is
+  admin-gated) and workspace-scoped, matching the other settings panels' policy. These are core
+  repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
+  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
+  allow-list. Server-only, symmetric by construction (the dispatcher reflects over each facade's
+  registry). Round-trip + cross-account-scope + missing-field unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (the whole
+  observability / incident-enrichment / release-health-config surface is now remote). **Explicitly
+  NOT in this slice:** decrypting a sealed connection cipher at gate-probe time (the later
+  secrets-delegation slice) and `accountSettingsRepository` (account-scoped, a separate decision).
+  So the settings PANELS are functional end-to-end (persist + read back the redacted summary),
+  but a saved observability connection does NOT yet drive a post-release-health gate probe in
+  mothership mode — that waits on the secrets-delegation slice. Note the connection `get` returns
+  the full record (the sealed `credentials` blob) over the machine API, matching the
+  `environmentRegistryRepository.get` precedent (the RPC client is the trusted, account-scoped
+  local node; the blob is sealed). The `workspaceField` rule binds only the record's top-level
+  `workspaceId`; `releaseHealthConfigRepository`'s `blockId` is not re-validated over the RPC (the
+  service layer, bypassed here, owns block-existence), so a config can only ever land in the
+  caller's own in-scope workspace.
 - **Phase 3 follow-up (failed-run retry / stop control surface)** — the board's run controls
   (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`, `AgentRunController`) enter through the
   unified `agent_runs` table's `agentRunRepository.getRef(workspaceId, id)`, which resolves a run's
@@ -288,20 +375,20 @@ never remotely invocable (mothership-internal cron).
 | `serviceFragmentDefaultsRepository`                         | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)           | ◑ part  | PR 3 (settings writes)          |
 | `trackerSettingsRepository`                                 | remote                                           | ✅ done | PR 3 (settings writes)          |
-| `serviceRepository`                                         | remote                                           | ⬜ todo | PR 3                            |
-| `workspaceMountRepository`                                  | remote                                           | ⬜ todo | PR 3                            |
-| `requirementReviewRepository`                               | remote                                           | ⬜ todo | PR 3                            |
-| `kaizenGradingRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
-| `kaizenVerifiedComboRepository`                             | remote                                           | ⬜ todo | PR 3                            |
-| `consensusSessionRepository`                                | remote                                           | ⬜ todo | PR 3                            |
-| `clarityReviewRepository`                                   | remote                                           | ⬜ todo | PR 3                            |
-| `brainstormSessionRepository`                               | remote                                           | ⬜ todo | PR 3                            |
+| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)   | ◑ part  | PR 3 (mount management)         |
+| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)       | ◑ part  | PR 3 (mount management)         |
+| `requirementReviewRepository`                               | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
+| `kaizenGradingRepository`                                   | remote (`getByStep`/`upsert`; rest pending)      | ◑ part  | PR 3                            |
+| `kaizenVerifiedComboRepository`                             | remote (`getByKey`; rest pending)                | ◑ part  | PR 3                            |
+| `consensusSessionRepository`                                | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
+| `clarityReviewRepository`                                   | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
+| `brainstormSessionRepository`                               | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
 | `mergePresetRepository`                                     | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `workspaceSettingsRepository`                               | remote                                           | ✅ done | PR 3 (settings writes)          |
-| `observabilityConnectionRepository`                         | remote                                           | ⬜ todo | PR 3                            |
-| `incidentEnrichmentConnectionRepository`                    | remote                                           | ⬜ todo | PR 3                            |
+| `observabilityConnectionRepository`                         | remote                                           | ✅ done | PR 3 (release-health settings)  |
+| `incidentEnrichmentConnectionRepository`                    | remote                                           | ✅ done | PR 3 (release-health settings)  |
 | `accountSettingsRepository`                                 | remote                                           | ⬜ todo | PR 3                            |
-| `releaseHealthConfigRepository`                             | remote                                           | ⬜ todo | PR 3                            |
+| `releaseHealthConfigRepository`                             | remote                                           | ✅ done | PR 3 (release-health settings)  |
 | `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership) | ⬜ todo | PR 3                            |
 | `githubInstallationRepository`                              | remote                                           | ⬜ todo | PR 3                            |
 | `runnerPoolConnectionRepository`                            | remote                                           | ⬜ todo | PR 3                            |

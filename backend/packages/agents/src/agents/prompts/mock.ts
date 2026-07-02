@@ -1,4 +1,5 @@
-import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
+import { DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH } from '@cat-factory/contracts'
 import { STANDARDS_FOOTER } from './shared.js'
 
 // Built-out role prompt for the mock-builder agent. This kind stands up
@@ -55,6 +56,71 @@ const SYSTEM_PROMPT = [
 /** True when the agent kind is the mock-builder. */
 export function isMockKind(kind: AgentKind): boolean {
   return kind === MOCK_AGENT_KIND
+}
+
+/**
+ * The frontend-specific mocking guidance for a `mocker` run whose frame is a `type: 'frontend'`
+ * app (the self-contained UI-test flow). A frontend's mocks are consumed very differently from a
+ * backend service's: the platform serves the built app AND WireMock as in-container processes (no
+ * docker-compose, no DinD), reading the stub mappings straight from a directory in the FRONTEND
+ * repo. So the mocker must author WireMock mappings under that directory in WireMock's `--root-dir`
+ * layout — NOT wire a docker-compose stack — for exactly the upstreams the harness will point at
+ * WireMock (every binding whose backend is not a LIVE service under test). Returns `undefined` for
+ * a backend run (or a non-mocker kind), so callers can append it unconditionally.
+ *
+ * Kept in lock-step with the harness `frontend` infra spec (server `testerInfraSpec` /
+ * `buildFrontendInfraSpec`): the served app reads each upstream URL from an injected env var, and
+ * a binding with no live service resolves to the in-container WireMock — those are the calls that
+ * MUST be mocked here.
+ */
+export function mockFrontendSection(context: AgentRunContext): string | undefined {
+  if (!isMockKind(context.agentKind) || !context.frontend) return undefined
+  const { config, bindings } = context.frontend
+  const root = config.mockMappingsPath?.trim() || DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH
+  const dir = root.replace(/\/+$/, '')
+  // The upstreams the harness will serve from WireMock: every resolved binding with no live
+  // `serviceUrl` (a `mock` source, or a `service` whose ephemeral env isn't live). A binding WITH
+  // a serviceUrl is the real service under test — do NOT mock it.
+  const mocked = bindings.filter((b) => !b.serviceUrl).map((b) => b.envVar)
+  const live = bindings.filter((b) => b.serviceUrl).map((b) => b.envVar)
+  const lines = [
+    '',
+    'FRONTEND UI TEST — this block is a frontend app, so its mocks are consumed by the',
+    'self-contained UI-test flow, NOT a docker-compose stack. The platform builds and serves the',
+    'app and runs WireMock in the SAME container (no docker-compose, no Docker-in-Docker), reading',
+    `your stub mappings from the frontend repo. Author them there instead of wiring compose:`,
+    '- This OVERRIDES the docker-compose / `docker-compose up` / CI-service-container stand-up',
+    '  instructions in your role above: they describe the BACKEND-service flow and do NOT apply to',
+    '  this frontend run. Do not create or edit any docker-compose file here.',
+    `- Put WireMock stubs under \`${dir}/mappings/*.json\` and their response bodies under`,
+    `  \`${dir}/__files/\` (this is WireMock's \`--root-dir\` layout — a bare \`${dir}/\` with no`,
+    '  `mappings/` inside starts an empty WireMock that 404s every mocked call).',
+    '- Do NOT add or edit a docker-compose file, CI service container, or env-var wiring for this',
+    '  frontend — the platform injects the resolved backend URLs and starts WireMock for you.',
+    '- Mock the frontend’s BACKEND upstreams that are NOT the live service under test: each',
+    '  backend binding whose URL resolves to WireMock. The frontend reads each upstream from an',
+    '  injected env var; author realistic stubs (success + the error/edge responses the UI must',
+    '  handle) for every route the app calls on those upstreams.',
+  ]
+  if (mocked.length) {
+    lines.push(
+      `- Upstreams to mock (their env vars point at WireMock): ${mocked.join(', ')}. Cover the`,
+      '  routes the app calls behind each of these.',
+    )
+  }
+  if (live.length) {
+    lines.push(
+      `- Do NOT mock the live service(s) under test (${live.join(', ')}) — those hit the real`,
+      '  ephemeral backend; mocking them would mask the very integration this run exercises.',
+    )
+  }
+  if (!mocked.length && !live.length) {
+    lines.push(
+      '- This frontend declares no backend bindings yet, so there is nothing to mock; if the app',
+      '  calls upstreams, add bindings + stubs for them.',
+    )
+  }
+  return lines.join('\n')
 }
 
 /**

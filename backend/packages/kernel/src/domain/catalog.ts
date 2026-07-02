@@ -37,6 +37,9 @@ export const DEFAULT_MERGE_PRESET = {
   maxRequirementIterations: 6,
   // Tolerate nothing by default: any reviewer finding pauses the run for a human.
   maxRequirementConcernAllowed: 'none',
+  // Test quality-control companion: how many times it may loop the Tester for a more
+  // complete report before letting the run proceed to the greenlight / fixer decision.
+  maxTesterQualityIterations: 3,
   // Post-release-health gate: how long (minutes) the gate watches the deployed
   // release's monitors/SLOs before declaring it healthy, and how many on-call
   // investigations may be dispatched while watching (the on-call agent investigates
@@ -69,6 +72,7 @@ export interface MergePresetSeed {
   ciMaxAttempts: number
   maxRequirementIterations: number
   maxRequirementConcernAllowed: RequirementConcernLevel
+  maxTesterQualityIterations: number
   releaseWatchWindowMinutes: number
   releaseMaxAttempts: number
   humanReviewGraceMinutes: number
@@ -103,12 +107,13 @@ export const MERGE_PRESET_SEEDS: MergePresetSeed[] = [
     ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
     maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
     maxRequirementConcernAllowed: DEFAULT_MERGE_PRESET.maxRequirementConcernAllowed,
+    maxTesterQualityIterations: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
     releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
     autoMergeEnabled: DEFAULT_MERGE_PRESET.autoMergeEnabled,
     isDefault: true,
-    version: 1,
+    version: 2,
   },
   {
     id: 'mp_manual_review',
@@ -120,13 +125,14 @@ export const MERGE_PRESET_SEEDS: MergePresetSeed[] = [
     ciMaxAttempts: DEFAULT_MERGE_PRESET.ciMaxAttempts,
     maxRequirementIterations: DEFAULT_MERGE_PRESET.maxRequirementIterations,
     maxRequirementConcernAllowed: 'none',
+    maxTesterQualityIterations: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
     releaseWatchWindowMinutes: DEFAULT_MERGE_PRESET.releaseWatchWindowMinutes,
     releaseMaxAttempts: DEFAULT_MERGE_PRESET.releaseMaxAttempts,
     humanReviewGraceMinutes: DEFAULT_MERGE_PRESET.humanReviewGraceMinutes,
     // The whole point of this preset: never auto-merge — always raise a human review.
     autoMergeEnabled: false,
     isDefault: false,
-    version: 1,
+    version: 2,
   },
 ]
 

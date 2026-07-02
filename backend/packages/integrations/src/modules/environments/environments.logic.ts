@@ -266,6 +266,7 @@ export function recordToHandle(
     id: record.id,
     workspaceId: record.workspaceId,
     blockId: record.blockId,
+    frameId: record.frameId,
     executionId: record.executionId,
     providerId: record.providerId,
     externalId: record.externalId,

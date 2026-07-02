@@ -111,6 +111,7 @@ import {
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
   buildResolveRepoTarget,
+  makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
   makeResolveRepoFilesForCoords,
@@ -142,7 +143,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { VcsIdentityRegistry } from '@cat-factory/kernel'
+import type { PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -569,6 +570,24 @@ export interface NodeContainerOptions {
    * Node behaviour). The local facade passes a PAT-backed client.
    */
   githubClient?: GitHubClient
+  /**
+   * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
+   * publishes a served app's port to a host port and keeps it alive. Local mode injects the real
+   * one (its Docker/Apple adapter); Node-pool/Worker inject none, so the preview module stays
+   * unwired (503). When present, the runtime-neutral `buildPreviewJob` is constructed from the
+   * SAME repo/token/session seams the container executor uses (unless one is injected via
+   * `overrides` — the conformance suite passes a fake pair to drive the flow on real Postgres).
+   */
+  previewTransport?: PreviewTransport
+  /**
+   * Wrap the model-provider resolver right after it's built, so a sibling facade can add a
+   * flavour the base resolver lacks. Local mode wraps it so a subscription HARNESS ref
+   * (`claude-code` / `codex`) resolves to a CLI-backed inline model driving the developer's
+   * ambient CLI — the inline analogue of its container ambient-auth path. Undefined → the
+   * base Node resolver (HTTP providers only). Applied to both the inline executor and
+   * `createCore`, so the reviewer/brainstorm/estimator + the inline agent kinds all use it.
+   */
+  wrapModelProviderResolver?: (inner: ModelProviderResolver) => ModelProviderResolver
   /**
    * Override the git origin (clone URL + provider) for a run's repo. The default builds a
    * `github.com` URL; the local GitLab facade injects a builder emitting the configured
@@ -1191,6 +1210,15 @@ function buildNodeGitHubIssueFiler(
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
+  // A browsable preview needs a per-runtime host-port-publish transport. Plain Node (runner
+  // pool) has none, so advertise support ONLY when a `previewTransport` is actually wired
+  // (local mode, or a facade/test that injects one) — otherwise the SPA would offer a Start
+  // button that 503s. Local pre-sets its own descriptor before calling in, so this ??= is
+  // skipped there; the check covers a stock Node build (false) and the conformance harness
+  // (which injects a fake transport via `overrides` → true).
+  const previewTransportWired = Boolean(
+    options.previewTransport ?? options.overrides?.previewTransport,
+  )
   // The Node service has no built-in per-run container runtime: repo-operating agents run on
   // a self-hosted runner pool, and Tester environments via the environment provider. Surface
   // that so the SPA's infrastructure selector reads accurately. Local mode pre-sets its own
@@ -1198,6 +1226,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   config.infrastructure ??= buildInfrastructureCapabilities({
     execution: { available: ['runner-pool'], active: 'runner-pool' },
     testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+    frontendPreview: { supported: previewTransportWired },
   })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
@@ -1355,7 +1384,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     config.spend.currency,
   )
-  const modelProviderResolver = buildModelProviderResolver(env, db, apiKeys, localModelEndpoints)
+  const baseModelProviderResolver = buildModelProviderResolver(
+    env,
+    db,
+    apiKeys,
+    localModelEndpoints,
+  )
+  const modelProviderResolver = options.wrapModelProviderResolver
+    ? options.wrapModelProviderResolver(baseModelProviderResolver)
+    : baseModelProviderResolver
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     options.cloudflareModelsEnabled ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
@@ -1365,6 +1402,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentRouting: config.agents.routing,
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
+    // In local mode this keeps an ambient-eligible subscription harness ref so the inline
+    // design/research kinds run on the developer's Claude Code / Codex CLI; undefined on
+    // stock Node (no inline harness), where such a ref degrades to the routing default.
+    ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
@@ -1813,6 +1854,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         agentRouting: config.agents.routing,
         resolveBlockModel: config.agents.resolveBlockModel,
         resolveWorkspaceModelDefault,
+        // Consensus runs its participants INLINE, so in local mode keep an ambient-eligible
+        // subscription harness ref (served via the CLI) instead of degrading it; undefined on
+        // stock Node/Worker, where such a ref degrades to the routing default as before.
+        ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
         sessionRepository: repos.consensusSessionRepository,
         ...(executionEventPublisher ? { eventPublisher: executionEventPublisher } : {}),
       }))
@@ -2006,6 +2051,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,
+    // Local mode runs the inline reviewers/brainstorm/estimator on the ambient Claude Code /
+    // Codex CLI when the pinned model is a subscription harness (undefined on stock Node, so
+    // such refs degrade to the routing default). Also drives the preset satisfiability guard.
+    ...(config.agents.inlineHarnessRef ? { inlineHarnessRef: config.agents.inlineHarnessRef } : {}),
     // Notifications subsystem (parity with the Worker, which wires it unconditionally):
     // the inbox + the human-action surfaces. Node has no real-time push, so the rows
     // persist (inbox + snapshot) and any channel composed below — e.g. Slack — delivers.
@@ -2174,6 +2223,35 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     ...options.overrides,
   }
 
+  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
+  // transport is available. Local mode injects the real transport; the conformance suite injects
+  // BOTH a fake transport + a fake job builder via `overrides` (which win, so the flow runs on
+  // real Postgres without GitHub). The Worker/Node-pool inject neither ⇒ the module stays absent
+  // (the controller 503s). When a transport is present but no builder was injected, construct the
+  // real one from the SAME repo/token/session seams the container executor uses; without those
+  // (no PUBLIC_URL / session secret / token mint) the module stays unwired rather than half-built.
+  if (options.previewTransport && !dependencies.previewTransport) {
+    dependencies.previewTransport = options.previewTransport
+  }
+  if (dependencies.previewTransport && !dependencies.buildPreviewJob) {
+    const previewPublicUrl = env.PUBLIC_URL?.trim()
+    const previewSessionSecret = config.auth.sessionSecret
+    if (previewPublicUrl && previewSessionSecret && baseDeployMint) {
+      dependencies.buildPreviewJob = makePreviewJobBuilder({
+        blockRepository: repos.blockRepository,
+        resolveRepoTarget,
+        mintInstallationToken: baseDeployMint,
+        ...(options.resolveRepoOrigin ? { resolveRepoOrigin: options.resolveRepoOrigin } : {}),
+        sessionService: new ContainerSessionService({ secret: previewSessionSecret }),
+        proxyBaseUrl: `${previewPublicUrl.replace(/\/+$/, '')}/v1`,
+        ...(config.github.apiBase ? { githubApiBase: config.github.apiBase } : {}),
+        ...(dependencies.environmentRegistryRepository
+          ? { environmentRegistryRepository: dependencies.environmentRegistryRepository }
+          : {}),
+      })
+    }
+  }
+
   // Wire the live env-config repair agent over the FINAL environment provider (after the
   // `...options.overrides` above), so an injected native adapter — not the default manifest
   // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
@@ -2252,6 +2330,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Resolves the per-account binary-artifact store (screenshots) for the artifact
     // controllers + the visual-confirmation gate (configured per-account in the UI).
     resolveBinaryArtifactStore,
+    // Stock/remote Node has NO built-in container runtime, so container agents run ONLY on a
+    // self-hosted runner pool — an unregistered pool means no agent can run, which the infra-setup
+    // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
+    // (so the pool is optional there); detect that by the absence of the default pool transport.
+    agentExecutorRequiresRunnerPool: options.resolveTransport === undefined,
     gateways: createNodeGateways(env),
     // Source-control PAT login: lets a user sign in with their own GitHub/GitLab PAT via
     // `/auth/pat`, held to the server's login/org/domain allowlist. Local mode overrides this

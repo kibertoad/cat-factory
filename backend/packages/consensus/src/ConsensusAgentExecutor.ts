@@ -50,6 +50,15 @@ export interface ConsensusAgentExecutorDependencies {
   modelProvider?: ModelProvider
   agentRouting: AgentRouting
   resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as an
+   * INLINE call in this deployment (local mode's ambient CLI). Consensus runs its participants
+   * INLINE, so — like the other inline callers — it must KEEP an ambient-eligible harness ref
+   * instead of degrading it to the routing default, otherwise a subscription-only participant
+   * model strands on the unconfigured fallback provider. From `config.agents.inlineHarnessRef`;
+   * absent on Node/Worker (no inline harness path → degrade, as before).
+   */
+  runsInline?: (ref: ModelRef) => boolean
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
@@ -132,6 +141,9 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         agentRouting: this.deps.agentRouting,
         resolveBlockModel: this.resolveBlockModel,
         resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
+        // In local mode keep an ambient-eligible subscription harness ref (served inline via
+        // the CLI) instead of degrading it to the routing default; undefined on Node/Worker.
+        ...(this.deps.runsInline ? { runsInline: this.deps.runsInline } : {}),
       },
       {
         agentKind: context.agentKind,
@@ -146,7 +158,12 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
   private refForModelId(modelId: string | undefined, base: ModelRef): ModelRef {
     if (modelId) {
       const pinned = this.resolveBlockModel(modelId)
-      if (pinned) return inlineModelRef(pinned, base)
+      if (pinned)
+        return inlineModelRef(
+          pinned,
+          base,
+          this.deps.runsInline ? { runsInline: this.deps.runsInline } : {},
+        )
     }
     return base
   }

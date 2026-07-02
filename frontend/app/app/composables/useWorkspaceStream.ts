@@ -133,12 +133,32 @@ export function useWorkspaceStream() {
 
     socket.onopen = () => {
       attempt = 0
-      connected.value = true
-      // Resync on (re)connect: any event missed while disconnected is reconciled.
-      // The snapshot carries `bootstrapJobs` + executions, so one refresh rehydrates
-      // agentRuns too — a missed terminal event (e.g. a container eviction that
-      // failed the run) can't leave a frame stuck on a stale "bootstrapping…" badge.
-      void workspace.refresh()
+      // Resync on (re)connect BEFORE announcing `connected`: any event missed while
+      // disconnected is reconciled first. The snapshot carries `bootstrapJobs` +
+      // executions, so one refresh rehydrates agentRuns too — a missed terminal event
+      // (e.g. a container eviction that failed the run) can't leave a frame stuck on a
+      // stale "bootstrapping…" badge.
+      //
+      // We flip `connected` only AFTER that refresh settles so it means "connected AND
+      // reconciled". Otherwise `board.hydrate`/`agentRuns.hydrate` reconcile with a
+      // snapshot fetched at connect time, which — under load — can resolve AFTER a fresh
+      // live event and clobber it: e.g. `board.hydrate` REPLACES the block list and drops
+      // a just-created provisional bootstrap frame the stale snapshot never saw, so its
+      // live "bootstrapping…" badge flickers out with no further board event to restore
+      // it. Anything acting on a `connected` board (a user, or an e2e spec gating on
+      // `data-connected`) then does so only after this reconcile, so a lagging resync
+      // can't drop the state that action produces. `connected` is still set on failure
+      // (we ARE connected; a transient refresh error must not wedge the indicator/tests).
+      void workspace
+        .refresh()
+        .catch(() => {})
+        .finally(() => {
+          // A workspace switch (or stop()) may have happened while the refresh was in
+          // flight — don't announce a connection for a socket we've since abandoned.
+          if (!stopped && socket && workspace.workspaceId === workspaceId) {
+            connected.value = true
+          }
+        })
     }
     socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '')
     socket.onclose = () => {

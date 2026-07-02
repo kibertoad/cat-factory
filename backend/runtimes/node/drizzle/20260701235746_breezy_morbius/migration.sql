@@ -1,0 +1,1 @@
+ALTER TABLE "merge_threshold_presets" ADD COLUMN "max_tester_quality_iterations" integer DEFAULT 3 NOT NULL;

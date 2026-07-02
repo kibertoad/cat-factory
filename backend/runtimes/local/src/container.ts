@@ -37,6 +37,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
+import { makeInlineHarnessPredicate, wrapResolverWithInlineHarness } from './harnessInline.js'
 import { buildLocalDeployTransport } from './NativeCliDeployTransport.js'
 import { applyLocalDefaults } from './config.js'
 import {
@@ -59,6 +60,7 @@ import {
   type LocalProcessRunnerTransport,
   createLocalProcessTransportFromEnv,
 } from './LocalProcessRunnerTransport.js'
+import { createLocalPreviewTransportFromEnv } from './LocalPreviewTransport.js'
 import { resolveHarnessImage } from './harnessImage.js'
 import { createRuntimeAdapter, resolveRuntimeId, runtimeProfile } from './runtimes/index.js'
 import { createDockerComposeRuntime } from './compose.js'
@@ -174,6 +176,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // endpoints + gates are served through `vcsClient`, GitHub- or GitLab-backed alike.
     ...(gitToken ? { github: { ...base.github, enabled: true } } : {}),
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
+    // With native agents on, the inline LLM steps (requirements reviewer, brainstorm,
+    // task-estimator, inline document kinds) can run on a subscription model through the
+    // developer's ambient `claude`/`codex` CLI too — so a subscription-only preset no longer
+    // strands them (or trips the preset-satisfiability guard). The predicate matches the same
+    // ambient-native vendors the container path allows; `wrapModelProviderResolver` below serves
+    // those refs via the CLI. Off → inline steps degrade to a provider model as on stock Node.
+    ...(nativeAgents
+      ? {
+          agents: { ...base.agents, inlineHarnessRef: makeInlineHarnessPredicate(nativeHarnesses) },
+        }
+      : {}),
     localMode: {
       enabled: true,
       // Surfaced to the SPA so it can label what is stored locally (credentials) vs delegated
@@ -463,6 +476,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         : ['environment-provider'],
       active: localTestInfraSupported ? 'local-compose' : 'environment-provider',
     },
+    // Local mode runs on the developer's own machine, so a built frontend can be served on a
+    // host-reachable URL for a browsable preview — the genuine local/node differentiator over
+    // the Worker's self-contained UI-test container.
+    frontendPreview: { supported: true },
   })
 
   // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with
@@ -533,6 +550,17 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
     // this the clone URL is always github.com, so a GitLab repo can't be cloned).
     ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
+    // Browsable frontend preview (slice 5c): the local Docker/Apple adapter can publish a served
+    // app's port to the host + keep the container alive, so local mode wires the real preview
+    // transport (buildNodeContainer builds the job builder from local's PAT-backed seams). The
+    // capability was already advertised `frontendPreview.supported: true` above.
+    previewTransport: createLocalPreviewTransportFromEnv(env),
+    // Serve ambient-eligible subscription harness refs (Claude Code / Codex) as INLINE CLI
+    // calls, so the inline reviewers/brainstorm/estimator + inline agent kinds run on the
+    // developer's subscription — the inline analogue of the container ambient-auth path.
+    ...(nativeAgents
+      ? { wrapModelProviderResolver: wrapResolverWithInlineHarness(nativeHarnesses) }
+      : {}),
     // Auto-provision the synthetic per-workspace installation so the integration reports
     // connected with no manual connect step.
     ...(githubInstallationRepository ? { githubInstallationRepository } : {}),

@@ -1908,6 +1908,9 @@ export function buildContainer(
       active: 'cloudflare-containers',
     },
     testEnv: { available: ['environment-provider'], active: 'environment-provider' },
+    // The Worker only runs the self-contained UI-test container (torn down with the run); it
+    // has no long-lived host serve, so a browsable frontend preview is unsupported here.
+    frontendPreview: { supported: false },
   })
   const db = env.DB
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database

@@ -29,6 +29,11 @@ interface RemovalSnapshot {
 export const useBoardStore = defineStore('board', () => {
   const api = useApi()
   const toast = useToast()
+  // Stores run outside a component `setup`, so resolve translations through the Nuxt app's
+  // global i18n instance (the same handle `plugins/locale.client.ts` uses) rather than
+  // `useI18n()`, which requires an active component instance.
+  const nuxtApp = useNuxtApp()
+  const tr = (key: string): string => (nuxtApp.$i18n as { t: (k: string) => string }).t(key)
   const blocks = ref<Block[]>([])
 
   // Pure derivations (hierarchy, status/progress, sizing) live in the composable.
@@ -162,7 +167,7 @@ export const useBoardStore = defineStore('board', () => {
     } catch (e) {
       t.epicId = prev
       toast.add({
-        title: 'Could not change epic',
+        title: tr('board.toast.epicFailed'),
         description: e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
@@ -216,7 +221,7 @@ export const useBoardStore = defineStore('board', () => {
       b.parentId = prevParentId
       b.position = prevPosition
       toast.add({
-        title: 'Could not move',
+        title: tr('board.toast.moveFailed'),
         description: e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
@@ -289,7 +294,7 @@ export const useBoardStore = defineStore('board', () => {
     } catch (e) {
       reattach(snap)
       toast.add({
-        title: 'Could not delete',
+        title: tr('board.toast.deleteFailed'),
         description: e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',
@@ -331,8 +336,34 @@ export const useBoardStore = defineStore('board', () => {
   async function updateBlock(id: string, patch: UpdateBlockInput) {
     const b = getBlock(id)
     if (!b) return
+    // Snapshot ONLY the fields this patch touches so a rejected write restores them exactly
+    // (a patch may set several at once) rather than leaving a stale optimistic value stuck on
+    // screen with no feedback — the same rollback contract the other mutations here follow.
+    const prev: Record<string, unknown> = {}
+    const patchRecord = patch as Record<string, unknown>
+    const record = b as unknown as Record<string, unknown>
+    for (const key of Object.keys(patch)) prev[key] = record[key]
     Object.assign(b, patch) // optimistic
-    upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
+    try {
+      upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
+    } catch (e) {
+      // Re-resolve the block: a live event may have replaced its object reference (`upsert`
+      // swaps in a fresh one) while the write was in flight, so `b` can be stale. Only revert
+      // fields that still hold OUR optimistic value, so a newer server value that landed
+      // mid-flight isn't clobbered by the rollback.
+      const cur = getBlock(id) as unknown as Record<string, unknown> | undefined
+      if (cur) {
+        for (const key of Object.keys(patch)) {
+          if (cur[key] === patchRecord[key]) cur[key] = prev[key]
+        }
+      }
+      toast.add({
+        title: tr('board.toast.updateFailed'),
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   /**
@@ -346,7 +377,7 @@ export const useBoardStore = defineStore('board', () => {
       upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
     } catch (e) {
       toast.add({
-        title: 'Could not link tasks',
+        title: tr('board.toast.linkFailed'),
         description: e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',

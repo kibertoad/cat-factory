@@ -1,9 +1,17 @@
 import { join } from 'node:path'
-import { mkdir, opendir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { mkdir, mkdtemp, opendir, rm } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { AgentInfraSpec, AgentJob, AgentResult, InfraSetupRecord } from './job.js'
-import { redactSecrets } from './redact.js'
+import type {
+  AgentInfraSpec,
+  AgentJob,
+  AgentResult,
+  InfraSetupRecord,
+  ServiceInfraSpec,
+} from './job.js'
+import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { captureRedactedOutput, redactSecrets } from './redact.js'
 import {
   cloneRepo,
   commitAll,
@@ -54,26 +62,6 @@ import { log, type Logger } from './logger.js'
 
 const exec = promisify(execFile)
 
-/** Cap on the captured compose output kept on the record (tail-biased — failures show last). */
-const MAX_INFRA_LOG_CHARS = 16_000
-
-/**
- * Combine, redact and tail-bound captured compose stdout+stderr into the stored `logs`
- * string. Keeps the LAST {@link MAX_INFRA_LOG_CHARS} (where a failure's error lives),
- * prefixed with a truncation marker when trimmed. Returns undefined for empty output so
- * the record stays sparse.
- */
-function captureInfraLogs(stdout: unknown, stderr: unknown): string | undefined {
-  const merged = [String(stdout ?? ''), String(stderr ?? '')]
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .join('\n')
-  if (!merged) return undefined
-  const redacted = redactSecrets(merged)
-  if (redacted.length <= MAX_INFRA_LOG_CHARS) return redacted
-  return `…(${redacted.length - MAX_INFRA_LOG_CHARS} earlier chars trimmed)\n${redacted.slice(-MAX_INFRA_LOG_CHARS)}`
-}
-
 /**
  * Bring the service's docker-compose dependencies up (local infra only). Best-effort:
  * runs `docker compose -f <path> up -d --wait` in the checkout. A missing Docker daemon
@@ -88,7 +76,7 @@ function captureInfraLogs(stdout: unknown, stderr: unknown): string | undefined 
  */
 async function standUpInfra(
   dir: string,
-  infra: AgentInfraSpec,
+  infra: ServiceInfraSpec,
   signal: AbortSignal | undefined,
   logger: Logger,
 ): Promise<{ started: boolean; note?: string; record?: InfraSetupRecord }> {
@@ -105,7 +93,7 @@ async function standUpInfra(
       ['compose', '-f', infra.composePath, 'up', '-d', '--wait'],
       { cwd: dir, signal, timeout: 5 * 60_000, maxBuffer: 16 * 1024 * 1024 },
     )
-    const logs = captureInfraLogs(stdout, stderr)
+    const logs = captureRedactedOutput(stdout, stderr)
     return {
       started: true,
       record: {
@@ -123,7 +111,7 @@ async function standUpInfra(
     // so the stored logs explain the failure (a port clash, a pull-auth error, an exited
     // dependency), not just the one-line exit message.
     const e = err as { stdout?: unknown; stderr?: unknown }
-    const logs = captureInfraLogs(e.stdout, e.stderr)
+    const logs = captureRedactedOutput(e.stdout, e.stderr)
     return {
       started: false,
       note,
@@ -139,8 +127,81 @@ async function standUpInfra(
   }
 }
 
+/**
+ * Stand the run's infra up and return a single cleanup handle, dispatching on the spec's
+ * `kind`: the frontend UI-test flow (`kind: 'frontend'`) builds/serves the app + WireMock as
+ * processes (torn down by killing them); the default backend-service flow stands the
+ * docker-compose stack up (torn down with `docker compose down`). Unifying the two here keeps
+ * `runExploreMode` free of the branch and guarantees the matching teardown runs in its finally.
+ *
+ * `dir` is the clone ROOT; `workDir` is the service subtree (equal to `dir` when the run is not
+ * monorepo-scoped). The docker-compose stand-up runs at the root (its `composePath` is
+ * repo-relative), but the FRONTEND stand-up runs in `workDir`: a monorepo frontend's
+ * `package.json` / `outputDir` / `mocks/` all live under the service subtree, so installing,
+ * building, serving and seeding WireMock from the root would target the wrong directory.
+ */
+async function manageInfra(
+  dir: string,
+  workDir: string,
+  infra: AgentInfraSpec,
+  signal: AbortSignal | undefined,
+  onActivity: (() => void) | undefined,
+  logger: Logger,
+): Promise<{
+  note?: string
+  serveUrl?: string
+  record?: InfraSetupRecord
+  cleanup: () => Promise<void>
+}> {
+  if (infra.kind === 'frontend') {
+    // `onActivity` feeds the inactivity watchdog through the frontend build/serve stand-up,
+    // which (unlike docker-compose's 5-min-capped `up`) can run past the inactivity window.
+    // Runs in `workDir` so a monorepo frontend builds/serves from its own package subtree.
+    const fe = await standUpFrontend(workDir, infra, signal, onActivity, logger)
+    return {
+      ...(fe.note ? { note: fe.note } : {}),
+      ...(fe.serveUrl ? { serveUrl: fe.serveUrl } : {}),
+      record: fe.record,
+      cleanup: () => tearDownFrontend(fe.processes, logger),
+    }
+  }
+  const standUp = await standUpInfra(dir, infra, signal, logger)
+  return {
+    ...(standUp.note ? { note: standUp.note } : {}),
+    ...(standUp.record ? { record: standUp.record } : {}),
+    cleanup: () => tearDownInfra(dir, infra),
+  }
+}
+
+/**
+ * Build the dynamic infra notes appended to the agent's user prompt from a stand-up outcome.
+ * A stand-up problem (a failed build / compose) is flagged as a concern to test around; a
+ * frontend serve URL points the UI tester at the app that was just built + served and pre-empts
+ * a live-backend CORS failure being mis-reported as an app defect. Pure (no IO) so the exact
+ * wording + ordering is unit-tested; returns the notes in order (problem first, serve URL next).
+ */
+export function buildInfraNotes(managed: { note?: string; serveUrl?: string }): string[] {
+  const notes: string[] = []
+  if (managed.note) {
+    notes.push(
+      `standing the infra up reported a problem (${managed.note}). Test what you can and ` +
+        `flag any dependency-related gaps as concerns.`,
+    )
+  }
+  if (managed.serveUrl) {
+    notes.push(
+      `The frontend under test is built and served at ${managed.serveUrl}, with its other ` +
+        `backend upstreams handled by WireMock. Drive your UI tests against ${managed.serveUrl}. ` +
+        `If a call to a live backend fails with a CORS / cross-origin error, that is an infra ` +
+        `gap (the backend must allow the ${managed.serveUrl} origin), not an app defect — flag ` +
+        `it as a concern rather than a failing test.`,
+    )
+  }
+  return notes
+}
+
 /** Tear the docker-compose dependencies down (best-effort; a no-op when none were started). */
-async function tearDownInfra(dir: string, infra: AgentInfraSpec): Promise<void> {
+async function tearDownInfra(dir: string, infra: ServiceInfraSpec): Promise<void> {
   if (infra.environment !== 'local' || infra.noInfraDependencies || !infra.composePath) return
   try {
     await exec('docker', ['compose', '-f', infra.composePath, 'down', '-v'], {
@@ -169,9 +230,130 @@ function extractJsonObject(text: string): unknown {
   }
 }
 
+/**
+ * The service work directory for a checkout at `dir`: the monorepo service subtree
+ * (`repo.serviceDirectory`, created if missing) when the job is service-scoped, else the clone
+ * root. Shared so the explore/preview flows derive `workDir` identically.
+ */
+async function deriveWorkDir(dir: string, serviceDirectory: string | undefined): Promise<string> {
+  const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
+  if (serviceDirectory) await mkdir(workDir, { recursive: true })
+  return workDir
+}
+
+/**
+ * Fresh-clone `job.branch` into `dir` and return the derived service work directory. Shared by
+ * the explore and preview flows, which both start from a clean single-branch checkout. (The
+ * coding and persistent-checkout paths keep their own resume / full-clone logic.)
+ */
+async function cloneServiceCheckout(
+  dir: string,
+  job: AgentJob,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  await cloneRepo({
+    repo: { ...job.repo, baseBranch: job.branch },
+    ghToken: job.ghToken,
+    dir,
+    full: job.full,
+    signal,
+  })
+  return deriveWorkDir(dir, job.repo.serviceDirectory)
+}
+
 /** Run one generic agent job end to end, dispatching on `mode`. */
 export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise<AgentResult> {
+  if (job.mode === 'preview') return runPreviewMode(job, opts)
   return job.mode === 'coding' ? runCodingMode(job, opts) : runExploreMode(job, opts)
+}
+
+/**
+ * Decide a preview stand-up's outcome from its result (pure, so the success/failure boundary
+ * is unit-tested without spawning a build). A preview must actually come up: unlike the tester's
+ * "test what you can" fallback, a stand-up that produced no reachable serve URL (failed build /
+ * server never bound) is a hard failure and its `note` becomes the failure reason. When the app
+ * is up but WireMock is not, the `note` rides along as a non-fatal warning.
+ */
+export function buildPreviewOutcome(standUp: {
+  serveUrl?: string
+  note?: string
+}): { ok: true; url: string; note?: string } | { ok: false; error: string } {
+  if (!standUp.serveUrl) {
+    return {
+      ok: false,
+      error: standUp.note
+        ? `the frontend preview did not come up (${standUp.note})`
+        : 'the frontend preview did not come up (the served app was never reachable)',
+    }
+  }
+  return { ok: true, url: standUp.serveUrl, ...(standUp.note ? { note: standUp.note } : {}) }
+}
+
+/**
+ * Long-lived browsable preview (local/node only): clone the frontend branch, then build +
+ * serve the app with its other upstreams mocked using the SAME {@link standUpFrontend} the UI
+ * tester uses — but KEEP IT RUNNING. No agent runs, and the serve / WireMock child processes
+ * are deliberately NOT torn down when the job returns, so the app stays reachable inside the
+ * container until the container itself is stopped (the transport's explicit stop path). Because
+ * the served files must outlive the job, the checkout is cloned into a directory that is NOT
+ * auto-removed (unlike the explore/coding `withWorkspace`); the ephemeral preview container
+ * reclaims it on teardown. A preview that never comes up is a hard failure — the partial
+ * stand-up is torn down and its temp checkout removed so a failed attempt leaks nothing.
+ */
+async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
+  const logger = opts.log ?? log
+  const infra = job.infra
+  if (infra?.kind !== 'frontend') {
+    // Invalid dispatch (a preview job MUST carry the frontend infra spec). No checkout or
+    // processes exist yet, so return the structured hard failure the rest of this flow uses
+    // rather than throwing a bare exception at the job registry.
+    return {
+      error: "invalid preview job: 'infra.kind' must be 'frontend'",
+      failureCause: 'no-usable-output',
+    }
+  }
+  opts.onPhase?.('clone')
+  logger.info('agent(preview): cloning')
+  // Not a `withWorkspace` temp dir: that is removed in a `finally` the moment this function
+  // returns, which would delete the files the kept-alive server serves. The preview container
+  // is single-purpose and torn down on stop, so leaving the checkout in place is intended.
+  const dir = await mkdtemp(join(tmpdir(), 'agent-preview-'))
+  try {
+    const workDir = await cloneServiceCheckout(dir, job, opts.signal)
+
+    opts.onPhase?.('serve')
+    logger.info('agent(preview): building + serving', {
+      serviceDirectory: job.repo.serviceDirectory,
+    })
+    const fe = await standUpFrontend(workDir, infra, opts.signal, opts.onActivity, logger)
+    const infraSetupFields: { infraSetup?: InfraSetupRecord } = fe.record
+      ? { infraSetup: fe.record }
+      : {}
+    const outcome = buildPreviewOutcome(fe)
+    if (!outcome.ok) {
+      // Never came up: tear the partial stand-up down and drop the checkout so a failed preview
+      // leaks neither processes nor disk. The backend surfaces the stand-up record + failure.
+      await tearDownFrontend(fe.processes, logger)
+      await rm(dir, { recursive: true, force: true })
+      return { error: outcome.error, failureCause: 'no-usable-output', ...infraSetupFields }
+    }
+    // Deliberately NOT torn down: the serve/WireMock children outlive this job and keep the app
+    // reachable until the container is stopped. `outcome.note` (WireMock down) is a soft warning.
+    logger.info('agent(preview): serving (kept alive)', { url: outcome.url })
+    return {
+      summary: outcome.note
+        ? `Frontend preview built and served at ${outcome.url} (${outcome.note}).`
+        : `Frontend preview built and served at ${outcome.url}.`,
+      preview: { url: outcome.url },
+      ...infraSetupFields,
+    }
+  } catch (err) {
+    // A throw BEFORE the stand-up handed off (a failed / aborted clone, an mkdir error) would
+    // otherwise leak the checkout that `withWorkspace` normally reclaims — no serve processes
+    // are running yet, so drop the dir and rethrow for the job registry to record the failure.
+    await rm(dir, { recursive: true, force: true })
+    throw err
+  }
 }
 
 /**
@@ -186,6 +368,10 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
     { persistent: job.persistentCheckout === true, prefix: 'agent-explore', repo: job.repo },
     async (dir) => {
       opts.onPhase?.('clone')
+      // Monorepo: run with cwd set to the service subtree (created if missing), mirroring the
+      // coding flow so a service-scoped exploration sees the right subdirectory.
+      const serviceDirectory = job.repo.serviceDirectory
+      let workDir: string
       if (job.persistentCheckout) {
         logger.info('agent(explore): preparing reused checkout')
         await prepareExistingCheckout({
@@ -197,22 +383,11 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           existing: true,
           signal: opts.signal,
         })
+        workDir = await deriveWorkDir(dir, serviceDirectory)
       } else {
         logger.info('agent(explore): cloning')
-        await cloneRepo({
-          repo: { ...job.repo, baseBranch: job.branch },
-          ghToken: job.ghToken,
-          dir,
-          full: job.full,
-          signal: opts.signal,
-        })
+        workDir = await cloneServiceCheckout(dir, job, opts.signal)
       }
-
-      // Monorepo: run with cwd set to the service subtree (created if missing), mirroring
-      // the coding flow so a service-scoped exploration sees the right subdirectory.
-      const serviceDirectory = job.repo.serviceDirectory
-      const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
-      if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
       // Optional infra stand-up (the tester): bring the service's docker-compose
       // dependencies up at the repo root for the duration of the run, tearing them down in
@@ -221,18 +396,21 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
       // The run-mode guidance itself lives in the backend-composed system/user prompt; the
       // harness only manages the lifecycle + this dynamic stand-up note.
       const infra = job.infra
-      const standUp = infra
-        ? await standUpInfra(dir, infra, opts.signal, logger)
-        : { started: false }
-      const userPrompt = standUp.note
-        ? `${job.userPrompt}\n\nNote: standing the infra up reported a problem (${standUp.note}). ` +
-          `Test what you can and flag any dependency-related gaps as concerns.`
+      const managed = infra
+        ? await manageInfra(dir, workDir, infra, opts.signal, opts.onActivity, logger)
+        : undefined
+      // Fold the stand-up outcome into the agent prompt: a stand-up problem (build/compose
+      // failure) is flagged as a concern; a frontend serve URL points the UI tester at the
+      // app it just built + served (the backend env resolution already reached the harness).
+      const infraNotes = managed ? buildInfraNotes(managed) : []
+      const userPrompt = infraNotes.length
+        ? `${job.userPrompt}\n\nNote: ${infraNotes.join(' ')}`
         : job.userPrompt
-      // The compose stand-up record (success or failure, with its captured logs) rides back on
-      // EVERY result branch — the backend surfaces it on the Tester step regardless of whether
-      // the agent then produced a usable report.
-      const infraSetupFields: { infraSetup?: InfraSetupRecord } = standUp.record
-        ? { infraSetup: standUp.record }
+      // The stand-up record (success or failure, with its captured logs) rides back on EVERY
+      // result branch — the backend surfaces it on the Tester step regardless of whether the
+      // agent then produced a usable report.
+      const infraSetupFields: { infraSetup?: InfraSetupRecord } = managed?.record
+        ? { infraSetup: managed.record }
         : {}
 
       try {
@@ -350,14 +528,21 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         // Stamp the run's actual environment authoritatively onto the structured result when
         // infra was managed (the tester): which env the suite ran in is decided by the job's
         // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
-        // even when the model omits it from its JSON (or a structured repair drops it).
-        if (infra && typeof custom === 'object') {
-          ;(custom as Record<string, unknown>).environment = infra.environment
+        // even when the model omits it from its JSON (or a structured repair drops it). A
+        // frontend run tests the app against its live ephemeral backend(s), so it reports
+        // `ephemeral` (the TestReport env vocabulary has no separate frontend value).
+        const reportedEnvironment = infra
+          ? infra.kind === 'frontend'
+            ? 'ephemeral'
+            : infra.environment
+          : undefined
+        if (reportedEnvironment && typeof custom === 'object') {
+          ;(custom as Record<string, unknown>).environment = reportedEnvironment
         }
         logger.info('agent(explore): done (structured)', { ...stats })
         return { summary, custom, stats, ...(usage ? { usage } : {}), ...infraSetupFields }
       } finally {
-        if (infra) await tearDownInfra(dir, infra)
+        if (managed) await managed.cleanup()
       }
     },
   )

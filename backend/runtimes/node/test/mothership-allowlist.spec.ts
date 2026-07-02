@@ -168,7 +168,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `put` is now allow-listed (the tracker-settings editor); `get` was already remote.
   trackerSettingsRepository: {},
   serviceRepository: {
-    get: 'pending',
+    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock` are allow-listed (the org-catalog mount
+    // flow + board composition + run-path frame resolution). The remaining CRUD + `getByRepo`
+    // (the GitHub-sync repo→service link) stay off the SPA path — a later slice.
     listByFrameBlocks: 'pending',
     getByRepo: 'pending',
     insert: 'pending',
@@ -177,15 +179,17 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     deleteMany: 'pending',
   },
   workspaceMountRepository: {
+    // `listByWorkspace`/`countByServiceIds`/`get`/`upsert`/`update`/`remove` are allow-listed (the
+    // shared-service mount management surface). The real-time fan-out reads
+    // (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
+    // (`removeByServices`) stay off the SPA path — mothership-internal / a later slice.
     listByService: 'pending',
     listWorkspaceIdsMountingBlock: 'pending',
-    get: 'pending',
-    upsert: 'pending',
-    update: 'pending',
-    remove: 'pending',
     removeByServices: 'pending',
   },
-  requirementReviewRepository: { deleteByBlock: 'pending' },
+  // The whole requirement-review repo is now remote (getByBlock/get/upsert were exposed earlier;
+  // deleteByBlock — the pre-review-run drop — completes it with the advanced-review slice).
+  requirementReviewRepository: {},
   kaizenGradingRepository: {
     get: 'pending',
     listByExecution: 'pending',
@@ -194,36 +198,25 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     claim: 'sweeper',
   },
   kaizenVerifiedComboRepository: { upsert: 'pending', listByWorkspace: 'pending' },
-  consensusSessionRepository: {
-    get: 'pending',
-    getByStep: 'pending',
-    getByBlock: 'pending',
-    upsert: 'pending',
-  },
-  clarityReviewRepository: { get: 'pending', upsert: 'pending', deleteByBlock: 'pending' },
-  brainstormSessionRepository: {
-    get: 'pending',
-    upsert: 'pending',
-    deleteByBlockStage: 'pending',
-  },
+  // The advanced review / structured-dialogue session surfaces are now fully remote (run + re-read
+  // + persist/replace as the window iterates) — get/getByStep/getByBlock/upsert for consensus,
+  // get/upsert/deleteBy* for clarity + brainstorm (getByBlock/getByBlockStage were already exposed).
+  consensusSessionRepository: {},
+  clarityReviewRepository: {},
+  brainstormSessionRepository: {},
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole merge-preset repo is remote.
   mergePresetRepository: {},
   // `upsert` is now allow-listed (the workspace-settings panel save); `get` was already remote.
   workspaceSettingsRepository: {},
-  observabilityConnectionRepository: { get: 'pending', upsert: 'pending', delete: 'pending' },
-  incidentEnrichmentConnectionRepository: {
-    get: 'pending',
-    upsert: 'pending',
-    delete: 'pending',
-  },
+  // The whole observability / incident-enrichment connection + per-block release-health config
+  // surface is now allow-listed (the post-release-health settings panels' get/upsert/delete),
+  // so these repos are fully remote — get/getByBlock/listByWorkspace/delete via the `workspace`
+  // rule, the record-based `upsert` via the `workspaceField` rule.
+  observabilityConnectionRepository: {},
+  incidentEnrichmentConnectionRepository: {},
   accountSettingsRepository: { getByAccount: 'pending', upsert: 'pending', listAll: 'sweeper' },
-  releaseHealthConfigRepository: {
-    getByBlock: 'pending',
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    delete: 'pending',
-  },
+  releaseHealthConfigRepository: {},
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
   // --- non-core repositories -----------------------------------------------------
   bootstrapJobRepository: {
@@ -274,7 +267,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   environmentRegistryRepository: {
     insert: 'pending',
     update: 'pending',
-    listByWorkspace: 'pending',
+    // listByWorkspace is now allow-listed (REMOTE_PERSISTENCE_METHODS) — the frontend UI-test
+    // gate's batch env read + the environments list endpoint. Classified there, not here.
     listExpired: 'sweeper',
     softDelete: 'pending',
   },

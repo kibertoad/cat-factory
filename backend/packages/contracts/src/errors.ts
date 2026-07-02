@@ -12,6 +12,11 @@
  */
 export const CONFLICT_REASONS = [
   'providers_unconfigured',
+  // A pipeline has INLINE steps (e.g. the requirements reviewer) whose resolved model can't run
+  // inline — a subscription-only model with no inline-harness support on this deployment. The
+  // remedy differs from `providers_unconfigured` (pick an inline-capable preset / model), so the
+  // SPA steers the user to the model preset rather than the provider-key setup.
+  'preset_unsatisfiable',
   'dependencies_unmet',
   'task_limit_reached',
   'tester_infra_unsupported',
@@ -25,6 +30,9 @@ export const CONFLICT_REASONS = [
   // No workspace handler is configured for a service's declared provision type (the
   // per-service provision-type model — the deployer/tester can't stand the env up).
   'provision_type_unhandled',
+  // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) was started on a frame
+  // with no UI to exercise — neither a `frontend` frame nor a frame a frontend links to.
+  'visual_pipeline_no_frontend',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

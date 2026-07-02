@@ -62,6 +62,52 @@ describe('buildLocalEnv', () => {
     // ...but the host-alias hint (which Apple most needs) is always present.
     expect(out).toContain('# LOCAL_HARNESS_HOST_ALIAS=')
   })
+
+  it('defaults to pool mode: native knobs commented + warm-pool pointer', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github' })
+    expect(out).toContain('# LOCAL_NATIVE_AGENTS=')
+    expect(out).toContain('# LOCAL_HARNESS_ENTRY=')
+    expect(out).toMatch(/PREWARMED DOCKER POOL/)
+    // No active native vars in pool mode.
+    expect(out).not.toMatch(/^LOCAL_NATIVE_AGENTS=/m)
+  })
+
+  it('writes active native vars + applicable models in native mode', () => {
+    const out = buildLocalEnv({
+      ...base,
+      provider: 'github',
+      executionMode: 'native',
+      nativeHarnesses: ['claude-code'],
+      harnessEntry: '/opt/harness/server.js',
+    })
+    expect(out).toMatch(/^LOCAL_NATIVE_AGENTS=claude-code$/m)
+    expect(out).toMatch(/^LOCAL_HARNESS_ENTRY=\/opt\/harness\/server\.js$/m)
+    // Only claude-code models are named as running natively.
+    expect(out).toContain('Claude Opus 4.8 (claude-opus)')
+    expect(out).not.toContain('GPT-5.5')
+  })
+
+  it('native mode with no harnesses named enables both', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github', executionMode: 'native' })
+    expect(out).toMatch(/^LOCAL_NATIVE_AGENTS=claude-code,codex$/m)
+  })
+
+  it('surfaces commonly-useful optional settings (commented, with defaults)', () => {
+    const out = buildLocalEnv({ ...base, provider: 'github' })
+    expect(out).toContain('# AUTH_PASSWORD_ENABLED=true')
+    expect(out).toContain('# AUTH_OPEN_SIGNUP=true')
+    expect(out).toContain('# LOCAL_HARNESS_IMAGE_REFRESH=off')
+    expect(out).toContain('# LANGFUSE_ENABLED=true')
+    expect(out).toContain('# SLACK_ENABLED=true')
+    expect(out).toContain('# CONSENSUS_ENABLED=true')
+    // GitLab-only knob is absent for a GitHub deployment.
+    expect(out).not.toContain('GITLAB_API_BASE')
+  })
+
+  it('adds the GitLab API base hint only for a gitlab deployment', () => {
+    const out = buildLocalEnv({ ...base, provider: 'gitlab' })
+    expect(out).toContain('# GITLAB_API_BASE=')
+  })
 })
 
 describe('buildFrontendEnv', () => {

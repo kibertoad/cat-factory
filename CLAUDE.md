@@ -220,6 +220,11 @@ Keep the symmetric D1 migration (a fresh numbered `*.sql` under
 
 ## Layout
 
+> Naming/vocabulary traps (block vs task vs card, `runtimes/cloudflare` = `@cat-factory/worker`,
+> runner/executor/transport, where gates / agent kinds / migration parity live) are resolved in
+> [`docs/glossary.md`](./docs/glossary.md). Each `backend/packages/*` and `backend/runtimes/*`
+> also carries an `AGENTS.md` with its public entry point + a "where things live" map.
+
 One pnpm workspace (single root lockfile). Packages are sorted by visibility:
 **published libraries** live in `backend/packages/*` + `frontend/app`, the
 **runtime facades** (one per deployment target) in `backend/runtimes/*`, **private
@@ -276,6 +281,32 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
     opt-in AWS Bedrock resolver (`@ai-sdk/amazon-bedrock`) with a **supported-model
     allow-list** that throws `Unsupported Bedrock model` for anything outside it.
     Mixed into a facade's registry only when configured.
+  - `backend/packages/provider-cloudflare` — `@cat-factory/provider-cloudflare`, the
+    opt-in **Cloudflare Workers AI** resolver added to a `CompositeModelProvider` (the
+    in-process binding on the Worker, OpenAI-compatible REST elsewhere). Like the other
+    `provider-*` packages, mixed into a facade's registry only when configured.
+  - `backend/packages/provider-s3` — `@cat-factory/provider-s3`, the opt-in **AWS S3**
+    blob backend implementing the kernel `BinaryBlobBackend` port over an S3 bucket
+    (the alternative to the runtime-default blob storage).
+  - `backend/packages/consensus` — `@cat-factory/consensus`, the opt-in
+    **consensus-orchestration** mechanism (specialist panel / debate / ranked voting via
+    `ConsensusAgentExecutor` + `src/strategies/*`) that fans an agent step across several
+    runs and reconciles them, gated by a task-estimate. Wired only when enabled.
+  - `backend/packages/gitlab` — `@cat-factory/gitlab`, the opt-in **GitLab VCS provider**:
+    implements the provider-neutral `VcsClient`/webhook/provisioning ports against the
+    GitLab REST v4 API (`FetchGitLabClient`) and self-registers via
+    `registerVcsProvider('gitlab')`. Kernel + contracts only; the GitHub analogue lives in
+    `@cat-factory/server`/`integrations`.
+  - `backend/packages/observability-langfuse` — `@cat-factory/observability-langfuse`,
+    an opt-in **Langfuse trace sink**: a fetch-based `LlmTraceSink` that streams LLM
+    generations + container tool spans to Langfuse, running unchanged on both the Worker
+    (workerd) and Node facades.
+  - `backend/packages/sandbox` — `@cat-factory/sandbox`, the **parallel prompt/model
+    testing surface** (versioned prompt candidates, experiment matrices, judge + objective
+    grading), deliberately isolated from the core product so it can be extracted;
+    `backend/packages/sandbox-fixtures` — `@cat-factory/sandbox-fixtures`, the hand-authored
+    graded no-repo fixtures (inline requirements/clarity/code-review/architecture inputs +
+    expectations) the sandbox grades against.
   - `backend/packages/gates` — `@cat-factory/gates`, the **built-in polling-gate suite**
     (`ci`, `conflicts`, `post-release-health` + the `on-call` escalation), authored entirely
     through the public `registerGate` seam (kernel + contracts only, never the engine). A
@@ -356,6 +387,17 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   `scripts/publish-image.sh`).
 - `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
   private, not published.
+- `backend/internal/smoketest-harness` — `@cat-factory/smoketest-harness`, a headless
+  **smoketest** for the Pi coding agent (`cat-smoke`): runs real coding tasks through the
+  actual Pi setup against Cloudflare AI, captures the full transcript, and flags breakage /
+  dead-ends / non-productive loops (no grading — that's the benchmark harness). Private.
+- `backend/internal/deploy-harness` — `@cat-factory/deploy-harness`, the container payload
+  that renders a service's **Kubernetes manifests** (kubectl/kustomize/helm) and applies
+  them to a per-PR namespace for ephemeral environments. Carries no secrets (the per-job
+  cluster + git tokens arrive in the job body). Private; its own Docker image.
+- `backend/internal/e2e` — `@cat-factory/e2e`, the **Playwright end-to-end suite** (see
+  "End-to-end (assembled-product) coverage" below): a real Chromium drives the real SPA
+  against a real Node backend, only the external deps faked. Private.
 - `backend/internal/conformance` — `@cat-factory/conformance`, the private
   **cross-runtime conformance suite** + the single canonical deterministic
   `FakeAgentExecutor`. `defineConformanceSuite(harness)` runs the key backend
@@ -1144,6 +1186,36 @@ with those fakes injected); the full picture is in [`backend/internal/e2e/README
   an otherwise-green PR. Promote it into `test-gate.needs` only once it has earned trust
   (see the README's promotion checklist).
 
+### A flaky e2e test is a BLOCKING bug — investigate and deflake, NEVER retry
+
+**A flaky e2e spec is a blocking issue that must ALWAYS be investigated and deflaked at its
+root cause — it can NEVER be "just retried" until it goes green, and a green-on-retry run is
+NOT a pass.** This is an absolute rule. Playwright is configured to enforce it
+(`failOnFlakyTests: true` in `playwright.config.ts`): a spec that fails on the first attempt
+and passes on a retry reports the shard **RED**, on purpose. The retry exists ONLY to capture
+the trace/video for diagnosis — it does **not** rescue the run. So when you see a red e2e
+shard, or a "N flaky" line in the report, treat it exactly like a hard failure:
+
+- **Do NOT re-run CI hoping for green, do NOT bump `retries`, do NOT `test.skip`/`test.fixme`
+  the spec, and do NOT dismiss it as "just a browser/boot flake."** "It passed the second
+  time" is a failed task, not a completed one. The non-blocking `Test e2e` job means a flake
+  can't _stop a merge_, but that is a safety net for infra hiccups, NOT permission to ignore a
+  flake — an intermittent RED is a signal to fix, every time.
+- **Reproduce, then root-cause.** A flake almost always exposes a REAL race in the product,
+  not "a slow test": a live event applied between a snapshot's fetch and its store-commit
+  (see the bootstrap-failure flake — a stale on-connect resync dropped a live-added terminal
+  run in `agentRuns.hydrate`), a subscribe-after-broadcast gap, a status that renders from a
+  clobbered store. Reproduce it (locally you can start Postgres + the built frontend/backend
+  and run the single spec with `--repeat-each` under load), find the ordering hazard, and
+  **fix the SOURCE** — usually a frontend store reconcile or a `helpers.ts` readiness gate,
+  occasionally the backend event path. Add a unit test that pins the race so it can't return.
+- **Never paper over it in the spec.** No fixed `sleep`, no bumped per-assertion timeout to
+  "give it more time," no reload to re-pull the snapshot (that hides exactly the live-push bug
+  the suite exists to catch). Web-first assertions on the named `helpers.ts` timeouts only.
+- **The bar for "fixed" is deterministic, not lucky:** the spec must pass a high-count
+  `--repeat-each` locally AND the root-cause fix (with its regression test) must be in the
+  same change. Only then is the flake closed.
+
 ## Internationalization (i18n)
 
 All user-facing copy in the SPA is translatable via **`@nuxtjs/i18n`** (vue-i18n under
@@ -1280,6 +1352,18 @@ string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
    indirectly (the `CONFLICT_TITLE_KEYS` Record, keys passed as string literals to
    `usePipelineErrorToast().present(...)`), which the scanner can't see as used — so an
    unused-key hard gate would fail spuriously and fight the incremental migration.
+
+4. A **locale-parity** CI check couples translations to `en.json` edits: a PR that adds,
+   changes, or removes an `en.json` message key MUST make the SAME change in every other locale
+   (`es/fr/he/ja/pl/tr/uk`), else it fails. It runs in the `build-typecheck` job via
+   `node frontend/app/scripts/i18n-locale-parity.mjs --since origin/<base>` (also
+   `pnpm --filter @cat-factory/app run i18n:parity`). This is **change-coupling against the PR
+   merge-base**, NOT full key-parity: it enforces ONLY the keys THIS PR touched in `en`, so the
+   pre-existing translation lag on untouched keys is left alone (it does not force a mass
+   back-translation). `@<key>` description siblings are en-only and ignored. Off a PR (no base
+   ref) it passes. **Consequence for the incremental rule below:** you may still add `en` keys
+   ahead of the components that use them, but when you do, add the translated value to all
+   locales in the SAME PR — an `en`-only string edit now fails CI.
 
 Migration is incremental — `usePipelineErrorToast` is the pilot; most components still hold
 inline strings, so **when you touch a component, lift its visible copy into the catalog**

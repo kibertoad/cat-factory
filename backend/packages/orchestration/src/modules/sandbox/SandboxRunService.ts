@@ -64,6 +64,11 @@ export interface SandboxRunServiceDependencies {
   resolveModelId?: (modelId: string | undefined) => ModelRef | undefined
   /** Routing default ref, used to degrade subscription models for these inline calls. */
   defaultModelRef?: ModelRef
+  /**
+   * Whether a subscription harness ref can run as an INLINE call in this deployment (local
+   * mode's ambient CLI). Keeps it instead of degrading to the default. Absent → degrade.
+   */
+  runsInline?: (ref: ModelRef) => boolean
 }
 
 /** Per-cell resolved prompt (the system text under test + its frozen label). */
@@ -339,7 +344,12 @@ export class SandboxRunService {
   /** A catalog id → inline-servable {@link ModelRef} (subscription models degrade to the default). */
   private refFor(modelId: string): ModelRef {
     const resolved = this.deps.resolveModelId?.(modelId) ?? parseModelCatalogId(modelId)
-    return inlineModelRef(resolved, this.deps.defaultModelRef ?? resolved)
+    const runsInline = this.deps.runsInline
+    return inlineModelRef(
+      resolved,
+      this.deps.defaultModelRef ?? resolved,
+      runsInline ? { runsInline } : {},
+    )
   }
 
   private detail(workspaceId: string, experimentId: string): Promise<SandboxExperimentDetail> {

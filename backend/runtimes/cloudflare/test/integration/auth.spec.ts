@@ -40,6 +40,8 @@ const INFRASTRUCTURE = {
     active: 'environment-provider',
     available: ['environment-provider'],
   },
+  // The Worker serves only the self-contained UI-test container, so a browsable preview is off.
+  frontendPreview: { supported: false },
 }
 
 function fetchWith(
