@@ -25,6 +25,8 @@ export {
   ExecutionService,
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
+export type { TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
+export type { TesterQualityOutcome } from './modules/execution/testerQuality.logic.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
 // The gate / step-resolver extension seams live in @cat-factory/kernel (so a deployment
 // package can register one without depending on this package); re-exported here for

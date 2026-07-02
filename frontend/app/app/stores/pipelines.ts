@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import type { ConsensusStepConfig, StepGating } from '~/types/consensus'
+import type { TesterQualityConfig } from '@cat-factory/contracts'
 import { companionForProducer, uid } from '~/utils/catalog'
 import { useWorkspaceStore } from '~/stores/workspace'
 
@@ -59,6 +60,13 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * a `coder` step; `false` disables the companion there (default/true ⇒ enabled).
    */
   const draftFollowUps = ref<(boolean | null)[]>([])
+  /**
+   * Per-step test quality-control companion config, kept index-aligned with `draft`. Only
+   * meaningful on a Tester step (`tester-api`/`tester-ui`); `null`/absent means "enabled, no
+   * gating" (the QC companion is on by default), `{ enabled: false }` disables it, and an
+   * entry with `gating` makes it conditional on the task estimate.
+   */
+  const draftTesterQuality = ref<(TesterQualityConfig | null)[]>([])
   /** Organizational labels for the pipeline being assembled/edited. */
   const draftLabels = ref<string[]>([])
   const draftName = ref('New pipeline')
@@ -84,6 +92,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus.value.splice(index, 0, null)
     draftGating.value.splice(index, 0, null)
     draftFollowUps.value.splice(index, 0, null)
+    draftTesterQuality.value.splice(index, 0, null)
   }
 
   function addToDraft(kind: AgentKind) {
@@ -98,6 +107,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus.value.splice(index, 1)
     draftGating.value.splice(index, 1)
     draftFollowUps.value.splice(index, 1)
+    draftTesterQuality.value.splice(index, 1)
   }
 
   function moveInDraft(from: number, to: number) {
@@ -116,6 +126,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftGating.value.splice(to, 0, gat ?? null)
     const [fu] = draftFollowUps.value.splice(from, 1)
     draftFollowUps.value.splice(to, 0, fu ?? null)
+    const [tq] = draftTesterQuality.value.splice(from, 1)
+    draftTesterQuality.value.splice(to, 0, tq ?? null)
   }
 
   /** Whether the producer step at `index` currently has its companion attached after it. */
@@ -191,6 +203,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus.value = reorder(draftConsensus.value)
     draftGating.value = reorder(draftGating.value)
     draftFollowUps.value = reorder(draftFollowUps.value)
+    draftTesterQuality.value = reorder(draftTesterQuality.value)
   }
 
   /** Toggle the consensus mechanism on the draft step at `index` (default config / off). */
@@ -214,6 +227,33 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftFollowUps.value[index] = draftFollowUps.value[index] === false ? null : false
   }
 
+  /**
+   * Toggle the test quality-control companion on the draft (Tester) step at `index`. The
+   * companion is enabled by default (a `null` entry), so the first toggle disables it
+   * (`{ enabled: false }`, dropping any gating) and the next restores the default.
+   */
+  function toggleDraftTesterQuality(index: number) {
+    draftTesterQuality.value[index] =
+      draftTesterQuality.value[index]?.enabled === false ? null : { enabled: false }
+  }
+
+  /**
+   * Toggle estimate gating on/off for the QC companion on the draft (Tester) step at `index`.
+   * A no-op while the companion is disabled (nothing to gate). Enabling gating pins the config
+   * to `{ enabled: true, gating }` so the thresholds are editable; disabling drops back to the
+   * default `null` (enabled, ungated).
+   */
+  function toggleDraftTesterQualityGating(index: number) {
+    const cur = draftTesterQuality.value[index]
+    if (cur?.enabled === false) return
+    draftTesterQuality.value[index] = cur?.gating?.enabled
+      ? null
+      : {
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.5, minImpact: 0.5, onMissingEstimate: 'run' },
+        }
+  }
+
   /** Enable/disable the draft step at `index` without removing it. */
   function toggleDraftEnabled(index: number) {
     draftEnabled.value[index] = draftEnabled.value[index] === false
@@ -227,6 +267,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus.value = []
     draftGating.value = []
     draftFollowUps.value = []
+    draftTesterQuality.value = []
     draftLabels.value = []
     draftName.value = 'New pipeline'
     editingId.value = null
@@ -241,6 +282,9 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus.value = pipeline.agentKinds.map((_, i) => pipeline.consensus?.[i] ?? null)
     draftGating.value = pipeline.agentKinds.map((_, i) => pipeline.gating?.[i] ?? null)
     draftFollowUps.value = pipeline.agentKinds.map((_, i) => pipeline.followUps?.[i] ?? null)
+    draftTesterQuality.value = pipeline.agentKinds.map(
+      (_, i) => pipeline.testerQuality?.[i] ?? null,
+    )
     draftLabels.value = [...(pipeline.labels ?? [])]
     draftName.value = pipeline.name
     editingId.value = pipeline.id
@@ -269,6 +313,12 @@ export const usePipelinesStore = defineStore('pipelines', () => {
       // explicit `false` opt-outs are worth persisting).
       ...(draftFollowUps.value.some((f) => f === false)
         ? { followUps: [...draftFollowUps.value] }
+        : {}),
+      // Only send testerQuality when at least one Tester step deviates from the default
+      // (companion disabled, or an estimate gate configured) — the default (null/enabled,
+      // ungated) is not worth persisting.
+      ...(draftTesterQuality.value.some((q) => q?.enabled === false || q?.gating?.enabled)
+        ? { testerQuality: [...draftTesterQuality.value] }
         : {}),
       // Only send labels when there are any.
       ...(draftLabels.value.length ? { labels: [...draftLabels.value] } : {}),
@@ -342,6 +392,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftConsensus,
     draftGating,
     draftFollowUps,
+    draftTesterQuality,
     draftLabels,
     draftName,
     editingId,
@@ -357,6 +408,8 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     toggleDraftGating,
     toggleDraftGate,
     toggleDraftFollowUps,
+    toggleDraftTesterQuality,
+    toggleDraftTesterQualityGating,
     toggleDraftEnabled,
     toggleDraftConsensus,
     setDraftConsensus,

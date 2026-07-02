@@ -1161,6 +1161,9 @@ export class ExecutionService {
     return {
       agentKinds: steps.map((s) => s.agentKind),
       gating: steps.map((s) => s.gating ?? null),
+      // The QC companion's live step-state carries the same `gating` config the pipeline set, so
+      // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
+      testerQuality: steps.map((s) => s.testerQuality ?? null),
     }
   }
 

@@ -160,7 +160,10 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
-import { TesterQualityReviewService } from './modules/execution/TesterQualityReviewService.js'
+import {
+  TesterQualityReviewService,
+  type TesterQualityReviewer,
+} from './modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
@@ -583,6 +586,14 @@ export interface CoreDependencies {
    * uses the default ref above.
    */
   requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Override the test quality-control companion's inline reviewer. Normally `createCore`
+   * builds a {@link TesterQualityReviewService} from the model-provider deps; injecting a
+   * reviewer here replaces that (the cross-runtime conformance suite drives the full QC loop
+   * through a deterministic fake reviewer this way). Absent ⇒ the reviewer is built from the
+   * model deps, or is a pass-through when no model resolves.
+   */
+  testerQualityReviewer?: TesterQualityReviewer
   /**
    * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as
    * an INLINE LLM call in this deployment — true only in local mode, where the developer's
@@ -2111,7 +2122,8 @@ export function createCore(dependencies: CoreDependencies): Core {
     // The test quality-control companion's inline reviewer, resolved like every other inline
     // review (block pin → workspace preset → routing default). Built only when a model
     // provider is available; absent → the Tester gate's QC step is a pass-through.
-    testerQualityReviewer: createTesterQualityReviewer(dependencies),
+    testerQualityReviewer:
+      dependencies.testerQualityReviewer ?? createTesterQualityReviewer(dependencies),
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,
     kaizenScheduler: kaizen?.service,

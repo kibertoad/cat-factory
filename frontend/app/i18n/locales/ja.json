@@ -2576,6 +2576,10 @@
       "consensusRevertTooltip": "コンセンサスが有効です。クリックして単一エージェントに戻します。",
       "followUpEnableTooltip": "フォローアップコンパニオンは無効です。クリックして有効化します(Coderが未解決事項/質問を提示)。",
       "followUpDisableTooltip": "フォローアップコンパニオンが有効です。Coderが未解決事項/サブタスク/質問を提示します。クリックして無効化します。",
+      "testerQualityEnableTooltip": "テスト品質コンパニオンは無効です。クリックして有効化します（レポートのカバレッジを監査し、不足があればテスターを再実行します）。",
+      "testerQualityDisableTooltip": "テスト品質コンパニオンは有効です。承認前にレポートのカバレッジを監査し、不足があればテスターを再実行します。クリックして無効化します。",
+      "testerQualityLabel": "テスト品質コンパニオン",
+      "testerQualityGateTooltip": "タスク見積もりがしきい値を超えた場合のみ品質監査を実行します（前段にタスク見積もりが必要）",
       "moveUp": "ステップを上に移動",
       "moveDown": "ステップを下に移動",
       "removeStep": "このステップをパイプラインから削除",
@@ -3216,6 +3220,15 @@
       "completed": "完了",
       "failed": "失敗",
       "addressed": "対応中"
+    },
+    "quality": {
+      "heading": "カバレッジレビュー",
+      "reruns": "品質主導のテスター再実行",
+      "rerunCount": "{attempts}/{max} 回再実行",
+      "exceeded": "予算を使い切りました",
+      "adequate": "カバレッジは十分です",
+      "inadequate": "カバレッジの不足が見つかりました",
+      "gaps": "解消すべき不足"
     },
     "empty": {
       "title": "テストレポートはまだありません。",

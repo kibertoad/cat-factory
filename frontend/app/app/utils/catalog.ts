@@ -313,6 +313,15 @@ export function isConsensusEligibleKind(kind: string): boolean {
 }
 
 /**
+ * Whether an agent kind is one of the Tester gate kinds (API or UI). Mirrors the backend
+ * `isTesterKind`; used by the pipeline builder to surface the test quality-control companion
+ * toggle only on Tester steps.
+ */
+export function isTesterKind(kind: string): boolean {
+  return kind === 'tester-api' || kind === 'tester-ui'
+}
+
+/**
  * Display metadata for the engine-driven "system" kinds — the gate/automation
  * steps (blueprint mapper, conflicts gate + resolver, CI gate + fixer, merger)
  * that appear in seeded pipelines and run timelines but are NOT user-addable

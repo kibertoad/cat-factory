@@ -122,6 +122,7 @@ export function makeConformanceApp(
     deployJobClient?: CoreDependencies['deployJobClient']
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
+    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   },
 ): ConformanceApp {
   // Record emitted run snapshots so the suite can assert intermediate transitions
@@ -162,6 +163,9 @@ export function makeConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
+    // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
+    // full QC loop is driven against real Postgres without a model, identically to the Worker.
+    ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
     // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
     // the suite drives the container render path through Node's wiring, identically to the Worker.
     ...(opts?.deployJobClient ? { deployJobClient: opts.deployJobClient } : {}),

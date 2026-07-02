@@ -2563,6 +2563,10 @@
       "consensusRevertTooltip": "Konsensus włączony. Kliknij, aby wrócić do pojedynczego agenta.",
       "followUpEnableTooltip": "Towarzysz uzupełniający wyłączony. Kliknij, aby włączyć (Coder wykrywa niedokończone wątki / pytania).",
       "followUpDisableTooltip": "Towarzysz uzupełniający włączony. Coder wykrywa niedokończone wątki / podzadania / pytania; kliknij, aby wyłączyć.",
+      "testerQualityEnableTooltip": "Towarzysz jakości testów wyłączony. Kliknij, aby włączyć (audytuje pokrycie raportu i ponawia Testera przy lukach).",
+      "testerQualityDisableTooltip": "Towarzysz jakości testów włączony. Audytuje pokrycie raportu przed zatwierdzeniem i ponawia Testera przy lukach; kliknij, aby wyłączyć.",
+      "testerQualityLabel": "Towarzysz jakości testów",
+      "testerQualityGateTooltip": "Uruchamiaj audyt jakości tylko, gdy szacowanie zadania przekroczy próg (wymaga wcześniejszego Estymatora zadań)",
       "moveUp": "Przesuń krok w górę",
       "moveDown": "Przesuń krok w dół",
       "removeStep": "Usuń ten krok z pipeline'u",
@@ -3203,6 +3207,15 @@
       "completed": "Ukończono",
       "failed": "Niepowodzenie",
       "addressed": "Naprawia"
+    },
+    "quality": {
+      "heading": "Przegląd pokrycia",
+      "reruns": "Ponowne uruchomienia Testera wywołane jakością",
+      "rerunCount": "{attempts}/{max} ponowne uruchomienie",
+      "exceeded": "Budżet wyczerpany",
+      "adequate": "Pokrycie wystarczające",
+      "inadequate": "Znaleziono luki w pokryciu",
+      "gaps": "Luki do zamknięcia"
     },
     "empty": {
       "title": "Brak raportu z testów.",
