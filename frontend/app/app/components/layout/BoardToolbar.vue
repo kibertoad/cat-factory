@@ -6,6 +6,7 @@ const ui = useUiStore()
 const board = useBoardStore()
 const execution = useExecutionStore()
 const workspace = useWorkspaceStore()
+const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
 const toast = useToast()
 const { t, n } = useI18n()
@@ -54,9 +55,18 @@ const LOD_LABEL_KEYS = {
 } as const
 const lodLabel = computed(() => t(LOD_LABEL_KEYS[ui.lod]))
 
-// Live spend indicator: shown once any tokens have been metered this period.
+// Live spend indicator: shown once the workspace has an explicit budget configured
+// (so the meter appears the moment a budget is set, at zero spend), or once any tokens
+// have been metered this period (the built-in default budget still applies unconfigured).
 const spend = computed(() => workspace.spend)
-const showSpend = computed(() => !!spend.value && spend.value.costSpent > 0)
+const budgetConfigured = computed(
+  () =>
+    workspaceSettings.settings.spendMonthlyLimit != null ||
+    workspaceSettings.settings.spendCurrency != null,
+)
+const showSpend = computed(
+  () => !!spend.value && (budgetConfigured.value || spend.value.costSpent > 0),
+)
 const spendLabel = computed(() => {
   const s = spend.value
   if (!s) return ''

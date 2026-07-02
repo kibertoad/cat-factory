@@ -1,5 +1,22 @@
 # @cat-factory/app
 
+## 0.71.2
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+
+## 0.71.1
+
+### Patch Changes
+
+- e9e9fbe: Show the spend/budget meter in the board toolbar as soon as a workspace budget is
+  configured (previously it only appeared once tokens had been metered, so setting a
+  budget at zero spend left the limit and usage hidden). Saving a budget now also
+  refreshes the workspace snapshot so the meter reflects the new limit/currency
+  immediately.
+
 ## 0.71.0
 
 ### Minor Changes

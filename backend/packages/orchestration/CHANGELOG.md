@@ -1,5 +1,73 @@
 # @cat-factory/orchestration
 
+## 0.55.0
+
+### Minor Changes
+
+- 16621f8: feat(testing): test quality-control companion that loops the Tester on incomplete reports
+
+  The Tester gate concluded a step purely from `greenlight` + blocking concerns + failed
+  outcomes, so a report that claimed to exercise many areas (`tested`) but recorded a single
+  happy-path `outcome` could greenlight and "pass" — leaving most scenarios as "No discrete
+  check recorded" in the Test Report window while the step read as successfully completed.
+
+  Two changes address this:
+
+  - **Tester prompts now require one recorded `outcome` per `tested` area** (API + UI testers):
+    every scenario listed as tested must have a matching outcome with a concrete detail, and
+    describing results only in the prose `summary` does not count. Genuinely un-exercised areas
+    are recorded as `skipped` with a reason rather than dropped.
+  - **A new test quality-control companion** (`tester-qc`) audits each Tester report for
+    coverage/coherence BEFORE the greenlight/fixer decision. When the report is inadequate it
+    loops the Tester for a focused additional pass (folding the prior report + the flagged gaps
+    in, and carrying forward already-covered outcomes), bounded by a new merge-preset knob
+    `maxTesterQualityIterations` (default 3). Enabled by default; a per-Tester-step toggle in
+    the pipeline shape (`pipeline.testerQuality`) disables it or gates it on the task estimate.
+    The companion is an inline reviewer (no container) that resolves its model like the other
+    inline reviewers and is a pass-through when no model is wired.
+
+  Persistence: the merge preset gains a `max_tester_quality_iterations` column, mirrored across
+  the D1 and Drizzle stores (built-in preset seed `version` bumped 1 → 2). The QC loop state
+  lives on the execution step, so no new table is added.
+
+  The frontend pipeline-builder toggle + Test Report verdict surfacing land in a follow-up
+  (see `docs/initiatives/tester-quality-companion.md`).
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+  - @cat-factory/kernel@0.68.0
+  - @cat-factory/agents@0.26.0
+  - @cat-factory/integrations@0.52.1
+  - @cat-factory/prompt-fragments@0.9.33
+  - @cat-factory/sandbox@0.8.71
+  - @cat-factory/spend@0.10.63
+  - @cat-factory/workspaces@0.10.10
+
+## 0.54.1
+
+### Patch Changes
+
+- 08be94c: Fix: a task **retry** and **restart-from-step** now run the same config/resource preconditions
+  as a fresh **start**, so a re-drive can no longer silently proceed on a configuration a start
+  would refuse.
+
+  `ExecutionService.start`, `.retry` and `.restartFromStep` previously each hand-rolled their
+  guard sequence, and retry/restart were missing the provider/preset satisfiability check (plus
+  pipeline-shape, frame-type, tester-infra and agent-backend). So retrying a task whose model
+  preset can't run every step — e.g. a subscription-only model an inline step (the requirements
+  reviewer) can't run without an inline harness — skipped the guard and failed mid-run against the
+  routing default (the confusing "requirements reviewer (qwen:qwen3-max) failed"), instead of the
+  clear `preset_unsatisfiable` / `providers_unconfigured` refusal a fresh start gives.
+
+  The shared preconditions are extracted into one `assertRunnable` method all three entry points
+  call, so they can't drift again. A retry/restart validates them over the STORED steps it
+  re-drives (not the current pipeline definition, which may have been edited out of band since the
+  run started), so the gate reflects exactly what re-executes and a deleted pipeline needs no
+  special case. The concurrency (task-limit) and dependency gates stay start-only by design (a
+  retry replaces the failed run rather than adding a new concurrent one).
+
 ## 0.54.0
 
 ### Minor Changes

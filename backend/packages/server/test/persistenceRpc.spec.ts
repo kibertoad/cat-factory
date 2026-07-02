@@ -103,6 +103,8 @@ function makeRegistry(): {
       // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).
       listByIds: async (ids: string[]) => ids.map((id) => services.get(id)).filter(Boolean),
       listByAccount: async (accountId: string) => [{ accountId }],
+      // The single-service read behind the org-catalog mount flow (`service` scope kind).
+      get: async (id: string) => services.get(id) ?? null,
     },
     accountRepository: {
       get: async (id: string) => ({ id, name: id }),
@@ -115,6 +117,12 @@ function makeRegistry(): {
       listByWorkspace: async (ws: string) => [{ ws }],
       deleteByWorkspace: async (_ws: string) => undefined,
       countByServiceIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
+      // The shared-service mount management surface: `get`/`update`/`remove` echo the workspaceId
+      // (arg0); the record-based `upsert` binds on the mount's `workspaceId` FIELD.
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      update: async () => undefined,
+      remove: async () => undefined,
     },
     workspaceSettingsRepository: {
       get: async (ws: string) => ({ ws }),
@@ -984,5 +992,142 @@ describe('advanced review / session management surface (workspace-scoped)', () =
 
     expect(calls).toContainEqual(['ws_in', { id: 'sess_1' }])
     expect(calls).toContainEqual(['ws_in', 'blk_1', 'discovery'])
+  })
+})
+
+describe('shared-service mount management surface', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // `serviceRepository.get(serviceId)` binds via the `service` scope kind (single serviceId →
+  // owning account, the single-id form of `serviceList`). svc_in lives under ACCOUNT, svc_out
+  // under OTHER_ACCOUNT.
+  it('forwards serviceRepository.get for an in-scope service', async () => {
+    await expect(remoteRegistry().serviceRepository!.get!('svc_in')).resolves.toMatchObject({
+      id: 'svc_in',
+    })
+  })
+
+  it('rejects serviceRepository.get for an out-of-scope service (404, no leak)', async () => {
+    await expect(remoteRegistry().serviceRepository!.get!('svc_out')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('rejects serviceRepository.get for an unknown service (fails closed)', async () => {
+    await expect(remoteRegistry().serviceRepository!.get!('svc_missing')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('rejects serviceRepository.get for a non-string arg (fails closed)', async () => {
+    await expect(
+      remoteRegistry().serviceRepository!.get!(undefined as unknown as string),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The workspaceId-keyed mount methods (arg0 = workspaceId → the `workspace` rule): `get` echoes
+  // the workspaceId, the void writes `update`/`remove` just resolve.
+  const WORKSPACE_METHODS: Array<{ method: string; args: unknown[]; echoes?: boolean }> = [
+    { method: 'get', args: ['svc_in'], echoes: true },
+    { method: 'update', args: ['svc_in', { position: { x: 1, y: 2 } }] },
+    { method: 'remove', args: ['svc_in'] },
+  ]
+
+  for (const { method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards workspaceMountRepository.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry().workspaceMountRepository![method]!('ws_in', ...args)
+      if (echoes) expect(result).toMatchObject({ ws: 'ws_in' })
+      else expect(result).toBeUndefined()
+    })
+
+    it(`rejects workspaceMountRepository.${method} for an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry().workspaceMountRepository![method]!('ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount` rule: the mount
+  // is placed onto exactly `mount.workspaceId` (out-of-scope → refused before any write) AND the
+  // mounted `serviceId` must be owned by the SAME account as that workspace (the cross-org mount
+  // invariant, enforced at the RPC layer — not only in the bypassed service layer).
+  it('forwards workspaceMountRepository.upsert when the mount targets an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_in',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount targets an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_out',
+        serviceId: 'svc_in',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount has no workspaceId field (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({ serviceId: 'svc_in' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount has no serviceId field (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({ workspaceId: 'ws_in' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mounted service is unknown (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_missing',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The cross-org mount invariant under a MULTI-account token (a user in several orgs). Both
+  // ACCOUNT and OTHER_ACCOUNT are in scope, so a workspace-only check would let one org's service
+  // be mounted onto another org's board. The `serviceMount` rule's same-account requirement blocks
+  // it: svc_out (OTHER_ACCOUNT) cannot be mounted onto ws_in (ACCOUNT) even though both are in scope.
+  it('rejects a cross-org mount upsert even when both accounts are in the token scope (404)', async () => {
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards a same-account mount upsert for a workspace in a secondary in-scope account', async () => {
+    // A multi-account token can still mount WITHIN each org: svc_out onto ws_out (both OTHER_ACCOUNT).
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_out',
+        serviceId: 'svc_out',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('still refuses a non-allow-listed mount method (real-time fan-out read)', async () => {
+    // `listByService` is a mothership-internal fan-out read — absent from the allow-list.
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listByService!('svc_in'),
+    ).rejects.toThrow(/not callable/)
   })
 })

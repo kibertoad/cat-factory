@@ -28,6 +28,41 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (shared-service mount management surface)** — the org-catalog / shared-service
+  mounting flow (`ServiceMountService` / `ServiceMountController` — mount / unmount / re-layout a
+  shared account service onto a workspace board) is now fully remotely callable, so a mothership-mode
+  SPA can not just DISPLAY the catalog but MOUNT from it. Previously the catalog-badge reads
+  (`workspaceMountRepository.listByWorkspace` / `countByServiceIds`) were exposed, but the
+  single-service read the mount flow performs and the mount write/update/remove methods came back
+  `unknown_method`. Newly allow-listed: `serviceRepository.get(serviceId)` — bound by a **new
+  `service` scope kind** (a single serviceId → owning account, the single-id form of `serviceList`,
+  reusing the controller's existing service→account resolver, so no controller change; the
+  dispatched `get` is routed through the same per-request `listByIds` memo the scope check reads, so
+  a mount precheck resolves the service in ONE query) — and `workspaceMountRepository`
+  `get`/`update`/`remove` (arg0 = workspaceId → the `workspace` rule) + the record-based
+  `upsert(mount)` (bound by a **new `serviceMount` scope kind**). Each is member-level (the mount
+  endpoints are not admin-gated) and workspace-scoped. **Cross-org sharing stays enforced AT THE RPC
+  LAYER, not only in the bypassed service layer:** the `serviceMount` rule binds `upsert` on the
+  mount's `workspaceId` FIELD (out-of-scope workspace → refused) AND requires the mounted `serviceId`
+  to be owned by the SAME account as that workspace, so a raw `upsert` can never plant a cross-org
+  mount — including for a machine token that spans several accounts (a user in multiple orgs, where a
+  workspace-only bind would let one org's service be mounted onto another org's board). The local
+  node's `mount()` also reads `serviceRepository.get` first (the `service` rule 404s a foreign
+  service, so `assertFound` throws), and board composition (`listByServices`) stays account-scoped as
+  a second line of defence. The real-time fan-out reads
+  (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
+  (`removeByServices` / `serviceRepository.deleteMany` / `listByFrameBlocks`) stay off the SPA path —
+  mothership-internal / a later board-frame-deletion slice. **Known gap (a later slice):** without
+  the fan-out reads, mounting/unmounting a shared service does not live-update OTHER boards mounting
+  the same service in mothership mode (the acting user's own board is driven directly). These are
+  core repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
+  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
+  allow-list plus the two new scope kinds. Server-only, symmetric by construction (the dispatcher
+  reflects over each facade's registry). Round-trip + cross-account-scope tests for every new method
+  (incl. the `service` kind's out-of-scope / unknown-id / non-string fail-closed edges and the
+  `serviceMount` rule's cross-org / multi-account-token denials) are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
 - **Phase 3 follow-up (advanced review / structured-dialogue session surface)** — the clarity-review
   (bug-report triage), brainstorm (structured dialogue) and consensus (multi-strategy orchestration)
   session repositories are now fully allow-listed, so a mothership-mode SPA can not just READ the
@@ -340,8 +375,8 @@ never remotely invocable (mothership-internal cron).
 | `serviceFragmentDefaultsRepository`                         | remote                                           | ✅ done | PR 3 (settings writes)          |
 | `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)           | ◑ part  | PR 3 (settings writes)          |
 | `trackerSettingsRepository`                                 | remote                                           | ✅ done | PR 3 (settings writes)          |
-| `serviceRepository`                                         | remote                                           | ⬜ todo | PR 3                            |
-| `workspaceMountRepository`                                  | remote                                           | ⬜ todo | PR 3                            |
+| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)   | ◑ part  | PR 3 (mount management)         |
+| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)       | ◑ part  | PR 3 (mount management)         |
 | `requirementReviewRepository`                               | remote                                           | ✅ done | PR 3 (advanced-review surface)  |
 | `kaizenGradingRepository`                                   | remote (`getByStep`/`upsert`; rest pending)      | ◑ part  | PR 3                            |
 | `kaizenVerifiedComboRepository`                             | remote (`getByKey`; rest pending)                | ◑ part  | PR 3                            |

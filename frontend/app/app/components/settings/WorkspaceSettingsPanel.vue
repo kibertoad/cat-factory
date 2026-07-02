@@ -195,6 +195,16 @@ async function saveBudget() {
       icon: 'i-lucide-check',
       color: 'success',
     })
+    // The settings PUT only returns the settings; re-fetch the snapshot so the toolbar's
+    // spend meter reflects the newly-set limit/currency (spendService.status) right away.
+    // Best-effort and AFTER the save succeeded: a transient snapshot-refresh failure must
+    // not report a successfully-saved budget as failed (the meter also catches up on the
+    // next snapshot pushed over the stream).
+    try {
+      await useWorkspaceStore().refresh()
+    } catch {
+      // ignore — the budget is persisted; the meter will catch up on the next snapshot.
+    }
   } catch (e) {
     toast.add({
       title: t('settings.workspaceSettings.toast.budgetSaveFailed'),

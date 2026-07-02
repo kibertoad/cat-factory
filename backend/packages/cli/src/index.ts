@@ -53,7 +53,24 @@ export { type Io, createConsoleIo } from './io.js'
 export { type BootstrapInput, buildPlan, type PlannedFile } from './plan.js'
 export { generateSecrets, type GeneratedSecrets, type RandomBytes } from './secrets.js'
 export { slugifyProjectName } from './slug.js'
-export { CONTAINER_RUNTIMES, type ContainerRuntime, DEFAULT_HARNESS_IMAGE } from './templates.js'
+export {
+  CONTAINER_RUNTIMES,
+  type ContainerRuntime,
+  DEFAULT_HARNESS_IMAGE,
+  EXECUTION_MODES,
+  type ExecutionMode,
+  NATIVE_HARNESSES,
+  type NativeHarness,
+} from './templates.js'
+export {
+  EXECUTION_MODE_TRADEOFFS,
+  NATIVE_HARNESS_INFO,
+  type NativeHarnessInfo,
+  type NativeModel,
+  NATIVE_MODELS,
+  nativeModelsFor,
+  nativeModelSummary,
+} from './execution.js'
 export {
   githubPatCreationUrl,
   gitlabPatCreationUrl,

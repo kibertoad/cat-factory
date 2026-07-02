@@ -6,7 +6,6 @@ import type {
   ExecutionInstance,
   FollowUpsStepState,
   MergePresetRepository,
-  Pipeline,
   PipelineStep,
   PullRequestMerger,
   StepReviewComment,
@@ -29,7 +28,7 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
-import { validatePipelineShape } from '../pipelines/pipelineShape.js'
+import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
@@ -81,6 +80,7 @@ import {
   type VisualConfirmActions,
 } from './gate-window-facades.js'
 import { TesterController } from './TesterController.js'
+import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -182,6 +182,13 @@ export interface ExecutionServiceDependencies {
    * through so pipelines run unchanged without the feature.
    */
   requirementReviewService?: RequirementReviewService
+  /**
+   * Optional: the inline reviewer for the test quality-control companion. When wired (and a
+   * Tester step has the companion enabled), each Tester report is audited for coverage before
+   * the greenlight/fixer decision and an inadequate report loops the Tester. Passed straight
+   * to the {@link TesterController}. Absent → QC is a pass-through.
+   */
+  testerQualityReviewer?: TesterQualityReviewer
   /**
    * Optional: the Kaizen agent's scheduler. When wired, a run reaching a terminal state
    * schedules a post-run grading for each completed agent step (skipping verified combos).
@@ -496,6 +503,7 @@ export class ExecutionService {
     taskRepository,
     requirementReviewRepository,
     requirementReviewService,
+    testerQualityReviewer,
     kaizenScheduler,
     clarityReviewRepository,
     clarityReviewService,
@@ -593,6 +601,10 @@ export class ExecutionService {
       contextBuilder: this.contextBuilder,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
       stateMachine: this.runStateMachine,
+      // The test quality-control companion's inline reviewer (when wired); absent → QC
+      // pass-through. Stamps its verdicts with the engine clock.
+      ...(testerQualityReviewer ? { qualityReviewer: testerQualityReviewer } : {}),
+      clockNow: () => this.clock.now(),
     })
     this.humanTestController = new HumanTestController({
       blockRepository,
@@ -859,9 +871,9 @@ export class ExecutionService {
   private async assertPipelineFrameTypeAllowed(
     workspaceId: string,
     block: Block,
-    pipeline: Pipeline,
+    agentKinds: readonly string[],
   ): Promise<void> {
-    if (!pipelineHasVisualStep(pipeline)) return
+    if (!pipelineHasVisualStep({ agentKinds: [...agentKinds] })) return
     const frame = await this.contextBuilder.resolveServiceFrame(workspaceId, block.id)
     // A `frontend` frame is always allowed without listing the workspace; only a non-frontend
     // frame needs the link scan, so defer the (single) block-list read until then.
@@ -966,7 +978,7 @@ export class ExecutionService {
   private async assertProvidersConfiguredForPipeline(
     workspaceId: string,
     block: Block,
-    pipeline: Pipeline,
+    agentKinds: readonly string[],
     initiatedBy: string | null | undefined,
   ): Promise<void> {
     if (!this.resolveProviderCapabilities) return
@@ -990,9 +1002,9 @@ export class ExecutionService {
     if (block.modelId) {
       // A block-level pin applies to every step; it must satisfy an inline step too when the
       // pipeline has one.
-      check(block.modelId, pipeline.agentKinds.some(isInlineModelStep))
+      check(block.modelId, agentKinds.some(isInlineModelStep))
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of pipeline.agentKinds) {
+      for (const kind of agentKinds) {
         const id = await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId)
         check(id, isInlineModelStep(kind))
       }
@@ -1033,7 +1045,7 @@ export class ExecutionService {
   private async assertBudgetAllowsPipeline(
     workspaceId: string,
     block: Block,
-    pipeline: Pipeline,
+    agentKinds: readonly string[],
     initiatedBy: string | null | undefined,
   ): Promise<void> {
     if (!(await this.spend.isOverBudget(workspaceId))) return
@@ -1043,7 +1055,7 @@ export class ExecutionService {
     if (block.modelId) {
       ids.push(block.modelId)
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of pipeline.agentKinds) {
+      for (const kind of agentKinds) {
         ids.push(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
       }
     } else {
@@ -1074,6 +1086,84 @@ export class ExecutionService {
     return !isLocalRunner(ref.provider)
   }
 
+  /**
+   * The config/resource preconditions a run must satisfy to START, RETRY **or** RESTART:
+   * everything that depends on the workspace environment + the steps being run, and NOT on
+   * whether this is a fresh run or a replacement. All three entry points call this so they
+   * can't drift — a guard added to one but silently missing from the other is exactly how a
+   * subscription-only preset slipped past retry and failed mid-run against the routing default.
+   * All checks are read-only and run BEFORE any side effects, each throwing an actionable
+   * {@link ConflictError}.
+   *
+   * The `shape` is the effective chain that will run, NOT the current pipeline definition: a
+   * fresh start passes the pipeline, while a retry/restart passes the STORED steps (via
+   * {@link runnableShapeOf}) so the guard validates exactly what re-executes — a pipeline
+   * edited out of band since the run started can't falsely refuse (or silently skip a check
+   * for) a step that isn't actually being re-driven.
+   *
+   * The concurrency (task-limit) and dependency gates are deliberately NOT here — they are
+   * start-only (a retry replaces the failed run rather than adding a new concurrent one, and a
+   * re-drive of an already-started task isn't re-gated on its dependencies).
+   */
+  private async assertRunnable(
+    workspaceId: string,
+    block: Block,
+    shape: PipelineShape,
+    initiatedBy: string | null | undefined,
+  ): Promise<void> {
+    // Reject a structurally-invalid chain (a misplaced companion or estimate-gating without a
+    // preceding task-estimator). The builder also rejects these at save, but a pipeline can
+    // become invalid out of band.
+    validatePipelineShape(shape)
+
+    // A chain with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
+    // it can only run on a `frontend` frame or a frame a frontend links to — else a `tester-ui`
+    // step has no app to drive.
+    await this.assertPipelineFrameTypeAllowed(workspaceId, block, shape.agentKinds)
+
+    // A chain with a Tester needs the service's declared provisioning to be runnable
+    // (`infraless`/none = no infra, `docker-compose` = DinD, `kubernetes`/`custom` = a handler).
+    if (shape.agentKinds.some(isTesterKind)) {
+      await this.assertTesterInfraConfigured(workspaceId, block)
+    }
+
+    // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
+    // screenshots) needs the account to have storage configured.
+    await this.assertBinaryStorageConfigured(workspaceId, shape.agentKinds)
+
+    // A workspace that delegates container agents to a runner pool needs that pool registered
+    // (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and when delegation is off.
+    await this.assertAgentBackendConfigured?.(workspaceId)
+
+    // Every step's canonical model must have a usable provider — a container step needs any
+    // usable flavour, an INLINE step needs an inline-usable one (a subscription-only model can't
+    // run inline without an inline harness). This is the gate a retry used to skip.
+    await this.assertProvidersConfiguredForPipeline(
+      workspaceId,
+      block,
+      shape.agentKinds,
+      initiatedBy,
+    )
+
+    // Refuse a metered run once the spend budget is reached (a clear error rather than a silent
+    // mid-run pause). A local/subscription-only pipeline is exempt.
+    await this.assertBudgetAllowsPipeline(workspaceId, block, shape.agentKinds, initiatedBy)
+  }
+
+  /**
+   * The {@link PipelineShape} a retry/restart re-drives: the stored run's steps ARE the enabled,
+   * ordered chain that will run again, so {@link assertRunnable} validates exactly what
+   * re-executes rather than the current pipeline definition (which may have been edited out of
+   * band since the run started). Disabled steps were already filtered out at start, so every
+   * stored step is enabled.
+   */
+  private runnableShapeOf(steps: readonly PipelineStep[]): PipelineShape {
+    return {
+      agentKinds: steps.map((s) => s.agentKind),
+      gating: steps.map((s) => s.gating ?? null),
+    }
+  }
+
   /** Start a pipeline against a block, replacing any prior run on it. */
   async start(
     workspaceId: string,
@@ -1102,47 +1192,18 @@ export class ExecutionService {
       pipelineId,
     )
 
-    // Reject a structurally-invalid pipeline before any side effects — a misplaced
-    // companion or estimate-gating without a preceding task-estimator. The builder also
-    // rejects these at save, but a pipeline can become invalid out of band, so a run
-    // refuses to START as well (the same shared check).
-    validatePipelineShape(pipeline)
+    // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
+    // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry
+    // runs, so the two can't drift. See assertRunnable.
+    await this.assertRunnable(workspaceId, block, pipeline, initiatedBy)
 
-    // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
-    // it can only run on a `frontend` frame (which owns the app under test) or a frame a frontend
-    // links to. Refuse it on any other frame up-front with an actionable, machine-readable
-    // conflict, rather than dispatching a `tester-ui` step that has no app to drive.
-    await this.assertPipelineFrameTypeAllowed(workspaceId, block, pipeline)
-
-    // A pipeline with a Tester needs the service's declared provisioning to be runnable —
-    // `infraless`/none runs with no infra, `docker-compose` needs DinD, `kubernetes`/`custom`
-    // needs a workspace handler. Block the start with a clear, actionable error otherwise —
-    // before any side effects (activation mint / prior-run teardown).
-    if (pipeline.agentKinds.some(isTesterKind)) {
-      await this.assertTesterInfraConfigured(workspaceId, block)
-    }
-
-    // Block the start when the pipeline carries an agent that relies on binary-artifact
-    // storage (the UI Tester uploads screenshots) but the account has none configured —
-    // before any side effects, with an actionable error pointing at the storage settings.
-    await this.assertBinaryStorageConfigured(workspaceId, pipeline.agentKinds)
-
-    // Block the start when the workspace delegates container agents to a runner pool that
-    // isn't registered (local mode opt-in). No-op on Cloudflare/Node (fixed backend) and
-    // when delegation is off; a missing local pool still also fails loudly at dispatch.
-    await this.assertAgentBackendConfigured?.(workspaceId)
-
-    // Block the start when a step's canonical model has no usable provider (no direct
-    // key, no subscription, no Cloudflare) — before any side effects.
-    await this.assertProvidersConfiguredForPipeline(workspaceId, block, pipeline, initiatedBy)
+    // START-ONLY gates below: a retry REPLACES the failed run rather than adding a new one, so
+    // the concurrency limit doesn't apply to it, and a re-drive of an already-started task isn't
+    // re-gated on its dependencies.
 
     // Enforce the workspace's per-service running-task limit (off by default) — a clear,
     // actionable error before any side effects, so the human knows why the start was refused.
     await this.assertWithinTaskLimit(workspaceId, block)
-
-    // Refuse a metered run once the spend budget is reached (a clear error rather than a
-    // silent mid-run pause). A local/subscription-only pipeline is exempt and starts.
-    await this.assertBudgetAllowsPipeline(workspaceId, block, pipeline, initiatedBy)
 
     // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
     // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
@@ -1224,6 +1285,24 @@ export class ExecutionService {
                   items: [],
                   loops: 0,
                   maxLoops: DEFAULT_FOLLOW_UP_MAX_LOOPS,
+                },
+              }
+            : {}),
+          // The test quality-control companion is on by default for a Tester step; the
+          // pipeline's per-step `testerQuality[i].enabled === false` disables it. `maxAttempts`
+          // is seeded with the default ceiling here and refreshed from the task's resolved
+          // merge preset on the first report (TesterController). Optional estimate gating is
+          // carried through so it can be evaluated against the block estimate at gate time.
+          ...(isTesterKind(kind) && pipeline.testerQuality?.[i]?.enabled !== false
+            ? {
+                testerQuality: {
+                  enabled: true,
+                  attempts: 0,
+                  maxAttempts: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
+                  verdicts: [],
+                  ...(pipeline.testerQuality?.[i]?.gating
+                    ? { gating: pipeline.testerQuality[i]!.gating }
+                    : {}),
                 },
               }
             : {}),
@@ -2070,6 +2149,7 @@ export class ExecutionService {
     ciMaxAttempts: number
     maxRequirementIterations: number
     maxRequirementConcernAllowed: RequirementConcernLevel
+    maxTesterQualityIterations: number
     releaseWatchWindowMinutes: number
     releaseMaxAttempts: number
     humanReviewGraceMinutes: number
@@ -2391,23 +2471,18 @@ export class ExecutionService {
     }
     const block = await this.requireBlock(workspaceId, previous.blockId)
 
-    // Same up-front budget gate as start(): refuse a metered retry once the budget is
-    // reached (local/subscription-only pipelines still retry). Before any side effects.
-    const pipeline = await this.pipelineRepository.get(workspaceId, previous.pipelineId)
-    if (pipeline) {
-      await this.assertBudgetAllowsPipeline(
-        workspaceId,
-        block,
-        pipeline,
-        initiatedBy ?? previous.initiatedBy,
-      )
-    }
-
-    // Same binary-storage precondition as start(): a retry of a run carrying a
-    // storage-reliant kind (the UI Tester) is refused when the account has no storage.
-    await this.assertBinaryStorageConfigured(
+    // Run the SAME config/resource preconditions start() does (shape, frame type, tester infra,
+    // binary storage, agent backend, provider/preset satisfiability, budget), so a retry can't
+    // silently proceed on a config a fresh start would refuse — the drift that let a
+    // subscription-only preset fail mid-run against the routing default. Validated over the
+    // STORED steps (what the retry actually re-drives), not the current pipeline definition, so
+    // an out-of-band pipeline edit can't skew the gate and a deleted pipeline needs no special
+    // case. Before any side effects.
+    await this.assertRunnable(
       workspaceId,
-      previous.steps.map((s) => s.agentKind),
+      block,
+      this.runnableShapeOf(previous.steps),
+      initiatedBy ?? previous.initiatedBy,
     )
 
     const { steps, currentStep } = planResumedSteps(previous)
@@ -2485,7 +2560,7 @@ export class ExecutionService {
       'Execution',
       executionId,
     )
-    await this.requireBlock(workspaceId, previous.blockId)
+    const block = await this.requireBlock(workspaceId, previous.blockId)
     if (
       !Number.isInteger(fromStepIndex) ||
       fromStepIndex < 0 ||
@@ -2496,12 +2571,17 @@ export class ExecutionService {
       )
     }
 
-    // Same binary-storage precondition as start(): a restart of a run carrying a
-    // storage-reliant kind (the UI Tester) is refused when the account has no storage —
-    // before any teardown/side effects.
-    await this.assertBinaryStorageConfigured(
+    // Run the SAME config/resource preconditions start()/retry() do, over the STORED steps this
+    // restart re-drives (frame type, tester infra, binary storage, agent backend, provider/preset
+    // satisfiability, budget). A restart re-dispatches provider-bearing steps just like a retry,
+    // so it must be gated identically — otherwise a run whose preset can't run every step (e.g. a
+    // subscription-only model an inline reviewer can't drive) strands mid-run instead of being
+    // refused up front. Before any teardown/side effects.
+    await this.assertRunnable(
       workspaceId,
-      previous.steps.map((s) => s.agentKind),
+      block,
+      this.runnableShapeOf(previous.steps),
+      initiatedBy ?? previous.initiatedBy,
     )
 
     // Tear down whatever was driving the run we're about to replace — its per-run
