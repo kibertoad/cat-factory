@@ -269,12 +269,15 @@ export class VisualConfirmationController {
       return this.toAwaitingHuman(workspaceId, instance, step, block)
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Build the context AS the fixer, so trait-driven context (the `code-aware`
+    // service-fragment fold) keys off the fixer's kind, not the hosting step's.
     const base = await this.deps.contextBuilder.buildContext(
       workspaceId,
       instance,
       step,
       isFinalStep,
       block,
+      { agentKind: FIXER_AGENT_KIND },
     )
     const context: AgentRunContext = {
       ...base,

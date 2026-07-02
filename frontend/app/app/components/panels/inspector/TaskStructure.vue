@@ -12,11 +12,13 @@ const { t } = useI18n()
 type MenuItem = { label: string; icon?: string; onSelect: () => void }
 
 // ---- best-practice prompt fragments ----------------------------------------
-// Selected fragments (resolved against the catalog; unknown ids are dropped).
+// Selected fragments, resolved against the catalog. An id the catalog no longer
+// resolves (removed/suppressed after selection) still renders — labelled by its
+// raw id — so it stays visible and removable.
 const selectedFragments = computed(() =>
-  (props.block.fragmentIds ?? [])
-    .map((id) => fragments.getFragment(id))
-    .filter((f): f is NonNullable<typeof f> => !!f),
+  (props.block.fragmentIds ?? []).map(
+    (id) => fragments.getFragment(id) ?? { id, title: id, summary: '' },
+  ),
 )
 
 // A trailing group that jumps from "attach a fragment" to authoring/editing the
