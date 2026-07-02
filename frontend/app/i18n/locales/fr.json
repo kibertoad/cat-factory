@@ -681,6 +681,33 @@
       "noResult": "Pas encore de résultat.",
       "noResultHint": "La sortie structurée apparaît une fois que cet agent a terminé. Pendant son exécution, l'étape affiche sa progression en direct sur le tableau."
     },
+    "mergerResult": {
+      "title": "Décision de fusion",
+      "titleWithBlock": "Décision de fusion : {title}",
+      "description": "Comment la PR a été évaluée et ce que le moteur a décidé.",
+      "outcome": {
+        "auto_merged": "Fusionnée automatiquement",
+        "awaiting_review": "En attente de revue humaine"
+      },
+      "reason": {
+        "within_thresholds": "Tous les scores sont dans les seuils de {preset}, la PR a donc été fusionnée automatiquement.",
+        "exceeded_thresholds": "{axes} a dépassé les seuils de {preset}, la PR attend donc une fusion par une personne.",
+        "auto_merge_disabled": "Le préréglage {preset} envoie chaque PR à une personne ; celle-ci attend donc une revue.",
+        "no_rationale": "Le fusionneur a évalué la PR mais n'a donné aucune justification, le verdict n'a donc pas pu être approuvé pour une fusion automatique ; la PR attend une fusion par une personne.",
+        "no_assessment": "Le fusionneur n'a pas renvoyé d'évaluation exploitable, la PR attend donc une fusion par une personne.",
+        "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne."
+      },
+      "scores": "Scores",
+      "axis": {
+        "complexity": "Complexité",
+        "risk": "Risque",
+        "impact": "Impact"
+      },
+      "ceiling": "plafond {value}",
+      "rationale": "Justification",
+      "noAssessment": "Le fusionneur n'a pas renvoyé d'évaluation chiffrée.",
+      "noResult": "Aucune décision de fusion enregistrée pour le moment."
+    },
     "testReport": {
       "title": "Rapport de test",
       "greenlit": "Validé",

@@ -721,6 +721,33 @@
       "noResult": "No result yet.",
       "noResultHint": "The structured output appears once this agent finishes. While it runs, the step shows live progress on the board."
     },
+    "mergerResult": {
+      "title": "Merge decision",
+      "titleWithBlock": "Merge decision: {title}",
+      "description": "How the PR scored and what the engine decided.",
+      "outcome": {
+        "auto_merged": "Auto-merged",
+        "awaiting_review": "Awaiting human review"
+      },
+      "reason": {
+        "within_thresholds": "Every score is within the {preset} thresholds, so the PR was merged automatically.",
+        "exceeded_thresholds": "{axes} exceeded the {preset} thresholds, so the PR is waiting for a human to merge.",
+        "auto_merge_disabled": "The {preset} preset sends every PR to a human, so this one is waiting for review.",
+        "no_rationale": "The merger scored the PR but gave no rationale, so the verdict could not be trusted to auto-merge; the PR is waiting for a human to merge.",
+        "no_assessment": "The merger did not return a parseable assessment, so the PR is waiting for a human to merge.",
+        "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge."
+      },
+      "scores": "Scores",
+      "axis": {
+        "complexity": "Complexity",
+        "risk": "Risk",
+        "impact": "Impact"
+      },
+      "ceiling": "ceiling {value}",
+      "rationale": "Rationale",
+      "noAssessment": "The merger did not return a scored assessment.",
+      "noResult": "No merge decision recorded yet."
+    },
     "testReport": {
       "title": "Test report",
       "greenlit": "Greenlit",

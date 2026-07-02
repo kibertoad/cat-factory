@@ -5445,11 +5445,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(start.status).toBe(201)
-        await app.drive(wsId)
+        const ticked = await app.drive(wsId)
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('pr_ready')
         expect(task.status).not.toBe('done')
+        // The engine records its structured decision on the merger step (`step.custom`) so
+        // the SPA can explain WHY review was needed — here, an assessment WITH scores but no
+        // rationale routes to review as `no_rationale` (distinct from a truly absent one),
+        // not an auto-merge.
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('no_rationale')
       })
 
       it('runs the merger merge at its step even when a later step follows it', async () => {
@@ -5482,12 +5493,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(start.status).toBe(201)
-        await app.drive(wsId)
+        const ticked = await app.drive(wsId)
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         // The merge ran at the (non-final) merger step → the block is `done`, not left
         // unmerged as `pr_ready`.
         expect(task.status).toBe('done')
+        // The auto-merge decision is recorded on the merger step for the SPA to render.
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          thresholds?: { presetName?: string }
+        }
+        expect(decision.outcome).toBe('auto_merged')
+        expect(decision.reason).toBe('within_thresholds')
+        expect(decision.thresholds?.presetName).toBeTruthy()
       })
 
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {
