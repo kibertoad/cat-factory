@@ -444,7 +444,11 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           >
             <div class="space-y-2">
               <div class="flex items-center gap-2">
-                <UInput v-model="repoName" placeholder="payments-service" class="w-full" />
+                <UInput
+                  v-model="repoName"
+                  :placeholder="t('bootstrap.targetRepo.namePlaceholder')"
+                  class="w-full"
+                />
                 <UButton
                   color="neutral"
                   variant="subtle"
@@ -493,7 +497,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
           >
             <UInput
               v-model="description"
-              placeholder="Handles payment intents and refunds"
+              :placeholder="t('bootstrap.description.placeholder')"
               class="w-full"
             />
           </UFormField>
@@ -640,7 +644,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               <USelect
                 v-model="archRepoSlug"
                 :items="repoOptions"
-                placeholder="owner/name"
+                :placeholder="t('bootstrap.arch.pickRepo.placeholder')"
                 class="w-full"
               />
             </UFormField>
@@ -650,14 +654,26 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               :description="t('bootstrap.arch.name.description')"
               required
             >
-              <UInput v-model="archForm.name" placeholder="Service Template" class="w-full" />
+              <UInput
+                v-model="archForm.name"
+                :placeholder="t('bootstrap.arch.name.placeholder')"
+                class="w-full"
+              />
             </UFormField>
             <div class="grid grid-cols-2 gap-2">
               <UFormField :label="t('bootstrap.arch.repoOwner')" required>
-                <UInput v-model="archForm.repoOwner" placeholder="acme" class="w-full" />
+                <UInput
+                  v-model="archForm.repoOwner"
+                  :placeholder="t('bootstrap.arch.repoOwnerPlaceholder')"
+                  class="w-full"
+                />
               </UFormField>
               <UFormField :label="t('bootstrap.arch.repoName')" required>
-                <UInput v-model="archForm.repoName" placeholder="service-template" class="w-full" />
+                <UInput
+                  v-model="archForm.repoName"
+                  :placeholder="t('bootstrap.arch.repoNamePlaceholder')"
+                  class="w-full"
+                />
               </UFormField>
             </div>
             <UFormField :label="t('bootstrap.description.label')">
@@ -674,7 +690,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               <UTextarea
                 v-model="archForm.defaultInstructions"
                 :rows="2"
-                placeholder="e.g. keep the structure; rename packages to match the new service"
+                :placeholder="t('bootstrap.arch.defaultInstructions.placeholder')"
                 class="w-full"
               />
             </UFormField>
