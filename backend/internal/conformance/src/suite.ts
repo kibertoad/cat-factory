@@ -3101,6 +3101,31 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(descriptor?.supportsTest).toBe(true)
         expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('token')
       })
+
+      it('resolves a deployment-registered custom kind through the injected app-owned registry — on every runtime', async () => {
+        // The secret-kind registry is app-owned (no module-global Map): a deployment
+        // registers a custom kind BY REFERENCE into the registry the harness injects via
+        // `makeApp({ backendRegistries })`, so the facade's UserSecretService describes it
+        // regardless of module identity — the migration's whole point. See
+        // `docs/initiatives/registry-di-migration.md`.
+        const backendRegistries = createBackendRegistries()
+        backendRegistries.userSecretKindRegistry.register({
+          kind: 'conformance-secret',
+          label: 'Conformance secret',
+          configFields: [{ key: 'token', label: 'Token', secret: true, required: true }],
+        })
+        const app = harness.makeApp(undefined, { backendRegistries })
+        const probe = app.userSecrets?.()
+        if (!probe) return
+
+        // The injected custom kind is describable...
+        const custom = probe.describe('conformance-secret')
+        expect(custom?.kind).toBe('conformance-secret')
+        expect(custom?.supportsTest).toBe(false)
+        expect(custom?.configFields.find((f) => f.secret)?.key).toBe('token')
+        // ...and the built-in still resolves off the SAME registry instance.
+        expect(probe.describe('github_pat')?.supportsTest).toBe(true)
+      })
     })
 
     describe('repo bootstrap', () => {
