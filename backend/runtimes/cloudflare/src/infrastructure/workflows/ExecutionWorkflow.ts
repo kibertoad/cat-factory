@@ -42,6 +42,10 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const ciPollInterval = execConfig.ciPollInterval as WorkflowSleepDuration
+    // How long a spend-paused run sleeps between budget re-checks (see the `paused`
+    // branch below). Reuses the gate-poll cadence — a paused run is just polling for
+    // its budget to free up, the same shape as a gate polling for its precheck.
+    const pausePollInterval = ciPollInterval
 
     const failRun = async (
       i: number,
@@ -191,9 +195,21 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         return
       }
 
-      // 'paused' means the spend budget is exhausted: stop driving this run.
-      // The /spend/resume endpoint re-creates the workflow once it frees up.
-      if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return
+      if (result.kind === 'done' || result.kind === 'noop') return
+
+      // 'paused' means the spend budget is exhausted. Do NOT return: returning makes
+      // this Workflows instance TERMINAL, and a terminal instance id can never be
+      // re-created (see WorkflowsLookup) — so `/spend/resume`'s `create` would silently
+      // no-op and the cron sweeper would later force-fail the "resumed" run. Instead we
+      // keep the instance ALIVE, sleeping durably between budget re-checks (cheap: each
+      // wake just re-reads the budget). Re-looping re-advances from storage, so the run
+      // auto-resumes the moment the budget frees up (a new billing period) OR when
+      // `/spend/resume` flips it back to `running` — with no terminal-id trap. A parked
+      // run can sleep here as long as the pause lasts, exactly like a decision wait.
+      if (result.kind === 'paused') {
+        await step.sleep(`paused-wait-${i}`, pausePollInterval)
+        continue
+      }
 
       if (result.kind === 'awaiting_decision') {
         const decisionId = result.decisionId

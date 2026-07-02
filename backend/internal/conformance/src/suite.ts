@@ -303,6 +303,51 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('one live execution run per block (insertLive)', () => {
+      // Two concurrent starts (double-click, recurring-vs-manual, notification-vs-human retry)
+      // must never create two live runs for one block. `insertLive` enforces it atomically via
+      // the partial unique index; asserted at the repository layer so D1 and Postgres are proven
+      // to reject the second live insert identically.
+      it('refuses a second live run for a block until the first goes terminal', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const run = (id: string, status: ExecutionInstance['status']): ExecutionInstance => ({
+          id,
+          blockId: 'blk_live',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status,
+          initiatedBy: null,
+        })
+
+        // The first live insert lands (and gets a fresh rev).
+        const first = run('exec_live_a', 'running')
+        expect(await repo.insertLive(workspace.id, first)).toBe(true)
+        expect(first.rev).toBe(0)
+
+        // A second live insert for the SAME block — WITHOUT a delete between — is refused with
+        // NO write (the concurrent double-start guard). The block keeps exactly the first run.
+        expect(await repo.insertLive(workspace.id, run('exec_live_b', 'running'))).toBe(false)
+        expect((await repo.getByBlock(workspace.id, 'blk_live'))?.id).toBe('exec_live_a')
+
+        // The index is partial: a `paused`/`blocked` run is still LIVE, so it too blocks a second.
+        first.status = 'paused'
+        await repo.upsert(workspace.id, first)
+        expect(await repo.insertLive(workspace.id, run('exec_live_c', 'running'))).toBe(false)
+
+        // Once the first run reaches a terminal state it leaves the partial index, freeing the
+        // block for a fresh live run (the retry-after-failure path) — even without a delete,
+        // which proves the index predicate excludes done/failed rows.
+        first.status = 'done'
+        await repo.upsert(workspace.id, first)
+        expect(await repo.insertLive(workspace.id, run('exec_live_d', 'running'))).toBe(true)
+      })
+    })
+
     describe('agent_runs sweeper read primitives (listStale + liveRunIds)', () => {
       // The stale-run sweeper reads these two `agent_runs` primitives to recover/flag orphaned
       // runs (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local

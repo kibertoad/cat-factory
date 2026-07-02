@@ -405,6 +405,14 @@ export const agentRuns = pgTable(
     index('idx_agent_runs_status_lease').on(t.status, t.updated_at),
     index('idx_agent_runs_block').on(t.workspace_id, t.block_id),
     index('idx_agent_runs_service').on(t.service_id),
+    // At most ONE live execution run per block — the one-run-per-block invariant the engine
+    // relied on via a racy delete-then-insert, now enforced atomically so two concurrent
+    // starts can't create two live runs (two drivers, two containers). Partial (only live
+    // execution rows), so terminal history is unconstrained and bootstrap rows never collide.
+    // Mirrors D1 migration 0033. See DrizzleExecutionRepository.insertLive.
+    uniqueIndex('uniq_live_execution_per_block')
+      .on(t.workspace_id, t.block_id)
+      .where(sql`${t.kind} = 'execution' AND ${t.status} IN ('running', 'blocked', 'paused')`),
   ],
 )
 

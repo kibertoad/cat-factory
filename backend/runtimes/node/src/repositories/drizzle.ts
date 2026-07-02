@@ -561,6 +561,43 @@ class DrizzleExecutionRepository implements ExecutionRepository {
     if (rows[0]) execution.rev = rows[0].rev
   }
 
+  async insertLive(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
+    // One live run per block, enforced atomically by the partial unique index
+    // `uniq_live_execution_per_block` on (workspace_id, block_id) over live execution rows.
+    // A fresh run always has a unique new id, so the only conflict this insert can hit is
+    // that block index — DO NOTHING makes a concurrent double-start a clean no-op (empty
+    // returning) instead of a second live run. The conflict target mirrors the D1 repo and
+    // the index predicate exactly. Mirrors upsert's insert columns (service_id subquery, rev 0).
+    const now = this.clock.now()
+    const detail = executionToDetail(execution)
+    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const rows = await this.db
+      .insert(agentRuns)
+      .values({
+        workspace_id: workspaceId,
+        id: execution.id,
+        kind: 'execution',
+        block_id: execution.blockId,
+        status: execution.status,
+        detail,
+        created_at: now,
+        updated_at: now,
+        workflow_instance_id: execution.id,
+        service_id: serviceIdSub,
+        rev: 0,
+      })
+      .onConflictDoNothing({
+        target: [agentRuns.workspace_id, agentRuns.block_id],
+        // For DO NOTHING, `where` is the conflict target's partial-index predicate (the
+        // DO-UPDATE `targetWhere`); it must mirror uniq_live_execution_per_block exactly.
+        where: sql`${agentRuns.kind} = 'execution' AND ${agentRuns.status} IN ('running', 'blocked', 'paused')`,
+      })
+      .returning({ rev: agentRuns.rev })
+    if (!rows[0]) return false
+    execution.rev = rows[0].rev
+    return true
+  }
+
   async compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
     // Conditional update guarded on the rev last read onto this instance; only writes
     // when the stored row is unchanged. No insert — the run must already exist.

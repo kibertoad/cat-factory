@@ -1331,7 +1331,7 @@ export class ExecutionService {
       status: 'running',
       initiatedBy: initiatedBy ?? null,
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'in_progress',
       progress: 0,
@@ -2538,7 +2538,7 @@ export class ExecutionService {
       status: 'running',
       initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
@@ -2641,7 +2641,7 @@ export class ExecutionService {
       status: 'running',
       initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
@@ -2651,6 +2651,28 @@ export class ExecutionService {
     await this.workRunner.startRun(workspaceId, instance.id)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
+  }
+
+  /**
+   * Insert a freshly-built run, enforcing the one-live-run-per-block invariant at the DB.
+   * `start`/`retry`/`restartFromStep` all `deleteByBlock` first, so in the uncontended path
+   * the insert always lands; a `false` return means a genuinely-concurrent start (double
+   * click, recurring-vs-manual, notification-vs-human retry) already created the block's live
+   * run between our delete and insert — so we REFUSE this duplicate rather than materialise a
+   * second driver + container on the same branch. The winning run is untouched (a losing
+   * insert never deletes it — see the port doc). Surfaces as a 409 the SPA shows as a toast.
+   */
+  private async insertLiveRunOrConflict(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<void> {
+    const inserted = await this.executionRepository.insertLive(workspaceId, instance)
+    if (!inserted) {
+      // No machine `reason`: this is a rare double-start edge, not a distinct client-handled
+      // conflict, so the human message drives the SPA's generic 409 toast (no new
+      // ConflictReason + exhaustive-Record/i18n cascade for a transient race).
+      throw new ConflictError('A run is already active for this block.')
+    }
   }
 
   /**

@@ -125,6 +125,45 @@ export class D1ExecutionRepository implements ExecutionRepository {
     if (row) execution.rev = row.rev
   }
 
+  async insertLive(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
+    // One live run per block, enforced atomically by the partial unique index
+    // `uniq_live_execution_per_block` (migration 0033) on (workspace_id, block_id) over
+    // live execution rows. A fresh run always has a unique new id, so the ONLY conflict
+    // this insert can hit is that block index — and DO NOTHING makes a concurrent
+    // double-start a clean no-op (empty RETURNING) instead of a second live run. The
+    // ON CONFLICT target MUST mirror the index predicate exactly.
+    const now = this.clock.now()
+    const detail = executionToDetail(execution)
+    const row = await this.db
+      .prepare(
+        `INSERT INTO agent_runs
+           (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
+            workflow_instance_id, service_id, rev)
+         VALUES (?, ?, 'execution', ?, ?, ?, ?, ?, ?,
+            (SELECT service_id FROM blocks WHERE workspace_id = ? AND id = ?), 0)
+         ON CONFLICT (workspace_id, block_id)
+           WHERE kind = 'execution' AND status IN ('running', 'blocked', 'paused')
+           DO NOTHING
+         RETURNING rev`,
+      )
+      .bind(
+        workspaceId,
+        execution.id,
+        execution.blockId,
+        execution.status,
+        detail,
+        now,
+        now,
+        execution.id,
+        workspaceId,
+        execution.blockId,
+      )
+      .first<{ rev: number }>()
+    if (!row) return false
+    execution.rev = row.rev
+    return true
+  }
+
   async compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
     // Conditional update guarded on the rev last read onto this instance; only writes
     // when the stored row is unchanged. No insert — the run must already exist.

@@ -70,12 +70,18 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
           { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'bootstrap poll could not read job status; treating as still running and retrying',
         )
-        // Sustained unreachability: leave the job `running` so the cron sweep can
-        // re-drive it later (the container may recover, or report terminal, by then).
-        // Stop this instance to avoid burning the whole poll budget while wedged.
-        if (pollReadFailures >= execConfig.jobPollFailureTolerance) {
-          log.error('bootstrap poll unreadable past tolerance; leaving for sweeper')
-          return
+        // Sustained unreachability past tolerance: do NOT return. Returning makes this
+        // Workflows instance TERMINAL, and the cron sweep can't re-drive a terminal
+        // instance (its id can't be recreated) — it takes the `finalizeOrphan` branch
+        // and STOPS the job, force-failing a bootstrap that was merely busy (a long
+        // clone/install) instead of recovering it. So we keep the instance alive and
+        // keep polling with the durable sleep between attempts (cheap, survives
+        // eviction): the container's own inactivity + max-duration watchdogs bound the
+        // work, a vanished container surfaces as a 404→`failed` value (handled below),
+        // and `jobMaxPolls` backstops a container that never reports terminal. A brief
+        // unreachability window is exactly what the tolerance was meant to ride out.
+        if (pollReadFailures === execConfig.jobPollFailureTolerance) {
+          log.warn('bootstrap poll unreadable past tolerance; keeping instance alive and polling')
         }
         continue
       }

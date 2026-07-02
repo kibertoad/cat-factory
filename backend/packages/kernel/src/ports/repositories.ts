@@ -144,6 +144,19 @@ export interface ExecutionRepository {
    */
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>
   /**
+   * Insert a brand-new run, but ONLY if the block has no other LIVE execution run
+   * (`running`/`blocked`/`paused`). Enforced atomically by a partial unique index on
+   * `(workspace_id, block_id)` over live execution rows, so two concurrent starts
+   * (double-click, a recurring fire racing a manual start, a notification retry racing a
+   * human retry) can never create two live runs — two drivers, two containers — for one
+   * block. Returns `true` when the row was inserted (and sets the in-memory `execution.rev`
+   * to its fresh value); returns `false` with NO write when a live run already exists, so
+   * the caller rejects the duplicate start rather than materialising a second run. Callers
+   * `deleteByBlock` first, so in the uncontended path there is never a live row to conflict
+   * with — the guard only bites the genuinely-concurrent double start.
+   */
+  insertLive(workspaceId: string, execution: ExecutionInstance): Promise<boolean>
+  /**
    * Optimistic-concurrency write: persist `execution` only if the stored row's `rev`
    * still equals the `rev` last read onto this instance. Returns `true` (and bumps the
    * in-memory `execution.rev`) when the write lands; returns `false` with NO write when
