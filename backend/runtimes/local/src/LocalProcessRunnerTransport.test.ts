@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { LocalProcessRunnerTransport } from './LocalProcessRunnerTransport.js'
+import { LocalProcessRunnerTransport, resolveHarnessEntry } from './LocalProcessRunnerTransport.js'
 
 // Coverage for the NATIVE local transport (LOCAL_NATIVE_AGENTS): it runs the harness as a
 // host process and drives it over HTTP. spawn + fetch + the port picker are injected so it
@@ -122,5 +122,20 @@ describe('LocalProcessRunnerTransport', () => {
     const body = JSON.parse(String((post[1] as RequestInit).body))
     expect(body.harness).toBe('claude-code')
     expect(body.ambientAuth).toBe(true)
+  })
+})
+
+describe('resolveHarnessEntry', () => {
+  it('uses an explicit LOCAL_HARNESS_ENTRY verbatim (trimmed)', () => {
+    expect(resolveHarnessEntry({ LOCAL_HARNESS_ENTRY: '  /custom/server.js  ' })).toBe(
+      '/custom/server.js',
+    )
+  })
+
+  it('falls back to the bundled @cat-factory/executor-harness server entry when unset', () => {
+    // No env override → resolves the package that ships as a dependency of local-server, so a
+    // fresh install runs native mode with no configuration (mirrors LOCAL_HARNESS_IMAGE).
+    const entry = resolveHarnessEntry({})
+    expect(entry).toMatch(/executor-harness[\\/].*server\.js$/)
   })
 })
