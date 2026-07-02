@@ -366,6 +366,14 @@ export function seedPipelines(): Pipeline[] {
       name: 'Quick implement',
       agentKinds: ['coder', 'blueprints', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
     },
+    // Identical to "Quick implement" but with the UI (`tester-ui`) tester in place of the
+    // API (`tester-api`) tester, so the test step drives a real browser against the frontend
+    // instead of exercising the API — every other step is the same.
+    {
+      id: 'pl_quick_fe',
+      name: 'Quick implement (FE)',
+      agentKinds: ['coder', 'blueprints', 'mocker', 'tester-ui', 'conflicts', 'ci', 'merger'],
+    },
     // The leanest end-to-end build: implement → review → test, then the standard
     // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
     // its `reviewer` companion rates it immediately and loops it back for automatic
