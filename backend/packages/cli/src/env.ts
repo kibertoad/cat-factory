@@ -191,16 +191,18 @@ function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
 }
 
 /**
- * Commonly-useful optional settings, all commented (their defaults already apply) with sane
- * values shown so a developer can toggle them in place instead of hunting the docs. Mirrors
- * the opt-in knobs documented in `deploy/local/.env.example`.
+ * Commonly-useful optional settings, all commented out so a developer can toggle them in place
+ * instead of hunting the docs. NOTE: these are shown with the value you'd set to change the
+ * behaviour, which is NOT always the default — the auth pair below is on by default in local
+ * mode, but tracing/Slack/consensus are opt-in (off) and image-refresh is on by default. Each
+ * comment states the actual default. Mirrors the opt-in knobs in `deploy/local/.env.example`.
  */
 function commonOptionalEntries(provider: VcsProvider): EnvEntry[] {
   const entries: EnvEntry[] = [
     {
       comment: [
-        'Commonly useful optional settings (the shown values are the defaults; uncomment to',
-        'change). Email/password sign-in + open signup are ON by default in local mode.',
+        'Email/password sign-in + open signup. Both are ON by default in local mode (the values',
+        'shown are the defaults) — uncomment and set to false to require an invite / disable it.',
       ],
       key: '# AUTH_PASSWORD_ENABLED',
       value: 'true',
@@ -208,27 +210,35 @@ function commonOptionalEntries(provider: VcsProvider): EnvEntry[] {
     { key: '# AUTH_OPEN_SIGNUP', value: 'true' },
     {
       comment: [
-        'Boot-time harness image refresh (pull the backend-matched image on start). Set to off',
-        'when offline or you manage the image yourself.',
+        'Boot-time harness image refresh (pull the backend-matched image on start). ON by',
+        'default; the value shown DISABLES it — uncomment when offline or you manage the image',
+        'yourself.',
       ],
       key: '# LOCAL_HARNESS_IMAGE_REFRESH',
       value: 'off',
     },
     {
-      comment: ['Stream every LLM call to Langfuse (needs both keys below).'],
+      comment: [
+        'Stream every LLM call to Langfuse. OFF by default; the value shown ENABLES it (also',
+        'needs both keys below).',
+      ],
       key: '# LANGFUSE_ENABLED',
       value: 'true',
     },
     { key: '# LANGFUSE_PUBLIC_KEY', value: '' },
     { key: '# LANGFUSE_SECRET_KEY', value: '' },
     {
-      comment: ['Post board notifications to Slack (connect the workspace in the UI).'],
+      comment: [
+        'Post board notifications to Slack (connect the workspace in the UI). OFF by default;',
+        'the value shown ENABLES it.',
+      ],
       key: '# SLACK_ENABLED',
       value: 'true',
     },
     {
       comment: [
         'Multi-model consensus (specialist panel / debate / ranked voting) on eligible steps.',
+        'OFF by default; the value shown ENABLES it.',
       ],
       key: '# CONSENSUS_ENABLED',
       value: 'true',

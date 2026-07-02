@@ -1,3 +1,4 @@
+import { MODEL_CATALOG, SUBSCRIPTION_VENDORS } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   EXECUTION_MODE_TRADEOFFS,
@@ -30,6 +31,33 @@ describe('nativeModelSummary', () => {
 
   it('reads "none" when no model applies', () => {
     expect(nativeModelSummary([])).toBe('none')
+  })
+})
+
+// NATIVE_MODELS is a hand-maintained mirror of the backend catalog (the CLI stays runtime
+// dependency-free, so it can't import it at runtime). These couple the mirror to the real
+// `@cat-factory/kernel` catalog as a DEV-only import, so a flagship-model rename / relabel /
+// harness change breaks this test instead of silently shipping a wrong `.env` comment.
+describe('NATIVE_MODELS mirror is in step with the backend catalog', () => {
+  it('names a real catalog model (id + label) for every native entry', () => {
+    for (const m of NATIVE_MODELS) {
+      const model = MODEL_CATALOG.find((c) => c.id === m.id)
+      expect(model, `native model id "${m.id}" is missing from MODEL_CATALOG`).toBeDefined()
+      expect(model?.label, `label drift for "${m.id}"`).toBe(m.label)
+    }
+  })
+
+  it('maps each native entry to the harness its catalog subscription vendor uses', () => {
+    for (const m of NATIVE_MODELS) {
+      const model = MODEL_CATALOG.find((c) => c.id === m.id)
+      const vendor = model?.subscription?.vendor
+      expect(vendor, `"${m.id}" has no subscription vendor in the catalog`).toBeDefined()
+      const cfg = vendor ? SUBSCRIPTION_VENDORS[vendor] : undefined
+      expect(cfg?.harness, `harness drift for "${m.id}"`).toBe(m.harness)
+      // Only a TRUE native vendor (its own CLI login, no Anthropic-compatible baseUrl) runs
+      // natively; a harness-reusing vendor (GLM/Kimi/DeepSeek carries a baseUrl) must not leak in.
+      expect(cfg?.baseUrl, `"${m.id}" mirrors a non-native (baseUrl) vendor`).toBeUndefined()
+    }
   })
 })
 

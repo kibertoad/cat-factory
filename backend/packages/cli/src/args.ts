@@ -191,8 +191,10 @@ function parseExecutionMode(value: string): ExecutionMode {
 
 /**
  * Parse a comma-separated `--native-harnesses` list (e.g. `claude-code,codex`). `claude` is
- * accepted as an alias for `claude-code`, mirroring the backend's `LOCAL_NATIVE_AGENTS` parse.
- * At least one recognised harness must be named.
+ * accepted as an alias for `claude-code`, matching the backend's `LOCAL_NATIVE_AGENTS` alias.
+ * Unlike the backend env parse (which also honours affirmative/off keywords like `both`/`off`
+ * and fails safe to off), this explicit flag is strict: at least one recognised harness must be
+ * named, and anything else is a hard error.
  */
 function parseNativeHarnesses(value: string): NativeHarness[] {
   const out = new Set<NativeHarness>()

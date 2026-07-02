@@ -176,9 +176,22 @@ interface ExecutionChoice {
  * interactive mode the tradeoffs of each mode are printed before the choice, and (native only)
  * the developer can list which models actually run natively before committing.
  */
+/** Whether any native-only flag (`--native-harnesses` / `--harness-entry`) was supplied. */
+function nativeFlagsProvided(options: CliOptions): boolean {
+  return Boolean(options.nativeHarnesses?.length) || options.harnessEntry !== undefined
+}
+
 async function resolveExecution(options: CliOptions, io: Io): Promise<ExecutionChoice> {
   const mode = await resolveExecutionMode(options, io)
-  if (mode !== 'native') return { mode }
+  if (mode !== 'native') {
+    // Native-only flags carry no meaning in pool mode; warn rather than silently drop them so a
+    // `--execution-mode pool --native-harnesses …` (or the same via prompt) isn't a quiet no-op.
+    if (nativeFlagsProvided(options))
+      io.warn(
+        'Ignoring --native-harnesses / --harness-entry: they only apply to --execution-mode native.',
+      )
+    return { mode }
+  }
 
   const nativeHarnesses = await resolveNativeHarnesses(options, io)
   if (!options.yes) await maybeShowNativeModels(io, nativeHarnesses)
@@ -188,6 +201,12 @@ async function resolveExecution(options: CliOptions, io: Io): Promise<ExecutionC
 
 async function resolveExecutionMode(options: CliOptions, io: Io): Promise<ExecutionMode> {
   if (options.executionMode) return options.executionMode
+  // A native-only flag with no explicit --execution-mode clearly means native: infer it rather
+  // than defaulting to pool and dropping the flag on the floor.
+  if (nativeFlagsProvided(options)) {
+    io.info('Assuming --execution-mode native (a native-only flag was provided).')
+    return 'native'
+  }
   if (options.yes) return OPTION_DEFAULTS.executionMode
   // Print both modes' tradeoffs so the choice is informed, not a bare two-item menu.
   io.info(
@@ -248,7 +267,16 @@ async function maybeShowNativeModels(io: Io, harnesses: NativeHarness[]): Promis
  */
 async function resolveHarnessEntry(options: CliOptions, io: Io): Promise<string> {
   if (options.harnessEntry !== undefined) return options.harnessEntry
-  if (options.yes) return ''
+  if (options.yes) {
+    // Non-interactive native mode with no --harness-entry: LOCAL_HARNESS_ENTRY is required, so
+    // warn loudly here too (the interactive branch below already does) — otherwise the misconfig
+    // only surfaces as a boot-time throw.
+    io.warn(
+      'LOCAL_HARNESS_ENTRY left blank (native mode, --yes with no --harness-entry) — set it ' +
+        'before starting or native dispatch fails.',
+    )
+    return ''
+  }
   const entry = (
     await io.question(
       'Path to the executor-harness server entry (LOCAL_HARNESS_ENTRY; leave blank to set later)',
