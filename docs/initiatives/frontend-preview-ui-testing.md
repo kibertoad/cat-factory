@@ -48,8 +48,8 @@ build on. Link the merged pilot PR here once it lands.
 | 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e      | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
 | 4c  | Surface/gate visual pipelines (`tester-ui`/`visual-confirmation`) to frames with a UI | done   | [#636](https://github.com/kibertoad/cat-factory/pull/636) |
 | 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)    | done   | [#638](https://github.com/kibertoad/cat-factory/pull/638) |
-| 5b  | Harness `preview` mode — build+serve kept alive (the serve mechanic's container half) | done   | this PR                                                   |
-| 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop   | todo   | —                                                         |
+| 5b  | Harness `preview` mode — build+serve kept alive (the serve mechanic's container half) | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
+| 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop   | done   | this PR                                                   |
 | 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector         | todo   | —                                                         |
 
 ## Conventions & gotchas carried between iterations
@@ -298,3 +298,45 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     Gate the whole flow on `frontendPreview.supported` server-side (a start/provision guard), since 5a
     only gates the SPA toggle. Keep it a local/node differentiator — the Worker never wires the
     preview dispatch. **5d** then surfaces the clickable URL + a stop button on the frame inspector.
+- Slice 5c conventions & gotchas:
+  - **The runtime-neutral half is symmetric; only the TRANSPORT is per-runtime.** `PreviewTransport`
+    (`kernel/ports/preview-transport.ts`) is a NEW optional port — a runtime-specific mechanic
+    (publish a served-app port to the host + keep the container alive), legitimately absent on
+    runtimes without a host-port-publish primitive, exactly like the Cloudflare-Container-only
+    execution path. Everything else IS runtime-neutral and lands on ALL facades: `PreviewService`
+    (a `Core` module, `orchestration/modules/preview`), the `PreviewController` + the three
+    `/workspaces/:ws/frames/:frameId/preview` routes (start/get/stop), and the capability gate. The
+    cross-runtime conformance suite drives the full lifecycle on BOTH Postgres runtimes with a
+    `FakePreviewTransport` + `fakeBuildPreviewJob` (the parallel of `FakeAgentExecutor` standing in
+    for a real container), pinning the ephemeral-`environments`-row persistence parity.
+  - **Reuse the `environments` table — NO new table/migration.** A running preview is persisted as an
+    `environments` row (`provisionType: 'preview'`, `blockId === frameId ===` the `frontend` frame,
+    `expiresAt: null` so the expiry cron never sweeps it). `getByBlock(ws, frameId)` finds it, guarded
+    by the `provisionType === 'preview'` discriminator so it can't be confused with a deployer env (a
+    deployer env keys `blockId` = the TASK, not the frame). `stop` owns its teardown — transport stop +
+    registry `softDelete` — NOT `EnvironmentTeardownService` (which resolves a `provider.teardown` a
+    preview has none of). No `frontend_config`-gating on the row; the module gates instead.
+  - **`get` re-polls the transport ONLY while `provisioning`.** Once served, the persisted host URL is
+    authoritative (the container keeps serving; a lost preview is simply re-started). This also spares
+    the transport a serve-port lookup it can only satisfy within the starting process — the in-memory
+    `frameId → { containerId, servePort }` cache (needed to read `docker port <id> <servePort>`) is not
+    durable, which is fine for a dev-convenience preview.
+  - **The adapter grew two symmetric knobs** (`ContainerRuntimeAdapter`): `RunContainerSpec.publishPorts`
+    (Docker publishes each with a second `-p 127.0.0.1:0:<port>`; Apple ignores it — its per-container
+    IP reaches any port directly) and `endpoint(exec, id, port?)` (Docker `docker port <id> <port>/tcp`;
+    Apple returns `{ host: containerIP, port }`). The harness job id inside a preview container is the
+    constant `PREVIEW_HARNESS_JOB_ID = 'preview'` (single-purpose container ⇒ no cross-layer id to
+    thread). A preview container is labelled with a synthetic `preview-<frameId>` run id.
+  - **The harness needs NO change (no image bump).** `runPreviewMode` (5b) already accepts the preview
+    job absent the agent-only fields but STILL requires `proxyBaseUrl` + `sessionToken` (its auth parser
+    runs before dispatch). No LLM runs, so `makePreviewJobBuilder` mints a benign, model-agnostic session
+    token purely to satisfy the parser — never used for a call. The builder is the server-layer seam
+    (`@cat-factory/server` `preview/previewJobBuilder`) reusing the SAME repo/token/session resolution
+    the container executor uses; `buildNodeContainer` constructs it from those seams whenever a preview
+    transport is injected (unless one is injected via `overrides` — the conformance fake).
+  - **Node advertises `frontendPreview.supported: true` (5a) but the bare Node deployment wires no
+    preview transport yet** (its runner is a self-hosted K8s pool with no host-port-publish primitive; a
+    K8s-ingress-backed preview transport is a follow-up). So on a stock Node-with-pool deployment the
+    preview module is unwired and the controller 503s despite the capability — consistent with the other
+    "Node follow-up" gaps in this initiative. Local mode wires the real Docker/Apple transport today.
+    The capability stays a topology statement per the landed 5a decision (not re-litigated here).

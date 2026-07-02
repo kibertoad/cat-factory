@@ -312,6 +312,8 @@ export type {
   RunnerJobView,
   RunnerTransport,
 } from './runner-transport.js'
+export type { PreviewRef, PreviewTransport, PreviewView } from './preview-transport.js'
+export { PREVIEW_HARNESS_JOB_ID } from './preview-transport.js'
 export type {
   RunnerDispatchRequest,
   RunnerPollRequest,

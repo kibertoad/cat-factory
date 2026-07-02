@@ -4513,6 +4513,72 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         },
       )
 
+      // Slice 5c (frontend-preview-ui-testing): the browsable-preview lifecycle + its ephemeral
+      // `environments`-row persistence, driven through a FAKE preview transport (the real one is a
+      // per-runtime differentiator, wired only in local). Skipped on Cloudflare (the Worker reports
+      // `frontendPreview.supported: false` and wires no transport → the controller 503s) and on
+      // mothership (its harness wires no preview fake). Asserts the runtime-neutral half: start
+      // persists a `preview`-typed env row keyed by the FRAME, get drives it to `ready` with the
+      // served URL, and stop soft-deletes it — the D1 ⇄ Drizzle env-row parity for a preview.
+      it.skipIf(harness.name === 'cloudflare' || harness.name === 'mothership')(
+        'starts, serves and stops a browsable frontend preview keyed by the frame',
+        async () => {
+          const app = harness.makeApp()
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // Nothing running yet.
+          const before = await app.call<{ status: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(before.status).toBe(200)
+          expect(before.body.status).toBe('stopped')
+
+          // Start → 201, provisioning; a `preview`-typed env row is keyed by the FRAME.
+          const started = await app.call<{ status: string; frameId: string }>(
+            'POST',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(started.status).toBe(201)
+          expect(started.body.status).toBe('starting')
+          expect(started.body.frameId).toBe('blk_frontend')
+
+          const envs = await app.call<{ blockId: string | null; frameId?: string | null }[]>(
+            'GET',
+            `/workspaces/${wsId}/environments`,
+          )
+          expect(envs.body).toHaveLength(1)
+          expect(envs.body[0]!.frameId).toBe('blk_frontend')
+          expect(envs.body[0]!.blockId).toBe('blk_frontend')
+
+          // Get → the fake transport reports it serving, so it flips to `ready` with the URL.
+          const ready = await app.call<{ status: string; url?: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(ready.status).toBe(200)
+          expect(ready.body.status).toBe('ready')
+          expect(ready.body.url).toBe('http://preview.test:4173')
+
+          // Stop → soft-deletes the row; a subsequent get + env list are empty again.
+          const stopped = await app.call<{ status: string }>(
+            'DELETE',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(stopped.status).toBe(200)
+          expect(stopped.body.status).toBe('stopped')
+
+          const after = await app.call<{ status: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(after.body.status).toBe('stopped')
+          const envsAfter = await app.call<unknown[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envsAfter.body).toHaveLength(0)
+        },
+      )
+
       it('refuses to start a UI-tester pipeline when the account has no binary storage', async () => {
         // The `tester-ui` step uploads its screenshots to the binary-artifact store, so the
         // engine refuses to START the pipeline when the account has none configured — a clear
