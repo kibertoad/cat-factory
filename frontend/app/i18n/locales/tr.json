@@ -445,6 +445,17 @@
         "mock": "Taklit (WireMock)",
         "remove": "Bağlamayı kaldır",
         "empty": "Backend bağlaması yok. Bir ortam değişkenini bir hizmete veya taklide yönlendirmek için bir tane ekleyin."
+      },
+      "preview": {
+        "open": "Önizlemeyi aç",
+        "start": "Önizlemeyi başlat",
+        "stop": "Durdur",
+        "status": {
+          "starting": "Başlatılıyor…",
+          "ready": "Çalışıyor",
+          "failed": "Başarısız",
+          "stopped": "Başlatılmadı"
+        }
       }
     },
     "releaseHealth": {

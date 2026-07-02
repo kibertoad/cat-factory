@@ -50,7 +50,7 @@ build on. Link the merged pilot PR here once it lands.
 | 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)    | done   | [#638](https://github.com/kibertoad/cat-factory/pull/638) |
 | 5b  | Harness `preview` mode — build+serve kept alive (the serve mechanic's container half) | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
 | 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop   | done   | this PR                                                   |
-| 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector         | todo   | —                                                         |
+| 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector         | done   | this PR                                                   |
 
 ## Conventions & gotchas carried between iterations
 
@@ -340,3 +340,19 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     preview module is unwired and the controller 503s despite the capability — consistent with the other
     "Node follow-up" gaps in this initiative. Local mode wires the real Docker/Apple transport today.
     The capability stays a topology statement per the landed 5a decision (not re-litigated here).
+- Slice 5d conventions & gotchas:
+  - **Live preview state is a store, NOT `frontendConfig`.** `frontendConfig.previewEnabled` is the
+    persisted per-frame TOGGLE (saved via `board.updateBlock`); the LIVE preview (a running container +
+    its host URL) is a separate runtime resource in `usePreviewStore` (`stores/preview.ts`), keyed by
+    frame id, over the three preview endpoints (a new `previewApi` client group registered in `useApi`).
+    The store self-polls (2.5s) while a preview is `starting` and stops on any terminal state.
+  - **The surface lives INSIDE `FrontendConfig.vue`, under the `previewEnabled` toggle** — shown only
+    when `previewSupported && previewEnabled` (so an unsupported runtime / a disabled toggle shows
+    nothing). Start/stop buttons + a clickable "Open preview" external-link button on `ready`; the status
+    label is a runtime-built key guarded by an exhaustive `Record<PreviewStatus, key>` (i18n tier-2, the
+    keys read as "unused" by `vue-i18n-extract` exactly like the `errors.conflict.title.*` set — expected).
+  - **All new copy is translated in every locale** (`inspector.frontendConfig.preview.*`, added to
+    en/es/fr/he/ja/pl/tr/uk) to satisfy the locale-parity CI gate. `data-testid`s
+    (`preview-panel`/`preview-status`/`preview-url`/`preview-start`/`preview-stop`) are in place for a
+    future e2e — none was added here (the e2e backend runs GitHub + Docker OFF, so a real preview can't
+    stand up there; the conformance suite is the runtime-neutral proof).

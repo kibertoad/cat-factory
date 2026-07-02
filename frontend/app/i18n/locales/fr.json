@@ -445,6 +445,17 @@
         "mock": "Simulation (WireMock)",
         "remove": "Supprimer la liaison",
         "empty": "Aucune liaison de backend. Ajoutez-en une pour pointer une variable d'environnement vers un service ou une simulation."
+      },
+      "preview": {
+        "open": "Ouvrir l'aperçu",
+        "start": "Démarrer l'aperçu",
+        "stop": "Arrêter",
+        "status": {
+          "starting": "Démarrage…",
+          "ready": "En cours",
+          "failed": "Échec",
+          "stopped": "Non démarré"
+        }
       }
     },
     "releaseHealth": {

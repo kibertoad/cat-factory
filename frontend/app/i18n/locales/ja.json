@@ -445,6 +445,17 @@
         "mock": "モック（WireMock）",
         "remove": "バインディングを削除",
         "empty": "バックエンドバインディングがありません。追加して、環境変数をサービスまたはモックに向けてください。"
+      },
+      "preview": {
+        "open": "プレビューを開く",
+        "start": "プレビューを開始",
+        "stop": "停止",
+        "status": {
+          "starting": "開始中…",
+          "ready": "実行中",
+          "failed": "失敗",
+          "stopped": "停止中"
+        }
       }
     },
     "releaseHealth": {
