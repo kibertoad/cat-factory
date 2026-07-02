@@ -40,6 +40,15 @@ const EXACT_ALLOW = new Set([
   'HTTPS_PROXY',
   'NO_PROXY',
   'ALL_PROXY',
+  // TLS trust anchors — non-secret, and the counterpart the proxy vars above are useless
+  // without: a corp TLS-terminating proxy re-signs with a private CA, so git/GitHub/API calls
+  // from the child fail with "unable to get local issuer certificate" if these are stripped.
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'GIT_SSL_CAINFO',
+  'REQUESTS_CA_BUNDLE',
+  'CURL_CA_BUNDLE',
   // Ambient CLI config homes — the whole point of native mode is the developer's own login
   'CLAUDE_CONFIG_DIR',
   'CODEX_HOME',

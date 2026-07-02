@@ -236,6 +236,8 @@ describe('JobRegistry.abortAll', () => {
     registry.start('hung-2', { jobId: 'hung-2' })
     await tick()
     expect(registry.get('quick')?.state).toBe('done')
+    // The graceful-shutdown poll sees the two hung jobs still running (the settled one drops out).
+    expect(registry.runningCount()).toBe(2)
 
     // Only the two still-running jobs are aborted; their views carry the shutdown reason.
     expect(registry.abortAll('harness shutting down (SIGTERM)')).toBe(2)
@@ -244,7 +246,8 @@ describe('JobRegistry.abortAll', () => {
     expect(registry.get('hung-1')?.error).toMatch(/shutting down/)
     expect(registry.get('hung-2')?.state).toBe('failed')
 
-    // Nothing left running: a second sweep is a no-op.
+    // Nothing left running: the shutdown poll can exit, and a second sweep is a no-op.
+    expect(registry.runningCount()).toBe(0)
     expect(registry.abortAll('again')).toBe(0)
   })
 })

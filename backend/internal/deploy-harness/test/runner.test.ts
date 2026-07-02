@@ -31,11 +31,13 @@ describe('JobRegistry.abortAll', () => {
     registry.start('hung', { jobId: 'hung' })
     await tick()
     expect(registry.get('quick')?.state).toBe('done')
+    expect(registry.runningCount()).toBe(1)
 
     expect(registry.abortAll('harness shutting down (SIGTERM)')).toBe(1)
     await tick()
     expect(registry.get('hung')?.state).toBe('failed')
     expect(registry.get('hung')?.error).toMatch(/shutting down/)
+    expect(registry.runningCount()).toBe(0)
     expect(registry.abortAll('again')).toBe(0)
   })
 })

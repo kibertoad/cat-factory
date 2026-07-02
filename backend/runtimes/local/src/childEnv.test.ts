@@ -49,14 +49,26 @@ describe('sanitizedChildEnv', () => {
     })
   })
 
-  it('passes extra names through the LOCAL_HARNESS_ENV_ALLOW escape hatch', () => {
+  it('keeps the TLS trust-anchor vars (a corp proxy is useless without its CA)', () => {
     const out = sanitizedChildEnv({
-      LOCAL_HARNESS_ENV_ALLOW: 'NODE_EXTRA_CA_CERTS, my_wrapper_flag',
+      HTTPS_PROXY: 'http://proxy:3128',
       NODE_EXTRA_CA_CERTS: '/etc/ssl/corp.pem',
-      MY_WRAPPER_FLAG: 'on',
+      SSL_CERT_FILE: '/etc/ssl/certs/ca.pem',
+      GIT_SSL_CAINFO: '/etc/ssl/certs/ca.pem',
       DATABASE_URL: 'postgres://secret',
     })
     expect(out.NODE_EXTRA_CA_CERTS).toBe('/etc/ssl/corp.pem')
+    expect(out.SSL_CERT_FILE).toBe('/etc/ssl/certs/ca.pem')
+    expect(out.GIT_SSL_CAINFO).toBe('/etc/ssl/certs/ca.pem')
+    expect(out.DATABASE_URL).toBeUndefined()
+  })
+
+  it('passes extra names through the LOCAL_HARNESS_ENV_ALLOW escape hatch', () => {
+    const out = sanitizedChildEnv({
+      LOCAL_HARNESS_ENV_ALLOW: 'my_wrapper_flag',
+      MY_WRAPPER_FLAG: 'on',
+      DATABASE_URL: 'postgres://secret',
+    })
     expect(out.MY_WRAPPER_FLAG).toBe('on')
     expect(out.DATABASE_URL).toBeUndefined()
     // The allow-list itself is not an allow-listed variable.

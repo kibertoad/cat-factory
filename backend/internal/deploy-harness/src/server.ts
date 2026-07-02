@@ -128,8 +128,9 @@ if (process.env.NODE_ENV !== 'test') {
   })
 
   // Graceful shutdown, identical to the executor harness: abort running jobs so their
-  // kubectl/helm children die with us instead of being orphaned mid-apply, then exit once
-  // the kill window has passed — immediately when nothing was running.
+  // kubectl/helm children die with us instead of being orphaned mid-apply, then exit as SOON as
+  // they settle (don't block every shutdown on a fixed window). The 6s cap covers a job that
+  // ignored SIGTERM and had to be force-killed; nothing running ⇒ exit immediately.
   const shutdown = (signal: string): void => {
     const aborted = Object.values(KINDS).reduce(
       (count, { registry }) => count + registry.abortAll(`harness shutting down (${signal})`),
@@ -137,7 +138,18 @@ if (process.env.NODE_ENV !== 'test') {
     )
     log.info('shutting down', { signal, abortedJobs: aborted })
     server.close()
-    setTimeout(() => process.exit(0), aborted > 0 ? 6_000 : 0)
+    if (aborted === 0) {
+      process.exit(0)
+      return
+    }
+    const deadline = Date.now() + 6_000
+    const timer = setInterval(() => {
+      const stillRunning = Object.values(KINDS).some(({ registry }) => registry.runningCount() > 0)
+      if (!stillRunning || Date.now() >= deadline) {
+        clearInterval(timer)
+        process.exit(0)
+      }
+    }, 50)
   }
   process.once('SIGTERM', () => shutdown('SIGTERM'))
   process.once('SIGINT', () => shutdown('SIGINT'))

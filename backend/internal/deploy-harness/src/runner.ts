@@ -143,6 +143,16 @@ export class JobRegistry<
     return aborted
   }
 
+  /**
+   * How many jobs are still RUNNING. Graceful shutdown polls this so it can exit the moment the
+   * aborted jobs have actually settled instead of waiting out a fixed kill-grace window.
+   */
+  runningCount(): number {
+    let running = 0
+    for (const entry of this.jobs.values()) if (entry.state === 'running') running += 1
+    return running
+  }
+
   private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
     const controller = new AbortController()
     let killReason: 'inactivity' | 'max-duration' | undefined

@@ -158,9 +158,11 @@ if (process.env.NODE_ENV !== 'test') {
   // Graceful shutdown: dying to a bare SIGTERM/SIGINT (the default handler) would ORPHAN any
   // in-flight `claude`/`codex`/git child — reparented, it keeps working unsupervised (and in
   // native local mode on the developer's own login). Abort every running job first (the
-  // SIGTERM→SIGKILL escalation in killChildProcess), then exit once the 5s escalation window
-  // has passed — immediately when nothing was running. A second signal takes the default
-  // (immediate) exit, since `once` leaves it unhandled.
+  // SIGTERM→SIGKILL escalation in killChildProcess), then exit as SOON as the aborted jobs have
+  // settled — the CLI usually honours SIGTERM in milliseconds, so don't block every shutdown on
+  // a fixed window. The 6s cap covers a job that ignored SIGTERM and had to be force-killed (the
+  // 5s escalation) plus a margin. Nothing running ⇒ exit immediately. A second signal takes the
+  // default (immediate) exit, since `once` leaves it unhandled.
   const shutdown = (signal: string): void => {
     const aborted = Object.values(KINDS).reduce(
       (count, { registry }) => count + registry.abortAll(`harness shutting down (${signal})`),
@@ -168,7 +170,18 @@ if (process.env.NODE_ENV !== 'test') {
     )
     log.info('shutting down', { signal, abortedJobs: aborted })
     server.close()
-    setTimeout(() => process.exit(0), aborted > 0 ? 6_000 : 0)
+    if (aborted === 0) {
+      process.exit(0)
+      return
+    }
+    const deadline = Date.now() + 6_000
+    const timer = setInterval(() => {
+      const stillRunning = Object.values(KINDS).some(({ registry }) => registry.runningCount() > 0)
+      if (!stillRunning || Date.now() >= deadline) {
+        clearInterval(timer)
+        process.exit(0)
+      }
+    }, 50)
   }
   process.once('SIGTERM', () => shutdown('SIGTERM'))
   process.once('SIGINT', () => shutdown('SIGINT'))

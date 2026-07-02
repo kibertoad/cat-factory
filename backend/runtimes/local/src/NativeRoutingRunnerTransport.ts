@@ -50,20 +50,11 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
     let transport = this.routed.get(refKey(ref))
     if (!transport) {
-      // Unknown ref — a fresh process after a restart/durable replay. The ambient host
-      // process died WITH the old parent, so a job that survived can only live on the
-      // managed (container) leg, which re-finds a per-run container by its run-id label
-      // with no in-process state. Fall back there instead of reporting a blanket eviction
-      // — otherwise a still-running container job is spuriously re-driven (repeating its
-      // agent work) that the plain container transport would have simply re-attached to.
-      // A genuinely-gone job still gets the eviction view from that transport's own 404
-      // mapping, and a deployment with no container leg configured (Claude/Codex-only
-      // native) fails to build it — treat that as the eviction too.
-      try {
-        transport = await this.managed()
-      } catch {
-        return { state: 'failed', error: EVICTION_ERROR }
-      }
+      transport = await this.recoverTransport()
+      // No container leg configured (Claude/Codex-only native) ⇒ nothing could have survived;
+      // report the eviction so the sweeper re-drives (an idempotent re-dispatch re-routes).
+      if (!transport) return { state: 'failed', error: EVICTION_ERROR }
+      // Remember the route so the follow-up polls hit the same backend with no rebuild.
       this.routed.set(refKey(ref), transport)
     }
     const view = await transport.poll(ref)
@@ -74,8 +65,28 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
   }
 
   async release(ref: RunnerJobRef): Promise<void> {
-    const transport = this.routed.get(refKey(ref))
+    // Prefer the remembered route; on an unknown ref (a cold release after a restart, e.g. the
+    // run was cancelled before any poll re-routed it) fall back to the managed leg exactly as
+    // poll() does — a survivor can only be a per-run container that leg re-finds by run-id
+    // label, so tearing it down there beats no-oping and leaking a still-running container. The
+    // release is terminal, so unlike poll() we don't persist the route.
+    const transport = this.routed.get(refKey(ref)) ?? (await this.recoverTransport())
     this.routed.delete(refKey(ref))
     await transport?.release?.(ref)
+  }
+
+  /**
+   * Build the managed (container) transport for a ref missing from the in-memory routing map — a
+   * fresh process after a restart/durable replay. The ambient host process died WITH the old
+   * parent, so a job that survived can only live on the container leg, which re-finds a per-run
+   * container by its run-id label with no in-process state. Returns undefined when no container
+   * leg can be built (Claude/Codex-only native), so the caller degrades to eviction / no-op.
+   */
+  private async recoverTransport(): Promise<RunnerTransport | undefined> {
+    try {
+      return await this.managed()
+    } catch {
+      return undefined
+    }
   }
 }

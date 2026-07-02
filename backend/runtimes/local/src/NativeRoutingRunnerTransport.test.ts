@@ -85,6 +85,32 @@ describe('NativeRoutingRunnerTransport', () => {
     expect(view.error).toMatch(/evicted or crashed/)
   })
 
+  it('falls back to the container transport for an unknown ref on release (cold cancel after restart)', async () => {
+    // A cold release after a restart (run cancelled before any poll re-routed the ref) must not
+    // no-op: a survivor is a per-run container the managed leg re-finds by label, so release has
+    // to reach it to tear it down instead of leaking a still-running container.
+    const ambient = fakeTransport('ambient')
+    const managed = fakeTransport('managed')
+    const router = new NativeRoutingRunnerTransport(
+      () => ambient,
+      () => managed,
+    )
+    await router.release({ runId: 'restarted', jobId: 'container-job' })
+    expect(managed.release).toHaveBeenCalledTimes(1)
+    expect(ambient.release).not.toHaveBeenCalled()
+  })
+
+  it('release for an unknown ref degrades to a no-op when no container transport can be built', async () => {
+    const router = new NativeRoutingRunnerTransport(
+      () => fakeTransport('ambient'),
+      () => {
+        throw new Error('no LOCAL_HARNESS_IMAGE')
+      },
+    )
+    // Claude/Codex-only native deployment: nothing to release, and it must not throw.
+    await expect(router.release({ runId: 'never', jobId: 'dispatched' })).resolves.toBeUndefined()
+  })
+
   it('drops the remembered route when a poll reports the job evicted', async () => {
     const ambient = fakeTransport('ambient')
     ambient.poll = vi.fn(
