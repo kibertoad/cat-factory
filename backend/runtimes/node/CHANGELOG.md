@@ -1,5 +1,41 @@
 # @cat-factory/node-server
 
+## 0.60.1
+
+### Patch Changes
+
+- 0d51638: Boundary hardening:
+
+  - **Local mode** now enforces a minimum strength on the required crypto secrets at config
+    load: `AUTH_SESSION_SECRET` must be ≥32 characters (local mode defaults the auth gate open,
+    so a weak secret would leave session/proxy/machine tokens forgeable) and `ENCRYPTION_KEY`
+    must decode to a full 32-byte key (surfaced early instead of deep in the first cipher build).
+  - **GitHub webhook verifier** fails closed when the webhook secret is unset (previously it would
+    import an empty HMAC key and compare), matching the GitLab verifier.
+  - **CORS** no longer reflects an arbitrary Origin by default outside development: an unset
+    `CORS_ALLOWED_ORIGINS` reflects any origin only when `ENVIRONMENT` is an explicitly
+    recognised development value (`development`/`dev`/`test`/`testing`/`local`/`e2e`). An
+    unset, unknown, or production `ENVIRONMENT` default-denies (fails safe), so a deployment
+    that forgets BOTH `ENVIRONMENT` and `CORS_ALLOWED_ORIGINS` no longer silently reflects.
+    An explicit `*` still opts into reflect-all.
+
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+  - @cat-factory/integrations@0.56.2
+  - @cat-factory/server@0.68.1
+  - @cat-factory/kernel@0.70.1
+  - @cat-factory/orchestration@0.59.1
+  - @cat-factory/agents@0.26.14
+  - @cat-factory/consensus@0.8.15
+  - @cat-factory/gates@0.2.71
+  - @cat-factory/gitlab@0.4.42
+  - @cat-factory/observability-langfuse@0.7.114
+  - @cat-factory/provider-bedrock@0.7.120
+  - @cat-factory/provider-cloudflare@0.7.120
+  - @cat-factory/provider-s3@0.2.64
+  - @cat-factory/spend@0.10.75
+
 ## 0.60.0
 
 ### Minor Changes
