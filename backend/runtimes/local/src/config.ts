@@ -60,7 +60,9 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
     try {
       bytes = base64urlToBytes(value)
     } catch {
-      throw new Error('ENCRYPTION_KEY must be a valid base64-encoded key. Generate one with `pnpm secrets`.')
+      throw new Error(
+        'ENCRYPTION_KEY must be a valid base64-encoded key. Generate one with `pnpm secrets`.',
+      )
     }
     if (bytes.length < MIN_ENCRYPTION_KEY_BYTES) {
       throw new Error(

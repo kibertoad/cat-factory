@@ -87,6 +87,17 @@ describe('HmacSigner', () => {
     expect(await signer.verify(token)).toMatchObject({ sub: 7 })
   })
 
+  it('treats an unrecognised audience as the base key, not its own derived subkey', async () => {
+    // An arbitrary (attacker-chosen) `aud` is NOT granted a derived subkey — it falls back
+    // to the raw-secret base key — so a flood of tokens carrying distinct junk audiences
+    // can't grow the per-audience key cache (an unauthenticated CPU/memory DoS, since
+    // `verify` selects the key from the claimed `aud` before the MAC check). It still
+    // round-trips and still can't satisfy a real audience pin.
+    const token = await signer.sign({ sub: 1, aud: 'not-a-real-audience-xyz' })
+    expect(await signer.verify(token)).toMatchObject({ sub: 1 })
+    expect(await signer.verify(token, { aud: TOKEN_AUDIENCE.session })).toBeNull()
+  })
+
   it('does not cross-validate the same payload across audiences', async () => {
     const container = await signer.sign({ sub: 1, aud: TOKEN_AUDIENCE.container })
     // Right audience → ok; every other audience pin → rejected.

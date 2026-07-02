@@ -99,7 +99,9 @@ describe('SearxngWebSearchUpstream', () => {
     const seen = captureGet(SEARX, '/search', {
       results: [{ url: 'https://d.example', title: 'D', content: 'snippet' }],
     })
-    const res = await new SearxngWebSearchUpstream('https://searx.example.com/', 'sx-key').search('q')
+    const res = await new SearxngWebSearchUpstream('https://searx.example.com/', 'sx-key').search(
+      'q',
+    )
     expect(res.results).toEqual([{ url: 'https://d.example', title: 'D', content: 'snippet' }])
     expect(seen[0]!.path).toBe('/search?q=q&format=json')
     expect(seen[0]!.headers.authorization).toBe('Bearer sx-key')

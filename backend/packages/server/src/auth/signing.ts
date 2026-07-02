@@ -19,7 +19,9 @@ import { base64url, base64urlToBytes, timingSafeEqual } from '../crypto/encoding
 // 256-bit subkey. So a token class is cryptographically isolated — a signature made
 // under one audience's key can't validate under another's even before the `aud`
 // check — and the effective HMAC key is a full-entropy 32 bytes rather than the raw
-// secret string. (Audience-less payloads — tests/legacy — fall back to the raw secret.)
+// secret string. (Audience-less — or unrecognised-audience — payloads fall back to the
+// raw secret; only the fixed known audiences get a derived subkey, so an attacker-chosen
+// `aud` can't grow the key cache.)
 //
 // Format: `base64url(JSON payload).base64url(HMAC(base64url(JSON payload)))`.
 // The payload is base64url (no dots), so the dot split is unambiguous. Payloads
@@ -88,6 +90,16 @@ function audienceInfo(aud: string): string {
   return `cat-factory:token:${aud}`
 }
 
+/**
+ * The fixed set of audiences that get their own derived subkey. `verify` reads a token's
+ * CLAIMED `aud` before checking the MAC (to pick the key), and that claim is fully
+ * attacker-controlled — so the derive/cache path MUST be bounded to this known set.
+ * Otherwise a stream of tokens carrying distinct junk `aud` values would force an HKDF
+ * derivation per request AND grow the key cache without bound (an unauthenticated CPU +
+ * memory DoS). An unrecognised (or absent) audience falls back to the raw-secret base key.
+ */
+const KNOWN_AUDIENCES: ReadonlySet<string> = new Set(Object.values(TOKEN_AUDIENCE))
+
 export class HmacSigner {
   /** Per-audience signing keys, keyed by the `aud` string (`''` = the raw-secret base key). */
   private readonly keyCache = new Map<string, Promise<CryptoKey>>()
@@ -148,12 +160,18 @@ export class HmacSigner {
     return crypto.subtle.sign('HMAC', key, new TextEncoder().encode(input))
   }
 
-  /** The HMAC signing key for an audience (HKDF-derived), memoised; base key when absent. */
+  /**
+   * The HMAC signing key for an audience (HKDF-derived), memoised. Only a {@link
+   * KNOWN_AUDIENCES} value gets a derived subkey; an absent OR unrecognised `aud` uses the
+   * raw-secret base key (cache slot `''`). Bounding the derive/cache to the known set is
+   * what stops an attacker-chosen `aud` (read before the MAC check in `verify`) from
+   * ballooning the cache or forcing a per-request key derivation.
+   */
   private keyFor(aud?: string): Promise<CryptoKey> {
-    const cacheKey = aud ?? ''
+    const cacheKey = aud !== undefined && KNOWN_AUDIENCES.has(aud) ? aud : ''
     let key = this.keyCache.get(cacheKey)
     if (!key) {
-      key = aud === undefined ? this.importBaseKey() : this.deriveAudienceKey(aud)
+      key = cacheKey === '' ? this.importBaseKey() : this.deriveAudienceKey(cacheKey)
       this.keyCache.set(cacheKey, key)
     }
     return key

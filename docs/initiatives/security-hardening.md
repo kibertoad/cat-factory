@@ -16,24 +16,27 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
 
 ## Status checklist
 
-| # | Item | Severity | Status | PR |
-|---|------|----------|--------|----|
-| 1 | Local-runner `fc`/`fd` hostname SSRF bypass | High | ✅ done | SSRF PR |
-| 2 | Runner-pool + `probeConnection` redirect revalidation | High | ✅ done | SSRF PR |
-| 3 | SearXNG web-search upstream SSRF guard | Medium | ✅ done | SSRF PR |
-| 4 | Local-mode secret minimum length | Medium | ✅ done | Tier-2 PR |
-| 5 | GitHub webhook empty-secret fail-closed | Low | ✅ done | Tier-2 PR |
-| 6 | CORS default-deny in production | Low | ✅ done | Tier-2 PR |
-| 7 | LLM telemetry secret redaction + per-workspace gate | High | ✅ done | Tier-3 PR |
-| 9 | HKDF per-audience token key separation | Medium | ✅ done | Tier-3 PR |
-| 8 | Machine-token revocation store | Medium | ⏳ todo | (its own PR) |
+| #   | Item                                                  | Severity | Status  | PR           |
+| --- | ----------------------------------------------------- | -------- | ------- | ------------ |
+| 1   | Local-runner `fc`/`fd` hostname SSRF bypass           | High     | ✅ done | SSRF PR      |
+| 2   | Runner-pool + `probeConnection` redirect revalidation | High     | ✅ done | SSRF PR      |
+| 3   | SearXNG web-search upstream SSRF guard                | Medium   | ✅ done | SSRF PR      |
+| 4   | Local-mode secret minimum length                      | Medium   | ✅ done | Tier-2 PR    |
+| 5   | GitHub webhook empty-secret fail-closed               | Low      | ✅ done | Tier-2 PR    |
+| 6   | CORS default-deny in production                       | Low      | ✅ done | Tier-2 PR    |
+| 7   | LLM telemetry secret redaction + per-workspace gate   | High     | ✅ done | Tier-3 PR    |
+| 9   | HKDF per-audience token key separation                | Medium   | ✅ done | Tier-3 PR    |
+| 8   | Machine-token revocation store                        | Medium   | ⏳ todo | (its own PR) |
 
 ## What shipped (items 1–7, 9)
 
 - **SSRF (1–3):** `localModelUrl` now reuses the kernel `ip-host` primitives and gates the
   IPv6-ULA test behind an is-literal check; a shared `modules/shared/safe-fetch.ts` gives the
   runner-pool + environment providers (and `probeConnection`) per-hop redirect revalidation +
-  a streamed byte cap; the account-configured SearXNG URL is guarded at the write boundary
+  a streamed byte cap, AND drops the request body + strips credential headers on any
+  cross-origin redirect hop (so a permitted host can't bounce the secrets to a _different_
+  public host — re-establishing the cross-origin stripping the manual redirect follower had
+  bypassed); the account-configured SearXNG URL is guarded at the write boundary
   (`AccountSettingsService.write`) and on every fetch hop (public host, http/https, no
   private/internal/metadata target).
 - **Boundary hardening (4–6):** local mode rejects a `<32`-char `AUTH_SESSION_SECRET` and a
@@ -42,13 +45,18 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
   (`corsReflectsWhenUnset`), threaded through both facades.
 - **Telemetry redaction (7):** a shared `redactSecrets` (promoted to
   `kernel/src/shared/redact-secrets.logic.ts`, reused by the provisioning-log path) scrubs
-  credential shapes from `promptText`/`responseText`/`reasoningText` before they are stored
-  or fanned out to Langfuse; body capture is additionally gated on the per-workspace
-  `storeAgentContext` toggle (numeric telemetry always records). Fixed a latent O(n²)
-  backtrack in the URL-userinfo rule (bounded the scheme quantifier) surfaced by large prompts.
+  credential shapes from `promptText`/`responseText`/`reasoningText` AND `errorMessage`
+  (the one exchange field kept as metadata when bodies are dropped, and fanned out ungated)
+  before they are stored or fanned out to Langfuse; body capture is additionally gated on the
+  per-workspace `storeAgentContext` toggle (numeric telemetry always records). Fixed a latent
+  O(n²) backtrack in the URL-userinfo rule (bounded the scheme quantifier) surfaced by large
+  prompts.
 - **Key separation (9):** `HmacSigner` derives an independent HKDF-SHA256 subkey per token
   audience (`info = "cat-factory:token:<aud>"`), so each token class is cryptographically
-  isolated; audience-less payloads fall back to the raw-secret key (tests/legacy).
+  isolated; audience-less — or unrecognised-audience — payloads fall back to the raw-secret
+  key (tests/legacy). Derivation is bounded to the fixed known-audience set because `verify`
+  picks the key from the token's attacker-controlled claimed `aud` before the MAC check, so an
+  unbounded set of junk audiences must NOT each mint+cache a subkey (CPU/memory DoS).
 
 ## Conventions & gotchas carried forward
 
@@ -57,9 +65,17 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
   repetitive input (real LLM prompts are large). Bound such quantifiers (`{0,39}`).
 - The SSRF `safeFetch` takes an injected `assertSafe` + error factory (and an optional
   `doFetch` for tests). Reuse it for any new provider that fetches an org-supplied URL;
-  don't reintroduce a bare `fetch` with `redirect: 'follow'`.
-- CORS default-deny keys off `ENVIRONMENT ∈ {production, prod, staging}`. e2e/dev set their
-  own `CORS_ALLOWED_ORIGINS`, so they're unaffected.
+  don't reintroduce a bare `fetch` with `redirect: 'follow'`. It also strips the body +
+  credential headers on a cross-origin redirect — a manual `redirect: 'manual'` follower must
+  do this by hand, since it loses the platform fetch's built-in cross-origin credential
+  stripping.
+- CORS reflect-when-unset is **opt-in** on an explicitly recognised development `ENVIRONMENT`
+  (`development`/`dev`/`test`/`testing`/`local`/`e2e`); unset/unknown/production all
+  default-deny (fail safe). e2e/dev set their own `CORS_ALLOWED_ORIGINS`, so they're
+  unaffected regardless.
+- Any signer/verifier that selects a key from a claimed, attacker-controlled field BEFORE the
+  MAC check must bound the derive/cache to a known finite set — else the field is an
+  unbounded cache-growth + per-request-derivation DoS (`HmacSigner.keyFor`).
 
 ---
 
@@ -77,23 +93,23 @@ persistence work. Consider also shortening `DEFAULT_MACHINE_TOKEN_TTL_MS`.
 **Checklist (keep the runtimes symmetric):**
 
 - [ ] `kernel`: add a `MachineTokenRevocationRepository` port — `isRevoked(nodeId)`,
-  `revoke(nodeId, revokedAt)`, `listRevoked(before?)` (for pruning). Add to the ports index.
+      `revoke(nodeId, revokedAt)`, `listRevoked(before?)` (for pruning). Add to the ports index.
 - [ ] `server`: in `PersistenceController`, after `verify(...aud: machine)` succeeds, reject
-  (403) when `await revocationRepo.isRevoked(payload.nodeId)`. Resolve the repo from the
-  container (add to `ServerContainer`/`repositories` or the DI object). Add a revoke endpoint
-  (session-gated, owner-scoped) alongside the mint endpoint in `AuthController`
-  (`POST /auth/machine-token/:nodeId/revoke` or `DELETE`).
+      (403) when `await revocationRepo.isRevoked(payload.nodeId)`. Resolve the repo from the
+      container (add to `ServerContainer`/`repositories` or the DI object). Add a revoke endpoint
+      (session-gated, owner-scoped) alongside the mint endpoint in `AuthController`
+      (`POST /auth/machine-token/:nodeId/revoke` or `DELETE`).
 - [ ] Cloudflare: `revoked_machine_nodes` D1 table (fresh numbered migration under
-  `runtimes/cloudflare/migrations/`) + `D1MachineTokenRevocationRepository`, wired in
-  `infrastructure/container.ts`.
+      `runtimes/cloudflare/migrations/`) + `D1MachineTokenRevocationRepository`, wired in
+      `infrastructure/container.ts`.
 - [ ] Node: `revokedMachineNodes` Drizzle table in `db/schema.ts` + a generated migration
-  (`pnpm db:generate` — a fresh table won't trigger the interactive rename prompt) +
-  `DrizzleMachineTokenRevocationRepository`, wired in `runtimes/node/src/container.ts`.
+      (`pnpm db:generate` — a fresh table won't trigger the interactive rename prompt) +
+      `DrizzleMachineTokenRevocationRepository`, wired in `runtimes/node/src/container.ts`.
 - [ ] Local: mirror in `runtimes/local/src/sqlite` (the local mothership uses sqlite).
 - [ ] Retention: prune revoked rows past the max token TTL in the existing retention sweep
-  (Cloudflare cron ⇄ Node timer).
+      (Cloudflare cron ⇄ Node timer).
 - [ ] Conformance: assert in `@cat-factory/conformance` that a revoked `nodeId` is rejected
-  and a live one passes, against both stores.
+      and a live one passes, against both stores.
 - [ ] Changeset for every touched versioned package; flag the new table.
 
 **Verification.** `pnpm test:run` (Node suite needs the Postgres service; the Worker/D1

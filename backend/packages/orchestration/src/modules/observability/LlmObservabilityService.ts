@@ -1,4 +1,9 @@
-import { type Clock, type IdGenerator, DEFAULT_WORKSPACE_SETTINGS, redactSecrets } from '@cat-factory/kernel'
+import {
+  type Clock,
+  type IdGenerator,
+  DEFAULT_WORKSPACE_SETTINGS,
+  redactSecrets,
+} from '@cat-factory/kernel'
 import type {
   LlmCallMetric,
   LlmCallMetricRepository,
@@ -156,6 +161,12 @@ export class LlmObservabilityService {
       promptText: redactSecrets(rawInput.promptText) ?? '',
       responseText: redactSecrets(rawInput.responseText) ?? '',
       reasoningText: redactSecrets(rawInput.reasoningText) ?? '',
+      // errorMessage is a free-text upstream/proxy error string that is kept as diagnostic
+      // metadata even when bodies are dropped (like httpStatus/finishReason) AND fanned out
+      // to the trace sink — so it too must be scrubbed. An upstream 4xx/5xx message can
+      // echo an `Authorization` header or a signed URL; redacting here keeps the one
+      // exchange field that isn't gated on `recordBodies` from leaking a secret shape.
+      errorMessage: redactSecrets(rawInput.errorMessage),
     }
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
     // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a

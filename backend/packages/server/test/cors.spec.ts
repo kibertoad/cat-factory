@@ -41,12 +41,14 @@ describe('resolveCorsOrigin', () => {
 })
 
 describe('corsReflectsWhenUnset', () => {
-  it('is false for production-like environments, true otherwise', () => {
-    for (const prod of ['production', 'prod', 'staging', 'PROD', ' Production ']) {
-      expect(corsReflectsWhenUnset(prod), prod).toBe(false)
+  it('reflects ONLY for explicitly-recognised development environments', () => {
+    for (const dev of ['test', 'dev', 'development', 'local', 'testing', 'e2e', 'DEV', ' Test ']) {
+      expect(corsReflectsWhenUnset(dev), dev).toBe(true)
     }
-    for (const nonProd of ['', undefined, 'test', 'dev', 'development', 'local']) {
-      expect(corsReflectsWhenUnset(nonProd), String(nonProd)).toBe(true)
+    // Unset, unknown, and production all default-deny (fail safe): a deployment that sets
+    // neither ENVIRONMENT nor CORS_ALLOWED_ORIGINS must NOT reflect an arbitrary origin.
+    for (const nonDev of ['', undefined, 'production', 'prod', 'staging', 'PROD', 'unknown']) {
+      expect(corsReflectsWhenUnset(nonDev), String(nonDev)).toBe(false)
     }
   })
 })

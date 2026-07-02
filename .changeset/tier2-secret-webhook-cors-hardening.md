@@ -13,7 +13,9 @@ Boundary hardening:
   must decode to a full 32-byte key (surfaced early instead of deep in the first cipher build).
 - **GitHub webhook verifier** fails closed when the webhook secret is unset (previously it would
   import an empty HMAC key and compare), matching the GitLab verifier.
-- **CORS** no longer reflects an arbitrary Origin by default in production: an unset
-  `CORS_ALLOWED_ORIGINS` reflects any origin only in a non-production `ENVIRONMENT`
-  (dev/test convenience); a production deployment that forgets to set it now default-denies
-  cross-origin. An explicit `*` still opts into reflect-all.
+- **CORS** no longer reflects an arbitrary Origin by default outside development: an unset
+  `CORS_ALLOWED_ORIGINS` reflects any origin only when `ENVIRONMENT` is an explicitly
+  recognised development value (`development`/`dev`/`test`/`testing`/`local`/`e2e`). An
+  unset, unknown, or production `ENVIRONMENT` default-denies (fails safe), so a deployment
+  that forgets BOTH `ENVIRONMENT` and `CORS_ALLOWED_ORIGINS` no longer silently reflects.
+  An explicit `*` still opts into reflect-all.

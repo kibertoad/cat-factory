@@ -349,6 +349,7 @@ describe('LlmObservabilityService secret redaction', () => {
         promptText: 'clone https://x-access-token:ghp_abcdefghijklmnopqrstuvwx1234@github.com/o/r',
         responseText: 'Authorization: Bearer sk-abcdefghijklmnopqrstuvwx',
         reasoningText: 'the key is AKIAIOSFODNN7EXAMPLE',
+        errorMessage: 'upstream 401: Authorization: Bearer sk-leakedleakedleakedleaked',
       }),
     )
 
@@ -357,10 +358,15 @@ describe('LlmObservabilityService secret redaction', () => {
     expect(m.promptText).toContain('[REDACTED]')
     expect(m.responseText).not.toContain('sk-abcdefghijklmnopqrstuvwx')
     expect(m.reasoningText).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    // errorMessage is the one exchange field kept even when bodies are dropped, so it must
+    // be scrubbed too (it can echo an upstream auth header).
+    expect(m.errorMessage).not.toContain('sk-leakedleakedleakedleaked')
+    expect(m.errorMessage).toContain('[REDACTED]')
     // The external trace sink receives the redacted text too.
     const e = sink.events[0]!
     expect(e.input).not.toContain('ghp_abcdefghijklmnopqrstuvwx1234')
     expect(e.output).not.toContain('sk-abcdefghijklmnopqrstuvwx')
+    expect(e.errorMessage).not.toContain('sk-leakedleakedleakedleaked')
   })
 })
 

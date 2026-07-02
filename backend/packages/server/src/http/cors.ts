@@ -1,21 +1,30 @@
 // CORS origin policy. The set of allowed browser Origins is configuration, not
 // code: this is a self-hosted system, so each provisioning org declares its own
 // frontend origin(s) (comma-separated). A lone `*` explicitly opts into reflecting
-// any origin. An UNSET allowlist reflects any origin ONLY in a non-production
-// environment (dev/test convenience); a production deployment that forgets to set
-// CORS_ALLOWED_ORIGINS denies cross-origin rather than silently reflecting. Auth is a
-// bearer header (not cookies) and credentials mode is off, so this is defense-in-depth.
-
-/** Deployment ENVIRONMENT values treated as production for the CORS default. */
-const PRODUCTION_ENVIRONMENTS = new Set(['production', 'prod', 'staging'])
+// any origin. An UNSET allowlist reflects any origin ONLY when ENVIRONMENT is an
+// explicitly recognised development value (dev/test convenience); an unset, unknown, or
+// production ENVIRONMENT default-denies, so a deployment that forgets to set
+// CORS_ALLOWED_ORIGINS fails safe rather than silently reflecting. Auth is a bearer
+// header (not cookies) and credentials mode is off, so this is defense-in-depth.
 
 /**
- * Whether an unset `CORS_ALLOWED_ORIGINS` should reflect any origin: yes outside a
- * production-like `ENVIRONMENT` (dev/test convenience), no in production (default-deny).
- * Pass the deployment's `ENVIRONMENT` env value.
+ * Deployment ENVIRONMENT values that are EXPLICITLY non-production, where an unset
+ * `CORS_ALLOWED_ORIGINS` may reflect any origin as a dev/test convenience. The reflect
+ * behaviour is opt-in on one of these values — NOT the default — so a production
+ * deployment that sets neither `ENVIRONMENT` nor `CORS_ALLOWED_ORIGINS` fails safe
+ * (default-deny) rather than silently reflecting. e2e/dev set their own
+ * `CORS_ALLOWED_ORIGINS` anyway, so they're unaffected by the stricter default.
+ */
+const DEVELOPMENT_ENVIRONMENTS = new Set(['development', 'dev', 'test', 'testing', 'local', 'e2e'])
+
+/**
+ * Whether an unset `CORS_ALLOWED_ORIGINS` should reflect any origin: yes only when
+ * `ENVIRONMENT` is an explicitly recognised development value (dev/test convenience), no
+ * otherwise — an UNSET, unknown, or production `ENVIRONMENT` all default-deny. Pass the
+ * deployment's `ENVIRONMENT` env value.
  */
 export function corsReflectsWhenUnset(environment: string | undefined): boolean {
-  return !PRODUCTION_ENVIRONMENTS.has((environment ?? '').trim().toLowerCase())
+  return DEVELOPMENT_ENVIRONMENTS.has((environment ?? '').trim().toLowerCase())
 }
 
 /**
