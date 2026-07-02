@@ -83,6 +83,31 @@ async function resolveSearchScope<E extends AppEnv>(
 }
 
 /**
+ * Resolve the repo scope for the imported-issue LIST from an optional block. Unlike
+ * {@link resolveSearchScope} this NEVER throws: the list spans every source, so a
+ * repo-less service (or an unconfigured GitHub) simply yields no scope and the list
+ * is returned unfiltered rather than refused — the search endpoint is where an
+ * unlinked service is rejected. A resolved scope narrows only the GitHub rows.
+ */
+async function resolveListScope<E extends AppEnv>(
+  c: Context<E>,
+  blockId: string | undefined,
+): Promise<TaskSearchRepoScope | undefined> {
+  if (!blockId) return undefined
+  const resolve = c.get('container').resolveRepoTarget
+  if (!resolve) return undefined
+  try {
+    const target = await resolve(param(c, 'workspaceId'), blockId)
+    return target ? { owner: target.owner, repo: target.name } : undefined
+  } catch (err) {
+    // Not linked to a repo (the ValidationError `resolveRepoTarget` raises) → no scope.
+    // Any other failure is a real error and must propagate, not be silently swallowed.
+    if (!(err instanceof ValidationError)) throw err
+    return undefined
+  }
+}
+
+/**
  * Workspace-scoped, source-parameterized task endpoints: source discovery,
  * connection management, issue import, issue listing, and linking an issue to a
  * block as agent context. Mounted under `/workspaces/:workspaceId`.
@@ -204,7 +229,8 @@ export function taskSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, listTasksContract, async (c) => {
     const tasks = requireTasks(c)
     if (!tasks) return unavailable(c)
-    return c.json(await tasks.importService.listTasks(param(c, 'workspaceId')), 200)
+    const scope = await resolveListScope(c, c.req.valid('query').blockId)
+    return c.json(await tasks.importService.listTasks(param(c, 'workspaceId'), scope), 200)
   })
 
   buildHonoRoute(app, importTaskContract, async (c) => {
