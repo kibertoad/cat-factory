@@ -1226,29 +1226,33 @@ export class ExecutionService {
     const executionId = this.idGenerator.next('exec')
     await activate?.(executionId)
 
+    // Read the block's prior run once: a manual re-start of an already-running block REPLACES
+    // it (the board offers "start" on a live block), so we pass its id to `insertLive` as the
+    // `replaceId` it supersedes atomically. A genuinely-CONCURRENT second start reads the SAME
+    // prior (or none), so only one insert wins and the other is rejected 409 — the loser's
+    // `replaceId` deletes only what it read, never the winner's fresh row (see insertLive).
+    const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
     // Replacing the block's prior run: clear its per-run activation now (it never reaches
     // the terminal cleanup in emitInstance when it's still running), so a replaced run's
     // system-encrypted token copy doesn't linger to its TTL. Keyed by the OLD run id, so
     // the activation just minted for the new run is untouched.
-    if (this.subscriptionActivations) {
-      const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
-      if (prior && prior.id !== executionId) {
-        // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
-        // failure here must never derail the start. In mothership mode this repo is remote and
-        // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
-        // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
-        // stale activation row as the backstop.
-        try {
-          await this.subscriptionActivations.deleteByExecution(prior.id)
-        } catch {
-          // Swallow — see above.
-        }
+    if (this.subscriptionActivations && prior && prior.id !== executionId) {
+      // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
+      // failure here must never derail the start. In mothership mode this repo is remote and
+      // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
+      // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
+      // stale activation row as the backstop.
+      try {
+        await this.subscriptionActivations.deleteByExecution(prior.id)
+      } catch {
+        // Swallow — see above.
       }
     }
 
-    // NB: do NOT `deleteByBlock` here — `insertLiveRunOrConflict` (below) atomically clears
-    // the block's terminal rows and inserts the new live run, so a concurrent double-start is
-    // rejected by the live-run index instead of both wiping each other's row (see insertLive).
+    // NB: do NOT `deleteByBlock` here — `insertLiveRunOrConflict` (below) atomically clears the
+    // block's terminal rows AND the `prior` run it replaces, then inserts the new live run, so a
+    // concurrent double-start is rejected by the live-run index instead of both wiping each
+    // other's row (see insertLive).
 
     // Build the run only from the ENABLED steps. A step the pipeline marked
     // `enabled[i] === false` is kept in the saved pipeline (so it can be toggled back
@@ -1333,7 +1337,7 @@ export class ExecutionService {
       status: 'running',
       initiatedBy: initiatedBy ?? null,
     }
-    await this.insertLiveRunOrConflict(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance, prior?.id)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'in_progress',
       progress: 0,
