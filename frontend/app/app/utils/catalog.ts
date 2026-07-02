@@ -414,6 +414,9 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-git-pull-request',
     color: '#a3e635',
     description: 'Scores the PR and auto-merges within the task thresholds, or asks for review.',
+    // The merger's verdict is structured (scores + the engine's auto-merge / review
+    // decision), so it opens a dedicated result view instead of the raw-JSON prose panel.
+    resultView: 'merger',
   },
   'human-review': {
     kind: 'human-review',

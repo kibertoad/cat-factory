@@ -1,5 +1,141 @@
 # @cat-factory/orchestration
 
+## 0.56.0
+
+### Minor Changes
+
+- dcc8b32: Browsable frontend preview — transport dispatch + `PreviewService` + controller + stop (slice 5c of
+  the frontend-preview + in-context UI-testing initiative,
+  docs/initiatives/frontend-preview-ui-testing.md).
+
+  Wire the harness `preview` mode (slice 5b) end to end: a `frontend` frame can now be built and
+  served on a HOST-reachable URL for a browsable preview, and stopped again. New pieces:
+
+  - A new optional `PreviewTransport` kernel port — the per-runtime half that publishes a served
+    app's port to an ephemeral host port and keeps the container alive past the build job. The local
+    facade wires the real one over its Docker/Podman/OrbStack/Colima/Apple adapter (a second
+    published port read back with `docker port` / the container IP); the Worker never wires it.
+  - A runtime-neutral `PreviewService` (start / get / stop) that persists the running preview like an
+    ephemeral `environments` row keyed by the `frontend` frame (reusing the existing table + soft-delete
+    stop path — no new migration), plus a `PreviewController` mounting
+    `GET|POST|DELETE /workspaces/:ws/frames/:frameId/preview`, gated server-side on the
+    `frontendPreview.supported` capability (503 on the Worker).
+  - The cross-runtime conformance suite drives the full start → serve → stop lifecycle on both Postgres
+    runtimes with a fake transport, pinning the ephemeral-env-row persistence parity.
+
+  Notes:
+
+  - `frontendPreview.supported` now tracks whether a preview transport is actually wired: a stock Node
+    build (runner pool, no host-port-publish primitive) advertises `false`, so the SPA never offers a
+    Start button that would 503; local mode (and any facade injecting a `previewTransport`) advertises
+    `true`.
+  - Preview rows share the `environments` table but carry a dedicated `preview` discriminator (outside
+    `provisionTypeSchema`), so the environment subsystem filters them out of its generic listing +
+    block-resolution paths — a preview never leaks into the deployer-env UI or tester env resolution.
+  - `PreviewService.get` re-polls a `ready` preview so a vanished/evicted container stops reporting a
+    stale, unreachable URL (it flips to `failed`); a healthy preview whose URL merely can't be
+    re-derived keeps its authoritative persisted URL.
+
+  Local/node differentiator; the SPA surface (the clickable URL + a stop button on the frame inspector)
+  lands in slice 5d. The harness is unchanged (no runner-image bump).
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/integrations@0.53.0
+  - @cat-factory/contracts@0.79.0
+  - @cat-factory/kernel@0.69.0
+  - @cat-factory/agents@0.26.2
+  - @cat-factory/prompt-fragments@0.9.35
+  - @cat-factory/sandbox@0.8.73
+  - @cat-factory/spend@0.10.65
+  - @cat-factory/workspaces@0.10.12
+
+## 0.55.1
+
+### Patch Changes
+
+- 16ee6cc: Refactor: the Kaizen grader now resolves its model through the SAME shared inline
+  model-resolution seam every other inline agent uses (`resolveInlineModelRef`) instead of a
+  hand-rolled copy of the precedence in `KaizenService.modelFor`. The bespoke copy was
+  behaviourally equivalent but a divergent code path that could drift and silently degrade a
+  subscription preset (e.g. a "Claude for everything" preset) to the env routing default (e.g.
+  `qwen`) — the same class of drift the `assertRunnable` de-duplication addressed for
+  start/retry/restart. Routing it through the one shared helper keeps kaizen identical to the
+  requirements reviewer et al. (block pin > workspace per-kind default > routing default, keeping
+  an ambient-eligible subscription harness ref rather than degrading it) and prevents future
+  drift. Adds `KaizenService.model.test.ts` pinning that precedence and the keep-vs-degrade
+  behaviour so the qwen-degrade scenario is now a regression test.
+- 16ee6cc: Surface the merger's verdict as a structured decision instead of raw JSON.
+
+  The engine now records a `MergeDecision` on the completed `merger` step (`step.custom`): the
+  assessment scores, the resolved preset ceilings, and — crucially — whether it auto-merged or routed
+  the PR to a human, and WHY (`within_thresholds` / `exceeded_thresholds` / `auto_merge_disabled` /
+  `no_rationale` / `no_assessment` / `merge_failed` — `no_rationale` distinguishes a scored-but-
+  unexplained assessment from a truly absent one). The SPA renders it in a dedicated `MergerResultView` (complexity /
+  risk / impact bars vs their ceilings + a plain-language decision banner — "Auto-merged — every score
+  is within the Balanced thresholds" / "Awaiting human review — risk exceeded the thresholds") instead
+  of the agent's raw JSON.
+
+  Also fixes the inspector showing a finished merger step as "Agent running": the run's shared container
+  is kept alive until the pipeline's final step, so a step whose state is already `done` (the merger
+  resolving mid-pipeline before a trailing gate) no longer displays the stale live container-phase label.
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+  - @cat-factory/kernel@0.68.1
+  - @cat-factory/agents@0.26.1
+  - @cat-factory/integrations@0.52.2
+  - @cat-factory/prompt-fragments@0.9.34
+  - @cat-factory/sandbox@0.8.72
+  - @cat-factory/spend@0.10.64
+  - @cat-factory/workspaces@0.10.11
+
+## 0.55.0
+
+### Minor Changes
+
+- 16621f8: feat(testing): test quality-control companion that loops the Tester on incomplete reports
+
+  The Tester gate concluded a step purely from `greenlight` + blocking concerns + failed
+  outcomes, so a report that claimed to exercise many areas (`tested`) but recorded a single
+  happy-path `outcome` could greenlight and "pass" — leaving most scenarios as "No discrete
+  check recorded" in the Test Report window while the step read as successfully completed.
+
+  Two changes address this:
+
+  - **Tester prompts now require one recorded `outcome` per `tested` area** (API + UI testers):
+    every scenario listed as tested must have a matching outcome with a concrete detail, and
+    describing results only in the prose `summary` does not count. Genuinely un-exercised areas
+    are recorded as `skipped` with a reason rather than dropped.
+  - **A new test quality-control companion** (`tester-qc`) audits each Tester report for
+    coverage/coherence BEFORE the greenlight/fixer decision. When the report is inadequate it
+    loops the Tester for a focused additional pass (folding the prior report + the flagged gaps
+    in, and carrying forward already-covered outcomes), bounded by a new merge-preset knob
+    `maxTesterQualityIterations` (default 3). Enabled by default; a per-Tester-step toggle in
+    the pipeline shape (`pipeline.testerQuality`) disables it or gates it on the task estimate.
+    The companion is an inline reviewer (no container) that resolves its model like the other
+    inline reviewers and is a pass-through when no model is wired.
+
+  Persistence: the merge preset gains a `max_tester_quality_iterations` column, mirrored across
+  the D1 and Drizzle stores (built-in preset seed `version` bumped 1 → 2). The QC loop state
+  lives on the execution step, so no new table is added.
+
+  The frontend pipeline-builder toggle + Test Report verdict surfacing land in a follow-up
+  (see `docs/initiatives/tester-quality-companion.md`).
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+  - @cat-factory/kernel@0.68.0
+  - @cat-factory/agents@0.26.0
+  - @cat-factory/integrations@0.52.1
+  - @cat-factory/prompt-fragments@0.9.33
+  - @cat-factory/sandbox@0.8.71
+  - @cat-factory/spend@0.10.63
+  - @cat-factory/workspaces@0.10.10
+
 ## 0.54.1
 
 ### Patch Changes

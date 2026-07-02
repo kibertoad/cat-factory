@@ -4,9 +4,11 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   FakeEnvConfigRepairer,
+  FakePreviewTransport,
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
+  fakeBuildPreviewJob,
   deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
@@ -137,6 +139,11 @@ export function makeConformanceApp(
     // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
     // lifecycle without GitHub or a container (the suite drives it via driveBootstrap).
     repoBootstrapper: new FakeRepoBootstrapper(),
+    // Fake browsable-preview transport + job builder so the runtime-neutral PreviewService
+    // lifecycle + its ephemeral `environments`-row persistence run on real Postgres without a
+    // container/GitHub (the real transport is a per-runtime differentiator, wired only in local).
+    previewTransport: new FakePreviewTransport(),
+    buildPreviewJob: fakeBuildPreviewJob,
     // A deterministic env-config-repairer + no-op runner so the suite can drive the
     // repair dispatch→poll→re-validate lifecycle without GitHub or a container (driven via
     // driveEnvConfigRepair). The module only builds when an env provider is also wired.

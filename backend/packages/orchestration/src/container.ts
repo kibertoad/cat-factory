@@ -22,6 +22,7 @@ import type {
 import type { ServiceRepository, WorkspaceMountRepository } from '@cat-factory/kernel'
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { PreviewTransport } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
 import type { LlmCallMetricRepository } from '@cat-factory/kernel'
@@ -173,6 +174,7 @@ import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
+import { PreviewService, type BuildPreviewJob } from './modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
 import type { AccountSettingsService } from '@cat-factory/integrations'
 import {
@@ -444,6 +446,20 @@ export interface CoreDependencies {
   // feature is off. Per-tenant secrets are encrypted via `secretCipher`.
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
+  /**
+   * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
+   * publishes a served app's port to a host port and keeps the container alive. Wired ONLY on a
+   * runtime with a host-port-publish primitive (local Docker/Apple); the Worker never wires it,
+   * so the preview module stays absent there and the controller 503s. Assembles the preview
+   * module only alongside {@link buildPreviewJob} + {@link environmentRegistryRepository}.
+   */
+  previewTransport?: PreviewTransport
+  /**
+   * Builds the harness `mode: 'preview'` job for a `frontend` frame (repo/token/session + the
+   * frontend infra spec) — a facade-provided seam because it needs the server-layer repo/auth
+   * resolution. Paired with {@link previewTransport}.
+   */
+  buildPreviewJob?: BuildPreviewJob
   /**
    * Workspace-defined custom-manifest-type catalog (the UI-editable half of the custom
    * provision-type catalog). Absent ⇒ the catalog is the registered code types only.
@@ -861,6 +877,11 @@ export interface ReleaseHealthModule {
   service: ReleaseHealthService
 }
 
+/** The browsable-frontend-preview service, present only when a preview transport is wired. */
+export interface PreviewModule {
+  service: PreviewService
+}
+
 /** The incident-enrichment (PagerDuty + incident.io) settings service, present only when wired. */
 export interface IncidentEnrichmentModule {
   service: IncidentEnrichmentService
@@ -981,6 +1002,8 @@ export interface Core {
   notifications?: NotificationsModule
   /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
   releaseHealth?: ReleaseHealthModule
+  /** Present only when a preview transport + job builder are wired (local/node — see CoreDependencies). */
+  preview?: PreviewModule
   /** Present only when the incident-enrichment connection repo + cipher are wired. */
   incidentEnrichmentSettings?: IncidentEnrichmentModule
   /** Present only when the per-account settings service is wired (facade-built). */
@@ -1891,6 +1914,24 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
   return { service }
 }
 
+/**
+ * Assemble the browsable-frontend-preview module when its per-runtime transport + the facade's
+ * job builder + the env registry are all wired (local/node with a host-port-publish runtime).
+ * Absent on the Worker (no preview transport) ⇒ the controller 503s there.
+ */
+function createPreviewModule(deps: CoreDependencies): PreviewModule | undefined {
+  const { previewTransport, buildPreviewJob, environmentRegistryRepository } = deps
+  if (!previewTransport || !buildPreviewJob || !environmentRegistryRepository) return undefined
+  const service = new PreviewService({
+    previewTransport,
+    buildPreviewJob,
+    environmentRegistryRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
 /** Assemble the incident-enrichment settings module when its repo + cipher are present. */
 function createIncidentEnrichmentModule(
   deps: CoreDependencies,
@@ -2083,6 +2124,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
+  const preview = createPreviewModule(dependencies)
   const incidentEnrichmentSettings = createIncidentEnrichmentModule(dependencies)
   const modelPresets = createModelPresetsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
@@ -2196,6 +2238,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
+    ...(preview ? { preview } : {}),
     ...(incidentEnrichmentSettings ? { incidentEnrichmentSettings } : {}),
     ...(dependencies.accountSettings
       ? { accountSettings: { service: dependencies.accountSettings } }

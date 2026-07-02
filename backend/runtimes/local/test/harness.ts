@@ -4,10 +4,12 @@ import {
   FakeAgentExecutor,
   type FakeAgentOptions,
   FakeEnvConfigRepairer,
+  FakePreviewTransport,
   FakeRepoBootstrapper,
   FakeTaskSourceProvider,
   RecordingEventPublisher,
   deriveWorkerDatabase,
+  fakeBuildPreviewJob,
   driveWorkspace,
   makeIncorporatedClarityReview,
   makeIncorporatedReview,
@@ -151,6 +153,11 @@ export function makeConformanceApp(
     // module only builds when an env provider is also wired.
     envConfigRepairer: new FakeEnvConfigRepairer(),
     envConfigRepairRunner: new NoopEnvConfigRepairRunner(),
+    // Fake browsable-preview transport + job builder — they WIN over the local facade's real
+    // Docker-backed transport (spread last in buildNodeContainer), so the runtime-neutral
+    // PreviewService lifecycle runs on real Postgres without Docker/GitHub, identically to Node.
+    previewTransport: new FakePreviewTransport(),
+    buildPreviewJob: fakeBuildPreviewJob,
     executionEventPublisher: recorder,
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against

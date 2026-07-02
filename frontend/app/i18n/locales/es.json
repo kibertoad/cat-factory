@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Cargando…",
+    "loadingBoard": "Cargando tablero…",
+    "backendUnreachable": "No se puede conectar con el backend",
+    "reconnecting": "Reconectando…"
+  },
   "language": {
     "switcher": "Idioma",
     "warning": {
@@ -68,6 +74,14 @@
     "infrastructure": "Infraestructura"
   },
   "board": {
+    "toast": {
+      "updateFailed": "No se pudieron guardar los cambios",
+      "epicFailed": "No se pudo cambiar la épica",
+      "moveFailed": "No se pudo mover",
+      "deleteFailed": "No se pudo eliminar",
+      "linkFailed": "No se pudieron vincular las tareas",
+      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente"
+    },
     "repoTypes": {
       "service": "Servicio",
       "frontend": "Frontend",
@@ -260,6 +274,11 @@
       "openPrOnGithub": "Abrir {pr} en GitHub",
       "review": "Revisar",
       "merge": "Fusionar",
+      "mergeConfirm": {
+        "title": "¿Fusionar esta pull request?",
+        "body": "Esto fusiona la PR en su rama base y completa la tarea. Esto no se puede deshacer.",
+        "confirm": "Fusionar"
+      },
       "implemented": "implementada",
       "module": "Módulo: {name}",
       "buildSteps": "Pasos de build",
@@ -445,6 +464,17 @@
         "mock": "Simulación (WireMock)",
         "remove": "Eliminar vinculación",
         "empty": "No hay vinculaciones de backend. Añade una para apuntar una variable de entorno a un servicio o a una simulación."
+      },
+      "preview": {
+        "open": "Abrir vista previa",
+        "start": "Iniciar vista previa",
+        "stop": "Detener",
+        "status": {
+          "starting": "Iniciando…",
+          "ready": "En ejecución",
+          "failed": "Error",
+          "stopped": "No iniciada"
+        }
       }
     },
     "releaseHealth": {
@@ -590,6 +620,16 @@
       "stopTooltip": "Detener la ejecución pero conservarla (legible y reintentable)",
       "reset": "Restablecer",
       "resetTooltip": "Descartar esta ejecución y restablecer la tarea a planificada",
+      "resetConfirm": {
+        "title": "¿Descartar esta ejecución?",
+        "body": "Esto elimina la ejecución y devuelve la tarea a planificada. Esto no se puede deshacer.",
+        "confirm": "Descartar ejecución"
+      },
+      "mergeConfirm": {
+        "title": "¿Fusionar esta pull request?",
+        "body": "Esto fusiona la PR en su rama base y completa la tarea. Esto no se puede deshacer.",
+        "confirm": "Fusionar"
+      },
       "viewDetailsOutput": "Ver detalles y leer la salida",
       "viewDetails": "Ver detalles del paso",
       "companion": "Acompañante",
@@ -680,6 +720,33 @@
       "structuredOutput": "Salida estructurada",
       "noResult": "Aún no hay resultado.",
       "noResultHint": "La salida estructurada aparece cuando este agente termina. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
+    },
+    "mergerResult": {
+      "title": "Decisión de fusión",
+      "titleWithBlock": "Decisión de fusión: {title}",
+      "description": "Cómo se puntuó el PR y qué decidió el motor.",
+      "outcome": {
+        "auto_merged": "Fusionado automáticamente",
+        "awaiting_review": "Esperando revisión humana"
+      },
+      "reason": {
+        "within_thresholds": "Todas las puntuaciones están dentro de los umbrales de {preset}, por lo que el PR se fusionó automáticamente.",
+        "exceeded_thresholds": "{axes} superó los umbrales de {preset}, por lo que el PR espera a que una persona lo fusione.",
+        "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
+        "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
+        "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
+        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione."
+      },
+      "scores": "Puntuaciones",
+      "axis": {
+        "complexity": "Complejidad",
+        "risk": "Riesgo",
+        "impact": "Impacto"
+      },
+      "ceiling": "límite {value}",
+      "rationale": "Justificación",
+      "noAssessment": "El fusionador no devolvió una evaluación puntuada.",
+      "noResult": "Aún no se ha registrado ninguna decisión de fusión."
     },
     "testReport": {
       "title": "Informe de pruebas",
@@ -1162,7 +1229,9 @@
       },
       "toast": {
         "acted": "Marcado como resuelto",
-        "dismissed": "Descartado"
+        "dismissed": "Descartado",
+        "actFailed": "No se pudo completar esa acción",
+        "dismissFailed": "No se pudo descartar"
       }
     },
     "aiProvidersBanner": {
@@ -3677,6 +3746,7 @@
     },
     "targetRepo": {
       "label": "Nombre del repositorio de destino",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "Crea un repositorio nuevo con este nombre bajo {owner} y luego la inicialización hace push a él. Un README, .gitignore o licencia ya creados están bien.",
       "descNoOwner": "Crea un repositorio nuevo con este nombre y luego la inicialización hace push a él. Un README, .gitignore o licencia ya creados están bien."
     },
@@ -3692,7 +3762,8 @@
     },
     "description": {
       "label": "Descripción",
-      "help": "Resumen opcional de una línea para el repositorio."
+      "help": "Resumen opcional de una línea para el repositorio.",
+      "placeholder": "Gestiona intenciones de pago y reembolsos"
     },
     "instructions": {
       "labelReference": "Instrucciones adicionales para el inicializador",
@@ -3722,18 +3793,23 @@
       "add": "Añadir",
       "pickRepo": {
         "label": "Elige un repositorio de GitHub existente",
-        "description": "Elige un repositorio al que tengas acceso para rellenar su propietario y nombre, o introdúcelos manualmente abajo."
+        "description": "Elige un repositorio al que tengas acceso para rellenar su propietario y nombre, o introdúcelos manualmente abajo.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Nombre",
-        "description": "Una etiqueta descriptiva para esta base."
+        "description": "Una etiqueta descriptiva para esta base.",
+        "placeholder": "Plantilla de servicio"
       },
       "repoOwner": "Propietario del repositorio",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Nombre del repositorio",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Resumen opcional de esta base",
       "defaultInstructions": {
         "label": "Instrucciones por defecto del inicializador",
-        "description": "Se anteponen a las instrucciones de cada ejecución siempre que se use esta base."
+        "description": "Se anteponen a las instrucciones de cada ejecución siempre que se use esta base.",
+        "placeholder": "p. ej. mantén la estructura; renombra los paquetes para que coincidan con el nuevo servicio"
       }
     },
     "toast": {

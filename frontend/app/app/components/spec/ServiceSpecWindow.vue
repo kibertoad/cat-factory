@@ -123,6 +123,8 @@ function kindLabel(item: RequirementItem): string {
     >
       <div
         class="flex max-h-[90dvh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
       >
         <!-- header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">

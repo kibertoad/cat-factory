@@ -1,5 +1,53 @@
 # @cat-factory/app
 
+## 0.72.0
+
+### Minor Changes
+
+- dcc8b32: Browsable frontend preview — SPA surface (slice 5d of the frontend-preview + in-context
+  UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  The frontend-frame inspector now surfaces the live browsable preview: when the frame's
+  `previewEnabled` toggle is on (local/node only), a control shows the preview's status, a
+  clickable "Open preview" URL once it is serving, and start / stop buttons. A new
+  `usePreviewStore` drives the three preview endpoints (`GET|POST|DELETE
+/workspaces/:ws/frames/:frameId/preview`), self-polling while the preview is `starting` so
+  the URL appears the moment it comes up. All copy is translated across every locale.
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/contracts@0.79.0
+
+## 0.71.3
+
+### Patch Changes
+
+- 16ee6cc: Surface the merger's verdict as a structured decision instead of raw JSON.
+
+  The engine now records a `MergeDecision` on the completed `merger` step (`step.custom`): the
+  assessment scores, the resolved preset ceilings, and — crucially — whether it auto-merged or routed
+  the PR to a human, and WHY (`within_thresholds` / `exceeded_thresholds` / `auto_merge_disabled` /
+  `no_rationale` / `no_assessment` / `merge_failed` — `no_rationale` distinguishes a scored-but-
+  unexplained assessment from a truly absent one). The SPA renders it in a dedicated `MergerResultView` (complexity /
+  risk / impact bars vs their ceilings + a plain-language decision banner — "Auto-merged — every score
+  is within the Balanced thresholds" / "Awaiting human review — risk exceeded the thresholds") instead
+  of the agent's raw JSON.
+
+  Also fixes the inspector showing a finished merger step as "Agent running": the run's shared container
+  is kept alive until the pipeline's final step, so a step whose state is already `done` (the merger
+  resolving mid-pipeline before a trailing gate) no longer displays the stale live container-phase label.
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+
+## 0.71.2
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+
 ## 0.71.1
 
 ### Patch Changes
