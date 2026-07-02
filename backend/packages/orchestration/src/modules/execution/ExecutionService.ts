@@ -2060,6 +2060,11 @@ export class ExecutionService {
   private async finalizeMerge(workspaceId: string, blockId: string): Promise<void> {
     const block = await this.blockRepository.get(workspaceId, blockId)
     if (!block) return
+    // Idempotent under durable-driver replays: a crash between the real merge and the
+    // instance persist re-runs the merger resolver, and re-merging an already-merged PR
+    // throws — which the resolver's fall-through would then misread as a failed merge
+    // and downgrade the block to `pr_ready`. `done` already means "merged"; keep it.
+    if (block.status === 'done') return
     if (this.prMerger && block.pullRequest) {
       // Throws on a blocked/failed merge — the caller decides what to do next.
       await this.prMerger.mergeForBlock(workspaceId, blockId)
@@ -2246,26 +2251,43 @@ export class ExecutionService {
     opts: { proposal?: string } = {},
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
-    const step = instance.steps[stepIndex]
-    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotIterativeGate(step)
-    if (step.approval.status === 'approved') return instance
+    // Optimistic-concurrency write like resolveDecision/requestStepChanges: an approve
+    // holding a stale snapshot (a racing reject, a driver poll, a terminal transition)
+    // must re-read and re-validate rather than blind-write — otherwise it can resurrect
+    // a run another writer already failed. The advance's in-memory half runs inside the
+    // CAS; the non-idempotent side effects (block writes, driver signal, emit) run once
+    // after, on the winning state.
+    let stepIndex = -1
+    let alreadyApproved = false
+    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
+      alreadyApproved = false
+      stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
+      const step = inst.steps[stepIndex]
+      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+      this.assertNotIterativeGate(step)
+      if (step.approval.status === 'approved') {
+        alreadyApproved = true
+        return
+      }
+      if (step.approval.status === 'rejected') {
+        throw new ConflictError(`Approval '${approvalId}' was rejected`)
+      }
+      if (inst.status === 'failed' || inst.status === 'done') {
+        throw new ConflictError(`Execution '${executionId}' is already ${inst.status}`)
+      }
 
-    // A human edit to the proposal replaces the agent's text, so the revised
-    // proposal is what downstream steps read (via priorOutputs).
-    if (opts.proposal !== undefined) {
-      step.output = opts.proposal
-      step.approval.proposal = opts.proposal
-    }
-    step.approval.status = 'approved'
-    // A gate is never raised on the final step, but the shared advance stays defensive.
-    await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, stepIndex)
+      // A human edit to the proposal replaces the agent's text, so the revised
+      // proposal is what downstream steps read (via priorOutputs).
+      if (opts.proposal !== undefined) {
+        step.output = opts.proposal
+        step.approval.proposal = opts.proposal
+      }
+      step.approval.status = 'approved'
+      // A gate is never raised on the final step, but the shared advance stays defensive.
+      this.runStateMachine.advanceRunPastGate(inst, stepIndex)
+    })
+    if (alreadyApproved) return instance
+    await this.runStateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
     return instance
   }
 

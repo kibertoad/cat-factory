@@ -202,14 +202,14 @@ describe('ApiKeyService', () => {
       usageWindowMs: WINDOW,
     })
     await service.addKey('workspace', WS, { provider: 'openrouter', label: 'k', key: 'sk-x' })
-    const err = await service.lease(WS, 'openrouter').catch((e: unknown) => e as Error)
+    const err = (await service.lease(WS, 'openrouter').catch((e: unknown) => e)) as Error
     // Actionable: names the offending provider + key id, and keeps the original as `cause` —
     // instead of surfacing the bare, contextless Web Crypto message.
     expect(err).toBeInstanceOf(Error)
     expect(err.message).toContain("'openrouter'")
     expect(err.message).toContain('apikey_1')
     expect(err.message).toContain('operation-specific reason')
-    expect((err as Error).cause).toBe(cause)
+    expect(err.cause).toBe(cause)
   })
 
   it('rotates to the least-loaded key across scopes (usage-aware)', async () => {

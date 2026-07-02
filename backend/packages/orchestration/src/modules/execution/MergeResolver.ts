@@ -68,6 +68,11 @@ export class MergeResolver {
   ): Promise<MergeDecision | null> {
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return null
+    // Replay guard: a durable-driver retry can re-resolve a merger step whose merge
+    // already landed (crash between the real merge and the instance persist). `done`
+    // is terminal-and-merged — never re-merge, and never downgrade it to `pr_ready`
+    // with a spurious review notification.
+    if (block.status === 'done') return null
 
     let assessment: MergeAssessment | null = null
     try {

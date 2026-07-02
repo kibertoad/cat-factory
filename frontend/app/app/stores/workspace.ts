@@ -91,7 +91,7 @@ export const useWorkspaceStore = defineStore(
       else workspaces.value.unshift(snapshot.workspace)
       useBoardStore().hydrate(snapshot.blocks)
       usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
-      useExecutionStore().hydrate(snapshot.executions)
+      useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
       useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
