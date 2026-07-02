@@ -53,7 +53,11 @@ import {
   requireProvider,
   sameSubtasks,
 } from '@cat-factory/kernel'
-import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
+import {
+  frontendOriginsForService,
+  parseBlueprintService,
+  parseSpecDoc,
+} from '@cat-factory/contracts'
 import {
   blueprintPostOp,
   isCompanionKind,
@@ -1458,16 +1462,37 @@ export class RunDispatcher {
     // task the deployer ran on. Falls back to the block id itself when the walk finds no frame.
     const frameId =
       (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
+    // Expose the origins of every `frontend` frame that binds this service as
+    // `{{input.frontendOrigins}}`, so the operator's manifest can fold them into the backend's
+    // CORS env var — the reverse of the frontend's `backendBindings`. Only the deployer path
+    // (the frame-keyed env a frontend binding resolves) injects it; the human-test manual env
+    // is unkeyed by frame, so a frontend can't bind it and it needs no origin (see notes).
+    const frontendOrigins = await this.frontendOriginsInput(workspaceId, frameId)
     return {
       workspaceId,
       blockId: block.id,
       frameId,
       executionId: instance.id,
-      inputs: this.deployInputs(block),
+      inputs: {
+        ...this.deployInputs(block),
+        ...(frontendOrigins ? { frontendOrigins } : {}),
+      },
       context: this.deployContext(block),
       ...(provisioning ? { serviceProvisioning: provisioning } : {}),
       initiatedBy: instance.initiatedBy,
     }
+  }
+
+  /**
+   * The `frontendOrigins` provision input for a service frame: the comma-joined browser origins
+   * of every `frontend` frame that binds this service (see `frontendOriginsForService`), for a
+   * manifest to fold into the backend's CORS allow-list via `{{input.frontendOrigins}}`. Empty
+   * string when no frontend binds it (the key is then omitted). One workspace block-list read —
+   * no per-frame point read (mirrors the visual-pipeline gate).
+   */
+  async frontendOriginsInput(workspaceId: string, serviceFrameId: string): Promise<string> {
+    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
+    return frontendOriginsForService(serviceFrameId, blocks).join(',')
   }
 
   /**

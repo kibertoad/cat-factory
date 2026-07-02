@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { UrlSafetyPolicy } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
-import { assertSafeEnvironmentUrl } from './environments.logic.js'
+import { frontendOriginsForService } from '@cat-factory/contracts'
+import { assertSafeEnvironmentUrl, interpolateTemplate } from './environments.logic.js'
 
 // SSRF host-classification regression tests (Finding #6b). The guards must block
 // the obfuscated loopback/link-local/RFC1918 encodings that bypass a naive
@@ -17,6 +18,30 @@ const expectAllowed = (url: string) => {
   expect(() => assertSafeEnvironmentUrl(url), url).not.toThrow()
   expect(() => assertSafeAtlassianBaseUrl(url), url).not.toThrow()
 }
+
+describe('frontendOrigins CORS injection (deployer input → HTTP-manifest template)', () => {
+  it('renders the derived frontend origins into a manifest body via {{input.frontendOrigins}}', () => {
+    // The HTTP manifest provider uses the `{{input.*}}` namespace (vs the K8s adapter's flat
+    // `{{frontendOrigins}}`). Same reverse-origin value, so an operator's provision `bodyTemplate`
+    // can hand the backend the origins to allow (CORS).
+    const origins = frontendOriginsForService('blk_api', [
+      {
+        level: 'frame',
+        type: 'frontend',
+        frontendConfig: {
+          backendBindings: [
+            { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+          ],
+        },
+      },
+    ]).join(',')
+    const rendered = interpolateTemplate('{"cors":"{{input.frontendOrigins}}"}', {
+      input: { frontendOrigins: origins },
+      provision: {},
+    })
+    expect(rendered).toBe('{"cors":"http://localhost:4173"}')
+  })
+})
 
 describe('SSRF host guard — obfuscated internal targets', () => {
   it('blocks bare-integer IPv4 (decimal 127.0.0.1)', () => {

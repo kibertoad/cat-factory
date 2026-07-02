@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FrontendConfig } from '@cat-factory/kernel'
+import { duplicateBindingEnvVars } from '@cat-factory/contracts'
 import {
   hasLiveServiceBinding,
   hasServiceBinding,
@@ -59,6 +60,52 @@ describe('resolveFrontendBindings', () => {
       { envVar: 'PUB_BILLING_URL' },
       { envVar: 'PUB_ANALYTICS_URL' },
     ])
+  })
+
+  it('dedupes a repeated env var deterministically (last non-empty binding wins)', () => {
+    // The injected env is a map keyed by envVar; a duplicate must resolve to ONE value, and it
+    // must be the last one the operator sees in the list — not left to insertion-order chance.
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_other' } },
+    ])
+    const live = new Map([
+      ['blk_api', 'https://api.ephemeral.example'],
+      ['blk_other', 'https://other.ephemeral.example'],
+    ])
+    expect(resolveFrontendBindings(cfg, live)).toEqual([
+      { envVar: 'PUB_API_URL', serviceUrl: 'https://other.ephemeral.example' },
+    ])
+  })
+})
+
+describe('duplicateBindingEnvVars', () => {
+  it('reports a non-empty env var used on more than one binding', () => {
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+      { envVar: 'PUB_API_URL', source: { kind: 'mock' } },
+    ])
+    expect(duplicateBindingEnvVars(cfg)).toEqual(['PUB_API_URL'])
+  })
+
+  it('ignores empty/whitespace env vars (unfinished rows) and returns sorted uniques', () => {
+    const cfg = config([
+      { envVar: 'B', source: { kind: 'mock' } },
+      { envVar: 'B', source: { kind: 'mock' } },
+      { envVar: 'A', source: { kind: 'mock' } },
+      { envVar: 'A', source: { kind: 'mock' } },
+      { envVar: '  ', source: { kind: 'mock' } },
+      { envVar: '  ', source: { kind: 'mock' } },
+    ])
+    expect(duplicateBindingEnvVars(cfg)).toEqual(['A', 'B'])
+  })
+
+  it('is empty when every (non-empty) env var is unique', () => {
+    const cfg = config([
+      { envVar: 'PUB_A', source: { kind: 'mock' } },
+      { envVar: 'PUB_B', source: { kind: 'mock' } },
+    ])
+    expect(duplicateBindingEnvVars(cfg)).toEqual([])
   })
 })
 
