@@ -123,6 +123,8 @@ interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   spanBuffer: ToolSpan[]
   /** Follow-up items buffered since the last drain (see {@link JobView.followUps}). */
   followUpBuffer: FollowUpLine[]
+  /** Abort the in-flight run (see {@link JobRegistry.abortAll}); set while running only. */
+  abort?: (reason: string) => void
 }
 
 /** Watchdog windows that bound every job. Tunable via the container's env. */
@@ -158,6 +160,7 @@ function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobVie
     promise: _promise,
     spanBuffer: _spanBuffer,
     followUpBuffer: _followUpBuffer,
+    abort: _abort,
     ...view
   } = entry
   return { ...view }
@@ -228,6 +231,24 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     return view
   }
 
+  /**
+   * Abort every RUNNING job (fires each run's abort signal, which SIGTERM→SIGKILLs its
+   * CLI/git children via `killChildProcess`). The graceful-shutdown hook: a harness dying
+   * to SIGTERM must not orphan a live agent subprocess — reparented, it would keep working
+   * unsupervised (and, in native local mode, on the developer's own login). Returns the
+   * number of jobs aborted.
+   */
+  abortAll(reason: string): number {
+    let aborted = 0
+    for (const entry of this.jobs.values()) {
+      if (entry.state === 'running' && entry.abort) {
+        entry.abort(reason)
+        aborted += 1
+      }
+    }
+    return aborted
+  }
+
   private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
     const controller = new AbortController()
     let killReason: 'inactivity' | 'max-duration' | undefined
@@ -271,6 +292,8 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       resetInactivity()
     }
     resetInactivity()
+    // Expose the abort for shutdown (see abortAll); cleared in `finally` once the job settles.
+    entry.abort = (reason) => controller.abort(new Error(reason))
 
     jobLog.info('job started', {})
     try {
@@ -327,6 +350,7 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
     } finally {
       clearTimeout(inactivity)
       clearTimeout(cap)
+      entry.abort = undefined
       entry.heartbeatAt = Date.now()
     }
   }

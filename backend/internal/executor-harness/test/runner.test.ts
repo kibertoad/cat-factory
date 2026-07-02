@@ -216,3 +216,35 @@ describe('JobRegistry', () => {
     expect(view?.failureCause).toBe('max-duration')
   })
 })
+
+describe('JobRegistry.abortAll', () => {
+  const limits = { maxDurationMs: 60_000, inactivityMs: 60_000 }
+
+  it('aborts every running job (graceful shutdown) and skips settled ones', async () => {
+    const registry = new JobRegistry<TestJob, TestResult>(limits, (j, opts: RunOptions) => {
+      if (j.jobId === 'quick') return Promise.resolve({ summary: 'ok' })
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener(
+          'abort',
+          () => reject(opts.signal?.reason ?? new Error('aborted')),
+          { once: true },
+        )
+      })
+    })
+    registry.start('quick', { jobId: 'quick' })
+    registry.start('hung-1', { jobId: 'hung-1' })
+    registry.start('hung-2', { jobId: 'hung-2' })
+    await tick()
+    expect(registry.get('quick')?.state).toBe('done')
+
+    // Only the two still-running jobs are aborted; their views carry the shutdown reason.
+    expect(registry.abortAll('harness shutting down (SIGTERM)')).toBe(2)
+    await tick()
+    expect(registry.get('hung-1')?.state).toBe('failed')
+    expect(registry.get('hung-1')?.error).toMatch(/shutting down/)
+    expect(registry.get('hung-2')?.state).toBe('failed')
+
+    // Nothing left running: a second sweep is a no-op.
+    expect(registry.abortAll('again')).toBe(0)
+  })
+})

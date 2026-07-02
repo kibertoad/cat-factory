@@ -16,6 +16,11 @@ import { log } from './logger.js'
 
 const PORT = Number(process.env.PORT ?? 8080)
 
+// Optional bind address, identical to the executor harness: default (unset) binds all
+// interfaces (a container's published port needs it); the native local transport sets
+// 127.0.0.1 so a host-process deploy harness stays off the LAN.
+const BIND_HOST = process.env.HARNESS_BIND_HOST?.trim() || undefined
+
 // Optional inbound auth, identical to the executor harness: when HARNESS_SHARED_SECRET
 // is set, every non-health request must present a matching `x-harness-secret` header
 // (constant-time compared). Unset ⇒ open (local/dev).
@@ -118,9 +123,24 @@ const server = createServer((req, res) => {
 
 // Only auto-listen when run as the entry point (tests import the handlers directly).
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => {
-    console.log(`deploy-harness listening on :${PORT}`)
+  server.listen(PORT, BIND_HOST, () => {
+    console.log(`deploy-harness listening on ${BIND_HOST ?? ''}:${PORT}`)
   })
+
+  // Graceful shutdown, identical to the executor harness: abort running jobs so their
+  // kubectl/helm children die with us instead of being orphaned mid-apply, then exit once
+  // the kill window has passed — immediately when nothing was running.
+  const shutdown = (signal: string): void => {
+    const aborted = Object.values(KINDS).reduce(
+      (count, { registry }) => count + registry.abortAll(`harness shutting down (${signal})`),
+      0,
+    )
+    log.info('shutting down', { signal, abortedJobs: aborted })
+    server.close()
+    setTimeout(() => process.exit(0), aborted > 0 ? 6_000 : 0)
+  }
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+  process.once('SIGINT', () => shutdown('SIGINT'))
 }
 
 export { server }

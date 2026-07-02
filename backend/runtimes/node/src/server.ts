@@ -286,6 +286,9 @@ export async function start(
     try {
       await boss.stop()
       await pool.end()
+      // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
+      // released here so a graceful exit tears them down instead of the exit-hook backstop.
+      await container.onShutdown?.()
     } catch (err) {
       logger.error({ err: err instanceof Error ? err.message : String(err) }, 'shutdown error')
     }
