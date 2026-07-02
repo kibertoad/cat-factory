@@ -1,5 +1,45 @@
 # @cat-factory/orchestration
 
+## 0.55.1
+
+### Patch Changes
+
+- 16ee6cc: Refactor: the Kaizen grader now resolves its model through the SAME shared inline
+  model-resolution seam every other inline agent uses (`resolveInlineModelRef`) instead of a
+  hand-rolled copy of the precedence in `KaizenService.modelFor`. The bespoke copy was
+  behaviourally equivalent but a divergent code path that could drift and silently degrade a
+  subscription preset (e.g. a "Claude for everything" preset) to the env routing default (e.g.
+  `qwen`) — the same class of drift the `assertRunnable` de-duplication addressed for
+  start/retry/restart. Routing it through the one shared helper keeps kaizen identical to the
+  requirements reviewer et al. (block pin > workspace per-kind default > routing default, keeping
+  an ambient-eligible subscription harness ref rather than degrading it) and prevents future
+  drift. Adds `KaizenService.model.test.ts` pinning that precedence and the keep-vs-degrade
+  behaviour so the qwen-degrade scenario is now a regression test.
+- 16ee6cc: Surface the merger's verdict as a structured decision instead of raw JSON.
+
+  The engine now records a `MergeDecision` on the completed `merger` step (`step.custom`): the
+  assessment scores, the resolved preset ceilings, and — crucially — whether it auto-merged or routed
+  the PR to a human, and WHY (`within_thresholds` / `exceeded_thresholds` / `auto_merge_disabled` /
+  `no_rationale` / `no_assessment` / `merge_failed` — `no_rationale` distinguishes a scored-but-
+  unexplained assessment from a truly absent one). The SPA renders it in a dedicated `MergerResultView` (complexity /
+  risk / impact bars vs their ceilings + a plain-language decision banner — "Auto-merged — every score
+  is within the Balanced thresholds" / "Awaiting human review — risk exceeded the thresholds") instead
+  of the agent's raw JSON.
+
+  Also fixes the inspector showing a finished merger step as "Agent running": the run's shared container
+  is kept alive until the pipeline's final step, so a step whose state is already `done` (the merger
+  resolving mid-pipeline before a trailing gate) no longer displays the stale live container-phase label.
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+  - @cat-factory/kernel@0.68.1
+  - @cat-factory/agents@0.26.1
+  - @cat-factory/integrations@0.52.2
+  - @cat-factory/prompt-fragments@0.9.34
+  - @cat-factory/sandbox@0.8.72
+  - @cat-factory/spend@0.10.64
+  - @cat-factory/workspaces@0.10.11
+
 ## 0.55.0
 
 ### Minor Changes
