@@ -3211,7 +3211,7 @@
     "quality": {
       "heading": "Przegląd pokrycia",
       "reruns": "Ponowne uruchomienia Testera wywołane jakością",
-      "rerunCount": "{attempts}/{max} ponowne uruchomienie",
+      "rerunCount": "{attempts}/{max} ponownych uruchomień",
       "exceeded": "Budżet wyczerpany",
       "adequate": "Pokrycie wystarczające",
       "inadequate": "Znaleziono luki w pokryciu",

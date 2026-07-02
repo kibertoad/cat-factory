@@ -3334,7 +3334,7 @@
     "quality": {
       "heading": "Coverage review",
       "reruns": "Quality-driven Tester re-runs",
-      "rerunCount": "{attempts}/{max} re-run",
+      "rerunCount": "{attempts}/{max} re-runs",
       "exceeded": "Budget spent",
       "adequate": "Coverage adequate",
       "inadequate": "Coverage gaps found",

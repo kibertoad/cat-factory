@@ -3222,7 +3222,7 @@
     "quality": {
       "heading": "סקירת כיסוי",
       "reruns": "הרצות חוזרות של הבודק מבוססות איכות",
-      "rerunCount": "{attempts}/{max} הרצה חוזרת",
+      "rerunCount": "{attempts}/{max} הרצות חוזרות",
       "exceeded": "התקציב נוצל",
       "adequate": "הכיסוי מספק",
       "inadequate": "נמצאו פערי כיסוי",

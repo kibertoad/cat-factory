@@ -3211,7 +3211,7 @@
     "quality": {
       "heading": "Revue de couverture",
       "reruns": "Relances du Testeur pilotées par la qualité",
-      "rerunCount": "{attempts}/{max} relance",
+      "rerunCount": "{attempts}/{max} relances",
       "exceeded": "Budget épuisé",
       "adequate": "Couverture adéquate",
       "inadequate": "Lacunes de couverture détectées",

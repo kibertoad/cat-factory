@@ -24,10 +24,16 @@ Completes the test quality-control (QC) companion (see
 - **Persistence fix**: the pipeline create/update/clone API + `PipelineService` now thread
   `testerQuality` (and the sibling `followUps`, which had the same latent gap) end-to-end, so a
   custom pipeline's builder toggle actually persists instead of being silently stripped by the
-  request-body validator. A QC estimate gate is validated like companion gating (a threshold
-  must be set and a `task-estimator` must run earlier).
+  request-body validator. This includes the persistence layer itself: new `follow_ups` +
+  `tester_quality` JSON columns on the `pipelines` table, mirrored D1 (migration
+  `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+  repos and read by the shared `rowToPipeline` mapper. A QC estimate gate is validated like
+  companion gating (a threshold must be set and a `task-estimator` must run earlier).
 - **Conformance**: the full QC loop (audit → loop the Tester on gaps → conclude on an adequate
   report) is now driven through an injected deterministic reviewer on every runtime, asserting
-  the verdicts + counters persist identically across D1 and Drizzle.
+  the verdicts + counters persist identically across D1 and Drizzle. A separate round-trip
+  assertion saves a custom pipeline with a `followUps` opt-out + a gated `testerQuality` config
+  and re-reads it from the store, so the new columns can't silently drop the toggles on either
+  runtime.
 
 All new user-facing copy is translated across every shipped locale.

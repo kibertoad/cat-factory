@@ -70,7 +70,14 @@ report inside the Tester gate, before `resolveTesterResult`'s greenlight/fixer b
   the request-schema fields), and fixed the identical pre-existing gap for the sibling `followUps`
   toggle (same latent bug). The QC companion's optional estimate GATE is validated like companion
   gating (`assertValidTesterQualityGating`: threshold set + a preceding `task-estimator`), but on
-  the Tester step itself rather than a companion row.
+  the Tester step itself rather than a companion row. **The fix reaches the persistence layer, not
+  just the request schema** (the original gap was that `pipelines` had no column for either field,
+  so threading them through the service alone still dropped them at the DB): new `follow_ups` +
+  `tester_quality` JSON columns on `pipelines`, mirrored D1 (migration
+  `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+  repos and read by the shared `rowToPipeline` mapper — with a conformance round-trip assertion
+  (save a `followUps` opt-out + a gated `testerQuality`, re-read from the store) guarding it on
+  both runtimes.
 - **Conformance drives the loop through an injected reviewer**: `createCore` now honours a
   `testerQualityReviewer` override (else it builds the model-derived one), and the suite injects
   a `FakeTesterQualityReviewer` (a scripted verdict sequence) via a `ConformanceAppOptions` seam

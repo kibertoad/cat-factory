@@ -3211,7 +3211,7 @@
     "quality": {
       "heading": "Revisión de cobertura",
       "reruns": "Reejecuciones del Tester impulsadas por calidad",
-      "rerunCount": "{attempts}/{max} reejecución",
+      "rerunCount": "{attempts}/{max} reejecuciones",
       "exceeded": "Presupuesto agotado",
       "adequate": "Cobertura adecuada",
       "inadequate": "Se encontraron lagunas de cobertura",

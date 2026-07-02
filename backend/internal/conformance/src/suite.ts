@@ -420,6 +420,45 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
         expect(res.status).toBe(422)
       })
+
+      it('round-trips the per-step companion toggles (followUps + testerQuality) on every store', async () => {
+        // The pipeline builder's two per-step companion toggles live on their own JSON columns
+        // (D1/Drizzle `follow_ups` + `tester_quality`), so a custom pipeline that opts a Coder
+        // step OUT of the Follow-up companion and configures a Tester step's QC companion (an
+        // estimate gate) must survive the store round-trip identically — otherwise the builder
+        // toggle silently reverts to the default on the next load.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Toggles',
+          agentKinds: ['task-estimator', 'coder', 'tester-api'],
+          // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
+          // task estimate (an estimator runs earlier, so the gate is valid).
+          followUps: [null, false, null],
+          testerQuality: [
+            null,
+            null,
+            { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+          ],
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.followUps?.[1]).toBe(false)
+        expect(created.body.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
+
+        // A fresh snapshot read re-hydrates both columns from the store, identically on D1 ⇄ Postgres.
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+        expect(stored.followUps?.[1]).toBe(false)
+        expect(stored.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
+      })
     })
 
     describe('service spec read', () => {
