@@ -25,7 +25,11 @@ import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
-import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
+import type {
+  LocalRunner,
+  UpsertLocalModelEndpointInput,
+  UserSecretKind,
+} from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
@@ -342,6 +346,15 @@ export function makeConformanceApp(
       return {
         get: (workspaceId: string) => svc.get(workspaceId),
         upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
+      }
+    },
+    userSecrets: () => {
+      const svc = container.userSecrets
+      if (!svc) return undefined
+      return {
+        store: (userId, kind, input) => svc.store(userId, kind as UserSecretKind, input),
+        resolve: (userId, kind) => svc.resolve(userId, kind as UserSecretKind),
+        describe: (kind) => svc.describe(kind as UserSecretKind),
       }
     },
   }

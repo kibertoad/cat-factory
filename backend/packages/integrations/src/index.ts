@@ -338,9 +338,9 @@ export {
   type UserSecretServiceDependencies,
 } from './modules/providers/UserSecretService.js'
 export {
-  registerUserSecretKind,
-  getUserSecretKind,
-  listUserSecretKinds,
+  UserSecretKindRegistry,
+  defaultUserSecretKindRegistry,
+  githubPatUserSecretKind,
   type UserSecretKindHandler,
   type UserSecretTestInput,
 } from './modules/providers/userSecretKinds.js'

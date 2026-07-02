@@ -80,6 +80,7 @@ const harness: ConformanceHarness = {
               environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
               runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
               customManifestTypeRegistry: opts.backendRegistries.customManifestTypeRegistry,
+              userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry,
             }
           : {}),
         ...fragmentLibraryDeps(),
@@ -146,6 +147,11 @@ const harness: ConformanceHarness = {
       userSecrets: () => {
         const svc = buildContainer(env, {
           agentExecutor: new FakeAgentExecutor(),
+          // Thread the injected app-owned secret-kind registry (custom kinds pre-registered by
+          // the suite) so the probe's service describes them by reference, like the main build.
+          ...(opts?.backendRegistries
+            ? { userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry }
+            : {}),
         }).userSecrets
         if (!svc) return undefined
         return {
