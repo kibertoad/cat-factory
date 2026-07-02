@@ -160,6 +160,7 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { TesterQualityReviewService } from './modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
@@ -1407,6 +1408,34 @@ function createBootstrapModule(
  * and the document/task repositories are reused, when wired, to fold linked PRDs
  * and tracker issues into the reviewed requirements.
  */
+/**
+ * Build the inline reviewer for the test quality-control companion. It resolves its model
+ * exactly like the requirements reviewer (block pin → workspace per-kind default → routing
+ * default). Returns `undefined` when no model provider is configured, so the Tester gate's QC
+ * step is a pass-through in unconfigured facades / tests.
+ */
+function createTesterQualityReviewer(
+  deps: CoreDependencies,
+): TesterQualityReviewService | undefined {
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new TesterQualityReviewService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
+}
+
 function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
@@ -2079,6 +2108,10 @@ export function createCore(dependencies: CoreDependencies): Core {
         }
       : undefined,
     requirementReviewService: requirements?.service,
+    // The test quality-control companion's inline reviewer, resolved like every other inline
+    // review (block pin → workspace preset → routing default). Built only when a model
+    // provider is available; absent → the Tester gate's QC step is a pass-through.
+    testerQualityReviewer: createTesterQualityReviewer(dependencies),
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,
     kaizenScheduler: kaizen?.service,

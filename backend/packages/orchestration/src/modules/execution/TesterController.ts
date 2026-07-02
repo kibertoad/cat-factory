@@ -11,6 +11,7 @@ import { DEFAULT_MERGE_PRESET, isAsyncAgentExecutor } from '@cat-factory/kernel'
 import {
   type TestReport,
   type TesterAttempt,
+  TESTER_QC_AGENT_KIND,
   parseTestReport,
   parseTesterInfraSetup,
 } from '@cat-factory/contracts'
@@ -19,6 +20,9 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
+import { renderQualityFeedbackForTester } from './testerQuality.logic.js'
+import { shouldRunGatedStep } from './stepGating.logic.js'
 
 /** Whether a Tester report raised any concern serious enough to block a release. */
 function hasBlockingConcerns(report: TestReport): boolean {
@@ -85,10 +89,22 @@ export interface TesterControllerDeps {
   notificationService?: NotificationService
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
-  /** The task's CI/test attempt budget (from the resolved merge preset). */
-  resolveMergePreset: (workspaceId: string, block: Block) => Promise<{ ciMaxAttempts: number }>
+  /** The task's CI/test + QC attempt budgets (from the resolved merge preset). */
+  resolveMergePreset: (
+    workspaceId: string,
+    block: Block,
+  ) => Promise<{ ciMaxAttempts: number; maxTesterQualityIterations: number }>
   /** The async instance/block spine (container reclaim, instance persist + emit). */
   stateMachine: RunStateMachine
+  /**
+   * Inline reviewer for the test quality-control companion. When wired (and the Tester step
+   * has the companion enabled), each Tester report is audited for coverage BEFORE the
+   * greenlight/fixer decision; an inadequate report loops the Tester for a more thorough pass.
+   * Absent (tests / no model) → QC is a pass-through and the gate behaves exactly as before.
+   */
+  qualityReviewer?: TesterQualityReviewer
+  /** Current time (ms) for stamping QC verdicts. Absent → `Date.now()`. */
+  clockNow?: () => number
 }
 
 /**
@@ -123,10 +139,19 @@ export class TesterController {
       report = null
     }
     if (!step.test) {
-      const maxAttempts = block
-        ? (await this.deps.resolveMergePreset(workspaceId, block)).ciMaxAttempts
-        : DEFAULT_MERGE_PRESET.ciMaxAttempts
-      step.test = { phase: 'testing', attempts: 0, maxAttempts, lastReport: null }
+      const preset = block
+        ? await this.deps.resolveMergePreset(workspaceId, block)
+        : DEFAULT_MERGE_PRESET
+      step.test = {
+        phase: 'testing',
+        attempts: 0,
+        maxAttempts: preset.ciMaxAttempts,
+        lastReport: null,
+      }
+      // Refresh the QC budget from the task's resolved preset (the step was seeded at run
+      // start with the default ceiling); done once, on the first report, alongside the fixer
+      // budget so a per-task preset override takes effect.
+      if (step.testerQuality) step.testerQuality.maxAttempts = preset.maxTesterQualityIterations
     }
     if (report) step.test.lastReport = report
     // Persist the in-container docker-compose stand-up record (local-infra tester) so the test
@@ -183,6 +208,20 @@ export class TesterController {
     const accepted = firstRound
       ? report.greenlight === true && report.concerns.length === 0 && !hasFailedOutcome(report)
       : isGreenlit(report)
+
+    // Test quality-control companion: gate a report that would otherwise CONCLUDE the step
+    // (accepted) for coverage completeness BEFORE it is accepted. A report that will loop the
+    // fixer (real failures / blocking concerns) is deliberately left to the fixer — QC re-audits
+    // the fixed report on a later round rather than re-testing unfixed code or spending its
+    // budget before anything is fixed. When the accepted report's coverage is inadequate, QC
+    // loops the Tester (folding the prior report + gaps in) for a more thorough pass. A
+    // pass-through (companion off / no model / gated out / budget spent / adequate) returns null
+    // and the accept-or-fix decision below runs unchanged.
+    if (accepted) {
+      const qualityResult = await this.runQualityGate(workspaceId, instance, step, block, report)
+      if (qualityResult) return qualityResult
+    }
+
     if (accepted) return null
 
     // Withheld greenlight: loop the fixer if any budget remains, else give up.
@@ -207,14 +246,86 @@ export class TesterController {
   }
 
   /**
+   * The test quality-control gate, run on each report that would otherwise CONCLUDE the step
+   * (be accepted) BEFORE it is accepted — a report bound for the fixer is left to the fixer.
+   * Returns an `awaiting_job` result when it looped the Tester for a more thorough pass;
+   * returns `null` (proceed to the accept decision) when the companion is disabled, unwired,
+   * gated out by the task estimate, the report is judged adequate, or the QC budget is spent.
+   * Records a verdict per evaluation on `step.testerQuality` for the UI.
+   */
+  private async runQualityGate(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block | null,
+    report: TestReport,
+  ): Promise<AdvanceResult | null> {
+    const qc = step.testerQuality
+    // Companion off, unwired reviewer, or no block ⇒ pass-through.
+    if (!qc || !qc.enabled || !this.deps.qualityReviewer || !block) return null
+    // Already settled as exceeded (budget spent on a prior report) ⇒ don't re-audit; proceed.
+    if (qc.exceeded) return null
+    // Optional estimate gating: only QC-gate a task heavy enough to qualify.
+    if (qc.gating?.enabled && !shouldRunGatedStep(block.estimate, qc.gating)) return null
+
+    const evaluated = await this.deps.qualityReviewer.evaluate(workspaceId, block, report)
+    // The reviewer could not resolve a model ⇒ pass-through (never block the pipeline on a QC
+    // that can't run), exactly like the requirements reviewer degrading when no model is wired.
+    if (!evaluated) return null
+    const { outcome, model } = evaluated
+    const now = this.deps.clockNow?.() ?? Date.now()
+    qc.verdicts = [
+      ...(qc.verdicts ?? []),
+      {
+        adequate: outcome.adequate,
+        feedback: outcome.feedback,
+        gaps: outcome.gaps,
+        at: now,
+        model,
+      },
+    ]
+
+    // Adequate report ⇒ proceed to the normal greenlight/fixer decision.
+    if (outcome.adequate) {
+      await this.deps.stateMachine.persistInstance(workspaceId, instance)
+      return null
+    }
+
+    // Inadequate + budget remains ⇒ loop the Tester for a focused additional pass.
+    const attempts = qc.attempts ?? 0
+    const executor = this.deps.agentExecutor
+    if (isAsyncAgentExecutor(executor) && attempts < qc.maxAttempts) {
+      qc.attempts = attempts + 1
+      // Reclaim the finished Tester container so the re-run boots fresh (idempotent dispatch by
+      // run id would otherwise re-attach to the completed job and replay its report).
+      await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
+      return this.dispatchTester(
+        workspaceId,
+        instance,
+        step,
+        block,
+        renderQualityFeedbackForTester(outcome, report),
+      )
+    }
+
+    // Budget spent (or no async executor to re-run) ⇒ stop gating and proceed with the report.
+    qc.exceeded = true
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    return null
+  }
+
+  /**
    * Re-dispatch the Tester after a Fixer job finished, against the (now-fixed) PR
    * branch. Parks on the fresh Tester job; its report then drives greenlight-or-loop.
+   * `qualityFeedback`, when present (a QC-driven re-run), is folded into the run context
+   * so the Tester closes the coverage gaps the quality companion flagged.
    */
   async dispatchTester(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     block: Block,
+    qualityFeedback?: string,
   ): Promise<AdvanceResult> {
     const executor = this.deps.agentExecutor
     if (!isAsyncAgentExecutor(executor)) {
@@ -228,6 +339,14 @@ export class TesterController {
       isFinalStep,
       block,
     )
+    // A QC-driven re-run hands the Tester the quality companion's gaps + prior report as an
+    // extra prior output, so it does a focused additional pass rather than starting cold.
+    if (qualityFeedback) {
+      context.priorOutputs = [
+        ...context.priorOutputs,
+        { agentKind: TESTER_QC_AGENT_KIND, output: qualityFeedback },
+      ]
+    }
     // Surface the cold-boot window BEFORE the blocking dispatch (it blocks until the per-run
     // container is up and accepts the job), so the Tester window shows "spinning up" then the
     // live phase via the same `container` projection the Coder uses — true parity, instead of
