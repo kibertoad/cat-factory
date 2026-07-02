@@ -7,6 +7,7 @@ import {
   type AgentRunContext,
   type AgentRunResult,
   type AsyncAgentExecutor,
+  type HarnessCallMetric,
   type HarnessKind,
   type LlmTraceSink,
   type ModelRef,
@@ -117,6 +118,23 @@ export type RecordSubscriptionUsage = (
 ) => Promise<void>
 
 /**
+ * Record a finished subscription harness's per-call telemetry into `llm_call_metrics`
+ * — the proxy-bypassing analogue of the per-call rows the LLM proxy writes for Pi. The
+ * facade maps each {@link HarnessCallMetric} onto the observability sink; kept out of
+ * the executor so the server layer stays free of an orchestration-service dependency.
+ * NOT gated on a pooled token id (a personal/individual subscription leases no tokenId
+ * yet still produces telemetry), unlike {@link RecordSubscriptionUsage}.
+ */
+export type RecordHarnessCalls = (input: {
+  workspaceId: string
+  executionId: string | null
+  agentKind: string
+  provider: string
+  model: string
+  calls: HarnessCallMetric[]
+}) => Promise<void>
+
+/**
  * The repo spec every container job body carries: clone coordinates plus, for a
  * monorepo service, the subdirectory the harness should run the agent within. Built
  * here once so the (six) agent-kind job bodies can't drift on which repo fields they
@@ -143,6 +161,13 @@ export type RecordSubscriptionUsage = (
 function stepJobId(executionId: string, agentKind: string, dispatchEpoch = 0): string {
   const base = `${executionId}-${agentKind}`
   return dispatchEpoch > 0 ? `${base}-${dispatchEpoch}` : base
+}
+
+/** The provider slug from a handle's `provider:model` string (fallback when the handle omits `provider`). */
+function providerOf(model: string | undefined): string {
+  if (!model) return 'unknown'
+  const colon = model.indexOf(':')
+  return colon > 0 ? model.slice(0, colon) : model
 }
 
 /**
@@ -390,6 +415,12 @@ export interface ContainerAgentExecutorDependencies {
   /** Attribute a finished subscription job's usage to its leased token (usage-aware rotation). */
   recordSubscriptionUsage?: RecordSubscriptionUsage
   /**
+   * Record a finished subscription harness's per-call telemetry into `llm_call_metrics`
+   * (the proxy-bypassing analogue of the LLM proxy's per-call rows for Pi). Best-effort;
+   * absent ⇒ no subscription-harness call telemetry is captured. See {@link RecordHarnessCalls}.
+   */
+  recordHarnessCalls?: RecordHarnessCalls
+  /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
    * returns true for a resolved subscription harness + vendor, the job carries
    * `ambientAuth: true` INSTEAD of a leased credential — the harness (run as a host process)
@@ -490,6 +521,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   private readonly recordedUsageJobs = new Set<string>()
 
+  /**
+   * Job ids whose per-call telemetry (`llm_call_metrics`) has already been recorded.
+   * Separate from {@link recordedUsageJobs} because the two recorders are independently
+   * wired and gated (telemetry records even for a personal subscription that leases no
+   * pooled token id). Same replay-safety rationale + bound as the usage guard.
+   */
+  private readonly recordedCallMetricJobs = new Set<string>()
+
   /** Resolves which model + subscription path a step runs on (routing policy). */
   private readonly modelRouter: ModelRouter
 
@@ -517,7 +556,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, kind, subscriptionTokenId } = await this.buildJobBody(context)
+    const { body, model, provider, kind, subscriptionTokenId } = await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
@@ -544,6 +583,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       jobId,
       runId: executionId,
       model,
+      provider,
       workspaceId,
       agentKind: context.agentKind,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
@@ -631,6 +671,33 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       // unboundedly (clearing only risks a benign re-record on a later retry).
       if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
       this.recordedUsageJobs.add(handle.jobId)
+    }
+    // Record the subscription harness's per-call telemetry into `llm_call_metrics` — the
+    // proxy-bypassing analogue of the rows the LLM proxy writes for Pi. Same once-per-job
+    // replay guard as the usage attribution; NOT gated on a pooled token id, so a personal
+    // (individual-usage) subscription run is observed too. Best-effort: an unwired recorder
+    // or an empty metric list is a no-op.
+    if (
+      handle.workspaceId &&
+      result.callMetrics &&
+      result.callMetrics.length > 0 &&
+      this.deps.recordHarnessCalls &&
+      !this.recordedCallMetricJobs.has(handle.jobId)
+    ) {
+      try {
+        await this.deps.recordHarnessCalls({
+          workspaceId: handle.workspaceId,
+          executionId: handle.runId ?? null,
+          agentKind: handle.agentKind ?? 'agent',
+          provider: handle.provider ?? providerOf(handle.model),
+          model: handle.model ?? '',
+          calls: result.callMetrics,
+        })
+        if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
+        this.recordedCallMetricJobs.add(handle.jobId)
+      } catch {
+        // Swallowed: telemetry is observability, never a reason to fail a completed run.
+      }
     }
     return { state: 'done', result: toRunResult(result, handle.agentKind), ...followUps }
   }
@@ -731,6 +798,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private async buildJobBody(context: AgentRunContext): Promise<{
     body: Record<string, unknown>
     model: string
+    provider: string
     kind: RunnerDispatchKind
     subscriptionTokenId?: string
   }> {
@@ -865,7 +933,13 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       workBranch,
       workBranchReady,
     })
-    return { subscriptionTokenId, body, model: `${ref.provider}:${ref.model}`, kind }
+    return {
+      subscriptionTokenId,
+      body,
+      model: `${ref.provider}:${ref.model}`,
+      provider: ref.provider,
+      kind,
+    }
   }
 
   /**

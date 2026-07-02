@@ -977,9 +977,16 @@ a separate **required** `TELEMETRY_DB` D1 database on Cloudflare and a `telemetr
 same window (`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days) by the existing retention
 sweep.
 
-- **`llm_call_metrics`** — per proxied LLM call (prompt/response delta-stored, tokens,
-  timing). Recorded by the LLM proxy via `LlmObservabilityService`. This captures what the
-  model _received_ per call.
+- **`llm_call_metrics`** — per LLM call (prompt/response delta-stored, tokens, timing).
+  Recorded by the LLM proxy via `LlmObservabilityService` for the proxy-metered Pi harness.
+  The **subscription harnesses (Claude Code / Codex) bypass the proxy** (they talk direct to
+  the vendor), so the harness lifts per-call metrics off each CLI's event stream onto
+  `RunnerJobResult.callMetrics`, and `ContainerAgentExecutor.pollJob` feeds them through the
+  SAME `LlmObservabilityService` (via `makeHarnessCallRecorder`, wired per-facade as
+  `recordHarnessCalls`). Claude Code's `stream-json` carries full request/response bodies;
+  Codex's `exec --json` is thinner (flat assistant text + per-turn tokens, no request
+  transcript). Both have zero per-HTTP timing (the CLIs don't expose it). This captures what
+  the model _received_ per call.
 - **`agent_context_snapshots`** — the complete context an agent was _provided_ per container
   dispatch: the fully fragment-composed system + user prompts, the best-practice fragment
   bodies folded in, and the **full content of the files injected into the container**

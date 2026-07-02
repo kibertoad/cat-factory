@@ -16,7 +16,7 @@ import {
   remoteBranchExists,
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
-import type { PiRunStats } from './pi.js'
+import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -88,6 +88,8 @@ export interface CodingAgentOutcome {
   stderrTail?: string
   /** Token usage from a subscription harness's CLI stream (absent for Pi). */
   usage?: { inputTokens: number; outputTokens: number }
+  /** Per-model-call telemetry from a subscription harness's CLI stream (absent for Pi). */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /**
@@ -295,7 +297,7 @@ export async function runCodingAgent(
       try {
         opts.onPhase?.('agent')
         logger.info('coding-agent: running agent', { serviceDirectory })
-        const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+        const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
           {
             dir: workDir,
             systemPrompt: spec.systemPrompt,
@@ -353,6 +355,7 @@ export async function runCodingAgent(
             stats,
             ...(stderrTail ? { stderrTail } : {}),
             ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
           }
         } else {
           opts.onPhase?.('push')
@@ -365,6 +368,7 @@ export async function runCodingAgent(
             stats,
             ...(stderrTail ? { stderrTail } : {}),
             ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
           }
         }
       } finally {

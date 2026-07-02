@@ -1,5 +1,6 @@
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type {
+  HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
@@ -230,5 +231,59 @@ export class LlmObservabilityService {
   async exportForExecution(workspaceId: string, executionId: string): Promise<LlmMetricsExport> {
     const calls = await this.listByExecution(workspaceId, executionId)
     return buildLlmMetricsExport(executionId, calls, this.clock.now())
+  }
+}
+
+/** The per-job payload the container executor hands a subscription-harness telemetry recorder. */
+export interface HarnessCallsRecordInput {
+  workspaceId: string
+  executionId: string | null
+  agentKind: string
+  /** The subscription vendor (claude/codex/glm/kimi/deepseek). */
+  provider: string
+  /** The dispatch model (`provider:model`); each call's own `model` wins when present. */
+  model: string
+  calls: HarnessCallMetric[]
+}
+
+/**
+ * Build the executor's `recordHarnessCalls` dependency: map a subscription harness's
+ * per-call metrics (lifted from its CLI stream, bypassing the LLM proxy) onto the SAME
+ * {@link LlmObservabilityService} the proxy feeds, so Claude Code / Codex calls land in
+ * `llm_call_metrics` exactly like Pi's proxied calls. Records SEQUENTIALLY so the
+ * prompt-delta chain (which reads the previous row's tip) stays ordered. The CLIs expose
+ * no per-HTTP timing, so `totalMs`/`upstreamMs` are 0 (overhead derives 0); tool counts
+ * aren't surfaced per call, so `toolCount` is 0.
+ */
+export function makeHarnessCallRecorder(
+  service: LlmObservabilityService,
+): (input: HarnessCallsRecordInput) => Promise<void> {
+  return async ({ workspaceId, executionId, agentKind, provider, model, calls }) => {
+    for (const call of calls) {
+      await service.record({
+        workspaceId,
+        executionId,
+        agentKind,
+        provider,
+        model: call.model ?? model,
+        streaming: true,
+        messageCount: call.messageCount,
+        toolCount: 0,
+        requestMaxTokens: null,
+        promptTokens: call.inputTokens,
+        cachedPromptTokens: call.cachedInputTokens,
+        completionTokens: call.outputTokens,
+        totalTokens: call.inputTokens + call.outputTokens,
+        finishReason: call.finishReason,
+        totalMs: 0,
+        upstreamMs: 0,
+        ok: true,
+        httpStatus: null,
+        errorMessage: null,
+        promptText: call.promptText,
+        responseText: call.responseText,
+        reasoningText: call.reasoningText,
+      })
+    }
   }
 }

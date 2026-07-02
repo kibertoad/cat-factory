@@ -1,4 +1,4 @@
-import type { PiRunStats } from './pi.js'
+import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
 
@@ -520,6 +520,12 @@ export interface AgentResult {
    */
   failureCause?: FailureCause
   usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * Per-model-call telemetry from a subscription harness's CLI stream (absent for the
+   * proxy-metered Pi harness). The backend records these into `llm_call_metrics`. See
+   * {@link HarnessCallMetric}.
+   */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /** Parse the coding-mode bootstrap spec, or undefined when absent. Validates the target. */

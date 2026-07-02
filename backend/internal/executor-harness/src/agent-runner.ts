@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
+import type { HarnessCallMetric, PiRunOutcome, PiRunStats, TodoProgress } from './pi.js'
 import { killChildProcess } from './process.js'
 import { redact, secretsToRedact } from './redact.js'
 
@@ -62,6 +62,29 @@ export interface SubscriptionRunOptions {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/** Scrub any leased-credential occurrences from a telemetry body (no-op when none). */
+function redactBody(text: string, secrets: string[]): string {
+  return secrets.length ? redact(text, secrets) : text
+}
+
+/**
+ * Fallback token attribution: if a CLI reported a cumulative total but no per-turn
+ * usage (so every captured call has zero tokens), pin the whole total onto the LAST
+ * call rather than dropping it — the run's tokens are still accounted, just not split
+ * per turn. A no-op when the calls already carry per-turn tokens.
+ */
+function attributeCumulativeUsage(
+  calls: HarnessCallMetric[],
+  usage: { inputTokens: number; outputTokens: number } | undefined,
+): void {
+  if (!usage || calls.length === 0) return
+  const anyTokens = calls.some((c) => c.inputTokens > 0 || c.outputTokens > 0)
+  if (anyTokens) return
+  const last = calls[calls.length - 1]!
+  last.inputTokens = usage.inputTokens
+  last.outputTokens = usage.outputTokens
 }
 
 /**
@@ -182,25 +205,59 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   let summary = ''
   let usage: { inputTokens: number; outputTokens: number } | undefined
 
+  // Reconstruct the full per-call request/response bodies for telemetry from the
+  // stream. `--output-format stream-json --verbose` emits each turn as a near-verbatim
+  // Anthropic Messages envelope, so `assistant` events carry the complete response
+  // (text + tool_use blocks + usage), and `user` events carry the tool_result blocks
+  // fed back — together the growing prompt transcript. We seed it with the two inputs
+  // the harness supplies (they never appear in the stream): the system + first user
+  // message. Bodies are credential-scrubbed (they can echo the leased token).
+  const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
+  const messages: Array<{ role: string; content: unknown }> = [
+    { role: 'system', content: opts.systemPrompt },
+    { role: 'user', content: opts.userPrompt },
+  ]
+  const calls: HarnessCallMetric[] = []
+
   const onEvent = (event: Record<string, unknown>): void => {
     const type = event.type
     if (type === 'assistant' && isObject(event.message)) {
-      const content = (event.message as Record<string, unknown>).content
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (!isObject(block)) continue
-          if (block.type === 'text' && typeof block.text === 'string') {
-            stats.assistantChars += block.text.length
-          }
-          if (block.type === 'tool_use') {
-            stats.toolCalls += 1
-            if (block.name === 'TodoWrite' && opts.onProgress) {
-              const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
-              if (progress) opts.onProgress(progress)
-            }
-          }
+      const message = event.message as Record<string, unknown>
+      const content = Array.isArray(message.content) ? message.content : []
+      const { text, reasoning, toolUses } = claudeAssistantContent(content)
+      stats.assistantChars += text.length
+      stats.toolCalls += toolUses
+      for (const block of content) {
+        if (
+          isObject(block) &&
+          block.type === 'tool_use' &&
+          block.name === 'TodoWrite' &&
+          opts.onProgress
+        ) {
+          const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
+          if (progress) opts.onProgress(progress)
         }
       }
+      // Record this call BEFORE appending its turn: the prompt is the history that
+      // produced this response. The append-only array keeps each call's prompt a strict
+      // prefix of the next, so the backend's telemetry chain delta-compresses cleanly.
+      const u = claudeCallUsage(message.usage)
+      calls.push({
+        ...(typeof message.model === 'string' ? { model: message.model } : {}),
+        promptText: redactBody(JSON.stringify(messages), secrets),
+        messageCount: messages.length,
+        responseText: redactBody(text, secrets),
+        reasoningText: redactBody(reasoning, secrets),
+        inputTokens: u.inputTokens,
+        cachedInputTokens: u.cachedInputTokens,
+        outputTokens: u.outputTokens,
+        finishReason: typeof message.stop_reason === 'string' ? message.stop_reason : null,
+      })
+      messages.push({ role: 'assistant', content })
+    } else if (type === 'user' && isObject(event.message)) {
+      // tool_result blocks the harness fed back to the model — part of the next prompt.
+      const content = (event.message as Record<string, unknown>).content
+      if (Array.isArray(content)) messages.push({ role: 'tool', content })
     } else if (type === 'result') {
       if (typeof event.result === 'string') summary = event.result
       usage = claudeUsage(event.usage) ?? usage
@@ -280,7 +337,14 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
       onEvent,
     )
 
-    return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
+    attributeCumulativeUsage(calls, usage)
+    return {
+      summary,
+      stats,
+      stderrTail,
+      ...(usage ? { usage } : {}),
+      ...(calls.length ? { callMetrics: calls } : {}),
+    }
   } finally {
     // Never leave the config dir (and any cached credential) on disk past the run.
     if (configHome) await rm(configHome, { recursive: true, force: true }).catch(() => {})
@@ -318,6 +382,44 @@ function claudeUsage(raw: unknown): { inputTokens: number; outputTokens: number 
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, outputTokens: output }
+}
+
+/** Pull the text + reasoning out of a Claude `assistant` message's content blocks. */
+function claudeAssistantContent(content: unknown[]): {
+  text: string
+  reasoning: string
+  toolUses: number
+} {
+  let text = ''
+  let reasoning = ''
+  let toolUses = 0
+  for (const block of content) {
+    if (!isObject(block)) continue
+    if (block.type === 'text' && typeof block.text === 'string') text += block.text
+    else if (block.type === 'thinking' && typeof block.thinking === 'string')
+      reasoning += block.thinking
+    else if (block.type === 'tool_use') toolUses += 1
+  }
+  return { text, reasoning, toolUses }
+}
+
+/**
+ * Per-CALL token usage off a Claude `assistant` message's `usage` (this turn only, not
+ * the cumulative `result` total). `inputTokens` counts every billed input bucket (fresh
+ * + both cache buckets); `cachedInputTokens` is the cache share, surfaced separately.
+ */
+function claudeCallUsage(raw: unknown): {
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+} {
+  if (!isObject(raw)) return { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+  const cached = numberOf(raw.cache_read_input_tokens) + numberOf(raw.cache_creation_input_tokens)
+  return {
+    inputTokens: numberOf(raw.input_tokens) + cached,
+    cachedInputTokens: cached,
+    outputTokens: numberOf(raw.output_tokens),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +466,22 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     await writeFile(join(codexHome, 'config.toml'), 'cli_auth_credentials_store = "file"\n', 'utf8')
   }
 
+  // Codex has no system-prompt flag, so fold the composed role + best-practice
+  // context into the prompt itself (Claude Code instead rides --append-system-prompt).
+  const prompt = opts.systemPrompt
+    ? `${opts.systemPrompt}\n\n---\n\n${opts.userPrompt}`
+    : opts.userPrompt
+
+  // Codex's `exec --json` is far thinner than Claude Code's stream: it surfaces only
+  // flat assistant text and (on `token_count` events) the per-turn `last_token_usage`
+  // plus a cumulative total. It never exposes the request transcript or structured
+  // tool/command bodies, so the captured prompt is just the folded input — the response
+  // text + per-turn tokens are faithful; the request side is best-effort by design.
+  const secrets = opts.subscriptionToken ? secretsToRedact(opts.subscriptionToken) : []
+  const messages: Array<{ role: string; content: unknown }> = [{ role: 'user', content: prompt }]
+  const calls: HarnessCallMetric[] = []
+  let pendingText = ''
+
   const onEvent = (event: Record<string, unknown>): void => {
     const type = typeof event.type === 'string' ? event.type : ''
     if (type.includes('agent_message') || type === 'item.completed') {
@@ -371,6 +489,7 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       if (text) {
         stats.assistantChars += text.length
         summary = text
+        pendingText = text
       }
     }
     if (type.includes('tool') || type.includes('command') || type.includes('exec')) {
@@ -380,13 +499,25 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
     if (progress && opts.onProgress) opts.onProgress(progress)
     const turnUsage = codexUsage(event)
     if (turnUsage) usage = turnUsage
+    // A `token_count` event closes a model turn: pair its per-turn usage with the
+    // assistant text seen since the previous turn as one telemetry call.
+    const perTurn = codexLastTurnUsage(event)
+    if (perTurn) {
+      calls.push({
+        model: opts.model,
+        promptText: redactBody(JSON.stringify(messages), secrets),
+        messageCount: messages.length,
+        responseText: redactBody(pendingText, secrets),
+        reasoningText: '',
+        inputTokens: perTurn.inputTokens,
+        cachedInputTokens: perTurn.cachedInputTokens,
+        outputTokens: perTurn.outputTokens,
+        finishReason: null,
+      })
+      if (pendingText) messages.push({ role: 'assistant', content: pendingText })
+      pendingText = ''
+    }
   }
-
-  // Codex has no system-prompt flag, so fold the composed role + best-practice
-  // context into the prompt itself (Claude Code instead rides --append-system-prompt).
-  const prompt = opts.systemPrompt
-    ? `${opts.systemPrompt}\n\n---\n\n${opts.userPrompt}`
-    : opts.userPrompt
 
   try {
     const { stderrTail } = await streamCli(
@@ -409,7 +540,28 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
       onEvent,
     )
 
-    return { summary, stats, stderrTail, ...(usage ? { usage } : {}) }
+    // Fallback for a CLI/version that never emits per-turn `last_token_usage`: record a
+    // single call from the cumulative total + final text so the run is still observable.
+    if (calls.length === 0 && (usage || summary)) {
+      calls.push({
+        model: opts.model,
+        promptText: redactBody(JSON.stringify(messages), secrets),
+        messageCount: messages.length,
+        responseText: redactBody(summary, secrets),
+        reasoningText: '',
+        inputTokens: usage?.inputTokens ?? 0,
+        cachedInputTokens: 0,
+        outputTokens: usage?.outputTokens ?? 0,
+        finishReason: null,
+      })
+    }
+    return {
+      summary,
+      stats,
+      stderrTail,
+      ...(usage ? { usage } : {}),
+      ...(calls.length ? { callMetrics: calls } : {}),
+    }
   } finally {
     // Never leave the decrypted credential on disk past the run.
     if (codexHome) await rm(codexHome, { recursive: true, force: true }).catch(() => {})
@@ -469,6 +621,28 @@ function codexUsage(
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, outputTokens: output }
+}
+
+/**
+ * Per-TURN Codex token usage off a `token_count` event's `info.last_token_usage` (the
+ * delta for the turn just completed, as opposed to `codexUsage`'s cumulative total).
+ * `inputTokens` folds in the cached share, surfaced separately as `cachedInputTokens`.
+ */
+function codexLastTurnUsage(event: Record<string, unknown>):
+  | {
+      inputTokens: number
+      cachedInputTokens: number
+      outputTokens: number
+    }
+  | undefined {
+  const info = isObject(event.info) ? (event.info as Record<string, unknown>) : undefined
+  const raw = info && isObject(info.last_token_usage) ? info.last_token_usage : undefined
+  if (!isObject(raw)) return undefined
+  const cached = numberOf(raw.cached_input_tokens)
+  const input = numberOf(raw.input_tokens) + cached
+  const output = numberOf(raw.output_tokens)
+  if (input === 0 && output === 0) return undefined
+  return { inputTokens: input, cachedInputTokens: cached, outputTokens: output }
 }
 
 function numberOf(value: unknown): number {
