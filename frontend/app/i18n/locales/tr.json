@@ -1983,7 +1983,7 @@
         "vendor": "Kayıt defteri",
         "host": "Token yalnızca {host} adresine gönderilir.",
         "scopes": "Paket kapsamları",
-        "scopesHelp": "Virgülle ayrılmış npm kapsamları, örn. @my-org",
+        "scopesHelp": "Virgülle ayrılmış npm kapsamları",
         "token": "Erişim token'ı",
         "save": "Kayıt defteri ekle"
       },

@@ -1861,7 +1861,7 @@
         "vendor": "Registro",
         "host": "El token solo se envía a {host}.",
         "scopes": "Ámbitos de paquetes",
-        "scopesHelp": "Ámbitos de npm separados por comas, p. ej. @my-org",
+        "scopesHelp": "Ámbitos de npm separados por comas",
         "token": "Token de acceso",
         "save": "Agregar registro"
       },

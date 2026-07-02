@@ -1861,7 +1861,7 @@
         "vendor": "Rejestr",
         "host": "Token jest wysyłany tylko do {host}.",
         "scopes": "Zakresy pakietów",
-        "scopesHelp": "Zakresy npm oddzielone przecinkami, np. @my-org",
+        "scopesHelp": "Zakresy npm oddzielone przecinkami",
         "token": "Token dostępu",
         "save": "Dodaj rejestr"
       },

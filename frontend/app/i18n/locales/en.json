@@ -2032,7 +2032,7 @@
         "vendor": "Registry",
         "host": "The token is sent only to {host}.",
         "scopes": "Package scopes",
-        "scopesHelp": "Comma-separated npm scopes, e.g. @my-org",
+        "scopesHelp": "Comma-separated npm scopes",
         "token": "Access token",
         "save": "Add registry"
       },

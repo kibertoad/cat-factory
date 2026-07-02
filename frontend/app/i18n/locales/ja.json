@@ -1983,7 +1983,7 @@
         "vendor": "レジストリ",
         "host": "トークンは {host} にのみ送信されます。",
         "scopes": "パッケージスコープ",
-        "scopesHelp": "カンマ区切りの npm スコープ（例: @my-org）",
+        "scopesHelp": "カンマ区切りの npm スコープ",
         "token": "アクセストークン",
         "save": "レジストリを追加"
       },

@@ -1861,7 +1861,7 @@
         "vendor": "Registre",
         "host": "Le jeton n'est envoyé qu'à {host}.",
         "scopes": "Portées de paquets",
-        "scopesHelp": "Portées npm séparées par des virgules, p. ex. @my-org",
+        "scopesHelp": "Portées npm séparées par des virgules",
         "token": "Jeton d'accès",
         "save": "Ajouter le registre"
       },
