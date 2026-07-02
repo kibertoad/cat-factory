@@ -6095,6 +6095,51 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         ).body.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('blocked')
       })
+
+      it('refuses to approve a rejected gate — a stale approve cannot resurrect a failed run', async () => {
+        // The reject/approve race regression: approve used to read once and blind-write,
+        // so an approve landing after a reject advanced the already-failed run back to
+        // life. It now re-validates under optimistic concurrency and must conflict.
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Gated',
+          agentKinds: ['architect', 'coder'],
+          gates: [true, false],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: gated.body.id,
+        })
+
+        const blocked = await app.drive(wsId)
+        const exec = blocked.find((e) => e.blockId === 'task_login')!
+        const approvalId = exec.steps[0]!.approval!.id
+
+        const rejected = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/reject`,
+          { reason: 'wrong direction' },
+        )
+        expect(rejected.status).toBe(200)
+        expect(rejected.body.status).toBe('failed')
+
+        const approve = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/approve`,
+          {},
+        )
+        expect(approve.status).toBe(409)
+
+        // The run stays failed and the task stays blocked — nothing was resurrected.
+        const snapshot = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const run = snapshot.executions.find((e) => e.id === exec.id)!
+        expect(run.status).toBe('failed')
+        expect(run.steps[0]!.approval?.status).toBe('rejected')
+        const task = snapshot.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('blocked')
+      })
     })
   })
 }

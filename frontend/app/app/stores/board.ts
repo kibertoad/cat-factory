@@ -313,26 +313,53 @@ export const useBoardStore = defineStore('board', () => {
   async function moveBlock(id: string, position: { x: number; y: number }) {
     const b = getBlock(id)
     if (!b) return
+    const prevPosition = b.position
     b.position = position // optimistic: keep the drag feeling instant
-    // A mounted service frame's position is a PER-WORKSPACE layout override on the mount, not
-    // on the (shared) block — so route a frame drag there. Other moves write the block.
-    const services = useServicesStore()
-    const mount = services.serviceByFrameBlock[id]
-      ? services.byServiceId[services.serviceByFrameBlock[id]!.id]
-      : undefined
-    if (mount) {
-      await services.updateLayout(mount.serviceId, position)
-      return
+    try {
+      // A mounted service frame's position is a PER-WORKSPACE layout override on the mount, not
+      // on the (shared) block — so route a frame drag there. Other moves write the block.
+      const services = useServicesStore()
+      const mount = services.serviceByFrameBlock[id]
+        ? services.byServiceId[services.serviceByFrameBlock[id]!.id]
+        : undefined
+      if (mount) {
+        await services.updateLayout(mount.serviceId, position)
+        return
+      }
+      upsert(await api.moveBlock(useWorkspaceStore().requireId(), id, { position }))
+    } catch (e) {
+      // Restore the pre-drag position — a rejected move must not leave the block at a
+      // spot the server never stored (a lie that survives until the next re-hydrate).
+      b.position = prevPosition
+      toast.add({
+        title: 'Could not move',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
     }
-    upsert(await api.moveBlock(useWorkspaceStore().requireId(), id, { position }))
   }
 
   /** Patch the user-editable fields of a block (title, features, threshold…). */
   async function updateBlock(id: string, patch: UpdateBlockInput) {
     const b = getBlock(id)
     if (!b) return
+    // Snapshot only the fields the patch touches so a rejected write restores them.
+    const prev = Object.fromEntries(
+      Object.keys(patch).map((k) => [k, (b as Record<string, unknown>)[k]]),
+    )
     Object.assign(b, patch) // optimistic
-    upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
+    try {
+      upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
+    } catch (e) {
+      Object.assign(b, prev)
+      toast.add({
+        title: 'Could not update',
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   /**

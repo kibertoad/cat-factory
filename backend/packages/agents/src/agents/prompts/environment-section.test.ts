@@ -8,7 +8,7 @@ function ctx(environment?: AgentRunContext['environment']): AgentRunContext {
     pipelineName: 'Build & test',
     stepIndex: 3,
     isFinalStep: false,
-    block: { title: 'Add /grass CRUD', type: 'task', description: 'REST CRUD for grass.' },
+    block: { title: 'Add /grass CRUD', type: 'api', description: 'REST CRUD for grass.' },
     priorOutputs: [],
     decisions: [],
     resolvedDecision: null,

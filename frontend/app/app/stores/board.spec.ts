@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { Block, BlockStatus } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
+import { useWorkspaceStore } from '~/stores/workspace'
 
 /** Minimal Block factory — only the fields the read getters care about. */
 function block(id: string, over: Partial<Block> = {}): Block {
@@ -231,5 +232,44 @@ describe('board store read getters', () => {
     store.upsert(task('t1', 'f1', { title: 'second' }))
     expect(store.getBlock('t1')?.title).toBe('second')
     expect(store.allTasks).toHaveLength(1)
+  })
+})
+
+describe('board store optimistic rollback', () => {
+  // These instantiate their own store AFTER stubbing the api (the store captures
+  // `useApi()` at setup), unlike the read-getter suite above.
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws1'
+  })
+
+  it('moveBlock restores the pre-drag position when the API rejects', async () => {
+    vi.stubGlobal('useApi', () => ({
+      moveBlock: () => Promise.reject(new Error('conflict')),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { position: { x: 10, y: 20 } })])
+    await store.moveBlock('t1', { x: 500, y: 600 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 10, y: 20 })
+  })
+
+  it('moveBlock keeps the new position on success', async () => {
+    vi.stubGlobal('useApi', () => ({
+      moveBlock: async () => task('t1', 'f1', { position: { x: 500, y: 600 } }),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { position: { x: 10, y: 20 } })])
+    await store.moveBlock('t1', { x: 500, y: 600 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 500, y: 600 })
+  })
+
+  it('updateBlock restores only the patched fields when the API rejects', async () => {
+    vi.stubGlobal('useApi', () => ({
+      updateBlock: () => Promise.reject(new Error('validation')),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig', description: 'keep' })])
+    await store.updateBlock('t1', { title: 'renamed' })
+    expect(store.getBlock('t1')?.title).toBe('orig')
+    expect(store.getBlock('t1')?.description).toBe('keep')
   })
 })

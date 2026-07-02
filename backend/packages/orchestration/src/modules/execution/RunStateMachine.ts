@@ -288,6 +288,51 @@ export class RunStateMachine {
   }
 
   /**
+   * The pure in-memory half of {@link advancePastResolvedGate}: stamp the gate step done
+   * and move the run cursor (final step → run `done`; else start the next step). No
+   * persistence and no external effects, so it is safe inside a {@link mutateInstance}
+   * callback (which may re-run the mutation on a CAS retry). Returns whether the gate
+   * was the final step.
+   */
+  advanceRunPastGate(instance: ExecutionInstance, stepIndex: number): boolean {
+    const step = instance.steps[stepIndex]!
+    this.stepGraph.finishStep(step)
+    step.progress = 1
+    const isFinalStep = stepIndex === instance.steps.length - 1
+    if (isFinalStep) {
+      instance.status = 'done'
+    } else {
+      instance.currentStep = stepIndex + 1
+      const next = instance.steps[instance.currentStep]
+      if (next) this.stepGraph.startStep(next)
+      if (instance.status === 'blocked') instance.status = 'running'
+    }
+    return isFinalStep
+  }
+
+  /**
+   * The side effects that follow an in-memory gate advance whose instance write already
+   * happened (via {@link mutateInstance}): the block status/progress writes, the durable
+   * driver's `approved` signal, and the emit. The instance itself is NOT re-persisted —
+   * the CAS write is the source of truth.
+   */
+  async settleAdvancedGate(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndex: number,
+  ): Promise<void> {
+    const decisionId = instance.steps[stepIndex]!.approval!.id
+    if (stepIndex === instance.steps.length - 1) {
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.stopRunContainer(workspaceId, instance)
+    } else {
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
+    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
+    await this.emitInstance(workspaceId, instance)
+  }
+
+  /**
    * Finish a gate step whose decision a human resolved and advance the run: stamp the step
    * done, finalize the block (final step) or start the next, persist, signal the durable
    * driver that the decision is `approved`, and emit.
@@ -297,20 +342,12 @@ export class RunStateMachine {
     instance: ExecutionInstance,
     stepIndex: number,
   ): Promise<void> {
-    const step = instance.steps[stepIndex]!
-    const decisionId = step.approval!.id
-    this.stepGraph.finishStep(step)
-    step.progress = 1
-    const isFinalStep = stepIndex === instance.steps.length - 1
+    const decisionId = instance.steps[stepIndex]!.approval!.id
+    const isFinalStep = this.advanceRunPastGate(instance, stepIndex)
     if (isFinalStep) {
-      instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.stopRunContainer(workspaceId, instance)
     } else {
-      instance.currentStep = stepIndex + 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.stepGraph.startStep(next)
-      if (instance.status === 'blocked') instance.status = 'running'
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
     await this.executionRepository.upsert(workspaceId, instance)
