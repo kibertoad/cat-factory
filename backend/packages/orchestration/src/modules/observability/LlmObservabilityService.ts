@@ -15,10 +15,11 @@ export interface LlmObservabilityServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
   /**
-   * Whether to persist the full prompt body with each metric. Defaults to true. When
+   * Whether to persist the full text bodies with each metric. Defaults to true. When
    * false, every numeric field (tokens, timing, finish reason, message/tool counts)
-   * is still recorded but the prompt is stored empty — for deployments that must not
-   * retain the complete prompts sent to the model. Governed by `LLM_RECORD_PROMPTS`.
+   * is still recorded but the prompt AND the response/reasoning bodies are stored empty
+   * — for deployments that must not retain the model content (prompts sent or replies
+   * received). Governed by `LLM_RECORD_PROMPTS`.
    */
   recordPrompts?: boolean
   /**
@@ -149,8 +150,11 @@ export class LlmObservabilityService {
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
-      responseText: clampBody(input.responseText),
-      reasoningText: clampBody(input.reasoningText),
+      // The privacy switch governs ALL captured bodies, not just the prompt: a response
+      // (which can echo verbatim repo source) and a reasoning trace are model content the
+      // same as the prompt, so both are stored empty when recording is off.
+      responseText: this.recordPrompts ? clampBody(input.responseText) : '',
+      reasoningText: this.recordPrompts ? clampBody(input.reasoningText) : '',
     }
     await this.repository.record(metric)
     // Fan out to the external trace sink (Langfuse), if wired. We send the FULL prompt
@@ -243,6 +247,15 @@ export interface HarnessCallsRecordInput {
   provider: string
   /** The dispatch model (`provider:model`); each call's own `model` wins when present. */
   model: string
+  /**
+   * The dispatch job id (per-step, deterministic across a durable driver's replays).
+   * When present, each call's row is minted a deterministic id off it, so a replay that
+   * re-runs the recorder inserts the SAME ids — a duplicate insert is rejected by the
+   * store, leaving the run idempotent (no double rows, no mangled delta chain) even when
+   * the executor's in-memory replay guard didn't survive an isolate eviction. Absent ⇒
+   * the service mints a random id (fine for one-shot callers/tests).
+   */
+  jobId?: string
   calls: HarnessCallMetric[]
 }
 
@@ -253,14 +266,17 @@ export interface HarnessCallsRecordInput {
  * `llm_call_metrics` exactly like Pi's proxied calls. Records SEQUENTIALLY so the
  * prompt-delta chain (which reads the previous row's tip) stays ordered. The CLIs expose
  * no per-HTTP timing, so `totalMs`/`upstreamMs` are 0 (overhead derives 0); tool counts
- * aren't surfaced per call, so `toolCount` is 0.
+ * aren't surfaced per call, so `toolCount` is 0. When a `jobId` is supplied each row is
+ * minted a deterministic id (`<jobId>-hc-<index>`) so a durable-driver replay re-records
+ * idempotently (duplicate ids are rejected by the store) rather than duplicating rows.
  */
 export function makeHarnessCallRecorder(
   service: LlmObservabilityService,
 ): (input: HarnessCallsRecordInput) => Promise<void> {
-  return async ({ workspaceId, executionId, agentKind, provider, model, calls }) => {
-    for (const call of calls) {
+  return async ({ workspaceId, executionId, agentKind, provider, model, jobId, calls }) => {
+    for (const [index, call] of calls.entries()) {
       await service.record({
+        ...(jobId ? { id: `${jobId}-hc-${index}` } : {}),
         workspaceId,
         executionId,
         agentKind,

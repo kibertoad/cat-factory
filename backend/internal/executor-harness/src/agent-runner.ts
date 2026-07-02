@@ -484,7 +484,10 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
 
   const onEvent = (event: Record<string, unknown>): void => {
     const type = typeof event.type === 'string' ? event.type : ''
-    if (type.includes('agent_message') || type === 'item.completed') {
+    if (
+      type.includes('agent_message') ||
+      (type === 'item.completed' && isCodexMessageItem(event))
+    ) {
       const text = extractText(event)
       if (text) {
         stats.assistantChars += text.length
@@ -568,6 +571,25 @@ export async function runCodex(opts: SubscriptionRunOptions): Promise<PiRunOutco
   }
 }
 
+/**
+ * Whether a Codex `item.completed` event carries the model's ASSISTANT text (as
+ * opposed to a command/exec/tool/reasoning item, which also carry a `text` field —
+ * their command output or thinking — and must NOT be captured as the turn's response).
+ * A message item's kind contains `message` (`agent_message`/`assistant_message`); an
+ * item with no kind is treated as a message so older/simple shapes don't regress.
+ */
+function isCodexMessageItem(event: Record<string, unknown>): boolean {
+  const item = isObject(event.item) ? (event.item as Record<string, unknown>) : undefined
+  if (!item) return false
+  const kind =
+    typeof item.item_type === 'string'
+      ? item.item_type
+      : typeof item.type === 'string'
+        ? item.type
+        : ''
+  return kind === '' || /message/i.test(kind)
+}
+
 /** Best-effort: pull a textual message out of a Codex event. */
 function extractText(event: Record<string, unknown>): string | undefined {
   if (typeof event.message === 'string') return event.message
@@ -606,6 +628,8 @@ function codexPlanProgress(event: Record<string, unknown>): TodoProgress | undef
  * other shapes put it on `usage` / `info.usage` directly. We read the cumulative
  * total when present so the caller can simply overwrite (not sum) — summing
  * cumulative totals across events would multiply-count. Checked most-likely first.
+ * `input_tokens` is the TOTAL prompt count (OpenAI semantics: `cached_input_tokens`
+ * is a subset already inside it), so it is NOT summed with the cached share.
  */
 function codexUsage(
   event: Record<string, unknown>,
@@ -617,7 +641,7 @@ function codexUsage(
     (isObject(event.usage) ? event.usage : undefined) ??
     (info && isObject(info.usage) ? info.usage : undefined)
   if (!isObject(raw)) return undefined
-  const input = numberOf(raw.input_tokens) + numberOf(raw.cached_input_tokens)
+  const input = numberOf(raw.input_tokens)
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, outputTokens: output }
@@ -626,7 +650,9 @@ function codexUsage(
 /**
  * Per-TURN Codex token usage off a `token_count` event's `info.last_token_usage` (the
  * delta for the turn just completed, as opposed to `codexUsage`'s cumulative total).
- * `inputTokens` folds in the cached share, surfaced separately as `cachedInputTokens`.
+ * `input_tokens` is the total prompt count for the turn and already INCLUDES the cached
+ * share (OpenAI semantics), so `cachedInputTokens` is surfaced as the subset it is —
+ * NOT added on top (adding it would double-count every cached token).
  */
 function codexLastTurnUsage(event: Record<string, unknown>):
   | {
@@ -638,8 +664,8 @@ function codexLastTurnUsage(event: Record<string, unknown>):
   const info = isObject(event.info) ? (event.info as Record<string, unknown>) : undefined
   const raw = info && isObject(info.last_token_usage) ? info.last_token_usage : undefined
   if (!isObject(raw)) return undefined
+  const input = numberOf(raw.input_tokens)
   const cached = numberOf(raw.cached_input_tokens)
-  const input = numberOf(raw.input_tokens) + cached
   const output = numberOf(raw.output_tokens)
   if (input === 0 && output === 0) return undefined
   return { inputTokens: input, cachedInputTokens: cached, outputTokens: output }

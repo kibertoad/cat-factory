@@ -179,7 +179,9 @@ describe.skipIf(!unix)('runCodex telemetry', () => {
 
     expect(calls[0]!.model).toBe('gpt-5.5-codex')
     expect(calls[0]!.responseText).toBe('Working on it')
-    expect(calls[0]!.inputTokens).toBe(110)
+    // Codex `input_tokens` is the total prompt count and already includes the cached
+    // share, so it is recorded as-is (100), with cached surfaced separately (10).
+    expect(calls[0]!.inputTokens).toBe(100)
     expect(calls[0]!.cachedInputTokens).toBe(10)
     expect(calls[0]!.outputTokens).toBe(20)
     expect(calls[0]!.messageCount).toBe(1)
@@ -189,6 +191,40 @@ describe.skipIf(!unix)('runCodex telemetry', () => {
     expect(calls[1]!.outputTokens).toBe(40)
     // The prior assistant turn was appended, so the transcript grew by one.
     expect(calls[1]!.messageCount).toBe(2)
+  })
+
+  it("does not let a command item's text clobber the assistant response", async () => {
+    fakeCli('codex', [
+      JSON.stringify({
+        type: 'item.completed',
+        item: { item_type: 'agent_message', text: 'The real answer' },
+      }),
+      // A command-execution item also carries a `text` field (its stdout); it must NOT
+      // become the turn's recorded responseText.
+      JSON.stringify({
+        type: 'item.completed',
+        item: { item_type: 'command_execution', text: 'total 8\ndrwxr-xr-x' },
+      }),
+      JSON.stringify({
+        type: 'token_count',
+        info: {
+          last_token_usage: { input_tokens: 100, cached_input_tokens: 0, output_tokens: 20 },
+        },
+      }),
+    ])
+
+    const outcome = await runCodex({
+      cwd,
+      model: 'gpt-5.5-codex',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+    })
+
+    const calls = outcome.callMetrics ?? []
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.responseText).toBe('The real answer')
+    expect(outcome.summary).toBe('The real answer')
   })
 
   it('falls back to a single call from the cumulative total when no per-turn usage is emitted', async () => {

@@ -35,7 +35,7 @@ import {
 import { ModelRouter } from './ModelRouter.js'
 import { toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
-import { UI_TESTER_AGENT_KIND } from '@cat-factory/orchestration'
+import { UI_TESTER_AGENT_KIND, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 
@@ -120,19 +120,12 @@ export type RecordSubscriptionUsage = (
 /**
  * Record a finished subscription harness's per-call telemetry into `llm_call_metrics`
  * — the proxy-bypassing analogue of the per-call rows the LLM proxy writes for Pi. The
- * facade maps each {@link HarnessCallMetric} onto the observability sink; kept out of
- * the executor so the server layer stays free of an orchestration-service dependency.
- * NOT gated on a pooled token id (a personal/individual subscription leases no tokenId
- * yet still produces telemetry), unlike {@link RecordSubscriptionUsage}.
+ * facade maps each harness call metric onto the observability sink. NOT gated on a
+ * pooled token id (a personal/individual subscription leases no tokenId yet still
+ * produces telemetry), unlike {@link RecordSubscriptionUsage}. The payload is the
+ * orchestration recorder's own {@link HarnessCallsRecordInput}, so the two can't drift.
  */
-export type RecordHarnessCalls = (input: {
-  workspaceId: string
-  executionId: string | null
-  agentKind: string
-  provider: string
-  model: string
-  calls: HarnessCallMetric[]
-}) => Promise<void>
+export type RecordHarnessCalls = (input: HarnessCallsRecordInput) => Promise<void>
 
 /**
  * The repo spec every container job body carries: clone coordinates plus, for a
@@ -641,12 +634,17 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(view.failureCause ? { failureCause: view.failureCause } : {}),
       ...(view.detail ? { detail: view.detail } : {}),
     }
+    // Completed OR failed: a subscription harness attaches its per-call telemetry to
+    // BOTH — a failed token-spending run (no changes / unusable output / unresolved
+    // conflicts) is exactly what an operator needs to inspect — so record it before the
+    // terminal returns below, on every terminal state.
+    const result = view.result ?? {}
+    await this.recordHarnessCallsOnce(handle, result)
     if (view.state === 'failed') {
       return { state: 'failed', error: view.error ?? 'Implementation job failed', ...failureMeta }
     }
     // Completed: a structured `error` (e.g. "no file changes") is still a failure. The harness
     // carries the cause on the view even for these clean-exit failures, so forward it too.
-    const result = view.result ?? {}
     if (result.error) {
       return { state: 'failed', error: `Implementation failed: ${result.error}`, ...failureMeta }
     }
@@ -672,34 +670,48 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       if (this.recordedUsageJobs.size >= 10_000) this.recordedUsageJobs.clear()
       this.recordedUsageJobs.add(handle.jobId)
     }
-    // Record the subscription harness's per-call telemetry into `llm_call_metrics` — the
-    // proxy-bypassing analogue of the rows the LLM proxy writes for Pi. Same once-per-job
-    // replay guard as the usage attribution; NOT gated on a pooled token id, so a personal
-    // (individual-usage) subscription run is observed too. Best-effort: an unwired recorder
-    // or an empty metric list is a no-op.
-    if (
-      handle.workspaceId &&
-      result.callMetrics &&
-      result.callMetrics.length > 0 &&
-      this.deps.recordHarnessCalls &&
-      !this.recordedCallMetricJobs.has(handle.jobId)
-    ) {
-      try {
-        await this.deps.recordHarnessCalls({
-          workspaceId: handle.workspaceId,
-          executionId: handle.runId ?? null,
-          agentKind: handle.agentKind ?? 'agent',
-          provider: handle.provider ?? providerOf(handle.model),
-          model: handle.model ?? '',
-          calls: result.callMetrics,
-        })
-        if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
-        this.recordedCallMetricJobs.add(handle.jobId)
-      } catch {
-        // Swallowed: telemetry is observability, never a reason to fail a completed run.
-      }
-    }
     return { state: 'done', result: toRunResult(result, handle.agentKind), ...followUps }
+  }
+
+  /**
+   * Record the subscription harness's per-call telemetry into `llm_call_metrics` — the
+   * proxy-bypassing analogue of the rows the LLM proxy writes for Pi. NOT gated on a
+   * pooled token id, so a personal (individual-usage) subscription run is observed too.
+   * Runs on every terminal state (success and failure alike). Best-effort: an unwired
+   * recorder or an empty metric list is a no-op. An in-memory once-per-job guard skips
+   * the redundant DB round-trip within this process; the recorder additionally mints
+   * deterministic per-call ids off the job id, so even a durable-driver replay in a
+   * fresh isolate (empty guard) re-records idempotently rather than duplicating rows.
+   */
+  private async recordHarnessCallsOnce(
+    handle: AgentJobHandle,
+    result: { callMetrics?: HarnessCallMetric[] },
+  ): Promise<void> {
+    if (
+      !handle.workspaceId ||
+      !result.callMetrics ||
+      result.callMetrics.length === 0 ||
+      !this.deps.recordHarnessCalls ||
+      this.recordedCallMetricJobs.has(handle.jobId)
+    ) {
+      return
+    }
+    try {
+      await this.deps.recordHarnessCalls({
+        workspaceId: handle.workspaceId,
+        executionId: handle.runId ?? null,
+        agentKind: handle.agentKind ?? 'agent',
+        provider: handle.provider ?? providerOf(handle.model),
+        model: handle.model ?? '',
+        jobId: handle.jobId,
+        calls: result.callMetrics,
+      })
+      if (this.recordedCallMetricJobs.size >= 10_000) this.recordedCallMetricJobs.clear()
+      this.recordedCallMetricJobs.add(handle.jobId)
+    } catch {
+      // Swallowed: telemetry is observability, never a reason to fail (or fail to
+      // complete) a run.
+    }
   }
 
   /**

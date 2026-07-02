@@ -423,4 +423,28 @@ describe('makeHarnessCallRecorder', () => {
     expect(repo.recorded[1]!.promptPrefixCount).toBe(1)
     expect(repo.chainTipReads).toBeGreaterThan(0)
   })
+
+  it('mints deterministic per-call ids off the job id so a replay is idempotent', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [metric({ responseText: 'a' }), metric({ responseText: 'b' })],
+    })
+
+    // Ids are derived from the job id + call index, so a durable-driver replay of the
+    // same job produces the SAME ids (a duplicate insert the store then rejects).
+    expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
+  })
 })
