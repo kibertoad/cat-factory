@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/agents",
-  "version": "0.26.2",
+  "version": "0.26.3",
   "description": "Agent catalog, routing, prompts and fragment library for the Agent Architecture Board.",
   "repository": {
     "type": "git",
