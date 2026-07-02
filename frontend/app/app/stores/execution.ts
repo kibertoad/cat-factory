@@ -26,16 +26,42 @@ export const useExecutionStore = defineStore('execution', () => {
   const runErrors = usePipelineErrorToast()
   const instances = ref<ExecutionInstance[]>([])
 
-  /** Replace the cached executions with a server snapshot. */
-  function hydrate(next: ExecutionInstance[]) {
-    instances.value = next
+  /**
+   * Reconcile the cached executions with a server snapshot. A snapshot is authoritative
+   * EXCEPT where a live `execution` event already advanced (or ADDED) a run past what
+   * this (possibly stale) read observed — a `board` event triggers a debounced
+   * `workspace.refresh()`, and the stream's on-(re)connect resync also refetches, so
+   * either read can resolve AFTER a newer event landed. Same two clobber hazards the
+   * agentRuns store guards (see its `hydrate`), keyed here by the run's monotonic `rev`:
+   *   - REGRESS: a run in BOTH — keep the newer-by-`rev` version so a lagging refresh
+   *     can't revert a `failed`/`done` run to `running` (terminal runs emit nothing
+   *     further, so the stale badge would stick).
+   *   - DROP: a run a live event just ADDED that the older snapshot never saw — preserve
+   *     it, but only when its block is on the hydrated board (`snapshotBlockIds`);
+   *     executions carry no workspaceId, so block membership is what keeps a board
+   *     SWITCH from leaking the previous board's runs.
+   */
+  function hydrate(next: ExecutionInstance[], snapshotBlockIds: ReadonlySet<string>) {
+    const incomingIds = new Set(next.map((e) => e.id))
+    const held = new Map(instances.value.map((e) => [e.id, e]))
+    const reconciled = next.map((incoming) => {
+      const current = held.get(incoming.id)
+      return current && (current.rev ?? 0) > (incoming.rev ?? 0) ? current : incoming
+    })
+    const preserved = [...held.values()].filter(
+      (e) => !incomingIds.has(e.id) && snapshotBlockIds.has(e.blockId),
+    )
+    instances.value = [...reconciled, ...preserved]
   }
 
   /** Insert or replace a single execution instance pushed by the event stream. */
   function upsert(instance: ExecutionInstance) {
     const i = instances.value.findIndex((e) => e.id === instance.id)
-    if (i >= 0) instances.value[i] = instance
-    else instances.value.push(instance)
+    // Monotonic by `rev`: never let a stale/out-of-order write regress a run a newer
+    // one already advanced (same guard as {@link hydrate}).
+    if (i >= 0) {
+      if ((instance.rev ?? 0) >= (instances.value[i]!.rev ?? 0)) instances.value[i] = instance
+    } else instances.value.push(instance)
   }
 
   const byId = computed(() => {

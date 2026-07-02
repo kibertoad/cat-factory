@@ -246,6 +246,38 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(a.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
         expect(b.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
       })
+
+      it('returns blocks in insertion order on every store, stable across updates', async () => {
+        // Parity pin: D1 lists blocks `ORDER BY rowid` (insertion order); the Postgres
+        // store must match via its `seq` column. Enough fat rows to span several heap
+        // pages + an update to the FIRST one make the drift observable: without an
+        // ORDER BY, Postgres relocates the updated row's new tuple version to a later
+        // page, so a bare heap read returns it out of insertion order.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const filler = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(12)
+        const createdIds: string[] = []
+        for (let i = 0; i < 40; i++) {
+          const res = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+            title: `Ordered task ${i}`,
+            description: filler,
+          })
+          expect(res.status).toBe(201)
+          createdIds.push(res.body.id)
+        }
+        const updated = await call('PATCH', `/workspaces/${wsId}/blocks/${createdIds[0]}`, {
+          title: 'Ordered task 0, renamed',
+          description: `${filler} Updated so the row version moves in the heap.`,
+        })
+        expect(updated.status).toBe(200)
+
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const createdSet = new Set(createdIds)
+        const listed = snapshot.body.blocks.map((b) => b.id).filter((id) => createdSet.has(id))
+        expect(listed).toEqual(createdIds)
+      })
     })
 
     describe('execution optimistic concurrency (compareAndSwap)', () => {

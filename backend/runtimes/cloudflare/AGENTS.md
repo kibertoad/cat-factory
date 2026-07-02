@@ -22,7 +22,7 @@ Cloudflare Workflows (durable execution), queues/cron, and the `workers-ai` bind
   container agent-executor **wiring** (same class names as `@cat-factory/server`'s `agents/`;
   those are the shared abstraction, these are the runtime wiring — see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/` — durable execution + real-time
-  + per-run-container machinery.
+  - per-run-container machinery.
 
 Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` — the D1 schema; the twin of the Node
