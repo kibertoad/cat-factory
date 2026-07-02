@@ -98,6 +98,17 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       service's owning account server-side (services are account-owned), the
  *                       single-id form of `serviceList`. A missing/out-of-scope service fails
  *                       closed (404, no existence leak).
+ *   - `serviceMount`  — `args[arg]` is a `WorkspaceMount` record (a `workspaceMountRepository.upsert`).
+ *                       Binds on the mount's `workspaceId` FIELD like `workspaceField`, AND
+ *                       ADDITIONALLY enforces the cross-org mount invariant server-side: the mounted
+ *                       `serviceId` must be owned by the SAME account as the target workspace. This
+ *                       makes "a service can only be mounted within its own organization" (which
+ *                       `ServiceMountService.mount` enforces in the service layer) non-bypassable
+ *                       over the raw RPC — a machine token that spans several accounts (a user who
+ *                       belongs to multiple orgs) cannot plant a cross-org mount by upserting
+ *                       directly. A non-object arg, a missing/non-string `workspaceId`/`serviceId`,
+ *                       an out-of-scope workspace, or a service whose account differs from the
+ *                       workspace's (incl. a missing service) is refused as 404.
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
@@ -109,6 +120,7 @@ export type ScopeRule =
   | { kind: 'block'; arg: number }
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
+  | { kind: 'serviceMount'; arg: number }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -228,17 +240,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // account service onto a workspace board. The reads that compose the catalog badge
   // (`listByWorkspace`, `countByServiceIds`) were already exposed; these complete the write
   // surface. `get`/`update`/`remove` take the workspaceId as arg0 (the `workspace` rule); the
-  // record-based `upsert(mount)` binds on the mount's `workspaceId` FIELD (the `workspaceField`
-  // rule — the id is a property of the record). Each is member-level (the mount endpoints are not
-  // admin-gated) and workspace-scoped. Sharing stays within one account: the local node's
-  // `mount()` reads `serviceRepository.get` first (the `service` rule 404s a foreign service), so
-  // a cross-org mount can never be persisted through the flow, and a stray direct `upsert` fails
-  // closed on board composition (its blocks read via the account-scoped `listByServices`).
+  // record-based `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount`
+  // rule. Each is member-level (the mount endpoints are not admin-gated) and workspace-scoped.
+  //
+  // Cross-org sharing stays enforced at the RPC layer, NOT only in the (bypassed) service layer:
+  // the `serviceMount` rule additionally requires the mounted `serviceId` to be owned by the SAME
+  // account as the target workspace, so a raw `upsert` can never plant a cross-org mount — even
+  // for a machine token that spans several accounts (a user in multiple orgs). Board composition
+  // (`blockRepository.listByServices`, `serviceRepository.listByIds`) stays account-scoped as a
+  // second line of defence, but it is no longer the sole guard for the mount invariant.
   workspaceMountRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     countByServiceIds: { scope: { kind: 'serviceList', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
-    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    upsert: { scope: { kind: 'serviceMount', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
@@ -635,6 +650,36 @@ export async function dispatchPersistenceCall(
       if (typeof serviceId !== 'string' || !opts.resolveServiceAccountIds) return denied
       const accounts = await opts.resolveServiceAccountIds([serviceId])
       if (!inScope(accounts.get(serviceId))) return denied
+      break
+    }
+    case 'serviceMount': {
+      // The record-based mount `upsert`. Bind on the mount's `workspaceId` FIELD (must be in
+      // scope) AND enforce the cross-org mount invariant server-side: the mounted `serviceId`
+      // must be owned by the SAME account as the target workspace, so a raw upsert can never
+      // plant a cross-org mount — even for a token that spans several accounts (both would be in
+      // scope, so a workspace-only check would let one org's service be mounted onto another's
+      // board). A non-object arg, a missing/non-string field, an out-of-scope workspace, or a
+      // service whose account differs from the workspace's (incl. a missing service) → 404.
+      const record = args[rule.arg]
+      const workspaceId =
+        record && typeof record === 'object'
+          ? (record as { workspaceId?: unknown }).workspaceId
+          : undefined
+      const serviceId =
+        record && typeof record === 'object'
+          ? (record as { serviceId?: unknown }).serviceId
+          : undefined
+      if (typeof workspaceId !== 'string' || typeof serviceId !== 'string') return denied
+      if (!opts.resolveServiceAccountIds) return denied
+      const workspaceAccount = await opts.resolveAccountId(workspaceId)
+      if (!inScope(workspaceAccount)) return denied
+      const serviceAccounts = await opts.resolveServiceAccountIds([serviceId])
+      const serviceAccount = serviceAccounts.get(serviceId)
+      // Same-account: the service must be owned by the workspace's (in-scope) account. Since
+      // `workspaceAccount` is already confirmed in scope, requiring equality also keeps the
+      // service in scope — a legacy/NULL-account service (never present under a scoped token)
+      // won't equal the string account, so it fails closed too.
+      if (typeof serviceAccount !== 'string' || serviceAccount !== workspaceAccount) return denied
       break
     }
     case 'visibility': {

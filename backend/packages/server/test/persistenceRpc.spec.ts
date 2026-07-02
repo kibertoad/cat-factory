@@ -1058,8 +1058,10 @@ describe('shared-service mount management surface', () => {
     })
   }
 
-  // `upsert(mount)` binds on the mount's `workspaceId` FIELD (the `workspaceField` rule): the mount
-  // is placed onto exactly `mount.workspaceId`, so an out-of-scope one is refused before any write.
+  // `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount` rule: the mount
+  // is placed onto exactly `mount.workspaceId` (out-of-scope → refused before any write) AND the
+  // mounted `serviceId` must be owned by the SAME account as that workspace (the cross-org mount
+  // invariant, enforced at the RPC layer — not only in the bypassed service layer).
   it('forwards workspaceMountRepository.upsert when the mount targets an in-scope workspace', async () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({
@@ -1082,6 +1084,44 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.upsert!({ serviceId: 'svc_in' }),
     ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount has no serviceId field (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({ workspaceId: 'ws_in' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mounted service is unknown (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_missing',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The cross-org mount invariant under a MULTI-account token (a user in several orgs). Both
+  // ACCOUNT and OTHER_ACCOUNT are in scope, so a workspace-only check would let one org's service
+  // be mounted onto another org's board. The `serviceMount` rule's same-account requirement blocks
+  // it: svc_out (OTHER_ACCOUNT) cannot be mounted onto ws_in (ACCOUNT) even though both are in scope.
+  it('rejects a cross-org mount upsert even when both accounts are in the token scope (404)', async () => {
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards a same-account mount upsert for a workspace in a secondary in-scope account', async () => {
+    // A multi-account token can still mount WITHIN each org: svc_out onto ws_out (both OTHER_ACCOUNT).
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_out',
+        serviceId: 'svc_out',
+      }),
+    ).resolves.toBeUndefined()
   })
 
   it('still refuses a non-allow-listed mount method (real-time fan-out read)', async () => {

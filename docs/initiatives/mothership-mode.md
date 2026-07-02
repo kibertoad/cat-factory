@@ -36,22 +36,31 @@
   single-service read the mount flow performs and the mount write/update/remove methods came back
   `unknown_method`. Newly allow-listed: `serviceRepository.get(serviceId)` — bound by a **new
   `service` scope kind** (a single serviceId → owning account, the single-id form of `serviceList`,
-  reusing the controller's existing service→account resolver, so no controller change) — and
-  `workspaceMountRepository` `get`/`update`/`remove` (arg0 = workspaceId → the `workspace` rule) +
-  the record-based `upsert(mount)` (bound on the mount's `workspaceId` FIELD → the `workspaceField`
-  rule). Each is member-level (the mount endpoints are not admin-gated) and workspace-scoped.
-  **Cross-org sharing stays enforced without the service layer:** the local node's `mount()` reads
-  `serviceRepository.get` first (the `service` rule 404s a foreign service, so `assertFound` throws
-  before any `upsert`), and a stray direct `upsert` of a foreign service fails closed on board
-  composition (its blocks read via the account-scoped `listByServices`). The real-time fan-out reads
+  reusing the controller's existing service→account resolver, so no controller change; the
+  dispatched `get` is routed through the same per-request `listByIds` memo the scope check reads, so
+  a mount precheck resolves the service in ONE query) — and `workspaceMountRepository`
+  `get`/`update`/`remove` (arg0 = workspaceId → the `workspace` rule) + the record-based
+  `upsert(mount)` (bound by a **new `serviceMount` scope kind**). Each is member-level (the mount
+  endpoints are not admin-gated) and workspace-scoped. **Cross-org sharing stays enforced AT THE RPC
+  LAYER, not only in the bypassed service layer:** the `serviceMount` rule binds `upsert` on the
+  mount's `workspaceId` FIELD (out-of-scope workspace → refused) AND requires the mounted `serviceId`
+  to be owned by the SAME account as that workspace, so a raw `upsert` can never plant a cross-org
+  mount — including for a machine token that spans several accounts (a user in multiple orgs, where a
+  workspace-only bind would let one org's service be mounted onto another org's board). The local
+  node's `mount()` also reads `serviceRepository.get` first (the `service` rule 404s a foreign
+  service, so `assertFound` throws), and board composition (`listByServices`) stays account-scoped as
+  a second line of defence. The real-time fan-out reads
   (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
   (`removeByServices` / `serviceRepository.deleteMany` / `listByFrameBlocks`) stay off the SPA path —
-  mothership-internal / a later board-frame-deletion slice. These are core repos
-  (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the full-surface
-  remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the allow-list plus
-  the one new scope kind. Server-only, symmetric by construction (the dispatcher reflects over each
-  facade's registry). Round-trip + cross-account-scope tests for every new method (incl. the new
-  `service` kind's out-of-scope / unknown-id / non-string fail-closed edges) are in
+  mothership-internal / a later board-frame-deletion slice. **Known gap (a later slice):** without
+  the fan-out reads, mounting/unmounting a shared service does not live-update OTHER boards mounting
+  the same service in mothership mode (the acting user's own board is driven directly). These are
+  core repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
+  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
+  allow-list plus the two new scope kinds. Server-only, symmetric by construction (the dispatcher
+  reflects over each facade's registry). Round-trip + cross-account-scope tests for every new method
+  (incl. the `service` kind's out-of-scope / unknown-id / non-string fail-closed edges and the
+  `serviceMount` rule's cross-org / multi-account-token denials) are in
   `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
   (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
 - **Phase 3 follow-up (advanced review / structured-dialogue session surface)** — the clarity-review
