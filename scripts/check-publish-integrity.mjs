@@ -15,7 +15,7 @@
 // Exit 0 = every publishable package ships a coherent artifact; exit 1 otherwise.
 
 import { spawn } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { publint } from 'publint'
@@ -48,17 +48,23 @@ const ATTW_SKIP = new Set(['@cat-factory/app'])
 // extensions across the facade. Every other package stays on the full esm-only profile.
 const ATTW_EXTRA_FLAGS = new Map([
   ['@cat-factory/worker', ['--ignore-rules', 'internal-resolution-error']],
+  // @cat-factory/executor-harness's `.` entry is a compiled runner payload (dist/server.js,
+  // built with declaration:false) that consumers spawn as a process, not import for types, so
+  // its "no types" is intentional — suppress just that rule. Its `./embed` source export still
+  // resolves types and stays fully checked.
+  ['@cat-factory/executor-harness', ['--ignore-rules', 'untyped-resolution']],
 ])
 
 // attw shells out to `npm pack` per package (~2-4s each); bound the parallelism.
 const ATTW_CONCURRENCY = 4
 
-// Run via a shell so the `pnpm` shim resolves cross-platform: bare `spawn('pnpm', …)` without
-// a shell throws ENOENT on win32 (this repo's dev platform, where the binary is `pnpm.cmd`),
-// and naming the `.cmd` shim explicitly instead throws EINVAL under Node's CVE-2024-27980
-// mitigation. `shell: true` sidesteps both (cmd.exe resolves it via PATHEXT; /bin/sh on posix).
-// The args below are all repo-controlled literals/paths with no spaces, so no quoting is needed.
-const USE_SHELL = true
+// On win32 (this repo's dev platform) the `pnpm` binary is a `pnpm.cmd` shim: bare
+// `spawn('pnpm', …)` throws ENOENT, and naming the `.cmd` shim explicitly throws EINVAL under
+// Node's CVE-2024-27980 mitigation — so run through a shell there (cmd.exe resolves it via
+// PATHEXT). posix (incl. CI) resolves `pnpm` directly, so it stays shell-free to avoid Node's
+// DEP0190 (args-with-shell) warning. The args are repo-controlled literals/paths with no
+// spaces, so the shell path needs no quoting.
+const USE_SHELL = process.platform === 'win32'
 
 function expandGlob(glob) {
   if (!glob.endsWith('/*')) return [glob]
@@ -122,7 +128,9 @@ function runAttw({ relDir, pkg }) {
     // A spawn failure (binary missing, shim unresolved) emits 'error' and NEVER 'close';
     // with no handler Node would throw it uncaught and leave the Promise pending (hanging
     // Promise.all). Resolve it as a non-zero code so it surfaces as a normal problem.
-    child.on('error', (err) => resolvePromise({ relDir, code: 1, output: `${output}${err.message}` }))
+    child.on('error', (err) =>
+      resolvePromise({ relDir, code: 1, output: `${output}${err.message}` }),
+    )
     child.on('close', (code) => resolvePromise({ relDir, code, output }))
   })
 }
