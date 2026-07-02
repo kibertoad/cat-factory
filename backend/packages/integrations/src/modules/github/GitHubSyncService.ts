@@ -52,8 +52,17 @@ export class GitHubSyncService {
    * The repos the workspace's installation can access, annotated with whether
    * this workspace currently links each one. Repos are linked *explicitly* per
    * workspace, so the connect UI lists these and the user picks a subset.
+   *
+   * An optional `q` applies a case-insensitive `owner/name` substring filter so the
+   * add-service picker can search server-side rather than prefetching the whole
+   * installation and filtering in the browser — a wide install/PAT can expose hundreds
+   * of repos. A blank/whitespace query returns every accessible repo (the repo-link
+   * panel's browse-all), so this stays backwards-compatible for existing callers.
    */
-  async listAvailableRepos(workspaceId: string): Promise<GitHubAvailableRepo[]> {
+  async listAvailableRepos(
+    workspaceId: string,
+    opts: { q?: string } = {},
+  ): Promise<GitHubAvailableRepo[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
     const { items } = await this.deps.githubClient.listInstallationRepos(
@@ -62,7 +71,11 @@ export class GitHubSyncService {
     const tracked = new Map(
       (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => [r.githubId, r]),
     )
-    return items.map((r) => ({
+    const query = opts.q?.trim().toLowerCase()
+    const matched = query
+      ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(query))
+      : items
+    return matched.map((r) => ({
       githubId: r.githubId,
       owner: r.owner,
       name: r.name,
