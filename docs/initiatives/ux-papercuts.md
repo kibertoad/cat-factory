@@ -18,7 +18,7 @@ source of truth across iterations.
 
 **How to use this doc:** pick a cluster of `todo` items (ideally one section, or one
 cross-cutting theme), fix them in one PR, flip their status to `done` with a PR
-link, and carry any new conventions into the *Conventions* section at the bottom.
+link, and carry any new conventions into the _Conventions_ section at the bottom.
 
 ## Severity legend
 
@@ -53,25 +53,25 @@ per-file patches:
 
 ## A. Board & canvas
 
-| ID | Sev | Status | Finding |
-|----|-----|--------|---------|
-| UX-01 | P1 | todo | No undo after a successful block delete |
-| UX-02 | P1 | todo | Delete confirmation never states cascade scope |
-| UX-03 | P1 | todo | Accidental drag-reparent commits silently, no undo |
-| UX-04 | P2 | todo | Drag/reparent has no drop-target highlighting |
-| UX-05 | P2 | todo | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
-| UX-06 | P2 | todo | Dependency edges cannot be removed (or hovered) on the canvas |
-| UX-07 | P2 | todo | Pipeline dropped on blank canvas gives no feedback |
-| UX-08 | P2 | todo | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous |
-| UX-09 | P2 | todo | Double-clicking a frame/epic is a dead no-op |
-| UX-10 | P2 | todo | Selection, zoom, viewport lost on reload / workspace switch |
-| UX-11 | P2 | todo | Camera doesn't refit on workspace switch |
-| UX-12 | P2 | todo | No arrow-key navigation or keyboard block movement |
-| UX-13 | P2 | todo | Hardcoded English toast `'Could not move'` in `moveBlock` |
-| UX-14 | P3 | todo | No reset-zoom-to-100%; zoom readout not clickable |
-| UX-15 | P3 | todo | Zoom/LOD readout hidden below `sm` breakpoint |
-| UX-16 | P3 | todo | Zoom buttons don't disable at min/max |
-| UX-17 | P3 | todo | Desktop frame-resize grips are an 8px hit target |
+| ID    | Sev | Status | Finding                                                                       |
+| ----- | --- | ------ | ----------------------------------------------------------------------------- |
+| UX-01 | P1  | todo   | No undo after a successful block delete                                       |
+| UX-02 | P1  | todo   | Delete confirmation never states cascade scope                                |
+| UX-03 | P1  | todo   | Accidental drag-reparent commits silently, no undo                            |
+| UX-04 | P2  | todo   | Drag/reparent has no drop-target highlighting                                 |
+| UX-05 | P2  | todo   | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
+| UX-06 | P2  | todo   | Dependency edges cannot be removed (or hovered) on the canvas                 |
+| UX-07 | P2  | todo   | Pipeline dropped on blank canvas gives no feedback                            |
+| UX-08 | P2  | todo   | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
+| UX-09 | P2  | todo   | Double-clicking a frame/epic is a dead no-op                                  |
+| UX-10 | P2  | todo   | Selection, zoom, viewport lost on reload / workspace switch                   |
+| UX-11 | P2  | todo   | Camera doesn't refit on workspace switch                                      |
+| UX-12 | P2  | todo   | No arrow-key navigation or keyboard block movement                            |
+| UX-13 | P2  | todo   | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
+| UX-14 | P3  | todo   | No reset-zoom-to-100%; zoom readout not clickable                             |
+| UX-15 | P3  | todo   | Zoom/LOD readout hidden below `sm` breakpoint                                 |
+| UX-16 | P3  | todo   | Zoom buttons don't disable at min/max                                         |
+| UX-17 | P3  | todo   | Desktop frame-resize grips are an 8px hit target                              |
 
 - **UX-01 — No undo after delete.** `composables/useBlockDeletion.ts:50-59`,
   `stores/board.ts:289-303`. `detach()`/`reattach()` already capture a full
@@ -84,12 +84,12 @@ per-file patches:
   descendants (`board.ts:240-268`). Confirming "Delete service Foo?" silently
   destroys N tasks. Fix: include the descendant count in the confirm body.
 - **UX-03 — Silent drag-reparent.** `composables/useBlockDrag.ts:51-93`. Any task
-  drag ending over a *different* `[data-drop-zone]` reparents optimistically; a
+  drag ending over a _different_ `[data-drop-zone]` reparents optimistically; a
   small overshoot while nudging a card moves it to a neighbouring module with no
   confirmation and (per UX-01) no undo.
 - **UX-04 — No drop-target highlight.** `useBlockDrag.ts:69-92`,
   `components/board/BoardCanvas.vue:113-116`. Destination resolved via
-  `elementFromPoint` *on release only*; nothing highlights the hovered drop zone
+  `elementFromPoint` _on release only_; nothing highlights the hovered drop zone
   during the drag. Fix: a `hoveredDropZoneId` ref driving a ring (mirror the
   `useFrameStacking` hover pattern).
 - **UX-05 — Dependency connect is blind.** `composables/useDependencyConnect.ts:33-49`.
@@ -130,22 +130,22 @@ per-file patches:
 
 ## B. Modals, forms & inputs
 
-| ID | Sev | Status | Finding |
-|----|-----|--------|---------|
-| UX-18 | P1 | todo | Content-heavy modals discard all typed input on Escape/backdrop click |
-| UX-19 | P2 | todo | No show/hide toggle on any password/secret field (systemic) |
-| UX-20 | P2 | todo | Provider API key entered in a plaintext, unmasked textarea (several surfaces) |
-| UX-21 | P2 | todo | `unlinkSource` (fragment library) destroys a synced source with no confirmation |
-| UX-22 | P2 | todo | Reset-password validation is submit-only, no inline feedback |
-| UX-23 | P2 | todo | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
-| UX-24 | P2 | todo | Datadog connection can't be updated without re-pasting both write-only keys |
-| UX-25 | P2 | todo | DecisionModal options: fire-and-forget, no pending state, double-click hazard |
-| UX-26 | P3 | todo | No autofocus on first field of login/reset/connect modals |
-| UX-27 | P3 | todo | Disabled submit buttons don't state why (min-length rules invisible) |
-| UX-28 | P3 | todo | No character counters where the backend enforces length limits |
-| UX-29 | P3 | todo | Fragment library: one global loading flag spins every row's buttons |
-| UX-30 | P3 | todo | Slack "Add to Slack" OAuth button has no pending state |
-| UX-31 | P3 | todo | "Edit" on list items doesn't scroll/focus the offscreen edit form |
+| ID    | Sev | Status | Finding                                                                            |
+| ----- | --- | ------ | ---------------------------------------------------------------------------------- |
+| UX-18 | P1  | todo   | Content-heavy modals discard all typed input on Escape/backdrop click              |
+| UX-19 | P2  | todo   | No show/hide toggle on any password/secret field (systemic)                        |
+| UX-20 | P2  | todo   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
+| UX-21 | P2  | todo   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
+| UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
+| UX-23 | P2  | todo   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
+| UX-24 | P2  | todo   | Datadog connection can't be updated without re-pasting both write-only keys        |
+| UX-25 | P2  | todo   | DecisionModal options: fire-and-forget, no pending state, double-click hazard      |
+| UX-26 | P3  | todo   | No autofocus on first field of login/reset/connect modals                          |
+| UX-27 | P3  | todo   | Disabled submit buttons don't state why (min-length rules invisible)               |
+| UX-28 | P3  | todo   | No character counters where the backend enforces length limits                     |
+| UX-29 | P3  | todo   | Fragment library: one global loading flag spins every row's buttons                |
+| UX-30 | P3  | todo   | Slack "Add to Slack" OAuth button has no pending state                             |
+| UX-31 | P3  | todo   | "Edit" on list items doesn't scroll/focus the offscreen edit form                  |
 
 - **UX-18 — Dirty modals discard input.** `components/board/AddTaskModal.vue`
   (open computed :34-39, reset watcher :321-358) — Escape or backdrop click wipes
@@ -174,9 +174,9 @@ per-file patches:
 - **UX-22 — Submit-only validation.** `auth/ResetPasswordScreen.vue:21-30` — the
   length≥8 and match checks run only on submit; no live hint or match indicator.
 - **UX-23 — Fragile Slack mapping rows.** `slack/SlackPanel.vue:292` (`:key="i"`)
-  + save filter at `:151`. Deleting a middle row can misbind `v-model`s; rows
-  missing either id are silently dropped on save. Fix: stable keys + block/warn on
-  incomplete rows.
+  - save filter at `:151`. Deleting a middle row can misbind `v-model`s; rows
+    missing either id are silently dropped on save. Fix: stable keys + block/warn on
+    incomplete rows.
 - **UX-24 — Datadog forced re-entry.** `settings/ObservabilityConnectionPanel.vue:216-219`
   disables save unless both write-only keys are present, so changing only `site`
   requires re-pasting both secrets — while the panel's own incident section (:75)
@@ -207,21 +207,21 @@ per-file patches:
 
 ## C. Review windows, inspector & pipeline surfaces
 
-| ID | Sev | Status | Finding |
-|----|-----|--------|---------|
-| UX-32 | P1 | todo | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable |
-| UX-33 | P1 | todo | Typed review answers lost when window closes without blur/save |
-| UX-34 | P2 | todo | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models |
-| UX-35 | P2 | todo | No elapsed time on running steps in PipelineProgress / TaskExecution |
-| UX-36 | P2 | todo | Raw model id rendered verbatim in review windows |
-| UX-37 | P2 | todo | Internal `agentKind` enum + raw model id leak in consensus window |
-| UX-38 | P2 | todo | Clipboard copies give no feedback and swallow failures |
-| UX-39 | P2 | todo | Agent/provider errors have no copy button |
-| UX-40 | P2 | todo | Inspector "Run" disabled with no explanation |
-| UX-41 | P2 | todo | Stopping a running bootstrap has no confirmation |
-| UX-42 | P3 | todo | "Restart from here" only visible on hover (invisible on touch) |
-| UX-43 | P3 | todo | Agent prose rendered as plain text in several result views |
-| UX-44 | P3 | todo | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
+| ID    | Sev | Status | Finding                                                                                                          |
+| ----- | --- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| UX-32 | P1  | todo   | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
+| UX-33 | P1  | todo   | Typed review answers lost when window closes without blur/save                                                   |
+| UX-34 | P2  | todo   | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
+| UX-35 | P2  | todo   | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
+| UX-36 | P2  | todo   | Raw model id rendered verbatim in review windows                                                                 |
+| UX-37 | P2  | todo   | Internal `agentKind` enum + raw model id leak in consensus window                                                |
+| UX-38 | P2  | todo   | Clipboard copies give no feedback and swallow failures                                                           |
+| UX-39 | P2  | todo   | Agent/provider errors have no copy button                                                                        |
+| UX-40 | P2  | todo   | Inspector "Run" disabled with no explanation                                                                     |
+| UX-41 | P2  | todo   | Stopping a running bootstrap has no confirmation                                                                 |
+| UX-42 | P3  | todo   | "Restart from here" only visible on hover (invisible on touch)                                                   |
+| UX-43 | P3  | todo   | Agent prose rendered as plain text in several result views                                                       |
+| UX-44 | P3  | todo   | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
 - **UX-32 — Hidden gate actions.** `requirements/RequirementsReviewWindow.vue:794`
   and `clarity/ClarityReviewWindow.vue:479`: the entire action rail (Proceed,
@@ -256,8 +256,8 @@ per-file patches:
   no catch (insecure context ⇒ silent no-op). `StepContainerStatus.vue:70` does it
   right — extract and reuse.
 - **UX-39 — Uncopyable errors.** `board/AgentFailureCard.vue:68-93` (`failure.message`
-  + `<pre>` detail), `ConsensusSessionWindow.vue:154`, `gates/GateResultView.vue:341,367`
-  — the first thing users do with a stack trace is copy it. Add a copy button.
+  - `<pre>` detail), `ConsensusSessionWindow.vue:154`, `gates/GateResultView.vue:341,367`
+    — the first thing users do with a stack trace is copy it. Add a copy button.
 - **UX-40 — Unexplained lock.** `panels/InspectorPanel.vue:493-504` — when
   `!runnable` the run trigger becomes a disabled lock icon with no tooltip stating
   the blocking condition (unmet dependency, wrong status, …).
@@ -279,25 +279,25 @@ per-file patches:
 
 ## D. Settings, keys & integrations
 
-| ID | Sev | Status | Finding |
-|----|-----|--------|---------|
-| UX-45 | P1 | todo | Direct provider API keys saved without any validation probe |
-| UX-46 | P2 | todo | Connected keys show no last-4 / created-date identity hint |
-| UX-47 | P2 | todo | Key-removal confirm is generic — doesn't name the key |
-| UX-48 | P2 | todo | Datadog/incident connections: no Test button, no key-page links, no scopes stated |
-| UX-49 | P2 | todo | 428 password modal never explains the 40h client-side password caching |
-| UX-50 | P2 | todo | Model pickers are unsearchable dropdowns (catalog can be 300+ models) |
-| UX-51 | P2 | todo | Merge presets: % semantics not shown; no "used by" / default hint |
-| UX-52 | P2 | todo | High-blast-radius disconnects (GitHub App) are one accidental Enter away |
-| UX-53 | P2 | todo | No unsaved-changes protection in settings panels (tab switch / Escape discards) |
-| UX-54 | P3 | todo | Manual GitHub installation-id field gives no hint where the id comes from |
-| UX-55 | P3 | todo | Vendor credential steps are plain text — no "create token" link |
-| UX-56 | P3 | todo | Mixed save granularity inside WorkspaceSettingsPanel (one Save for 5 sections; Budget separate) |
-| UX-57 | P3 | todo | Raw backend error text piped verbatim into toasts/status across settings |
-| UX-58 | P3 | todo | Local runner endpoints savable without a (re)successful test after URL edits |
-| UX-59 | P3 | todo | Slack member map requires hand-pasting raw `Uxxxx`/GitHub ids, no lookup |
-| UX-60 | P3 | todo | Password modal doesn't name the run/task it gates; expiry date field doesn't state its consequence |
-| UX-61 | P3 | todo | AI-onboarding modal: no explicit skip/later button; operator note nearly invisible |
+| ID    | Sev | Status | Finding                                                                                            |
+| ----- | --- | ------ | -------------------------------------------------------------------------------------------------- |
+| UX-45 | P1  | todo   | Direct provider API keys saved without any validation probe                                        |
+| UX-46 | P2  | todo   | Connected keys show no last-4 / created-date identity hint                                         |
+| UX-47 | P2  | todo   | Key-removal confirm is generic — doesn't name the key                                              |
+| UX-48 | P2  | todo   | Datadog/incident connections: no Test button, no key-page links, no scopes stated                  |
+| UX-49 | P2  | todo   | 428 password modal never explains the 40h client-side password caching                             |
+| UX-50 | P2  | todo   | Model pickers are unsearchable dropdowns (catalog can be 300+ models)                              |
+| UX-51 | P2  | todo   | Merge presets: % semantics not shown; no "used by" / default hint                                  |
+| UX-52 | P2  | todo   | High-blast-radius disconnects (GitHub App) are one accidental Enter away                           |
+| UX-53 | P2  | todo   | No unsaved-changes protection in settings panels (tab switch / Escape discards)                    |
+| UX-54 | P3  | todo   | Manual GitHub installation-id field gives no hint where the id comes from                          |
+| UX-55 | P3  | todo   | Vendor credential steps are plain text — no "create token" link                                    |
+| UX-56 | P3  | todo   | Mixed save granularity inside WorkspaceSettingsPanel (one Save for 5 sections; Budget separate)    |
+| UX-57 | P3  | todo   | Raw backend error text piped verbatim into toasts/status across settings                           |
+| UX-58 | P3  | todo   | Local runner endpoints savable without a (re)successful test after URL edits                       |
+| UX-59 | P3  | todo   | Slack member map requires hand-pasting raw `Uxxxx`/GitHub ids, no lookup                           |
+| UX-60 | P3  | todo   | Password modal doesn't name the run/task it gates; expiry date field doesn't state its consequence |
+| UX-61 | P3  | todo   | AI-onboarding modal: no explicit skip/later button; operator note nearly invisible                 |
 
 - **UX-45 — Unvalidated keys.** `providers/ApiKeysSection.vue:179` +
   `stores/apiKeys.ts:38-43` — pasting a direct key POSTs and toasts "Connected"
@@ -322,7 +322,7 @@ per-file patches:
   (+ optionally a "don't remember" choice).
 - **UX-50 — Unsearchable model pickers.** `settings/ModelConfigurationPanel.vue:168-176`
   (base) and `:179-194` (per-agent override) render the full `selectableModels`
-  list with no filter — while the *agent-kind* list right below has one (`:453`).
+  list with no filter — while the _agent-kind_ list right below has one (`:453`).
   With OpenRouter enabled the list can exceed 300 entries. Related: the OpenRouter
   browse list itself renders unvirtualized (`OpenRouterCatalogPanel.vue:75-81,346-348`)
   and janks on mount — cap, filter-first, or virtualize.
@@ -352,16 +352,16 @@ per-file patches:
 
 ## E. Async state, realtime & error surfacing
 
-| ID | Sev | Status | Finding |
-|----|-----|--------|---------|
-| UX-70 | P1 | todo | Board whose WebSocket never connects is silently non-live — no indicator |
-| UX-71 | P2 | todo | Debounced board refresh swallows failures → silently stale board |
-| UX-72 | P2 | todo | Reconnect declares "connected" even when the resync refresh failed |
-| UX-73 | P2 | todo | Preview polling stops silently on transient error → stuck "Starting…" forever |
-| UX-74 | P2 | todo | Service-spec window error state has no retry |
-| UX-75 | P3 | todo | Observability panel error has no retry; context-load failure masquerades as empty state |
-| UX-76 | P3 | todo | `removeDependency` has no error handling (sibling `toggleDependency` does) |
-| UX-77 | P3 | todo | Actionable error toasts auto-dismiss, taking their remedy button with them |
+| ID    | Sev | Status | Finding                                                                                 |
+| ----- | --- | ------ | --------------------------------------------------------------------------------------- |
+| UX-70 | P1  | todo   | Board whose WebSocket never connects is silently non-live — no indicator                |
+| UX-71 | P2  | todo   | Debounced board refresh swallows failures → silently stale board                        |
+| UX-72 | P2  | todo   | Reconnect declares "connected" even when the resync refresh failed                      |
+| UX-73 | P2  | todo   | Preview polling stops silently on transient error → stuck "Starting…" forever           |
+| UX-74 | P2  | todo   | Service-spec window error state has no retry                                            |
+| UX-75 | P3  | todo   | Observability panel error has no retry; context-load failure masquerades as empty state |
+| UX-76 | P3  | todo   | `removeDependency` has no error handling (sibling `toggleDependency` does)              |
+| UX-77 | P3  | todo   | Actionable error toasts auto-dismiss, taking their remedy button with them              |
 
 - **UX-70 — Never-connected is invisible.** `layout/ConnectionStatusBanner.vue:33,42`
   gates on `everConnected`; if the very first WS handshake keeps failing
@@ -391,22 +391,22 @@ per-file patches:
   try/catch; a failure rejects unhandled with no toast and the edge stays visible.
   Mirror `toggleDependency` (:387-399).
 - **UX-77 — Vanishing remedies.** `composables/usePipelineErrorToast.ts:89-104,
-  112-128,142-157` — the toasts carrying one-click remedies ("Configure AI",
+112-128,142-157` — the toasts carrying one-click remedies ("Configure AI",
   "Configure storage") set no `duration`, so they auto-dismiss with the framework
   default (~5s). Make action-bearing error toasts sticky (`duration: 0`).
 
 ## F. Accessibility, keyboard & theming
 
-| ID | Sev | Status | Finding |
-|----|-----|--------|---------|
-| UX-62 | P1 | todo | Icon-only close/action buttons with no accessible name (widespread) |
-| UX-63 | P2 | todo | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
-| UX-64 | P2 | todo | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable |
-| UX-65 | P2 | todo | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap) |
-| UX-66 | P2 | todo | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants) |
-| UX-67 | P2 | todo | No light mode / system color-scheme support; palette hardcoded |
-| UX-68 | P3 | todo | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented |
-| UX-69 | P3 | todo | Board nodes not in the tab order — no keyboard path to a specific card |
+| ID    | Sev | Status | Finding                                                                                  |
+| ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
+| UX-62 | P1  | todo   | Icon-only close/action buttons with no accessible name (widespread)                      |
+| UX-63 | P2  | todo   | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
+| UX-64 | P2  | todo   | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
+| UX-65 | P2  | todo   | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
+| UX-66 | P2  | todo   | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
+| UX-67 | P2  | todo   | No light mode / system color-scheme support; palette hardcoded                           |
+| UX-68 | P3  | todo   | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
+| UX-69 | P3  | todo   | Board nodes not in the tab order — no keyboard path to a specific card                   |
 
 - **UX-62 — Unlabeled icon buttons.** Representative: `focus/BlockFocusView.vue:108`,
   `clarity/ClarityReviewWindow.vue:267`, `brainstorm/BrainstormWindow.vue:284`,

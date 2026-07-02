@@ -57,6 +57,21 @@ export class D1AgentRunRepository implements AgentRunRepository {
     }))
   }
 
+  async listPausedExecutions(): Promise<AgentRunRef[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT workspace_id, id FROM agent_runs
+         WHERE kind = 'execution' AND status = 'paused'
+         ORDER BY updated_at`,
+      )
+      .all<{ workspace_id: string; id: string }>()
+    return (results ?? []).map((r) => ({
+      workspaceId: r.workspace_id,
+      id: r.id,
+      kind: 'execution' as const,
+    }))
+  }
+
   async liveRunIds(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return []
     const live: string[] = []

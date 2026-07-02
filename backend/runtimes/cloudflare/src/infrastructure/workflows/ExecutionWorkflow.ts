@@ -48,6 +48,13 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const ciPollInterval = execConfig.ciPollInterval as WorkflowSleepDuration
+    // Chunk length for a spend-paused run's budget re-check (see the `paused` branch below).
+    // Reuses the decision-wait cadence (default 24h), NOT the short gate-poll cadence: the run
+    // parks on `waitForEvent`, so `/spend/resume` wakes it immediately via `signalResume` and
+    // this timeout only backstops auto-resume on a new billing period. A long chunk keeps the
+    // instance's durable step history bounded (≈1/day, like a decision wait) instead of the
+    // thousands/day a 30s busy-loop would accrue toward the Workflows per-instance limit.
+    const pauseRecheckTimeout = decisionTimeout
 
     const failRun = async (
       i: number,
@@ -197,9 +204,29 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
         return
       }
 
-      // 'paused' means the spend budget is exhausted: stop driving this run.
-      // The /spend/resume endpoint re-creates the workflow once it frees up.
-      if (result.kind === 'done' || result.kind === 'noop' || result.kind === 'paused') return
+      if (result.kind === 'done' || result.kind === 'noop') return
+
+      // 'paused' means the spend budget is exhausted. Do NOT return: returning makes this
+      // Workflows instance TERMINAL, and a terminal instance id can never be re-created (see
+      // WorkflowsLookup) — so `/spend/resume`'s `create` would silently no-op and the cron
+      // sweeper would later force-fail the "resumed" run. Instead we keep the instance ALIVE
+      // parked on `waitForEvent`, EXACTLY like a decision wait (not a busy sleep-loop): a
+      // `spend-resume` event from `resumePaused`'s `signalResume` wakes it immediately, and on
+      // the timeout we simply re-loop and re-advance from storage — auto-resuming when the
+      // budget frees up on a new billing period. Parking (vs a short durable sleep) keeps the
+      // step history bounded over a pause that can last days/weeks. The per-iteration `-${i}`
+      // keeps each re-armed wait a distinct step.
+      if (result.kind === 'paused') {
+        try {
+          await step.waitForEvent(`spend-resume-${i}`, {
+            type: 'spend-resume',
+            timeout: pauseRecheckTimeout,
+          })
+        } catch {
+          // Timed out without a resume signal — fall through and re-loop to re-check the budget.
+        }
+        continue
+      }
 
       if (result.kind === 'awaiting_decision') {
         const decisionId = result.decisionId

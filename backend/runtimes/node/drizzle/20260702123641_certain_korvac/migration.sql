@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uniq_live_execution_per_block" ON "agent_runs" ("workspace_id","block_id") WHERE "kind" = 'execution' AND "status" IN ('running', 'blocked', 'paused');
