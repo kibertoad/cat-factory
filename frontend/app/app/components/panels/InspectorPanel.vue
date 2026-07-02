@@ -54,6 +54,18 @@ const block = computed<Block | undefined>(() =>
 )
 const level = computed(() => block.value?.level ?? 'frame')
 const isFrame = computed(() => level.value === 'frame')
+
+// The last persisted title, re-seeded whenever the selected block changes. Editing the title
+// binds straight to the store object via v-model, so if the user clears it and blurs there is
+// nothing to fall back to — restore this rather than persisting (and showing) an empty title.
+const lastSavedTitle = ref('')
+watch(
+  () => block.value?.id,
+  () => {
+    lastSavedTitle.value = block.value?.title ?? ''
+  },
+  { immediate: true },
+)
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
 const isEpic = computed(() => level.value === 'epic')
@@ -107,7 +119,15 @@ function saveTitle() {
   const b = block.value
   if (!b) return
   const next = b.title.trim()
-  if (next) board.updateBlock(b.id, { title: next })
+  // An emptied title can't persist — restore the last saved value so the field never shows a
+  // blank the user didn't intend (and the board keeps a real label).
+  if (!next) {
+    b.title = lastSavedTitle.value
+    return
+  }
+  b.title = next
+  lastSavedTitle.value = next
+  board.updateBlock(b.id, { title: next })
 }
 function saveDescription() {
   const b = block.value

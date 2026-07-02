@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Ładowanie…",
+    "loadingBoard": "Ładowanie tablicy…",
+    "backendUnreachable": "Nie można połączyć się z backendem",
+    "reconnecting": "Ponowne łączenie…"
+  },
   "language": {
     "switcher": "Język",
     "warning": {
@@ -68,6 +74,14 @@
     "infrastructure": "Infrastruktura"
   },
   "board": {
+    "toast": {
+      "updateFailed": "Nie udało się zapisać zmian",
+      "epicFailed": "Nie udało się zmienić epiku",
+      "moveFailed": "Nie udało się przenieść",
+      "deleteFailed": "Nie udało się usunąć",
+      "linkFailed": "Nie udało się powiązać zadań",
+      "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u"
+    },
     "repoTypes": {
       "service": "Usługa",
       "frontend": "Frontend",
@@ -260,6 +274,11 @@
       "openPrOnGithub": "Otwórz {pr} na GitHub",
       "review": "Przejrzyj",
       "merge": "Scal",
+      "mergeConfirm": {
+        "title": "Scalić tę pull request?",
+        "body": "Spowoduje to scalenie PR do jego gałęzi bazowej i ukończenie zadania. Tej operacji nie można cofnąć.",
+        "confirm": "Scal"
+      },
       "implemented": "wdrożone",
       "module": "Moduł: {name}",
       "buildSteps": "Kroki budowania",
@@ -590,6 +609,16 @@
       "stopTooltip": "Zatrzymaj uruchomienie, ale zachowaj je (do odczytu i ponownego uruchomienia)",
       "reset": "Resetuj",
       "resetTooltip": "Odrzuć to uruchomienie i przywróć zadanie do stanu zaplanowanego",
+      "resetConfirm": {
+        "title": "Odrzucić to uruchomienie?",
+        "body": "Spowoduje to usunięcie uruchomienia i przywrócenie zadania do stanu zaplanowanego. Tej operacji nie można cofnąć.",
+        "confirm": "Odrzuć uruchomienie"
+      },
+      "mergeConfirm": {
+        "title": "Scalić tę pull request?",
+        "body": "Spowoduje to scalenie PR do jego gałęzi bazowej i ukończenie zadania. Tej operacji nie można cofnąć.",
+        "confirm": "Scal"
+      },
       "viewDetailsOutput": "Wyświetl szczegóły i odczytaj wynik",
       "viewDetails": "Wyświetl szczegóły kroku",
       "companion": "Towarzysz",
@@ -1162,7 +1191,9 @@
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
-        "dismissed": "Odrzucono"
+        "dismissed": "Odrzucono",
+        "actFailed": "Nie udało się wykonać tej akcji",
+        "dismissFailed": "Nie udało się odrzucić"
       }
     },
     "aiProvidersBanner": {
@@ -3664,6 +3695,7 @@
     },
     "targetRepo": {
       "label": "Nazwa repozytorium docelowego",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "Utwórz nowe repozytorium o tej nazwie w {owner}, a następnie inicjacja wypycha do niego. Wstępnie utworzony README, .gitignore lub licencja są w porządku.",
       "descNoOwner": "Utwórz nowe repozytorium o tej nazwie, a następnie inicjacja wypycha do niego. Wstępnie utworzony README, .gitignore lub licencja są w porządku."
     },
@@ -3679,7 +3711,8 @@
     },
     "description": {
       "label": "Opis",
-      "help": "Opcjonalne jednowierszowe podsumowanie repozytorium."
+      "help": "Opcjonalne jednowierszowe podsumowanie repozytorium.",
+      "placeholder": "Obsługuje intencje płatności i zwroty"
     },
     "instructions": {
       "labelReference": "Dodatkowe instrukcje dla inicjatora",
@@ -3709,18 +3742,23 @@
       "add": "Dodaj",
       "pickRepo": {
         "label": "Wybierz istniejące repozytorium GitHub",
-        "description": "Wybierz repozytorium, do którego masz dostęp, aby wypełnić jego właściciela i nazwę, albo wpisz je ręcznie poniżej."
+        "description": "Wybierz repozytorium, do którego masz dostęp, aby wypełnić jego właściciela i nazwę, albo wpisz je ręcznie poniżej.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Nazwa",
-        "description": "Przyjazna etykieta dla tej bazy."
+        "description": "Przyjazna etykieta dla tej bazy.",
+        "placeholder": "Szablon usługi"
       },
       "repoOwner": "Właściciel repozytorium",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Nazwa repozytorium",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Opcjonalne podsumowanie tej bazy",
       "defaultInstructions": {
         "label": "Domyślne instrukcje inicjatora",
-        "description": "Dodawane przed instrukcjami każdego uruchomienia za każdym razem, gdy używana jest ta baza."
+        "description": "Dodawane przed instrukcjami każdego uruchomienia za każdym razem, gdy używana jest ta baza.",
+        "placeholder": "np. zachowaj strukturę; zmień nazwy pakietów, aby pasowały do nowej usługi"
       }
     },
     "toast": {

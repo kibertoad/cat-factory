@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "読み込み中…",
+    "loadingBoard": "ボードを読み込み中…",
+    "backendUnreachable": "バックエンドに接続できません",
+    "reconnecting": "再接続中…"
+  },
   "language": {
     "switcher": "言語",
     "warning": {
@@ -68,6 +74,14 @@
     "accountSettings": "アカウント設定"
   },
   "board": {
+    "toast": {
+      "updateFailed": "変更を保存できませんでした",
+      "epicFailed": "エピックを変更できませんでした",
+      "moveFailed": "移動できませんでした",
+      "deleteFailed": "削除できませんでした",
+      "linkFailed": "タスクをリンクできませんでした",
+      "recurringDeleteFailed": "定期パイプラインを削除できませんでした"
+    },
     "repoTypes": {
       "service": "サービス",
       "frontend": "フロントエンド",
@@ -260,6 +274,11 @@
       "openPrOnGithub": "{pr} を GitHub で開く",
       "review": "レビュー",
       "merge": "マージ",
+      "mergeConfirm": {
+        "title": "このプルリクエストをマージしますか？",
+        "body": "PR をベースブランチにマージし、タスクを完了します。この操作は取り消せません。",
+        "confirm": "マージ"
+      },
       "implemented": "実装済み",
       "module": "モジュール: {name}",
       "buildSteps": "ビルドステップ",
@@ -590,6 +609,16 @@
       "stopTooltip": "実行を停止しますが保持します (閲覧および再実行が可能)",
       "reset": "リセット",
       "resetTooltip": "この実行を破棄し、タスクを計画済みにリセットします",
+      "resetConfirm": {
+        "title": "この実行を破棄しますか？",
+        "body": "実行を削除し、タスクを計画済みに戻します。この操作は取り消せません。",
+        "confirm": "実行を破棄"
+      },
+      "mergeConfirm": {
+        "title": "このプルリクエストをマージしますか？",
+        "body": "PR をベースブランチにマージし、タスクを完了します。この操作は取り消せません。",
+        "confirm": "マージ"
+      },
       "viewDetailsOutput": "詳細を表示して出力を読む",
       "viewDetails": "ステップの詳細を表示",
       "companion": "コンパニオン",
@@ -1162,7 +1191,9 @@
       },
       "toast": {
         "acted": "対応済みにしました",
-        "dismissed": "却下しました"
+        "dismissed": "却下しました",
+        "actFailed": "その操作を完了できませんでした",
+        "dismissFailed": "却下できませんでした"
       }
     },
     "aiProvidersBanner": {
@@ -3677,6 +3708,7 @@
     },
     "targetRepo": {
       "label": "ターゲットリポジトリ名",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "{owner} の下にこの名前で新しいリポジトリを作成し、ブートストラップがそこにプッシュします。README、.gitignore、ライセンスがあらかじめ入っていても問題ありません。",
       "descNoOwner": "この名前で新しいリポジトリを作成し、ブートストラップがそこにプッシュします。README、.gitignore、ライセンスがあらかじめ入っていても問題ありません。"
     },
@@ -3692,7 +3724,8 @@
     },
     "description": {
       "label": "説明",
-      "help": "リポジトリの任意の1行要約。"
+      "help": "リポジトリの任意の1行要約。",
+      "placeholder": "支払いインテントと返金を処理します"
     },
     "instructions": {
       "labelReference": "ブートストラッパーへの追加指示",
@@ -3722,18 +3755,23 @@
       "add": "追加",
       "pickRepo": {
         "label": "既存の GitHub リポジトリを選択",
-        "description": "アクセスできるリポジトリを選んでオーナーと名前を入力するか、下で手動で入力してください。"
+        "description": "アクセスできるリポジトリを選んでオーナーと名前を入力するか、下で手動で入力してください。",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "名前",
-        "description": "このベースのわかりやすいラベル。"
+        "description": "このベースのわかりやすいラベル。",
+        "placeholder": "サービステンプレート"
       },
       "repoOwner": "リポジトリオーナー",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "リポジトリ名",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "このベースの任意の要約",
       "defaultInstructions": {
         "label": "デフォルトのブートストラッパー指示",
-        "description": "このベースを使用するたびに、実行ごとの指示の前に付加されます。"
+        "description": "このベースを使用するたびに、実行ごとの指示の前に付加されます。",
+        "placeholder": "例: 構造を維持し、パッケージ名を新しいサービスに合わせて変更する"
       }
     },
     "toast": {

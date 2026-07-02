@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "טוען…",
+    "loadingBoard": "טוען לוח…",
+    "backendUnreachable": "לא ניתן להתחבר לבקאנד",
+    "reconnecting": "מתחבר מחדש…"
+  },
   "language": {
     "switcher": "שפה",
     "warning": {
@@ -68,6 +74,14 @@
     "accountSettings": "הגדרות חשבון"
   },
   "board": {
+    "toast": {
+      "updateFailed": "לא ניתן היה לשמור את השינויים",
+      "epicFailed": "לא ניתן היה לשנות את האפיק",
+      "moveFailed": "לא ניתן היה להעביר",
+      "deleteFailed": "לא ניתן היה למחוק",
+      "linkFailed": "לא ניתן היה לקשר משימות",
+      "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר"
+    },
     "repoTypes": {
       "service": "שירות",
       "frontend": "פרונט-אנד",
@@ -260,6 +274,11 @@
       "openPrOnGithub": "פתח את {pr} ב-GitHub",
       "review": "סקירה",
       "merge": "מזג",
+      "mergeConfirm": {
+        "title": "למזג בקשת משיכה זו?",
+        "body": "פעולה זו ממזגת את ה-PR לענף הבסיס שלו ומשלימה את המשימה. לא ניתן לבטל פעולה זו.",
+        "confirm": "מזג"
+      },
       "implemented": "מומש",
       "module": "מודול: {name}",
       "buildSteps": "שלבי בנייה",
@@ -590,6 +609,16 @@
       "stopTooltip": "עצור את ההרצה אך שמור אותה (ניתנת לקריאה ולחזרה)",
       "reset": "אפס",
       "resetTooltip": "השלך הרצה זו ואפס את המשימה למתוכננת",
+      "resetConfirm": {
+        "title": "להשליך הרצה זו?",
+        "body": "פעולה זו מוחקת את ההרצה ומחזירה את המשימה למתוכננת. לא ניתן לבטל פעולה זו.",
+        "confirm": "השלך הרצה"
+      },
+      "mergeConfirm": {
+        "title": "למזג בקשת משיכה זו?",
+        "body": "פעולה זו ממזגת את ה-PR לענף הבסיס שלו ומשלימה את המשימה. לא ניתן לבטל פעולה זו.",
+        "confirm": "מזג"
+      },
       "viewDetailsOutput": "הצג פרטים וקרא פלט",
       "viewDetails": "הצג פרטי שלב",
       "companion": "מלווה",
@@ -1162,7 +1191,9 @@
       },
       "toast": {
         "acted": "סומן כטופל",
-        "dismissed": "נדחה"
+        "dismissed": "נדחה",
+        "actFailed": "לא ניתן היה להשלים את הפעולה",
+        "dismissFailed": "לא ניתן היה לבטל"
       }
     },
     "aiProvidersBanner": {
@@ -3675,6 +3706,7 @@
     },
     "targetRepo": {
       "label": "שם מאגר היעד",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "צור מאגר חדש בשם הזה תחת {owner}, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר.",
       "descNoOwner": "צור מאגר חדש בשם הזה, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר."
     },
@@ -3690,7 +3722,8 @@
     },
     "description": {
       "label": "תיאור",
-      "help": "תקציר אופציונלי בשורה אחת למאגר."
+      "help": "תקציר אופציונלי בשורה אחת למאגר.",
+      "placeholder": "מטפל בכוונות תשלום והחזרים"
     },
     "instructions": {
       "labelReference": "הנחיות נוספות למאתחל",
@@ -3720,18 +3753,23 @@
       "add": "הוסף",
       "pickRepo": {
         "label": "בחר מאגר GitHub קיים",
-        "description": "בחר מאגר שיש לך גישה אליו כדי למלא את הבעלים והשם שלו, או הזן אותם ידנית למטה."
+        "description": "בחר מאגר שיש לך גישה אליו כדי למלא את הבעלים והשם שלו, או הזן אותם ידנית למטה.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "שם",
-        "description": "תווית ידידותית לבסיס הזה."
+        "description": "תווית ידידותית לבסיס הזה.",
+        "placeholder": "תבנית שירות"
       },
       "repoOwner": "בעלי המאגר",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "שם המאגר",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "תקציר אופציונלי של הבסיס הזה",
       "defaultInstructions": {
         "label": "הנחיות מאתחל ברירת מחדל",
-        "description": "מצורפות לפני ההנחיות הפר-הרצה בכל פעם שנעשה שימוש בבסיס הזה."
+        "description": "מצורפות לפני ההנחיות הפר-הרצה בכל פעם שנעשה שימוש בבסיס הזה.",
+        "placeholder": "לדוגמה, שמור על המבנה; שנה את שמות החבילות כך שיתאימו לשירות החדש"
       }
     },
     "toast": {

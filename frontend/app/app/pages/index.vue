@@ -3,6 +3,7 @@ import BoardCanvas from '~/components/board/BoardCanvas.vue'
 import SideBar from '~/components/layout/SideBar.vue'
 import BoardToolbar from '~/components/layout/BoardToolbar.vue'
 import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
+import ConnectionStatusBanner from '~/components/layout/ConnectionStatusBanner.vue'
 import TranslationWarningBanner from '~/components/layout/TranslationWarningBanner.vue'
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
@@ -275,7 +276,7 @@ watch(
       class="m-auto flex flex-col items-center gap-3 text-slate-400"
     >
       <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-      <span class="text-sm">Loading…</span>
+      <span class="text-sm">{{ $t('app.loading') }}</span>
     </div>
 
     <!-- App enabled but not installed on this workspace: hard onboarding gate. -->
@@ -312,6 +313,7 @@ watch(
         />
         <BoardToolbar />
         <SpendWarningBanner />
+        <ConnectionStatusBanner :connected="streamConnected" />
         <InspectorPanel />
         <!-- Code-split focus view. The fade lives here (not inside the component) so the
              leave animation still plays when `focusBlockId` clears and the v-if unmounts
@@ -368,17 +370,17 @@ watch(
     <!-- Backend unreachable / bootstrap failed -->
     <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
       <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
-      <h1 class="mb-1 text-lg font-semibold">Can’t reach the backend</h1>
+      <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
       <p class="mb-4 text-sm text-slate-400">{{ workspace.error }}</p>
       <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">
-        Retry
+        {{ $t('common.retry') }}
       </UButton>
     </div>
 
     <!-- Initial load -->
     <div v-else class="m-auto flex flex-col items-center gap-3 text-slate-400">
       <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-      <span class="text-sm">Loading board…</span>
+      <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
     </div>
   </div>
 </template>

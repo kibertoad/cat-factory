@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Chargement…",
+    "loadingBoard": "Chargement du tableau…",
+    "backendUnreachable": "Impossible de joindre le backend",
+    "reconnecting": "Reconnexion…"
+  },
   "language": {
     "switcher": "Langue",
     "warning": {
@@ -68,6 +74,14 @@
     "infrastructure": "Infrastructure"
   },
   "board": {
+    "toast": {
+      "updateFailed": "Impossible d'enregistrer les modifications",
+      "epicFailed": "Impossible de changer l'épopée",
+      "moveFailed": "Impossible de déplacer",
+      "deleteFailed": "Impossible de supprimer",
+      "linkFailed": "Impossible de lier les tâches",
+      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent"
+    },
     "repoTypes": {
       "service": "Service",
       "frontend": "Frontend",
@@ -260,6 +274,11 @@
       "openPrOnGithub": "Ouvrir {pr} sur GitHub",
       "review": "Revoir",
       "merge": "Fusionner",
+      "mergeConfirm": {
+        "title": "Fusionner cette pull request ?",
+        "body": "Cela fusionne la PR dans sa branche de base et termine la tâche. Cette action est irréversible.",
+        "confirm": "Fusionner"
+      },
       "implemented": "implémentée",
       "module": "Module : {name}",
       "buildSteps": "Étapes de build",
@@ -590,6 +609,16 @@
       "stopTooltip": "Arrêter l'exécution mais la conserver (lisible et relançable)",
       "reset": "Réinitialiser",
       "resetTooltip": "Abandonner cette exécution et réinitialiser la tâche à planifiée",
+      "resetConfirm": {
+        "title": "Abandonner cette exécution ?",
+        "body": "Cela supprime l'exécution et ramène la tâche à planifiée. Cette action est irréversible.",
+        "confirm": "Abandonner l'exécution"
+      },
+      "mergeConfirm": {
+        "title": "Fusionner cette pull request ?",
+        "body": "Cela fusionne la PR dans sa branche de base et termine la tâche. Cette action est irréversible.",
+        "confirm": "Fusionner"
+      },
       "viewDetailsOutput": "Voir les détails et lire la sortie",
       "viewDetails": "Voir les détails de l'étape",
       "companion": "Compagnon",
@@ -1162,7 +1191,9 @@
       },
       "toast": {
         "acted": "Marqué comme traité",
-        "dismissed": "Ignoré"
+        "dismissed": "Ignoré",
+        "actFailed": "Impossible de terminer cette action",
+        "dismissFailed": "Impossible d'ignorer"
       }
     },
     "aiProvidersBanner": {
@@ -3664,6 +3695,7 @@
     },
     "targetRepo": {
       "label": "Nom du dépôt cible",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "Créez un nouveau dépôt portant ce nom sous {owner}, puis l'initialisation y pousse. Un README, un .gitignore ou une licence préremplis conviennent.",
       "descNoOwner": "Créez un nouveau dépôt portant ce nom, puis l'initialisation y pousse. Un README, un .gitignore ou une licence préremplis conviennent."
     },
@@ -3679,7 +3711,8 @@
     },
     "description": {
       "label": "Description",
-      "help": "Résumé facultatif en une ligne pour le dépôt."
+      "help": "Résumé facultatif en une ligne pour le dépôt.",
+      "placeholder": "Gère les intentions de paiement et les remboursements"
     },
     "instructions": {
       "labelReference": "Instructions supplémentaires pour l'initialiseur",
@@ -3709,18 +3742,23 @@
       "add": "Ajouter",
       "pickRepo": {
         "label": "Choisir un dépôt GitHub existant",
-        "description": "Choisissez un dépôt auquel vous avez accès pour renseigner son propriétaire et son nom, ou saisissez-les manuellement ci-dessous."
+        "description": "Choisissez un dépôt auquel vous avez accès pour renseigner son propriétaire et son nom, ou saisissez-les manuellement ci-dessous.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Nom",
-        "description": "Un libellé convivial pour cette base."
+        "description": "Un libellé convivial pour cette base.",
+        "placeholder": "Modèle de service"
       },
       "repoOwner": "Propriétaire du dépôt",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Nom du dépôt",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Résumé facultatif de cette base",
       "defaultInstructions": {
         "label": "Instructions d'initialisation par défaut",
-        "description": "Ajoutées avant les instructions de chaque exécution chaque fois que cette base est utilisée."
+        "description": "Ajoutées avant les instructions de chaque exécution chaque fois que cette base est utilisée.",
+        "placeholder": "p. ex. conserver la structure ; renommer les paquets pour correspondre au nouveau service"
       }
     },
     "toast": {
