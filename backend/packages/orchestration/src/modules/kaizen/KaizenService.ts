@@ -20,7 +20,6 @@ import type {
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   extractJson,
-  inlineModelRef,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
 import { generateText } from 'ai'
@@ -28,6 +27,7 @@ import {
   catFactoryObservability,
   KAIZEN_SYSTEM_PROMPT,
   promptVersionForKind,
+  resolveInlineModelRef,
 } from '@cat-factory/agents'
 import type { AgentContextObservabilityService } from '../observability/AgentContextObservabilityService.js'
 import { comboKeyFor, isVerified, nextComboState } from './kaizen.logic.js'
@@ -297,23 +297,30 @@ export class KaizenService {
     return { provider, ref }
   }
 
-  /** Block pin > workspace per-kind default (`kaizen`) > routing default. */
+  /**
+   * The grader's model. Kaizen grading is just another inline LLM step, so it resolves its
+   * model through the SAME shared seam every inline agent uses ({@link resolveInlineModelRef}
+   * — block pin > workspace per-kind default > routing default, keeping an ambient-eligible
+   * subscription harness ref instead of degrading it) rather than re-deriving that precedence
+   * here. Returns undefined only when no routing default is wired (grader disabled).
+   */
   private async modelFor(workspaceId: string, blockId: string): Promise<ModelRef | undefined> {
-    const fallback = this.deps.modelRef
-    const runsInline = this.deps.runsInline
-    const resolve = (ref: ModelRef): ModelRef =>
-      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
+    if (!this.deps.modelRef) return undefined
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
-    const fromBlock = this.deps.resolveBlockModel?.(block?.modelId)
-    if (fromBlock) return resolve(fromBlock)
-    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
-      workspaceId,
-      KAIZEN_AGENT_KIND,
-      block?.modelPresetId,
+    return resolveInlineModelRef(
+      {
+        agentRouting: { default: { ref: this.deps.modelRef }, byKind: {} },
+        resolveBlockModel: this.deps.resolveBlockModel ?? (() => undefined),
+        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
+        ...(this.deps.runsInline ? { runsInline: this.deps.runsInline } : {}),
+      },
+      {
+        agentKind: KAIZEN_AGENT_KIND,
+        blockModelId: block?.modelId,
+        modelPresetId: block?.modelPresetId,
+        workspaceId,
+      },
     )
-    const fromDefault = this.deps.resolveBlockModel?.(defaultId)
-    if (fromDefault) return resolve(fromDefault)
-    return fallback
   }
 
   private async updateCombo(
