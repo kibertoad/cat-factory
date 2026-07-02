@@ -188,7 +188,14 @@ export class WorkspaceService {
       this.workspaceMountRepository && this.serviceRepository
         ? await this.workspaceMountRepository.listByWorkspace(id)
         : []
-    const blocks = await this.composeBoard(localBlocks, mounts)
+    // Exclude HEADLESS internal blocks (public-API "initiative" runs) from the board projection —
+    // they exist only to anchor an external run and must never render in the UI. Filtered here, at
+    // the single SPA-facing snapshot read, not in the repository (the engine still sees them). See
+    // BoardService.createInternalTask. Their executions are left in `executions` (harmless without a
+    // block to attach to) so the durable driver — which the conformance/test harness reaches via
+    // this snapshot — still advances the run.
+    const visibleBlocks = localBlocks.filter((b) => !b.internal)
+    const blocks = await this.composeBoard(visibleBlocks, mounts)
     const executions = await this.composeExecutions(localExecutions, mounts)
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
     // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).

@@ -158,6 +158,11 @@ export {
   registerDocumentAgents,
 } from './agents/kinds/document.js'
 export {
+  INITIATIVE_BREAKDOWN_KIND,
+  INITIATIVE_AGENT_KINDS,
+  registerInitiativeAgents,
+} from './agents/kinds/initiative.js'
+export {
   READ_ONLY_AGENT_KINDS,
   READ_ONLY_GUARDRAIL,
   isReadOnlyAgentKind,

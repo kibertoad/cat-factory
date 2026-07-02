@@ -90,6 +90,8 @@ export interface BlockRow {
   /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
   tracker_comment_on_pr_open?: string | null
   tracker_resolve_on_merge?: string | null
+  /** Headless marker: 1 ⇒ a public-API "initiative" anchor block excluded from the board; null ⇒ normal. */
+  internal?: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +444,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   // Per-task writeback overrides; an empty string clears it (back to inheriting the workspace setting).
   optField('trackerCommentOnPrOpen', { clearOnEmpty: true }),
   optField('trackerResolveOnMerge', { clearOnEmpty: true }),
+  // Headless public-API "initiative" anchor: 1/0 column, set once at insert (never patched).
+  optBoolIntField('internal'),
 ]
 
 const blockMapper = makeEntityMapper<Block, BlockPatch, BlockRow>(blockFields)
@@ -486,6 +490,8 @@ export interface PipelineRow {
   archived?: number | boolean | null
   /** Monotonic seed version for a built-in pipeline (migration 0017); null on custom/legacy rows. */
   version?: number | null
+  /** Truthy (1) when the pipeline is callable via the public API (migration 0033). */
+  public?: number | boolean | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -506,6 +512,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),
     ...(row.version != null ? { version: row.version } : {}),
+    ...(row.public ? { public: true } : {}),
   }
 }
 

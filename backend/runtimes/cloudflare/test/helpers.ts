@@ -44,7 +44,12 @@ export interface TestResponse<T = unknown> {
 }
 
 export interface TestApp {
-  call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
+  call<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<TestResponse<T>>
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /** Create an unseeded workspace owned by a fresh ORG account (via the real services). */
   createOrgWorkspace(options?: { name?: string }): Promise<WorkspaceSnapshot>
@@ -97,12 +102,20 @@ export function makeApp(
   }
   const app = createApp({ overrides: coreOverrides, ...appOptions })
 
-  async function call<T>(method: string, path: string, body?: unknown): Promise<TestResponse<T>> {
+  async function call<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<TestResponse<T>> {
     const hasBody = body !== undefined
     const res = await app.fetch(
       new Request(`${BASE}${path}`, {
         method,
-        headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+        headers: {
+          ...(hasBody ? { 'content-type': 'application/json' } : {}),
+          ...extraHeaders,
+        },
         body: hasBody ? JSON.stringify(body) : undefined,
       }),
       env,

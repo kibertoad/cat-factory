@@ -336,6 +336,7 @@ export type {
   ProviderApiKeyRecord,
   ProviderApiKeyRepository,
 } from './provider-api-key-repositories.js'
+export type { PublicApiKeyRecord, PublicApiKeyRepository } from './public-api-key-repositories.js'
 export type {
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,

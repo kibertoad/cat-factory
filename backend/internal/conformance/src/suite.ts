@@ -398,6 +398,80 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('public API (break down an initiative)', () => {
+      it('authenticates a public-API key, runs a public inline pipeline headlessly, persists a retrievable result, and hides the anchor block', async () => {
+        const { call, createWorkspace, drive } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        // Mint an inbound public-API key (needs ENCRYPTION_KEY, which both harnesses configure).
+        const created = await call<{ key: { id: string }; secret: string }>(
+          'POST',
+          `/workspaces/${wsId}/public-api-keys`,
+          { label: 'external' },
+        )
+        expect(created.status).toBe(201)
+        const secret = created.body.secret
+        expect(secret).toMatch(/^cf_live_/)
+        const auth = { authorization: `Bearer ${secret}` }
+
+        // A missing key is refused; a valid key starts the run.
+        expect(
+          (
+            await call('POST', '/api/v1/initiatives', {
+              pipelineId: 'pl_initiative_breakdown',
+              input: 'x',
+            })
+          ).status,
+        ).toBe(401)
+        const started = await call<{ jobId: string; status: string }>(
+          'POST',
+          '/api/v1/initiatives',
+          { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
+          auth,
+        )
+        expect(started.status).toBe(202)
+        const jobId = started.body.jobId
+
+        // Drive the run to completion and read back the DB-persisted result.
+        await drive(wsId)
+        const job = await call<{ status: string; result: { output: string } | null }>(
+          'GET',
+          `/api/v1/jobs/${jobId}`,
+          undefined,
+          auth,
+        )
+        expect(job.status).toBe(200)
+        expect(job.body.status).toBe('succeeded')
+        expect(job.body.result?.output).toBeTruthy()
+
+        // The headless anchor block is excluded from the board snapshot on both stores.
+        const board = await call<{ blocks: { title: string; internal?: boolean }[] }>(
+          'GET',
+          `/workspaces/${wsId}`,
+        )
+        expect(board.body.blocks.some((b) => b.internal)).toBe(false)
+        expect(board.body.blocks.some((b) => b.title === 'Build a cat feeder service')).toBe(false)
+
+        // A non-public pipeline id is refused; a revoked key no longer authenticates.
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_blueprint', input: 'x' },
+              auth,
+            )
+          ).status,
+        ).toBe(400)
+        expect(
+          (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`))
+            .status,
+        ).toBe(204)
+        expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
+      })
+    })
+
     describe('pipeline versioning + reseed', () => {
       it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
         const { call, createWorkspace } = harness.makeApp()

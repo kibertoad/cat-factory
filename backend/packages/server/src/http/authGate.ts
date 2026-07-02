@@ -20,7 +20,9 @@ import type { AppEnv } from './env.js'
 //   /slack    — Slack OAuth callback; the `state` is HMAC-signed + short-lived.
 //   /internal — mothership-mode machine API; authenticated by an audience-pinned machine
 //               token verified inside the controller, not by the session gate.
-const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack', '/internal']
+//   /api      — the public external API; authenticated by an in-controller public-API key
+//               (`Authorization: Bearer cf_live_…`), not the session gate.
+const PUBLIC_PREFIXES = ['/health', '/auth', '/v1', '/github', '/slack', '/internal', '/api']
 
 /** The exact WebSocket-upgrade shape that self-authenticates via `?ticket=`. */
 const WS_EVENTS_PATH = /^\/workspaces\/[^/]+\/events$/

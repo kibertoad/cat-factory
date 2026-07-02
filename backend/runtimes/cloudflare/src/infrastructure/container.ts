@@ -43,6 +43,7 @@ import {
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ApiKeyService,
+  PublicApiKeyService,
   LocalModelEndpointService,
   UserSecretService,
   OpenRouterCatalogService,
@@ -121,6 +122,7 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
+import { D1PublicApiKeyRepository } from './repositories/D1PublicApiKeyRepository'
 import {
   D1PersonalSubscriptionRepository,
   D1SubscriptionActivationRepository,
@@ -1112,6 +1114,27 @@ function buildApiKeyService(env: Env, db: D1Database, clock: Clock): ApiKeyServi
 }
 
 /**
+ * Build the INBOUND public-API key store (external callers → `/api/v1`), or undefined when no
+ * ENCRYPTION_KEY is configured. The key uses ENCRYPTION_KEY as the HMAC pepper for its one-way
+ * secret hash (not the SecretCipher — a public-API key is verified, never decrypted). Shared by
+ * the key-management controller and the public API's in-controller authentication.
+ */
+function buildPublicApiKeyService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): PublicApiKeyService | undefined {
+  const pepper = env.ENCRYPTION_KEY?.trim()
+  if (!pepper) return undefined
+  return new PublicApiKeyService({
+    repository: new D1PublicApiKeyRepository({ db }),
+    pepper,
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude), or undefined when
  * no ENCRYPTION_KEY is configured. Uses the system SecretCipher (master key, scoped
  * info) for the outer layer and the password-derived PersonalSecretCipher for the inner
@@ -2009,6 +2032,9 @@ export function buildContainer(
   // API-key controller, the model-provider resolver, and the LLM proxy key lease.
   const apiKeys = buildApiKeyService(env, db, clock)
 
+  // The inbound public-API key store — drives the public `/api/v1` surface's authentication.
+  const publicApiKeys = buildPublicApiKeyService(env, db, clock)
+
   // The per-user locally-run model endpoints store (Ollama / LM Studio / …) — shared by
   // the local-runner controller, the per-user model catalog, and the LLM proxy.
   const localModelEndpoints = buildLocalModelEndpointService(env, db, clock)
@@ -2272,6 +2298,8 @@ export function buildContainer(
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a

@@ -321,6 +321,12 @@ export {
   type PoolScopeOpts,
 } from './modules/providers/ApiKeyService.js'
 export {
+  PublicApiKeyService,
+  type PublicApiKeyServiceDependencies,
+  type PublicApiKeyAuth,
+  type IssuedPublicApiKey,
+} from './modules/publicApi/PublicApiKeyService.js'
+export {
   PersonalSubscriptionService,
   type PersonalSubscriptionServiceDependencies,
   type LeasedPersonalToken,

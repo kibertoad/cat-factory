@@ -200,12 +200,20 @@ export function makeConformanceApp(
   })
   const app = createApp(container, TEST_ENV)
 
-  async function call<T>(method: string, path: string, body?: unknown) {
+  async function call<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ) {
     const hasBody = body !== undefined
     const res = await app.fetch(
       new Request(`${BASE}${path}`, {
         method,
-        headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+        headers: {
+          ...(hasBody ? { 'content-type': 'application/json' } : {}),
+          ...extraHeaders,
+        },
         body: hasBody ? JSON.stringify(body) : undefined,
       }),
     )

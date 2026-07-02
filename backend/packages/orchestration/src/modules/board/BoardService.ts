@@ -465,6 +465,36 @@ export class BoardService {
     return block
   }
 
+  /**
+   * Create a HEADLESS internal task — a top-level, `internal: true` block used purely to anchor
+   * a public-API run (an external "initiative breakdown"). It is EXCLUDED from every board
+   * projection (see the snapshot/board reads), so it never renders in the UI; deliberately does
+   * NOT emit a `block-added` event (nothing should flash onto a live board). Returns the block so
+   * the caller can start an execution on it. The engine writes status onto it like any block.
+   */
+  async createInternalTask(
+    workspaceId: string,
+    input: { title: string; description: string },
+  ): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    const block: Block = {
+      id: this.idGenerator.next('task'),
+      title: input.title.trim() || 'Initiative',
+      type: 'service',
+      description: input.description ?? '',
+      position: { x: 0, y: 0 },
+      status: 'planned',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'task',
+      parentId: null,
+      internal: true,
+    }
+    await this.blockRepository.insert(workspaceId, block)
+    return block
+  }
+
   /** Add a module (sub-frame) inside a service. */
   async addModule(workspaceId: string, serviceId: string, input: AddModuleInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)

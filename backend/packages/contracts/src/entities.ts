@@ -242,6 +242,14 @@ export const blockSchema = v.object({
    * Only meaningful on `task`-level blocks that have a linked tracker issue.
    */
   trackerResolveOnMerge: v.optional(v.nullable(writebackOverrideSchema)),
+  /**
+   * Headless marker: when `true` this block was created by the public API (an external
+   * "initiative breakdown" run) purely to anchor an execution, and is EXCLUDED from every
+   * board projection — the board-listing read and the workspace snapshot filter it out, so
+   * it never renders in the UI. The block still exists for the engine (it carries the run's
+   * `executionId` and receives status writes). Absent / false ⇒ a normal, board-visible block.
+   */
+  internal: v.optional(v.boolean()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
@@ -508,6 +516,14 @@ export const pipelineSchema = v.object({
    * not version-tracked) and on rows persisted before versioning existed (treated as 0).
    */
   version: v.optional(v.number()),
+  /**
+   * When true this pipeline may be invoked by an EXTERNAL caller through the public API
+   * (`POST /api/v1/initiatives`). Only honored for inline (no-container/no-GitHub) pipelines,
+   * so an external initiative run never pushes to a repo. Absent / false ⇒ not exposed to the
+   * public API (still fully usable from the authenticated SPA). See the `initiative-breakdown`
+   * pipeline for the first public entry.
+   */
+  public: v.optional(v.boolean()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 

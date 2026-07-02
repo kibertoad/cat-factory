@@ -512,6 +512,17 @@ export function seedPipelines(): Pipeline[] {
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
+    // The first PUBLIC-API pipeline: a single inline `initiative-breakdown` step that
+    // decomposes an initiative brief into a structured plan. `public: true` exposes it to
+    // external callers via `POST /api/v1/initiatives`; being inline (no container / no repo)
+    // it runs headlessly and persists its result to the DB, never touching GitHub. The kind
+    // itself is registered in @cat-factory/agents (like every other kind referenced here).
+    {
+      id: 'pl_initiative_breakdown',
+      name: 'Break down initiative',
+      agentKinds: ['initiative-breakdown'],
+      public: true,
+    },
     {
       // FORWARD document authoring: turn a brief (+ linked PRDs/RFCs/issues) into a polished
       // in-repo Markdown document shipped as a PR. Unlike the reverse-documentation kinds
@@ -570,6 +581,9 @@ export function seedPipelines(): Pipeline[] {
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
 export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
+
+/** Pipeline id of the built-in public "break down an initiative" pipeline (public API). */
+export const INITIATIVE_BREAKDOWN_PIPELINE_ID = 'pl_initiative_breakdown'
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'

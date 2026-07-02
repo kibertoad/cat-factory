@@ -72,7 +72,12 @@ export interface TestResponse<T = unknown> {
  */
 export interface ConformanceApp {
   /** Issue an HTTP request through the facade's real Hono `app.fetch`. */
-  call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
+  call<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<TestResponse<T>>
   /** Create (and optionally seed) a workspace, returning its snapshot. */
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
