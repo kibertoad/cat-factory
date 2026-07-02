@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, Pipeline } from '@cat-factory/contracts'
-import { frameAllowsVisualPipeline, pipelineHasVisualStep } from '@cat-factory/contracts'
+import {
+  frameAllowsVisualPipeline,
+  frontendOriginsForService,
+  pipelineHasVisualStep,
+} from '@cat-factory/contracts'
 
 // The pure predicates behind the slice-4c run-start gate (and the SPA's matching surface): a
 // pipeline with a visual step (`tester-ui` / `visual-confirmation`) may run only on a frame with
@@ -79,5 +83,54 @@ describe('frameAllowsVisualPipeline', () => {
   it('refuses when the frame cannot be resolved (undefined/null)', () => {
     expect(frameAllowsVisualPipeline(undefined, [frontendFrame(['blk_svc'])])).toBe(false)
     expect(frameAllowsVisualPipeline(null, [frontendFrame(['blk_svc'])])).toBe(false)
+  })
+})
+
+describe('frontendOriginsForService', () => {
+  /** A `frontend` frame binding `serviceBlockId` with a given envVar + optional servePort. */
+  function fe(
+    serviceBlockId: string,
+    { envVar = 'PUB_API_URL', servePort }: { envVar?: string; servePort?: number } = {},
+  ): Pick<Block, 'level' | 'type' | 'frontendConfig'> {
+    return {
+      level: 'frame',
+      type: 'frontend',
+      frontendConfig: {
+        backendBindings: [{ envVar, source: { kind: 'service', serviceBlockId } }],
+        ...(servePort !== undefined ? { servePort } : {}),
+      },
+    }
+  }
+
+  it('emits the tester origin (default servePort 4173) of a frontend that binds the service', () => {
+    expect(frontendOriginsForService('blk_svc', [fe('blk_svc')])).toEqual(['http://localhost:4173'])
+  })
+
+  it('uses the frontend frame’s configured servePort', () => {
+    expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { servePort: 5000 })])).toEqual([
+      'http://localhost:5000',
+    ])
+  })
+
+  it('dedupes + sorts origins across multiple binding frontends', () => {
+    const origins = frontendOriginsForService('blk_svc', [
+      fe('blk_svc', { servePort: 5000 }),
+      fe('blk_svc', { servePort: 4173 }),
+      fe('blk_svc', { servePort: 5000 }), // duplicate port collapses
+    ])
+    expect(origins).toEqual(['http://localhost:4173', 'http://localhost:5000'])
+  })
+
+  it('is empty when no frontend binds the service (mock-only or binds a different one)', () => {
+    const mockOnly: Pick<Block, 'level' | 'type' | 'frontendConfig'> = {
+      level: 'frame',
+      type: 'frontend',
+      frontendConfig: { backendBindings: [{ envVar: 'X', source: { kind: 'mock' } }] },
+    }
+    expect(frontendOriginsForService('blk_svc', [mockOnly, fe('blk_other')])).toEqual([])
+  })
+
+  it('ignores a binding with an empty envVar (an unfinished row the frontend never injects)', () => {
+    expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { envVar: '  ' })])).toEqual([])
   })
 })

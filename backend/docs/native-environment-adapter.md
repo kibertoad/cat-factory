@@ -69,6 +69,26 @@ Every call receives the per-workspace `manifest` plus a `resolveSecret(key)` cal
 `blockId`) derived from the block under deployment. `status`/`teardown` get the `externalId`
 and the `provisionFields` captured at provision time.
 
+### `frontendOrigins` — wiring a bound frontend's CORS
+
+When a `deployer` step provisions a service that one or more `frontend` frames bind (via the
+frontend's `backendBindings`), the engine passes an extra input, `frontendOrigins`: the
+comma-joined browser origins of those frontends (e.g. `http://localhost:4173`) — the reverse of
+the frontend→service binding. Fold it into the deployed backend's **CORS allow-list** (and any
+OAuth-callback allow-list) so the ephemeral frontend can actually reach the ephemeral backend:
+
+- **HTTP-manifest provider:** reference `{{input.frontendOrigins}}` in a request `bodyTemplate` /
+  header / query.
+- **Kubernetes native adapter:** reference `{{frontendOrigins}}` (FLAT, like `{{branch}}` /
+  `{{namespace}}`) in a `secretInjections` `valueTemplate` or a helm `--set` — e.g. a
+  `generatorEnvFile` entry `{ key: 'CORS_ALLOWED_ORIGINS', valueTemplate: '{{frontendOrigins}}' }`.
+
+The key is **absent when no frontend binds the service**. The origin derivation is automatic; the
+mapping into your CORS env var is operator-authored (the env-var name is app-specific), and CORS is
+baked at provision time — **re-provision** the backend to pick up a newly-linked frontend or a
+changed `servePort`. (For zero-config local dev you can instead allow a `localhost` wildcard in your
+manifest and skip the re-provision; exact-origin injection is the recommended path.)
+
 ## Registering the backend
 
 A native backend is **registered programmatically** as an import side effect — the same

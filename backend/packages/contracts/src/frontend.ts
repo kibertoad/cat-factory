@@ -23,6 +23,15 @@ import * as v from 'valibot'
  */
 export const DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH = 'mocks/'
 
+/**
+ * The default in-container port the built frontend is served on for a UI test / preview.
+ * Deliberately NOT 8080 (the harness's own job HTTP server) nor the WireMock port. The single
+ * source of truth shared by the server's `resolveServePort` and the reverse-origin derivation
+ * (`frontendOriginsForService`) so the tester origin a backend must allow (CORS) can't drift
+ * from the port the app is actually served on.
+ */
+export const DEFAULT_FRONTEND_SERVE_PORT = 4173
+
 /** The package manager the frontend build uses. Defaults to `pnpm`. */
 export const frontendPackageManagerSchema = v.picklist(['pnpm', 'npm', 'yarn'])
 export type FrontendPackageManager = v.InferOutput<typeof frontendPackageManagerSchema>
@@ -79,6 +88,27 @@ export const frontendBackendBindingSchema = v.object({
   source: frontendBackendSourceSchema,
 })
 export type FrontendBackendBinding = v.InferOutput<typeof frontendBackendBindingSchema>
+
+/**
+ * The non-empty `envVar` names that appear on MORE THAN ONE backend binding. Two bindings
+ * sharing an env var is a real misconfiguration — the injected env is a map, so one silently
+ * clobbers the other (`resolveFrontendBindings` keeps the last). Advisory only: this is NOT a
+ * `v.check` on {@link frontendConfigSchema}, because a binding row persists per-blur and allows
+ * an empty `envVar` (a freshly-added row), so a schema-level reject would 422 a mid-edit PATCH
+ * (e.g. duplicate a row, then rename it). The inspector + the run-start soft note surface it
+ * instead. Empty names are ignored (an unfinished row is inert). Sorted for stable output.
+ */
+export function duplicateBindingEnvVars(config: Pick<FrontendConfig, 'backendBindings'>): string[] {
+  const seen = new Set<string>()
+  const duplicates = new Set<string>()
+  for (const binding of config.backendBindings) {
+    const name = binding.envVar.trim()
+    if (!name) continue
+    if (seen.has(name)) duplicates.add(name)
+    else seen.add(name)
+  }
+  return [...duplicates].sort()
+}
 
 /**
  * Which branch the frontend is built from for a UI test / preview:
