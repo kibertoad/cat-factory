@@ -1,5 +1,48 @@
 # @cat-factory/node-server
 
+## 0.60.2
+
+### Patch Changes
+
+- e0aab3f: Connections between services, phase 1 of the service-connections initiative (see
+  `backend/docs/service-connections.md` + `docs/initiatives/service-connections.md`):
+
+  - **Service connections**: a `service`-type frame carries `serviceConnections` — directed
+    consumer→provider edges to the other services it uses, each with an optional
+    description ("sends transactional email via it"). Stored as a JSON column on the block
+    (D1 migration `0034` ⇄ Drizzle), validated at the `updateBlock` write gate (no
+    self-connection, no duplicates, targets must be service frames; cycles are deliberately
+    legal), pruned when a connected frame is deleted, and drawn as emerald consumer→provider
+    edges on the board. A new inspector panel on service frames edits the connections and
+    shows the reverse "Used by" list.
+  - **Per-task involved services**: a task carries `involvedServiceIds` — the connected
+    services directly involved in it beyond its own service, picked (in the task's run
+    settings) from the frame's connection neighbors in either direction. Validated at the
+    write gate against the neighbor set; a selection whose connection was later removed is
+    badged stale in the UI and dropped on the next change. Later phases use the selection
+    to provision every involved service as an ephemeral environment and to let the coding
+    agent change every involved repo (multi-repo sibling checkouts) — designed in the
+    docs, not yet implemented.
+  - Cross-runtime conformance now round-trips both JSON columns and asserts the write-gate
+    rejections on both stores.
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+  - @cat-factory/orchestration@0.59.2
+  - @cat-factory/server@0.68.2
+  - @cat-factory/agents@0.26.15
+  - @cat-factory/consensus@0.8.16
+  - @cat-factory/gates@0.2.72
+  - @cat-factory/gitlab@0.4.43
+  - @cat-factory/integrations@0.56.3
+  - @cat-factory/prompt-fragments@0.9.43
+  - @cat-factory/spend@0.10.76
+  - @cat-factory/observability-langfuse@0.7.115
+  - @cat-factory/provider-bedrock@0.7.121
+  - @cat-factory/provider-cloudflare@0.7.121
+  - @cat-factory/provider-s3@0.2.65
+
 ## 0.60.1
 
 ### Patch Changes
