@@ -33,11 +33,14 @@ import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type {
+  DetectFrontendConfigInput,
   DetectServiceProvisioningInput,
+  FrontendConfigRecommendation,
   ProvisioningRecommendation,
   RepairCustomManifestInput,
 } from '@cat-factory/contracts'
 import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
+import { detectFrontendConfig } from './frontend-detect.logic.js'
 import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -708,6 +711,39 @@ export class EnvironmentConnectionService {
       gitRef: input.gitRef ?? bound.baseBranch,
       ...(input.directory ? { directory: input.directory } : {}),
       ...(input.prefer ? { prefer: input.prefer } : {}),
+    })
+  }
+
+  /**
+   * Auto-detect a NON-BINDING recommended FRONTEND config for a repo, read checkout-free over the
+   * workspace-bound {@link RepoFiles} (pure repo introspection — no provider/connection needed).
+   * Nothing is persisted; the SPA prefills a preview the user applies. No VCS resolver / no repo
+   * match ⇒ a `detected: false` result with an explanatory note rather than an error (symmetric
+   * with {@link detectServiceProvisioning}).
+   */
+  async detectFrontendConfig(
+    workspaceId: string,
+    input: DetectFrontendConfigInput,
+  ): Promise<FrontendConfigRecommendation> {
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const bound = await this.resolveRepo(workspaceId, input.owner, input.repo, input.provider)
+    if (!bound) {
+      return {
+        detected: false,
+        config: { backendBindings: [] },
+        notes: [
+          {
+            field: 'packageManager',
+            confidence: 'low',
+            message:
+              'No VCS connection is configured for this workspace; cannot read the repo to detect the frontend config.',
+          },
+        ],
+      }
+    }
+    return detectFrontendConfig(bound.repo, {
+      gitRef: input.gitRef ?? bound.baseBranch,
+      ...(input.directory ? { directory: input.directory } : {}),
     })
   }
 

@@ -1,4 +1,5 @@
 import {
+  detectFrontendConfigContract,
   detectServiceProvisioningContract,
   listEnvironmentHandlersContract,
   listEnvironmentUserHandlersContract,
@@ -12,6 +13,7 @@ import {
   upsertEnvironmentUserHandlerContract,
 } from '@cat-factory/contracts'
 import type {
+  DetectFrontendConfigInput,
   DetectServiceProvisioningInput,
   ProvisionType,
   RegisterEnvironmentHandlerInput,
@@ -46,6 +48,10 @@ export function infraHandlersApi({ send, ws }: ApiContext) {
     // Auto-detect a non-binding recommended provisioning config from a service's repo.
     detectServiceProvisioning: (workspaceId: string, body: DetectServiceProvisioningInput) =>
       send(detectServiceProvisioningContract, { pathPrefix: ws(workspaceId), body }),
+
+    // Auto-detect a non-binding recommended frontend config from a frontend repo.
+    detectFrontendConfig: (workspaceId: string, body: DetectFrontendConfigInput) =>
+      send(detectFrontendConfigContract, { pathPrefix: ws(workspaceId), body }),
 
     // Generate/fix a service's custom manifest via the fixer coding agent (async repair run).
     repairCustomManifest: (workspaceId: string, body: RepairCustomManifestInput) =>
