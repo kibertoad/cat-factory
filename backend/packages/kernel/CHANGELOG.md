@@ -1,5 +1,12 @@
 # @cat-factory/kernel
 
+## 0.69.5
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+
 ## 0.69.4
 
 ### Patch Changes
