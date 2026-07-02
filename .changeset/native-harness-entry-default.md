@@ -1,7 +1,7 @@
 ---
-"@cat-factory/executor-harness": patch
-"@cat-factory/local-server": minor
-"@cat-factory/cli": patch
+'@cat-factory/executor-harness': patch
+'@cat-factory/local-server': minor
+'@cat-factory/cli': patch
 ---
 
 Local native mode: default `LOCAL_HARNESS_ENTRY` to a bundled harness (no more manual path)
