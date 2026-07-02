@@ -185,7 +185,8 @@ describe('github sync', () => {
     const second = uniqueInstallationId()
     const installation = (installationId: number) => ({
       installationId,
-      workspaceId: 'ws_conn',
+      // github_installations.workspace_id is UNIQUE — one binding per workspace.
+      workspaceId: `ws_conn_${installationId}`,
       accountId: null,
       accountLogin: 'octo',
       targetType: 'Organization' as const,

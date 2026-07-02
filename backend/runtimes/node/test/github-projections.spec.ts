@@ -265,7 +265,8 @@ describe('GitHub projections (Postgres)', () => {
     const repo = new DrizzleGitHubInstallationRepository(db)
     const installation = (installationId: number) => ({
       installationId,
-      workspaceId: ws,
+      // github_installations.workspace_id is UNIQUE — one binding per workspace.
+      workspaceId: `${ws}_${installationId}`,
       accountId: null,
       accountLogin: 'octo',
       targetType: 'Organization' as const,
