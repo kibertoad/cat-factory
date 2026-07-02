@@ -1,4 +1,11 @@
-import { CONTAINER_RUNTIMES, type ContainerRuntime } from './templates.js'
+import { nativeModelSummary } from './execution.js'
+import {
+  CONTAINER_RUNTIMES,
+  type ContainerRuntime,
+  type ExecutionMode,
+  NATIVE_HARNESSES,
+  type NativeHarness,
+} from './templates.js'
 import { patEnvVar, providerLabel, type VcsProvider } from './vcs.js'
 
 /** One line of an `.env` file: a key/value pair with an optional leading comment block. */
@@ -33,6 +40,12 @@ export interface LocalEnvInput {
   provider: VcsProvider
   /** Container runtime that spawns agent jobs (`LOCAL_CONTAINER_RUNTIME`). */
   containerRuntime: ContainerRuntime
+  /** How agent jobs execute: a Docker container pool (default) or native host agents. */
+  executionMode?: ExecutionMode
+  /** Native mode only: the subscription harnesses to run as host processes. */
+  nativeHarnesses?: NativeHarness[]
+  /** Native mode only: the executor-harness server entry path (`LOCAL_HARNESS_ENTRY`). */
+  harnessEntry?: string
   /** The pasted PAT, or empty/undefined to leave the var present-but-blank. */
   token?: string
 }
@@ -98,6 +111,8 @@ export function buildLocalEnv(input: LocalEnvInput): string {
       value: input.containerRuntime,
     },
     ...reachabilityEntries(input.containerRuntime),
+    ...executionModeEntries(input),
+    ...commonOptionalEntries(input.provider),
     {
       comment: [
         'At least one model provider must be configured or no model is selectable.',
@@ -116,6 +131,119 @@ export function buildLocalEnv(input: LocalEnvInput): string {
     { key: '# OPENAI_API_KEY', value: '' },
   ]
   return renderEnvFile(entries)
+}
+
+/**
+ * Execution-mode entries: PREWARMED DOCKER POOL (default) or NATIVE host agents. In pool
+ * mode the native knobs are written commented (advertising the alternative) plus a pointer
+ * to the UI-configured warm pool with recommended sizing. In native mode `LOCAL_NATIVE_AGENTS`
+ * + `LOCAL_HARNESS_ENTRY` are written active, annotated with the models that actually run
+ * natively (every other step still runs in a container, so LOCAL_HARNESS_IMAGE stays needed).
+ */
+function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
+  if (input.executionMode === 'native') {
+    const harnesses = input.nativeHarnesses?.length ? input.nativeHarnesses : [...NATIVE_HARNESSES]
+    return [
+      {
+        comment: [
+          'Execution mode: NATIVE host agents (chosen). A step whose model maps to a native',
+          'vendor runs as a HOST PROCESS driving your OWN installed CLI (ambient login) — no',
+          'container, no leased credential, NO sandbox (full host access + your subscription).',
+          `Runs natively: ${nativeModelSummary(harnesses)}.`,
+          'Every OTHER step (Cloudflare/proxy models, and GLM/Kimi/DeepSeek which reuse the',
+          'claude-code harness against their own endpoint) still runs in a container, so',
+          'LOCAL_HARNESS_IMAGE above is still required. The named CLIs must already be',
+          'installed and logged in on this host.',
+        ],
+        key: 'LOCAL_NATIVE_AGENTS',
+        value: harnesses.join(','),
+      },
+      {
+        comment: [
+          'REQUIRED for native mode: path to the executor-harness server entry run as the host',
+          'process (its built server.js, or src/server.ts via Node type-stripping). Fill this in',
+          'before starting — native dispatch fails loudly without it.',
+        ],
+        key: 'LOCAL_HARNESS_ENTRY',
+        value: input.harnessEntry ?? '',
+      },
+    ]
+  }
+  return [
+    {
+      comment: [
+        'Execution mode: PREWARMED DOCKER POOL (chosen). Agent jobs run in per-run containers',
+        'from LOCAL_HARNESS_IMAGE above via LOCAL_CONTAINER_RUNTIME. Warm-pool sizing (keep N',
+        'containers ready so runs start fast) lives in the DB, edited in the UI under',
+        'Integrations > "Local mode". Off by default (cold-start per run); recommended to start:',
+        'size 3, pre-warm 1, idle timeout 10m.',
+        '',
+        'To switch to NATIVE host agents instead (your own installed claude/codex CLI — no',
+        'container, no leased credential), set LOCAL_NATIVE_AGENTS (e.g. claude-code,codex) and',
+        'LOCAL_HARNESS_ENTRY (the harness server entry path). Only Claude/ChatGPT models go',
+        'native; every other model still uses the container path above.',
+      ],
+      key: '# LOCAL_NATIVE_AGENTS',
+      value: '',
+    },
+    { key: '# LOCAL_HARNESS_ENTRY', value: '' },
+  ]
+}
+
+/**
+ * Commonly-useful optional settings, all commented (their defaults already apply) with sane
+ * values shown so a developer can toggle them in place instead of hunting the docs. Mirrors
+ * the opt-in knobs documented in `deploy/local/.env.example`.
+ */
+function commonOptionalEntries(provider: VcsProvider): EnvEntry[] {
+  const entries: EnvEntry[] = [
+    {
+      comment: [
+        'Commonly useful optional settings (the shown values are the defaults; uncomment to',
+        'change). Email/password sign-in + open signup are ON by default in local mode.',
+      ],
+      key: '# AUTH_PASSWORD_ENABLED',
+      value: 'true',
+    },
+    { key: '# AUTH_OPEN_SIGNUP', value: 'true' },
+    {
+      comment: [
+        'Boot-time harness image refresh (pull the backend-matched image on start). Set to off',
+        'when offline or you manage the image yourself.',
+      ],
+      key: '# LOCAL_HARNESS_IMAGE_REFRESH',
+      value: 'off',
+    },
+    {
+      comment: ['Stream every LLM call to Langfuse (needs both keys below).'],
+      key: '# LANGFUSE_ENABLED',
+      value: 'true',
+    },
+    { key: '# LANGFUSE_PUBLIC_KEY', value: '' },
+    { key: '# LANGFUSE_SECRET_KEY', value: '' },
+    {
+      comment: ['Post board notifications to Slack (connect the workspace in the UI).'],
+      key: '# SLACK_ENABLED',
+      value: 'true',
+    },
+    {
+      comment: [
+        'Multi-model consensus (specialist panel / debate / ranked voting) on eligible steps.',
+      ],
+      key: '# CONSENSUS_ENABLED',
+      value: 'true',
+    },
+  ]
+  if (provider === 'gitlab') {
+    entries.push({
+      comment: [
+        'Self-managed GitLab only: point at your instance API (e.g. https://gitlab.example.com/api/v4).',
+      ],
+      key: '# GITLAB_API_BASE',
+      value: '',
+    })
+  }
+  return entries
 }
 
 /**
