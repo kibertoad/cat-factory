@@ -174,10 +174,16 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
     return hit ? name : undefined
   }
 
-  async endpoint(exec: ContainerExec, containerId: string): Promise<ContainerEndpoint | undefined> {
+  async endpoint(
+    exec: ContainerExec,
+    containerId: string,
+    inContainerPort: number = HARNESS_PORT,
+  ): Promise<ContainerEndpoint | undefined> {
+    // One VM per container with its own IP and no published-port model, so ANY in-container
+    // port (the harness :8080 or the preview's served-app port) is reached directly on that IP.
     const { ip } = parseInspect((await exec(['inspect', containerId])).stdout)
     if (!ip) return undefined
-    return { host: ip, port: HARNESS_PORT }
+    return { host: ip, port: inContainerPort }
   }
 
   async isRunning(exec: ContainerExec, containerId: string): Promise<boolean> {

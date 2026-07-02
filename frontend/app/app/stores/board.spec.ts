@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
 import type { Block, BlockStatus } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -223,6 +224,22 @@ describe('board store read getters', () => {
     expect(store.getBlock('t1')?.position).toEqual({ x: 120, y: 40 })
     // a no-op for unknown ids (no throw)
     expect(() => store.previewMove('missing', { x: 1, y: 1 })).not.toThrow()
+  })
+
+  it('updateBlock restores the patched fields and toasts when the write fails', async () => {
+    // Capture the toast the store surfaces on failure. Re-stub before creating the store so it
+    // binds this spy (the store resolves `useToast()` once at setup).
+    const addSpy = vi.fn()
+    vi.stubGlobal('useToast', () => ({ add: addSpy }))
+    setActivePinia(createPinia())
+    const s = useBoardStore()
+    s.hydrate([frame('f1', { title: 'Original', description: 'orig' })])
+    // With no active workspace, `requireId()` throws inside updateBlock's try — the same catch
+    // that a rejected API write hits — so this exercises the optimistic-rollback + toast path.
+    await s.updateBlock('f1', { title: 'Edited', description: 'changed' })
+    expect(s.getBlock('f1')?.title).toBe('Original')
+    expect(s.getBlock('f1')?.description).toBe('orig')
+    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
   })
 
   it('hydrate replaces and upsert inserts/updates cached blocks', () => {

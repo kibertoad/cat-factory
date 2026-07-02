@@ -4601,6 +4601,70 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         },
       )
 
+      // Slice 5c (frontend-preview-ui-testing): the browsable-preview lifecycle + its ephemeral
+      // `environments`-row persistence, driven through a FAKE preview transport (the real one is a
+      // per-runtime differentiator, wired only in local). Skipped on Cloudflare (the Worker reports
+      // `frontendPreview.supported: false` and wires no transport → the controller 503s) and on
+      // mothership (its harness wires no preview fake). Asserts the runtime-neutral half: start
+      // persists a `preview`-typed env row keyed by the FRAME, get drives it to `ready` with the
+      // served URL, and stop soft-deletes it — the D1 ⇄ Drizzle env-row parity for a preview.
+      it.skipIf(harness.name === 'cloudflare' || harness.name === 'mothership')(
+        'starts, serves and stops a browsable frontend preview keyed by the frame',
+        async () => {
+          const app = harness.makeApp()
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // Nothing running yet.
+          const before = await app.call<{ status: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(before.status).toBe(200)
+          expect(before.body.status).toBe('stopped')
+
+          // Start → 201, provisioning; a `preview`-typed env row is persisted keyed by the FRAME.
+          const started = await app.call<{ status: string; frameId: string }>(
+            'POST',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(started.status).toBe(201)
+          expect(started.body.status).toBe('starting')
+          expect(started.body.frameId).toBe('blk_frontend')
+
+          // The preview row shares the `environments` table but is NOT a provisioned environment,
+          // so it must be ISOLATED from the deployer-env listing the SPA renders (the persistence
+          // itself is proven by the preview endpoints below, which read it back on both runtimes).
+          const envs = await app.call<unknown[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(0)
+
+          // Get → the fake transport reports it serving, so it flips to `ready` with the URL.
+          const ready = await app.call<{ status: string; url?: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(ready.status).toBe(200)
+          expect(ready.body.status).toBe('ready')
+          expect(ready.body.url).toBe('http://preview.test:4173')
+
+          // Stop → soft-deletes the row; a subsequent get reports `stopped` again.
+          const stopped = await app.call<{ status: string }>(
+            'DELETE',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(stopped.status).toBe(200)
+          expect(stopped.body.status).toBe('stopped')
+
+          const after = await app.call<{ status: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(after.body.status).toBe('stopped')
+          const envsAfter = await app.call<unknown[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envsAfter.body).toHaveLength(0)
+        },
+      )
+
       it('refuses to start a UI-tester pipeline when the account has no binary storage', async () => {
         // The `tester-ui` step uploads its screenshots to the binary-artifact store, so the
         // engine refuses to START the pipeline when the account has none configured — a clear
@@ -5445,11 +5509,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(start.status).toBe(201)
-        await app.drive(wsId)
+        const ticked = await app.drive(wsId)
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('pr_ready')
         expect(task.status).not.toBe('done')
+        // The engine records its structured decision on the merger step (`step.custom`) so
+        // the SPA can explain WHY review was needed — here, an assessment WITH scores but no
+        // rationale routes to review as `no_rationale` (distinct from a truly absent one),
+        // not an auto-merge.
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('no_rationale')
       })
 
       it('runs the merger merge at its step even when a later step follows it', async () => {
@@ -5482,12 +5557,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(start.status).toBe(201)
-        await app.drive(wsId)
+        const ticked = await app.drive(wsId)
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         // The merge ran at the (non-final) merger step → the block is `done`, not left
         // unmerged as `pr_ready`.
         expect(task.status).toBe('done')
+        // The auto-merge decision is recorded on the merger step for the SPA to render.
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          thresholds?: { presetName?: string }
+        }
+        expect(decision.outcome).toBe('auto_merged')
+        expect(decision.reason).toBe('within_thresholds')
+        expect(decision.thresholds?.presetName).toBeTruthy()
       })
 
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {
