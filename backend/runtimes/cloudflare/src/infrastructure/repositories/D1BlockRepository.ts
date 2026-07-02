@@ -136,4 +136,14 @@ export class D1BlockRepository implements BlockRepository {
       .bind(workspaceId, ...ids)
       .run()
   }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM blocks WHERE workspace_id = ? AND internal = 1 AND status = 'in_progress'",
+      )
+      .bind(workspaceId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
+  }
 }

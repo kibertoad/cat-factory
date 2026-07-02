@@ -546,6 +546,8 @@ interface ExecutionDetail {
   currentStep: number
   /** Internal user id of the run's initiator (individual-usage credential ownership). */
   initiatedBy: string | null
+  /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
+  createdAt?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -632,6 +634,8 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
+    // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
+    ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
     // Optimistic-concurrency token; a legacy row without the column reads as 0.
     rev: row.rev ?? 0,
   }
@@ -647,5 +651,6 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
+    ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
   } satisfies ExecutionDetail)
 }

@@ -1330,6 +1330,7 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      createdAt: this.clock.now(),
     }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.blockRepository.update(workspaceId, blockId, {

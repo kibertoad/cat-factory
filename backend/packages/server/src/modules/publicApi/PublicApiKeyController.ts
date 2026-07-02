@@ -49,7 +49,13 @@ export function publicApiKeyController(): Hono<AppEnv> {
     const publicApiKeys = container.publicApiKeys
     if (!publicApiKeys) return unavailable(c)
     const workspaceId = param(c, 'workspaceId')
-    const accountId = (await container.workspaceService.accountOf(workspaceId)) ?? ''
+    // Resolve the owning account; the public API is an account-scoped feature, so refuse to mint a
+    // key for a missing workspace (`undefined`) or a legacy account-less board (`null`) rather than
+    // persisting an orphan key with an empty `accountId` (the old `?? ''` fallback).
+    const accountId = await container.workspaceService.accountOf(workspaceId)
+    if (accountId == null) {
+      return c.json({ error: { code: 'not_found', message: 'Workspace not found' } }, 404)
+    }
     const { record, secret } = await publicApiKeys.issue(
       { accountId, workspaceId },
       c.req.valid('json').label,

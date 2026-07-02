@@ -445,13 +445,55 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(job.body.status).toBe('succeeded')
         expect(job.body.result?.output).toBeTruthy()
 
-        // The headless anchor block is excluded from the board snapshot on both stores.
-        const board = await call<{ blocks: { title: string; internal?: boolean }[] }>(
-          'GET',
-          `/workspaces/${wsId}`,
-        )
+        // The headless anchor block AND its execution are excluded from the board snapshot on both
+        // stores — neither the hidden block nor the external run's brief/output reaches the SPA.
+        const board = await call<{
+          blocks: { title: string; internal?: boolean }[]
+          executions: { id: string }[]
+        }>('GET', `/workspaces/${wsId}`)
         expect(board.body.blocks.some((b) => b.internal)).toBe(false)
         expect(board.body.blocks.some((b) => b.title === 'Build a cat feeder service')).toBe(false)
+        expect(board.body.executions.some((e) => e.id === jobId)).toBe(false)
+
+        // A key can read ONLY the initiative runs it created, never an arbitrary board run in the
+        // same workspace: start the SAME public pipeline on a NORMAL seeded task, and the key gets
+        // a 404 (its anchor block isn't internal), even though the run exists and shares the scope.
+        const normalStart = await call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: 'pl_initiative_breakdown' },
+        )
+        expect(normalStart.status).toBe(201)
+        const normalExec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect((await call('GET', `/api/v1/jobs/${normalExec.id}`, undefined, auth)).status).toBe(
+          404,
+        )
+
+        // Concurrency backstop (both stores): a workspace may only have 5 initiative runs in
+        // flight; leaving them undriven, the 6th start is refused with 429.
+        for (let i = 0; i < 5; i++) {
+          expect(
+            (
+              await call(
+                'POST',
+                '/api/v1/initiatives',
+                { pipelineId: 'pl_initiative_breakdown', input: `run ${i}` },
+                auth,
+              )
+            ).status,
+          ).toBe(202)
+        }
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_initiative_breakdown', input: 'overflow' },
+              auth,
+            )
+          ).status,
+        ).toBe(429)
+        await drive(wsId) // let the in-flight runs finish so none dangle
 
         // A non-public pipeline id is refused; a revoked key no longer authenticates.
         expect(

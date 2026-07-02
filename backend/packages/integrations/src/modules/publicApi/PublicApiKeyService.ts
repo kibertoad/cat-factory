@@ -109,6 +109,17 @@ export class PublicApiKeyService {
     return { keyId: record.id, accountId: record.accountId, workspaceId: record.workspaceId }
   }
 
+  /**
+   * Whether a key id still exists and has not been revoked. A cheap re-check (one `getById`, no
+   * hashing, no `markUsed` write) for long-lived connections that authenticated once at open — the
+   * SSE stream re-checks it each poll so a mid-stream revoke cuts the connection instead of
+   * letting it run to the timeout cap. Not a substitute for {@link authenticate} (no secret proof).
+   */
+  async isActive(keyId: string): Promise<boolean> {
+    const record = await this.deps.repository.getById(keyId)
+    return record !== null && record.revokedAt === null
+  }
+
   private hmacKey(): Promise<CryptoKey> {
     if (!this.hmacKeyPromise) {
       this.hmacKeyPromise = crypto.subtle.importKey(

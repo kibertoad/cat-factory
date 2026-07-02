@@ -241,7 +241,9 @@ export function makeConformanceApp(
     return driveWorkspace(
       container.executionService,
       workspaceId,
-      async () => (await container.workspaceService.snapshot(workspaceId)).executions,
+      // Enumerate runs straight from the repository (as production does — it drives by run id),
+      // NOT via the SPA snapshot, which now hides the public-API "initiative" runs' executions.
+      () => container.executionRepository.listByWorkspace(workspaceId),
       maxRounds,
     )
   }
