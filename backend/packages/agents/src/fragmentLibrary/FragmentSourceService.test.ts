@@ -126,9 +126,12 @@ describe('FragmentSourceService.sync', () => {
     await harness.service.sync('workspace', 'ws1', sourceId)
   })
 
-  it('keeps an explicit-id fragment live when its file is RENAMED', async () => {
+  it('keeps an explicit-id fragment live (and preserves createdAt) when its file is RENAMED', async () => {
     // Rename: same explicit frontmatter id, new path. A path-keyed sweep would
-    // tombstone the row the rename just updated; the id-keyed sweep must not.
+    // tombstone the row the rename just updated; the id-keyed sweep must not — and the
+    // fragment's createdAt/version must be inherited by id, not reset to defaults.
+    const before = await harness.fragments.get('workspace', 'ws1', 'org.perf')
+    const createdAt = before?.createdAt
     delete github.files['guidelines/perf.md']
     github.files['guidelines/performance.md'] = {
       sha: 'sha-2',
@@ -140,6 +143,9 @@ describe('FragmentSourceService.sync', () => {
     const row = await harness.fragments.get('workspace', 'ws1', 'org.perf')
     expect(row?.deletedAt).toBeNull()
     expect(row?.sourcePath).toBe('guidelines/performance.md')
+    // Inherited from the pre-rename row, not stamped fresh.
+    expect(row?.createdAt).toBe(createdAt)
+    expect(row?.version).toBe(before?.version)
   })
 
   it('retires the OLD id when a file changes its explicit frontmatter id in place', async () => {

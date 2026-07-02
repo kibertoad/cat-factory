@@ -25,8 +25,11 @@ export const useFragmentsStore = defineStore('fragments', () => {
   async function ensureLoaded() {
     const wsId = useWorkspaceStore().workspaceId ?? ''
     if (loaded.value && loadedFor.value === wsId) return
-    // Prefer the merged tenant catalog; a 503 (library unconfigured) or any other
-    // failure degrades to the static universal pool.
+    // Prefer the merged tenant catalog; only a FAILURE (a 503 when the library is
+    // unconfigured, or any other error) degrades to the static universal pool — mapped to
+    // null by the catch. A successful-but-empty resolved catalog is left empty on purpose:
+    // it means every fragment is suppressed at some tier, and falling back to the static
+    // pool would resurrect the very built-ins the tenant tombstoned.
     const resolved = wsId ? await api.getResolvedFragments(wsId).catch(() => null) : null
     fragments.value = resolved ?? (await api.getPromptFragments())
     loadedFor.value = wsId

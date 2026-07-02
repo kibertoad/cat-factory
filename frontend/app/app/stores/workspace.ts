@@ -21,6 +21,7 @@ import { useClarityStore } from '~/stores/clarity'
 import { useBrainstormStore } from '~/stores/brainstorm'
 import { useConsensusStore } from '~/stores/consensus'
 import { useGitHubStore } from '~/stores/github'
+import { useFragmentsStore } from '~/stores/fragments'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
 
 /**
@@ -81,6 +82,10 @@ export const useWorkspaceStore = defineStore(
         useBrainstormStore().reset()
         useConsensusStore().reset()
         useGitHubStore().reset()
+        // The fragment picker catalog is per-board (the merged tenant catalog), so drop
+        // it too — the next inspector open re-fetches it for the switched-to board rather
+        // than showing the previous board's (or a raw-id placeholder for) fragments.
+        useFragmentsStore().invalidate()
       }
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null

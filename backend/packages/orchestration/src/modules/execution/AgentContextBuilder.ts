@@ -457,7 +457,14 @@ export class AgentContextBuilder {
     step: PipelineStep,
     block: Block,
   ): Promise<{ fragments: { id: string; body: string }[] } | null> {
-    if (!hasTrait(agentKind, CODE_AWARE_TRAIT)) return null
+    // Recorded per dispatch, so it always reflects the kind that actually ran. A step
+    // reused across dispatches (a gate/tester host, then its code-aware helper, then a
+    // re-test) must not keep reporting a prior round's fragments: a non-code-aware kind
+    // receives none, so clear it here rather than leaving a stale selection behind.
+    if (!hasTrait(agentKind, CODE_AWARE_TRAIT)) {
+      step.selectedFragmentIds = undefined
+      return null
+    }
     try {
       const serviceIds = await this.resolveServiceFragmentIds(workspaceId, block)
       // Service standards first, then the block's own pins; deduped, stable order.
@@ -485,7 +492,10 @@ export class AgentContextBuilder {
       if (fragments.length === 0) return null
       return { fragments }
     } catch {
-      // Resolution must never wedge a run; fall back to the block's own pins.
+      // Resolution must never wedge a run; fall back to the block's own pins. Clear any
+      // stale selection so observability doesn't keep reporting a prior round's fragments
+      // that this dispatch did not actually inject.
+      step.selectedFragmentIds = undefined
       return null
     }
   }

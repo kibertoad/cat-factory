@@ -111,6 +111,10 @@ export class FragmentSourceService {
     const entries = await this.readMarkdown(source, installationId)
     const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
     const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
+    // Keyed by fragment id too, so `syncEntry` can inherit an existing fragment's
+    // version/createdAt when a RENAME reaches it under a new path (path lookup misses,
+    // id lookup hits) rather than silently resetting them to defaults.
+    const existingById = new Map(existing.map((f) => [f.fragmentId, f]))
     const now = this.deps.clock.now()
 
     let upserted = 0
@@ -129,7 +133,7 @@ export class FragmentSourceService {
         liveIds.add(prior.fragmentId)
         continue
       }
-      const syncedId = await this.syncEntry(source, entry, prior, now, installationId)
+      const syncedId = await this.syncEntry(source, entry, existingById, now, installationId)
       if (syncedId) {
         liveIds.add(syncedId)
         upserted++
@@ -160,7 +164,16 @@ export class FragmentSourceService {
     return { upserted, tombstoned, unchanged, lastSyncedSha }
   }
 
-  /** Cheap "check for changes": compare the remote tree digest to the stored one. */
+  /**
+   * Cheap "check for changes": compare the remote tree digest to the stored one. It reads
+   * only the directory listing (never file bodies), so `changedCount` is a file-level
+   * estimate — new/modified files plus files removed upstream. A pure RENAME preserves the
+   * blob sha, so it is counted ONCE (the moved file, not also as a deletion) to stay in
+   * line with the id-keyed {@link sync} (which upserts the moved fragment without retiring
+   * it). It cannot see an in-place explicit-`id` edit (that needs parsing), so for that
+   * rare case the count can still trail sync by one; `changed` (the digest comparison) is
+   * always exact.
+   */
   async status(
     ownerKind: FragmentOwnerKind,
     ownerId: string,
@@ -170,6 +183,8 @@ export class FragmentSourceService {
     const entries = await this.readMarkdown(source, await this.requireInstallation(source))
     const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
     const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
+    // A blob sha still present in the current tree is a move/rename, not a deletion.
+    const currentShas = new Set(entries.map((e) => e.sha))
 
     let changedCount = 0
     const seen = new Set<string>()
@@ -179,7 +194,10 @@ export class FragmentSourceService {
       if (!prior || prior.sourceSha !== entry.sha) changedCount++
     }
     for (const f of existing) {
-      if (f.sourcePath && !seen.has(f.sourcePath)) changedCount++
+      // A removed path whose blob sha reappears elsewhere in the tree is a rename (already
+      // counted as the new path above), so don't also count it as a deletion.
+      const movedNotDeleted = f.sourceSha !== null && currentShas.has(f.sourceSha)
+      if (f.sourcePath && !seen.has(f.sourcePath) && !movedNotDeleted) changedCount++
     }
 
     const remoteSha = digestListing(entries.map((e) => ({ path: e.path, sha: e.sha })))
@@ -245,7 +263,7 @@ export class FragmentSourceService {
   private async syncEntry(
     source: FragmentSourceRecord,
     entry: RepoContentEntry,
-    prior: PromptFragmentRecord | undefined,
+    existingById: Map<string, PromptFragmentRecord>,
     now: number,
     installationId: number,
   ): Promise<string | null> {
@@ -262,6 +280,11 @@ export class FragmentSourceService {
     // Sourced ids are namespaced so two sources can't collide; an explicit
     // frontmatter `id` instead *shadows* a built-in/inherited fragment (ADR 0006).
     const fragmentId = parsed.id?.trim() || `src:${source.id}:${slugFromPath(entry.path)}`
+    // Match the existing row by the id THIS file produces, not by path — so a rename
+    // (new path, same explicit id) still inherits the fragment's version + createdAt,
+    // while a genuinely new id (a fresh file, or a file whose explicit id changed) starts
+    // fresh and lets the sweep retire the old id.
+    const prior = existingById.get(fragmentId)
     const record: PromptFragmentRecord = {
       fragmentId,
       ownerKind: source.ownerKind,

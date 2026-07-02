@@ -105,4 +105,14 @@ describe('AgentContextBuilder fragment resolution', () => {
     expect(context.block.resolvedFragments).toBeUndefined()
     expect(s.selectedFragmentIds).toBeUndefined()
   })
+
+  it('clears a stale selectedFragmentIds when the step is re-dispatched as a non-code-aware kind', async () => {
+    // A gate/tester host step keeps its own (non-code-aware) kind; a prior code-aware
+    // helper round left selectedFragmentIds behind. Re-dispatching the host must not keep
+    // reporting fragments it never received — the trait early-return has to clear it too.
+    const s = step({ agentKind: 'tester', selectedFragmentIds: ['node.best-practices'] })
+    const context = await makeBuilder().buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.block.resolvedFragments).toBeUndefined()
+    expect(s.selectedFragmentIds).toBeUndefined()
+  })
 })

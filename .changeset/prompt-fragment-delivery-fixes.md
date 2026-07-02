@@ -39,4 +39,13 @@ Fix five bugs in how best-practice prompt fragments are managed and applied:
   attached (and a managed id set via API rendered no chip). The fragments store now
   loads the workspace's resolved catalog (falling back to the static pool when the
   library is off), invalidates on library edits, and unknown selected ids render as
-  removable chips instead of disappearing.
+  removable chips instead of disappearing. The catalog is per-board, so a workspace
+  switch now invalidates it and the task inspector reloads it on mount — otherwise the
+  task picker kept showing the previous board's fragments.
+
+Review follow-ups: `AgentContextBuilder` now clears a stale `step.selectedFragmentIds`
+on the non-code-aware and error paths too (not only when a code-aware resolve is empty);
+the requirement-writer grounding resolves the merged catalog once (reused for titles and
+bodies) instead of twice; a repo-source RENAME of an explicit-id file inherits the
+fragment's `version`/`createdAt` by id instead of resetting them; and the source `status`
+count no longer double-counts a pure rename.

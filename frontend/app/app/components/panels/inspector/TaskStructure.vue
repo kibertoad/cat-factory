@@ -9,6 +9,10 @@ const ui = useUiStore()
 const accounts = useAccountsStore()
 const { t } = useI18n()
 
+// The catalog is per-board and invalidated on a workspace switch, so (re)load it when the
+// task inspector mounts — mirrors ServiceFragments; ensureLoaded is a no-op while current.
+onMounted(() => fragments.ensureLoaded())
+
 type MenuItem = { label: string; icon?: string; onSelect: () => void }
 
 // ---- best-practice prompt fragments ----------------------------------------

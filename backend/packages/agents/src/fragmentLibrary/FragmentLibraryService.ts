@@ -380,14 +380,18 @@ export class FragmentLibraryService implements FragmentResolver {
    * fragment, so a missing id is either stale or tier-tombstoned, and resolving it
    * from the static pool anyway would defeat suppression (ADR 0006). The result
    * preserves the input order.
+   *
+   * A caller that has already resolved the merged catalog (e.g. to also read titles)
+   * may pass it in to avoid a second resolve of the same tenant catalog.
    */
   async resolveBodiesForRun(
     workspaceId: string,
     ids: string[],
+    catalog?: ResolvedCatalogEntry[],
   ): Promise<{ id: string; body: string }[]> {
     if (ids.length === 0) return []
-    const catalog = await this.resolveCatalog(workspaceId)
-    const byId = new Map(catalog.map((e) => [e.id, e]))
+    const entries = catalog ?? (await this.resolveCatalog(workspaceId))
+    const byId = new Map(entries.map((e) => [e.id, e]))
 
     const out: { id: string; body: string }[] = []
     const seen = new Set<string>()
