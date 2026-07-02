@@ -1,5 +1,12 @@
 # @cat-factory/local-server
 
+## 0.38.1
+
+### Patch Changes
+
+- Updated dependencies [986ed0e]
+  - @cat-factory/executor-harness@1.31.4
+
 ## 0.38.0
 
 ### Minor Changes
