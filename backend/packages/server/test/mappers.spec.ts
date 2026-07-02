@@ -8,6 +8,7 @@ import {
   type ExecutionRow,
   blockInsertValues,
   blockPatchToColumns,
+  executionToDetail,
   rowToBlock,
   rowToExecution,
   rowToPipeline,
@@ -349,6 +350,57 @@ describe('rowToExecution', () => {
     expect(
       rowToExecution({ ...base, failure: JSON.stringify({ kind: 'agent' }) }).failure,
     ).toBeNull()
+  })
+
+  it('defaults the prior-attempts failureHistory to an empty array when absent', () => {
+    expect(rowToExecution(base).failureHistory).toEqual([])
+  })
+
+  it('round-trips a failure trail through detail and drops legacy/garbage entries', () => {
+    const good = {
+      kind: 'agent' as const,
+      message: 'first crash',
+      detail: null,
+      hint: null,
+      occurredAt: 1,
+      lastSubtasks: null,
+    }
+    const detail = JSON.stringify({
+      pipelineId: 'pl_1',
+      pipelineName: 'Quick',
+      steps: [],
+      currentStep: 0,
+      failureHistory: [
+        good,
+        // A pre-cutoff entry with a removed kind is dropped, not surfaced.
+        { kind: 'decision_timeout', message: 'stale', occurredAt: 2 },
+        // A structurally-broken entry is dropped too.
+        { message: 'no kind' },
+      ],
+    })
+    const mapped = rowToExecution({ ...base, detail })
+    expect(mapped.failureHistory).toEqual([good])
+    expect(() => v.parse(executionInstanceSchema, mapped)).not.toThrow()
+  })
+
+  it('executionToDetail persists a non-empty trail and omits an empty one', () => {
+    const failure = {
+      kind: 'agent' as const,
+      message: 'boom',
+      detail: null,
+      hint: null,
+      occurredAt: 1,
+      lastSubtasks: null,
+    }
+    const withTrail = rowToExecution({
+      ...base,
+      detail: executionToDetail({ ...rowToExecution(base), failureHistory: [failure] }),
+    })
+    expect(withTrail.failureHistory).toEqual([failure])
+
+    // An empty trail is not written into detail (the key is omitted), so it reads back as [].
+    const empty = executionToDetail({ ...rowToExecution(base), failureHistory: [] })
+    expect(JSON.parse(empty).failureHistory).toBeUndefined()
   })
 })
 

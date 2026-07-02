@@ -1,4 +1,4 @@
-import type { PipelineStep } from '@cat-factory/kernel'
+import type { AgentFailure, PipelineStep } from '@cat-factory/kernel'
 
 /**
  * Plan how a failed run resumes on retry: keep the steps that already completed
@@ -22,6 +22,24 @@ export function planResumedSteps(prev: { steps: PipelineStep[]; currentStep: num
   // the last step so the retry still does something rather than no-op.
   const resumeIndex = firstUnfinished === -1 ? Math.max(prev.steps.length - 1, 0) : firstUnfinished
   return planFromStep(prev.steps, resumeIndex)
+}
+
+/**
+ * Accumulate a failed run's error trail across a retry/restart: append the outgoing
+ * attempt's own {@link AgentFailure} (if it has one) to the failures it already carried,
+ * oldest→newest. The fresh attempt is minted with `failure` CLEARED (so the top failure
+ * banner, keyed on `status === 'failed'`, disappears the moment the task restarts) but
+ * this history preserved — so every prior error stays viewable. Called by both
+ * {@link ExecutionService.retry} and {@link ExecutionService.restartFromStep}.
+ *
+ * Pure + deterministic so it can be unit-tested without the service's ports.
+ */
+export function carryForwardFailures(prev: {
+  failure?: AgentFailure | null
+  failureHistory?: AgentFailure[]
+}): AgentFailure[] {
+  const history = prev.failureHistory ?? []
+  return prev.failure ? [...history, prev.failure] : history
 }
 
 /**

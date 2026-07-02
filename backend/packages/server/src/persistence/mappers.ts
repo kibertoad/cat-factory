@@ -539,6 +539,8 @@ interface ExecutionDetail {
   currentStep: number
   /** Internal user id of the run's initiator (individual-usage credential ownership). */
   initiatedBy: string | null
+  /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
+  failureHistory?: AgentFailure[]
 }
 
 // ---------------------------------------------------------------------------
@@ -564,19 +566,37 @@ export function isKnownAgentFailureKind(kind: string): boolean {
   return KNOWN_FAILURE_KINDS.has(kind)
 }
 
+/** Whether a decoded value is a usable {@link AgentFailure} (tolerating removed legacy kinds). */
+function isUsableFailure(o: unknown): o is AgentFailure {
+  const f = o as AgentFailure | null
+  return (
+    !!f &&
+    typeof f.kind === 'string' &&
+    typeof f.message === 'string' &&
+    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
+    isKnownAgentFailureKind(f.kind)
+  )
+}
+
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
 function parseAgentFailure(raw: string | null): AgentFailure | null {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as AgentFailure
-    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
+    if (isUsableFailure(o)) return o
   } catch {
     // fall through
   }
   return null
+}
+
+/**
+ * The prior-attempts failure trail packed into `detail`. Tolerant like
+ * {@link parseAgentFailure}: a non-array or an entry with a removed legacy kind is
+ * dropped rather than bricking the whole snapshot decode.
+ */
+function parseFailureHistory(list: unknown): AgentFailure[] {
+  return Array.isArray(list) ? list.filter(isUsableFailure) : []
 }
 
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
@@ -622,6 +642,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       id: row.id,
     }),
     failure: parseAgentFailure(row.failure),
+    // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
+    // no dedicated column); a run that never failed-then-retried simply has none.
+    failureHistory: parseFailureHistory(detail.failureHistory),
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
@@ -640,5 +663,8 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
+    // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
+    // never failed don't carry an empty array on every write.
+    failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
   } satisfies ExecutionDetail)
 }

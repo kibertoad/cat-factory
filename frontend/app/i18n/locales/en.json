@@ -225,7 +225,10 @@
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "showDetail": "Show detail",
-      "retrying": "Retrying…"
+      "retrying": "Retrying…",
+      "history": {
+        "previousErrors": "{count} previous error | {count} previous errors"
+      }
     },
     "stop": {
       "label": "Stop",

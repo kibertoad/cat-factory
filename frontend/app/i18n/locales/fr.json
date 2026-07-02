@@ -204,7 +204,10 @@
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
       "showDetail": "Afficher le détail",
-      "retrying": "Nouvelle tentative…"
+      "retrying": "Nouvelle tentative…",
+      "history": {
+        "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"
+      }
     },
     "stop": {
       "label": "Arrêter",

@@ -204,7 +204,10 @@
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
       "showDetail": "Mostrar detalle",
-      "retrying": "Reintentando…"
+      "retrying": "Reintentando…",
+      "history": {
+        "previousErrors": "{count} error anterior | {count} errores anteriores"
+      }
     },
     "stop": {
       "label": "Detener",

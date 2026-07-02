@@ -204,7 +204,10 @@
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
       "showDetail": "Pokaż szczegóły",
-      "retrying": "Ponawianie…"
+      "retrying": "Ponawianie…",
+      "history": {
+        "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
+      }
     },
     "stop": {
       "label": "Zatrzymaj",

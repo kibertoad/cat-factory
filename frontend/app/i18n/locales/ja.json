@@ -204,7 +204,10 @@
       "retryBootstrap": "ブートストラップを再試行",
       "retryRun": "実行を再試行",
       "showDetail": "詳細を表示",
-      "retrying": "再試行中…"
+      "retrying": "再試行中…",
+      "history": {
+        "previousErrors": "以前のエラー {count} 件 | 以前のエラー {count} 件"
+      }
     },
     "stop": {
       "label": "停止",
