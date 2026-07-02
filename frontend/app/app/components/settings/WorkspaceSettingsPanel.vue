@@ -190,6 +190,9 @@ async function saveBudget() {
       spendCurrency: draft.spendCurrency.trim() ? draft.spendCurrency.trim().toUpperCase() : null,
       spendMonthlyLimit: monthlyLimit,
     })
+    // The settings PUT only returns the settings; re-fetch the snapshot so the toolbar's
+    // spend meter reflects the newly-set limit/currency (spendService.status) right away.
+    await useWorkspaceStore().refresh()
     toast.add({
       title: t('settings.workspaceSettings.toast.budgetSaved'),
       icon: 'i-lucide-check',
