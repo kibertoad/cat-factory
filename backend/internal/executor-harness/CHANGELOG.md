@@ -1,5 +1,13 @@
 # @cat-factory/executor-harness
 
+## 1.31.12
+
+### Patch Changes
+
+- 5ce03c6: Frontend UI-test stand-up: honor an optional `directory` on the frontend infra spec so a monorepo
+  frontend builds/serves from its subdirectory (install, build, serve, and WireMock run there;
+  `outputDir`/`mockMappingsPath` are relative to it). Bumps the runner image tag.
+
 ## 1.31.10
 
 ### Patch Changes
