@@ -3596,7 +3596,8 @@
       "connectFirst": "חבר תחילה מקור מסמכים (Confluence, Notion או GitHub) תחת אינטגרציות.",
       "refPlaceholder": "מזהה עמוד או כתובת (למשל עמוד Confluence/Notion או כתובת קובץ GitHub)",
       "tagsPlaceholder": "תגיות, מופרדות בפסיקים (אופציונלי)",
-      "link": "קשר כמקטע חי"
+      "link": "קשר כמקטע חי",
+      "githubBrowseHint": "עיין במאגר ובחר את הקובץ לקישור."
     },
     "sources": {
       "metaSynced": "סונכרן · ref {ref}",
@@ -3608,7 +3609,10 @@
       "repoPlaceholder": "מאגר",
       "dirPlaceholder": "נתיב תיקייה (למשל guidelines)",
       "refPlaceholder": "ref (ברירת מחדל HEAD)",
-      "link": "קשר וסנכרן"
+      "link": "קשר וסנכרן",
+      "browseHint": "עיין במאגר ובחר את תיקיית הנחיות ה-Markdown (או קשר את המאגר כולו).",
+      "selectedDir": "תיקייה:",
+      "wholeRepo": "המאגר כולו (השורש)."
     },
     "toast": {
       "added": "המקטע נוסף",
@@ -3632,7 +3636,8 @@
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",
       "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
-    }
+    },
+    "unavailable": "ספריית מקטעי הפרומפט אינה מופעלת בפריסה זו."
   },
   "sandbox": {
     "title": "Sandbox: בדיקת פרומפטים ומודלים",

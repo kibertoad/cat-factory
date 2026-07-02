@@ -3598,7 +3598,8 @@
       "connectFirst": "Önce Entegrasyonlar altında bir belge kaynağı (Confluence, Notion veya GitHub) bağlayın.",
       "refPlaceholder": "Sayfa kimliği veya URL (örn. bir Confluence/Notion sayfası veya GitHub dosya URL'si)",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (isteğe bağlı)",
-      "link": "Canlı parça olarak bağla"
+      "link": "Canlı parça olarak bağla",
+      "githubBrowseHint": "Depoya göz atın ve bağlanacak dosyayı seçin."
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
@@ -3610,7 +3611,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dizin yolu (örn. guidelines)",
       "refPlaceholder": "ref (varsayılan HEAD)",
-      "link": "Bağla ve eşitle"
+      "link": "Bağla ve eşitle",
+      "browseHint": "Depoya göz atın ve Markdown yönerge dizinini seçin (veya tüm depoyu bağlayın).",
+      "selectedDir": "Dizin:",
+      "wholeRepo": "Tüm depo (kök)."
     },
     "toast": {
       "added": "Parça eklendi",
@@ -3634,7 +3638,8 @@
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",
       "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
-    }
+    },
+    "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",

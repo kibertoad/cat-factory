@@ -3585,7 +3585,8 @@
       "connectFirst": "Connectez d'abord une source de documents (Confluence, Notion ou GitHub) dans Intégrations.",
       "refPlaceholder": "Id ou URL de page (par ex. une page Confluence/Notion ou l'URL d'un fichier GitHub)",
       "tagsPlaceholder": "Étiquettes, séparées par des virgules (facultatif)",
-      "link": "Lier comme fragment vivant"
+      "link": "Lier comme fragment vivant",
+      "githubBrowseHint": "Parcourez le dépôt et choisissez le fichier à lier."
     },
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",
@@ -3597,7 +3598,10 @@
       "repoPlaceholder": "dépôt",
       "dirPlaceholder": "chemin du répertoire (par ex. guidelines)",
       "refPlaceholder": "ref (HEAD par défaut)",
-      "link": "Lier et synchroniser"
+      "link": "Lier et synchroniser",
+      "browseHint": "Parcourez le dépôt et choisissez le répertoire de consignes Markdown (ou liez tout le dépôt).",
+      "selectedDir": "Répertoire :",
+      "wholeRepo": "Dépôt entier (racine)."
     },
     "toast": {
       "added": "Fragment ajouté",
@@ -3621,7 +3625,8 @@
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",
       "body": "\"{name}\" sera supprimé. Cette action est irréversible."
-    }
+    },
+    "unavailable": "La bibliothèque de fragments de prompt n'est pas activée pour ce déploiement."
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",
