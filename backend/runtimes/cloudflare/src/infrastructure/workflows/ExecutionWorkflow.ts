@@ -11,6 +11,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { buildWorkflowRuntime } from './runtime'
 import type { ExecutionWorkflowParams } from './WorkflowsWorkRunner'
 
 /** Per-step retry policy: failures retry a few times before the run is failed. */
@@ -36,9 +37,14 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     // One DI-graph assembly per wake: the container is pure wiring over env bindings
     // (no I/O), so every step/poll in this invocation shares it instead of re-running
     // the whole composition root per `step.do`. A hibernation wake replays `run()`
-    // from the top, so each wake still gets a fresh build.
-    const container = buildContainer(this.env)
-    const execConfig = loadConfig(this.env).execution
+    // from the top, so each wake still gets a fresh build. Built via `buildWorkflowRuntime`
+    // so a transient throw here can't kill a parked (`blocked`) instance terminally and
+    // discard the human's decision (F5).
+    const { container, execConfig } = await buildWorkflowRuntime(
+      () => ({ container: buildContainer(this.env), execConfig: loadConfig(this.env).execution }),
+      step,
+      'exec',
+    )
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const ciPollInterval = execConfig.ciPollInterval as WorkflowSleepDuration

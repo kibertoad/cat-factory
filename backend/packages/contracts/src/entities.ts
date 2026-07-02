@@ -1512,6 +1512,14 @@ export const executionInstanceSchema = v.object({
    */
   failure: v.optional(v.nullable(agentFailureSchema)),
   /**
+   * Failures from the run's PRIOR attempts, oldest→newest. Each retry/restart appends
+   * the then-current {@link failure} here and clears `failure` on the fresh attempt, so
+   * the top failure banner (keyed on `status === 'failed'`) disappears once the task is
+   * restarted while the full error trail stays viewable in the "previous errors" history.
+   * Absent/empty for a run that has never been failed-then-retried.
+   */
+  failureHistory: v.optional(v.array(agentFailureSchema)),
+  /**
    * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
    * so the individual-usage restricted mode can use the initiator's OWN personal
    * subscription (e.g. Claude) for the run's steps — a personal credential is never

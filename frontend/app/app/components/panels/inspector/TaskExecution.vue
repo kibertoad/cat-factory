@@ -8,6 +8,7 @@ import {
   containerPhaseLabel,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
@@ -56,6 +57,10 @@ const failedRun = computed(() => {
   const run = agentRuns.byBlock[props.block.id]
   return run && run.status === 'failed' ? run : null
 })
+
+// Failures from prior attempts, preserved across retries — shown regardless of the run's
+// CURRENT status, so the error trail stays viewable after a restart clears the top banner.
+const failureHistory = computed(() => agentRuns.byBlock[props.block.id]?.failureHistory ?? [])
 
 const pr = computed(() => props.block.pullRequest)
 /** A PR is merged once the block is `done`; otherwise it is open awaiting merge. */
@@ -412,6 +417,9 @@ async function mergePr() {
 
     <!-- failed run: shared failure banner + retry -->
     <AgentFailureCard v-if="failedRun" :run="failedRun" />
+
+    <!-- error trail of prior attempts (survives a retry/restart that cleared the banner) -->
+    <AgentFailureHistory :failures="failureHistory" />
 
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
