@@ -39,6 +39,9 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
     step: WorkflowStep,
   ): Promise<void> {
     const { workspaceId, jobId } = event.payload
+    // One DI-graph assembly per wake (pure wiring over env bindings, no I/O) shared by
+    // every poll in this invocation; a hibernation wake replays `run()` and rebuilds.
+    const container = buildContainer(this.env)
     const execConfig = loadConfig(this.env).execution
     const pollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const log = logger.child({ workspaceId, jobId, workflow: 'bootstrap' })
@@ -56,7 +59,6 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
       let result: BootstrapPollResult
       try {
         result = (await step.do(`poll-${p}`, STEP_CONFIG, async () => {
-          const container = buildContainer(this.env)
           if (!container.bootstrap) {
             throw new Error('Bootstrap module is not configured')
           }

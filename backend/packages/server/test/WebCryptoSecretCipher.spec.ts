@@ -22,7 +22,7 @@ describe('WebCryptoSecretCipher', () => {
   it('surfaces an actionable error when the master key no longer matches (rotated key)', async () => {
     const sealed = await new WebCryptoSecretCipher({ masterKeyBase64: KEY_A }).encrypt('sk-secret')
     const withRotatedKey = new WebCryptoSecretCipher({ masterKeyBase64: KEY_B })
-    const err = await withRotatedKey.decrypt(sealed).catch((e: unknown) => e as Error)
+    const err = (await withRotatedKey.decrypt(sealed).catch((e: unknown) => e)) as Error
     expect(err).toBeInstanceOf(Error)
     // Actionable — names ENCRYPTION_KEY and the likely rotation cause, not the opaque
     // Web Crypto "operation-specific reason" DOMException (which is kept as `cause`).

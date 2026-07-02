@@ -17,6 +17,7 @@ import {
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleNotificationRepository,
   buildNodeContainer,
   createApp,
   createDbClient,
@@ -407,6 +408,9 @@ export function makeMothershipConformanceApp(
     // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
     executionRepository: () => ms.container.executionRepository,
     agentRunRepository: () => ms.container.agentRunRepository,
+    // Direct-store probes read the mothership's authoritative Postgres, like seedService.
+    blockRepository: () => mothershipRepos().blockRepository,
+    notificationRepository: () => new DrizzleNotificationRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

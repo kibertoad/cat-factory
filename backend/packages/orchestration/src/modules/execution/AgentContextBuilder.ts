@@ -536,35 +536,52 @@ export class AgentContextBuilder {
     }
 
     if (opts.includeLinked) {
-      if (this.deps.documents)
-        for (const d of await this.deps.documents.listByBlock(workspaceId, blockId)) addDoc(d)
-      if (this.deps.tasks)
-        for (const t of await this.deps.tasks.listByBlock(workspaceId, blockId)) addTask(t)
+      const [linkedDocs, linkedTasks] = await Promise.all([
+        this.deps.documents?.listByBlock(workspaceId, blockId) ?? [],
+        this.deps.tasks?.listByBlock(workspaceId, blockId) ?? [],
+      ])
+      for (const d of linkedDocs) addDoc(d)
+      for (const t of linkedTasks) addTask(t)
     }
 
     // Resolve explicitly-named references against the imported corpus by a POINT LOOKUP
     // per reference — never a full-corpus scan. Only items that actually exist are added
     // (a `UTF-8` that happens to match the Jira-key shape just resolves to nothing);
-    // nothing is fetched live.
+    // nothing is fetched live. The lookups are independent point reads on the per-step
+    // dispatch path, so they run concurrently; results are folded in in reference order
+    // so the dedupe (and the resulting context ordering) stays deterministic.
     const refs = extractReferences(description ?? '')
-    if (this.deps.tasks) {
-      for (const key of refs.jiraKeys) addTask(await this.deps.tasks.get(workspaceId, 'jira', key))
-      for (const ref of refs.githubRefs)
-        addTask(await this.deps.tasks.get(workspaceId, 'github', ref))
-    }
-    for (const url of refs.urls) {
-      if (this.deps.documents) {
-        // Prefer a precise match by the document's stable (source, externalId) — a pasted
-        // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
-        // title segment or tracking params still resolves. Fall back to the url-string
-        // lookup for any source the resolver doesn't claim (or when it isn't wired).
-        const ref = this.deps.documentUrlResolver?.(url)
-        const byRef = ref
-          ? await this.deps.documents.get(workspaceId, ref.source, ref.externalId)
-          : null
-        addDoc(byRef ?? (await this.deps.documents.getByUrl(workspaceId, url)))
-      }
-      if (this.deps.tasks) addTask(await this.deps.tasks.getByUrl(workspaceId, url))
+    const documents = this.deps.documents
+    const taskRepo = this.deps.tasks
+    const [keyTasks, refTasks, urlItems] = await Promise.all([
+      Promise.all(refs.jiraKeys.map((key) => taskRepo?.get(workspaceId, 'jira', key) ?? null)),
+      Promise.all(refs.githubRefs.map((ref) => taskRepo?.get(workspaceId, 'github', ref) ?? null)),
+      Promise.all(
+        refs.urls.map(async (url) => {
+          const [doc, task] = await Promise.all([
+            (async () => {
+              if (!documents) return null
+              // Prefer a precise match by the document's stable (source, externalId) — a pasted
+              // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
+              // title segment or tracking params still resolves. Fall back to the url-string
+              // lookup for any source the resolver doesn't claim (or when it isn't wired).
+              const ref = this.deps.documentUrlResolver?.(url)
+              const byRef = ref
+                ? await documents.get(workspaceId, ref.source, ref.externalId)
+                : null
+              return byRef ?? (await documents.getByUrl(workspaceId, url))
+            })(),
+            taskRepo?.getByUrl(workspaceId, url) ?? null,
+          ])
+          return { doc, task }
+        }),
+      ),
+    ])
+    for (const t of keyTasks) addTask(t)
+    for (const t of refTasks) addTask(t)
+    for (const { doc, task } of urlItems) {
+      addDoc(doc)
+      addTask(task)
     }
 
     return {

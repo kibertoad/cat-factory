@@ -202,7 +202,7 @@ describe('ApiKeyService', () => {
       usageWindowMs: WINDOW,
     })
     await service.addKey('workspace', WS, { provider: 'openrouter', label: 'k', key: 'sk-x' })
-    const err = await service.lease(WS, 'openrouter').catch((e: unknown) => e as Error)
+    const err = (await service.lease(WS, 'openrouter').catch((e: unknown) => e)) as Error
     // Actionable: names the offending provider + key id, and keeps the original as `cause` —
     // instead of surfacing the bare, contextless Web Crypto message.
     expect(err).toBeInstanceOf(Error)

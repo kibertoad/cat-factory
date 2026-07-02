@@ -18,6 +18,8 @@ import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
+import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
+import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
 // facade (the real Hono app over a real local D1, inside workerd). The Node
@@ -164,6 +166,8 @@ const harness: ConformanceHarness = {
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
       agentRunRepository: () =>
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
+      blockRepository: () => new D1BlockRepository({ db: env.DB }),
+      notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
     }
   },
 }

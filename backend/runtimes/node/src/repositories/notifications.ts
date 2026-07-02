@@ -10,7 +10,7 @@ import {
   notificationTypeSchema,
 } from '@cat-factory/contracts'
 import { decodeEnum, decodeEnumOr } from '@cat-factory/server'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, lte, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { notifications } from '../db/schema.js'
 
@@ -124,6 +124,24 @@ export class DrizzleNotificationRepository implements NotificationRepository {
           resolved_at: values.resolved_at,
         },
       })
+  }
+
+  async escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]> {
+    // One statement flips every overdue open card and returns the rows for re-delivery —
+    // the sweep never loops per-row upserts. Mirrors the D1 twin.
+    const rows = await this.db
+      .update(notifications)
+      .set({ severity: 'urgent' })
+      .where(
+        and(
+          eq(notifications.workspace_id, workspaceId),
+          eq(notifications.status, 'open'),
+          or(eq(notifications.severity, 'normal'), isNull(notifications.severity)),
+          lte(notifications.created_at, cutoff),
+        ),
+      )
+      .returning()
+    return rows.map(rowToNotification)
   }
 
   async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {

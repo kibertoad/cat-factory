@@ -1004,10 +1004,13 @@ export class ExecutionService {
       // pipeline has one.
       check(block.modelId, agentKinds.some(isInlineModelStep))
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of agentKinds) {
-        const id = await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId)
-        check(id, isInlineModelStep(kind))
-      }
+      // Independent per-kind resolutions on the start path — run them concurrently.
+      const ids = await Promise.all(
+        agentKinds.map((kind) =>
+          this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
+        ),
+      )
+      agentKinds.forEach((kind, i) => check(ids[i], isInlineModelStep(kind)))
     }
     if (unconfigured.size > 0) {
       throw new ConflictError(
@@ -1055,9 +1058,13 @@ export class ExecutionService {
     if (block.modelId) {
       ids.push(block.modelId)
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of agentKinds) {
-        ids.push(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
-      }
+      ids.push(
+        ...(await Promise.all(
+          agentKinds.map((kind) =>
+            this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
+          ),
+        )),
+      )
     } else {
       ids.push(undefined)
     }
@@ -1372,17 +1379,16 @@ export class ExecutionService {
    * Augment a workspace's block list (in place) with any dependency blocks referenced by
    * `depIds` that aren't already present — a `dependsOn` edge can point at a task homed in a
    * DIFFERENT workspace (a shared/mounted service). Resolved via the cross-workspace
-   * {@link BlockRepository.findById}, so a shared-service blocker is evaluated by its real
-   * status instead of being silently treated as satisfied (missing ⇒ done). Returns the same
-   * (now-augmented) array for chaining.
+   * {@link BlockRepository.findByIds} (one batched query, not a point-read per id), so a
+   * shared-service blocker is evaluated by its real status instead of being silently treated
+   * as satisfied (missing ⇒ done). Returns the same (now-augmented) array for chaining.
    */
   private async augmentWithCrossWorkspaceDeps(blocks: Block[], depIds: string[]): Promise<Block[]> {
     const have = new Set(blocks.map((b) => b.id))
-    for (const id of depIds) {
-      if (have.has(id)) continue
-      have.add(id)
-      const found = await this.blockRepository.findById(id)
-      if (found) blocks.push(found.block)
+    const missing = [...new Set(depIds)].filter((id) => !have.has(id))
+    if (missing.length === 0) return blocks
+    for (const found of await this.blockRepository.findByIds(missing)) {
+      blocks.push(found.block)
     }
     return blocks
   }
@@ -2101,37 +2107,37 @@ export class ExecutionService {
       blocks,
       dependents.flatMap((d) => d.dependsOn),
     )
+    // The workspace's first pipeline (the board's "Run" default for a dependent with no
+    // pinned pipeline) is invariant across the loop — read it once, not per dependent.
+    const firstPipeline = dependents.some((d) => !d.pipelineId)
+      ? ((await this.pipelineRepository.listByWorkspace(workspaceId))[0] ?? null)
+      : null
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue
       // Only auto-start a fresh task — never replace a run already in flight or a finished one.
       if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
-      const pipelineId = await this.resolveDefaultPipelineId(workspaceId, dependent)
-      if (!pipelineId) continue
-      // Skip dependents that would lease an individual-usage credential (can't unlock unattended).
-      const individual = await this.individualVendorsForBlock(workspaceId, dependent.id, pipelineId)
+      const pipeline = dependent.pipelineId
+        ? await this.pipelineRepository.get(workspaceId, dependent.pipelineId)
+        : firstPipeline
+      if (!pipeline) continue
+      // Skip dependents that would lease an individual-usage credential (can't unlock
+      // unattended) — resolved from the block + pipeline already in hand, no re-reads.
+      const individual = await this.resolveIndividualVendors(
+        workspaceId,
+        dependent.modelId,
+        dependent.modelPresetId,
+        pipeline.agentKinds,
+        () => false,
+      )
       if (individual.length > 0) continue
       try {
-        await this.start(workspaceId, dependent.id, pipelineId, null)
+        await this.start(workspaceId, dependent.id, pipeline.id, null)
       } catch {
         // Already running, no usable provider, still-unmet dep racing, etc. — leave this
         // dependent for a manual start; the others still get their chance.
       }
     }
-  }
-
-  /**
-   * The pipeline id a dependent task should auto-start with: its pinned `pipelineId` when
-   * set, else the workspace's first pipeline (mirrors the board's "Run" default). Null
-   * when no pipeline exists at all.
-   */
-  private async resolveDefaultPipelineId(
-    workspaceId: string,
-    block: Block,
-  ): Promise<string | null> {
-    if (block.pipelineId) return block.pipelineId
-    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
-    return pipelines[0]?.id ?? null
   }
 
   /**
