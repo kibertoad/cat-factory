@@ -496,6 +496,43 @@ export async function branchHasCommitsSince(
 }
 
 /**
+ * Whether the checked-out branch carries at least one commit the PR base does NOT — i.e.
+ * `git rev-list --count <base>..HEAD > 0`. A resume clone is single-branch, so it has no
+ * `origin/<base>` tracking ref; this fetches the base into a dedicated local ref first and
+ * diffs HEAD against it.
+ *
+ * Tri-state on purpose:
+ *  - `true`  — confirmed ≥1 commit ahead (there is something to open a PR for).
+ *  - `false` — confirmed 0 commits ahead (the branch is reachable from base, e.g. its earlier
+ *              PR was merged with a merge commit and the best-effort branch delete was skipped).
+ *  - `undefined` — could not determine (fetch / rev-list error); the caller keeps its prior
+ *              behaviour rather than wrongly dropping a resumed branch that has real work.
+ *
+ * Used by the resume path to avoid declaring a merged/empty branch as work and then failing
+ * the run with GitHub's opaque 422 "No commits between <base> and <branch>".
+ */
+export async function branchAheadOfBase(
+  dir: string,
+  baseBranch: string,
+  ghToken: string,
+  signal?: AbortSignal,
+): Promise<boolean | undefined> {
+  try {
+    await git(['fetch', 'origin', `+refs/heads/${baseBranch}:refs/cat-factory/base`], {
+      cwd: dir,
+      signal,
+      env: await authEnv(ghToken),
+    })
+    const count = (
+      await git(['rev-list', '--count', 'refs/cat-factory/base..HEAD'], { cwd: dir, signal })
+    ).trim()
+    return Number(count) > 0
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Whether the checked-out branch has a real, examinable diff against
  * `origin/<baseBranch>` — i.e. the base branch's remote-tracking ref exists (so the
  * merge base resolves) AND there are changes between that merge base and HEAD. The
@@ -876,7 +913,7 @@ function backoffMs(attempt: number): number {
  * GitLab whose host isn't named `gitlab.*` still opens an MR instead of being misrouted to
  * GitHub's API. The GitHub path is unchanged.
  */
-export async function openPullRequest(opts: OpenPullRequestOptions): Promise<string> {
+export async function openPullRequest(opts: OpenPullRequestOptions): Promise<string | null> {
   const provider = opts.provider ?? (opts.cloneUrl ? inferVcsProvider(opts.cloneUrl) : 'github')
   if (provider === 'gitlab') {
     if (!opts.cloneUrl) {
@@ -917,6 +954,12 @@ export async function openPullRequest(opts: OpenPullRequestOptions): Promise<str
       const existing = await findOpenPullRequestUrl(opts)
       if (existing) return existing
     }
+    // The head branch has nothing ahead of base ("No commits between <base> and <head>").
+    // That is not an API failure — there is simply nothing to open a PR for (e.g. a resumed
+    // branch whose earlier PR was merged with a merge commit, leaving the branch reachable
+    // from base). Signal it with null so the caller records a clean no-op instead of failing
+    // the run with GitHub's opaque 422.
+    if (res.status === 422 && /no commits between/i.test(detail)) return null
     throw new HarnessFailure(
       'api',
       redactSecrets(`Failed to open PR (HTTP ${res.status}): ${detail.slice(0, 300)}`),

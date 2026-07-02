@@ -200,6 +200,23 @@ never trips either and burns the whole budget (and the engine budget behind it).
 **Fix (harness, optional):** a no-tool-progress guard between the 10-min inactivity and the
 60-min cap. Arguably the 60-min ceiling is the intended bound — lowest-priority medium.
 
+**F14 — Resumed work branch with nothing ahead of base fails the run with GitHub's opaque
+422 instead of no-op'ing (and the merger silently strands the branch).**
+`executor-harness/src/coding-agent.ts` computed `hasWork = resumed || branchHasCommitsSince(...)`,
+so ANY pre-existing work branch was treated as work even when it had zero commits ahead of the
+PR base. A branch gets stranded in that state when its earlier PR is merged with a **merge
+commit** (leaving the branch reachable from base) and `GitHubPullRequestMerger`'s best-effort
+`deleteBranch().catch(() => {})` skips the cleanup. A re-dispatch then resumes it, the agent
+no-op's, and `openPullRequest` fails `422 "No commits between <base> and <branch>"` — surfaced
+to the user as a scary `Failed to open PR (HTTP 422)` rather than a clean no-changes outcome.
+Observed on a local docker+postgres run (`exec_91f9521463e64bd898e53f3d`).
+**Fix (this PR):** `runCodingAgent` confirms a resumed branch is actually ahead of the PR base
+(new tri-state `branchAheadOfBase`; `undefined` keeps the prior resume-is-work behaviour) and
+records a no-op otherwise; `openPullRequest` maps the 422 "No commits between" to a no-op
+(`null`) as a backstop; `GitHubPullRequestMerger` now logs the swallowed branch-delete failure.
+Harness change ⇒ image-bumped (`@cat-factory/executor-harness` 1.31.6 → 1.31.7 + the three
+pins). Follow-up (not done): don't re-dispatch a block whose PR already merged.
+
 ### Low — recorded as accepted / not planned (don't re-derive these)
 
 - **pg-boss poison run dodges the hard-stall clock:** a drive that throws → pg-boss `failed` →
@@ -249,6 +266,7 @@ of each PR.
 | F9  | Node advance has no timeout                         | node driver            | D                        | ⬜ todo |     |
 | F12 | Sleep-eviction burns the single recovery            | CF container           | D                        | ⬜ todo |     |
 | F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                        | ⬜ todo |     |
+| F14 | Resumed empty branch fails 422 vs no-op             | harness + engine       | (fixed inline)           | ✅ done |     |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
 no signal), then C, then D (most invasive; D is deferrable).
