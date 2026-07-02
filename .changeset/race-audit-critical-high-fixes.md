@@ -1,6 +1,7 @@
 ---
 '@cat-factory/kernel': patch
 '@cat-factory/orchestration': patch
+'@cat-factory/server': patch
 '@cat-factory/worker': patch
 '@cat-factory/node-server': patch
 ---
