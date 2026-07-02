@@ -99,9 +99,11 @@ self-contained.
 
 ## Published image (GHCR + Docker Hub)
 
-This package is not published to npm; instead its **Docker image** is published
-publicly, multi-arch (`linux/amd64` + `linux/arm64`), to **both GHCR and Docker
-Hub** so anyone can pull it without building from source:
+This package is published to npm (its zero-dependency `dist/server.js` is the
+entry `@cat-factory/local-server` spawns in local native mode). In addition, its
+**Docker image** is published publicly, multi-arch (`linux/amd64` +
+`linux/arm64`), to **both GHCR and Docker Hub** so anyone can pull it without
+building from source:
 
 ```
 ghcr.io/<owner>/cat-factory-executor:<version>
