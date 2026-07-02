@@ -67,6 +67,10 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
     return this.inner.getByInstallationId(installationId)
   }
 
+  listByInstallationIds(installationIds: number[]): Promise<GitHubInstallation[]> {
+    return this.inner.listByInstallationIds(installationIds)
+  }
+
   listWorkspacesForInstallation(installationId: number): Promise<string[]> {
     return this.inner.listWorkspacesForInstallation(installationId)
   }

@@ -225,7 +225,13 @@
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "showDetail": "Show detail",
-      "retrying": "Retrying…"
+      "retrying": "Retrying…",
+      "history": {
+        "previousErrors": "{count} previous error | {count} previous errors",
+        "@previousErrors": {
+          "description": "Count-based tally of a run's earlier failed attempts, rendered as e.g. '3 previous errors' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        }
+      }
     },
     "stop": {
       "label": "Stop",
@@ -2706,6 +2712,10 @@
       "consensusRevertTooltip": "Consensus enabled. Click to revert to a single agent.",
       "followUpEnableTooltip": "Follow-up companion disabled. Click to enable (Coder surfaces loose ends / questions).",
       "followUpDisableTooltip": "Follow-up companion enabled. Coder surfaces loose ends / side-tasks / questions; click to disable.",
+      "testerQualityEnableTooltip": "Test quality companion disabled. Click to enable (audits the report for coverage and loops the Tester on gaps).",
+      "testerQualityDisableTooltip": "Test quality companion enabled. Audits the report for coverage before greenlight and loops the Tester on gaps; click to disable.",
+      "testerQualityLabel": "Test quality companion",
+      "testerQualityGateTooltip": "Only run the quality audit when the task estimate clears a threshold (needs a Task Estimator earlier)",
       "moveUp": "Move step up",
       "moveDown": "Move step down",
       "removeStep": "Remove this step from the pipeline",
@@ -3396,6 +3406,15 @@
       "failed": "Failed",
       "addressed": "Addressing"
     },
+    "quality": {
+      "heading": "Coverage review",
+      "reruns": "Quality-driven Tester re-runs",
+      "rerunCount": "{attempts}/{max} re-runs",
+      "exceeded": "Budget spent",
+      "adequate": "Coverage adequate",
+      "inadequate": "Coverage gaps found",
+      "gaps": "Gaps to close"
+    },
     "empty": {
       "title": "No test report yet.",
       "hint": "The report appears once the Tester finishes a pass. While it runs, the step shows live progress on the board."
@@ -3704,7 +3723,8 @@
       "connectFirst": "Connect a document source (Confluence, Notion or GitHub) under Integrations first.",
       "refPlaceholder": "Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)",
       "tagsPlaceholder": "Tags, comma-separated (optional)",
-      "link": "Link as living fragment"
+      "link": "Link as living fragment",
+      "githubBrowseHint": "Browse the repo and pick the file to link."
     },
     "sources": {
       "metaSynced": "synced · ref {ref}",
@@ -3716,7 +3736,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dir path (e.g. guidelines)",
       "refPlaceholder": "ref (default HEAD)",
-      "link": "Link & sync"
+      "link": "Link & sync",
+      "browseHint": "Browse the repo and pick the directory of Markdown guidelines (or link the whole repo).",
+      "selectedDir": "Directory:",
+      "wholeRepo": "Whole repository (root)."
     },
     "toast": {
       "added": "Fragment added",
@@ -3740,7 +3763,8 @@
     "confirmRemove": {
       "title": "Delete this fragment?",
       "body": "\"{name}\" will be removed. This can't be undone."
-    }
+    },
+    "unavailable": "The prompt-fragment library isn't enabled for this deployment."
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",

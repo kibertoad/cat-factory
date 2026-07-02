@@ -416,12 +416,13 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       // High-churn provisioning event log; pruned aggressively (default 14 days).
       provisioningLogMs: (num(env.PROVISIONING_LOG_RETENTION_DAYS) ?? 14) * 24 * 60 * 60 * 1000,
     },
-    // Prompt-fragment library (ADR 0006): opt-in (`PROMPT_LIBRARY_ENABLED=true`),
-    // needs no encryption key (fragments are not secrets). Mirrors the Worker's
+    // Prompt-fragment library (ADR 0006): on by default, opt OUT with
+    // `PROMPT_LIBRARY_ENABLED=false`. Needs no encryption key (fragments are not
+    // secrets) and its tables ship in the base schema. Mirrors the Worker's
     // mapping; `PROMPT_LIBRARY_SELECTOR=llm` ranks per run, else the deterministic
     // tag matcher (which also backs the `llm` selector's graceful fallback).
     fragmentLibrary: {
-      enabled: env.PROMPT_LIBRARY_ENABLED?.trim() === 'true',
+      enabled: env.PROMPT_LIBRARY_ENABLED?.trim() !== 'false',
       selector: env.PROMPT_LIBRARY_SELECTOR?.trim() === 'llm' ? 'llm' : 'deterministic',
     },
     // Recording the complete prompts is on by default; opt out with

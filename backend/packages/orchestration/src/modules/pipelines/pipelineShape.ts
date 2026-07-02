@@ -1,6 +1,7 @@
 import { ValidationError } from '@cat-factory/kernel'
-import type { StepGating } from '@cat-factory/kernel'
+import type { StepGating, TesterQualityConfig } from '@cat-factory/kernel'
 import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
+import { isTesterKind } from '../execution/ci.logic.js'
 
 /**
  * Structural validation shared by the pipeline builder (save) and the execution engine
@@ -20,16 +21,22 @@ import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@c
  *    only kind it is safe to skip — skipping a producer would starve its downstream steps),
  *    must set at least one axis threshold (or it would always skip), and needs a
  *    `task-estimator` to have run before it (or the gate has nothing to consult).
+ *  - {@link assertValidTesterQualityGating}: the test quality-control companion's optional
+ *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
+ *    separately — but under the same "threshold set + estimator earlier" rules, since a
+ *    QC gate with no estimator would silently never gate.
  */
 export interface PipelineShape {
   agentKinds: string[]
   enabled?: boolean[]
   gating?: (StepGating | null)[]
+  testerQuality?: (TesterQualityConfig | null)[]
 }
 
 export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline.agentKinds, pipeline.enabled)
   assertValidGating(pipeline.agentKinds, pipeline.enabled, pipeline.gating)
+  assertValidTesterQualityGating(pipeline.agentKinds, pipeline.enabled, pipeline.testerQuality)
 }
 
 /**
@@ -105,6 +112,44 @@ export function assertValidGating(
     if (!hasEstimator) {
       throw new ValidationError(
         `Step '${kind}' is gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
+      )
+    }
+  }
+}
+
+/**
+ * Validate every ENABLED Tester step whose test quality-control companion carries an enabled
+ * estimate gate. The QC gate lives on the Tester step itself (not a companion), so it is
+ * checked here rather than in {@link assertValidGating} (which is companion-only). The same two
+ * safety rules apply as for step gating: at least one axis threshold must be set (or the gate
+ * would never fire), and an enabled `task-estimator` must run earlier (or the gate has no
+ * estimate to consult). The QC companion being enabled/disabled itself imposes no requirement —
+ * only an enabled GATE does.
+ */
+export function assertValidTesterQualityGating(
+  agentKinds: string[],
+  enabled?: boolean[],
+  testerQuality?: (TesterQualityConfig | null)[],
+): void {
+  if (!testerQuality) return
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  for (let i = 0; i < agentKinds.length; i++) {
+    const qc = testerQuality[i]
+    const g = qc?.gating
+    if (!g?.enabled || !isEnabled(i)) continue
+    const kind = agentKinds[i]
+    if (kind === undefined || !isTesterKind(kind)) continue
+    if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
+      throw new ValidationError(
+        `Step '${kind}' has an estimate-gated test quality companion but sets no threshold — set at least one of complexity / risk / impact, or the gate would always skip the review.`,
+      )
+    }
+    const hasEstimator = agentKinds
+      .slice(0, i)
+      .some((k, j) => k === TASK_ESTIMATOR_AGENT_KIND && isEnabled(j))
+    if (!hasEstimator) {
+      throw new ValidationError(
+        `Step '${kind}' has a test quality companion gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
       )
     }
   }

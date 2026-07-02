@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
-import { writebackOverrideSchema } from './entities.js'
+import { testerQualityConfigSchema, writebackOverrideSchema } from './entities.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
@@ -234,6 +234,19 @@ export const createPipelineSchema = v.object({
    * chain or it is rejected. Optional.
    */
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  /**
+   * Per-step Follow-up companion toggle, parallel to {@link agentKinds}. Only meaningful on a
+   * `coder` step; `false` disables the companion there. `null`/`true`/omitted ⇒ enabled (the
+   * default). Optional.
+   */
+  followUps: v.optional(v.array(v.nullable(v.boolean()))),
+  /**
+   * Per-step test quality-control companion config, parallel to {@link agentKinds}. Only
+   * meaningful on a Tester step; `null`/omitted ⇒ enabled with no gating (the default), an
+   * entry with `enabled: false` disables it, and an entry with `gating` makes it conditional
+   * on the task estimate. Optional.
+   */
+  testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   /** Free-form organizational labels for the library. Optional. */
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
 })
@@ -252,6 +265,8 @@ export const updatePipelineSchema = v.object({
   enabled: v.optional(v.array(v.boolean())),
   consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  followUps: v.optional(v.array(v.nullable(v.boolean()))),
+  testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>

@@ -204,7 +204,10 @@
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
       "showDetail": "Ayrıntıyı göster",
-      "retrying": "Yeniden deneniyor…"
+      "retrying": "Yeniden deneniyor…",
+      "history": {
+        "previousErrors": "{count} önceki hata | {count} önceki hata"
+      }
     },
     "stop": {
       "label": "Durdur",
@@ -2645,6 +2648,10 @@
       "consensusRevertTooltip": "Fikir birliği etkin. Tek ajana dönmek için tıklayın.",
       "followUpEnableTooltip": "Takip eşlikçisi devre dışı. Etkinleştirmek için tıklayın (Coder, açık uçları / soruları yüzeye çıkarır).",
       "followUpDisableTooltip": "Takip eşlikçisi etkin. Coder açık uçları / yan görevleri / soruları yüzeye çıkarır; devre dışı bırakmak için tıklayın.",
+      "testerQualityEnableTooltip": "Test kalitesi yardımcısı devre dışı. Etkinleştirmek için tıklayın (raporun kapsamını denetler ve eksiklerde Test aracını yeniden çalıştırır).",
+      "testerQualityDisableTooltip": "Test kalitesi yardımcısı etkin. Onaydan önce raporun kapsamını denetler ve eksiklerde Test aracını yeniden çalıştırır; devre dışı bırakmak için tıklayın.",
+      "testerQualityLabel": "Test kalitesi yardımcısı",
+      "testerQualityGateTooltip": "Kalite denetimini yalnızca görev tahmini bir eşiği aştığında çalıştır (önce bir Görev Tahmincisi gerekir)",
       "moveUp": "Adımı yukarı taşı",
       "moveDown": "Adımı aşağı taşı",
       "removeStep": "Bu adımı pipeline'dan kaldır",
@@ -3286,6 +3293,15 @@
       "failed": "Başarısız",
       "addressed": "Ele alınıyor"
     },
+    "quality": {
+      "heading": "Kapsam incelemesi",
+      "reruns": "Kalite kaynaklı Test aracı yeniden çalıştırmaları",
+      "rerunCount": "{attempts}/{max} yeniden çalıştırma",
+      "exceeded": "Bütçe tükendi",
+      "adequate": "Kapsam yeterli",
+      "inadequate": "Kapsam eksikleri bulundu",
+      "gaps": "Kapatılacak eksikler"
+    },
     "empty": {
       "title": "Henüz test raporu yok.",
       "hint": "Rapor, Tester bir turu bitirdiğinde görünür. Çalışırken adım, tahtada canlı ilerlemeyi gösterir."
@@ -3585,7 +3601,8 @@
       "connectFirst": "Önce Entegrasyonlar altında bir belge kaynağı (Confluence, Notion veya GitHub) bağlayın.",
       "refPlaceholder": "Sayfa kimliği veya URL (örn. bir Confluence/Notion sayfası veya GitHub dosya URL'si)",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (isteğe bağlı)",
-      "link": "Canlı parça olarak bağla"
+      "link": "Canlı parça olarak bağla",
+      "githubBrowseHint": "Depoya göz atın ve bağlanacak dosyayı seçin."
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
@@ -3597,7 +3614,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dizin yolu (örn. guidelines)",
       "refPlaceholder": "ref (varsayılan HEAD)",
-      "link": "Bağla ve eşitle"
+      "link": "Bağla ve eşitle",
+      "browseHint": "Depoya göz atın ve Markdown yönerge dizinini seçin (veya tüm depoyu bağlayın).",
+      "selectedDir": "Dizin:",
+      "wholeRepo": "Tüm depo (kök)."
     },
     "toast": {
       "added": "Parça eklendi",
@@ -3621,7 +3641,8 @@
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",
       "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
-    }
+    },
+    "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",

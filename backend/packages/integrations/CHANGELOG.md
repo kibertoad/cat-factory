@@ -1,5 +1,114 @@
 # @cat-factory/integrations
 
+## 0.54.2
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/kernel@0.69.5
+
+## 0.54.1
+
+### Patch Changes
+
+- 2a91615: Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview initiative):
+
+  - **Reverse CORS origin injection.** A `deployer` step now passes `inputs.frontendOrigins` — the
+    comma-joined browser origins (`http://localhost:<servePort>`) of every `frontend` frame that
+    binds the service being provisioned (the reverse of the frontend's `backendBindings`). A
+    backend manifest folds it into its CORS allow-list via `{{input.frontendOrigins}}` (HTTP-manifest
+    provider) or `{{frontendOrigins}}` (Kubernetes native adapter, flat scope), so an ephemeral
+    frontend can reach an ephemeral backend. Derivation is automatic (`frontendOriginsForService`,
+    a single workspace block-list read — no N+1); the CORS env-var mapping stays operator-authored,
+    and the backend must be re-provisioned to pick up a newly-linked frontend. The served port is
+    resolved through the shared `resolveFrontendServePort` (contracts) — the same reserved-port
+    sanitization the harness infra spec uses — so a `servePort` set to a reserved in-container port
+    (8080/8089) injects the port the app is actually served on (4173), not the raw value.
+  - **Binding-resolution correctness.** `resolveFrontendBindings` now dedupes a repeated `envVar`
+    deterministically (last non-empty binding wins, matching the injected env map) instead of leaving
+    it to insertion order. New `duplicateBindingEnvVars` predicate (contracts) surfaces the collision
+    for the inspector + run-start notes (a follow-up slice); it is advisory, not a schema reject
+    (bindings persist per-blur with an allowed empty `envVar`).
+
+  Runtime-neutral (all facades). The inspector visibility panel + run-detail projection (6b) and the
+  deterministic local preview host port (6c) are tracked follow-ups in
+  `docs/initiatives/frontend-preview-ui-testing.md`.
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/kernel@0.69.4
+
+## 0.54.0
+
+### Minor Changes
+
+- 67d3876: feat(github): search available repos server-side in the "add service from repo" picker.
+  The picker no longer prefetches the entire installation repo list on open (slow for a wide
+  App install or PAT with hundreds of repos, and it blocked filtering until the whole list
+  loaded). Instead the user types at least 3 characters and the (debounced) query is sent to
+  `GET /github/available-repos?q=…`, which returns only the `owner/name` matches. The `q`
+  param is optional, so the repo-link management panel's browse-all is unchanged. The now-moot
+  manual "refresh list" button is removed (each search hits GitHub live).
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/kernel@0.69.3
+
+## 0.53.2
+
+### Patch Changes
+
+- 63cf6de: Performance: batch reads, parallelize independent awaits, and push work into SQL on hot paths.
+
+  - `GET /workspaces/:id` (the board-load endpoint) now fetches its ~15 independent snapshot
+    ingredients concurrently instead of serially, so its latency is the slowest read rather
+    than the sum of every round-trip; the create-workspace route parallelizes its spend +
+    infra-setup reads the same way.
+  - Agent-context reference lookups (Jira keys / GitHub refs / URLs) run concurrently on the
+    per-step dispatch path; run-start model-default resolutions run concurrently per agent kind.
+  - New batched port methods, mirrored on both runtimes with conformance coverage:
+    `BlockRepository.findByIds` (cross-workspace dependency resolution — one chunked query
+    instead of a point-read per id, also allow-listed for mothership mode),
+    `NotificationRepository.escalateStaleOpen` (the escalation sweep is now one
+    `UPDATE … RETURNING` statement instead of a load-filter-upsert loop), and
+    `GitHubInstallationRepository.listByInstallationIds` (connect-UI annotation).
+  - GitHub webhook fan-out resolves linked workspaces via the existing batched
+    `linkedWorkspaces` read instead of a per-workspace point-read on every delivery.
+  - The Node Drizzle GitHub projections write chunked multi-row upserts (matching the D1
+    twins' `db.batch`) instead of one round-trip per row, and their list reads run
+    `ORDER BY`/`LIMIT` in SQL (NULLS LAST for D1 parity) instead of sorting full result
+    sets in JS.
+  - `autoStartDependents` hoists the invariant workspace-pipeline read out of its loop and
+    stops re-fetching blocks it already holds.
+  - Session/WS-ticket/machine-token verification reuses a memoized `HmacSigner` per secret,
+    so `crypto.subtle.importKey` no longer runs on every request (`signerFor` export).
+  - The Cloudflare Workflows drivers (execution / bootstrap / env-config-repair) build the
+    DI container once per wake instead of once per `step.do` poll tick.
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/contracts@0.80.1
+
+## 0.53.1
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/kernel@0.69.1
+
 ## 0.53.0
 
 ### Minor Changes

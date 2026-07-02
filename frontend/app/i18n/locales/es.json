@@ -204,7 +204,10 @@
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
       "showDetail": "Mostrar detalle",
-      "retrying": "Reintentando…"
+      "retrying": "Reintentando…",
+      "history": {
+        "previousErrors": "{count} error anterior | {count} errores anteriores"
+      }
     },
     "stop": {
       "label": "Detener",
@@ -2632,6 +2635,10 @@
       "consensusRevertTooltip": "Consenso activado. Haz clic para volver a un solo agente.",
       "followUpEnableTooltip": "Compañero de seguimiento desactivado. Haz clic para activarlo (Coder detecta cabos sueltos / preguntas).",
       "followUpDisableTooltip": "Compañero de seguimiento activado. Coder detecta cabos sueltos / subtareas / preguntas; haz clic para desactivarlo.",
+      "testerQualityEnableTooltip": "Compañero de calidad de pruebas desactivado. Haz clic para activarlo (audita la cobertura del informe y reitera el Tester ante lagunas).",
+      "testerQualityDisableTooltip": "Compañero de calidad de pruebas activado. Audita la cobertura del informe antes de la aprobación y reitera el Tester ante lagunas; haz clic para desactivarlo.",
+      "testerQualityLabel": "Compañero de calidad de pruebas",
+      "testerQualityGateTooltip": "Ejecutar la auditoría de calidad solo cuando la estimación de la tarea supere un umbral (requiere un Estimador de Tareas antes)",
       "moveUp": "Subir el paso",
       "moveDown": "Bajar el paso",
       "removeStep": "Quitar este paso del pipeline",
@@ -3273,6 +3280,15 @@
       "failed": "Falló",
       "addressed": "Abordando"
     },
+    "quality": {
+      "heading": "Revisión de cobertura",
+      "reruns": "Reejecuciones del Tester impulsadas por calidad",
+      "rerunCount": "{attempts}/{max} reejecuciones",
+      "exceeded": "Presupuesto agotado",
+      "adequate": "Cobertura adecuada",
+      "inadequate": "Se encontraron lagunas de cobertura",
+      "gaps": "Lagunas por cerrar"
+    },
     "empty": {
       "title": "Aún no hay informe de pruebas.",
       "hint": "El informe aparece cuando el Tester termina una pasada. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
@@ -3572,7 +3588,8 @@
       "connectFirst": "Conecta primero una fuente de documentos (Confluence, Notion o GitHub) en Integraciones.",
       "refPlaceholder": "Id o URL de página (p. ej., una página de Confluence/Notion o la URL de un archivo de GitHub)",
       "tagsPlaceholder": "Etiquetas, separadas por comas (opcional)",
-      "link": "Vincular como fragmento vivo"
+      "link": "Vincular como fragmento vivo",
+      "githubBrowseHint": "Explora el repositorio y elige el archivo a enlazar."
     },
     "sources": {
       "metaSynced": "sincronizado · ref {ref}",
@@ -3584,7 +3601,10 @@
       "repoPlaceholder": "repositorio",
       "dirPlaceholder": "ruta del directorio (p. ej., guidelines)",
       "refPlaceholder": "ref (HEAD por defecto)",
-      "link": "Vincular y sincronizar"
+      "link": "Vincular y sincronizar",
+      "browseHint": "Explora el repositorio y elige el directorio de guías Markdown (o enlaza todo el repositorio).",
+      "selectedDir": "Directorio:",
+      "wholeRepo": "Repositorio completo (raíz)."
     },
     "toast": {
       "added": "Fragmento añadido",
@@ -3608,7 +3628,8 @@
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",
       "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
-    }
+    },
+    "unavailable": "La biblioteca de fragmentos de prompt no está habilitada en esta implementación."
   },
   "sandbox": {
     "title": "Sandbox: pruebas de prompts y modelos",

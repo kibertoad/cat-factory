@@ -219,22 +219,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   releaseHealthConfigRepository: {},
   provisioningLogRepository: { append: 'telemetry', list: 'pending', deleteOlderThan: 'sweeper' },
   // --- non-core repositories -----------------------------------------------------
+  // `get`/`insert`/`update` are now allow-listed (the bootstrap start / board-card poll / retry /
+  // stop surface); `listByWorkspace`/`listByServices` were already remote. `blockServiceId` is a
+  // row-mapping helper; the serviceId-keyed `listByService` stays off the SPA path.
   bootstrapJobRepository: {
     blockServiceId: 'helper',
-    insert: 'pending',
-    update: 'pending',
-    get: 'pending',
     listByService: 'pending',
   },
-  referenceArchitectureRepository: {
-    insert: 'pending',
-    update: 'pending',
-    get: 'pending',
-    listByWorkspace: 'pending',
-    softDelete: 'pending',
-  },
+  // The whole reference-architecture library is now remote (the bootstrap modal's CRUD + the
+  // retry re-resolve): get/listByWorkspace/insert/update/softDelete.
+  referenceArchitectureRepository: {},
   githubInstallationRepository: {
     getByInstallationId: 'pending',
+    listByInstallationIds: 'pending',
     getByWorkspace: 'pending',
     listWorkspacesForInstallation: 'pending',
     listActive: 'sweeper',
@@ -257,7 +254,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'pending',
     softDelete: 'pending',
   },
-  envConfigRepairJobRepository: { insert: 'pending', update: 'pending', get: 'pending' },
+  // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
+  // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
+  envConfigRepairJobRepository: {},
   environmentConnectionRepository: {
     listByWorkspace: 'pending',
     getByWorkspaceAndType: 'pending',

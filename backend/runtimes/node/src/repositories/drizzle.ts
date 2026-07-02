@@ -267,26 +267,38 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
 class DrizzleBlockRepository implements BlockRepository {
   constructor(private readonly db: DrizzleDb) {}
 
+  // List reads order by `seq` (insertion order) for parity with the Cloudflare facade's
+  // `ORDER BY rowid` — Postgres heap order is otherwise non-deterministic.
   async listByWorkspace(workspaceId: string): Promise<Block[]> {
-    const rows = await this.db.select().from(blocks).where(eq(blocks.workspace_id, workspaceId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.workspace_id, workspaceId))
+      .orderBy(blocks.seq)
     // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByService(serviceId: string): Promise<Block[]> {
-    const rows = await this.db.select().from(blocks).where(eq(blocks.service_id, serviceId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.service_id, serviceId))
+      .orderBy(blocks.seq)
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByServices(serviceIds: string[]): Promise<Block[]> {
     if (serviceIds.length === 0) return []
     const out: Block[] = []
-    // Chunk the IN list to stay well under the bind-parameter limit.
+    // Chunk the IN list to stay well under the bind-parameter limit. Ordering is
+    // per-chunk, matching the D1 twin's per-chunk `ORDER BY rowid`.
     for (let i = 0; i < serviceIds.length; i += 500) {
       const rows = await this.db
         .select()
         .from(blocks)
         .where(inArray(blocks.service_id, serviceIds.slice(i, i + 500)))
+        .orderBy(blocks.seq)
       out.push(...tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id })))
     }
     return out
@@ -310,6 +322,28 @@ class DrizzleBlockRepository implements BlockRepository {
       serviceId: row.service_id ?? null,
       block: rowToBlock(row),
     }
+  }
+
+  async findByIds(
+    blockIds: string[],
+  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>> {
+    if (blockIds.length === 0) return []
+    const out: Array<{ workspaceId: string; serviceId: string | null; block: Block }> = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < blockIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(blocks)
+        .where(inArray(blocks.id, blockIds.slice(i, i + 500)))
+      out.push(
+        ...rows.map((row) => ({
+          workspaceId: row.workspace_id,
+          serviceId: row.service_id ?? null,
+          block: rowToBlock(row),
+        })),
+      )
+    }
+    return out
   }
 
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
@@ -380,6 +414,8 @@ class DrizzlePipelineRepository implements PipelineRepository {
       enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
       consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
       gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+      follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+      tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
       labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
@@ -401,6 +437,8 @@ class DrizzlePipelineRepository implements PipelineRepository {
         enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+        tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,

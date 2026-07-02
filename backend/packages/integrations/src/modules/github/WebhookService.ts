@@ -150,10 +150,14 @@ export class WebhookService {
   ): Promise<void> {
     const workspaceIds =
       await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
-    for (const ws of workspaceIds) {
-      const repo = await this.deps.repoProjectionRepository.get(ws, repoGithubId)
-      if (repo) await project(ws)
-    }
+    if (workspaceIds.length === 0) return
+    // One batched query resolves which of those workspaces link the repo — this runs on
+    // every webhook delivery, so a per-workspace point-read here would be an N+1.
+    const linked = await this.deps.repoProjectionRepository.linkedWorkspaces(
+      repoGithubId,
+      workspaceIds,
+    )
+    for (const ws of linked) await project(ws)
   }
 
   private async handleInstallation(eventName: string, root: Json): Promise<void> {
@@ -186,21 +190,22 @@ export class WebhookService {
     if (removed.length === 0) return
     const workspaceIds =
       await this.deps.githubInstallationRepository.listWorkspacesForInstallation(installationId)
-    for (const ws of workspaceIds) {
+    if (workspaceIds.length === 0) return
+    // Narrow to the workspaces that actually track one of the removed repos (one batched
+    // query per removed repo) before touching each one, instead of listing every
+    // workspace's full repo projection.
+    const removedIds = new Set(removed.map((r) => r.id))
+    const affected = new Set<string>()
+    for (const id of removedIds) {
+      const linked = await this.deps.repoProjectionRepository.linkedWorkspaces(id, workspaceIds)
+      for (const ws of linked) affected.add(ws)
+    }
+    for (const ws of affected) {
       const tracked = await this.deps.repoProjectionRepository.list(ws)
-      const removedIds = new Set(removed.map((r) => r.id))
       const remaining = tracked
         .filter((repo) => repo.installationId === installationId && !removedIds.has(repo.githubId))
         .map((repo) => repo.githubId)
-      // Only rewrite when this workspace actually tracks one of the removed repos.
-      if (remaining.length !== tracked.filter((r) => r.installationId === installationId).length) {
-        await this.deps.repoProjectionRepository.tombstoneMissing(
-          ws,
-          installationId,
-          remaining,
-          now,
-        )
-      }
+      await this.deps.repoProjectionRepository.tombstoneMissing(ws, installationId, remaining, now)
     }
   }
 

@@ -134,25 +134,27 @@ export class GitHubInstallationService {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
     const installations = await this.deps.githubClient.listInstallations()
-    return Promise.all(
-      installations.map(async (i) => {
-        const existing = await this.deps.githubInstallationRepository.getByInstallationId(
-          i.installationId,
-        )
-        let connected: GitHubInstallationOption['connected'] = 'none'
-        if (existing) {
-          const sameAccount =
-            existing.accountId !== null && accountId !== null && existing.accountId === accountId
-          if (existing.workspaceId === workspaceId || sameAccount) {
-            // Already available to this workspace (directly, or shared via account).
-            if (!existing.deletedAt || sameAccount) connected = 'this'
-          } else {
-            connected = 'other'
-          }
-        }
-        return { ...i, connected }
-      }),
+    // One batched read annotates every discovered installation (a point-read per
+    // installation would be an N+1 on the connect-page load).
+    const bindings = await this.deps.githubInstallationRepository.listByInstallationIds(
+      installations.map((i) => i.installationId),
     )
+    const bindingById = new Map(bindings.map((b) => [b.installationId, b]))
+    return installations.map((i) => {
+      const existing = bindingById.get(i.installationId)
+      let connected: GitHubInstallationOption['connected'] = 'none'
+      if (existing) {
+        const sameAccount =
+          existing.accountId !== null && accountId !== null && existing.accountId === accountId
+        if (existing.workspaceId === workspaceId || sameAccount) {
+          // Already available to this workspace (directly, or shared via account).
+          if (!existing.deletedAt || sameAccount) connected = 'this'
+        } else {
+          connected = 'other'
+        }
+      }
+      return { ...i, connected }
+    })
   }
 
   /**

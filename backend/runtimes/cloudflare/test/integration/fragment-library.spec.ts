@@ -12,7 +12,12 @@ import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
 describe('prompt-fragment library (ADR 0006)', () => {
   describe('when the module is not configured', () => {
     it('reports the tier endpoint as unavailable (503)', async () => {
-      const app = makeApp()
+      // The library is on by default now, so simulate an explicit opt-out by
+      // un-wiring its repositories (what `PROMPT_LIBRARY_ENABLED=false` produces).
+      const app = makeApp(undefined, {
+        promptFragmentRepository: undefined,
+        fragmentSourceRepository: undefined,
+      })
       const { workspace } = await app.createWorkspace()
       const res = await app.call('GET', `/workspaces/${workspace.id}/prompt-fragments`)
       expect(res.status).toBe(503)
@@ -176,6 +181,41 @@ describe('prompt-fragment library (ADR 0006)', () => {
       )
       expect(dirty.body.changed).toBe(true)
       expect(dirty.body.changedCount).toBe(1)
+    })
+
+    it("hides another tenant's source from sync/status/unlink (404, nothing mutated)", async () => {
+      const source = await app.call<FragmentSource>(
+        'POST',
+        `/workspaces/${wsId}/fragment-sources`,
+        { repoOwner: 'acme', repoName: 'guidelines', dirPath: 'guidelines' },
+      )
+      const { workspace: other } = await app.createWorkspace()
+
+      // The other workspace's routes must not read, mutate or delete workspace A's source.
+      const status = await app.call(
+        'GET',
+        `/workspaces/${other.id}/fragment-sources/${source.body.id}/status`,
+      )
+      expect(status.status).toBe(404)
+      const sync = await app.call(
+        'POST',
+        `/workspaces/${other.id}/fragment-sources/${source.body.id}/sync`,
+      )
+      expect(sync.status).toBe(404)
+      const unlink = await app.call(
+        'DELETE',
+        `/workspaces/${other.id}/fragment-sources/${source.body.id}`,
+      )
+      expect(unlink.status).toBe(404)
+
+      // Still linked and syncable at its real owner.
+      const mine = await app.call<FragmentSource[]>('GET', `/workspaces/${wsId}/fragment-sources`)
+      expect(mine.body.map((s) => s.id)).toContain(source.body.id)
+      const ownSync = await app.call(
+        'POST',
+        `/workspaces/${wsId}/fragment-sources/${source.body.id}/sync`,
+      )
+      expect(ownSync.status).toBe(200)
     })
   })
 

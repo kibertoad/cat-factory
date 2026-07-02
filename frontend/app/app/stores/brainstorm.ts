@@ -84,6 +84,16 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     sessions.value = { ...sessions.value, [key(session.blockId, session.stage)]: session }
   }
 
+  /** Patch the cache from a live `brainstorm` stream event (newest wins per block+stage). */
+  function upsert(session: BrainstormSession) {
+    const existing = sessions.value[key(session.blockId, session.stage)]
+    // Keep the freshest by updatedAt (the consensus-store guard): `store()` also runs on
+    // API responses, so a slightly-older event racing a just-submitted answer over the
+    // separate WS transport must not revert the session the response already delivered.
+    if (existing && existing.id === session.id && existing.updatedAt > session.updatedAt) return
+    store(session)
+  }
+
   /** Drop all cached sessions + in-flight state (called on workspace switch). */
   function reset() {
     available.value = null
@@ -215,7 +225,6 @@ export const useBrainstormStore = defineStore('brainstorm', () => {
     proceed,
     resolveExceeded,
     reset,
-    // Patch the cache from a live `brainstorm` stream event.
-    upsert: store,
+    upsert,
   }
 })

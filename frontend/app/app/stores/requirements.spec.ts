@@ -92,3 +92,24 @@ describe('requirements store load() loading flag', () => {
     expect(calls).toBe(2)
   })
 })
+
+describe('requirements store live-event upsert guard', () => {
+  it('an out-of-order stream event cannot revert a newer cached review', () => {
+    const store = useRequirementsStore()
+    // The API response for a just-submitted answer landed first (newer updatedAt)…
+    store.upsert(review({ updatedAt: 2000, status: 'merged' }))
+    // …then the slightly-older stream event (emitted just before) arrives late.
+    store.upsert(review({ updatedAt: 1000, status: 'ready' }))
+    expect(store.reviewFor('b1')?.status).toBe('merged')
+    // A genuinely newer event still applies.
+    store.upsert(review({ updatedAt: 3000, status: 'incorporated' }))
+    expect(store.reviewFor('b1')?.status).toBe('incorporated')
+  })
+
+  it('a NEW review (different id) for the block replaces regardless of updatedAt', () => {
+    const store = useRequirementsStore()
+    store.upsert(review({ updatedAt: 2000 }))
+    store.upsert(review({ id: 'rr2', updatedAt: 1000 }))
+    expect(store.reviewFor('b1')?.id).toBe('rr2')
+  })
+})

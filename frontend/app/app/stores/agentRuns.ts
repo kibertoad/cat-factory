@@ -26,6 +26,13 @@ export interface AgentRunSummary {
   runId: string
   /** Structured failure when `status` is `failed`; null otherwise. */
   failure: AgentFailure | null
+  /**
+   * Failures from the run's PRIOR attempts, oldest→newest — the error trail preserved
+   * across retries/restarts. Stays populated after a restart (when `status` is no longer
+   * `failed` and the top banner is gone), so the "previous errors" history remains
+   * viewable. Empty for a bootstrap run or a run that never failed-then-retried.
+   */
+  failureHistory: AgentFailure[]
   /** Latest subtask counts for a live progress bar (null until reported). */
   subtasks: StepSubtasks | null
 }
@@ -138,6 +145,7 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
         status: e.status,
         runId: e.id,
         failure: e.failure ?? null,
+        failureHistory: e.failureHistory ?? [],
         subtasks: e.steps[e.currentStep]?.subtasks ?? null,
       }
     }
@@ -150,6 +158,8 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
         status: job.status,
         runId: job.id,
         failure: job.failure,
+        // Bootstrap runs keep no prior-attempt trail (retry mints a fresh row).
+        failureHistory: [],
         subtasks: job.subtasks,
       }
     }

@@ -204,7 +204,10 @@
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
       "showDetail": "Pokaż szczegóły",
-      "retrying": "Ponawianie…"
+      "retrying": "Ponawianie…",
+      "history": {
+        "previousErrors": "{count} poprzedni błąd | {count} poprzednie błędy | {count} poprzednich błędów"
+      }
     },
     "stop": {
       "label": "Zatrzymaj",
@@ -2632,6 +2635,10 @@
       "consensusRevertTooltip": "Konsensus włączony. Kliknij, aby wrócić do pojedynczego agenta.",
       "followUpEnableTooltip": "Towarzysz uzupełniający wyłączony. Kliknij, aby włączyć (Coder wykrywa niedokończone wątki / pytania).",
       "followUpDisableTooltip": "Towarzysz uzupełniający włączony. Coder wykrywa niedokończone wątki / podzadania / pytania; kliknij, aby wyłączyć.",
+      "testerQualityEnableTooltip": "Towarzysz jakości testów wyłączony. Kliknij, aby włączyć (audytuje pokrycie raportu i ponawia Testera przy lukach).",
+      "testerQualityDisableTooltip": "Towarzysz jakości testów włączony. Audytuje pokrycie raportu przed zatwierdzeniem i ponawia Testera przy lukach; kliknij, aby wyłączyć.",
+      "testerQualityLabel": "Towarzysz jakości testów",
+      "testerQualityGateTooltip": "Uruchamiaj audyt jakości tylko, gdy szacowanie zadania przekroczy próg (wymaga wcześniejszego Estymatora zadań)",
       "moveUp": "Przesuń krok w górę",
       "moveDown": "Przesuń krok w dół",
       "removeStep": "Usuń ten krok z pipeline'u",
@@ -3273,6 +3280,15 @@
       "failed": "Niepowodzenie",
       "addressed": "Naprawia"
     },
+    "quality": {
+      "heading": "Przegląd pokrycia",
+      "reruns": "Ponowne uruchomienia Testera wywołane jakością",
+      "rerunCount": "{attempts}/{max} ponownych uruchomień",
+      "exceeded": "Budżet wyczerpany",
+      "adequate": "Pokrycie wystarczające",
+      "inadequate": "Znaleziono luki w pokryciu",
+      "gaps": "Luki do zamknięcia"
+    },
     "empty": {
       "title": "Brak raportu z testów.",
       "hint": "Raport pojawi się, gdy Tester zakończy przebieg. W trakcie działania krok pokazuje postęp na żywo na tablicy."
@@ -3572,7 +3588,8 @@
       "connectFirst": "Najpierw połącz źródło dokumentów (Confluence, Notion lub GitHub) w sekcji Integracje.",
       "refPlaceholder": "Id lub URL strony (np. strona Confluence/Notion lub URL pliku GitHub)",
       "tagsPlaceholder": "Tagi, oddzielone przecinkami (opcjonalnie)",
-      "link": "Połącz jako żywy fragment"
+      "link": "Połącz jako żywy fragment",
+      "githubBrowseHint": "Przeglądaj repozytorium i wybierz plik do połączenia."
     },
     "sources": {
       "metaSynced": "zsynchronizowano · ref {ref}",
@@ -3584,7 +3601,10 @@
       "repoPlaceholder": "repozytorium",
       "dirPlaceholder": "ścieżka katalogu (np. guidelines)",
       "refPlaceholder": "ref (domyślnie HEAD)",
-      "link": "Połącz i synchronizuj"
+      "link": "Połącz i synchronizuj",
+      "browseHint": "Przeglądaj repozytorium i wybierz katalog wytycznych Markdown (lub połącz całe repozytorium).",
+      "selectedDir": "Katalog:",
+      "wholeRepo": "Całe repozytorium (katalog główny)."
     },
     "toast": {
       "added": "Dodano fragment",
@@ -3608,7 +3628,8 @@
     "confirmRemove": {
       "title": "Usunąć ten fragment?",
       "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
-    }
+    },
+    "unavailable": "Biblioteka fragmentów promptów nie jest włączona w tym wdrożeniu."
   },
   "sandbox": {
     "title": "Piaskownica: testowanie promptów i modeli",

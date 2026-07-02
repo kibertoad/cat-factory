@@ -124,3 +124,22 @@ describe('MergeResolver.resolveMergerStep', () => {
     expect(decision).toBeNull()
   })
 })
+
+describe('MergeResolver replay safety', () => {
+  it('is a complete no-op on an already-done block (durable-driver replay)', async () => {
+    // A crash between the real merge and the instance persist replays the merger step.
+    // The block is already `done` (= merged): the resolver must not re-merge, must not
+    // downgrade it to `pr_ready`, and must not raise a spurious merge_review.
+    const { resolver, finalizeMerge, update, raise } = makeResolver()
+    const deps = (resolver as unknown as { deps: MergeResolverDeps }).deps
+    ;(deps.blockRepository.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...BLOCK,
+      status: 'done',
+    } as Block)
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(decision).toBeNull()
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(update).not.toHaveBeenCalled()
+    expect(raise).not.toHaveBeenCalled()
+  })
+})

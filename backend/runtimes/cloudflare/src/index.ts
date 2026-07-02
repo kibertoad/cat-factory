@@ -83,6 +83,16 @@ function errInfo(error: unknown): { message: string; stack?: string } {
 const SWEEP_LEASE_MS = 5 * 60 * 1000
 /** An execution whose instance stays missing this long is failed `stalled`, not re-driven. */
 const SWEEP_HARD_STALL_MS = 60 * 60 * 1000
+/**
+ * Per-isolate "first observed orphaned" clock for the run sweeper (see `sweepStuckRuns`).
+ * Keyed by run id, it makes the hard-stall deadline measure time-OBSERVED-orphaned rather
+ * than raw lease age, so a cron outage / deploy freeze longer than `SWEEP_HARD_STALL_MS`
+ * doesn't wrongly fail a recoverable run on the first post-outage tick. A warm isolate carries
+ * it across the 2-min cron ticks; an isolate eviction just resets the clock (the safe
+ * direction — more re-drive grace, never a premature kill). Mirrors the Node sweeper's
+ * per-process `orphanedSince` map.
+ */
+const runSweepOrphanedSince = new Map<string, number>()
 /** A GitHub projection is reconciled if it hasn't synced within this window. */
 const GITHUB_RECONCILE_STALE_MS = 30 * 60 * 1000
 /** A `running` Kaizen grading older than this is re-driven (its sweep crashed mid-flight). */
@@ -289,6 +299,7 @@ export default {
           clock,
           leaseMs: SWEEP_LEASE_MS,
           hardStallMs: SWEEP_HARD_STALL_MS,
+          orphanedSince: runSweepOrphanedSince,
         })
           // Surface what the sweep did — the key signal for "are runs getting stuck?"
           // Only log when it actually acted.

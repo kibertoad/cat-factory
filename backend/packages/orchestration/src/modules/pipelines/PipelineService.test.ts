@@ -176,6 +176,84 @@ describe('PipelineService — estimate gating, companion placement, labels & arc
     expect(p.gating?.[0]).toBeNull()
   })
 
+  it('persists a Tester step opting OUT of the test quality companion', async () => {
+    const service = svc()
+    const p = await service.create(WS, {
+      name: 'Build + test, no QC',
+      agentKinds: ['coder', 'tester-api'],
+      testerQuality: [null, { enabled: false }],
+    })
+    expect(p.testerQuality?.[1]).toEqual({ enabled: false })
+    // Aligned-null on the non-Tester index.
+    expect(p.testerQuality?.[0]).toBeNull()
+    // A round-trip through update preserves the opt-out.
+    const updated = await service.update(WS, p.id, { name: 'renamed' })
+    expect(updated.testerQuality?.[1]).toEqual({ enabled: false })
+  })
+
+  it('does not persist a testerQuality array when every Tester step keeps the default', async () => {
+    const p = await svc().create(WS, {
+      name: 'Build + test, default QC',
+      agentKinds: ['coder', 'tester-api'],
+      // Explicit "enabled, ungated" is the default — not worth an array.
+      testerQuality: [null, { enabled: true }],
+    })
+    expect(p.testerQuality).toBeUndefined()
+  })
+
+  it('persists a Coder step opting OUT of the follow-up companion', async () => {
+    const p = await svc().create(WS, {
+      name: 'Build, no follow-ups',
+      agentKinds: ['coder', 'reviewer'],
+      followUps: [false, null],
+    })
+    expect(p.followUps?.[0]).toBe(false)
+    expect(p.followUps?.[1]).toBeNull()
+  })
+
+  it('rejects a QC-gated Tester step with no task-estimator before it', async () => {
+    await expect(
+      svc().create(WS, {
+        name: 'QC-gated, no estimator',
+        agentKinds: ['coder', 'tester-api'],
+        testerQuality: [
+          null,
+          { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('rejects a QC-gated Tester step that sets no threshold', async () => {
+    await expect(
+      svc().create(WS, {
+        name: 'QC-gated, no threshold',
+        agentKinds: ['task-estimator', 'coder', 'tester-api'],
+        testerQuality: [
+          null,
+          null,
+          { enabled: true, gating: { enabled: true, onMissingEstimate: 'run' } },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('accepts a QC-gated Tester step when a task-estimator runs earlier, persisting it', async () => {
+    const p = await svc().create(WS, {
+      name: 'QC-gated',
+      agentKinds: ['task-estimator', 'coder', 'tester-api'],
+      testerQuality: [
+        null,
+        null,
+        { enabled: true, gating: { enabled: true, minImpact: 0.7, onMissingEstimate: 'run' } },
+      ],
+    })
+    expect(p.testerQuality?.[2]).toEqual({
+      enabled: true,
+      gating: { enabled: true, minImpact: 0.7, onMissingEstimate: 'run' },
+    })
+  })
+
   it('organizes a built-in (archive + labels) — the only mutation a built-in accepts', async () => {
     const store = new Map<string, Pipeline>()
     store.set('pl_builtin', {

@@ -6,7 +6,7 @@ import type {
   Service,
   ServiceRepository,
 } from '@cat-factory/kernel'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { githubInstallations, runnerPoolConnections, services, workspaces } from '../db/schema.js'
 
@@ -107,6 +107,16 @@ export class DrizzleGitHubInstallationRepository implements GitHubInstallationRe
       .where(eq(githubInstallations.installation_id, installationId))
       .limit(1)
     return rows[0] ? rowToInstallation(rows[0]) : null
+  }
+
+  async listByInstallationIds(installationIds: number[]): Promise<GitHubInstallation[]> {
+    if (installationIds.length === 0) return []
+    // Tombstoned rows are included, exactly like the point read (`getByInstallationId`).
+    const rows = await this.db
+      .select()
+      .from(githubInstallations)
+      .where(inArray(githubInstallations.installation_id, installationIds))
+    return rows.map(rowToInstallation)
   }
 
   async getByWorkspace(workspaceId: string): Promise<GitHubInstallation | null> {

@@ -97,6 +97,16 @@ export const useRequirementsStore = defineStore('requirements', () => {
     reviews.value = { ...reviews.value, [review.blockId]: review }
   }
 
+  /** Patch the cache from a live `requirements` stream event (newest wins per block). */
+  function upsert(review: RequirementReview) {
+    const existing = reviews.value[review.blockId]
+    // Keep the freshest by updatedAt (the consensus-store guard): `store()` also runs on
+    // API responses, so a slightly-older event racing a just-submitted answer over the
+    // separate WS transport must not revert the review the response already delivered.
+    if (existing && existing.id === review.id && existing.updatedAt > review.updatedAt) return
+    store(review)
+  }
+
   /** Drop all cached reviews + in-flight state (called on workspace switch). */
   function reset() {
     available.value = null
@@ -277,7 +287,6 @@ export const useRequirementsStore = defineStore('requirements', () => {
     rejectRecommendation,
     reRequestRecommendation,
     reset,
-    // Patch the cache from a live `requirements` stream event.
-    upsert: store,
+    upsert,
   }
 })

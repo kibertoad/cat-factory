@@ -204,7 +204,10 @@
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
       "showDetail": "הצג פרטים",
-      "retrying": "מנסה שוב…"
+      "retrying": "מנסה שוב…",
+      "history": {
+        "previousErrors": "שגיאה קודמת {count} | {count} שגיאות קודמות"
+      }
     },
     "stop": {
       "label": "עצור",
@@ -2643,6 +2646,10 @@
       "consensusRevertTooltip": "קונצנזוס מופעל. לחץ כדי לחזור לסוכן יחיד.",
       "followUpEnableTooltip": "מלווה המעקב מושבת. לחץ כדי להפעיל (Coder מציף קצוות פתוחים / שאלות).",
       "followUpDisableTooltip": "מלווה המעקב מופעל. Coder מציף קצוות פתוחים / משימות צד / שאלות; לחץ כדי להשבית.",
+      "testerQualityEnableTooltip": "מלווה איכות הבדיקות מושבת. לחץ כדי להפעיל (מבקר את כיסוי הדוח ומריץ מחדש את הבודק על פערים).",
+      "testerQualityDisableTooltip": "מלווה איכות הבדיקות פעיל. מבקר את כיסוי הדוח לפני האישור ומריץ מחדש את הבודק על פערים; לחץ כדי להשבית.",
+      "testerQualityLabel": "מלווה איכות הבדיקות",
+      "testerQualityGateTooltip": "הרץ את בדיקת האיכות רק כאשר הערכת המשימה חוצה סף (דורש מעריך משימות לפני כן)",
       "moveUp": "הזז שלב למעלה",
       "moveDown": "הזז שלב למטה",
       "removeStep": "הסר שלב זה מהצינור",
@@ -3284,6 +3291,15 @@
       "failed": "נכשל",
       "addressed": "מטפל"
     },
+    "quality": {
+      "heading": "סקירת כיסוי",
+      "reruns": "הרצות חוזרות של הבודק מבוססות איכות",
+      "rerunCount": "{attempts}/{max} הרצות חוזרות",
+      "exceeded": "התקציב נוצל",
+      "adequate": "הכיסוי מספק",
+      "inadequate": "נמצאו פערי כיסוי",
+      "gaps": "פערים לסגירה"
+    },
     "empty": {
       "title": "אין דוח בדיקה עדיין.",
       "hint": "הדוח מופיע ברגע שהבודק מסיים מעבר. בזמן שהוא רץ, השלב מציג התקדמות חיה על הלוח."
@@ -3583,7 +3599,8 @@
       "connectFirst": "חבר תחילה מקור מסמכים (Confluence, Notion או GitHub) תחת אינטגרציות.",
       "refPlaceholder": "מזהה עמוד או כתובת (למשל עמוד Confluence/Notion או כתובת קובץ GitHub)",
       "tagsPlaceholder": "תגיות, מופרדות בפסיקים (אופציונלי)",
-      "link": "קשר כמקטע חי"
+      "link": "קשר כמקטע חי",
+      "githubBrowseHint": "עיין במאגר ובחר את הקובץ לקישור."
     },
     "sources": {
       "metaSynced": "סונכרן · ref {ref}",
@@ -3595,7 +3612,10 @@
       "repoPlaceholder": "מאגר",
       "dirPlaceholder": "נתיב תיקייה (למשל guidelines)",
       "refPlaceholder": "ref (ברירת מחדל HEAD)",
-      "link": "קשר וסנכרן"
+      "link": "קשר וסנכרן",
+      "browseHint": "עיין במאגר ובחר את תיקיית הנחיות ה-Markdown (או קשר את המאגר כולו).",
+      "selectedDir": "תיקייה:",
+      "wholeRepo": "המאגר כולו (השורש)."
     },
     "toast": {
       "added": "המקטע נוסף",
@@ -3619,7 +3639,8 @@
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",
       "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
-    }
+    },
+    "unavailable": "ספריית מקטעי הפרומפט אינה מופעלת בפריסה זו."
   },
   "sandbox": {
     "title": "Sandbox: בדיקת פרומפטים ומודלים",

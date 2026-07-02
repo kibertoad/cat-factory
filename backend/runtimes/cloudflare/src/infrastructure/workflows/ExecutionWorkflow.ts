@@ -11,6 +11,7 @@ import type { Env } from '../env'
 import { buildContainer } from '../container'
 import { loadConfig } from '../config'
 import { logger } from '../observability/logger'
+import { buildWorkflowRuntime } from './runtime'
 import type { ExecutionWorkflowParams } from './WorkflowsWorkRunner'
 
 /** Per-step retry policy: failures retry a few times before the run is failed. */
@@ -33,7 +34,17 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     step: WorkflowStep,
   ): Promise<void> {
     const { workspaceId, executionId } = event.payload
-    const execConfig = loadConfig(this.env).execution
+    // One DI-graph assembly per wake: the container is pure wiring over env bindings
+    // (no I/O), so every step/poll in this invocation shares it instead of re-running
+    // the whole composition root per `step.do`. A hibernation wake replays `run()`
+    // from the top, so each wake still gets a fresh build. Built via `buildWorkflowRuntime`
+    // so a transient throw here can't kill a parked (`blocked`) instance terminally and
+    // discard the human's decision (F5).
+    const { container, execConfig } = await buildWorkflowRuntime(
+      () => ({ container: buildContainer(this.env), execConfig: loadConfig(this.env).execution }),
+      step,
+      'exec',
+    )
     const decisionTimeout = execConfig.decisionTimeout as WorkflowSleepDuration
     const jobPollInterval = execConfig.jobPollInterval as WorkflowSleepDuration
     const ciPollInterval = execConfig.ciPollInterval as WorkflowSleepDuration
@@ -46,13 +57,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
     ): Promise<void> => {
       logger.warn({ workspaceId, executionId, step: i }, `failing run: ${message}`)
       await step.do(`fail-${i}`, () =>
-        buildContainer(this.env).executionService.failRun(
-          workspaceId,
-          executionId,
-          message,
-          kind,
-          detail,
-        ),
+        container.executionService.failRun(workspaceId, executionId, message, kind, detail),
       )
     }
 
@@ -60,7 +65,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
       let result: AdvanceResult
       try {
         result = (await step.do(`advance-${i}`, STEP_CONFIG, () =>
-          buildContainer(this.env).executionService.advanceInstance(workspaceId, executionId, {
+          container.executionService.advanceInstance(workspaceId, executionId, {
             rethrowAgentErrors: true,
           }),
         )) as AdvanceResult
@@ -91,7 +96,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           await step.sleep(`poll-wait-${i}-${p}`, jobPollInterval)
           try {
             result = (await step.do(`poll-${i}-${p}`, STEP_CONFIG, () =>
-              buildContainer(this.env).executionService.pollAgentJob(workspaceId, executionId),
+              container.executionService.pollAgentJob(workspaceId, executionId),
             )) as AdvanceResult
           } catch (error) {
             pollReadFailures += 1
@@ -138,7 +143,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           await step.sleep(`gate-wait-${i}-${p}`, ciPollInterval)
           try {
             result = (await step.do(`gate-poll-${i}-${p}`, STEP_CONFIG, () =>
-              buildContainer(this.env).executionService.pollGate(workspaceId, executionId),
+              container.executionService.pollGate(workspaceId, executionId),
             )) as AdvanceResult
           } catch (error) {
             pollReadFailures += 1
@@ -169,10 +174,7 @@ export class ExecutionWorkflow extends WorkflowEntrypoint<Env, ExecutionWorkflow
           // regression), while CI/conflicts resolve to a `job_failed` timeout the
           // checks below funnel through `failRun`. One policy, both runtimes.
           result = (await step.do(`gate-exhausted-${i}`, STEP_CONFIG, () =>
-            buildContainer(this.env).executionService.resolveGatePollExhaustion(
-              workspaceId,
-              executionId,
-            ),
+            container.executionService.resolveGatePollExhaustion(workspaceId, executionId),
           )) as AdvanceResult
         }
         // Fall through: the now-updated `result` (continue / done / awaiting_job /

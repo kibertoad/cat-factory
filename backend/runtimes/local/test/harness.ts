@@ -18,6 +18,7 @@ import {
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
+  DrizzleNotificationRepository,
   createApp,
   createDbClient,
   createDrizzleRepositories,
@@ -139,6 +140,7 @@ export function makeConformanceApp(
     deployJobClient?: CoreDependencies['deployJobClient']
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
+    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -183,6 +185,10 @@ export function makeConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
+    // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
+    // full QC loop is driven through the local composition root without a model, identically to
+    // the Worker/Node.
+    ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
     // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
     // the suite drives the container render path through the local composition root, identically
     // to the Worker/Node. Overrides win over buildLocalContainer's own deploy wiring (spread last).
@@ -333,6 +339,8 @@ export function makeConformanceApp(
     seedIncorporatedClarityReview,
     executionRepository: () => container.executionRepository,
     agentRunRepository: () => container.agentRunRepository,
+    blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
+    notificationRepository: () => new DrizzleNotificationRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

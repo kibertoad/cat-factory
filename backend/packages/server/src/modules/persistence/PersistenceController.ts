@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { HmacSigner, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
 import type { AppEnv } from '../../http/env.js'
 import { type PersistenceRpcRequest, dispatchPersistenceCall } from '../../persistence/rpc.js'
 
@@ -39,7 +39,7 @@ export function persistenceController(): Hono<AppEnv> {
     const secret = container.config.auth.sessionSecret
     const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
     const payload = secret
-      ? await new HmacSigner(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
+      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
       : null
     if (!payload) {
       return c.json(
@@ -91,8 +91,9 @@ export function persistenceController(): Hono<AppEnv> {
       }
     }
     const blockFindById = memoizeRead((blockId) => blockRepository?.findById?.(blockId as string))
+    const blockFindByIds = memoizeRead((ids) => blockRepository?.findByIds?.(ids as string[]))
     const serviceListByIds = memoizeRead((ids) => serviceRepository?.listByIds?.(ids as string[]))
-    // For the two self-keyed reads, point the dispatcher's own call at the memo so it hits the
+    // For the self-keyed reads, point the dispatcher's own call at the memo so it hits the
     // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
     // of the registry is untouched.
     const serviceGetViaMemo = async (id: unknown) =>
@@ -100,11 +101,13 @@ export function persistenceController(): Hono<AppEnv> {
     const registryForDispatch =
       request.repo === 'blockRepository' && request.method === 'findById'
         ? { ...registry, blockRepository: { findById: blockFindById } }
-        : request.repo === 'serviceRepository' && request.method === 'listByIds'
-          ? { ...registry, serviceRepository: { listByIds: serviceListByIds } }
-          : request.repo === 'serviceRepository' && request.method === 'get'
-            ? { ...registry, serviceRepository: { get: serviceGetViaMemo } }
-            : registry
+        : request.repo === 'blockRepository' && request.method === 'findByIds'
+          ? { ...registry, blockRepository: { findByIds: blockFindByIds } }
+          : request.repo === 'serviceRepository' && request.method === 'listByIds'
+            ? { ...registry, serviceRepository: { listByIds: serviceListByIds } }
+            : request.repo === 'serviceRepository' && request.method === 'get'
+              ? { ...registry, serviceRepository: { get: serviceGetViaMemo } }
+              : registry
 
     const result = await dispatchPersistenceCall(request, {
       registry: registryForDispatch,
@@ -115,6 +118,24 @@ export function persistenceController(): Hono<AppEnv> {
         const found = (await blockFindById(blockId)) as { workspaceId?: string } | null | undefined
         const workspaceId = found?.workspaceId
         return typeof workspaceId === 'string' ? resolveAccountId(workspaceId) : undefined
+      },
+      // The batched form: one findByIds resolves every block's home workspace, then each
+      // (deduped) workspace's account. A block absent from the read is absent from the map.
+      resolveBlockAccountIds: async (blockIds) => {
+        const found = (await blockFindByIds(blockIds)) as
+          | Array<{ workspaceId: string; block: { id: string } }>
+          | undefined
+        const accountByWorkspace = memoizeRead((workspaceId) =>
+          resolveAccountId(workspaceId as string),
+        )
+        const map = new Map<string, string | null | undefined>()
+        for (const entry of found ?? []) {
+          map.set(
+            entry.block.id,
+            (await accountByWorkspace(entry.workspaceId)) as string | null | undefined,
+          )
+        }
+        return map
       },
       // Services are account-owned; resolve each requested id's `accountId` for the scope check.
       resolveServiceAccountIds: async (serviceIds) => {

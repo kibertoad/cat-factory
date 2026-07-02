@@ -204,7 +204,10 @@
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
       "showDetail": "Afficher le détail",
-      "retrying": "Nouvelle tentative…"
+      "retrying": "Nouvelle tentative…",
+      "history": {
+        "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"
+      }
     },
     "stop": {
       "label": "Arrêter",
@@ -2632,6 +2635,10 @@
       "consensusRevertTooltip": "Consensus activé. Cliquez pour revenir à un seul agent.",
       "followUpEnableTooltip": "Compagnon de suivi désactivé. Cliquez pour l'activer (Coder repère les points en suspens / questions).",
       "followUpDisableTooltip": "Compagnon de suivi activé. Coder repère les points en suspens / sous-tâches / questions ; cliquez pour le désactiver.",
+      "testerQualityEnableTooltip": "Compagnon de qualité des tests désactivé. Cliquez pour l'activer (audite la couverture du rapport et relance le Testeur en cas de lacunes).",
+      "testerQualityDisableTooltip": "Compagnon de qualité des tests activé. Audite la couverture du rapport avant le feu vert et relance le Testeur en cas de lacunes ; cliquez pour le désactiver.",
+      "testerQualityLabel": "Compagnon de qualité des tests",
+      "testerQualityGateTooltip": "N'exécuter l'audit de qualité que lorsque l'estimation de la tâche dépasse un seuil (nécessite un Estimateur de tâches en amont)",
       "moveUp": "Monter l'étape",
       "moveDown": "Descendre l'étape",
       "removeStep": "Retirer cette étape du pipeline",
@@ -3273,6 +3280,15 @@
       "failed": "Échec",
       "addressed": "Corrige"
     },
+    "quality": {
+      "heading": "Revue de couverture",
+      "reruns": "Relances du Testeur pilotées par la qualité",
+      "rerunCount": "{attempts}/{max} relances",
+      "exceeded": "Budget épuisé",
+      "adequate": "Couverture adéquate",
+      "inadequate": "Lacunes de couverture détectées",
+      "gaps": "Lacunes à combler"
+    },
     "empty": {
       "title": "Aucun rapport de tests pour l'instant.",
       "hint": "Le rapport apparaît une fois que le Testeur a terminé une passe. Pendant son exécution, l'étape affiche la progression en direct sur le tableau."
@@ -3572,7 +3588,8 @@
       "connectFirst": "Connectez d'abord une source de documents (Confluence, Notion ou GitHub) dans Intégrations.",
       "refPlaceholder": "Id ou URL de page (par ex. une page Confluence/Notion ou l'URL d'un fichier GitHub)",
       "tagsPlaceholder": "Étiquettes, séparées par des virgules (facultatif)",
-      "link": "Lier comme fragment vivant"
+      "link": "Lier comme fragment vivant",
+      "githubBrowseHint": "Parcourez le dépôt et choisissez le fichier à lier."
     },
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",
@@ -3584,7 +3601,10 @@
       "repoPlaceholder": "dépôt",
       "dirPlaceholder": "chemin du répertoire (par ex. guidelines)",
       "refPlaceholder": "ref (HEAD par défaut)",
-      "link": "Lier et synchroniser"
+      "link": "Lier et synchroniser",
+      "browseHint": "Parcourez le dépôt et choisissez le répertoire de consignes Markdown (ou liez tout le dépôt).",
+      "selectedDir": "Répertoire :",
+      "wholeRepo": "Dépôt entier (racine)."
     },
     "toast": {
       "added": "Fragment ajouté",
@@ -3608,7 +3628,8 @@
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",
       "body": "\"{name}\" sera supprimé. Cette action est irréversible."
-    }
+    },
+    "unavailable": "La bibliothèque de fragments de prompt n'est pas activée pour ce déploiement."
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",

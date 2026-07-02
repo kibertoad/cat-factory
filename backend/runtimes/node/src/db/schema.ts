@@ -276,6 +276,11 @@ export const blocks = pgTable(
     // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
     tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),
     tracker_resolve_on_merge: text('tracker_resolve_on_merge'),
+    // Monotonic insert sequence (Postgres has no SQLite rowid): block list reads come
+    // back in insertion order — sibling order in the board tree, deterministic
+    // snapshots — matching the Cloudflare facade (which orders by `rowid`).
+    // Auto-assigned on insert.
+    seq: serial('seq').notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
@@ -353,6 +358,13 @@ export const pipelines = pgTable(
     // Nullable JSON array of per-step StepGating, parallel to agent_kinds: an enabled entry
     // makes the step run only when the task estimate meets the threshold (mirror of D1 0003).
     gating: text('gating'),
+    // Nullable JSON array of per-step Follow-up companion toggles, parallel to agent_kinds:
+    // `false` disables the Coder's Follow-up companion on that step (mirror of D1 0032).
+    follow_ups: text('follow_ups'),
+    // Nullable JSON array of per-step test quality-control companion configs, parallel to
+    // agent_kinds: an `enabled: false` entry turns the QC companion off on a Tester step, an
+    // entry with `gating` makes the coverage audit estimate-conditional (mirror of D1 0032).
+    tester_quality: text('tester_quality'),
     // Nullable JSON array of free-form organizational labels; `archived` (truthy) hides the
     // pipeline from the default library view (mirror of D1 0003).
     labels: text('labels'),

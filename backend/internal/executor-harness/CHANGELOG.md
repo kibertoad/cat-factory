@@ -1,5 +1,84 @@
 # @cat-factory/executor-harness
 
+## 1.31.8
+
+### Patch Changes
+
+- 6347d0e: Fix opaque "Failed to open PR (HTTP 422): No commits between ..." run failure when a
+  coding run resumes a work branch that has nothing ahead of its base (e.g. its earlier PR
+  was merged with a merge commit, leaving the branch reachable from base and its best-effort
+  delete skipped).
+
+  - `runCodingAgent` no longer treats a resumed branch as work unconditionally: when the
+    branch has no new commits this pass, it confirms the branch is actually ahead of the PR
+    base (new `branchAheadOfBase`, tri-state so an undeterminable result keeps the prior
+    resume-is-work behaviour) and records a clean no-op otherwise.
+  - `openPullRequest` now maps GitHub's `422 "No commits between ..."` to a no-op (returns
+    `null`) instead of a hard `HarnessFailure`, as a backstop.
+
+  Image-bumping: `@cat-factory/executor-harness` → 1.31.7 with the three runner-image pins
+  synced.
+
+## 1.31.6
+
+### Patch Changes
+
+- 9468b90: Force fully non-interactive git auth in the harness so native local mode never triggers a Git
+  Credential Manager popup. Every git invocation now empties the host credential-helper list
+  (`-c credential.helper=`) and disables interactive credential backends, so git falls back to the
+  harness's own askpass PAT instead of the host's GCM — which on Windows either stole focus with a
+  stray auth window or, when modal, hung the git command (clone/fetch/push) until it timed out. A
+  per-command git timeout is now surfaced as an explicit stall (naming the likely causes) rather
+  than a contentless "Command failed", and a genuine git failure now folds in git's stderr.
+
+  Bumps the executor-harness image tag (and the matched `RECOMMENDED_HARNESS_IMAGE` pin) to 1.31.5.
+
+## 1.31.4
+
+### Patch Changes
+
+- 986ed0e: Fix npm publish: add the `repository` field required by sigstore provenance
+
+  The first publish of `@cat-factory/executor-harness` as a public package failed
+  with `E422 … Error verifying sigstore provenance bundle: package.json:
+"repository.url" is ""`. Provenance verification requires the package's
+  `repository.url` to match the source repo, and the manifest carried no
+  `repository` field at all. Add it (pointing at `backend/internal/executor-harness`,
+  like every other published package) plus the mandatory `prepublishOnly` build
+  guard so no publish path can ship an empty `dist/`.
+
+## 1.31.2
+
+### Patch Changes
+
+- 063ef2b: Local native mode: default `LOCAL_HARNESS_ENTRY` to a bundled harness (no more manual path)
+
+  Native execution (`LOCAL_NATIVE_AGENTS`) previously required `LOCAL_HARNESS_ENTRY` to be set
+  to a filesystem path to the executor-harness server entry, which only existed inside a full
+  monorepo checkout — so consumers installing `@cat-factory/*` from npm had no stable target.
+
+  - `@cat-factory/executor-harness` is now **published** (was `private`). Its `.` export is the
+    zero-dependency `dist/server.js` HTTP server that native mode spawns via `node <entry>`.
+  - `@cat-factory/local-server` now depends on it and **auto-resolves** the entry via
+    `require.resolve('@cat-factory/executor-harness')` when `LOCAL_HARNESS_ENTRY` is unset — so a
+    fresh install runs native mode out of the box, mirroring how an unset `LOCAL_HARNESS_IMAGE`
+    falls back to the pinned recommended image. Setting `LOCAL_HARNESS_ENTRY` still overrides it
+    (for a custom or source-checkout build).
+  - `cat-factory init` (`@cat-factory/cli`) no longer treats the entry as required: it is written
+    commented (optional override) and the "set it before starting" warnings are gone.
+
+- 063ef2b: Native local mode (Windows): make ephemeral agent-workspace teardown best-effort
+
+  `withWorkspace` removed its temp checkout with a bare `rm` inside a `finally`. On Windows
+  native execution (`LOCAL_NATIVE_AGENTS`) a just-exited child — git, or the developer's own
+  `claude`/`codex` CLI — can still hold a transient handle on a file in the checkout, so the
+  `rm` throws `EBUSY: resource busy or locked, rmdir '…/agent-XXXXXX'`. Running in the
+  `finally`, that throw propagated out and failed an otherwise-successful agent step.
+
+  Teardown is now resilient: it retries via `fs.rm`'s Windows backoff (`maxRetries`/
+  `retryDelay`) and, if the directory still can't be removed, logs a warning and swallows the
+  error. A leaked temp dir is harmless (the OS reclaims the temp root); failing the run is not.
+
 ## 1.31.0
 
 ### Minor Changes

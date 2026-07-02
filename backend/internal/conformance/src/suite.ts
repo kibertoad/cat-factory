@@ -42,6 +42,7 @@ import type {
   DeployCloneTarget,
   EnvironmentProvider,
   GateProbe,
+  Notification,
   PullRequestReviewProvider,
   PullRequestReviewSnapshot,
   RepoFiles,
@@ -59,6 +60,7 @@ import {
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
+import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -246,6 +248,38 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(a.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
         expect(b.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
       })
+
+      it('returns blocks in insertion order on every store, stable across updates', async () => {
+        // Parity pin: D1 lists blocks `ORDER BY rowid` (insertion order); the Postgres
+        // store must match via its `seq` column. Enough fat rows to span several heap
+        // pages + an update to the FIRST one make the drift observable: without an
+        // ORDER BY, Postgres relocates the updated row's new tuple version to a later
+        // page, so a bare heap read returns it out of insertion order.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const filler = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(12)
+        const createdIds: string[] = []
+        for (let i = 0; i < 40; i++) {
+          const res = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+            title: `Ordered task ${i}`,
+            description: filler,
+          })
+          expect(res.status).toBe(201)
+          createdIds.push(res.body.id)
+        }
+        const updated = await call('PATCH', `/workspaces/${wsId}/blocks/${createdIds[0]}`, {
+          title: 'Ordered task 0, renamed',
+          description: `${filler} Updated so the row version moves in the heap.`,
+        })
+        expect(updated.status).toBe(200)
+
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const createdSet = new Set(createdIds)
+        const listed = snapshot.body.blocks.map((b) => b.id).filter((id) => createdSet.has(id))
+        expect(listed).toEqual(createdIds)
+      })
     })
 
     describe('execution optimistic concurrency (compareAndSwap)', () => {
@@ -418,6 +452,45 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         })
         const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
         expect(res.status).toBe(422)
+      })
+
+      it('round-trips the per-step companion toggles (followUps + testerQuality) on every store', async () => {
+        // The pipeline builder's two per-step companion toggles live on their own JSON columns
+        // (D1/Drizzle `follow_ups` + `tester_quality`), so a custom pipeline that opts a Coder
+        // step OUT of the Follow-up companion and configures a Tester step's QC companion (an
+        // estimate gate) must survive the store round-trip identically — otherwise the builder
+        // toggle silently reverts to the default on the next load.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Toggles',
+          agentKinds: ['task-estimator', 'coder', 'tester-api'],
+          // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
+          // task estimate (an estimator runs earlier, so the gate is valid).
+          followUps: [null, false, null],
+          testerQuality: [
+            null,
+            null,
+            { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+          ],
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.followUps?.[1]).toBe(false)
+        expect(created.body.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
+
+        // A fresh snapshot read re-hydrates both columns from the store, identically on D1 ⇄ Postgres.
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+        expect(stored.followUps?.[1]).toBe(false)
+        expect(stored.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
       })
     })
 
@@ -777,6 +850,73 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           pipelineId: pipeline.body.id,
         })
         expect(blocked.status).toBe(409)
+      })
+
+      it('findByIds resolves blocks across workspaces in one batched read', async () => {
+        // The cross-workspace dependency gate resolves a dependent's foreign blockers via
+        // the batched `BlockRepository.findByIds` (never a point-read per id) — assert the
+        // batched read maps each block to its HOME workspace identically on every store.
+        const app = harness.makeApp()
+        const { workspace: wsA } = await app.createWorkspace()
+        const { workspace: wsB } = await app.createWorkspace()
+        const a = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+          title: 'Home task',
+        })
+        const b = await app.call<Block>('POST', `/workspaces/${wsB.id}/blocks/blk_auth/tasks`, {
+          title: 'Foreign task',
+        })
+        const repo = app.blockRepository()
+        const found = await repo.findByIds([a.body.id, b.body.id, 'blk_does_not_exist'])
+        // Both blocks resolve with their home workspace; the unknown id is simply absent.
+        expect(found).toHaveLength(2)
+        const byId = new Map(found.map((f) => [f.block.id, f]))
+        expect(byId.get(a.body.id)?.workspaceId).toBe(wsA.id)
+        expect(byId.get(b.body.id)?.workspaceId).toBe(wsB.id)
+        expect(byId.get(a.body.id)?.block.title).toBe('Home task')
+        // Empty input short-circuits to an empty result.
+        expect(await repo.findByIds([])).toEqual([])
+      })
+    })
+
+    describe('notifications', () => {
+      it('escalateStaleOpen flips exactly the overdue open normal cards in one statement', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const repo = app.notificationRepository()
+        const card = (id: string, overrides: Partial<Notification>): Notification =>
+          ({
+            id,
+            type: 'merge_review',
+            status: 'open',
+            severity: 'normal',
+            blockId: null,
+            executionId: null,
+            title: id,
+            body: 'body',
+            payload: null,
+            createdAt: 1_000,
+            resolvedAt: null,
+            ...overrides,
+          }) as Notification
+        await repo.upsert(wsId, card('ntf_overdue', {}))
+        await repo.upsert(wsId, card('ntf_recent', { createdAt: 50_000 }))
+        await repo.upsert(wsId, card('ntf_already_urgent', { severity: 'urgent' }))
+        await repo.upsert(wsId, card('ntf_dismissed', { status: 'dismissed', resolvedAt: 2_000 }))
+
+        // Only the open, still-normal card past the cutoff flips — and is returned for
+        // re-delivery (the real-time inbox re-render).
+        const escalated = await repo.escalateStaleOpen(wsId, 10_000)
+        expect(escalated.map((n) => n.id)).toEqual(['ntf_overdue'])
+        expect(escalated[0]?.severity).toBe('urgent')
+
+        const open = await repo.listOpen(wsId)
+        const severityById = new Map(open.map((n) => [n.id, n.severity]))
+        expect(severityById.get('ntf_overdue')).toBe('urgent')
+        expect(severityById.get('ntf_recent')).toBe('normal')
+        expect(severityById.get('ntf_already_urgent')).toBe('urgent')
+        // Idempotent: a second sweep finds nothing left to flip.
+        expect(await repo.escalateStaleOpen(wsId, 10_000)).toEqual([])
       })
     })
 
@@ -4340,6 +4480,83 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
+      it('loops the Tester via the quality-control companion until coverage is adequate, then completes', async () => {
+        // Both reports greenlight with no concerns, so the FIXER never runs — but the QC reviewer
+        // judges the first report's coverage inadequate (it claims three areas but records one
+        // outcome), so the engine loops the Tester for a focused additional pass on its OWN budget,
+        // then the second report's coverage is adequate and the run advances. Drives the full QC
+        // loop — inject a deterministic reviewer, audit → re-run → audit → conclude — on EVERY
+        // runtime, asserting the verdicts + counters persist identically through the step JSON.
+        const shallow = {
+          greenlight: true,
+          summary: 'happy path only',
+          tested: ['login', 'logout', 'session refresh'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const thorough = {
+          greenlight: true,
+          summary: 'covered every area',
+          tested: ['login', 'logout', 'session refresh'],
+          outcomes: [
+            { name: 'login', status: 'passed' as const },
+            { name: 'logout', status: 'passed' as const },
+            { name: 'session refresh', status: 'passed' as const },
+          ],
+          concerns: [],
+        }
+        const reviewer = new FakeTesterQualityReviewer([
+          {
+            adequate: false,
+            gaps: ['logout not exercised', 'session refresh not exercised'],
+            feedback:
+              'Only the happy path was checked; two claimed areas have no recorded outcome.',
+          },
+          { adequate: true, gaps: [], feedback: 'Every listed area now has a recorded outcome.' },
+        ])
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'tester-api'],
+            asyncPolls: 1,
+            testReports: [shallow, thorough],
+            pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
+          },
+          { testerQualityReviewer: reviewer },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test + QC',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.state).toBe('done')
+        // The QC companion looped the Tester exactly once, on its OWN budget — the fixer never ran.
+        expect(testerStep.testerQuality?.attempts).toBe(1)
+        expect(testerStep.test?.attempts).toBe(0)
+        // Two QC verdicts recorded (inadequate → adequate); the round-trip through the step JSON
+        // is identical on D1 and Drizzle.
+        expect(testerStep.testerQuality?.verdicts.map((v) => v.adequate)).toEqual([false, true])
+        expect(testerStep.testerQuality?.verdicts[0]?.gaps.length).toBeGreaterThan(0)
+        expect(testerStep.testerQuality?.exceeded).toBeFalsy()
+        // The final, adequate report is the one that concluded the step.
+        expect(testerStep.test?.lastReport?.summary).toBe('covered every area')
+        // The reviewer audited exactly two reports (the shallow one, then the thorough re-run).
+        expect(reviewer.calls).toHaveLength(2)
+        expect(reviewer.calls.map((c) => c.adequate)).toEqual([false, true])
+      })
+
       it('persists the tester docker-compose stand-up record on both stores', async () => {
         // The in-container compose stand-up (local-infra tester) is captured by the harness and
         // surfaced on the Tester step so the test window can show WHY local infra failed to come
@@ -6203,6 +6420,51 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const task = (
           await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
         ).body.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('blocked')
+      })
+
+      it('refuses to approve a rejected gate — a stale approve cannot resurrect a failed run', async () => {
+        // The reject/approve race regression: approve used to read once and blind-write,
+        // so an approve landing after a reject advanced the already-failed run back to
+        // life. It now re-validates under optimistic concurrency and must conflict.
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Gated',
+          agentKinds: ['architect', 'coder'],
+          gates: [true, false],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: gated.body.id,
+        })
+
+        const blocked = await app.drive(wsId)
+        const exec = blocked.find((e) => e.blockId === 'task_login')!
+        const approvalId = exec.steps[0]!.approval!.id
+
+        const rejected = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/reject`,
+          { reason: 'wrong direction' },
+        )
+        expect(rejected.status).toBe(200)
+        expect(rejected.body.status).toBe('failed')
+
+        const approve = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/approve`,
+          {},
+        )
+        expect(approve.status).toBe(409)
+
+        // The run stays failed and the task stays blocked — nothing was resurrected.
+        const snapshot = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const run = snapshot.executions.find((e) => e.id === exec.id)!
+        expect(run.status).toBe('failed')
+        expect(run.steps[0]!.approval?.status).toBe('rejected')
+        const task = snapshot.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('blocked')
       })
     })

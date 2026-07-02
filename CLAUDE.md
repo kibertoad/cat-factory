@@ -381,10 +381,12 @@ facade so the runtimes can't drift (see "Cross-runtime conformance" below).
   `github_repos`/`github_installations` projection); the `linkRepo` helper (+ CLI) seeds
   those rows from PAT-read repo metadata since there is no GitHub-App connect flow.
 - `backend/internal/executor-harness` — the payload that runs **inside** each
-  per-run Cloudflare Container (the Pi coding-agent harness). Private (not on npm);
-  its multi-arch Docker image is published publicly to **GHCR + Docker Hub** by
-  `docker-publish.yml` (or manually via the package's `image:publish` script /
-  `scripts/publish-image.sh`).
+  per-run Cloudflare Container (the Pi coding-agent harness). Published to **npm**
+  (its zero-dependency `dist/server.js` is the entry `@cat-factory/local-server`
+  spawns in local native mode), and its multi-arch Docker image is published
+  publicly to **GHCR + Docker Hub** by `docker-publish.yml` (or manually via the
+  package's `image:publish` script / `scripts/publish-image.sh`). Its version is
+  both the npm version and the Docker image tag.
 - `backend/internal/benchmark-harness` — headless agent benchmarking (`cat-bench`);
   private, not published.
 - `backend/internal/smoketest-harness` — `@cat-factory/smoketest-harness`, a headless
@@ -465,7 +467,8 @@ The allow-list is `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`. The polic
 - Versioning/publishing is [changesets](https://github.com/changesets/changesets)
   (`.changeset/config.json`, root `pnpm changeset` / `ci:publish`). Public packages
   publish to npm; `deploy/*` + `benchmark-harness` are `ignore`d;
-  `executor-harness` is versioned-but-private (its version is the GHCR image tag).
+  `executor-harness` publishes to npm too and its version doubles as the Docker
+  image tag.
 - **Always add a changeset for any change to a versioned package**, and bump
   `@cat-factory/executor-harness` whenever you touch what goes into its image
   (`src/**`, `Dockerfile`, `tsconfig.json`, the pinned `PI_*` args). Empty changeset
