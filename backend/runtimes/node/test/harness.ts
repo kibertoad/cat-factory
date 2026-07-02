@@ -227,11 +227,13 @@ export function makeConformanceApp(
 
   // Org-scoped workspace via the container's services (dev-open has no signed-in user,
   // so the HTTP account flow can't create the owning org). Mirrors the Worker helper.
-  async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
+  async function createOrgWorkspace(
+    options: { name?: string; seed?: boolean } = {},
+  ): Promise<WorkspaceSnapshot> {
     const user = { id: 'usr_org-owner', login: 'org-owner', name: 'Org Owner' }
     const name = options.name ?? 'Org board'
     const org = await container.accountService.createOrg(user, { name: `${name} org` })
-    return container.workspaceService.create({ name, seed: false }, user.id, org.id)
+    return container.workspaceService.create({ name, seed: options.seed ?? false }, user.id, org.id)
   }
 
   // Drive every active run to a standstill through the SHARED production driver
@@ -241,7 +243,9 @@ export function makeConformanceApp(
     return driveWorkspace(
       container.executionService,
       workspaceId,
-      async () => (await container.workspaceService.snapshot(workspaceId)).executions,
+      // Enumerate runs straight from the repository (as production does — it drives by run id),
+      // NOT via the SPA snapshot, which now hides the public-API "initiative" runs' executions.
+      () => container.executionRepository.listByWorkspace(workspaceId),
       maxRounds,
     )
   }

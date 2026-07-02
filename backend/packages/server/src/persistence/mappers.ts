@@ -549,6 +549,8 @@ interface ExecutionDetail {
   initiatedBy: string | null
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
+  /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
+  createdAt?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +662,8 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
+    // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
+    ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
     // Optimistic-concurrency token; a legacy row without the column reads as 0.
     rev: row.rev ?? 0,
   }
@@ -678,5 +682,6 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
+    ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
   } satisfies ExecutionDetail)
 }

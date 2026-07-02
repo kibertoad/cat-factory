@@ -81,12 +81,14 @@ export interface ConformanceApp {
   /** Create (and optionally seed) a workspace, returning its snapshot. */
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
-   * Create an unseeded workspace owned by an ORG account (a fresh org + owner created
-   * straight through the facade's services, since dev-open has no signed-in user to
-   * drive the HTTP account flow). Backs the conformance assertion that an individual-only
-   * subscription (Claude) is refused for org-owned workspaces on every runtime.
+   * Create a workspace owned by an ORG account (a fresh org + owner created straight through
+   * the facade's services, since dev-open has no signed-in user to drive the HTTP account flow).
+   * Unseeded by default; pass `seed: true` for the demo board + built-in pipelines (e.g. the
+   * public-API test, which needs the account AND the seeded `pl_initiative_breakdown` pipeline).
+   * Backs the assertion that an individual-only subscription (Claude) is refused for org-owned
+   * workspaces on every runtime.
    */
-  createOrgWorkspace(options?: { name?: string }): Promise<WorkspaceSnapshot>
+  createOrgWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
    * Drive every active run in a workspace to a standstill (done, or parked on a
    * decision / the spend gate) and return the latest executions. In production a

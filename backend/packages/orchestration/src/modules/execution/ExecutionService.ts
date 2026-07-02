@@ -1336,6 +1336,7 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      createdAt: this.clock.now(),
     }
     await this.insertLiveRunOrConflict(workspaceId, instance, prior?.id)
     await this.blockRepository.update(workspaceId, blockId, {

@@ -391,6 +391,20 @@ class DrizzleBlockRepository implements BlockRepository {
       .delete(blocks)
       .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
   }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.workspace_id, workspaceId),
+          eq(blocks.internal, 1),
+          eq(blocks.status, 'in_progress'),
+        ),
+      )
+    return row?.n ?? 0
+  }
 }
 
 class DrizzlePipelineRepository implements PipelineRepository {

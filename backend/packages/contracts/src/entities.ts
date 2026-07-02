@@ -1544,6 +1544,12 @@ export const executionInstanceSchema = v.object({
    */
   initiatedBy: v.optional(v.nullable(v.string())),
   /**
+   * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
+   * creation timestamp independent of when its first step actually starts (the public-API
+   * job view reports it as `createdAt`). Absent on legacy runs persisted before this field.
+   */
+  createdAt: v.optional(v.number()),
+  /**
    * Optimistic-concurrency token: a monotonic revision of the persisted run row,
    * bumped on every write. Read back by the repository and used by
    * `compareAndSwap` so a human-action write (resolve decision / approve /

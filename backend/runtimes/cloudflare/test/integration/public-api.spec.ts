@@ -10,7 +10,9 @@ import { makeApp } from '../helpers'
 describe('public API — break down an initiative', () => {
   it('issues a key, runs headlessly, retrieves the result, and hides the anchor block', async () => {
     const app = makeApp(new FakeAgentExecutor())
-    const snapshot = await app.createWorkspace({ seed: true })
+    // Public-API keys are account-scoped, so use a seeded ORG workspace (the seed brings the
+    // built-in `pl_initiative_breakdown` pipeline).
+    const snapshot = await app.createOrgWorkspace({ seed: true })
     const workspaceId = snapshot.workspace.id
 
     // Mint a public-API key via the session-authed management route (dev-open in tests).

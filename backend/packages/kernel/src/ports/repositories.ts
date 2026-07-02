@@ -103,6 +103,13 @@ export interface BlockRepository {
    */
   setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void>
   deleteMany(workspaceId: string, ids: string[]): Promise<void>
+  /**
+   * Count the workspace's HEADLESS internal anchor blocks (`internal = 1`) still in flight
+   * (`status = 'in_progress'`) — the concurrency backstop for the public API, which caps how
+   * many external "initiative" runs a workspace can have active at once. A SQL `COUNT`, never a
+   * load-and-count in JS (an unbounded external caller could otherwise start runs without limit).
+   */
+  countActiveInternal(workspaceId: string): Promise<number>
 }
 
 export interface PipelineRepository {

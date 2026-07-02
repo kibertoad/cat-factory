@@ -86,4 +86,13 @@ describe('PublicApiKeyService', () => {
     // A revoked key drops out of the management list.
     expect(await service.list('w')).toHaveLength(0)
   })
+
+  it('isActive reflects existence + revocation (the cheap re-check for live streams)', async () => {
+    const { service } = makeService()
+    const { record } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+    expect(await service.isActive(record.id)).toBe(true)
+    expect(await service.isActive('pak_unknown')).toBe(false)
+    await service.revoke('w', record.id)
+    expect(await service.isActive(record.id)).toBe(false)
+  })
 })

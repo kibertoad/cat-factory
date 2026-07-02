@@ -495,6 +495,26 @@ export class BoardService {
     return block
   }
 
+  /**
+   * Fetch a HEADLESS internal anchor block by id, or null when no block with that id exists in
+   * the workspace OR it is not `internal`. The public-API job reads use this to confine an
+   * external key to the runs IT created (an `internal` block) — never an arbitrary board
+   * execution that merely shares the key's workspace. See PublicApiController.
+   */
+  async getInternalTask(workspaceId: string, blockId: string): Promise<Block | null> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    return block?.internal ? block : null
+  }
+
+  /**
+   * How many of the workspace's headless internal "initiative" runs are still in flight — the
+   * concurrency backstop the public API checks before starting another, so a single (possibly
+   * leaked) key can't spin up unbounded LLM runs. A SQL `COUNT`, not a load-and-count.
+   */
+  countActiveInternalTasks(workspaceId: string): Promise<number> {
+    return this.blockRepository.countActiveInternal(workspaceId)
+  }
+
   /** Add a module (sub-frame) inside a service. */
   async addModule(workspaceId: string, serviceId: string, input: AddModuleInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
