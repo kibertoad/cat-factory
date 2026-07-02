@@ -85,6 +85,7 @@ export {
   isTestingKind,
   testingSystemPrompt,
   testerEnvironmentSection,
+  TESTER_QC_SYSTEM_PROMPT,
 } from './agents/prompts/testing.js'
 // Requirements-review prompt text + its versioned-prompt registry.
 export {

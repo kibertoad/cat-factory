@@ -2949,6 +2949,7 @@ function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
     maxRequirementIterations: row.max_requirement_iterations,
     maxRequirementConcernAllowed:
       row.max_requirement_concern_allowed as MergeThresholdPreset['maxRequirementConcernAllowed'],
+    maxTesterQualityIterations: row.max_tester_quality_iterations,
     releaseWatchWindowMinutes: row.release_watch_window_minutes,
     releaseMaxAttempts: row.release_max_attempts,
     humanReviewGraceMinutes: row.human_review_grace_minutes,
@@ -3016,6 +3017,7 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
       ci_max_attempts: preset.ciMaxAttempts,
       max_requirement_iterations: preset.maxRequirementIterations,
       max_requirement_concern_allowed: preset.maxRequirementConcernAllowed,
+      max_tester_quality_iterations: preset.maxTesterQualityIterations,
       release_watch_window_minutes: preset.releaseWatchWindowMinutes,
       release_max_attempts: preset.releaseMaxAttempts,
       human_review_grace_minutes: preset.humanReviewGraceMinutes,
@@ -3052,6 +3054,7 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
             ci_max_attempts: values.ci_max_attempts,
             max_requirement_iterations: values.max_requirement_iterations,
             max_requirement_concern_allowed: values.max_requirement_concern_allowed,
+            max_tester_quality_iterations: values.max_tester_quality_iterations,
             release_watch_window_minutes: values.release_watch_window_minutes,
             release_max_attempts: values.release_max_attempts,
             human_review_grace_minutes: values.human_review_grace_minutes,

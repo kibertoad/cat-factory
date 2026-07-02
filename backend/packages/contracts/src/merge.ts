@@ -81,6 +81,14 @@ export const mergeThresholdPresetSchema = v.object({
    */
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   /**
+   * How many times the test quality-control companion may loop the Tester for a more
+   * complete report before it stops gating and lets the run proceed to the greenlight /
+   * fixer decision. One QC-driven Tester re-run = one iteration, so this is the maximum
+   * number of QC re-runs: `1` permits a single re-run before the gate gives up. Independent
+   * of the `ciMaxAttempts` fixer budget.
+   */
+  maxTesterQualityIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /**
    * How long (minutes) the post-release-health gate watches the deployed release's
    * Datadog monitors/SLOs before declaring it healthy and advancing.
    */
@@ -137,6 +145,7 @@ export const createMergePresetSchema = v.object({
   ciMaxAttempts: attemptsSchema,
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
+  maxTesterQualityIterations: v.optional(iterationsSchema, 3),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
@@ -156,6 +165,7 @@ export const updateMergePresetSchema = v.object({
   ciMaxAttempts: v.optional(attemptsSchema),
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
+  maxTesterQualityIterations: v.optional(iterationsSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),

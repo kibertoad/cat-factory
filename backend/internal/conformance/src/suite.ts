@@ -2344,7 +2344,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
         expect(balanced.isDefault).toBe(true)
         expect(balanced.autoMergeEnabled).toBe(true)
-        expect(balanced.version).toBe(1)
+        expect(balanced.version).toBe(2)
+        // The QC-companion budget round-trips with its default through both stores.
+        expect(balanced.maxTesterQualityIterations).toBe(3)
         // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
         expect(manual.isDefault).toBe(false)
         expect(manual.autoMergeEnabled).toBe(false)
@@ -2362,14 +2364,16 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           ciMaxAttempts: 5,
           maxRequirementIterations: 5,
           maxRequirementConcernAllowed: 'medium',
+          maxTesterQualityIterations: 4,
           releaseWatchWindowMinutes: 45,
           releaseMaxAttempts: 2,
         })
         expect(lenient.status).toBe(201)
         expect(lenient.body.isDefault).toBe(false)
-        // The requirements-loop + release-health fields round-trip through the store on both runtimes.
+        // The requirements-loop + QC + release-health fields round-trip through the store on both runtimes.
         expect(lenient.body.maxRequirementIterations).toBe(5)
         expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
+        expect(lenient.body.maxTesterQualityIterations).toBe(4)
         expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
         expect(lenient.body.releaseMaxAttempts).toBe(2)
 
@@ -2427,8 +2431,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           `/workspaces/${wsId}`,
         )
         expect(snap.body.mergePresetCatalogVersions).toMatchObject({
-          mp_balanced: 1,
-          mp_manual_review: 1,
+          mp_balanced: 2,
+          mp_manual_review: 2,
         })
 
         // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
@@ -2442,7 +2446,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(reseeded.status).toBe(200)
         expect(reseeded.body.name).toBe('Balanced')
         expect(reseeded.body.autoMergeEnabled).toBe(true)
-        expect(reseeded.body.version).toBe(1)
+        expect(reseeded.body.version).toBe(2)
         // The default is preserved across a reseed.
         expect(reseeded.body.isDefault).toBe(true)
 

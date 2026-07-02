@@ -23,6 +23,15 @@ import * as v from 'valibot'
 export const testEnvironmentSchema = v.picklist(['local', 'ephemeral'])
 export type TestEnvironment = v.InferOutput<typeof testEnvironmentSchema>
 
+/**
+ * The test quality-control companion's agent kind. It is a companion of the `tester-api`
+ * and `tester-ui` agents (never a standalone pipeline step): after the Tester produces a
+ * report, this inline reviewer judges whether the report adequately covers what the Tester
+ * claimed to test and, when it doesn't, loops the Tester for a more thorough pass BEFORE the
+ * greenlight/fixer decision. This package is the single source of truth for the string.
+ */
+export const TESTER_QC_AGENT_KIND = 'tester-qc'
+
 /** How serious a concern the Tester surfaced is. */
 export const testConcernSeveritySchema = v.picklist(['low', 'medium', 'high', 'critical'])
 export type TestConcernSeverity = v.InferOutput<typeof testConcernSeveritySchema>
