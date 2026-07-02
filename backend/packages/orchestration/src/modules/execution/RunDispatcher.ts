@@ -2074,12 +2074,19 @@ export class RunDispatcher {
       {
         kind: MERGER_AGENT_KIND,
         applies: (result) => result.mergeAssessment !== undefined,
-        resolve: async ({ workspaceId, instance, result }) => {
+        resolve: async ({ workspaceId, instance, step, result }) => {
           // The real merge runs the engine GitHub client under the run initiator's
           // ambient context, so a per-user PAT (when set) authors the merge.
-          await this.runInitiatorScope(instance.initiatedBy, () =>
+          const decision = await this.runInitiatorScope(instance.initiatedBy, () =>
             this.mergeResolver.resolveMergerStep(workspaceId, instance, result.mergeAssessment),
           )
+          // Record the structured verdict on the step so the SPA's dedicated merger result
+          // view renders the assessment + explains the auto-merge / awaiting-review decision,
+          // instead of showing the agent's raw JSON. Replaces the raw JSON output too.
+          if (decision) {
+            step.custom = decision
+            step.output = ''
+          }
           return { ownsTerminalStatus: true }
         },
       },

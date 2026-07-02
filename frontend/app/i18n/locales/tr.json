@@ -681,6 +681,32 @@
       "noResult": "Henüz sonuç yok.",
       "noResultHint": "Yapılandırılmış çıktı bu ajan tamamlandığında görünür. Çalışırken adım, panoda canlı ilerlemeyi gösterir."
     },
+    "mergerResult": {
+      "title": "Birleştirme kararı",
+      "titleWithBlock": "Birleştirme kararı: {title}",
+      "description": "PR'nin nasıl puanlandığı ve motorun ne karar verdiği.",
+      "outcome": {
+        "auto_merged": "Otomatik birleştirildi",
+        "awaiting_review": "İnsan incelemesi bekleniyor"
+      },
+      "reason": {
+        "within_thresholds": "Tüm puanlar {preset} eşiklerinin içinde olduğundan PR otomatik olarak birleştirildi.",
+        "exceeded_thresholds": "{axes} {preset} eşiklerini aştığından PR bir kişinin birleştirmesini bekliyor.",
+        "auto_merge_disabled": "{preset} ön ayarı her PR'yi bir kişiye yönlendirir, bu yüzden bu PR inceleme bekliyor.",
+        "no_assessment": "Birleştirici güvenilir bir değerlendirme üretemedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
+        "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor."
+      },
+      "scores": "Puanlar",
+      "axis": {
+        "complexity": "Karmaşıklık",
+        "risk": "Risk",
+        "impact": "Etki"
+      },
+      "ceiling": "üst sınır {value}",
+      "rationale": "Gerekçe",
+      "noAssessment": "Birleştirici puanlı bir değerlendirme döndürmedi.",
+      "noResult": "Henüz bir birleştirme kararı kaydedilmedi."
+    },
     "testReport": {
       "title": "Test raporu",
       "greenlit": "Onaylandı",

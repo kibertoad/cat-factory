@@ -681,6 +681,32 @@
       "noResult": "Brak wyniku.",
       "noResultHint": "Ustrukturyzowany wynik pojawia się po zakończeniu pracy tego agenta. W trakcie działania krok pokazuje postęp na żywo na tablicy."
     },
+    "mergerResult": {
+      "title": "Decyzja o scaleniu",
+      "titleWithBlock": "Decyzja o scaleniu: {title}",
+      "description": "Jak oceniono PR i co zdecydował silnik.",
+      "outcome": {
+        "auto_merged": "Scalono automatycznie",
+        "awaiting_review": "Oczekuje na przegląd przez człowieka"
+      },
+      "reason": {
+        "within_thresholds": "Wszystkie oceny mieszczą się w progach {preset}, więc PR został scalony automatycznie.",
+        "exceeded_thresholds": "{axes} przekroczył progi {preset}, więc PR czeka na scalenie przez człowieka.",
+        "auto_merge_disabled": "Ustawienie {preset} kieruje każdy PR do człowieka, więc ten czeka na przegląd.",
+        "no_assessment": "Scalający nie zdołał sporządzić wiarygodnej oceny, więc PR czeka na scalenie przez człowieka.",
+        "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka."
+      },
+      "scores": "Oceny",
+      "axis": {
+        "complexity": "Złożoność",
+        "risk": "Ryzyko",
+        "impact": "Wpływ"
+      },
+      "ceiling": "limit {value}",
+      "rationale": "Uzasadnienie",
+      "noAssessment": "Scalający nie zwrócił oceny punktowej.",
+      "noResult": "Nie zarejestrowano jeszcze decyzji o scaleniu."
+    },
     "testReport": {
       "title": "Raport z testów",
       "greenlit": "Zatwierdzone",

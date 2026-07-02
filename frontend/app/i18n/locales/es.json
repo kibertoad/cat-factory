@@ -681,6 +681,32 @@
       "noResult": "Aún no hay resultado.",
       "noResultHint": "La salida estructurada aparece cuando este agente termina. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
     },
+    "mergerResult": {
+      "title": "Decisión de fusión",
+      "titleWithBlock": "Decisión de fusión: {title}",
+      "description": "Cómo se puntuó el PR y qué decidió el motor.",
+      "outcome": {
+        "auto_merged": "Fusionado automáticamente",
+        "awaiting_review": "Esperando revisión humana"
+      },
+      "reason": {
+        "within_thresholds": "Todas las puntuaciones están dentro de los umbrales de {preset}, por lo que el PR se fusionó automáticamente.",
+        "exceeded_thresholds": "{axes} superó los umbrales de {preset}, por lo que el PR espera a que una persona lo fusione.",
+        "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
+        "no_assessment": "El fusionador no pudo producir una evaluación creíble, por lo que el PR espera a que una persona lo fusione.",
+        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione."
+      },
+      "scores": "Puntuaciones",
+      "axis": {
+        "complexity": "Complejidad",
+        "risk": "Riesgo",
+        "impact": "Impacto"
+      },
+      "ceiling": "límite {value}",
+      "rationale": "Justificación",
+      "noAssessment": "El fusionador no devolvió una evaluación puntuada.",
+      "noResult": "Aún no se ha registrado ninguna decisión de fusión."
+    },
     "testReport": {
       "title": "Informe de pruebas",
       "greenlit": "Aprobado",

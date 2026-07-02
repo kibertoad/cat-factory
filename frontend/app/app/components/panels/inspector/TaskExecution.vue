@@ -99,7 +99,12 @@ function labelForStep(s: {
   // container is still cold-booting → "Spinning up"; up with a known phase → the phase
   // label ("Agent running" / "Preparing workspace"), so a finished cold-boot no longer
   // collapses into a blank "Working". A failed run's mid-flight step isn't booting.
-  if (!runFailed.value) {
+  //
+  // Only while the step is STILL RUNNING, though: the run's one shared container is kept
+  // alive until the pipeline's final step, so a step that has already finished (e.g. the
+  // merger, which resolves + advances to a trailing gate) would otherwise keep reading the
+  // stale "Agent running" phase even though its state is `done`. A done step reads "Done".
+  if (!runFailed.value && s.state !== 'done') {
     if (s.container?.status === 'starting') return t('inspector.execution.spinningUp')
     if (s.container?.status === 'up') {
       const label = containerPhaseLabel(s.container.phase, { t, te })

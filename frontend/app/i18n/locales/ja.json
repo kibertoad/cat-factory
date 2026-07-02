@@ -681,6 +681,32 @@
       "noResult": "まだ結果はありません。",
       "noResultHint": "構造化出力はこのエージェントの完了後に表示されます。実行中はステップがボード上にライブ進捗を表示します。"
     },
+    "mergerResult": {
+      "title": "マージの判定",
+      "titleWithBlock": "マージの判定: {title}",
+      "description": "PR のスコアとエンジンの判断内容。",
+      "outcome": {
+        "auto_merged": "自動マージ済み",
+        "awaiting_review": "人によるレビュー待ち"
+      },
+      "reason": {
+        "within_thresholds": "すべてのスコアが {preset} のしきい値内のため、PR は自動的にマージされました。",
+        "exceeded_thresholds": "{axes} が {preset} のしきい値を超えたため、PR は人によるマージを待っています。",
+        "auto_merge_disabled": "{preset} プリセットはすべての PR を人に回すため、この PR はレビュー待ちです。",
+        "no_assessment": "マージ担当が信頼できる評価を生成できなかったため、PR は人によるマージを待っています。",
+        "merge_failed": "スコアは {preset} のしきい値内でしたが、自動マージを完了できなかった（例: ブランチ保護や競合）ため、PR は人によるマージを待っています。"
+      },
+      "scores": "スコア",
+      "axis": {
+        "complexity": "複雑さ",
+        "risk": "リスク",
+        "impact": "影響"
+      },
+      "ceiling": "上限 {value}",
+      "rationale": "根拠",
+      "noAssessment": "マージ担当はスコア付き評価を返しませんでした。",
+      "noResult": "マージの判定はまだ記録されていません。"
+    },
     "testReport": {
       "title": "テストレポート",
       "greenlit": "承認済み",

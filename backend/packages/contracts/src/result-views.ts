@@ -26,6 +26,7 @@ export const RESULT_VIEW_IDS = [
   'generic-structured',
   'service-spec',
   'follow-ups',
+  'merger',
 ] as const
 
 export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]
