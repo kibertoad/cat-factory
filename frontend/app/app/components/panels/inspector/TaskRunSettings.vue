@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { connectionNeighborIds } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
@@ -152,6 +153,33 @@ const pipelineMenu = computed(() => [
 ])
 function setPipeline(id: string) {
   board.updateBlock(props.block.id, { pipelineId: id })
+}
+
+// ---- involved services ------------------------------------------------------
+// Which of the connected services are directly involved in this task (beyond its own
+// service, which is always implicit): each involved service is spun up as an ephemeral
+// environment alongside it, and the coding agent may change its repo too. Choices come
+// from the frame's connection NEIGHBORS (either direction). An id whose connection was
+// removed after selection is stale: badged, and dropped on the next toggle (the write
+// gate would reject it).
+const connectedServices = computed(() => {
+  const frame = taskFrame.value
+  if (!frame) return []
+  return [...connectionNeighborIds(board.blocks, frame.id)]
+    .map((id) => board.getBlock(id))
+    .filter((b): b is Block => !!b)
+})
+const involvedIds = computed(() => props.block.involvedServiceIds ?? [])
+const staleInvolvedServices = computed(() => {
+  const connected = new Set(connectedServices.value.map((b) => b.id))
+  return involvedIds.value.filter((id) => !connected.has(id))
+})
+function toggleInvolved(serviceId: string, on: boolean) {
+  const connected = new Set(connectedServices.value.map((b) => b.id))
+  const kept = involvedIds.value.filter((id) => id !== serviceId && connected.has(id))
+  board.updateBlock(props.block.id, {
+    involvedServiceIds: on ? [...kept, serviceId] : kept,
+  })
 }
 
 // ---- issue-tracker writeback overrides -------------------------------------
@@ -397,6 +425,44 @@ const technicalLabel = computed(() => {
         <template v-else>
           {{ t('inspector.runSettings.technicalHint.unset') }}
         </template>
+      </div>
+    </div>
+
+    <!-- involved services: connected services this task spans (envs + possible code changes) -->
+    <div data-testid="involved-services">
+      <div class="mb-1 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+          {{ t('inspector.runSettings.involvedServices') }}
+        </span>
+      </div>
+      <div v-if="connectedServices.length" class="space-y-1">
+        <UCheckbox
+          v-for="s in connectedServices"
+          :key="s.id"
+          :model-value="involvedIds.includes(s.id)"
+          :label="s.title || s.id"
+          size="xs"
+          data-testid="involved-service-toggle"
+          @update:model-value="(v: boolean | 'indeterminate') => toggleInvolved(s.id, v === true)"
+        />
+      </div>
+      <div v-else class="text-[11px] text-slate-500">
+        {{ t('inspector.runSettings.involvedServicesEmpty') }}
+      </div>
+      <div v-if="staleInvolvedServices.length" class="mt-1 flex flex-wrap gap-1">
+        <UBadge
+          v-for="id in staleInvolvedServices"
+          :key="id"
+          size="sm"
+          variant="soft"
+          color="warning"
+          :title="t('inspector.runSettings.involvedServiceStale')"
+        >
+          {{ board.getBlock(id)?.title ?? id }}
+        </UBadge>
+      </div>
+      <div class="mt-1 text-[11px] text-slate-500">
+        {{ t('inspector.runSettings.involvedServicesHint') }}
       </div>
     </div>
 
