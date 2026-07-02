@@ -16,6 +16,11 @@ Verified-sound areas are listed at the end so they aren't re-reported as gaps.
 
 ## 1. Critical — features that are broken, not just racy
 
+> **Status: ADDRESSED.** The `ExecutionWorkflow` no longer returns on `paused` (which
+> made its instance terminal); it keeps the instance alive, sleeping between budget
+> re-checks, so the run auto-resumes on budget-free or `/spend/resume` with no
+> terminal-id trap.
+
 ### 1.1 Cloudflare: a spend-paused run can never be resumed; resume converts it into an auto-stopped failure — CONFIRMED
 
 - `ExecutionService.resumePaused` (`backend/packages/orchestration/src/modules/execution/ExecutionService.ts:2629`) flips `paused` → `running` (correctly via CAS), then `workRunner.startRun(…, resumed.id)`.
@@ -37,6 +42,10 @@ facade-parity bug. Fix shape: mint a fresh instance id on resume, exactly as
 `retry`/`restartFromStep` already do (`ExecutionService.ts:2443-2447` documents why) and
 as `GitHubBackfillWorkflow` does with its `Date.now()` suffix (`GitHubGateways.ts:18`).
 
+> **Status: ADDRESSED.** Past the poll-read tolerance the `BootstrapWorkflow` no longer
+> returns (terminal → sweeper force-fail); it keeps the instance alive and keeps polling,
+> so a merely-busy container recovers.
+
 ### 1.2 BootstrapWorkflow's "leave it for the sweeper to re-drive" actually force-fails the job — CONFIRMED intent/behavior mismatch
 
 - `BootstrapWorkflow.ts:71-77`: after `jobPollFailureTolerance` consecutive unreadable
@@ -52,6 +61,13 @@ as `GitHubBackfillWorkflow` does with its `Date.now()` suffix (`GitHubGateways.t
 ---
 
 ## 2. High — engine-wide structural races
+
+> **Status: ADDRESSED.** A partial unique index on live execution rows per block (D1
+> migration `0033` ⇄ Drizzle) plus an atomic `ExecutionRepository.insertLive` (ON CONFLICT
+> DO NOTHING) make `start`/`retry`/`restartFromStep` refuse a concurrent double start with
+> a 409 instead of creating two live runs. Cross-runtime conformance assertion added. The
+> amplifiers (3.1 notification retry, 3.3 bootstrap double-start, recurring double-fire)
+> still funnel through their own call sites and remain open.
 
 ### 2.1 No "one live run per block" constraint: concurrent starts yield two live runs, two drivers, two containers — CONFIRMED
 

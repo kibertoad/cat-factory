@@ -38,6 +38,14 @@ export interface AgentRunRepository {
    */
   listStale(olderThanEpochMs: number): Promise<StaleAgentRun[]>
   /**
+   * Every EXECUTION run currently `paused` by the spend safeguard, across all workspaces. A
+   * paused run is not `running`, so {@link listStale} deliberately skips it; the Node/local
+   * facade polls this on its reclaim tick to auto-resume runs whose monthly budget has since
+   * freed (the Cloudflare facade needs no equivalent read — its paused run's Workflows instance
+   * stays parked on a `waitForEvent` and re-checks the budget itself).
+   */
+  listPausedExecutions(): Promise<AgentRunRef[]>
+  /**
    * The subset of the given run ids that are still LIVE — i.e. not terminal (a run in
    * `running`/`blocked`/`paused`/`pending`, not `done`/`failed`/etc.). Spans workspaces
    * and batches (chunked `IN`), so local mode can reap per-run containers whose run has

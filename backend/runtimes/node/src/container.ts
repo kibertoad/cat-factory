@@ -18,6 +18,7 @@ import {
   type BackendRegistries,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
+  type UserSecretKindRegistry,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
@@ -1086,6 +1087,7 @@ function buildNodeUserSecretService(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb | undefined,
   clock: Clock,
+  userSecretKindRegistry: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
@@ -1095,6 +1097,7 @@ function buildNodeUserSecretService(
     userSecretRepository: new DrizzleUserSecretRepository(db),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
+    userSecretKindRegistry,
   })
 }
 
@@ -1265,8 +1268,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
   // selectors. A deployment registers a custom backend by reference; the conformance suite
   // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
-  const { environmentBackendRegistry, runnerBackendRegistry, customManifestTypeRegistry } =
-    options.backendRegistries ?? createBackendRegistries()
+  const {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+  } = options.backendRegistries ?? createBackendRegistries()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
@@ -1369,7 +1376,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   )
   // The per-user generic secret store (a GitHub PAT today), shared by the user-secret
   // controller and the run-initiator PAT resolver below.
-  const userSecrets = buildNodeUserSecretService(env, db, clock)
+  const userSecrets = buildNodeUserSecretService(env, db, clock, userSecretKindRegistry)
   // Resolve the run initiator's stored GitHub PAT (when set) — preferred over the
   // App/env token by the container push-token mint + the engine GitHub client.
   const resolveUserGitHubToken: ResolveUserGitHubToken | undefined = userSecrets

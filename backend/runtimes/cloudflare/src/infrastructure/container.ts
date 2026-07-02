@@ -45,6 +45,7 @@ import {
   ApiKeyService,
   LocalModelEndpointService,
   UserSecretService,
+  type UserSecretKindRegistry,
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
   PersonalSubscriptionService,
@@ -1169,6 +1170,10 @@ function buildUserSecretService(
   env: Env,
   db: D1Database,
   clock: Clock,
+  // The app-owned secret-kind registry. Optional: the resolve-only throwaway services (the
+  // PAT resolver) never consult the kind registry, so they omit it (default); only the
+  // container-wired service that serves describe/test needs the injected instance.
+  userSecretKindRegistry?: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
@@ -1176,6 +1181,7 @@ function buildUserSecretService(
     userSecretRepository: new D1UserSecretRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
+    ...(userSecretKindRegistry ? { userSecretKindRegistry } : {}),
   })
 }
 
@@ -1931,6 +1937,8 @@ export function buildContainer(
     overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
   const customManifestTypeRegistry =
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
+  const userSecretKindRegistry =
+    overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
@@ -2015,7 +2023,7 @@ export function buildContainer(
 
   // The per-user generic secret store (a GitHub PAT today) — shared by the user-secret
   // controller; also backs the run-initiator PAT resolver used by the executor + gates.
-  const userSecrets = buildUserSecretService(env, db, clock)
+  const userSecrets = buildUserSecretService(env, db, clock, userSecretKindRegistry)
 
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.

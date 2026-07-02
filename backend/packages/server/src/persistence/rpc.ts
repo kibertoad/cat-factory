@@ -203,6 +203,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
+    // The one-live-run-per-block insert used by start/retry/restart. Workspace-scoped like
+    // upsert and bumps `execution.rev` in place on the arg-1 instance on a successful insert.
+    insertLive: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
     compareAndSwap: { scope: { kind: 'workspace', arg: 0 }, revWriteBack: 1 },
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
     markFailed: { scope: { kind: 'workspace', arg: 0 } },

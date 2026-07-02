@@ -322,7 +322,7 @@ export class RecurringPipelineService {
       // Don't overlap; leave nextRunAt so the sweeper retries next pass.
       return false
     }
-    // Persist the prior (now terminal) run's outcome before start() deletes it.
+    // Persist the prior (now terminal) run's outcome before start()'s insertLive clears it.
     if (prior) {
       const runs = await this.schedules.listRuns(workspaceId, schedule.id)
       const priorRun = runs.find((r) => r.executionId === prior.id)
