@@ -2,7 +2,8 @@
 
 The shared Hono app **every runtime facade serves** (no `@cloudflare/*` dep). Controllers
 resolve everything from `c.get('container')` (a `ServerContainer` = the domain `Core` + config
-+ `agentRunRepository` + gateways).
+
+- `agentRunRepository` + gateways).
 
 **Entry:** `src/index.ts`; `src/app.ts` — `registerCoreControllers(app)`.
 

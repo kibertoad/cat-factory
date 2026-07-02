@@ -52,11 +52,11 @@ rows after it list the opt-in libraries and the runtime facades so this doc stay
 
 **Runtime facades** (each serves the shared `@cat-factory/server` app; keep them symmetric):
 
-| Package                    | Role                                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `@cat-factory/worker`      | Cloudflare Worker facade (`backend/runtimes/cloudflare`): D1 repos, Durable Objects, Workflows, per-run Containers. |
-| `@cat-factory/node-server` | Node.js service facade (`backend/runtimes/node`): Drizzle/Postgres repos + pg-boss durable execution.        |
-| `@cat-factory/local-server`| Local-mode facade (`backend/runtimes/local`): the Node stack with local Docker containers + a GitHub PAT.    |
+| Package                     | Role                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@cat-factory/worker`       | Cloudflare Worker facade (`backend/runtimes/cloudflare`): D1 repos, Durable Objects, Workflows, per-run Containers. |
+| `@cat-factory/node-server`  | Node.js service facade (`backend/runtimes/node`): Drizzle/Postgres repos + pg-boss durable execution.               |
+| `@cat-factory/local-server` | Local-mode facade (`backend/runtimes/local`): the Node stack with local Docker containers + a GitHub PAT.           |
 
 **Opt-in libraries** (wired only when configured): `@cat-factory/gates` (the built-in
 polling-gate suite), `@cat-factory/consensus` (multi-run agent reconciliation),

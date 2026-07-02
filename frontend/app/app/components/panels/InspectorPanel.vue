@@ -54,6 +54,21 @@ const block = computed<Block | undefined>(() =>
 )
 const level = computed(() => block.value?.level ?? 'frame')
 const isFrame = computed(() => level.value === 'frame')
+
+// The title to fall back to when the user clears the field and blurs. Editing the title binds
+// straight to the store object via v-model, so there is nothing to fall back to otherwise —
+// restore this rather than persisting (and showing) an empty title. It is captured fresh at
+// edit start (`captureTitle` on focus), so it always reflects the current known-good value —
+// robust against a failed save (which rolls the title back) and an external rename of the same
+// block. Seeded here on block switch so the fallback is sane even before the first focus.
+const lastSavedTitle = ref('')
+watch(
+  () => block.value?.id,
+  () => {
+    lastSavedTitle.value = block.value?.title ?? ''
+  },
+  { immediate: true },
+)
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
 const isEpic = computed(() => level.value === 'epic')
@@ -103,11 +118,24 @@ const started = computed(
 )
 const editable = computed(() => !started.value)
 
+// Snapshot the current title as the fallback the moment editing begins, so it reflects the
+// last known-good value (survives a failed save or an external rename) rather than a value we
+// only optimistically assumed had persisted.
+function captureTitle() {
+  lastSavedTitle.value = block.value?.title ?? ''
+}
 function saveTitle() {
   const b = block.value
   if (!b) return
   const next = b.title.trim()
-  if (next) board.updateBlock(b.id, { title: next })
+  // An emptied title can't persist — restore the last saved value so the field never shows a
+  // blank the user didn't intend (and the board keeps a real label).
+  if (!next) {
+    b.title = lastSavedTitle.value
+    return
+  }
+  b.title = next
+  board.updateBlock(b.id, { title: next })
 }
 function saveDescription() {
   const b = block.value
@@ -253,6 +281,7 @@ const showOriginalDescription = ref(false)
           size="sm"
           class="w-full"
           :placeholder="t('panels.inspector.titlePlaceholder')"
+          @focus="captureTitle"
           @change="saveTitle"
           @blur="saveTitle"
         />

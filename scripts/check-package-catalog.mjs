@@ -84,4 +84,6 @@ if (problems.length > 0) {
   process.exit(1)
 }
 
-console.log(`check-package-catalog: all ${packages.length} workspace packages are described and listed in README.md. ✅`)
+console.log(
+  `check-package-catalog: all ${packages.length} workspace packages are described and listed in README.md. ✅`,
+)

@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Loading…",
+    "loadingBoard": "Loading board…",
+    "backendUnreachable": "Can't reach the backend",
+    "reconnecting": "Reconnecting…"
+  },
   "language": {
     "switcher": "Language",
     "warning": {
@@ -83,6 +89,14 @@
     "accountSettings": "Account settings"
   },
   "board": {
+    "toast": {
+      "updateFailed": "Could not save changes",
+      "epicFailed": "Could not change epic",
+      "moveFailed": "Could not move",
+      "deleteFailed": "Could not delete",
+      "linkFailed": "Could not link tasks",
+      "recurringDeleteFailed": "Could not delete recurring pipeline"
+    },
     "repoTypes": {
       "service": "Service",
       "frontend": "Frontend",
@@ -291,6 +305,11 @@
       "openPrOnGithub": "Open {pr} on GitHub",
       "review": "Review",
       "merge": "Merge",
+      "mergeConfirm": {
+        "title": "Merge this pull request?",
+        "body": "This merges the PR into its base branch and completes the task. This can't be undone.",
+        "confirm": "Merge"
+      },
       "implemented": "implemented",
       "module": "Module: {name}",
       "buildSteps": "Build steps",
@@ -485,6 +504,17 @@
         "mock": "Mock (WireMock)",
         "remove": "Remove binding",
         "empty": "No backend bindings. Add one to point an env var at a service or a mock."
+      },
+      "preview": {
+        "open": "Open preview",
+        "start": "Start preview",
+        "stop": "Stop",
+        "status": {
+          "starting": "Starting…",
+          "ready": "Running",
+          "failed": "Failed",
+          "stopped": "Not running"
+        }
       }
     },
     "releaseHealth": {
@@ -634,6 +664,16 @@
       "stopTooltip": "Stop the run but keep it (readable and retryable)",
       "reset": "Reset",
       "resetTooltip": "Discard this run and reset the task to planned",
+      "resetConfirm": {
+        "title": "Discard this run?",
+        "body": "This deletes the run and returns the task to planned. This can't be undone.",
+        "confirm": "Discard run"
+      },
+      "mergeConfirm": {
+        "title": "Merge this pull request?",
+        "body": "This merges the PR into its base branch and completes the task. This can't be undone.",
+        "confirm": "Merge"
+      },
       "viewDetailsOutput": "View details and read output",
       "viewDetails": "View step details",
       "companion": "Companion",
@@ -720,6 +760,33 @@
       "structuredOutput": "Structured output",
       "noResult": "No result yet.",
       "noResultHint": "The structured output appears once this agent finishes. While it runs, the step shows live progress on the board."
+    },
+    "mergerResult": {
+      "title": "Merge decision",
+      "titleWithBlock": "Merge decision: {title}",
+      "description": "How the PR scored and what the engine decided.",
+      "outcome": {
+        "auto_merged": "Auto-merged",
+        "awaiting_review": "Awaiting human review"
+      },
+      "reason": {
+        "within_thresholds": "Every score is within the {preset} thresholds, so the PR was merged automatically.",
+        "exceeded_thresholds": "{axes} exceeded the {preset} thresholds, so the PR is waiting for a human to merge.",
+        "auto_merge_disabled": "The {preset} preset sends every PR to a human, so this one is waiting for review.",
+        "no_rationale": "The merger scored the PR but gave no rationale, so the verdict could not be trusted to auto-merge; the PR is waiting for a human to merge.",
+        "no_assessment": "The merger did not return a parseable assessment, so the PR is waiting for a human to merge.",
+        "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge."
+      },
+      "scores": "Scores",
+      "axis": {
+        "complexity": "Complexity",
+        "risk": "Risk",
+        "impact": "Impact"
+      },
+      "ceiling": "ceiling {value}",
+      "rationale": "Rationale",
+      "noAssessment": "The merger did not return a scored assessment.",
+      "noResult": "No merge decision recorded yet."
     },
     "testReport": {
       "title": "Test report",
@@ -1190,7 +1257,9 @@
       "dismiss": "Dismiss",
       "toast": {
         "acted": "Marked as handled",
-        "dismissed": "Dismissed"
+        "dismissed": "Dismissed",
+        "actFailed": "Could not complete that action",
+        "dismissFailed": "Could not dismiss"
       },
       "action": {
         "merge_review": "Merge",
@@ -3799,6 +3868,7 @@
     },
     "targetRepo": {
       "label": "Target repository name",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "Create a fresh repo with this name under {owner}, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine.",
       "descNoOwner": "Create a fresh repo with this name, then bootstrap pushes into it. A prepopulated README, .gitignore or license is fine."
     },
@@ -3818,7 +3888,8 @@
     },
     "description": {
       "label": "Description",
-      "help": "Optional one-line summary for the repo."
+      "help": "Optional one-line summary for the repo.",
+      "placeholder": "Handles payment intents and refunds"
     },
     "instructions": {
       "labelReference": "Extra instructions for the bootstrapper",
@@ -3848,18 +3919,23 @@
       "add": "Add",
       "pickRepo": {
         "label": "Pick an existing GitHub repo",
-        "description": "Choose a repo you can access to fill in its owner and name, or enter them manually below."
+        "description": "Choose a repo you can access to fill in its owner and name, or enter them manually below.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Name",
-        "description": "A friendly label for this base."
+        "description": "A friendly label for this base.",
+        "placeholder": "Service Template"
       },
       "repoOwner": "Repo owner",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Repo name",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Optional summary of this base",
       "defaultInstructions": {
         "label": "Default bootstrapper instructions",
-        "description": "Prepended to the per-run instructions whenever this base is used."
+        "description": "Prepended to the per-run instructions whenever this base is used.",
+        "placeholder": "e.g. keep the structure; rename packages to match the new service"
       }
     },
     "toast": {
