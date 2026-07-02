@@ -3717,7 +3717,8 @@
       "connectFirst": "Connect a document source (Confluence, Notion or GitHub) under Integrations first.",
       "refPlaceholder": "Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)",
       "tagsPlaceholder": "Tags, comma-separated (optional)",
-      "link": "Link as living fragment"
+      "link": "Link as living fragment",
+      "githubBrowseHint": "Browse the repo and pick the file to link."
     },
     "sources": {
       "metaSynced": "synced · ref {ref}",
@@ -3729,7 +3730,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dir path (e.g. guidelines)",
       "refPlaceholder": "ref (default HEAD)",
-      "link": "Link & sync"
+      "link": "Link & sync",
+      "browseHint": "Browse the repo and pick the directory of Markdown guidelines (or link the whole repo).",
+      "selectedDir": "Directory:",
+      "wholeRepo": "Whole repository (root)."
     },
     "toast": {
       "added": "Fragment added",
@@ -3753,7 +3757,8 @@
     "confirmRemove": {
       "title": "Delete this fragment?",
       "body": "\"{name}\" will be removed. This can't be undone."
-    }
+    },
+    "unavailable": "The prompt-fragment library isn't enabled for this deployment."
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",

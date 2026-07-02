@@ -7,8 +7,15 @@
 // run. The account scope has no resolved/merged catalog and fetches document
 // fragments through `viaWorkspaceId` (document-source credentials are per-workspace).
 import { computed, ref, watch } from 'vue'
-import type { DocumentSourceKind, FragmentOwnerKind, ResolvedFragment } from '~/types/domain'
+import type {
+  DocumentSourceKind,
+  FragmentOwnerKind,
+  GitHubAvailableRepo,
+  ResolvedFragment,
+} from '~/types/domain'
 import { useFragmentLibrary, useFragmentLibraryStore } from '~/stores/fragmentLibrary'
+import GitHubRepoSearchSelect from '~/components/github/GitHubRepoSearchSelect.vue'
+import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -29,6 +36,7 @@ const library =
     ? useFragmentLibraryStore()
     : useFragmentLibrary(props.kind, props.ownerId)
 const documents = useDocumentsStore()
+const github = useGitHubStore()
 const toast = useToast()
 const { t, d } = useI18n()
 const { confirm } = useConfirm()
@@ -50,9 +58,16 @@ watch(
   () => {
     void library.probe()
     void documents.probe()
+    // The GitHub pickers (repo search + tree browser) need the active board's
+    // installation state; probe once so they light up when the App is connected.
+    void github.probe()
   },
   { immediate: true },
 )
+
+// The rich GitHub pickers reuse the active board's App installation. When it isn't
+// connected (or the integration is off) both forms fall back to manual text entry.
+const githubReady = computed(() => github.available === true && github.connected)
 
 type Tab = 'catalog' | 'authored' | 'documents' | 'sources'
 const tabs = computed<Tab[]>(() =>
@@ -147,6 +162,40 @@ const docDraftValid = computed(
   () => !docLinkDisabled.value && docDraft.value.source && docDraft.value.ref.trim(),
 )
 
+// ---- GitHub file picker (documents tab) -----------------------------------
+// For a GitHub source, let the user search a repo + browse to the file instead of
+// hand-typing a `owner/repo:path` ref. Picking a file fills `docDraft.ref` (still
+// editable, so pasting a URL/shorthand keeps working). Only offered when the App is
+// connected; other sources (Confluence/Notion) keep the free-text ref field.
+const isGithubDoc = computed(() => docDraft.value.source === 'github')
+const showGithubDocPicker = computed(() => isGithubDoc.value && githubReady.value)
+const docRepoId = ref<number | undefined>(undefined)
+const docRepo = ref<GitHubAvailableRepo | undefined>(undefined)
+const docFilePath = ref<string | undefined>(undefined)
+
+// Reset the picker (and the derived ref) whenever the selected source changes.
+watch(
+  () => docDraft.value.source,
+  () => {
+    docRepoId.value = undefined
+    docRepo.value = undefined
+    docFilePath.value = undefined
+    docDraft.value.ref = ''
+  },
+)
+
+// A new repo selection clears the previously-browsed file.
+watch(docRepoId, () => {
+  docFilePath.value = undefined
+})
+
+// Derive the canonical `owner/repo:path` ref the GitHub docs provider expects.
+watch([docRepo, docFilePath], () => {
+  if (docRepo.value && docFilePath.value) {
+    docDraft.value.ref = `${docRepo.value.owner}/${docRepo.value.name}:${docFilePath.value}`
+  }
+})
+
 /** This tier's existing document-backed fragments. */
 const documentFragments = computed(() => library.fragments.filter((f) => f.documentRef))
 
@@ -178,21 +227,50 @@ async function refreshFragment(id: string) {
 }
 
 // ---- repo sources ----------------------------------------------------------
-const sourceDraft = ref({ repoOwner: '', repoName: '', dirPath: '', gitRef: '' })
-const sourceValid = computed(
-  () => sourceDraft.value.repoOwner.trim() && sourceDraft.value.repoName.trim(),
-)
+// When the App is connected the user searches a repo + browses to the guideline
+// directory; otherwise the manual owner/name/dir fields are the fallback.
+const sourceRepoId = ref<number | undefined>(undefined)
+const sourceRepo = ref<GitHubAvailableRepo | undefined>(undefined)
+const sourceDir = ref<string | undefined>(undefined)
+const sourceRef = ref('')
+const manualSource = ref({ repoOwner: '', repoName: '', dirPath: '' })
+
+// A new repo selection clears the previously-browsed directory.
+watch(sourceRepoId, () => {
+  sourceDir.value = undefined
+})
+
+const sourceOwnerName = computed<{ owner: string; name: string } | null>(() => {
+  if (githubReady.value) {
+    return sourceRepo.value ? { owner: sourceRepo.value.owner, name: sourceRepo.value.name } : null
+  }
+  const owner = manualSource.value.repoOwner.trim()
+  const name = manualSource.value.repoName.trim()
+  return owner && name ? { owner, name } : null
+})
+const sourceValid = computed(() => sourceOwnerName.value !== null)
+
+function resetSourceDraft() {
+  sourceRepoId.value = undefined
+  sourceRepo.value = undefined
+  sourceDir.value = undefined
+  sourceRef.value = ''
+  manualSource.value = { repoOwner: '', repoName: '', dirPath: '' }
+}
 
 async function linkSource() {
-  if (!sourceValid.value) return
+  const ownerName = sourceOwnerName.value
+  if (!ownerName) return
+  const dirPath =
+    (githubReady.value ? sourceDir.value : manualSource.value.dirPath.trim()) || undefined
   try {
     const source = await library.linkSource({
-      repoOwner: sourceDraft.value.repoOwner.trim(),
-      repoName: sourceDraft.value.repoName.trim(),
-      dirPath: sourceDraft.value.dirPath.trim() || undefined,
-      gitRef: sourceDraft.value.gitRef.trim() || undefined,
+      repoOwner: ownerName.owner,
+      repoName: ownerName.name,
+      dirPath,
+      gitRef: sourceRef.value.trim() || undefined,
     })
-    sourceDraft.value = { repoOwner: '', repoName: '', dirPath: '', gitRef: '' }
+    resetSourceDraft()
     await library.syncSource(source.id)
     toast.add({ title: t('fragments.toast.sourceLinked'), icon: 'i-lucide-git-branch' })
   } catch (e) {
@@ -242,315 +320,364 @@ async function unlinkSource(id: string) {
 
 <template>
   <div class="flex flex-col gap-4">
-    <p class="text-sm text-slate-400">
-      <template v-if="isWorkspace">
-        {{ t('fragments.intro.workspace') }}
-      </template>
-      <template v-else>
-        {{ t('fragments.intro.account') }}
-      </template>
-    </p>
-
-    <div class="flex gap-2">
-      <UButton
-        v-for="t in tabs"
-        :key="t"
-        :color="tab === t ? 'primary' : 'neutral'"
-        :variant="tab === t ? 'solid' : 'ghost'"
-        size="sm"
-        @click="tab = t"
-      >
-        {{ tabLabel(t) }}
-      </UButton>
+    <!-- The library is opt-out; if a deployment disabled it, don't offer forms that
+         would fail with a raw 503 — say so instead (any entry point lands here). -->
+    <div
+      v-if="library.available === false"
+      class="rounded-md border border-slate-800 bg-slate-900/40 p-3 text-sm text-slate-400"
+    >
+      {{ t('fragments.unavailable') }}
     </div>
 
-    <!-- Resolved (merged) catalog — workspace scope only -->
-    <div v-if="tab === 'catalog'" class="flex flex-col gap-2">
-      <p class="text-xs text-slate-500">
-        {{
-          t(
-            'fragments.catalog.summary',
-            { count: library.resolved.length, builtin: library.builtinCount },
-            library.resolved.length,
-          )
-        }}
+    <template v-else>
+      <p class="text-sm text-slate-400">
+        <template v-if="isWorkspace">
+          {{ t('fragments.intro.workspace') }}
+        </template>
+        <template v-else>
+          {{ t('fragments.intro.account') }}
+        </template>
       </p>
-      <div
-        v-for="f in library.resolved"
-        :key="f.id"
-        class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
-      >
-        <div class="flex items-center gap-2">
-          <span class="font-medium text-slate-100">{{ f.title }}</span>
-          <UBadge size="xs" :color="tierColor[f.tier]" variant="subtle">
-            {{ tierLabel[f.tier] }}
-          </UBadge>
-          <UBadge
-            v-if="f.documentRef"
-            size="xs"
-            color="success"
-            variant="subtle"
-            icon="i-lucide-radio"
-          >
-            {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
-          </UBadge>
-          <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
-        </div>
-        <p class="mt-1 text-sm text-slate-400">{{ f.summary }}</p>
-        <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
-          <UBadge v-for="tag in f.tags" :key="tag" size="xs" variant="outline" color="neutral">
-            {{ tag }}
-          </UBadge>
-        </div>
-      </div>
-    </div>
 
-    <!-- Hand-authored (this tier) -->
-    <div v-else-if="tab === 'authored'" class="flex flex-col gap-3">
-      <div
-        v-for="f in library.fragments"
-        :key="f.id"
-        class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
-      >
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="font-medium text-slate-100">{{ f.title }}</span>
-            <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
-              t('fragments.authored.fromRepo')
-            }}</UBadge>
-          </div>
-          <p class="text-sm text-slate-400">{{ f.summary }}</p>
-        </div>
+      <div class="flex gap-2">
         <UButton
-          icon="i-lucide-trash-2"
-          size="xs"
-          color="error"
-          variant="ghost"
-          class="ms-auto"
-          @click="removeFragment(f.id)"
-        />
+          v-for="t in tabs"
+          :key="t"
+          :color="tab === t ? 'primary' : 'neutral'"
+          :variant="tab === t ? 'solid' : 'ghost'"
+          size="sm"
+          @click="tab = t"
+        >
+          {{ tabLabel(t) }}
+        </UButton>
       </div>
-      <p v-if="!library.fragments.length" class="text-sm text-slate-500">
-        {{
-          isWorkspace
-            ? t('fragments.authored.empty.workspace')
-            : t('fragments.authored.empty.account')
-        }}
-      </p>
 
-      <div class="rounded-md border border-slate-800 p-3">
-        <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
-        <div class="flex flex-col gap-2">
-          <UInput v-model="draft.title" :placeholder="t('fragments.authored.titlePlaceholder')" />
-          <UInput
-            v-model="draft.summary"
-            :placeholder="t('fragments.authored.summaryPlaceholder')"
-          />
-          <UTextarea
-            v-model="draft.body"
-            :placeholder="t('fragments.authored.bodyPlaceholder')"
-            :rows="4"
-          />
-          <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
-          <UButton
-            icon="i-lucide-plus"
-            size="sm"
-            :disabled="!draftValid"
-            :loading="library.loading"
-            class="self-start"
-            @click="createFragment"
-          >
-            {{ t('fragments.authored.add') }}
-          </UButton>
-        </div>
-      </div>
-    </div>
-
-    <!-- Document-backed (living) fragments -->
-    <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
-      <p class="text-xs text-slate-500">
-        {{ t('fragments.documents.intro') }}
-      </p>
-
-      <div
-        v-for="f in documentFragments"
-        :key="f.id"
-        class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
-      >
-        <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
-        <div class="min-w-0">
+      <!-- Resolved (merged) catalog — workspace scope only -->
+      <div v-if="tab === 'catalog'" class="flex flex-col gap-2">
+        <p class="text-xs text-slate-500">
+          {{
+            t(
+              'fragments.catalog.summary',
+              { count: library.resolved.length, builtin: library.builtinCount },
+              library.resolved.length,
+            )
+          }}
+        </p>
+        <div
+          v-for="f in library.resolved"
+          :key="f.id"
+          class="rounded-md border border-slate-800 bg-slate-900/60 p-3"
+        >
           <div class="flex items-center gap-2">
             <span class="font-medium text-slate-100">{{ f.title }}</span>
-            <UBadge size="xs" color="success" variant="subtle">
-              {{ f.documentRef?.source }}
+            <UBadge size="xs" :color="tierColor[f.tier]" variant="subtle">
+              {{ tierLabel[f.tier] }}
+            </UBadge>
+            <UBadge
+              v-if="f.documentRef"
+              size="xs"
+              color="success"
+              variant="subtle"
+              icon="i-lucide-radio"
+            >
+              {{ t('fragments.catalog.live', { source: f.documentRef.source }) }}
+            </UBadge>
+            <span class="ms-auto font-mono text-[11px] text-slate-500">{{ f.id }}</span>
+          </div>
+          <p class="mt-1 text-sm text-slate-400">{{ f.summary }}</p>
+          <div v-if="f.tags?.length" class="mt-1 flex flex-wrap gap-1">
+            <UBadge v-for="tag in f.tags" :key="tag" size="xs" variant="outline" color="neutral">
+              {{ tag }}
             </UBadge>
           </div>
-          <p class="text-sm text-slate-400">{{ f.summary }}</p>
-          <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
-            {{ t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') }) }}
-          </p>
         </div>
-        <div class="ms-auto flex gap-1">
-          <UButton
-            icon="i-lucide-refresh-cw"
-            size="xs"
-            variant="ghost"
-            :loading="library.loading"
-            :title="t('fragments.documents.refreshTitle')"
-            @click="refreshFragment(f.id)"
-          />
+      </div>
+
+      <!-- Hand-authored (this tier) -->
+      <div v-else-if="tab === 'authored'" class="flex flex-col gap-3">
+        <div
+          v-for="f in library.fragments"
+          :key="f.id"
+          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+        >
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-slate-100">{{ f.title }}</span>
+              <UBadge v-if="f.source" size="xs" color="info" variant="subtle">{{
+                t('fragments.authored.fromRepo')
+              }}</UBadge>
+            </div>
+            <p class="text-sm text-slate-400">{{ f.summary }}</p>
+          </div>
           <UButton
             icon="i-lucide-trash-2"
             size="xs"
             color="error"
             variant="ghost"
+            class="ms-auto"
             @click="removeFragment(f.id)"
           />
         </div>
-      </div>
-      <p v-if="!documentFragments.length" class="text-sm text-slate-500">
-        {{ t('fragments.documents.empty') }}
-      </p>
+        <p v-if="!library.fragments.length" class="text-sm text-slate-500">
+          {{
+            isWorkspace
+              ? t('fragments.authored.empty.workspace')
+              : t('fragments.authored.empty.account')
+          }}
+        </p>
 
-      <div class="rounded-md border border-slate-800 p-3">
-        <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
-        <div v-if="docLinkDisabled" class="text-sm text-slate-500">
-          {{ t('fragments.documents.disabledHint') }}
-        </div>
-        <div v-else-if="!documents.connectedSources.length" class="text-sm text-slate-500">
-          {{ t('fragments.documents.connectFirst') }}
-        </div>
-        <div v-else class="flex flex-col gap-2">
-          <div class="flex flex-wrap gap-2">
+        <div class="rounded-md border border-slate-800 p-3">
+          <p class="mb-2 text-sm font-medium">{{ t('fragments.authored.addTitle') }}</p>
+          <div class="flex flex-col gap-2">
+            <UInput v-model="draft.title" :placeholder="t('fragments.authored.titlePlaceholder')" />
+            <UInput
+              v-model="draft.summary"
+              :placeholder="t('fragments.authored.summaryPlaceholder')"
+            />
+            <UTextarea
+              v-model="draft.body"
+              :placeholder="t('fragments.authored.bodyPlaceholder')"
+              :rows="4"
+            />
+            <UInput v-model="draft.tags" :placeholder="t('fragments.authored.tagsPlaceholder')" />
             <UButton
-              v-for="s in documents.connectedSources"
-              :key="s.source"
-              size="xs"
-              :color="docDraft.source === s.source ? 'primary' : 'neutral'"
-              :variant="docDraft.source === s.source ? 'solid' : 'outline'"
-              @click="docDraft.source = s.source"
+              icon="i-lucide-plus"
+              size="sm"
+              :disabled="!draftValid"
+              :loading="library.loading"
+              class="self-start"
+              @click="createFragment"
             >
-              {{ s.label }}
+              {{ t('fragments.authored.add') }}
             </UButton>
           </div>
-          <UInput v-model="docDraft.ref" :placeholder="t('fragments.documents.refPlaceholder')" />
-          <UInput v-model="docDraft.tags" :placeholder="t('fragments.documents.tagsPlaceholder')" />
-          <UButton
-            icon="i-lucide-link"
-            size="sm"
-            :disabled="!docDraftValid"
-            :loading="library.loading"
-            class="self-start"
-            @click="linkDocumentFragment"
-          >
-            {{ t('fragments.documents.link') }}
-          </UButton>
         </div>
       </div>
-    </div>
 
-    <!-- Repo sources -->
-    <div v-else class="flex flex-col gap-3">
-      <div
-        v-for="s in library.sources"
-        :key="s.id"
-        class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
-      >
-        <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-slate-400" />
-        <div class="min-w-0">
-          <span class="font-mono text-sm text-slate-100">
-            {{ s.repoOwner }}/{{ s.repoName
-            }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
-          </span>
-          <p class="text-xs text-slate-500">
-            {{
-              s.lastSyncedAt
-                ? t('fragments.sources.metaSynced', { ref: s.gitRef })
-                : t('fragments.sources.metaNever', { ref: s.gitRef })
-            }}
-          </p>
-        </div>
-        <UBadge
-          v-if="library.sourceChanges[s.id]"
-          size="xs"
-          color="warning"
-          variant="subtle"
-          class="ms-auto"
+      <!-- Document-backed (living) fragments -->
+      <div v-else-if="tab === 'documents'" class="flex flex-col gap-3">
+        <p class="text-xs text-slate-500">
+          {{ t('fragments.documents.intro') }}
+        </p>
+
+        <div
+          v-for="f in documentFragments"
+          :key="f.id"
+          class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
         >
-          {{
-            t(
-              'fragments.sources.changes',
-              { count: library.sourceChanges[s.id] },
-              library.sourceChanges[s.id] ?? 0,
-            )
-          }}
-        </UBadge>
-        <div class="ms-auto flex gap-1">
-          <UButton
-            icon="i-lucide-search-check"
-            size="xs"
-            variant="ghost"
-            @click="checkSource(s.id)"
-          />
-          <UButton
-            icon="i-lucide-refresh-cw"
-            size="xs"
-            variant="ghost"
-            :loading="library.loading"
-            @click="syncSource(s.id)"
-          />
-          <UButton
-            icon="i-lucide-unplug"
-            size="xs"
-            color="error"
-            variant="ghost"
-            @click="unlinkSource(s.id)"
-          />
+          <UIcon name="i-lucide-radio" class="mt-0.5 h-4 w-4 text-emerald-400" />
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-slate-100">{{ f.title }}</span>
+              <UBadge size="xs" color="success" variant="subtle">
+                {{ f.documentRef?.source }}
+              </UBadge>
+            </div>
+            <p class="text-sm text-slate-400">{{ f.summary }}</p>
+            <p v-if="f.resolvedAt" class="text-[11px] text-slate-500">
+              {{
+                t('fragments.documents.lastResolved', { date: d(new Date(f.resolvedAt), 'long') })
+              }}
+            </p>
+          </div>
+          <div class="ms-auto flex gap-1">
+            <UButton
+              icon="i-lucide-refresh-cw"
+              size="xs"
+              variant="ghost"
+              :loading="library.loading"
+              :title="t('fragments.documents.refreshTitle')"
+              @click="refreshFragment(f.id)"
+            />
+            <UButton
+              icon="i-lucide-trash-2"
+              size="xs"
+              color="error"
+              variant="ghost"
+              @click="removeFragment(f.id)"
+            />
+          </div>
         </div>
-      </div>
-      <p v-if="!library.sources.length" class="text-sm text-slate-500">
-        {{ t('fragments.sources.empty') }}
-      </p>
+        <p v-if="!documentFragments.length" class="text-sm text-slate-500">
+          {{ t('fragments.documents.empty') }}
+        </p>
 
-      <div class="rounded-md border border-slate-800 p-3">
-        <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>
-        <div class="flex flex-col gap-2">
-          <div class="flex gap-2">
-            <UInput
-              v-model="sourceDraft.repoOwner"
-              :placeholder="t('fragments.sources.ownerPlaceholder')"
-              class="flex-1"
-            />
-            <UInput
-              v-model="sourceDraft.repoName"
-              :placeholder="t('fragments.sources.repoPlaceholder')"
-              class="flex-1"
-            />
+        <div class="rounded-md border border-slate-800 p-3">
+          <p class="mb-2 text-sm font-medium">{{ t('fragments.documents.linkTitle') }}</p>
+          <div v-if="docLinkDisabled" class="text-sm text-slate-500">
+            {{ t('fragments.documents.disabledHint') }}
           </div>
-          <div class="flex gap-2">
-            <UInput
-              v-model="sourceDraft.dirPath"
-              :placeholder="t('fragments.sources.dirPlaceholder')"
-              class="flex-1"
-            />
-            <UInput
-              v-model="sourceDraft.gitRef"
-              :placeholder="t('fragments.sources.refPlaceholder')"
-              class="flex-1"
-            />
+          <div v-else-if="!documents.connectedSources.length" class="text-sm text-slate-500">
+            {{ t('fragments.documents.connectFirst') }}
           </div>
-          <UButton
-            icon="i-lucide-link"
-            size="sm"
-            :disabled="!sourceValid"
-            :loading="library.loading"
-            class="self-start"
-            @click="linkSource"
-          >
-            {{ t('fragments.sources.link') }}
-          </UButton>
+          <div v-else class="flex flex-col gap-2">
+            <div class="flex flex-wrap gap-2">
+              <UButton
+                v-for="s in documents.connectedSources"
+                :key="s.source"
+                size="xs"
+                :color="docDraft.source === s.source ? 'primary' : 'neutral'"
+                :variant="docDraft.source === s.source ? 'solid' : 'outline'"
+                @click="docDraft.source = s.source"
+              >
+                {{ s.label }}
+              </UButton>
+            </div>
+
+            <!-- GitHub: search a repo + browse to the file instead of typing the ref -->
+            <template v-if="showGithubDocPicker">
+              <GitHubRepoSearchSelect v-model="docRepoId" @update:repo="docRepo = $event" />
+              <div
+                v-if="docRepoId !== undefined"
+                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+              >
+                <p class="mb-2 text-xs text-slate-400">
+                  {{ t('fragments.documents.githubBrowseHint') }}
+                </p>
+                <RepoTreeBrowser v-model="docFilePath" :repo-github-id="docRepoId" mode="file" />
+              </div>
+            </template>
+
+            <UInput v-model="docDraft.ref" :placeholder="t('fragments.documents.refPlaceholder')" />
+            <UInput
+              v-model="docDraft.tags"
+              :placeholder="t('fragments.documents.tagsPlaceholder')"
+            />
+            <UButton
+              icon="i-lucide-link"
+              size="sm"
+              :disabled="!docDraftValid"
+              :loading="library.loading"
+              class="self-start"
+              @click="linkDocumentFragment"
+            >
+              {{ t('fragments.documents.link') }}
+            </UButton>
+          </div>
         </div>
       </div>
-    </div>
+
+      <!-- Repo sources -->
+      <div v-else class="flex flex-col gap-3">
+        <div
+          v-for="s in library.sources"
+          :key="s.id"
+          class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 p-3"
+        >
+          <UIcon name="i-lucide-git-branch" class="h-4 w-4 text-slate-400" />
+          <div class="min-w-0">
+            <span class="font-mono text-sm text-slate-100">
+              {{ s.repoOwner }}/{{ s.repoName
+              }}<span class="text-slate-500">/{{ s.dirPath || '' }}</span>
+            </span>
+            <p class="text-xs text-slate-500">
+              {{
+                s.lastSyncedAt
+                  ? t('fragments.sources.metaSynced', { ref: s.gitRef })
+                  : t('fragments.sources.metaNever', { ref: s.gitRef })
+              }}
+            </p>
+          </div>
+          <UBadge
+            v-if="library.sourceChanges[s.id]"
+            size="xs"
+            color="warning"
+            variant="subtle"
+            class="ms-auto"
+          >
+            {{
+              t(
+                'fragments.sources.changes',
+                { count: library.sourceChanges[s.id] },
+                library.sourceChanges[s.id] ?? 0,
+              )
+            }}
+          </UBadge>
+          <div class="ms-auto flex gap-1">
+            <UButton
+              icon="i-lucide-search-check"
+              size="xs"
+              variant="ghost"
+              @click="checkSource(s.id)"
+            />
+            <UButton
+              icon="i-lucide-refresh-cw"
+              size="xs"
+              variant="ghost"
+              :loading="library.loading"
+              @click="syncSource(s.id)"
+            />
+            <UButton
+              icon="i-lucide-unplug"
+              size="xs"
+              color="error"
+              variant="ghost"
+              @click="unlinkSource(s.id)"
+            />
+          </div>
+        </div>
+        <p v-if="!library.sources.length" class="text-sm text-slate-500">
+          {{ t('fragments.sources.empty') }}
+        </p>
+
+        <div class="rounded-md border border-slate-800 p-3">
+          <p class="mb-2 text-sm font-medium">{{ t('fragments.sources.linkTitle') }}</p>
+          <div class="flex flex-col gap-2">
+            <!-- Connected: search a repo + browse to the guideline directory -->
+            <template v-if="githubReady">
+              <GitHubRepoSearchSelect v-model="sourceRepoId" @update:repo="sourceRepo = $event" />
+              <div
+                v-if="sourceRepoId !== undefined"
+                class="rounded-md border border-slate-800 bg-slate-900/40 p-2"
+              >
+                <p class="mb-2 text-xs text-slate-400">
+                  {{ t('fragments.sources.browseHint') }}
+                </p>
+                <RepoTreeBrowser v-model="sourceDir" :repo-github-id="sourceRepoId" mode="dir" />
+                <p class="mt-2 truncate text-xs text-slate-400">
+                  <template v-if="sourceDir">
+                    {{ t('fragments.sources.selectedDir') }}
+                    <code class="text-slate-200">{{ sourceDir }}</code>
+                  </template>
+                  <template v-else>{{ t('fragments.sources.wholeRepo') }}</template>
+                </p>
+              </div>
+            </template>
+
+            <!-- Not connected: manual owner/name/dir fallback -->
+            <template v-else>
+              <div class="flex gap-2">
+                <UInput
+                  v-model="manualSource.repoOwner"
+                  :placeholder="t('fragments.sources.ownerPlaceholder')"
+                  class="flex-1"
+                />
+                <UInput
+                  v-model="manualSource.repoName"
+                  :placeholder="t('fragments.sources.repoPlaceholder')"
+                  class="flex-1"
+                />
+              </div>
+              <UInput
+                v-model="manualSource.dirPath"
+                :placeholder="t('fragments.sources.dirPlaceholder')"
+              />
+            </template>
+
+            <UInput v-model="sourceRef" :placeholder="t('fragments.sources.refPlaceholder')" />
+            <UButton
+              icon="i-lucide-link"
+              size="sm"
+              :disabled="!sourceValid"
+              :loading="library.loading"
+              class="self-start"
+              @click="linkSource"
+            >
+              {{ t('fragments.sources.link') }}
+            </UButton>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>

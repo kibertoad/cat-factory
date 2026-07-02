@@ -12,7 +12,12 @@ import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
 describe('prompt-fragment library (ADR 0006)', () => {
   describe('when the module is not configured', () => {
     it('reports the tier endpoint as unavailable (503)', async () => {
-      const app = makeApp()
+      // The library is on by default now, so simulate an explicit opt-out by
+      // un-wiring its repositories (what `PROMPT_LIBRARY_ENABLED=false` produces).
+      const app = makeApp(undefined, {
+        promptFragmentRepository: undefined,
+        fragmentSourceRepository: undefined,
+      })
       const { workspace } = await app.createWorkspace()
       const res = await app.call('GET', `/workspaces/${workspace.id}/prompt-fragments`)
       expect(res.status).toBe(503)
