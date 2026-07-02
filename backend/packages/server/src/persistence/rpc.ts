@@ -384,9 +384,37 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // like the listOpen + per-row upsert loop it replaced). Workspace-scoped like `upsert`.
     escalateStaleOpen: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- Repo-bootstrap management / retry / stop surface ---------------------------
+  // The bootstrap flow a mothership-mode SPA drives (`BootstrapController` +
+  // `AgentRunController`): start a repo bootstrap, read a single job (the board-card poll), and
+  // retry / stop a failed or running one. The board-load reads (`listByWorkspace` /
+  // `listByServices`) were already exposed; these complete the surface. `get`/`update` take the
+  // workspaceId as arg0 (the `workspace` rule); the record-based `insert(record)` binds on the
+  // job's `workspaceId` FIELD (the `workspaceField` rule — the id is a property, not a positional
+  // arg). Each is member-level (the bootstrap endpoints are not admin-gated) and workspace-scoped —
+  // the same policy as the block/pipeline mutations. The `insert` record's sibling ids (`blockId`,
+  // `referenceArchitectureId`) are NOT re-validated over the RPC (see the `workspaceField` note):
+  // the row is stored under — and later read by — the bound `workspaceId`, and a foreign
+  // `referenceArchitectureId` is harmless because the retry run re-resolves it via the
+  // workspace-scoped `referenceArchitectureRepository.get` below, which 404s a cross-workspace id.
   bootstrapJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     listByServices: { scope: { kind: 'serviceList', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    insert: { scope: { kind: 'workspaceField', arg: 0 } },
+    update: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The reference-architecture library the bootstrap modal reads + edits, and that a retry
+  // re-resolves the base repo from (`referenceArchitectureRepository.get`). Reads/updates/deletes
+  // take the workspaceId as arg0 (the `workspace` rule); the record-based `insert(record)` binds on
+  // the record's `workspaceId` FIELD (the `workspaceField` rule). Member-level (the reference-arch
+  // endpoints are not admin-gated), workspace-scoped — the same policy as the other library editors.
+  referenceArchitectureRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    insert: { scope: { kind: 'workspaceField', arg: 0 } },
+    update: { scope: { kind: 'workspace', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The board's run controls (retry / stop a failed or running run) enter through the unified
   // `agent_runs` table: `AgentRunController` calls `getRef(workspaceId, id)` to resolve the run's
@@ -397,8 +425,9 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage prechecks) is
   // already allow-listed on the run/start path. The bootstrap + env-config-repair retry branches
   // read their own repos (`bootstrapJobRepository.get`, `referenceArchitectureRepository.get`, …),
-  // which stay `pending` — a later slice. The sweeper-only `listStale`/`liveRunIds` stay
-  // mothership-internal (its cron owns them).
+  // now allow-listed too (see the bootstrap / reference-architecture / env-config-repair management
+  // surface above). The sweeper-only `listStale`/`liveRunIds` stay mothership-internal (its cron
+  // owns them).
   agentRunRepository: {
     getRef: { scope: { kind: 'workspace', arg: 0 } },
   },
@@ -437,9 +466,17 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   kaizenVerifiedComboRepository: {
     getByKey: { scope: { kind: 'workspace', arg: 0 } },
   },
-  // Env-config-repair (a Tester sub-flow) lists a workspace's repair jobs on the run path.
+  // Env-config-repair (a Tester sub-flow) lists a workspace's repair jobs on the run path
+  // (`listByWorkspace`), and the board's run controls retry / stop a failed or running repair run:
+  // `get`/`update` take the workspaceId as arg0 (the `workspace` rule), the record-based
+  // `insert(record)` binds on the job's `workspaceId` FIELD (the `workspaceField` rule). Retry
+  // STARTS a fresh run from the failed job's coords, so it reads the prior job (`get`) then inserts
+  // a new one; stop patches the running job (`update`). Member-level, workspace-scoped.
   envConfigRepairJobRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    insert: { scope: { kind: 'workspaceField', arg: 0 } },
+    update: { scope: { kind: 'workspace', arg: 0 } },
   },
   // --- Advanced review / structured-dialogue session surfaces ---------------------
   // The clarity-review (bug-report triage), brainstorm (structured dialogue) and consensus
