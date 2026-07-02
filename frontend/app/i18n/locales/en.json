@@ -225,7 +225,13 @@
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "showDetail": "Show detail",
-      "retrying": "Retrying…"
+      "retrying": "Retrying…",
+      "history": {
+        "previousErrors": "{count} previous error | {count} previous errors",
+        "@previousErrors": {
+          "description": "Count-based tally of a run's earlier failed attempts, rendered as e.g. '3 previous errors' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        }
+      }
     },
     "stop": {
       "label": "Stop",

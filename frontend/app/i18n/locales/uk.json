@@ -204,7 +204,10 @@
       "retryBootstrap": "Повторити ініціалізацію",
       "retryRun": "Повторити запуск",
       "showDetail": "Показати деталі",
-      "retrying": "Повторення…"
+      "retrying": "Повторення…",
+      "history": {
+        "previousErrors": "{count} попередня помилка | {count} попередні помилки | {count} попередніх помилок"
+      }
     },
     "stop": {
       "label": "Зупинити",

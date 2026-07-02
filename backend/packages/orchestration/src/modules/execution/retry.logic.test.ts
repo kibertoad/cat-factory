@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentKind, PipelineStep } from '@cat-factory/kernel'
-import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
+import type { AgentFailure, AgentKind, PipelineStep } from '@cat-factory/kernel'
+import {
+  carryForwardFailures,
+  MAX_FAILURE_HISTORY,
+  planResumedSteps,
+  planRestartFromStep,
+} from './retry.logic.js'
 
 const step = (
   agentKind: AgentKind,
@@ -145,5 +150,63 @@ describe('planRestartFromStep', () => {
   it('clamps an out-of-range index into the step range (the service rejects it first)', () => {
     const { currentStep } = planRestartFromStep({ steps: fullSteps('done') }, 99)
     expect(currentStep).toBe(5) // last step
+  })
+})
+
+describe('carryForwardFailures', () => {
+  const failure = (message: string, occurredAt: number): AgentFailure => ({
+    kind: 'agent',
+    message,
+    detail: null,
+    hint: null,
+    occurredAt,
+    lastSubtasks: null,
+  })
+
+  it('appends the outgoing failure to the prior trail, oldest→newest', () => {
+    const first = failure('first crash', 1)
+    const second = failure('second crash', 2)
+    const trail = carryForwardFailures({ failure: second, failureHistory: [first] })
+    expect(trail).toEqual([first, second])
+  })
+
+  it('seeds the trail from a first failure when there was no prior history', () => {
+    const only = failure('boom', 1)
+    expect(carryForwardFailures({ failure: only })).toEqual([only])
+  })
+
+  it('keeps the existing trail unchanged when the outgoing run has no failure', () => {
+    // A restart of a still-running / already-succeeded run carries the trail through untouched.
+    const prior = [failure('older', 1)]
+    expect(carryForwardFailures({ failure: null, failureHistory: prior })).toEqual(prior)
+    expect(carryForwardFailures({ failureHistory: prior })).toEqual(prior)
+  })
+
+  it('returns an empty trail when there is neither a failure nor a history', () => {
+    expect(carryForwardFailures({})).toEqual([])
+  })
+
+  it('accumulates across repeated retries', () => {
+    const a = failure('a', 1)
+    const b = failure('b', 2)
+    const c = failure('c', 3)
+    // retry #1: failed run (a) → trail [a]
+    const afterFirst = carryForwardFailures({ failure: a })
+    // retry #2: the run failed again (b) carrying [a] → trail [a, b]
+    const afterSecond = carryForwardFailures({ failure: b, failureHistory: afterFirst })
+    // retry #3: failed again (c) → [a, b, c]
+    const afterThird = carryForwardFailures({ failure: c, failureHistory: afterSecond })
+    expect(afterThird).toEqual([a, b, c])
+  })
+
+  it('caps the trail at MAX_FAILURE_HISTORY, dropping the oldest', () => {
+    // A run that flapped past the cap: a full history plus one more outgoing failure.
+    const full = Array.from({ length: MAX_FAILURE_HISTORY }, (_, i) => failure(`old ${i}`, i))
+    const newest = failure('newest', MAX_FAILURE_HISTORY)
+    const trail = carryForwardFailures({ failure: newest, failureHistory: full })
+    expect(trail).toHaveLength(MAX_FAILURE_HISTORY)
+    // The oldest is evicted; the newest is retained at the tail.
+    expect(trail[0]).toEqual(full[1])
+    expect(trail.at(-1)).toEqual(newest)
   })
 })

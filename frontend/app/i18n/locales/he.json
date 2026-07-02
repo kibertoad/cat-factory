@@ -204,7 +204,10 @@
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
       "showDetail": "הצג פרטים",
-      "retrying": "מנסה שוב…"
+      "retrying": "מנסה שוב…",
+      "history": {
+        "previousErrors": "שגיאה קודמת {count} | {count} שגיאות קודמות"
+      }
     },
     "stop": {
       "label": "עצור",

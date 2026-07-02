@@ -204,7 +204,10 @@
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
       "showDetail": "Ayrıntıyı göster",
-      "retrying": "Yeniden deneniyor…"
+      "retrying": "Yeniden deneniyor…",
+      "history": {
+        "previousErrors": "{count} önceki hata | {count} önceki hata"
+      }
     },
     "stop": {
       "label": "Durdur",
