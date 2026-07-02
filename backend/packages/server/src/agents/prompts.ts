@@ -382,7 +382,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
  * when one resolved, else the in-container WireMock URL (every OTHER upstream is mocked). The
  * bindings were already env-var-filtered upstream, so no empty var reaches the injected env.
  */
-function buildFrontendInfraSpec(
+export function buildFrontendInfraSpec(
   frontend: NonNullable<AgentRunContext['frontend']>,
 ): Record<string, unknown> {
   const { config, bindings } = frontend

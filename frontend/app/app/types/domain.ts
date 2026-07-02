@@ -63,6 +63,8 @@ export type {
   KaizenVerifiedCombo,
   KaizenOverview,
   WorkspaceEvent,
+  PreviewState,
+  PreviewStatus,
 } from '@cat-factory/contracts'
 
 import type { AgentCategory, AgentKind } from '@cat-factory/contracts'

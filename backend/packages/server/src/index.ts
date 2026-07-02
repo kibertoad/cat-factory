@@ -91,6 +91,10 @@ export {
   makeResolveRunRepoContext,
   runRepoOps,
 } from './agents/repoFiles.js'
+export {
+  makePreviewJobBuilder,
+  type PreviewJobBuilderDependencies,
+} from './preview/previewJobBuilder.js'
 export { bearerToken, requireAuth, verifySession } from './auth/middleware.js'
 export { registerCoreControllers } from './app.js'
 export {

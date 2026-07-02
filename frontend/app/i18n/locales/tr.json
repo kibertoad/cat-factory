@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Yükleniyor…",
+    "loadingBoard": "Pano yükleniyor…",
+    "backendUnreachable": "Arka uca ulaşılamıyor",
+    "reconnecting": "Yeniden bağlanılıyor…"
+  },
   "language": {
     "switcher": "Dil",
     "warning": {
@@ -68,6 +74,14 @@
     "accountSettings": "Hesap ayarları"
   },
   "board": {
+    "toast": {
+      "updateFailed": "Değişiklikler kaydedilemedi",
+      "epicFailed": "Epik değiştirilemedi",
+      "moveFailed": "Taşınamadı",
+      "deleteFailed": "Silinemedi",
+      "linkFailed": "Görevler bağlanamadı",
+      "recurringDeleteFailed": "Yinelenen pipeline silinemedi"
+    },
     "repoTypes": {
       "service": "Servis",
       "frontend": "Frontend",
@@ -260,6 +274,11 @@
       "openPrOnGithub": "{pr} öğesini GitHub'da aç",
       "review": "İncele",
       "merge": "Birleştir",
+      "mergeConfirm": {
+        "title": "Bu pull request birleştirilsin mi?",
+        "body": "Bu, PR'ı temel dalına birleştirir ve görevi tamamlar. Bu geri alınamaz.",
+        "confirm": "Birleştir"
+      },
       "implemented": "uygulandı",
       "module": "Modül: {name}",
       "buildSteps": "Derleme adımları",
@@ -445,6 +464,17 @@
         "mock": "Taklit (WireMock)",
         "remove": "Bağlamayı kaldır",
         "empty": "Backend bağlaması yok. Bir ortam değişkenini bir hizmete veya taklide yönlendirmek için bir tane ekleyin."
+      },
+      "preview": {
+        "open": "Önizlemeyi aç",
+        "start": "Önizlemeyi başlat",
+        "stop": "Durdur",
+        "status": {
+          "starting": "Başlatılıyor…",
+          "ready": "Çalışıyor",
+          "failed": "Başarısız",
+          "stopped": "Başlatılmadı"
+        }
       }
     },
     "releaseHealth": {
@@ -590,6 +620,16 @@
       "stopTooltip": "Çalıştırmayı durdur ancak sakla (okunabilir ve yeniden denenebilir)",
       "reset": "Sıfırla",
       "resetTooltip": "Bu çalıştırmayı sil ve görevi planlandı durumuna sıfırla",
+      "resetConfirm": {
+        "title": "Bu çalıştırma silinsin mi?",
+        "body": "Bu, çalıştırmayı siler ve görevi planlandı durumuna döndürür. Bu geri alınamaz.",
+        "confirm": "Çalıştırmayı sil"
+      },
+      "mergeConfirm": {
+        "title": "Bu pull request birleştirilsin mi?",
+        "body": "Bu, PR'ı temel dalına birleştirir ve görevi tamamlar. Bu geri alınamaz.",
+        "confirm": "Birleştir"
+      },
       "viewDetailsOutput": "Ayrıntıları görüntüle ve çıktıyı oku",
       "viewDetails": "Adım ayrıntılarını görüntüle",
       "companion": "Yardımcı",
@@ -680,6 +720,33 @@
       "structuredOutput": "Yapılandırılmış çıktı",
       "noResult": "Henüz sonuç yok.",
       "noResultHint": "Yapılandırılmış çıktı bu ajan tamamlandığında görünür. Çalışırken adım, panoda canlı ilerlemeyi gösterir."
+    },
+    "mergerResult": {
+      "title": "Birleştirme kararı",
+      "titleWithBlock": "Birleştirme kararı: {title}",
+      "description": "PR'nin nasıl puanlandığı ve motorun ne karar verdiği.",
+      "outcome": {
+        "auto_merged": "Otomatik birleştirildi",
+        "awaiting_review": "İnsan incelemesi bekleniyor"
+      },
+      "reason": {
+        "within_thresholds": "Tüm puanlar {preset} eşiklerinin içinde olduğundan PR otomatik olarak birleştirildi.",
+        "exceeded_thresholds": "{axes} {preset} eşiklerini aştığından PR bir kişinin birleştirmesini bekliyor.",
+        "auto_merge_disabled": "{preset} ön ayarı her PR'yi bir kişiye yönlendirir, bu yüzden bu PR inceleme bekliyor.",
+        "no_rationale": "Birleştirici PR'yi puanladı ancak bir gerekçe vermedi, bu yüzden karara otomatik birleştirme için güvenilemedi; PR bir kişinin birleştirmesini bekliyor.",
+        "no_assessment": "Birleştirici ayrıştırılabilir bir değerlendirme döndürmedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
+        "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor."
+      },
+      "scores": "Puanlar",
+      "axis": {
+        "complexity": "Karmaşıklık",
+        "risk": "Risk",
+        "impact": "Etki"
+      },
+      "ceiling": "üst sınır {value}",
+      "rationale": "Gerekçe",
+      "noAssessment": "Birleştirici puanlı bir değerlendirme döndürmedi.",
+      "noResult": "Henüz bir birleştirme kararı kaydedilmedi."
     },
     "testReport": {
       "title": "Test raporu",
@@ -1162,7 +1229,9 @@
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",
-        "dismissed": "Kapatıldı"
+        "dismissed": "Kapatıldı",
+        "actFailed": "Bu işlem tamamlanamadı",
+        "dismissFailed": "Kapatılamadı"
       }
     },
     "aiProvidersBanner": {
@@ -3677,6 +3746,7 @@
     },
     "targetRepo": {
       "label": "Hedef depo adı",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "{owner} altında bu adla yeni bir depo oluşturun, ardından başlatma ona gönderim yapar. Önceden doldurulmuş bir README, .gitignore veya lisans sorun değildir.",
       "descNoOwner": "Bu adla yeni bir depo oluşturun, ardından başlatma ona gönderim yapar. Önceden doldurulmuş bir README, .gitignore veya lisans sorun değildir."
     },
@@ -3692,7 +3762,8 @@
     },
     "description": {
       "label": "Açıklama",
-      "help": "Depo için isteğe bağlı tek satırlık özet."
+      "help": "Depo için isteğe bağlı tek satırlık özet.",
+      "placeholder": "Ödeme niyetlerini ve iadeleri yönetir"
     },
     "instructions": {
       "labelReference": "Başlatıcı için ek talimatlar",
@@ -3722,18 +3793,23 @@
       "add": "Ekle",
       "pickRepo": {
         "label": "Mevcut bir GitHub deposu seçin",
-        "description": "Sahip ve adını doldurmak için erişebileceğiniz bir depo seçin veya aşağıdan bunları elle girin."
+        "description": "Sahip ve adını doldurmak için erişebileceğiniz bir depo seçin veya aşağıdan bunları elle girin.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Ad",
-        "description": "Bu temel için kullanışlı bir etiket."
+        "description": "Bu temel için kullanışlı bir etiket.",
+        "placeholder": "Servis Şablonu"
       },
       "repoOwner": "Depo sahibi",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Depo adı",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Bu temelin isteğe bağlı özeti",
       "defaultInstructions": {
         "label": "Varsayılan başlatıcı talimatları",
-        "description": "Bu temel her kullanıldığında çalıştırma başına talimatların önüne eklenir."
+        "description": "Bu temel her kullanıldığında çalıştırma başına talimatların önüne eklenir.",
+        "placeholder": "örn. yapıyı koru; paketleri yeni servise uyacak şekilde yeniden adlandır"
       }
     },
     "toast": {

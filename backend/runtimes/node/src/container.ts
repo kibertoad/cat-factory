@@ -111,6 +111,7 @@ import {
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
   buildResolveRepoTarget,
+  makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
   makeResolveRepoFilesForCoords,
@@ -142,7 +143,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { VcsIdentityRegistry } from '@cat-factory/kernel'
+import type { PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -569,6 +570,15 @@ export interface NodeContainerOptions {
    * Node behaviour). The local facade passes a PAT-backed client.
    */
   githubClient?: GitHubClient
+  /**
+   * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
+   * publishes a served app's port to a host port and keeps it alive. Local mode injects the real
+   * one (its Docker/Apple adapter); Node-pool/Worker inject none, so the preview module stays
+   * unwired (503). When present, the runtime-neutral `buildPreviewJob` is constructed from the
+   * SAME repo/token/session seams the container executor uses (unless one is injected via
+   * `overrides` — the conformance suite passes a fake pair to drive the flow on real Postgres).
+   */
+  previewTransport?: PreviewTransport
   /**
    * Wrap the model-provider resolver right after it's built, so a sibling facade can add a
    * flavour the base resolver lacks. Local mode wraps it so a subscription HARNESS ref
@@ -1200,6 +1210,15 @@ function buildNodeGitHubIssueFiler(
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
+  // A browsable preview needs a per-runtime host-port-publish transport. Plain Node (runner
+  // pool) has none, so advertise support ONLY when a `previewTransport` is actually wired
+  // (local mode, or a facade/test that injects one) — otherwise the SPA would offer a Start
+  // button that 503s. Local pre-sets its own descriptor before calling in, so this ??= is
+  // skipped there; the check covers a stock Node build (false) and the conformance harness
+  // (which injects a fake transport via `overrides` → true).
+  const previewTransportWired = Boolean(
+    options.previewTransport ?? options.overrides?.previewTransport,
+  )
   // The Node service has no built-in per-run container runtime: repo-operating agents run on
   // a self-hosted runner pool, and Tester environments via the environment provider. Surface
   // that so the SPA's infrastructure selector reads accurately. Local mode pre-sets its own
@@ -1207,9 +1226,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   config.infrastructure ??= buildInfrastructureCapabilities({
     execution: { available: ['runner-pool'], active: 'runner-pool' },
     testEnv: { available: ['environment-provider'], active: 'environment-provider' },
-    // Node can keep a built frontend served on a host-reachable URL, so a browsable preview is
-    // supported here (the local facade sets its own descriptor before this default is reached).
-    frontendPreview: { supported: true },
+    frontendPreview: { supported: previewTransportWired },
   })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
@@ -2204,6 +2221,35 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // context, so a per-user PAT (when set) is preferred over the App/env token.
     runInitiatorScope: runWithInitiator,
     ...options.overrides,
+  }
+
+  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
+  // transport is available. Local mode injects the real transport; the conformance suite injects
+  // BOTH a fake transport + a fake job builder via `overrides` (which win, so the flow runs on
+  // real Postgres without GitHub). The Worker/Node-pool inject neither ⇒ the module stays absent
+  // (the controller 503s). When a transport is present but no builder was injected, construct the
+  // real one from the SAME repo/token/session seams the container executor uses; without those
+  // (no PUBLIC_URL / session secret / token mint) the module stays unwired rather than half-built.
+  if (options.previewTransport && !dependencies.previewTransport) {
+    dependencies.previewTransport = options.previewTransport
+  }
+  if (dependencies.previewTransport && !dependencies.buildPreviewJob) {
+    const previewPublicUrl = env.PUBLIC_URL?.trim()
+    const previewSessionSecret = config.auth.sessionSecret
+    if (previewPublicUrl && previewSessionSecret && baseDeployMint) {
+      dependencies.buildPreviewJob = makePreviewJobBuilder({
+        blockRepository: repos.blockRepository,
+        resolveRepoTarget,
+        mintInstallationToken: baseDeployMint,
+        ...(options.resolveRepoOrigin ? { resolveRepoOrigin: options.resolveRepoOrigin } : {}),
+        sessionService: new ContainerSessionService({ secret: previewSessionSecret }),
+        proxyBaseUrl: `${previewPublicUrl.replace(/\/+$/, '')}/v1`,
+        ...(config.github.apiBase ? { githubApiBase: config.github.apiBase } : {}),
+        ...(dependencies.environmentRegistryRepository
+          ? { environmentRegistryRepository: dependencies.environmentRegistryRepository }
+          : {}),
+      })
+    }
   }
 
   // Wire the live env-config repair agent over the FINAL environment provider (after the

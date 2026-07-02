@@ -18,6 +18,7 @@ const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
 const { t, te } = useI18n()
+const { confirm } = useConfirm()
 
 // The async stage this task's iterative reviewer gate (requirements-review / clarity-review)
 // is mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate is
@@ -99,7 +100,12 @@ function labelForStep(s: {
   // container is still cold-booting → "Spinning up"; up with a known phase → the phase
   // label ("Agent running" / "Preparing workspace"), so a finished cold-boot no longer
   // collapses into a blank "Working". A failed run's mid-flight step isn't booting.
-  if (!runFailed.value) {
+  //
+  // Only while the step is STILL RUNNING, though: the run's one shared container is kept
+  // alive until the pipeline's final step, so a step that has already finished (e.g. the
+  // merger, which resolves + advances to a trailing gate) would otherwise keep reading the
+  // stale "Agent running" phase even though its state is `done`. A done step reads "Done".
+  if (!runFailed.value && s.state !== 'done') {
     if (s.container?.status === 'starting') return t('inspector.execution.spinningUp')
     if (s.container?.status === 'up') {
       const label = containerPhaseLabel(s.container.phase, { t, te })
@@ -141,12 +147,35 @@ async function stopRun() {
 const resetting = ref(false)
 async function resetRun() {
   if (resetting.value) return
+  // Destructive: discards the run and returns the task to planned — gate it behind a confirm,
+  // matching the confirm-then-mutate contract the board delete path uses.
+  const ok = await confirm({
+    title: t('inspector.execution.resetConfirm.title'),
+    description: t('inspector.execution.resetConfirm.body'),
+    variant: 'destructive',
+    confirmLabel: t('inspector.execution.resetConfirm.confirm'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   resetting.value = true
   try {
     await execution.cancel(props.block.id)
   } finally {
     resetting.value = false
   }
+}
+
+// Merging a PR is consequential and effectively irreversible — confirm first. `execution.mergePr`
+// surfaces its own error toast, so no catch is needed here.
+async function mergePr() {
+  const ok = await confirm({
+    title: t('inspector.execution.mergeConfirm.title'),
+    description: t('inspector.execution.mergeConfirm.body'),
+    confirmLabel: t('inspector.execution.mergeConfirm.confirm'),
+    icon: 'i-lucide-git-merge',
+  })
+  if (!ok) return
+  await execution.mergePr(props.block.id)
 }
 </script>
 
@@ -431,7 +460,7 @@ async function resetRun() {
       size="sm"
       icon="i-lucide-git-merge"
       block
-      @click="execution.mergePr(block.id)"
+      @click="mergePr"
     >
       {{ t('inspector.execution.mergePr') }}
     </UButton>

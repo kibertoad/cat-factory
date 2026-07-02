@@ -62,6 +62,8 @@ function openApprovalFor(approvalId: string) {
   <div
     v-if="block && statusMeta && typeMeta"
     class="absolute inset-0 z-30 flex flex-col bg-slate-950/95 backdrop-blur"
+    role="dialog"
+    aria-modal="true"
   >
     <!-- header / breadcrumb -->
     <header class="flex items-center gap-3 border-b border-slate-800 px-6 py-4">
