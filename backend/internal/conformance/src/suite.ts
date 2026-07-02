@@ -31,6 +31,7 @@ import {
   type ComposeRuntime,
   type EnvironmentBackendProvider,
   type RunnerBackendProvider,
+  type UserSecretKindHandler,
 } from '@cat-factory/integrations'
 // The built-in gate suite lives in its own package and registers via the public seam (the
 // dogfood). The suite imports it so the runtime-neutral assertions run with the SAME gates a
@@ -2866,6 +2867,32 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const descriptor = probe.describe('github_pat')
         expect(descriptor?.supportsTest).toBe(true)
         expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('token')
+      })
+
+      it('consults the injected kind registry by reference — a deployment-customised kind wins', async () => {
+        // The kind registry is app-owned (`createBackendRegistries().userSecretKindRegistry`) and
+        // injected into `UserSecretService`, NOT a module-global Map — so a deployment registers a
+        // customised handler BY REFERENCE and the facade consults THAT instance regardless of
+        // module identity. Re-register `github_pat` with a distinctive secret-field key + no
+        // connection test; every runtime must surface the injected shape, proving the injection
+        // path (not a phantom global) is what the service reads. See the registry-DI migration.
+        const backendRegistries = createBackendRegistries()
+        const customised: UserSecretKindHandler = {
+          kind: 'github_pat',
+          label: 'Conformance PAT',
+          configFields: [{ key: 'pat', label: 'PAT', secret: true, required: true }],
+          // No testConnection ⇒ supportsTest must flip to false, unlike the built-in.
+        }
+        backendRegistries.userSecretKindRegistry.register(customised)
+
+        const app = harness.makeApp(undefined, { backendRegistries })
+        const probe = app.userSecrets?.()
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        if (!probe) return
+
+        const descriptor = probe.describe('github_pat')
+        expect(descriptor?.supportsTest).toBe(false)
+        expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('pat')
       })
     })
 

@@ -53,7 +53,7 @@ The pilot — the environment-backend + runner-backend registries — is the tem
 | ---------------------- | ----------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------- |
 | Environment backends   | integrations                  | `modules/environments/environment-backends.ts` | ✅ done                                                                                             | (pilot) |
 | Runner backends        | integrations                  | `modules/runners/runner-backends.ts`           | ✅ done                                                                                             | (pilot) |
-| User-secret kinds      | integrations                  | `modules/providers/userSecretKinds.ts`         | ⬜ todo                                                                                             |         |
+| User-secret kinds      | integrations                  | `modules/providers/userSecretKinds.ts`         | ✅ done                                                                                             |         |
 | Observability adapters | integrations                  | `modules/observability/registry.ts`            | ⚠️ partial (already injected into `RegistryReleaseHealthProvider`; uses a record, not a module Map) |         |
 | Gates                  | kernel + `@cat-factory/gates` | `kernel/domain/gate-registry.ts`               | ⬜ todo                                                                                             |         |
 | Provider tokens        | kernel                        | `domain/provider-registry.ts`                  | ⬜ todo                                                                                             |         |
@@ -77,7 +77,15 @@ The pilot — the environment-backend + runner-backend registries — is the tem
 - **Watch for >1 construction site per facade.** A registry may be resolved both in the
   module factory (orchestration) AND in a facade helper that builds a service directly
   (e.g. `buildNodeResolveTransport` / the Worker `buildResolveTransport`). Thread the SAME
-  instance to all of them.
+  instance to all of them. NB some construction sites only exercise a path that never reads
+  the registry (e.g. the Worker builds a second `UserSecretService` purely for `.resolve()`
+  in `buildResolveUserGitHubToken`); those can keep the defaulted registry, but the site the
+  controller uses must get the injected one.
+- **A conformance probe that rebuilds its own container must thread the override too.** The
+  Worker harness's `userSecrets` probe calls a _fresh_ `buildContainer(env, …)` rather than
+  reusing `makeApp`'s app, so an injected registry only reaches it if the probe forwards
+  `opts.backendRegistries.<registry>` into that rebuild. The Node/local probes read the
+  already-built `container.<service>`, so they get it for free.
 - **Pre-1.0 = no back-compat.** Remove the old free functions outright; flag breaking in
   the changeset. Don't keep a shim.
 - **Agent-kind / pipeline / gate registries are read deep in the engine** (lazily, on first

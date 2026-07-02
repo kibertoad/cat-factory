@@ -7,6 +7,10 @@ import {
   defaultRunnerBackendRegistry,
   type RunnerBackendRegistry,
 } from './runners/runner-backends.js'
+import {
+  defaultUserSecretKindRegistry,
+  type UserSecretKindRegistry,
+} from './providers/userSecretKinds.js'
 
 // The single "unified" construction entry for the app-owned backend registries. A facade's
 // composition root calls this ONCE, optionally registers any deployment-custom backends
@@ -28,6 +32,14 @@ export interface BackendRegistries {
    * (the built-ins are the `manifest`/`kubernetes` BACKENDS, not custom manifest types).
    */
   customManifestTypeRegistry: CustomManifestTypeRegistry
+  /**
+   * The app-owned registry of per-USER secret kinds (a GitHub PAT today; each kind declares
+   * its config fields + optional connection test). Pre-loaded with the built-in `github_pat`
+   * kind; a deployment registers a custom kind by reference
+   * (`registries.userSecretKindRegistry.register(...)`). Injected into `UserSecretService` by
+   * each facade so a registered kind is seen regardless of module identity.
+   */
+  userSecretKindRegistry: UserSecretKindRegistry
 }
 
 /** Build the backend registries pre-loaded with the built-in (`manifest` + `kubernetes`) kinds. */
@@ -36,5 +48,6 @@ export function createBackendRegistries(): BackendRegistries {
     environmentBackendRegistry: defaultEnvironmentBackendRegistry(),
     runnerBackendRegistry: defaultRunnerBackendRegistry(),
     customManifestTypeRegistry: new CustomManifestTypeRegistry(),
+    userSecretKindRegistry: defaultUserSecretKindRegistry(),
   }
 }

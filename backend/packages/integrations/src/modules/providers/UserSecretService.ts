@@ -13,7 +13,7 @@ import type {
   UserSecretDescriptor,
   UserSecretStatus,
 } from '@cat-factory/contracts'
-import { getUserSecretKind, listUserSecretKinds } from './userSecretKinds.js'
+import { defaultUserSecretKindRegistry, type UserSecretKindRegistry } from './userSecretKinds.js'
 
 // UserSecretService: owns each USER's generic, kind-discriminated secrets (a GitHub
 // PAT today; future repository/provider tokens as new kinds). Single system-cipher
@@ -27,10 +27,21 @@ export interface UserSecretServiceDependencies {
   clock: Clock
   /** Injected for tests; defaults to the global fetch (used by kind testConnection). */
   fetch?: typeof fetch
+  /**
+   * The app-owned registry of secret KINDS (fields + connection test per kind). Absent ⇒
+   * a fresh registry with just the built-in `github_pat` kind
+   * (`defaultUserSecretKindRegistry()`). A facade builds it via `createBackendRegistries()`
+   * and registers any custom kinds by reference before injecting it here.
+   */
+  userSecretKindRegistry?: UserSecretKindRegistry
 }
 
 export class UserSecretService {
-  constructor(private readonly deps: UserSecretServiceDependencies) {}
+  private readonly kinds: UserSecretKindRegistry
+
+  constructor(private readonly deps: UserSecretServiceDependencies) {
+    this.kinds = deps.userSecretKindRegistry ?? defaultUserSecretKindRegistry()
+  }
 
   /** Every secret the user has stored (metadata only, never the secret value). */
   async list(userId: string): Promise<UserSecretStatus[]> {
@@ -50,7 +61,7 @@ export class UserSecretService {
     kind: UserSecretKind,
     input: StoreUserSecretInput,
   ): Promise<UserSecretStatus> {
-    const handler = getUserSecretKind(kind)
+    const handler = this.kinds.get(kind)
     if (!handler) throw new ValidationError(`Unknown secret kind '${kind}'`)
     const now = this.deps.clock.now()
     const existing = await this.deps.userSecretRepository.getByUserKind(userId, kind)
@@ -85,7 +96,7 @@ export class UserSecretService {
 
   /** A kind's self-description for the generic connect form. */
   describe(kind: UserSecretKind): UserSecretDescriptor | null {
-    const handler = getUserSecretKind(kind)
+    const handler = this.kinds.get(kind)
     if (!handler) return null
     return {
       kind: handler.kind,
@@ -97,7 +108,7 @@ export class UserSecretService {
 
   /** Every registered kind's descriptor (for rendering the available connect forms). */
   describeAll(): UserSecretDescriptor[] {
-    return listUserSecretKinds().map((h) => ({
+    return this.kinds.list().map((h) => ({
       kind: h.kind,
       label: h.label,
       configFields: h.configFields,
@@ -110,7 +121,7 @@ export class UserSecretService {
     kind: UserSecretKind,
     input: TestUserSecretInput,
   ): Promise<ConnectionTestResult> {
-    const handler = getUserSecretKind(kind)
+    const handler = this.kinds.get(kind)
     if (!handler?.testConnection)
       return { ok: true, message: 'This secret has no connection test.' }
     return handler.testConnection(

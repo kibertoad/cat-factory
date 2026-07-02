@@ -155,6 +155,7 @@ import {
   type DeployJobClient,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
+  type UserSecretKindRegistry,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
@@ -512,6 +513,16 @@ export interface CoreDependencies {
    * `kubernetes` kinds (`defaultRunnerBackendRegistry()`).
    */
   runnerBackendRegistry?: RunnerBackendRegistry
+  /**
+   * The app-owned registry of per-USER secret kinds (a GitHub PAT today). A facade builds it
+   * via `createBackendRegistries()` and registers any custom kinds by reference before
+   * injecting it here; the facade threads it into `UserSecretService`. `createCore` does not
+   * build that service itself, so this field only carries the registry through the app-owned
+   * `CoreDependencies` bag (and the conformance seam) to the facade's construction site.
+   * Absent ⇒ a fresh registry with just the built-in `github_pat` kind
+   * (`defaultUserSecretKindRegistry()`).
+   */
+  userSecretKindRegistry?: UserSecretKindRegistry
   // URL/host safety policy for the RUNNER-POOL integration (the scheduler baseUrl).
   // Absent => strict. Scoped independently of `environmentUrlSafetyPolicy` so an
   // operator widening the env allow-list does not silently widen the pool's SSRF guard.

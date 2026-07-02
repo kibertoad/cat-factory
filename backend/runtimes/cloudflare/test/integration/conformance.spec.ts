@@ -80,6 +80,7 @@ const harness: ConformanceHarness = {
               environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
               runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
               customManifestTypeRegistry: opts.backendRegistries.customManifestTypeRegistry,
+              userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry,
             }
           : {}),
         ...fragmentLibraryDeps(),
@@ -144,8 +145,13 @@ const harness: ConformanceHarness = {
         }
       },
       userSecrets: () => {
+        // Thread the injected kind registry (when the suite pre-loads one) so the
+        // describe assertion sees the deployment-customised handler by reference.
         const svc = buildContainer(env, {
           agentExecutor: new FakeAgentExecutor(),
+          ...(opts?.backendRegistries
+            ? { userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry }
+            : {}),
         }).userSecrets
         if (!svc) return undefined
         return {
