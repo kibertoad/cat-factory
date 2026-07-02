@@ -340,13 +340,23 @@ export const useBoardStore = defineStore('board', () => {
     // (a patch may set several at once) rather than leaving a stale optimistic value stuck on
     // screen with no feedback — the same rollback contract the other mutations here follow.
     const prev: Record<string, unknown> = {}
+    const patchRecord = patch as Record<string, unknown>
     const record = b as unknown as Record<string, unknown>
     for (const key of Object.keys(patch)) prev[key] = record[key]
     Object.assign(b, patch) // optimistic
     try {
       upsert(await api.updateBlock(useWorkspaceStore().requireId(), id, patch))
     } catch (e) {
-      Object.assign(b, prev)
+      // Re-resolve the block: a live event may have replaced its object reference (`upsert`
+      // swaps in a fresh one) while the write was in flight, so `b` can be stale. Only revert
+      // fields that still hold OUR optimistic value, so a newer server value that landed
+      // mid-flight isn't clobbered by the rollback.
+      const cur = getBlock(id) as unknown as Record<string, unknown> | undefined
+      if (cur) {
+        for (const key of Object.keys(patch)) {
+          if (cur[key] === patchRecord[key]) cur[key] = prev[key]
+        }
+      }
       toast.add({
         title: tr('board.toast.updateFailed'),
         description: e instanceof Error ? e.message : String(e),

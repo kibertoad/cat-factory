@@ -55,9 +55,12 @@ const block = computed<Block | undefined>(() =>
 const level = computed(() => block.value?.level ?? 'frame')
 const isFrame = computed(() => level.value === 'frame')
 
-// The last persisted title, re-seeded whenever the selected block changes. Editing the title
-// binds straight to the store object via v-model, so if the user clears it and blurs there is
-// nothing to fall back to — restore this rather than persisting (and showing) an empty title.
+// The title to fall back to when the user clears the field and blurs. Editing the title binds
+// straight to the store object via v-model, so there is nothing to fall back to otherwise —
+// restore this rather than persisting (and showing) an empty title. It is captured fresh at
+// edit start (`captureTitle` on focus), so it always reflects the current known-good value —
+// robust against a failed save (which rolls the title back) and an external rename of the same
+// block. Seeded here on block switch so the fallback is sane even before the first focus.
 const lastSavedTitle = ref('')
 watch(
   () => block.value?.id,
@@ -115,6 +118,12 @@ const started = computed(
 )
 const editable = computed(() => !started.value)
 
+// Snapshot the current title as the fallback the moment editing begins, so it reflects the
+// last known-good value (survives a failed save or an external rename) rather than a value we
+// only optimistically assumed had persisted.
+function captureTitle() {
+  lastSavedTitle.value = block.value?.title ?? ''
+}
 function saveTitle() {
   const b = block.value
   if (!b) return
@@ -126,7 +135,6 @@ function saveTitle() {
     return
   }
   b.title = next
-  lastSavedTitle.value = next
   board.updateBlock(b.id, { title: next })
 }
 function saveDescription() {
@@ -273,6 +281,7 @@ const showOriginalDescription = ref(false)
           size="sm"
           class="w-full"
           :placeholder="t('panels.inspector.titlePlaceholder')"
+          @focus="captureTitle"
           @change="saveTitle"
           @blur="saveTitle"
         />

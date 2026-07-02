@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 // A slim top strip shown when the real-time WebSocket has dropped and is reconnecting, so a
 // silently-frozen board (events stop arriving, nothing updates) is no longer indistinguishable
@@ -40,6 +40,14 @@ watch(
 )
 
 const visible = computed(() => everConnected.value && !props.connected && showAfterDelay.value)
+
+// Don't leave a pending debounce timer firing into a torn-down component.
+onBeforeUnmount(() => {
+  if (timer) {
+    clearTimeout(timer)
+    timer = null
+  }
+})
 </script>
 
 <template>
