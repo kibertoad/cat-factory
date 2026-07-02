@@ -65,6 +65,7 @@ export class MergePresetService {
       ciMaxAttempts: input.ciMaxAttempts,
       maxRequirementIterations: input.maxRequirementIterations,
       maxRequirementConcernAllowed: input.maxRequirementConcernAllowed,
+      maxTesterQualityIterations: input.maxTesterQualityIterations,
       releaseWatchWindowMinutes: input.releaseWatchWindowMinutes,
       releaseMaxAttempts: input.releaseMaxAttempts,
       humanReviewGraceMinutes: input.humanReviewGraceMinutes,
@@ -100,6 +101,9 @@ export class MergePresetService {
         : {}),
       ...(patch.maxRequirementConcernAllowed !== undefined
         ? { maxRequirementConcernAllowed: patch.maxRequirementConcernAllowed }
+        : {}),
+      ...(patch.maxTesterQualityIterations !== undefined
+        ? { maxTesterQualityIterations: patch.maxTesterQualityIterations }
         : {}),
       ...(patch.releaseWatchWindowMinutes !== undefined
         ? { releaseWatchWindowMinutes: patch.releaseWatchWindowMinutes }
@@ -189,6 +193,7 @@ export class MergePresetService {
       ciMaxAttempts: seed.ciMaxAttempts,
       maxRequirementIterations: seed.maxRequirementIterations,
       maxRequirementConcernAllowed: seed.maxRequirementConcernAllowed,
+      maxTesterQualityIterations: seed.maxTesterQualityIterations,
       releaseWatchWindowMinutes: seed.releaseWatchWindowMinutes,
       releaseMaxAttempts: seed.releaseMaxAttempts,
       humanReviewGraceMinutes: seed.humanReviewGraceMinutes,

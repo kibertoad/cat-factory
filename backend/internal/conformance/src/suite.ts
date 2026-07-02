@@ -109,6 +109,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           infrastructure?: {
             execution: { available: string[]; active: string }
             testEnv: { available: string[]; active: string }
+            frontendPreview: { supported: boolean }
           }
         }>('GET', '/auth/config')
         expect(res.status).toBe(200)
@@ -119,6 +120,11 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(infra!.execution.available).toContain(infra!.execution.active)
         expect(infra!.testEnv.available.length).toBeGreaterThan(0)
         expect(infra!.testEnv.available).toContain(infra!.testEnv.active)
+        // The browsable-preview capability is a required boolean axis on every facade (the SPA
+        // gates the `previewEnabled` toggle on it). Its VALUE is a per-facade differentiator
+        // (Worker false; Node/local true), so the shared suite pins only that it is present +
+        // boolean — each facade's own spec asserts its concrete value.
+        expect(typeof infra!.frontendPreview.supported).toBe('boolean')
       })
     })
 
@@ -2237,6 +2243,90 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         })
         expect(ok.status).toBe(201)
       })
+
+      it('runs the SAME provider guard on RETRY as on start (refuses a retry gone unsatisfiable)', async () => {
+        // A retry re-drives the failed run through the same steps, so it must be gated exactly
+        // like a start — otherwise a run that failed under a now-unconfigured model silently
+        // re-dispatches and fails again mid-run (the drift that let a subscription-only preset
+        // slip past retry). Start under a configured model, fail it, remove the provider, retry →
+        // refused up front with the same conflict a fresh start gives.
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { asyncKinds: ['coder'], dispatchThrowKinds: ['coder'] },
+          { cloudflareModelsEnabled: false },
+        )
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // Configure a qwen key + pin qwen so the start guard passes, then fail the run.
+        const key = await call<{ id: string }>('POST', `/workspaces/${wsId}/api-keys`, KEY)
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+
+        // Remove the provider key → the pinned model is no longer usable for THIS workspace.
+        const removed = await call('DELETE', `/workspaces/${wsId}/api-keys/${key.body.id}`)
+        expect(removed.status).toBe(204)
+
+        // Retry the failed run → refused with the same providers_unconfigured conflict as a start,
+        // because retry now shares start's `assertRunnable` gate.
+        const retried = await call<{ error: { details?: { reason?: string } } }>(
+          'POST',
+          `/workspaces/${wsId}/agent-runs/${exec.id}/retry`,
+        )
+        expect(retried.status).toBe(409)
+        expect(retried.body.error.details?.reason).toBe('providers_unconfigured')
+      })
+
+      it('runs the SAME provider guard on RESTART-from-step as on start', async () => {
+        // A restart re-dispatches the stored steps just like a retry (from an arbitrary step),
+        // so it must be gated identically — otherwise a run whose model went unconfigured slips
+        // past restart and strands mid-run. Start under a configured model, fail it, remove the
+        // provider, restart from step 0 → refused up front with the same conflict a start gives.
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { asyncKinds: ['coder'], dispatchThrowKinds: ['coder'] },
+          { cloudflareModelsEnabled: false },
+        )
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const key = await call<{ id: string }>('POST', `/workspaces/${wsId}/api-keys`, KEY)
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+
+        const removed = await call('DELETE', `/workspaces/${wsId}/api-keys/${key.body.id}`)
+        expect(removed.status).toBe(204)
+
+        // Restart from the first step → refused with providers_unconfigured, because restart now
+        // shares start's `assertRunnable` gate over the stored steps it re-drives.
+        const restarted = await call<{ error: { details?: { reason?: string } } }>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/restart`,
+          { fromStepIndex: 0 },
+        )
+        expect(restarted.status).toBe(409)
+        expect(restarted.body.error.details?.reason).toBe('providers_unconfigured')
+      })
     })
 
     describe('merge presets', () => {
@@ -2254,7 +2344,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
         expect(balanced.isDefault).toBe(true)
         expect(balanced.autoMergeEnabled).toBe(true)
-        expect(balanced.version).toBe(1)
+        expect(balanced.version).toBe(2)
+        // The QC-companion budget round-trips with its default through both stores.
+        expect(balanced.maxTesterQualityIterations).toBe(3)
         // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
         expect(manual.isDefault).toBe(false)
         expect(manual.autoMergeEnabled).toBe(false)
@@ -2272,14 +2364,16 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           ciMaxAttempts: 5,
           maxRequirementIterations: 5,
           maxRequirementConcernAllowed: 'medium',
+          maxTesterQualityIterations: 4,
           releaseWatchWindowMinutes: 45,
           releaseMaxAttempts: 2,
         })
         expect(lenient.status).toBe(201)
         expect(lenient.body.isDefault).toBe(false)
-        // The requirements-loop + release-health fields round-trip through the store on both runtimes.
+        // The requirements-loop + QC + release-health fields round-trip through the store on both runtimes.
         expect(lenient.body.maxRequirementIterations).toBe(5)
         expect(lenient.body.maxRequirementConcernAllowed).toBe('medium')
+        expect(lenient.body.maxTesterQualityIterations).toBe(4)
         expect(lenient.body.releaseWatchWindowMinutes).toBe(45)
         expect(lenient.body.releaseMaxAttempts).toBe(2)
 
@@ -2337,8 +2431,8 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           `/workspaces/${wsId}`,
         )
         expect(snap.body.mergePresetCatalogVersions).toMatchObject({
-          mp_balanced: 1,
-          mp_manual_review: 1,
+          mp_balanced: 2,
+          mp_manual_review: 2,
         })
 
         // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
@@ -2352,7 +2446,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(reseeded.status).toBe(200)
         expect(reseeded.body.name).toBe('Balanced')
         expect(reseeded.body.autoMergeEnabled).toBe(true)
-        expect(reseeded.body.version).toBe(1)
+        expect(reseeded.body.version).toBe(2)
         // The default is preserved across a reseed.
         expect(reseeded.body.isDefault).toBe(true)
 
@@ -4325,6 +4419,252 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(blocked.body.error.details?.infraReason).toBe('frontend-no-live-service')
       })
 
+      it('gates a visual pipeline to a frame with a UI (refuse on a bare service, allow once a frontend links it)', async () => {
+        // Slice 4c (frontend-preview-ui-testing): a pipeline with a VISUAL step (`tester-ui` /
+        // `visual-confirmation`) may run only where there is a UI to exercise — a `frontend` frame,
+        // or a frame a `frontend` frame links to. `task_login` lives under the `blk_auth` SERVICE
+        // frame, which has no frontend linked in the seed, so a visual pipeline is refused up-front
+        // with `visual_pipeline_no_frontend`. Once the seeded frontend frame BINDS `blk_auth`
+        // (a frontend→service link), the same run is allowed and starts. This pins the D1 ⇄ Drizzle
+        // parity of reading `frontend_config` to discover the link during a run-start gate: a facade
+        // that dropped/mismapped the column would find no link and refuse the allowed case too.
+        // Binary storage is wired so the allowed run isn't refused by the storage gate instead.
+        const app = harness.makeApp(undefined, { resolveBinaryArtifactStore: STORAGE_ON })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Visual build',
+          agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
+        })
+
+        // No frontend links `blk_auth` yet ⇒ the visual pipeline is refused on `task_login`.
+        const refused = await app.call<{
+          error: { code: string; details?: { reason?: string; frameType?: string | null } }
+        }>('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(refused.status).toBe(409)
+        expect(refused.body.error.code).toBe('conflict')
+        expect(refused.body.error.details?.reason).toBe('visual_pipeline_no_frontend')
+        expect(refused.body.error.details?.frameType).toBe('service')
+
+        // Link the seeded frontend frame to `blk_auth`: now the service HAS a frontend, so the same
+        // visual pipeline is allowed to start on its task.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
+        const started = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(started.status).toBe(201)
+      })
+
+      // Skipped on the mothership harness: this test runs a real `deployer` (registering an
+      // environment connection + provisioning through it), which drives the env connect/provision
+      // write surface. That surface is deliberately NOT exposed over the mothership RPC boundary
+      // yet (see `packages/server/src/persistence/rpc.ts`: `environmentRegistryRepository` is
+      // read-only there and `environmentConnectionRepository` is unproxied — "the connect/provision
+      // surface ... is a later slice"), so it 500s on that node. The sibling refusal test above
+      // stays mothership-safe because it only reads/PATCHes seeded blocks. Every OTHER harness
+      // (node/local/worker, real persistence) exercises the full provision path here.
+      it.skipIf(harness.name === 'mothership')(
+        'resolves a frontend `service` binding to a live env keyed by the service FRAME id',
+        async () => {
+          // Slice 4b (frontend-preview-ui-testing): a `deployer` keys its ephemeral env under the
+          // task `block_id` it ran on, but a `frontend` frame's `service` binding names a service
+          // FRAME id. So the env now also records the resolved service `frame_id`, and
+          // `resolveFrontendConfig` matches handles on THAT. This asserts both cross-runtime facts:
+          //   (1) the `frame_id` column round-trips through each facade's registry repo (D1 ⇄
+          //       Drizzle) — a facade that dropped/mismapped it would key the env under `null`, and
+          //   (2) with the bound service's env live under its frame, the frontend infra gate is
+          //       SATISFIED and the UI-tester run STARTS (201) — the mirror of the sibling refusal
+          //       test, where the same binding had no live env and was refused (409).
+          // The deployer runs on `task_login` (a task under the seeded `blk_auth` service frame), so
+          // the env keys under `blk_auth`; the frontend binds `blk_auth` and resolves to its URL.
+          const provider = {
+            provision: async () => ({
+              externalId: 'auth-env-1',
+              status: 'ready',
+              url: 'https://auth-live.example',
+              expiresAt: null,
+              access: null,
+              fields: {},
+            }),
+            status: async () =>
+              ({
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+              }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+            resolveBinaryArtifactStore: STORAGE_ON,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // A registered connection gives `provision` its manifest (the legacy single-connection
+          // path), so the deployer reaches the injected provider rather than failing on "no connection".
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: { method: 'POST', pathTemplate: '/environments' },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // Provision the auth service's live env by running a `deployer` on a task inside its frame.
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy auth',
+            agentKinds: ['deployer'],
+          })
+          const startDeploy = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            {
+              pipelineId: deployPipeline.body.id,
+            },
+          )
+          expect(startDeploy.status).toBe(201)
+          await app.drive(wsId)
+
+          // The env is keyed by the service FRAME (`blk_auth`) AND the task the deployer ran on —
+          // the `frame_id` column round-trip across each facade's registry repo.
+          const envs = await app.call<
+            {
+              blockId: string | null
+              frameId?: string | null
+              status: string
+              url: string | null
+            }[]
+          >('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(1)
+          expect(envs.body[0]!.blockId).toBe('task_login')
+          expect(envs.body[0]!.frameId).toBe('blk_auth')
+          expect(envs.body[0]!.status).toBe('ready')
+
+          // Bind the frontend frame to that service FRAME (plus a mock upstream).
+          const patched = await app.call<Block>(
+            'PATCH',
+            `/workspaces/${wsId}/blocks/blk_frontend`,
+            {
+              frontendConfig: {
+                packageManager: 'pnpm',
+                buildScript: 'build',
+                backendBindings: [
+                  {
+                    envVar: 'PUB_API_URL',
+                    source: { kind: 'service', serviceBlockId: 'blk_auth' },
+                  },
+                  { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } },
+                ],
+              },
+            },
+          )
+          expect(patched.status).toBe(200)
+
+          // A UI-tester run against the frontend now STARTS: the live service-under-test resolved via
+          // `frame_id`, so the frontend infra gate is satisfied instead of refusing the run.
+          const task = await app.call<Block>(
+            'POST',
+            `/workspaces/${wsId}/blocks/blk_frontend/tasks`,
+            {
+              title: 'Exercise the dashboard',
+            },
+          )
+          const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Build + UI test',
+            agentKinds: ['coder', 'tester-ui'],
+          })
+          const started = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+            {
+              pipelineId: uiPipeline.body.id,
+            },
+          )
+          expect(started.status).toBe(201)
+        },
+      )
+
+      // Slice 5c (frontend-preview-ui-testing): the browsable-preview lifecycle + its ephemeral
+      // `environments`-row persistence, driven through a FAKE preview transport (the real one is a
+      // per-runtime differentiator, wired only in local). Skipped on Cloudflare (the Worker reports
+      // `frontendPreview.supported: false` and wires no transport → the controller 503s) and on
+      // mothership (its harness wires no preview fake). Asserts the runtime-neutral half: start
+      // persists a `preview`-typed env row keyed by the FRAME, get drives it to `ready` with the
+      // served URL, and stop soft-deletes it — the D1 ⇄ Drizzle env-row parity for a preview.
+      it.skipIf(harness.name === 'cloudflare' || harness.name === 'mothership')(
+        'starts, serves and stops a browsable frontend preview keyed by the frame',
+        async () => {
+          const app = harness.makeApp()
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // Nothing running yet.
+          const before = await app.call<{ status: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(before.status).toBe(200)
+          expect(before.body.status).toBe('stopped')
+
+          // Start → 201, provisioning; a `preview`-typed env row is persisted keyed by the FRAME.
+          const started = await app.call<{ status: string; frameId: string }>(
+            'POST',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(started.status).toBe(201)
+          expect(started.body.status).toBe('starting')
+          expect(started.body.frameId).toBe('blk_frontend')
+
+          // The preview row shares the `environments` table but is NOT a provisioned environment,
+          // so it must be ISOLATED from the deployer-env listing the SPA renders (the persistence
+          // itself is proven by the preview endpoints below, which read it back on both runtimes).
+          const envs = await app.call<unknown[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(0)
+
+          // Get → the fake transport reports it serving, so it flips to `ready` with the URL.
+          const ready = await app.call<{ status: string; url?: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(ready.status).toBe(200)
+          expect(ready.body.status).toBe('ready')
+          expect(ready.body.url).toBe('http://preview.test:4173')
+
+          // Stop → soft-deletes the row; a subsequent get reports `stopped` again.
+          const stopped = await app.call<{ status: string }>(
+            'DELETE',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(stopped.status).toBe(200)
+          expect(stopped.body.status).toBe('stopped')
+
+          const after = await app.call<{ status: string }>(
+            'GET',
+            `/workspaces/${wsId}/frames/blk_frontend/preview`,
+          )
+          expect(after.body.status).toBe('stopped')
+          const envsAfter = await app.call<unknown[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envsAfter.body).toHaveLength(0)
+        },
+      )
+
       it('refuses to start a UI-tester pipeline when the account has no binary storage', async () => {
         // The `tester-ui` step uploads its screenshots to the binary-artifact store, so the
         // engine refuses to START the pipeline when the account has none configured — a clear
@@ -4337,6 +4677,18 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         })
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
+        // Slice 4c: a visual pipeline (`tester-ui` / `visual-confirmation`) is gated to a frame
+        // with a UI. This run targets `task_login` under the `blk_auth` SERVICE frame, so first
+        // link the seeded frontend frame to `blk_auth` (making it "a service with a frontend
+        // linked to it") — otherwise the run is refused by the frame-type gate BEFORE it can reach
+        // the binary-storage gate this test asserts.
+        await call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
         const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test (no storage)',
           agentKinds: ['coder', 'tester-ui', 'visual-confirmation'],
@@ -4376,6 +4728,15 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+        // Slice 4c: link the seeded frontend frame to `blk_auth` so the visual pipeline is allowed
+        // to run on `task_login` (under that service frame) — see the binary-storage test above.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test + visual confirmation',
@@ -4431,6 +4792,15 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+        // Slice 4c: link the seeded frontend frame to `blk_auth` so the visual pipeline is allowed
+        // to run on `task_login` (under that service frame) — see the binary-storage test above.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+          frontendConfig: {
+            backendBindings: [
+              { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+            ],
+          },
+        })
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'UI test + visual confirmation (fix)',
@@ -5139,11 +5509,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(start.status).toBe(201)
-        await app.drive(wsId)
+        const ticked = await app.drive(wsId)
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('pr_ready')
         expect(task.status).not.toBe('done')
+        // The engine records its structured decision on the merger step (`step.custom`) so
+        // the SPA can explain WHY review was needed — here, an assessment WITH scores but no
+        // rationale routes to review as `no_rationale` (distinct from a truly absent one),
+        // not an auto-merge.
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('no_rationale')
       })
 
       it('runs the merger merge at its step even when a later step follows it', async () => {
@@ -5176,12 +5557,22 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           { pipelineId: pipeline.body.id },
         )
         expect(start.status).toBe(201)
-        await app.drive(wsId)
+        const ticked = await app.drive(wsId)
         const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
         const task = snap.blocks.find((b) => b.id === 'task_login')!
         // The merge ran at the (non-final) merger step → the block is `done`, not left
         // unmerged as `pr_ready`.
         expect(task.status).toBe('done')
+        // The auto-merge decision is recorded on the merger step for the SPA to render.
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          thresholds?: { presetName?: string }
+        }
+        expect(decision.outcome).toBe('auto_merged')
+        expect(decision.reason).toBe('within_thresholds')
+        expect(decision.thresholds?.presetName).toBeTruthy()
       })
 
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {

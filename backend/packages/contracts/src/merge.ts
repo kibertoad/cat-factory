@@ -81,6 +81,14 @@ export const mergeThresholdPresetSchema = v.object({
    */
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
   /**
+   * How many times the test quality-control companion may loop the Tester for a more
+   * complete report before it stops gating and lets the run proceed to the greenlight /
+   * fixer decision. One QC-driven Tester re-run = one iteration, so this is the maximum
+   * number of QC re-runs: `1` permits a single re-run before the gate gives up. Independent
+   * of the `ciMaxAttempts` fixer budget.
+   */
+  maxTesterQualityIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  /**
    * How long (minutes) the post-release-health gate watches the deployed release's
    * Datadog monitors/SLOs before declaring it healthy and advancing.
    */
@@ -137,6 +145,7 @@ export const createMergePresetSchema = v.object({
   ciMaxAttempts: attemptsSchema,
   maxRequirementIterations: iterationsSchema,
   maxRequirementConcernAllowed: requirementConcernLevelSchema,
+  maxTesterQualityIterations: v.optional(iterationsSchema, 3),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema, 30),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema, 1),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema, 10),
@@ -156,6 +165,7 @@ export const updateMergePresetSchema = v.object({
   ciMaxAttempts: v.optional(attemptsSchema),
   maxRequirementIterations: v.optional(iterationsSchema),
   maxRequirementConcernAllowed: v.optional(requirementConcernLevelSchema),
+  maxTesterQualityIterations: v.optional(iterationsSchema),
   releaseWatchWindowMinutes: v.optional(releaseWindowSchema),
   releaseMaxAttempts: v.optional(releaseAttemptsSchema),
   humanReviewGraceMinutes: v.optional(graceMinutesSchema),
@@ -168,3 +178,56 @@ export type UpdateMergePresetInput = v.InferOutput<typeof updateMergePresetSchem
 export function parseMergeAssessment(value: unknown): MergeAssessment {
   return v.parse(mergeAssessmentSchema, value)
 }
+
+// ---------------------------------------------------------------------------
+// Merge DECISION — the engine's resolved verdict for a completed `merger` step,
+// persisted on the step (`step.custom`) so the SPA can render the assessment nicely
+// AND explain WHY the engine auto-merged or routed the PR to a human. The `merger`
+// agent only produces the assessment (scores + rationale); the engine (MergeResolver)
+// compares it against the task's resolved preset and records this alongside.
+// ---------------------------------------------------------------------------
+
+/** Which assessment axis exceeded its preset ceiling. */
+export const mergeAxisSchema = v.picklist(['complexity', 'risk', 'impact'])
+export type MergeAxis = v.InferOutput<typeof mergeAxisSchema>
+
+/** The preset ceilings the assessment was compared against (for the decision banner). */
+export const mergeDecisionThresholdsSchema = v.object({
+  /** The resolved preset's display name (e.g. "Balanced"). */
+  presetName: v.string(),
+  maxComplexity: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  maxRisk: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  maxImpact: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  autoMergeEnabled: v.boolean(),
+})
+export type MergeDecisionThresholds = v.InferOutput<typeof mergeDecisionThresholdsSchema>
+
+export const mergeDecisionSchema = v.object({
+  /** What the engine did: merged the PR for real, or left it open for a human. */
+  outcome: v.picklist(['auto_merged', 'awaiting_review']),
+  /**
+   * Why — drives the human-readable banner:
+   *  - `within_thresholds`: auto-merged; every axis at/below the preset ceiling.
+   *  - `exceeded_thresholds`: review; one or more axes over the ceiling (`exceededAxes`).
+   *  - `auto_merge_disabled`: review; the preset routes every PR to a human.
+   *  - `no_rationale`: review; the merger returned scores but no rationale, so the verdict
+   *    can't be trusted to auto-merge (the assessment IS present, just not credible).
+   *  - `no_assessment`: review; the merger produced no parseable assessment at all.
+   *  - `merge_failed`: review; within threshold but the real merge threw (e.g. branch
+   *    protection / conflict), so it fell through to human review.
+   */
+  reason: v.picklist([
+    'within_thresholds',
+    'exceeded_thresholds',
+    'auto_merge_disabled',
+    'no_rationale',
+    'no_assessment',
+    'merge_failed',
+  ]),
+  /** The merger's assessment (absent only when it produced no parseable one). */
+  assessment: v.optional(mergeAssessmentSchema),
+  thresholds: mergeDecisionThresholdsSchema,
+  /** The axes that exceeded their ceiling (empty unless `reason` is `exceeded_thresholds`). */
+  exceededAxes: v.array(mergeAxisSchema),
+})
+export type MergeDecision = v.InferOutput<typeof mergeDecisionSchema>

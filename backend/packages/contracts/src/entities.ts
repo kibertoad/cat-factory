@@ -402,6 +402,20 @@ export type ModelOption = v.InferOutput<typeof modelOptionSchema>
 export const modelCatalogSchema = v.array(modelOptionSchema)
 export type ModelCatalog = v.InferOutput<typeof modelCatalogSchema>
 
+/**
+ * The test quality-control companion configuration for a Tester step, as authored in the
+ * pipeline builder (parallel to {@link agentKindSchema}). `enabled` toggles the companion;
+ * optional `gating` makes it conditional on the task estimate (only QC-gate heavy tasks).
+ * A `null`/absent entry on a Tester step means "enabled with no gating" — the companion is
+ * on by default.
+ */
+export const testerQualityConfigSchema = v.object({
+  enabled: v.boolean(),
+  /** Optional estimate gating: run the QC companion only when the task estimate qualifies. */
+  gating: v.optional(v.nullable(stepGatingSchema)),
+})
+export type TesterQualityConfig = v.InferOutput<typeof testerQualityConfigSchema>
+
 export const pipelineSchema = v.object({
   id: v.string(),
   name: v.string(),
@@ -459,6 +473,17 @@ export const pipelineSchema = v.object({
    * Copied onto the run's step (`followUps.enabled`) at start, like {@link gates}.
    */
   followUps: v.optional(v.array(v.nullable(v.boolean()))),
+  /**
+   * Per-step test quality-control companion config, parallel to {@link agentKinds}: governs
+   * whether a `tester-api`/`tester-ui` step runs the QC companion that reads each Tester
+   * report and, when it is incomplete, loops the Tester for a more thorough pass BEFORE the
+   * greenlight/fixer decision. `null`/absent on a Tester step means "enabled, no gating" — so
+   * a Tester step gets the companion by default; an entry with `enabled: false` disables it,
+   * and an entry with `gating` makes it conditional on the task estimate. Ignored on
+   * non-Tester steps. Copied onto the run's step (`testerQuality`) at start, like {@link gating}.
+   * See {@link testerQualityConfigSchema}.
+   */
+  testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   /**
    * Free-form organizational labels for the saved-pipeline library (filter/search).
    * Absent ⇒ no labels. Applies to built-in and custom pipelines alike.
@@ -893,6 +918,50 @@ export const testerStepStateSchema = v.object({
 export type TesterStepState = v.InferOutput<typeof testerStepStateSchema>
 
 /**
+ * One test quality-control companion verdict, recorded per QC evaluation of a Tester
+ * report (in order; newest last). `adequate` is the QC's judgement that the report is
+ * complete enough to conclude testing / go to the fixer; when false, `gaps` lists the
+ * concrete things the Tester still needs to exercise and `feedback` is the prose the
+ * Tester is handed on its re-run.
+ */
+export const testerQualityVerdictSchema = v.object({
+  /** Whether the report is complete/coherent enough to proceed (no QC re-run needed). */
+  adequate: v.boolean(),
+  /** The QC's prose challenge / justification, folded into the Tester's re-run context. */
+  feedback: v.string(),
+  /** Concrete coverage gaps the Tester must still address (empty when adequate). */
+  gaps: v.array(v.string()),
+  /** Epoch ms the verdict was produced. */
+  at: v.number(),
+  /** The model that produced the verdict, for transparency. */
+  model: v.optional(v.nullable(v.string())),
+})
+export type TesterQualityVerdict = v.InferOutput<typeof testerQualityVerdictSchema>
+
+/**
+ * Live test quality-control loop state carried on a run's Tester step, copied from the
+ * pipeline's per-step {@link testerQualityConfigSchema} at run start. The QC companion reads
+ * each Tester report BEFORE the greenlight/fixer decision; when the report is inadequate and
+ * `attempts < maxAttempts` it loops the Tester (folding the prior report + `feedback` in),
+ * bounded independently of the fixer budget. `verdicts` records each evaluation for the UI.
+ */
+export const testerQualityStepStateSchema = v.object({
+  /** Whether the QC companion is active on this Tester step (the builder toggle). */
+  enabled: v.boolean(),
+  /** How many QC-driven Tester re-runs have been dispatched so far. */
+  attempts: v.optional(v.number(), 0),
+  /** Ceiling on QC-driven re-runs, from the task's merge preset (`maxTesterQualityIterations`). */
+  maxAttempts: v.number(),
+  /** Optional estimate gating copied from the pipeline; evaluated against the block estimate. */
+  gating: v.optional(v.nullable(stepGatingSchema)),
+  /** One verdict per QC evaluation, in order (newest last). Empty before the first grade. */
+  verdicts: v.array(testerQualityVerdictSchema),
+  /** Set true once the QC budget was spent with the report still judged inadequate. */
+  exceeded: v.optional(v.boolean()),
+})
+export type TesterQualityStepState = v.InferOutput<typeof testerQualityStepStateSchema>
+
+/**
  * The compact ephemeral-environment view a `human-test` gate carries on its step, so the
  * dedicated window can surface the live URL/status without a second fetch. The full record
  * (with encrypted access creds) lives in the `environments` table; this is the non-secret
@@ -1177,6 +1246,13 @@ export const pipelineStepSchema = v.object({
   gate: v.optional(v.nullable(gateStepStateSchema)),
   /** Live Tester→Fixer loop state while a `tester` step runs/fixes; see {@link testerStepStateSchema}. */
   test: v.optional(v.nullable(testerStepStateSchema)),
+  /**
+   * Live test quality-control companion state on a `tester-api`/`tester-ui` step, copied
+   * from the pipeline's per-step `testerQuality` config at run start. Drives the QC loop that
+   * gates each Tester report for completeness before the greenlight/fixer decision. Absent
+   * for non-Tester steps / when the companion is disabled. See {@link testerQualityStepStateSchema}.
+   */
+  testerQuality: v.optional(v.nullable(testerQualityStepStateSchema)),
   /**
    * Live state of a `human-test` gate (ephemeral env + human validation loop); see
    * {@link humanTestStepStateSchema}. Absent for every other step kind.

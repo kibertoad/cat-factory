@@ -289,14 +289,17 @@ describe('EnvironmentProvisioningService — failed provisioning is stored', () 
     const service = makeService(provider, registry)
 
     // The original provider error still propagates to the caller...
-    await expect(service.provision({ workspaceId: 'ws1', blockId: 'blk1' })).rejects.toThrow(
-      /ECONNREFUSED/,
-    )
+    await expect(
+      service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame1' }),
+    ).rejects.toThrow(/ECONNREFUSED/)
     // ...AND a failed environment record is left behind so the deployer step can show it.
     expect(registry.records).toHaveLength(1)
     const rec = registry.records[0]!
     expect(rec.status).toBe('failed')
     expect(rec.blockId).toBe('blk1')
+    // The service frame the deployer belonged to is recorded even on the failed path, so a
+    // cross-frame consumer keys off the FRAME id, not the task the deployer ran on.
+    expect(rec.frameId).toBe('frame1')
     expect(rec.lastError).toMatch(/ECONNREFUSED/)
   })
 
@@ -462,6 +465,7 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
       id: 'env_old',
       workspaceId: 'ws1',
       blockId: 'blk1',
+      frameId: null,
       executionId: null,
       providerId: 'p',
       externalId: 'x',

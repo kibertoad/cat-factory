@@ -1,5 +1,343 @@
 # @cat-factory/app
 
+## 0.72.1
+
+### Patch Changes
+
+- 31a80a1: UX reliability & feedback hardening: inspector edits (title/description/run settings) now roll
+  back and toast on a failed save instead of silently sticking a stale value; notification
+  act/dismiss failures surface an error toast; the `Delete` key can no longer delete a block hidden
+  behind an open result-view window (those windows now carry `role="dialog"`); merging a PR and
+  discarding a run are gated behind a confirm; an emptied task title reverts to its last saved
+  value; a "Reconnecting…" indicator shows when the live event stream drops; and the remaining
+  hardcoded app-shell / toast / bootstrap strings are routed through i18n.
+
+## 0.72.0
+
+### Minor Changes
+
+- dcc8b32: Browsable frontend preview — SPA surface (slice 5d of the frontend-preview + in-context
+  UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  The frontend-frame inspector now surfaces the live browsable preview: when the frame's
+  `previewEnabled` toggle is on (local/node only), a control shows the preview's status, a
+  clickable "Open preview" URL once it is serving, and start / stop buttons. A new
+  `usePreviewStore` drives the three preview endpoints (`GET|POST|DELETE
+/workspaces/:ws/frames/:frameId/preview`), self-polling while the preview is `starting` so
+  the URL appears the moment it comes up. All copy is translated across every locale.
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/contracts@0.79.0
+
+## 0.71.3
+
+### Patch Changes
+
+- 16ee6cc: Surface the merger's verdict as a structured decision instead of raw JSON.
+
+  The engine now records a `MergeDecision` on the completed `merger` step (`step.custom`): the
+  assessment scores, the resolved preset ceilings, and — crucially — whether it auto-merged or routed
+  the PR to a human, and WHY (`within_thresholds` / `exceeded_thresholds` / `auto_merge_disabled` /
+  `no_rationale` / `no_assessment` / `merge_failed` — `no_rationale` distinguishes a scored-but-
+  unexplained assessment from a truly absent one). The SPA renders it in a dedicated `MergerResultView` (complexity /
+  risk / impact bars vs their ceilings + a plain-language decision banner — "Auto-merged — every score
+  is within the Balanced thresholds" / "Awaiting human review — risk exceeded the thresholds") instead
+  of the agent's raw JSON.
+
+  Also fixes the inspector showing a finished merger step as "Agent running": the run's shared container
+  is kept alive until the pipeline's final step, so a step whose state is already `done` (the merger
+  resolving mid-pipeline before a trailing gate) no longer displays the stale live container-phase label.
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+
+## 0.71.2
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+
+## 0.71.1
+
+### Patch Changes
+
+- e9e9fbe: Show the spend/budget meter in the board toolbar as soon as a workspace budget is
+  configured (previously it only appeared once tokens had been metered, so setting a
+  budget at zero spend left the limit and usage hidden). Saving a budget now also
+  refreshes the workspace snapshot so the meter reflects the new limit/currency
+  immediately.
+
+## 0.71.0
+
+### Minor Changes
+
+- edf4e69: feat(frontend): gate visual pipelines to frames with a UI (slice 4c of the frontend-preview +
+  in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A pipeline with a VISUAL step — `tester-ui` (drives a real browser against a running frontend) or
+  `visual-confirmation` (the human gate over its screenshots) — only makes sense where there is a UI
+  to exercise. Until now nothing stopped `pl_frontend` / `pl_visual` from being started on a bare
+  backend `service` (or a `library` / `document`) frame, where `tester-ui` has no app to drive.
+
+  The engine now refuses such a start unless the task's enclosing frame is a `frontend` frame (it
+  owns the app under test) OR a frame a `frontend` frame links to (its `frontendConfig.backendBindings`
+  name it as a `service` upstream — the linked frontend is the UI a change to that service is
+  validated through). The SPA surfaces the SAME rule so those pipelines are hidden from the pickers
+  where they can't run, and both sides share one predicate so the surface can't drift from the gate.
+
+  - **Shared predicates in `@cat-factory/contracts`** (`pipelineHasVisualStep`,
+    `frameAllowsVisualPipeline`, and the canonical `UI_TESTER_AGENT_KIND` /
+    `VISUAL_CONFIRM_AGENT_KIND` slugs, now re-exported by orchestration's `ci.logic` so the wire
+    values can't drift). The link scan reads the workspace block list once — no per-frame point read.
+  - **Run-start gate** (`ExecutionService.assertPipelineFrameTypeAllowed`): a new
+    `visual_pipeline_no_frontend` conflict reason, refused before any side effects, alongside the
+    existing tester-infra / binary-storage start guards. A non-visual pipeline passes through.
+  - **SPA surface**: the task-create, run-settings, run-launcher (inspector + focus view) and
+    recurring-schedule pipeline pickers filter out visual pipelines for a frame with no UI, keyed off
+    the block's enclosing frame and the board's frontend→service links. The new conflict reason maps
+    to a localized toast title across every locale.
+  - **Conformance**: a cross-runtime assertion refuses a visual pipeline on a bare service frame
+    (`visual_pipeline_no_frontend`) and lets the same run START once a frontend links that service —
+    pinning the D1 ⇄ Drizzle parity of reading `frontend_config` during the run-start gate.
+
+- f21279e: Warn when required infrastructure is undefined. The workspace snapshot now carries an
+  `infraSetup` projection (computed server-side in `WorkspaceController` from whatever the
+  deployment actually wired) that tracks three areas explicitly as `not_defined` /
+  `configured` / `not_applicable`:
+
+  - **Ephemeral environments** (all runtimes that wire the environments integration) —
+    `not_defined` when no environment provider connection is registered, so testing agents
+    that need a live environment can't run.
+  - **Agent executor** (stock/remote Node only — Cloudflare has built-in per-run containers, and
+    local mode runs agents in per-run HOST containers) — `not_defined` when no self-hosted runner
+    pool is registered, so NO container agents can run. This area fires only where the pool is the
+    SOLE executor (the new `agentExecutorRequiresRunnerPool` container flag, set by the Node facade
+    when it uses the default pool transport); Cloudflare and local both wire the runner surface but
+    keep a built-in executor, so the pool is optional there and the area is `not_applicable` — a bare
+    `!!container.runners` check would otherwise falsely nag on every local deployment.
+  - **Binary storage** (remote Node only — Cloudflare binds R2, local defaults to a filesystem
+    store) — `not_defined` when the account selected no content-storage backend, so UI
+    screenshots / reference images have nowhere to live.
+
+  The SPA surfaces each `not_defined` area as a loud, per-area setup banner with a deep-link
+  into the relevant configuration. Dismissing a banner asks whether to hide it just for this
+  session (re-nags next load) or permanently — "I'm OK with the limitations, don't notify me
+  again" — the latter persisted per-user in localStorage.
+
+  The advisory top-of-board banners (AI-readiness, provider-config, infra-setup) now render in a
+  single shared, click-through column so concurrent prompts on a fresh deployment stack vertically
+  instead of drawing on top of each other. The `RunnerPoolConnectionService` and
+  `EnvironmentConnectionService` gain a `hasConnection` presence probe (no secret decrypt) that the
+  projection uses on the hot board-load path.
+
+  Each area probe is additionally bounded by a timeout and its swallowed faults are logged, so a slow
+  or misconfigured backend read degrades that area to `not_applicable` (advisory-only, never 500s or
+  stalls the board load) while staying diagnosable. The banner's permanent-dismissal `localStorage`
+  key + the infra-setup area list are exported from `@cat-factory/contracts`
+  (`INFRA_SETUP_DISMISSED_STORAGE_KEY` / `INFRA_SETUP_AREAS`) so the SPA and the e2e seed share one
+  source of truth, and the stacked banner cards announce through a single polite live region instead
+  of one assertive alert each.
+
+- 6c51e31: Run inline LLM steps through the ambient Claude Code / Codex CLI in local mode, and refuse to
+  start a pipeline whose model preset can't satisfy every step.
+
+  - **Local inline harness execution**: with native agents enabled (`LOCAL_NATIVE_AGENTS`), the
+    inline steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) now run
+    on the developer's ambient `claude`/`codex` subscription CLI as a host subprocess — the inline
+    analogue of the existing container ambient-auth path. Previously a subscription-only preset
+    (e.g. Claude Opus) degraded these inline steps to the routing default and failed against an
+    unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
+    Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
+    local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
+    degrading it. The consensus executor (an inline path) threads the same predicate, so a
+    subscription-only consensus participant model is kept inline in local mode too.
+  - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
+    inline-usability, not just container-usability. A subscription-only model that satisfies the
+    container agents but can't run the inline reviewers (and this deployment has no inline harness)
+    is refused up front with a new `preset_unsatisfiable` conflict reason and an actionable message,
+    instead of failing mid-run. The SPA maps the new reason to a translated toast.
+
+  Breaking: `inlineModelRef` gains an optional third `opts` argument; the `ConflictReason` wire
+  union gains `preset_unsatisfiable`.
+
+### Patch Changes
+
+- 1d2684f: fix(board): don't drop a live-added bootstrap run when a stale snapshot resync races it
+
+  `agentRuns.hydrate` reconciled a workspace snapshot by mapping over the incoming jobs only, so
+  a bootstrap run that a live `bootstrap` event had just ADDED — but which a stale, in-flight
+  snapshot (the stream's on-connect resync, fetched before the run started) never observed — was
+  silently dropped. A terminal bootstrap emits nothing further, so the service frame was stranded
+  on a stale "bootstrapping…" badge (or lost its failure banner) with no event to correct it.
+
+  `hydrate` now preserves cached runs the snapshot hasn't observed yet, scoped to the workspace
+  (bootstrap runs carry `workspaceId`), so a board switch still discards the previous board's runs.
+  This also fixes the intermittent `bootstrap-live` e2e failure (the live failure banner never
+  arriving within the timeout under shard load, only to pass on a page-reload retry).
+
+- 9e93fe8: feat(frontend): `frontendPreview` infrastructure capability + preview-toggle gate (slice 5a of the
+  frontend-preview + in-context UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A browsable frontend preview keeps a built app served on a host-reachable URL, which needs a
+  long-lived host serve — so it is a genuine local/node differentiator. The Worker only runs the
+  self-contained UI-test container (built, tested, and torn down with the run), so it cannot host one.
+  Until now the `frontendConfig.previewEnabled` toggle (shipped as scaffolding in slice 2) was offered
+  on every runtime and read by nothing.
+
+  This lands the capability that makes the toggle honest, and gates it in the SPA where a preview can't
+  run. The long-lived build+serve-kept-alive mechanic itself is the remaining slice 5b.
+
+  - **New capability axis** on the `/auth/config` `infrastructureCapabilities` descriptor:
+    `frontendPreview: { supported: boolean }`, built by the shared `buildInfrastructureCapabilities`
+    so all three facades emit the same shape. Value is a per-facade differentiator — Worker `false`,
+    Node + local `true`.
+  - **SPA gate**: `FrontendConfig.vue` reads `infrastructure.frontendPreview.supported` (defaulting
+    true until the auth handshake resolves) and disables the `previewEnabled` checkbox with an
+    explanatory hint (`inspector.frontendConfig.previewUnsupported`, translated across every locale)
+    when unsupported. The stored config is left untouched, so a `previewEnabled` flag authored on
+    local/node is simply inert when served from the Worker (no migration; pre-1.0 breakage rules).
+  - **Conformance** pins that the axis is present + boolean on every facade (its value is a
+    differentiator); the Worker `auth.spec` pins `false`, the Node `auth-gate.spec` pins `true`.
+
+- e0aa45e: Self-contained frontend UI-test infra (slice 3 of the frontend-preview + in-context
+  UI-testing initiative, docs/initiatives/frontend-preview-ui-testing.md).
+
+  A `tester-ui` running on a task under a `type: 'frontend'` frame now builds and serves the
+  frontend, stands WireMock up for its OTHER backend upstreams, and drives the UI tests against
+  the two together — all as localhost processes in the one container (no Docker-in-Docker), so
+  it works on Cloudflare and Apple `container` too.
+
+  - **Harness**: a new `frontend` variant of the tester infra spec (`kind: 'frontend'`) that
+    installs, builds (injecting the resolved backend URLs at build time, or a `window.env` shim
+    for runtime injection), starts WireMock seeded from the frontend repo's mappings dir, serves
+    the built app, health-checks it, and points the agent at it. The `ui` image gains pnpm/yarn
+    (corepack), a static file server (`serve`), and a headless JRE + WireMock standalone
+    (executor-harness image bumped to 1.28.0).
+  - **Backend**: `AgentRunContext` carries a resolved `frontend` slice (the frame's
+    `frontendConfig` plus its backend bindings resolved to concrete upstreams — a bound service's
+    live ephemeral env URL for the service under test, else a WireMock mock). The engine's
+    `testerInfraSpec` turns it into the harness spec, and the tester-infra start gate refuses a
+    frontend UI test only when it binds a live-backend `service` with none actually live (a
+    mock-only / no-backend frontend passes — WireMock + the static server fully stand it up).
+    Empty-envVar bindings are filtered.
+  - **Hardening** (review follow-ups): the harness's WireMock / serve child processes get an
+    `'error'` listener (a spawn failure is captured, not an uncaught crash of the job server),
+    WireMock is now health-checked alongside the served app (a dead mock becomes a prompt note,
+    not a test-time ECONNREFUSED), reserved env-var names (`PATH`, `NODE_OPTIONS`, …) are dropped
+    from the injected build env, and a configured `servePort` that collides with a reserved
+    in-container port (8080 harness job server, 8089 WireMock) falls back to the default. The
+    inspector's servePort placeholder now shows 4173. Shared `pathExists` / log-capture helpers
+    are de-duplicated in the harness. The frontend UI-test gate's batch env read
+    (`environmentRegistryRepository.listByWorkspace`) is added to the mothership remote-persistence
+    allow-list so the gate resolves in mothership mode.
+  - **Hardening (second review round)**: the frontend stand-up now feeds the run's inactivity
+    watchdog with a heartbeat while it installs/builds/serves — a real frontend's `install` +
+    `build` can exceed the 10-min inactivity window, and the (activity-silent) stand-up would
+    otherwise be killed mid-build with a misleading "likely hung". `serveMode: 'command'` now also
+    forwards the resolved backend URLs (`env`) to the serve process, so a runtime-reading
+    dev/preview server sees them (previously only `PORT` was passed). Reserved env-var names are
+    now also dropped in the backend infra-spec builder (defence in depth, not just the harness).
+    The `mockMappingsPath` docs + inspector hint clarify WireMock's `--root-dir` layout (stubs go
+    in a `mappings/` subfolder), and the env-injection hint notes the build-tool prefix caveat
+    (e.g. Vite only exposes `VITE_*`). The UI-tester prompt flags a live-backend CORS failure as an
+    infra gap rather than an app defect.
+  - **Hardening (third review round)**: the frontend stand-up now runs in the run's SERVICE
+    SUBTREE (`workDir`), not the clone root — a monorepo frontend's `package.json` / `outputDir` /
+    `mocks/` live under its own subdirectory, so installing, building, serving and seeding WireMock
+    from the repo root would have targeted the wrong directory (the docker-compose stand-up still
+    runs at the root, where its repo-relative `composePath` resolves). The harness now bounds
+    frontend `servePort` / `wiremockPort` to 1..65535 at its untrusted-body boundary (an
+    out-of-range port can never bind, so it falls back to the default). The reserved-env filter —
+    in BOTH the harness parse and the backend infra-spec builder — grows the `NODE_EXTRA_CA_CERTS`
+    / `BASH_ENV` / `ENV` / `SHELL` / `IFS` names plus the `npm_config_*` and `GIT_*` FAMILIES, so a
+    binding that reconfigures the package manager, git, or the TLS trust store during the build is
+    dropped rather than injected. Runtime env injection under `serveMode: 'command'` now warns
+    (the `window.env` shim is only served in static mode; the forwarded `env` covers the command
+    server), and a failed shim write is logged instead of silently swallowed. `AgentContextBuilder`
+    gains `resolveServiceFrame` so the frontend-config resolution reuses the frame row the walk
+    already loaded instead of re-fetching it. Fixes the `Lint & format` failure (an unnecessary
+    `?? {}` empty-fallback spread in the serve env).
+  - **Hardening (fourth review round)**: the reserved-env family filter (`npm_config_*` / `GIT_*`)
+    now matches **case-insensitively** in BOTH the harness parse and the backend infra-spec builder —
+    npm reads its config env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY`
+    (upper/mixed case) is honoured just like `npm_config_registry`; a case-sensitive prefix match
+    would have let the upper-cased form slip through and reconfigure the package manager during the
+    build. The frontend serve/WireMock health-check now also aborts an in-flight probe on the run's
+    own abort signal (not just the per-attempt timeout). The stale `envInjectionHint` translation is
+    synced across all locales, and the missed-translation class is now guarded in CI (see the app
+    note). The agent prompt-note assembly and the frontend `installCommand` are extracted as pure
+    helpers with unit coverage.
+
+  `@cat-factory/app`: sync the `envInjectionHint` hint across all locales (the `en` update noting
+  the build-tool prefix caveat, e.g. Vite only exposes `VITE_*`, had been left untranslated). A new
+  CI **locale-parity guard** now fails a PR that changes an `en.json` message key without changing
+  the same key in every other locale, so translations can't silently go stale.
+
+  BREAKING (pre-1.0): the harness `AgentInfraSpec` is now a discriminated union
+  (`service` | `frontend`); the default backend-service tester shape is unchanged.
+
+- ab7d589: feat(infra): view, retest and safely edit a stored Kubernetes test-environment connection
+
+  The Test-environments Kubernetes handler previously only offered a delete: opening the edit form
+  cleared the write-only ServiceAccount token, so "Test connection" on a saved connection always
+  failed auth (no token) and re-saving a non-secret tweak silently wiped the stored token.
+
+  - Backend (`EnvironmentConnectionService` + `EnvironmentUserHandlerService`, runtime-neutral):
+    `testHandler` now falls back to the SAVED handler's stored secret, so an established connection
+    can be tested (or a non-secret field edited and tested) without re-entering the token; a
+    freshly-typed value still overrides it. Saving a handler now PRESERVES stored secrets the
+    operator left blank (a blank/omitted secret means "keep it") and replaces them only when a new
+    value is supplied. Shared `overlaySecrets` helper; no schema change.
+  - Frontend: the Kubernetes engine form shows when a token is already saved, makes the token
+    optional on edit ("leave blank to keep"), and enables Test against the stored token. The
+    handler list now frames each entry as an established connection with a prominent connected
+    checkbox and an inline Test-connection button.
+
+- 8bab651: fix(board): announce the workspace stream as connected only after its on-connect resync settles
+
+  The real-time stream flipped `connected` the moment the socket opened, then fired the
+  reconcile `workspace.refresh()` in the background. Under load that snapshot — fetched at
+  connect time — could resolve AFTER a fresh live event and clobber it: `board.hydrate`
+  replaces the block list wholesale, so it dropped a just-created provisional bootstrap frame
+  the stale snapshot never saw, and its live "bootstrapping…" badge flickered out with no
+  further board event to restore it.
+
+  `connected` (and its `data-connected` attribute) now means "connected AND reconciled" — it is
+  set only after the on-connect refresh settles (still on failure, so a transient refresh error
+  can't wedge the indicator). Anything acting on a connected board — a user, or an e2e spec that
+  gates on `data-connected` — now does so after the reconcile, so a lagging resync can't drop the
+  state that action produces. Deflakes the `bootstrap-live` "provisional frame + live progress
+  badge" e2e spec.
+
+- 9091404: UX quality-of-life pass (follow-up): complete the destructive-confirm coverage across the
+  settings/connection surfaces the first pass didn't reach. Add a reusable `useConfirmAction`
+  composable (built on the same `useConfirm()` singleton + `useToast()`) that gates the
+  recurring disconnect/remove/revoke/clear/destroy actions behind a confirmation and toasts on
+  success, so every such affordance routes through one confirm-then-mutate + feedback path
+  instead of mutating instantly and silently. Gated: revoke API key, revoke team invite,
+  disconnect email sender, disconnect observability / incident provider, clear release-health
+  config, destroy human-test environment, remove custom manifest type, remove reference
+  architecture, disconnect task/document source, remove provider connection, remove Kubernetes
+  handler / override / custom handler, and clear Slack / Linear / web-search config. Generic
+  `common.confirm.*` / `common.toast.*` copy added across all 8 locales.
+
+  The `clear` shape warns the config can be reconfigured later (a cleared config is
+  re-enterable) rather than reusing the harsher "can't be undone" copy of the
+  remove/revoke/destroy shapes, and destroying a human-test environment now surfaces an error
+  toast on failure instead of silently rejecting.
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [6c51e31]
+  - @cat-factory/contracts@0.77.0
+
 ## 0.70.1
 
 ### Patch Changes

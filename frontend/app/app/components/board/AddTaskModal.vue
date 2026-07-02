@@ -16,6 +16,7 @@ import { DOC_KINDS } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
+import { pipelineAllowedForFrame } from '~/utils/pipeline'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -195,6 +196,11 @@ const selectedModelPresetLabel = computed(() => {
   )
 })
 
+// Hide UI-testing pipelines (`tester-ui` / `visual-confirmation`) when the target frame has no
+// UI to exercise — they'd be refused server-side (see utils/pipeline + the backend gate).
+const selectablePipelines = computed(() =>
+  pipelines.pipelines.filter((p) => pipelineAllowedForFrame(p, frame.value, board.blocks)),
+)
 const pipelineMenu = computed(() => [
   [
     {
@@ -202,7 +208,7 @@ const pipelineMenu = computed(() => [
       icon: 'i-lucide-rotate-ccw',
       onSelect: () => (pipelineId.value = ''),
     },
-    ...pipelines.pipelines.map((p) => ({
+    ...selectablePipelines.value.map((p) => ({
       label: p.name,
       icon: 'i-lucide-workflow',
       onSelect: () => (pipelineId.value = p.id),

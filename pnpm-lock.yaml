@@ -235,6 +235,9 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.54
         version: 2.0.54(zod@3.25.76)
+      '@ai-sdk/provider':
+        specifier: ^3.0.12
+        version: 3.0.12
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -270,6 +273,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1

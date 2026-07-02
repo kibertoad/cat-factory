@@ -1,5 +1,166 @@
 # @cat-factory/integrations
 
+## 0.53.0
+
+### Minor Changes
+
+- dcc8b32: Browsable frontend preview — transport dispatch + `PreviewService` + controller + stop (slice 5c of
+  the frontend-preview + in-context UI-testing initiative,
+  docs/initiatives/frontend-preview-ui-testing.md).
+
+  Wire the harness `preview` mode (slice 5b) end to end: a `frontend` frame can now be built and
+  served on a HOST-reachable URL for a browsable preview, and stopped again. New pieces:
+
+  - A new optional `PreviewTransport` kernel port — the per-runtime half that publishes a served
+    app's port to an ephemeral host port and keeps the container alive past the build job. The local
+    facade wires the real one over its Docker/Podman/OrbStack/Colima/Apple adapter (a second
+    published port read back with `docker port` / the container IP); the Worker never wires it.
+  - A runtime-neutral `PreviewService` (start / get / stop) that persists the running preview like an
+    ephemeral `environments` row keyed by the `frontend` frame (reusing the existing table + soft-delete
+    stop path — no new migration), plus a `PreviewController` mounting
+    `GET|POST|DELETE /workspaces/:ws/frames/:frameId/preview`, gated server-side on the
+    `frontendPreview.supported` capability (503 on the Worker).
+  - The cross-runtime conformance suite drives the full start → serve → stop lifecycle on both Postgres
+    runtimes with a fake transport, pinning the ephemeral-env-row persistence parity.
+
+  Notes:
+
+  - `frontendPreview.supported` now tracks whether a preview transport is actually wired: a stock Node
+    build (runner pool, no host-port-publish primitive) advertises `false`, so the SPA never offers a
+    Start button that would 503; local mode (and any facade injecting a `previewTransport`) advertises
+    `true`.
+  - Preview rows share the `environments` table but carry a dedicated `preview` discriminator (outside
+    `provisionTypeSchema`), so the environment subsystem filters them out of its generic listing +
+    block-resolution paths — a preview never leaks into the deployer-env UI or tester env resolution.
+  - `PreviewService.get` re-polls a `ready` preview so a vanished/evicted container stops reporting a
+    stale, unreachable URL (it flips to `failed`); a healthy preview whose URL merely can't be
+    re-derived keeps its authoritative persisted URL.
+
+  Local/node differentiator; the SPA surface (the clickable URL + a stop button on the frame inspector)
+  lands in slice 5d. The harness is unchanged (no runner-image bump).
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/contracts@0.79.0
+  - @cat-factory/kernel@0.69.0
+
+## 0.52.2
+
+### Patch Changes
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+  - @cat-factory/kernel@0.68.1
+
+## 0.52.1
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+  - @cat-factory/kernel@0.68.0
+
+## 0.52.0
+
+### Minor Changes
+
+- 9b26ff1: feat(frontend): key a deployer's ephemeral env by its service FRAME so a live `service` binding
+  resolves (slice 4b of the frontend-preview + in-context UI-testing initiative,
+  docs/initiatives/frontend-preview-ui-testing.md).
+
+  A `frontend` frame's `service` binding names a service FRAME id, but a `deployer` keyed its
+  ephemeral env only under the task `block_id` it ran on — so `resolveFrontendConfig`'s
+  `handle === serviceBlockId` match never hit and a live-service binding fell back to WireMock even
+  when the backend's env was up (the deferred keying gap slices 3/4 flagged).
+
+  The env now also records the resolved service `frame_id` (the deployer's block walked up to its
+  enclosing frame), and the frontend binding resolution matches handles on THAT. The task-keyed
+  `block_id` — and the same-block deployer→tester env projection that reads it — is unchanged; this
+  is an additive column, not a re-key.
+
+  - **New `frame_id` column** on `environments`, mirrored D1 (`0030_environment_frame_id.sql`) ⇄
+    Drizzle (`environments.frame_id` + generated migration), threaded through `EnvironmentRecord`,
+    the `EnvironmentHandle` wire shape, and both registry repos.
+  - **Keying**: `RunDispatcher.deployerProvisionArgs` resolves the service frame id via the shared
+    frame walk and passes it on `ProvisionArgs.frameId`; the provisioning service persists it on both
+    the provisioned and the failed-record paths.
+  - **Resolution**: `AgentContextBuilder.resolveFrontendConfig` indexes the single `listHandles` read
+    by `handle.frameId` (still one batch read, no per-binding point read), so a `service` binding
+    resolves to its live ephemeral URL — and the frontend UI-test infra gate is satisfied instead of
+    refusing the run.
+  - **Conformance**: a new cross-runtime assertion provisions a service frame's env via a `deployer`,
+    then a UI-tester run against a frontend bound to that frame STARTS (the mirror of the existing
+    no-live-service refusal), pinning both the `frame_id` D1 ⇄ Drizzle round-trip and the
+    frame-keyed resolution.
+
+- f21279e: Warn when required infrastructure is undefined. The workspace snapshot now carries an
+  `infraSetup` projection (computed server-side in `WorkspaceController` from whatever the
+  deployment actually wired) that tracks three areas explicitly as `not_defined` /
+  `configured` / `not_applicable`:
+
+  - **Ephemeral environments** (all runtimes that wire the environments integration) —
+    `not_defined` when no environment provider connection is registered, so testing agents
+    that need a live environment can't run.
+  - **Agent executor** (stock/remote Node only — Cloudflare has built-in per-run containers, and
+    local mode runs agents in per-run HOST containers) — `not_defined` when no self-hosted runner
+    pool is registered, so NO container agents can run. This area fires only where the pool is the
+    SOLE executor (the new `agentExecutorRequiresRunnerPool` container flag, set by the Node facade
+    when it uses the default pool transport); Cloudflare and local both wire the runner surface but
+    keep a built-in executor, so the pool is optional there and the area is `not_applicable` — a bare
+    `!!container.runners` check would otherwise falsely nag on every local deployment.
+  - **Binary storage** (remote Node only — Cloudflare binds R2, local defaults to a filesystem
+    store) — `not_defined` when the account selected no content-storage backend, so UI
+    screenshots / reference images have nowhere to live.
+
+  The SPA surfaces each `not_defined` area as a loud, per-area setup banner with a deep-link
+  into the relevant configuration. Dismissing a banner asks whether to hide it just for this
+  session (re-nags next load) or permanently — "I'm OK with the limitations, don't notify me
+  again" — the latter persisted per-user in localStorage.
+
+  The advisory top-of-board banners (AI-readiness, provider-config, infra-setup) now render in a
+  single shared, click-through column so concurrent prompts on a fresh deployment stack vertically
+  instead of drawing on top of each other. The `RunnerPoolConnectionService` and
+  `EnvironmentConnectionService` gain a `hasConnection` presence probe (no secret decrypt) that the
+  projection uses on the hot board-load path.
+
+  Each area probe is additionally bounded by a timeout and its swallowed faults are logged, so a slow
+  or misconfigured backend read degrades that area to `not_applicable` (advisory-only, never 500s or
+  stalls the board load) while staying diagnosable. The banner's permanent-dismissal `localStorage`
+  key + the infra-setup area list are exported from `@cat-factory/contracts`
+  (`INFRA_SETUP_DISMISSED_STORAGE_KEY` / `INFRA_SETUP_AREAS`) so the SPA and the e2e seed share one
+  source of truth, and the stacked banner cards announce through a single polite live region instead
+  of one assertive alert each.
+
+### Patch Changes
+
+- ab7d589: feat(infra): view, retest and safely edit a stored Kubernetes test-environment connection
+
+  The Test-environments Kubernetes handler previously only offered a delete: opening the edit form
+  cleared the write-only ServiceAccount token, so "Test connection" on a saved connection always
+  failed auth (no token) and re-saving a non-secret tweak silently wiped the stored token.
+
+  - Backend (`EnvironmentConnectionService` + `EnvironmentUserHandlerService`, runtime-neutral):
+    `testHandler` now falls back to the SAVED handler's stored secret, so an established connection
+    can be tested (or a non-secret field edited and tested) without re-entering the token; a
+    freshly-typed value still overrides it. Saving a handler now PRESERVES stored secrets the
+    operator left blank (a blank/omitted secret means "keep it") and replaces them only when a new
+    value is supplied. Shared `overlaySecrets` helper; no schema change.
+  - Frontend: the Kubernetes engine form shows when a token is already saved, makes the token
+    optional on edit ("leave blank to keep"), and enables Test against the stored token. The
+    handler list now frames each entry as an established connection with a prominent connected
+    checkbox and an inline Test-connection button.
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [6c51e31]
+  - @cat-factory/contracts@0.77.0
+  - @cat-factory/kernel@0.67.0
+
 ## 0.51.4
 
 ### Patch Changes

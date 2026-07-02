@@ -1,4 +1,12 @@
-import { CONTAINER_RUNTIMES, type ContainerRuntime, DEFAULT_HARNESS_IMAGE } from './templates.js'
+import {
+  CONTAINER_RUNTIMES,
+  type ContainerRuntime,
+  DEFAULT_HARNESS_IMAGE,
+  EXECUTION_MODES,
+  type ExecutionMode,
+  NATIVE_HARNESSES,
+  type NativeHarness,
+} from './templates.js'
 import { VCS_PROVIDERS, type VcsProvider } from './vcs.js'
 
 /** The Kubernetes distribution `cat-factory k3s` can provision/target. */
@@ -20,6 +28,12 @@ export interface CliOptions {
   harnessImage?: string
   /** Container runtime that spawns agent jobs (`LOCAL_CONTAINER_RUNTIME`). */
   containerRuntime?: ContainerRuntime
+  /** How agent jobs execute: a Docker container pool (default) or native host agents. */
+  executionMode?: ExecutionMode
+  /** Native mode only: the subscription harnesses to run natively (`LOCAL_NATIVE_AGENTS`). */
+  nativeHarnesses?: NativeHarness[]
+  /** Native mode only: the executor-harness server entry path (`LOCAL_HARNESS_ENTRY`). */
+  harnessEntry?: string
   /** `k3s` command: name for a provisioned local cluster. */
   clusterName?: string
   /** `k3s` command: the Kubernetes distribution to provision/target. */
@@ -117,6 +131,15 @@ export function parseArgs(argv: string[]): CliOptions {
       case '--container-runtime':
         opts.containerRuntime = parseContainerRuntime(takeValue(flag, inline, queue))
         break
+      case '--execution-mode':
+        opts.executionMode = parseExecutionMode(takeValue(flag, inline, queue))
+        break
+      case '--native-harnesses':
+        opts.nativeHarnesses = parseNativeHarnesses(takeValue(flag, inline, queue))
+        break
+      case '--harness-entry':
+        opts.harnessEntry = takeValue(flag, inline, queue)
+        break
       case '--cluster-name':
         opts.clusterName = takeValue(flag, inline, queue)
         break
@@ -156,6 +179,39 @@ function parseContainerRuntime(value: string): ContainerRuntime {
   throw new ArgError(
     `Invalid --container-runtime "${value}" (expected: ${CONTAINER_RUNTIMES.join(' | ')})`,
   )
+}
+
+function parseExecutionMode(value: string): ExecutionMode {
+  const v = value.toLowerCase()
+  if ((EXECUTION_MODES as readonly string[]).includes(v)) return v as ExecutionMode
+  throw new ArgError(
+    `Invalid --execution-mode "${value}" (expected: ${EXECUTION_MODES.join(' | ')})`,
+  )
+}
+
+/**
+ * Parse a comma-separated `--native-harnesses` list (e.g. `claude-code,codex`). `claude` is
+ * accepted as an alias for `claude-code`, matching the backend's `LOCAL_NATIVE_AGENTS` alias.
+ * Unlike the backend env parse (which also honours affirmative/off keywords like `both`/`off`
+ * and fails safe to off), this explicit flag is strict: at least one recognised harness must be
+ * named, and anything else is a hard error.
+ */
+function parseNativeHarnesses(value: string): NativeHarness[] {
+  const out = new Set<NativeHarness>()
+  for (const raw of value.split(',').map((s) => s.trim().toLowerCase())) {
+    if (raw === 'claude-code' || raw === 'claude') out.add('claude-code')
+    else if (raw === 'codex') out.add('codex')
+    else if (raw !== '')
+      throw new ArgError(
+        `Invalid --native-harnesses "${value}" (expected: ${NATIVE_HARNESSES.join(' | ')})`,
+      )
+  }
+  if (out.size === 0) {
+    throw new ArgError(
+      `Invalid --native-harnesses "${value}" (expected at least one of: ${NATIVE_HARNESSES.join(' | ')})`,
+    )
+  }
+  return [...out]
 }
 
 function parseK3sRuntime(value: string): K3sRuntime {
@@ -205,6 +261,7 @@ export const OPTION_DEFAULTS = {
   port: 8787,
   harnessImage: DEFAULT_HARNESS_IMAGE,
   containerRuntime: 'docker' as ContainerRuntime,
+  executionMode: 'pool' as ExecutionMode,
   // `k3s` command defaults.
   k3sClusterName: 'cat-factory',
   k3sRuntime: 'k3d' as K3sRuntime,
@@ -237,6 +294,9 @@ Options (init):
       --port <n>          Backend HTTP port (default: 8787; also sets the SPA's api-base)
       --harness-image <ref>  Executor-harness image (default: ghcr.io ...:latest)
       --container-runtime <r>  Agent container runtime: docker | podman | orbstack | colima | apple
+      --execution-mode <m>  How agents run: pool (Docker container pool) | native (host CLI)
+      --native-harnesses <l>  Native mode: harnesses to run natively (claude-code,codex)
+      --harness-entry <p>  Native mode: path to the executor-harness server entry
       --no-open           Don't open the browser (just print the token URL)
   -y, --yes               Non-interactive: use defaults/flags, never prompt
   -f, --force             Overwrite existing files

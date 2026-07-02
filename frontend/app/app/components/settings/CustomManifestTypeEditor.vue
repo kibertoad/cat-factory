@@ -10,6 +10,7 @@ import type { CustomManifestType } from '@cat-factory/contracts'
 const { t } = useI18n()
 const infra = useInfraConfigStore()
 const toast = useToast()
+const { confirmAction, toastDone } = useConfirmAction()
 
 // A draft for the add/edit form. `manifestId` is locked on edit (it's the PK).
 const draft = reactive({
@@ -79,10 +80,12 @@ async function save() {
 }
 
 async function remove(type: CustomManifestType) {
+  if (!(await confirmAction('remove', type.label))) return
   busy.value = true
   try {
     await infra.removeCustomType(type.manifestId)
     if (editing.value && draft.manifestId === type.manifestId) startAdd()
+    toastDone('remove', type.label)
   } catch (e) {
     toast.add({
       title: t('settings.infrastructure.customType.removeFailed'),

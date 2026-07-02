@@ -82,6 +82,14 @@ jobs:
         id: changesets
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         with:
+          # Run the root `version` npm script, NOT the action's default (which is a
+          # bare `changeset version`). The action does NOT pick up the package.json
+          # `version` script on its own, so without this input the post-bump
+          # `scripts/sync-runner-image-tags.mjs` never runs and the Release PR is born
+          # with runner-image tag drift (harness bumped, deploy pins left behind) that
+          # red-fails the "Guard runner image tag" check. Naming the script here is
+          # what wires the auto-sync into every Release PR.
+          version: pnpm run version
           # Builds every publishable package then runs `changeset publish`.
           publish: pnpm ci:publish
           title: 'Release Packages'

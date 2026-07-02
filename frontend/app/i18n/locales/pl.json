@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Ładowanie…",
+    "loadingBoard": "Ładowanie tablicy…",
+    "backendUnreachable": "Nie można połączyć się z backendem",
+    "reconnecting": "Ponowne łączenie…"
+  },
   "language": {
     "switcher": "Język",
     "warning": {
@@ -20,11 +26,31 @@
     "remove": "Usuń",
     "confirm": {
       "defaultTitle": "Na pewno?",
-      "confirm": "Potwierdź"
+      "confirm": "Potwierdź",
+      "irreversible": "Tej operacji nie można cofnąć.",
+      "reconnectHint": "Aby użyć tego ponownie, trzeba będzie połączyć to na nowo.",
+      "titles": {
+        "disconnect": "Rozłączyć {name}?",
+        "remove": "Usunąć {name}?",
+        "revoke": "Unieważnić {name}?",
+        "clear": "Wyczyścić {name}?",
+        "destroy": "Zniszczyć {name}?"
+      },
+      "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
     "disconnect": "Rozłącz",
-    "copyFailed": "Nie udało się skopiować do schowka"
+    "copyFailed": "Nie udało się skopiować do schowka",
+    "revoke": "Unieważnij",
+    "clear": "Wyczyść",
+    "destroy": "Zniszcz",
+    "toast": {
+      "disconnected": "Rozłączono {name}",
+      "removed": "Usunięto {name}",
+      "revoked": "Unieważniono {name}",
+      "cleared": "Wyczyszczono {name}",
+      "destroyed": "Zniszczono {name}"
+    }
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -48,6 +74,14 @@
     "infrastructure": "Infrastruktura"
   },
   "board": {
+    "toast": {
+      "updateFailed": "Nie udało się zapisać zmian",
+      "epicFailed": "Nie udało się zmienić epiku",
+      "moveFailed": "Nie udało się przenieść",
+      "deleteFailed": "Nie udało się usunąć",
+      "linkFailed": "Nie udało się powiązać zadań",
+      "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u"
+    },
     "repoTypes": {
       "service": "Usługa",
       "frontend": "Frontend",
@@ -240,6 +274,11 @@
       "openPrOnGithub": "Otwórz {pr} na GitHub",
       "review": "Przejrzyj",
       "merge": "Scal",
+      "mergeConfirm": {
+        "title": "Scalić tę pull request?",
+        "body": "Spowoduje to scalenie PR do jego gałęzi bazowej i ukończenie zadania. Tej operacji nie można cofnąć.",
+        "confirm": "Scal"
+      },
       "implemented": "wdrożone",
       "module": "Moduł: {name}",
       "buildSteps": "Kroki budowania",
@@ -273,7 +312,9 @@
         "no_pr_to_merge": "Brak PR do scalenia",
         "github_not_connected": "GitHub nie jest połączony",
         "bootstrap_not_retryable": "Inicjalizacji nie można ponowić",
-        "bootstrap_reference_missing": "Architektura referencyjna zniknęła"
+        "bootstrap_reference_missing": "Architektura referencyjna zniknęła",
+        "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku",
+        "visual_pipeline_no_frontend": "Brak frontendu do przetestowania"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {
@@ -416,12 +457,24 @@
       "envInjectionHint": "W czasie budowania wstrzykuje adresy URL backendu jako zmienne środowiskowe budowania; W czasie działania zapisuje je w shimie window.env. Pamiętaj, że Twoje narzędzie budujące może udostępniać przeglądarce tylko zmienne z prefiksem (np. VITE_), więc nazywaj powiązania zgodnie z jego konwencją.",
       "previewEnabled": "Włącz przeglądalny podgląd",
       "previewHint": "Utrzymuje działający serwowany podgląd z klikalnym adresem URL. Tylko środowiska Local i Node.",
+      "previewUnsupported": "To wdrożenie nie może hostować przeglądalnego podglądu. Uruchom na wdrożeniu Local lub Node, aby zachować serwowany podgląd z klikalnym adresem URL.",
       "bindings": {
         "title": "Powiązania backendu",
         "hint": "Każda zmienna środowiskowa, którą frontend odczytuje dla adresu URL nadrzędnego, oraz miejsce jej rozwiązania: efemeryczne środowisko powiązanej usługi lub zaślepka WireMock.",
         "mock": "Mock (WireMock)",
         "remove": "Usuń powiązanie",
         "empty": "Brak powiązań backendu. Dodaj jedno, aby skierować zmienną środowiskową do usługi lub mocka."
+      },
+      "preview": {
+        "open": "Otwórz podgląd",
+        "start": "Uruchom podgląd",
+        "stop": "Zatrzymaj",
+        "status": {
+          "starting": "Uruchamianie…",
+          "ready": "Działa",
+          "failed": "Błąd",
+          "stopped": "Nie uruchomiono"
+        }
       }
     },
     "releaseHealth": {
@@ -437,7 +490,8 @@
       "saveMonitoring": "Zapisz monitorowanie",
       "savedToast": "Monitorowanie zapisane",
       "saveFailed": "Nie udało się zapisać mapowania",
-      "clearFailed": "Nie udało się wyczyścić mapowania"
+      "clearFailed": "Nie udało się wyczyścić mapowania",
+      "configNoun": "konfigurację kondycji wydania"
     },
     "testConfig": {
       "title": "Infrastruktura testowa",
@@ -566,6 +620,16 @@
       "stopTooltip": "Zatrzymaj uruchomienie, ale zachowaj je (do odczytu i ponownego uruchomienia)",
       "reset": "Resetuj",
       "resetTooltip": "Odrzuć to uruchomienie i przywróć zadanie do stanu zaplanowanego",
+      "resetConfirm": {
+        "title": "Odrzucić to uruchomienie?",
+        "body": "Spowoduje to usunięcie uruchomienia i przywrócenie zadania do stanu zaplanowanego. Tej operacji nie można cofnąć.",
+        "confirm": "Odrzuć uruchomienie"
+      },
+      "mergeConfirm": {
+        "title": "Scalić tę pull request?",
+        "body": "Spowoduje to scalenie PR do jego gałęzi bazowej i ukończenie zadania. Tej operacji nie można cofnąć.",
+        "confirm": "Scal"
+      },
       "viewDetailsOutput": "Wyświetl szczegóły i odczytaj wynik",
       "viewDetails": "Wyświetl szczegóły kroku",
       "companion": "Towarzysz",
@@ -656,6 +720,33 @@
       "structuredOutput": "Ustrukturyzowany wynik",
       "noResult": "Brak wyniku.",
       "noResultHint": "Ustrukturyzowany wynik pojawia się po zakończeniu pracy tego agenta. W trakcie działania krok pokazuje postęp na żywo na tablicy."
+    },
+    "mergerResult": {
+      "title": "Decyzja o scaleniu",
+      "titleWithBlock": "Decyzja o scaleniu: {title}",
+      "description": "Jak oceniono PR i co zdecydował silnik.",
+      "outcome": {
+        "auto_merged": "Scalono automatycznie",
+        "awaiting_review": "Oczekuje na przegląd przez człowieka"
+      },
+      "reason": {
+        "within_thresholds": "Wszystkie oceny mieszczą się w progach {preset}, więc PR został scalony automatycznie.",
+        "exceeded_thresholds": "{axes} przekroczył progi {preset}, więc PR czeka na scalenie przez człowieka.",
+        "auto_merge_disabled": "Ustawienie {preset} kieruje każdy PR do człowieka, więc ten czeka na przegląd.",
+        "no_rationale": "Scalający ocenił PR, ale nie podał uzasadnienia, więc werdyktowi nie można było zaufać na tyle, by scalić automatycznie; PR czeka na scalenie przez człowieka.",
+        "no_assessment": "Scalający nie zwrócił możliwej do przetworzenia oceny, więc PR czeka na scalenie przez człowieka.",
+        "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka."
+      },
+      "scores": "Oceny",
+      "axis": {
+        "complexity": "Złożoność",
+        "risk": "Ryzyko",
+        "impact": "Wpływ"
+      },
+      "ceiling": "limit {value}",
+      "rationale": "Uzasadnienie",
+      "noAssessment": "Scalający nie zwrócił oceny punktowej.",
+      "noResult": "Nie zarejestrowano jeszcze decyzji o scaleniu."
     },
     "testReport": {
       "title": "Raport z testów",
@@ -1065,7 +1156,8 @@
         "revokeInvite": "Nie udało się odwołać zaproszenia",
         "connectEmail": "Nie udało się połączyć nadawcy e-maili",
         "disconnectEmail": "Nie udało się rozłączyć nadawcy e-maili"
-      }
+      },
+      "emailNoun": "wysyłanie e-maili"
     },
     "boardSwitcher": {
       "accountFallback": "Konto",
@@ -1137,7 +1229,9 @@
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
-        "dismissed": "Odrzucono"
+        "dismissed": "Odrzucono",
+        "actFailed": "Nie udało się wykonać tej akcji",
+        "dismissFailed": "Nie udało się odrzucić"
       }
     },
     "aiProvidersBanner": {
@@ -1718,7 +1812,9 @@
         "connected": "Obserwowalność połączona",
         "connectFailed": "Nie można zapisać połączenia",
         "disconnectFailed": "Nie można rozłączyć"
-      }
+      },
+      "connectionNoun": "połączenie obserwowalności",
+      "incidentNoun": "dostawcę incydentów"
     },
     "localMode": {
       "title": "Tryb lokalny",
@@ -1923,6 +2019,9 @@
         "apiServerUrlHelp": "Główny adres kube-apiserver, np. https://my-cluster.example:6443.",
         "apiToken": "Token ServiceAccount",
         "apiTokenHelp": "Tylko do zapisu; wprowadź ponownie, aby zmienić. Przechowywany w postaci zaszyfrowanej, nigdy nie jest zwracany.",
+        "apiTokenHelpStored": "Token jest zapisany i używany ponownie do testów. Pozostaw puste, aby go zachować, lub wpisz nowy, aby go zastąpić.",
+        "apiTokenPlaceholderStored": "Pozostaw puste, aby zachować zapisany token",
+        "tokenSaved": "Zapisano",
         "urlSourceLabel": "Źródło URL środowiska",
         "urlIngressTemplate": "Szablon hosta Ingress",
         "urlIngressStatus": "Status Ingress",
@@ -1975,6 +2074,9 @@
       "handler": {
         "intro": "Skonfiguruj, jak obsługiwany jest każdy typ provisioningu zadeklarowany przez usługę: silnik i połączenie. Manifesty lub ścieżka compose usługi (co/gdzie) są ustawiane na usłudze.",
         "activeEngine": "Silnik:",
+        "connectionEstablished": "Połączenie nawiązane",
+        "notConnected": "Nie skonfigurowano jeszcze połączenia",
+        "disconnect": "Usuń połączenie",
         "engineLabel": "Silnik",
         "customHandlerTitle": "Handler remote-custom",
         "customTypeLabel": "Typ niestandardowy",
@@ -1988,7 +2090,10 @@
         "overrideActive": "Aktywne",
         "personalOverrideHint": "Nadpisz handler przestrzeni roboczej dla tego typu provisioningu na własnej maszynie. Przechowywane na użytkownika.",
         "removeOverride": "Usuń nadpisanie",
-        "loading": "Ładowanie ustawień infrastruktury…"
+        "loading": "Ładowanie ustawień infrastruktury…",
+        "kubeNoun": "obsługę Kubernetes",
+        "kubeOverrideNoun": "nadpisanie Kubernetes",
+        "customNoun": "tę obsługę"
       }
     }
   },
@@ -2112,7 +2217,8 @@
           "step1": "Wygeneruj klucz wirtualny na swojej bramie LiteLLM (lub użyj jej klucza głównego).",
           "step2": "Bazowy URL bramy ustawia operator Twojego wdrożenia (LITELLM_BASE_URL), nie tutaj."
         }
-      }
+      },
+      "keyNoun": "ten klucz API"
     },
     "vendorCredentials": {
       "title": "Dostawcy LLM",
@@ -3147,7 +3253,9 @@
       "completed": "zakończono",
       "failed": "niepowodzenie",
       "inProgress": "w toku"
-    }
+    },
+    "envNoun": "środowisko testowe",
+    "destroyFailed": "Nie udało się zniszczyć środowiska"
   },
   "testing": {
     "title": "Raport z testów",
@@ -3625,6 +3733,7 @@
     },
     "targetRepo": {
       "label": "Nazwa repozytorium docelowego",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "Utwórz nowe repozytorium o tej nazwie w {owner}, a następnie inicjacja wypycha do niego. Wstępnie utworzony README, .gitignore lub licencja są w porządku.",
       "descNoOwner": "Utwórz nowe repozytorium o tej nazwie, a następnie inicjacja wypycha do niego. Wstępnie utworzony README, .gitignore lub licencja są w porządku."
     },
@@ -3640,7 +3749,8 @@
     },
     "description": {
       "label": "Opis",
-      "help": "Opcjonalne jednowierszowe podsumowanie repozytorium."
+      "help": "Opcjonalne jednowierszowe podsumowanie repozytorium.",
+      "placeholder": "Obsługuje intencje płatności i zwroty"
     },
     "instructions": {
       "labelReference": "Dodatkowe instrukcje dla inicjatora",
@@ -3670,18 +3780,23 @@
       "add": "Dodaj",
       "pickRepo": {
         "label": "Wybierz istniejące repozytorium GitHub",
-        "description": "Wybierz repozytorium, do którego masz dostęp, aby wypełnić jego właściciela i nazwę, albo wpisz je ręcznie poniżej."
+        "description": "Wybierz repozytorium, do którego masz dostęp, aby wypełnić jego właściciela i nazwę, albo wpisz je ręcznie poniżej.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Nazwa",
-        "description": "Przyjazna etykieta dla tej bazy."
+        "description": "Przyjazna etykieta dla tej bazy.",
+        "placeholder": "Szablon usługi"
       },
       "repoOwner": "Właściciel repozytorium",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Nazwa repozytorium",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Opcjonalne podsumowanie tej bazy",
       "defaultInstructions": {
         "label": "Domyślne instrukcje inicjatora",
-        "description": "Dodawane przed instrukcjami każdego uruchomienia za każdym razem, gdy używana jest ta baza."
+        "description": "Dodawane przed instrukcjami każdego uruchomienia za każdym razem, gdy używana jest ta baza.",
+        "placeholder": "np. zachowaj strukturę; zmień nazwy pakietów, aby pasowały do nowej usługi"
       }
     },
     "toast": {

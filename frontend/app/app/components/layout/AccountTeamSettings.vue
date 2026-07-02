@@ -14,6 +14,7 @@ const props = defineProps<{ accountId: string }>()
 const accounts = useAccountsStore()
 const toast = useToast()
 const { t, te } = useI18n()
+const { confirmAction, toastDone } = useConfirmAction()
 const busy = ref(false)
 
 const ROLE_ITEMS = computed<{ label: string; value: AccountRole }[]>(() => [
@@ -132,9 +133,11 @@ async function sendInvite() {
   }
 }
 
-async function revoke(id: string) {
+async function revoke(id: string, email: string) {
+  if (!(await confirmAction('revoke', email))) return
   try {
     await accounts.revokeInvite(props.accountId, id)
+    toastDone('revoke', email)
   } catch (e) {
     notifyError(t('layout.accountTeam.errors.revokeInvite'), e)
   }
@@ -164,9 +167,12 @@ async function connectEmail() {
 }
 
 async function disconnectEmail() {
+  const noun = t('layout.accountTeam.emailNoun')
+  if (!(await confirmAction('disconnect', noun))) return
   busy.value = true
   try {
     await accounts.disconnectEmail(props.accountId)
+    toastDone('disconnect', noun)
   } catch (e) {
     notifyError(t('layout.accountTeam.errors.disconnectEmail'), e)
   } finally {
@@ -258,7 +264,7 @@ async function disconnectEmail() {
               variant="ghost"
               icon="i-lucide-x"
               :aria-label="t('layout.accountTeam.invite.revoke')"
-              @click="revoke(inv.id)"
+              @click="revoke(inv.id, inv.email)"
             />
           </span>
         </li>

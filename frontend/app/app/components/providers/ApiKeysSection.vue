@@ -27,6 +27,7 @@ const keys = useApiKeysStore()
 const models = useModelsStore()
 const auth = useAuthStore()
 const toast = useToast()
+const { confirmAction, toastDone } = useConfirmAction()
 
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
@@ -209,11 +210,14 @@ async function add() {
 }
 
 async function remove(k: ApiKey) {
+  const noun = t('providers.apiKeys.keyNoun')
+  if (!(await confirmAction('remove', noun))) return
   try {
     if (k.scope === 'account') await keys.removeAccountKey(k.id)
     else if (k.scope === 'workspace') await keys.removeWorkspaceKey(k.id)
     else await keys.removeUserKey(k.id)
     if (workspace.workspaceId) await models.refresh(workspace.workspaceId)
+    toastDone('remove', noun)
   } catch (e) {
     toast.add({
       title: t('providers.apiKeys.toast.removeFailed'),

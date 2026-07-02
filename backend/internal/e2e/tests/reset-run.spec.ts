@@ -41,6 +41,11 @@ test.describe('reset a parked run', () => {
     await expect(reset).toBeVisible()
     await reset.click()
 
+    // Reset is destructive, so it is confirm-gated (the shared ConfirmDialog): accept it to
+    // proceed with the cancel. Without this the dialog just sits open and the run is never
+    // discarded, so the card stays `blocked`.
+    await page.getByTestId('confirm-accept').click()
+
     // LIVE: the run is gone — the card returns to `planned` and the decision badge clears,
     // pushed over the WebSocket with no reload.
     await expect(card).toHaveAttribute('data-status', 'planned', { timeout: RUN_TERMINAL_TIMEOUT })

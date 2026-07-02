@@ -14,6 +14,7 @@ const store = useAccountSettingsStore()
 const ui = useUiStore()
 const toast = useToast()
 const { t } = useI18n()
+const { confirmAction } = useConfirmAction()
 
 // Deep-link anchor: the pipeline-start "configure storage" prompt opens this tab with the
 // ui store's scroll target set to `content-storage`, so we bring the storage section (which
@@ -207,6 +208,7 @@ async function saveSlack() {
 }
 
 async function clearSlack() {
+  if (!(await confirmAction('clear', 'Slack'))) return
   savingSlack.value = true
   try {
     await store.save(props.accountId, { secrets: { slackOAuth: null } })
@@ -262,6 +264,7 @@ async function saveLinear() {
 }
 
 async function clearLinear() {
+  if (!(await confirmAction('clear', 'Linear'))) return
   savingLinear.value = true
   try {
     await store.save(props.accountId, { secrets: { linearOAuth: null } })
@@ -319,6 +322,7 @@ async function saveWeb() {
 }
 
 async function clearWeb() {
+  if (!(await confirmAction('clear', t('layout.accountDeployment.web.title')))) return
   savingWeb.value = true
   try {
     await store.save(props.accountId, { secrets: { webSearch: null } })

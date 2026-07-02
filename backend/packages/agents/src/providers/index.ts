@@ -1,5 +1,11 @@
 export { CompositeModelProvider, type ModelResolver, type ProviderRegistry } from './registry.js'
 export {
+  CliInlineLanguageModel,
+  type InlineCliRequest,
+  type InlineCliResult,
+  type InlineCliRunner,
+} from './cli-inline.js'
+export {
   InstrumentedModelProvider,
   catFactoryObservability,
   type InlineObservabilityContext,

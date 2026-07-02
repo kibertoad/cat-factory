@@ -18,7 +18,11 @@ import type {
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
 import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
-import { resolveFrontendBindings } from './frontend-infra.logic.js'
+import {
+  boundServiceFrameIds,
+  indexLiveServiceEnvUrls,
+  resolveFrontendBindings,
+} from './frontend-infra.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -328,8 +332,9 @@ export class AgentContextBuilder {
    * the context stays unchanged for backend services. Each `service` binding whose bound
    * service has a LIVE ephemeral env (status `ready` + a URL) becomes the service under test
    * (its real URL); every other upstream is left for the harness to mock. The live env URLs
-   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by block
-   * id (no per-binding point read), so this is a single query regardless of binding count.
+   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by the
+   * service-frame id (no per-binding point read), so this is a single query regardless of
+   * binding count.
    */
   async resolveFrontendConfig(
     workspaceId: string,
@@ -339,27 +344,18 @@ export class AgentContextBuilder {
       block.level === 'frame' ? block : await this.resolveServiceFrame(workspaceId, block.id)
     if (!frame || frame.type !== 'frontend' || !frame.frontendConfig) return undefined
     const config = frame.frontendConfig
-    // The distinct service block ids this frontend binds — the only envs whose live URLs matter.
-    const serviceBlockIds = new Set(
-      config.backendBindings
-        .filter((b) => b.source.kind === 'service')
-        .map((b) => (b.source as { serviceBlockId: string }).serviceBlockId),
-    )
-    const liveServiceEnvUrls = new Map<string, string>()
-    if (this.deps.environmentProvisioning && serviceBlockIds.size > 0) {
-      // One list read, then index the ready-with-URL handles for the bound services — never a
-      // per-binding `getByBlock` loop (the N+1 the "reuse an already-fetched list" rule bans).
-      for (const handle of await this.deps.environmentProvisioning.listHandles(workspaceId)) {
-        if (
-          handle.blockId &&
-          handle.url &&
-          handle.status === 'ready' &&
-          serviceBlockIds.has(handle.blockId)
-        ) {
-          liveServiceEnvUrls.set(handle.blockId, handle.url)
-        }
-      }
-    }
+    // The distinct service FRAMES this frontend binds — the only envs whose live URLs matter.
+    const serviceFrameIds = boundServiceFrameIds(config)
+    // One list read, then index the ready-with-URL handles for the bound services — never a
+    // per-binding `getByBlock` loop (the N+1 the "reuse an already-fetched list" rule bans). The
+    // frame-keyed newest-wins indexing is shared with the preview job builder (see the helper).
+    const liveServiceEnvUrls =
+      this.deps.environmentProvisioning && serviceFrameIds.size > 0
+        ? indexLiveServiceEnvUrls(
+            await this.deps.environmentProvisioning.listHandles(workspaceId),
+            serviceFrameIds,
+          )
+        : new Map<string, string>()
     return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
   }
 

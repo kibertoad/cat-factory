@@ -103,6 +103,8 @@ function makeRegistry(): {
       // Mirror the real repo: a missing id is simply absent from the result (NOT an error row).
       listByIds: async (ids: string[]) => ids.map((id) => services.get(id)).filter(Boolean),
       listByAccount: async (accountId: string) => [{ accountId }],
+      // The single-service read behind the org-catalog mount flow (`service` scope kind).
+      get: async (id: string) => services.get(id) ?? null,
     },
     accountRepository: {
       get: async (id: string) => ({ id, name: id }),
@@ -115,6 +117,12 @@ function makeRegistry(): {
       listByWorkspace: async (ws: string) => [{ ws }],
       deleteByWorkspace: async (_ws: string) => undefined,
       countByServiceIds: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, 1])),
+      // The shared-service mount management surface: `get`/`update`/`remove` echo the workspaceId
+      // (arg0); the record-based `upsert` binds on the mount's `workspaceId` FIELD.
+      get: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      update: async () => undefined,
+      remove: async () => undefined,
     },
     workspaceSettingsRepository: {
       get: async (ws: string) => ({ ws }),
@@ -191,9 +199,15 @@ function makeRegistry(): {
     },
     requirementReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      deleteByBlock: async () => undefined,
     },
     clarityReviewRepository: {
       getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      deleteByBlock: async () => undefined,
     },
     brainstormSessionRepository: {
       getByBlockStage: async (ws: string, blockId: string, stage: string) => ({
@@ -201,6 +215,19 @@ function makeRegistry(): {
         blockId,
         stage,
       }),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      upsert: async () => undefined,
+      deleteByBlockStage: async () => undefined,
+    },
+    consensusSessionRepository: {
+      get: async (ws: string, id: string) => ({ ws, id }),
+      getByStep: async (ws: string, executionId: string, stepIndex: number) => ({
+        ws,
+        executionId,
+        stepIndex,
+      }),
+      getByBlock: async (ws: string, blockId: string) => ({ ws, blockId }),
+      upsert: async () => undefined,
     },
     // The post-release-health settings surface: reads/deletes echo their workspaceId (arg0);
     // the record-based `upsert` binds on the record's `workspaceId` FIELD.
@@ -829,4 +856,278 @@ describe('post-release-health settings surface (observability / release-health /
       })
     }
   }
+})
+
+describe('advanced review / session management surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The clarity-review / brainstorm / consensus windows: run + re-read + persist/replace as the
+  // window iterates. Every method takes the workspaceId as arg0 (the `upsert(workspaceId, review)`
+  // signature carries it positionally → the `workspace` rule). `args` are the trailing arguments
+  // after it; value-returning reads (`echoed`) echo the FULL bound arg set so the round-trip can
+  // assert every argument reached the repo in order, void writes resolve `undefined`.
+  const METHODS: Array<{
+    repo: string
+    method: string
+    args: unknown[]
+    // The object a value-returning read echoes back (workspaceId + trailing args), asserting the
+    // whole argument list survived the hop in order. Absent → a void write (resolves `undefined`).
+    echoed?: Record<string, unknown>
+  }> = [
+    // requirement-review: getByBlock/get/upsert were exposed earlier; deleteByBlock completes it.
+    {
+      repo: 'requirementReviewRepository',
+      method: 'get',
+      args: ['rev_1'],
+      echoed: { ws: 'ws_in', id: 'rev_1' },
+    },
+    { repo: 'requirementReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
+    { repo: 'requirementReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
+    // clarity-review (bug-report triage).
+    {
+      repo: 'clarityReviewRepository',
+      method: 'get',
+      args: ['rev_1'],
+      echoed: { ws: 'ws_in', id: 'rev_1' },
+    },
+    { repo: 'clarityReviewRepository', method: 'upsert', args: [{ id: 'rev_1' }] },
+    { repo: 'clarityReviewRepository', method: 'deleteByBlock', args: ['blk_1'] },
+    // brainstorm (structured dialogue, keyed by block+stage).
+    {
+      repo: 'brainstormSessionRepository',
+      method: 'get',
+      args: ['sess_1'],
+      echoed: { ws: 'ws_in', id: 'sess_1' },
+    },
+    { repo: 'brainstormSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
+    {
+      repo: 'brainstormSessionRepository',
+      method: 'deleteByBlockStage',
+      args: ['blk_1', 'discovery'],
+    },
+    // consensus (multi-strategy orchestration, keyed by run step).
+    {
+      repo: 'consensusSessionRepository',
+      method: 'get',
+      args: ['sess_1'],
+      echoed: { ws: 'ws_in', id: 'sess_1' },
+    },
+    {
+      repo: 'consensusSessionRepository',
+      method: 'getByStep',
+      args: ['ex_1', 0],
+      echoed: { ws: 'ws_in', executionId: 'ex_1', stepIndex: 0 },
+    },
+    {
+      repo: 'consensusSessionRepository',
+      method: 'getByBlock',
+      args: ['blk_1'],
+      echoed: { ws: 'ws_in', blockId: 'blk_1' },
+    },
+    { repo: 'consensusSessionRepository', method: 'upsert', args: [{ id: 'sess_1' }] },
+  ]
+
+  for (const { repo, method, args, echoed } of METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoed) {
+        // Assert the FULL bound arg set round-tripped (workspaceId + every trailing arg in order),
+        // not just that the call was authorized — a read that dropped or reordered an arg would
+        // slip past a bare `{ ws }` check.
+        expect(Array.isArray(result) ? result[0] : result).toMatchObject(echoed)
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // A void write resolves `undefined`, so the loop above can't see WHAT reached the repo. Drive a
+  // capturing registry to prove the write path forwards the workspaceId + payload (and, for the
+  // block+stage delete, every positional key) in order across the round-trip — the write-path
+  // analogue of the `echoed` reads above.
+  it('forwards the workspaceId + payload to a write in order', async () => {
+    const calls: unknown[][] = []
+    const { registry, ...resolvers } = makeRegistry()
+    const capturing: PersistenceRegistry = {
+      ...registry,
+      consensusSessionRepository: {
+        ...registry.consensusSessionRepository,
+        upsert: async (...a: unknown[]) => void calls.push(a),
+      },
+      brainstormSessionRepository: {
+        ...registry.brainstormSessionRepository,
+        deleteByBlockStage: async (...a: unknown[]) => void calls.push(a),
+      },
+    }
+    const client = inProcessClient({
+      registry: capturing,
+      ...resolvers,
+      scope: { accountIds: [ACCOUNT], userId: USER },
+    })
+    const remote = createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+
+    await remote.consensusSessionRepository!.upsert!('ws_in', { id: 'sess_1' })
+    await remote.brainstormSessionRepository!.deleteByBlockStage!('ws_in', 'blk_1', 'discovery')
+
+    expect(calls).toContainEqual(['ws_in', { id: 'sess_1' }])
+    expect(calls).toContainEqual(['ws_in', 'blk_1', 'discovery'])
+  })
+})
+
+describe('shared-service mount management surface', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // `serviceRepository.get(serviceId)` binds via the `service` scope kind (single serviceId →
+  // owning account, the single-id form of `serviceList`). svc_in lives under ACCOUNT, svc_out
+  // under OTHER_ACCOUNT.
+  it('forwards serviceRepository.get for an in-scope service', async () => {
+    await expect(remoteRegistry().serviceRepository!.get!('svc_in')).resolves.toMatchObject({
+      id: 'svc_in',
+    })
+  })
+
+  it('rejects serviceRepository.get for an out-of-scope service (404, no leak)', async () => {
+    await expect(remoteRegistry().serviceRepository!.get!('svc_out')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('rejects serviceRepository.get for an unknown service (fails closed)', async () => {
+    await expect(remoteRegistry().serviceRepository!.get!('svc_missing')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+
+  it('rejects serviceRepository.get for a non-string arg (fails closed)', async () => {
+    await expect(
+      remoteRegistry().serviceRepository!.get!(undefined as unknown as string),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The workspaceId-keyed mount methods (arg0 = workspaceId → the `workspace` rule): `get` echoes
+  // the workspaceId, the void writes `update`/`remove` just resolve.
+  const WORKSPACE_METHODS: Array<{ method: string; args: unknown[]; echoes?: boolean }> = [
+    { method: 'get', args: ['svc_in'], echoes: true },
+    { method: 'update', args: ['svc_in', { position: { x: 1, y: 2 } }] },
+    { method: 'remove', args: ['svc_in'] },
+  ]
+
+  for (const { method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards workspaceMountRepository.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry().workspaceMountRepository![method]!('ws_in', ...args)
+      if (echoes) expect(result).toMatchObject({ ws: 'ws_in' })
+      else expect(result).toBeUndefined()
+    })
+
+    it(`rejects workspaceMountRepository.${method} for an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry().workspaceMountRepository![method]!('ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // `upsert(mount)` binds on the mount's `workspaceId` FIELD via the `serviceMount` rule: the mount
+  // is placed onto exactly `mount.workspaceId` (out-of-scope → refused before any write) AND the
+  // mounted `serviceId` must be owned by the SAME account as that workspace (the cross-org mount
+  // invariant, enforced at the RPC layer — not only in the bypassed service layer).
+  it('forwards workspaceMountRepository.upsert when the mount targets an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_in',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount targets an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_out',
+        serviceId: 'svc_in',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount has no workspaceId field (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({ serviceId: 'svc_in' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mount has no serviceId field (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({ workspaceId: 'ws_in' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects workspaceMountRepository.upsert when the mounted service is unknown (404)', async () => {
+    await expect(
+      remoteRegistry().workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_missing',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The cross-org mount invariant under a MULTI-account token (a user in several orgs). Both
+  // ACCOUNT and OTHER_ACCOUNT are in scope, so a workspace-only check would let one org's service
+  // be mounted onto another org's board. The `serviceMount` rule's same-account requirement blocks
+  // it: svc_out (OTHER_ACCOUNT) cannot be mounted onto ws_in (ACCOUNT) even though both are in scope.
+  it('rejects a cross-org mount upsert even when both accounts are in the token scope (404)', async () => {
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_in',
+        serviceId: 'svc_out',
+      }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('forwards a same-account mount upsert for a workspace in a secondary in-scope account', async () => {
+    // A multi-account token can still mount WITHIN each org: svc_out onto ws_out (both OTHER_ACCOUNT).
+    await expect(
+      remoteRegistry([ACCOUNT, OTHER_ACCOUNT]).workspaceMountRepository!.upsert!({
+        workspaceId: 'ws_out',
+        serviceId: 'svc_out',
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('still refuses a non-allow-listed mount method (real-time fan-out read)', async () => {
+    // `listByService` is a mothership-internal fan-out read — absent from the allow-list.
+    await expect(
+      remoteRegistry().workspaceMountRepository!.listByService!('svc_in'),
+    ).rejects.toThrow(/not callable/)
+  })
 })

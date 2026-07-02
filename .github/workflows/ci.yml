@@ -159,6 +159,12 @@ jobs:
             node scripts/check-runner-image-tag.mjs
           fi
 
+      # Guard the human/LLM-facing package map: every workspace package must have a
+      # package.json description AND a row in the README repository-layout tables, so a new
+      # package can't become invisible to the docs an LLM reads first. Pure node; no install.
+      - name: Guard package catalog
+        run: node scripts/check-package-catalog.mjs
+
       - name: Install pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 

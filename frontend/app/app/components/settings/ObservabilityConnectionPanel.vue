@@ -12,6 +12,7 @@ const { t } = useI18n()
 const ui = useUiStore()
 const store = useReleaseHealthStore()
 const toast = useToast()
+const { confirmAction, toastDone } = useConfirmAction()
 
 const open = computed({
   get: () => ui.observabilityConnectionOpen,
@@ -95,9 +96,12 @@ async function saveIncident() {
 }
 
 async function disconnectIncident() {
+  const noun = t('settings.observabilityConnection.incidentNoun')
+  if (!(await confirmAction('disconnect', noun))) return
   incidentBusy.value = true
   try {
     await store.removeIncident()
+    toastDone('disconnect', noun)
   } catch (e) {
     notifyError(t('settings.observabilityConnection.toast.incidentDisconnectFailed'), e)
   } finally {
@@ -127,9 +131,12 @@ async function saveConnection() {
 }
 
 async function disconnect() {
+  const noun = t('settings.observabilityConnection.connectionNoun')
+  if (!(await confirmAction('disconnect', noun))) return
   busy.value = true
   try {
     await store.removeConnection()
+    toastDone('disconnect', noun)
   } catch (e) {
     notifyError(t('settings.observabilityConnection.toast.disconnectFailed'), e)
   } finally {

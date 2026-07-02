@@ -22,6 +22,7 @@ import type {
 import type { ServiceRepository, WorkspaceMountRepository } from '@cat-factory/kernel'
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import type { PreviewTransport } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { TokenUsageRepository } from '@cat-factory/kernel'
 import type { LlmCallMetricRepository } from '@cat-factory/kernel'
@@ -160,6 +161,7 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { TesterQualityReviewService } from './modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
@@ -169,6 +171,7 @@ import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
+import { PreviewService, type BuildPreviewJob } from './modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
 import type { AccountSettingsService } from '@cat-factory/integrations'
 import {
@@ -441,6 +444,20 @@ export interface CoreDependencies {
   environmentConnectionRepository?: EnvironmentConnectionRepository
   environmentRegistryRepository?: EnvironmentRegistryRepository
   /**
+   * The browsable-frontend-PREVIEW container transport (slice 5c) — the per-runtime half that
+   * publishes a served app's port to a host port and keeps the container alive. Wired ONLY on a
+   * runtime with a host-port-publish primitive (local Docker/Apple); the Worker never wires it,
+   * so the preview module stays absent there and the controller 503s. Assembles the preview
+   * module only alongside {@link buildPreviewJob} + {@link environmentRegistryRepository}.
+   */
+  previewTransport?: PreviewTransport
+  /**
+   * Builds the harness `mode: 'preview'` job for a `frontend` frame (repo/token/session + the
+   * frontend infra spec) — a facade-provided seam because it needs the server-layer repo/auth
+   * resolution. Paired with {@link previewTransport}.
+   */
+  buildPreviewJob?: BuildPreviewJob
+  /**
    * Workspace-defined custom-manifest-type catalog (the UI-editable half of the custom
    * provision-type catalog). Absent ⇒ the catalog is the registered code types only.
    */
@@ -582,6 +599,16 @@ export interface CoreDependencies {
    * uses the default ref above.
    */
   requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as
+   * an INLINE LLM call in this deployment — true only in local mode, where the developer's
+   * ambient CLI login is driven as a host subprocess. Threaded into every inline service
+   * (requirements/clarity reviewers, brainstorm, kaizen, sandbox) so an ambient-eligible
+   * harness ref is kept (served by the harness-aware model provider) instead of degraded to
+   * the routing default, and into the start guard's inline-model check. From
+   * `config.agents.inlineHarnessRef`; absent on Node/Worker (no inline harness path).
+   */
+  inlineHarnessRef?: (ref: ModelRef) => boolean
 
   // ---- Prompt-fragment library (opt-in; ADR 0006) -------------------------
   // The managed, tenant-scoped catalog of best-practice fragments. The library
@@ -839,6 +866,11 @@ export interface ReleaseHealthModule {
   service: ReleaseHealthService
 }
 
+/** The browsable-frontend-preview service, present only when a preview transport is wired. */
+export interface PreviewModule {
+  service: PreviewService
+}
+
 /** The incident-enrichment (PagerDuty + incident.io) settings service, present only when wired. */
 export interface IncidentEnrichmentModule {
   service: IncidentEnrichmentService
@@ -959,6 +991,8 @@ export interface Core {
   notifications?: NotificationsModule
   /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
   releaseHealth?: ReleaseHealthModule
+  /** Present only when a preview transport + job builder are wired (local/node — see CoreDependencies). */
+  preview?: PreviewModule
   /** Present only when the incident-enrichment connection repo + cipher are wired. */
   incidentEnrichmentSettings?: IncidentEnrichmentModule
   /** Present only when the per-account settings service is wired (facade-built). */
@@ -1397,6 +1431,34 @@ function createBootstrapModule(
  * and the document/task repositories are reused, when wired, to fold linked PRDs
  * and tracker issues into the reviewed requirements.
  */
+/**
+ * Build the inline reviewer for the test quality-control companion. It resolves its model
+ * exactly like the requirements reviewer (block pin → workspace per-kind default → routing
+ * default). Returns `undefined` when no model provider is configured, so the Tester gate's QC
+ * step is a pass-through in unconfigured facades / tests.
+ */
+function createTesterQualityReviewer(
+  deps: CoreDependencies,
+): TesterQualityReviewService | undefined {
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new TesterQualityReviewService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
+}
+
 function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
@@ -1418,6 +1480,9 @@ function createRequirementsModule(
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     // Honour a block's pinned model with the direct/Cloudflare fallback, like the executor.
     resolveBlockModel: deps.requirementReviewResolveModel,
+    // In local mode, run the reviewer inline through the ambient Claude Code / Codex CLI on a
+    // subscription model instead of degrading to the routing default.
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     // Honour the workspace's model presets for the `requirements` kind too, so the
     // reviewer resolves its model exactly like a pipeline step. Reuses the already
     // wired model-preset repository (the workspace default preset); absent → only
@@ -1541,6 +1606,7 @@ function createBrainstormModule(
     modelProvider: deps.modelProvider,
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     resolveWorkspaceModelDefault,
   }
 
@@ -1584,6 +1650,7 @@ function createKaizenModule(deps: CoreDependencies): KaizenModule | undefined {
     // Reuse the reviewer's routing default ref + block-model resolver (the agents' default).
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     // Resolve the workspace's per-kind default for `kaizen`, like a pipeline step.
     resolveWorkspaceModelDefault: deps.modelPresetRepository
       ? (workspaceId, agentKind, modelPresetId) =>
@@ -1621,6 +1688,7 @@ function createClarityModule(
     modelProvider: deps.modelProvider,
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
     resolveWorkspaceModelDefault: deps.modelPresetRepository
       ? (workspaceId, agentKind, modelPresetId) =>
           resolvePresetModelForKind(
@@ -1792,6 +1860,7 @@ function createSandboxModule(deps: CoreDependencies): SandboxModule | undefined 
     modelProvider: deps.modelProvider,
     resolveModelId: deps.requirementReviewResolveModel,
     defaultModelRef,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
   })
   return { service, runService }
 }
@@ -1829,6 +1898,24 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
     observabilitySecretCipher,
     workspaceRepository: deps.workspaceRepository,
     blockRepository: deps.blockRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
+/**
+ * Assemble the browsable-frontend-preview module when its per-runtime transport + the facade's
+ * job builder + the env registry are all wired (local/node with a host-port-publish runtime).
+ * Absent on the Worker (no preview transport) ⇒ the controller 503s there.
+ */
+function createPreviewModule(deps: CoreDependencies): PreviewModule | undefined {
+  const { previewTransport, buildPreviewJob, environmentRegistryRepository } = deps
+  if (!previewTransport || !buildPreviewJob || !environmentRegistryRepository) return undefined
+  const service = new PreviewService({
+    previewTransport,
+    buildPreviewJob,
+    environmentRegistryRepository,
+    idGenerator: deps.idGenerator,
     clock: deps.clock,
   })
   return { service }
@@ -2026,6 +2113,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
+  const preview = createPreviewModule(dependencies)
   const incidentEnrichmentSettings = createIncidentEnrichmentModule(dependencies)
   const modelPresets = createModelPresetsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
@@ -2062,6 +2150,10 @@ export function createCore(dependencies: CoreDependencies): Core {
         }
       : undefined,
     requirementReviewService: requirements?.service,
+    // The test quality-control companion's inline reviewer, resolved like every other inline
+    // review (block pin → workspace preset → routing default). Built only when a model
+    // provider is available; absent → the Tester gate's QC step is a pass-through.
+    testerQualityReviewer: createTesterQualityReviewer(dependencies),
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,
     kaizenScheduler: kaizen?.service,
@@ -2134,6 +2226,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
+    ...(preview ? { preview } : {}),
     ...(incidentEnrichmentSettings ? { incidentEnrichmentSettings } : {}),
     ...(dependencies.accountSettings
       ? { accountSettings: { service: dependencies.accountSettings } }

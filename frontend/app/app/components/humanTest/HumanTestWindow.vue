@@ -19,6 +19,8 @@ const board = useBoardStore()
 const execution = useExecutionStore()
 const humanTest = useHumanTestStore()
 const { t, d } = useI18n()
+const toast = useToast()
+const { confirmAction, toastDone } = useConfirmAction()
 
 // Shared seam contract (open/blockId/close + Escape). No `onOpen` loader: the gate state
 // rides on the execution step, pushed over the stream.
@@ -102,7 +104,19 @@ async function recreate() {
 }
 async function destroy() {
   if (!blockId.value) return
-  await humanTest.destroyEnv(blockId.value)
+  const noun = t('humanTest.envNoun')
+  if (!(await confirmAction('destroy', noun))) return
+  try {
+    await humanTest.destroyEnv(blockId.value)
+    toastDone('destroy', noun)
+  } catch (e) {
+    toast.add({
+      title: t('humanTest.destroyFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  }
 }
 
 /** Env actions need a provider (an env is/was present, or it's provisioning) — disabled in degraded mode. */
@@ -128,6 +142,8 @@ const canDestroy = computed(
     >
       <div
         class="m-4 flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
       >
         <!-- Header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">

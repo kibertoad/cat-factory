@@ -46,6 +46,8 @@ const CONFLICT_TITLE_KEYS: Record<
   bootstrap_not_retryable: 'errors.conflict.title.bootstrap_not_retryable',
   bootstrap_reference_missing: 'errors.conflict.title.bootstrap_reference_missing',
   provision_type_unhandled: 'errors.conflict.title.provision_type_unhandled',
+  preset_unsatisfiable: 'errors.conflict.title.preset_unsatisfiable',
+  visual_pipeline_no_frontend: 'errors.conflict.title.visual_pipeline_no_frontend',
 }
 
 /**

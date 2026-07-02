@@ -61,6 +61,9 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       '-e',
       `HARNESS_SHARED_SECRET=${spec.sharedSecret}`,
     ]
+    // Extra published ports (the preview transport's served-app port) alongside the harness
+    // :8080, each on its own ephemeral host port read back via `endpoint(id, port)`.
+    for (const port of spec.publishPorts ?? []) args.push('-p', `127.0.0.1:0:${port}`)
     if (spec.instanceSize)
       args.push('--memory', spec.instanceSize.memory, '--cpus', spec.instanceSize.cpus)
     if (spec.privileged) args.push('--privileged')
@@ -87,8 +90,12 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
     return stdout.trim().split('\n')[0]?.trim() || undefined
   }
 
-  async endpoint(exec: ContainerExec, containerId: string): Promise<ContainerEndpoint | undefined> {
-    const { stdout } = await exec(['port', containerId, `${HARNESS_PORT}/tcp`])
+  async endpoint(
+    exec: ContainerExec,
+    containerId: string,
+    inContainerPort: number = HARNESS_PORT,
+  ): Promise<ContainerEndpoint | undefined> {
+    const { stdout } = await exec(['port', containerId, `${inContainerPort}/tcp`])
     // e.g. "127.0.0.1:49153" (possibly several lines for IPv4/IPv6); take the last
     // numeric segment of the first line.
     const line = stdout.trim().split('\n')[0]?.trim()
