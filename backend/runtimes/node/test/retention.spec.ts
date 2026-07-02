@@ -17,6 +17,7 @@ function fakeRepos(): {
     llmCallMetrics: number | null
     agentContextSnapshots: number | null
     provisioningLog: number | null
+    commits: number | null
   }
 } {
   const cutoffs = {
@@ -24,6 +25,7 @@ function fakeRepos(): {
     llmCallMetrics: null as number | null,
     agentContextSnapshots: null as number | null,
     provisioningLog: null as number | null,
+    commits: null as number | null,
   }
   return {
     cutoffs,
@@ -60,6 +62,13 @@ function fakeRepos(): {
       },
       // Expired password-reset tokens (deleted by `now`, not a window).
       passwordResetTokenRepository: { deleteExpired: async () => 1 },
+      // GitHub commit projection, pruned to the `commitMs` window (Worker parity).
+      commitRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.commits = c
+          return 4
+        },
+      },
     },
   }
 }
@@ -86,6 +95,7 @@ describe('sweepRetention', () => {
     expect(cutoffs.llmCallMetrics).toBe(now - 3 * DAY)
     expect(cutoffs.agentContextSnapshots).toBe(now - 3 * DAY) // same window as llmCallMetrics
     expect(cutoffs.provisioningLog).toBe(now - 14 * DAY)
+    expect(cutoffs.commits).toBe(now - 90 * DAY)
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
@@ -94,6 +104,7 @@ describe('sweepRetention', () => {
       activations: 2,
       provisioningLog: 5,
       passwordResetTokens: 1,
+      commits: 4,
     })
   })
 
@@ -112,6 +123,15 @@ describe('sweepRetention', () => {
       activations: 2,
       provisioningLog: 5,
       passwordResetTokens: 1,
+      commits: 4,
     })
+  })
+
+  it('treats a non-positive commit window as disabled (full history kept)', async () => {
+    const { repos, cutoffs } = fakeRepos()
+    const result = await sweepRetention(repos, policy({ commitMs: 0 }), now)
+
+    expect(cutoffs.commits).toBeNull()
+    expect(result.commits).toBe(0)
   })
 })

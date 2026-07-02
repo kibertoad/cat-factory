@@ -35,6 +35,7 @@ function installationsRepo(active: GitHubInstallation[]): GitHubInstallationRepo
   return {
     listActive: async () => active,
     getByInstallationId: async () => null,
+    listByInstallationIds: async () => [],
     getByWorkspace: async (workspaceId) =>
       active.find((i) => i.workspaceId === workspaceId) ?? null,
     listWorkspacesForInstallation: async () => [],

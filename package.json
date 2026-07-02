@@ -12,6 +12,9 @@
     "test:run": "turbo run test:run",
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix && oxfmt .",
+    "lint:monorepo": "sherif -i typescript -i @types/node",
+    "lint:knip": "knip",
+    "check:publish": "node scripts/check-publish-integrity.mjs",
     "dev:backend": "turbo run dev --filter=@cat-factory/deploy-backend",
     "dev:node": "turbo run dev --filter=@cat-factory/deploy-node",
     "dev:frontend": "turbo run dev --filter=@cat-factory/deploy-frontend",
@@ -21,9 +24,13 @@
     "ci:publish": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.4",
     "@changesets/cli": "^2.31.0",
+    "knip": "^6.23.0",
     "oxfmt": "^0.56.0",
     "oxlint": "^1.71.0",
+    "publint": "^0.3.21",
+    "sherif": "^1.12.0",
     "turbo": "^2.10.0",
     "typescript": "7.0.1-rc"
   },

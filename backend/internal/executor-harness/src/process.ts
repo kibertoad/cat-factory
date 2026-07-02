@@ -10,9 +10,31 @@ import { log, type Logger } from './logger.js'
 const KILL_GRACE_MS = 5_000
 
 /**
- * Terminate a child process: SIGTERM first, then SIGKILL after a grace period if it
- * hasn't exited (ignored an ordinary terminate). The escalation timer is `unref()`d
- * so it never by itself keeps the event loop alive. Safe to call more than once.
+ * Signal a child and, when it was spawned detached (a process-group leader on POSIX — see
+ * `spawnDetached`), the whole group with it. The agent CLIs (`claude`/`codex`/Pi) spawn their
+ * own grandchildren (a shell tool, a build, their own git); a plain `child.kill()` reaps only
+ * the direct child and those grandchildren reparent to init and keep running unsupervised.
+ * `process.kill(-pid)` targets the group instead. Falls back to a direct kill on Windows (no
+ * POSIX process groups) or when the group send fails (already reaped, or the child wasn't
+ * spawned detached so no group of its own exists).
+ */
+function signalTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid !== undefined && process.platform !== 'win32') {
+    try {
+      process.kill(-child.pid, signal)
+      return
+    } catch {
+      // Fall through to the direct kill below.
+    }
+  }
+  child.kill(signal)
+}
+
+/**
+ * Terminate a child process (and its group — see {@link signalTree}): SIGTERM first, then
+ * SIGKILL after a grace period if it hasn't exited (ignored an ordinary terminate). The
+ * escalation timer is `unref()`d so it never by itself keeps the event loop alive. Safe to
+ * call more than once.
  *
  * An actual escalation to SIGKILL is logged at warn level: a process that ignores
  * SIGTERM and has to be force-killed is a signal worth seeing (a wedged Pi/CLI), and
@@ -23,11 +45,18 @@ export function killChildProcess(
   graceMs: number = KILL_GRACE_MS,
   logger: Logger = log,
 ): void {
-  child.kill('SIGTERM')
+  signalTree(child, 'SIGTERM')
   setTimeout(() => {
     if (child.exitCode === null && child.signalCode === null) {
       logger.warn('killChildProcess: process ignored SIGTERM, escalating to SIGKILL', { graceMs })
-      child.kill('SIGKILL')
+      signalTree(child, 'SIGKILL')
     }
   }, graceMs).unref()
 }
+
+/**
+ * Whether a spawned agent CLI should be its own process-group leader so {@link killChildProcess}
+ * can reap the whole tree (its grandchildren) on abort. POSIX only; Windows has no process
+ * groups (and `detached` there spawns a new console we don't want), so it stays false.
+ */
+export const spawnDetached = process.platform !== 'win32'

@@ -18,6 +18,8 @@ import { buildContainer } from '../../src/infrastructure/container'
 import { D1RequirementReviewRepository } from '../../src/infrastructure/repositories/D1RequirementReviewRepository'
 import { D1ClarityReviewRepository } from '../../src/infrastructure/repositories/D1ClarityReviewRepository'
 import { D1ServiceRepository } from '../../src/infrastructure/repositories/D1ServiceRepository'
+import { D1BlockRepository } from '../../src/infrastructure/repositories/D1BlockRepository'
+import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
 
 // Run the shared cross-runtime conformance suite against the Cloudflare Worker
 // facade (the real Hono app over a real local D1, inside workerd). The Node
@@ -65,6 +67,11 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRepoFilesForCoords
           ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
           : {}),
+        // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
+        // full QC loop is driven against real D1 without a model, identically to Node.
+        ...(opts?.testerQualityReviewer
+          ? { testerQualityReviewer: opts.testerQualityReviewer }
+          : {}),
         // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
         // the suite drives the container render path through this facade's wiring, identically to
         // Node — asserting the `deploy` dispatch is accepted and the stubbed view finalizes the same.
@@ -80,6 +87,7 @@ const harness: ConformanceHarness = {
               environmentBackendRegistry: opts.backendRegistries.environmentBackendRegistry,
               runnerBackendRegistry: opts.backendRegistries.runnerBackendRegistry,
               customManifestTypeRegistry: opts.backendRegistries.customManifestTypeRegistry,
+              userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry,
             }
           : {}),
         ...fragmentLibraryDeps(),
@@ -146,6 +154,11 @@ const harness: ConformanceHarness = {
       userSecrets: () => {
         const svc = buildContainer(env, {
           agentExecutor: new FakeAgentExecutor(),
+          // Thread the injected app-owned secret-kind registry (custom kinds pre-registered by
+          // the suite) so the probe's service describes them by reference, like the main build.
+          ...(opts?.backendRegistries
+            ? { userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry }
+            : {}),
         }).userSecrets
         if (!svc) return undefined
         return {
@@ -164,6 +177,8 @@ const harness: ConformanceHarness = {
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).executionRepository,
       agentRunRepository: () =>
         buildContainer(env, { agentExecutor: new FakeAgentExecutor() }).agentRunRepository,
+      blockRepository: () => new D1BlockRepository({ db: env.DB }),
+      notificationRepository: () => new D1NotificationRepository({ db: env.DB }),
     }
   },
 }

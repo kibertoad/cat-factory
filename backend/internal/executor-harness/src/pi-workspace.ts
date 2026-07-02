@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { RepoSpec } from './job.js'
+import { log } from './logger.js'
 import {
   type ContextFileInfo,
   type PiRunOutcome,
@@ -37,6 +38,14 @@ export type HarnessKind = 'pi' | SubscriptionHarness
 /**
  * Run `fn` against a fresh temp working directory, always removing it afterwards
  * (even on throw). `prefix` labels the directory (e.g. 'impl', 'merge').
+ *
+ * Teardown is **best-effort**: on Windows (native local mode) a just-exited child —
+ * git, or the developer's own `claude`/`codex` CLI — can still hold a transient handle
+ * on a file in the checkout, so a straight `rm` throws `EBUSY`/`EPERM` and, running in
+ * the `finally`, would fail an otherwise-successful run. We lean on `fs.rm`'s Windows
+ * backoff (`maxRetries`/`retryDelay`) and, if it STILL can't remove the dir, log and
+ * swallow: a leaked temp dir is harmless (the OS reclaims the temp root), a failed run
+ * is not.
  */
 export async function withWorkspace<T>(
   prefix: string,
@@ -46,7 +55,14 @@ export async function withWorkspace<T>(
   try {
     return await fn(dir)
   } finally {
-    await rm(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(
+      (error: unknown) => {
+        log.warn('failed to remove ephemeral workspace', {
+          dir,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      },
+    )
   }
 }
 

@@ -2,6 +2,7 @@ import type {
   AgentContextSnapshotRepository,
   ResolveBinaryArtifactStore,
   Clock,
+  CommitProjectionRepository,
   LlmCallMetricRepository,
   PasswordResetTokenRepository,
   PipelineScheduleRepository,
@@ -20,11 +21,13 @@ export const SCHEDULE_RUN_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 // Retention sweep for the Node facade's unbounded tables. The Worker prunes these from
 // its every-2-min cron (see the Worker's `sweepRetention`); the Node service has no
-// cron, so a timer mirrors it. Node persists two of the retention-eligible tables today
-// — the append-only `token_usage` ledger and the heavy `llm_call_metrics` observability
-// sink (full per-call prompt/response). The GitHub rate-limit/commit projections are not
-// wired on Node yet, so there is nothing to prune for them. Each table is pruned to its
-// configured age window; a non-positive window disables that pass, matching the Worker.
+// cron, so a timer mirrors it. This covers the append-only `token_usage` ledger, the
+// heavy `llm_call_metrics` observability sink (full per-call prompt/response), and the
+// `github_commits` projection (webhook/backfill-fed whenever the GitHub App is wired —
+// without a prune it grows without bound, exactly what `retention.commitMs` bounds on
+// the Worker). The rate-limit ledger is a Noop on Node (an intentional telemetry
+// omission), so it alone has nothing to prune. Each table is pruned to its configured
+// age window; a non-positive window disables that pass, matching the Worker.
 
 /** The Node-persisted repositories with an age-based prune. */
 export interface RetentionRepos {
@@ -40,6 +43,11 @@ export interface RetentionRepos {
   provisioningLogRepository: Pick<ProvisioningLogRepository, 'deleteOlderThan'>
   // Password-reset tokens past their own TTL (single-use + 1h expiry, so tiny).
   passwordResetTokenRepository: Pick<PasswordResetTokenRepository, 'deleteExpired'>
+  // The GitHub commit projection (`github_commits`), pruned to `retention.commitMs`
+  // like the Worker's daily prune. Fed only when the GitHub App is configured, but the
+  // prune is wired unconditionally — on an unwired deployment the table is empty and
+  // the pass is a free no-op.
+  commitRepository: Pick<CommitProjectionRepository, 'deleteOlderThan'>
 }
 
 /** Rows reclaimed from each table, for logging. */
@@ -51,6 +59,7 @@ export interface RetentionResult {
   activations: number
   provisioningLog: number
   passwordResetTokens: number
+  commits: number
 }
 
 /**
@@ -102,6 +111,7 @@ export async function sweepRetention(
     ),
     // Reset tokens past their own expiry — `now`, not a window (like activations).
     passwordResetTokens: await repos.passwordResetTokenRepository.deleteExpired(now),
+    commits: await prune(retention.commitMs, now, (c) => repos.commitRepository.deleteOlderThan(c)),
   }
 }
 
@@ -119,36 +129,9 @@ export function startRetentionSweeper(
 ): () => void {
   const tick = async () => {
     try {
-      const {
-        tokenUsage,
-        llmCallMetrics,
-        agentContextSnapshots,
-        scheduleRuns,
-        activations,
-        provisioningLog,
-        passwordResetTokens,
-      } = await sweepRetention(repos, retention, clock.now())
-      if (
-        tokenUsage > 0 ||
-        llmCallMetrics > 0 ||
-        agentContextSnapshots > 0 ||
-        scheduleRuns > 0 ||
-        activations > 0 ||
-        provisioningLog > 0 ||
-        passwordResetTokens > 0
-      ) {
-        log.info(
-          {
-            tokenUsage,
-            llmCallMetrics,
-            agentContextSnapshots,
-            scheduleRuns,
-            activations,
-            provisioningLog,
-            passwordResetTokens,
-          },
-          'retention sweep reclaimed rows',
-        )
+      const reclaimed = await sweepRetention(repos, retention, clock.now())
+      if (Object.values(reclaimed).some((n) => n > 0)) {
+        log.info(reclaimed, 'retention sweep reclaimed rows')
       }
     } catch (error) {
       log.error(

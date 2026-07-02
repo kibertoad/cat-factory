@@ -36,9 +36,10 @@ export async function resolveIndividualVendors(
     return pinned ? [pinned] : []
   }
   if (!resolveWorkspaceModelDefault || agentKinds.length === 0) return []
+  // Independent per-kind resolutions on the start path — run them concurrently.
+  const defaultIds = await Promise.all(agentKinds.map((kind) => resolveWorkspaceModelDefault(kind)))
   const vendors = new Set<SubscriptionVendor>()
-  for (const kind of agentKinds) {
-    const defaultId = await resolveWorkspaceModelDefault(kind)
+  for (const defaultId of defaultIds) {
     const vendor = personalCredentialVendorForModelId(defaultId, hasPersonalSubscription)
     if (vendor) vendors.add(vendor)
   }

@@ -2,6 +2,7 @@ import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { AgentRunRef, AgentRunRepository, StaleAgentRun } from '@cat-factory/kernel'
 import { decodeEnum } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 
 /**
  * Kind-spanning reads over the unified `agent_runs` table (migration 0019). Writes
@@ -56,12 +57,26 @@ export class D1AgentRunRepository implements AgentRunRepository {
     }))
   }
 
+  async listPausedExecutions(): Promise<AgentRunRef[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT workspace_id, id FROM agent_runs
+         WHERE kind = 'execution' AND status = 'paused'
+         ORDER BY updated_at`,
+      )
+      .all<{ workspace_id: string; id: string }>()
+    return (results ?? []).map((r) => ({
+      workspaceId: r.workspace_id,
+      id: r.id,
+      kind: 'execution' as const,
+    }))
+  }
+
   async liveRunIds(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return []
     const live: string[] = []
     // Chunk the IN list so a large set never blows the SQL variable limit (batch, not N+1).
-    for (let i = 0; i < ids.length; i += 100) {
-      const chunk = ids.slice(i, i + 100)
+    for (const chunk of chunkForIn(ids)) {
       const placeholders = chunk.map(() => '?').join(', ')
       const { results } = await this.db
         .prepare(

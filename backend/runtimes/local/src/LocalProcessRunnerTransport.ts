@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import type {
   RunnerDispatchKind,
@@ -7,6 +8,7 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { sanitizedChildEnv } from './childEnv.js'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,
@@ -46,6 +48,14 @@ export interface LocalProcessRunnerTransportOptions {
   sharedSecret?: string
   /** Extra env for the harness process (e.g. GITHUB_ALLOWED_HOSTS). */
   env?: Record<string, string>
+  /**
+   * What the harness child inherits from the parent's environment. `sanitized` (default)
+   * projects it down to the {@link sanitizedChildEnv} allow-list so the orchestrator's
+   * secrets (DATABASE_URL, ENCRYPTION_KEY, GITHUB_PAT, …) never reach the agent
+   * subprocesses; `inherit` passes the full env through — the deploy harness needs it
+   * (kubectl/helm run on ambient cloud/cluster env like KUBECONFIG and AWS_*).
+   */
+  envMode?: 'sanitized' | 'inherit'
   /** Injectable fetch — defaults to the global. */
   fetchImpl?: typeof fetch
   /** Injectable spawn — defaults to node:child_process.spawn (overridable in tests). */
@@ -77,6 +87,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   private readonly nodeArgs: string[]
   private readonly sharedSecret: string
   private readonly extraEnv: Record<string, string>
+  private readonly envMode: 'sanitized' | 'inherit'
   private readonly fetchImpl: typeof fetch
   private readonly spawnImpl: typeof spawn
   private readonly pickPort: () => Promise<number>
@@ -86,6 +97,11 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
   /** The single long-lived harness process, started lazily and reused across all runs. */
   private proc: { child: ChildProcess; port: number; exited: boolean } | undefined
   private starting: Promise<{ child: ChildProcess; port: number; exited: boolean }> | undefined
+  /** Set by {@link shutdown}; a shut-down transport never (re)spawns the harness. */
+  private stopped = false
+  /** The child of a start still in its health wait, so {@link shutdown} can kill it NOW
+   * (flipping the health loop's `isDead`) instead of waiting out the ready timeout. */
+  private startingChild: ChildProcess | undefined
 
   constructor(options: LocalProcessRunnerTransportOptions) {
     this.harnessEntry = options.harnessEntry
@@ -93,6 +109,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     this.nodeArgs = options.nodeArgs ?? []
     this.sharedSecret = options.sharedSecret ?? randomBytes(24).toString('hex')
     this.extraEnv = options.env ?? {}
+    this.envMode = options.envMode ?? 'sanitized'
     this.fetchImpl = options.fetchImpl ?? fetch
     this.spawnImpl = options.spawnImpl ?? spawn
     this.pickPort = options.pickPort ?? ephemeralPort
@@ -142,22 +159,44 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     // intentionally a no-op
   }
 
-  /** Stop the harness process (for shutdown / tests). Idempotent. */
+  /**
+   * Stop the harness process (for shutdown / tests). Idempotent and TERMINAL: a shut-down
+   * transport refuses further dispatches. A start still in flight is awaited and its child
+   * killed too, so a shutdown racing a lazy first dispatch can neither leak the harness
+   * process nor let `ensureProcess` resurrect it afterwards.
+   */
   async shutdown(): Promise<void> {
+    this.stopped = true
+    const starting = this.starting
+    this.starting = undefined
     const proc = this.proc
     this.proc = undefined
-    this.starting = undefined
     if (proc && !proc.exited) proc.child.kill()
+    // Kill a mid-startup child directly — its exit flips the health loop's `isDead`, so the
+    // in-flight start settles promptly instead of running out its ready timeout.
+    this.startingChild?.kill()
+    if (starting) {
+      try {
+        const handle = await starting
+        if (!handle.exited) handle.child.kill()
+      } catch {
+        // The start failed on its own; startProcess already reaped its child.
+      }
+    }
   }
 
   // --- internals ----------------------------------------------------------
 
   private async ensureProcess(): Promise<{ child: ChildProcess; port: number; exited: boolean }> {
+    if (this.stopped) throw new Error('the native harness transport is shut down')
     if (this.proc && !this.proc.exited) return this.proc
     this.starting ??= this.startProcess()
     try {
-      this.proc = await this.starting
-      return this.proc
+      const handle = await this.starting
+      // shutdown() raced the start: it kills this child itself — don't resurrect it here.
+      if (this.stopped) throw new Error('the native harness transport is shut down')
+      this.proc = handle
+      return handle
     } finally {
       this.starting = undefined
     }
@@ -165,12 +204,19 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
 
   private async startProcess(): Promise<{ child: ChildProcess; port: number; exited: boolean }> {
     const port = await this.pickPort()
+    // `sanitized` (the default) confines the child to the allow-list env — the orchestrator's
+    // secrets must not reach a host process whose whole job is spawning an agent with shell
+    // access. The explicit vars below always win over the inherited base.
+    const base = this.envMode === 'inherit' ? process.env : sanitizedChildEnv(process.env)
     const child = this.spawnImpl(this.nodePath, [...this.nodeArgs, this.harnessEntry], {
       env: {
-        ...process.env,
+        ...base,
         ...this.extraEnv,
         PORT: String(port),
         HARNESS_SHARED_SECRET: this.sharedSecret,
+        // This transport only ever connects over loopback, and the harness runs UNSANDBOXED
+        // on the developer's host — don't expose its agent-spawning API to the LAN.
+        HARNESS_BIND_HOST: '127.0.0.1',
         // The harness only auto-listens when NODE_ENV !== 'test'.
         NODE_ENV: 'production',
       },
@@ -195,7 +241,21 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
       process.removeListener('exit', killOnParentExit)
       if (this.proc === handle) this.proc = undefined
     })
-    await this.waitForHealth(port, handle)
+    this.startingChild = child
+    try {
+      // shutdown() may have flipped `stopped` while the port pick was pending (before the
+      // spawn) — it had no child to kill then, so reap this one here instead of health-waiting.
+      if (this.stopped) throw new Error('the native harness transport is shut down')
+      await this.waitForHealth(port, handle)
+    } catch (err) {
+      // A harness that never became healthy must not linger holding its port (each retry
+      // dispatch would leak another one). The 'exit' handler above removes the parent-exit
+      // hook once the kill lands.
+      if (!handle.exited) child.kill()
+      throw err
+    } finally {
+      if (this.startingChild === child) this.startingChild = undefined
+    }
     return handle
   }
 
@@ -214,21 +274,44 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
 }
 
 /**
- * Build a {@link LocalProcessRunnerTransport} from the environment. Requires
- * `LOCAL_HARNESS_ENTRY` (the path to the executor-harness server entry to run as a host
- * process). The native CLIs (`claude` / `codex`) must already be installed on the host.
+ * The executor-harness server entry to spawn as a host process (`node <entry>`).
+ *
+ * Mirrors {@link resolveHarnessImage} for the container path: an explicit `LOCAL_HARNESS_ENTRY`
+ * wins (a custom build or a source checkout), else we resolve the `@cat-factory/executor-harness`
+ * package that ships with this backend — its `.` export is the zero-dependency `dist/server.js`.
+ * So a fresh install runs native mode out of the box with no extra configuration, exactly like
+ * an unset `LOCAL_HARNESS_IMAGE` falls back to the pinned recommended image.
+ *
+ * We only throw when native mode is on AND neither source is available — a case that should not
+ * happen for a normal `pnpm add @cat-factory/local-server` install, but is worth a clear message
+ * (e.g. a pruned/hoisting-broken `node_modules`).
+ */
+export function resolveHarnessEntry(env: NodeJS.ProcessEnv): string {
+  const explicit = env.LOCAL_HARNESS_ENTRY?.trim()
+  if (explicit) return explicit
+  try {
+    return createRequire(import.meta.url).resolve('@cat-factory/executor-harness')
+  } catch (cause) {
+    throw new Error(
+      'Native local mode (LOCAL_NATIVE_AGENTS) needs the executor-harness server entry, but ' +
+        "'@cat-factory/executor-harness' could not be resolved. It ships as a dependency of " +
+        '@cat-factory/local-server — reinstall dependencies, or set LOCAL_HARNESS_ENTRY to the ' +
+        'harness server entry path (its built dist/server.js) explicitly.',
+      { cause },
+    )
+  }
+}
+
+/**
+ * Build a {@link LocalProcessRunnerTransport} from the environment. The executor-harness server
+ * entry is resolved via {@link resolveHarnessEntry} (`LOCAL_HARNESS_ENTRY` overrides, else the
+ * bundled `@cat-factory/executor-harness`). The native CLIs (`claude` / `codex`) must already be
+ * installed on the host.
  */
 export function createLocalProcessTransportFromEnv(
   env: NodeJS.ProcessEnv,
 ): LocalProcessRunnerTransport {
-  const harnessEntry = env.LOCAL_HARNESS_ENTRY?.trim()
-  if (!harnessEntry) {
-    throw new Error(
-      'LOCAL_HARNESS_ENTRY is required for native local mode (LOCAL_NATIVE_AGENTS): set it to ' +
-        'the executor-harness server entry path (its built server.js, or src/server.ts run via ' +
-        'Node type-stripping).',
-    )
-  }
+  const harnessEntry = resolveHarnessEntry(env)
   const nodeArgs = env.LOCAL_HARNESS_NODE_ARGS?.trim()
     ? env.LOCAL_HARNESS_NODE_ARGS.trim().split(/\s+/)
     : undefined

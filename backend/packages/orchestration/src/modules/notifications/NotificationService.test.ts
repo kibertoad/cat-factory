@@ -34,6 +34,20 @@ function fakeRepo() {
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
     },
+    async escalateStaleOpen(_ws, cutoff) {
+      // Mirror the real repos' single UPDATE ... RETURNING: flip every open, still-normal
+      // card created at or before the cutoff and return the escalated rows.
+      const escalated: Notification[] = []
+      for (const n of rows.values()) {
+        if (n.status !== 'open') continue
+        if ((n.severity ?? 'normal') !== 'normal') continue
+        if (n.createdAt > cutoff) continue
+        const updated: Notification = { ...n, severity: 'urgent' }
+        rows.set(n.id, updated)
+        escalated.push({ ...updated })
+      }
+      return escalated
+    },
     async upsertOpenForBlock(_ws, n) {
       // Mirror the partial-index dedup: an existing open card for (block, type) is updated
       // in place (id/severity/createdAt preserved); otherwise insert. Returns the canonical

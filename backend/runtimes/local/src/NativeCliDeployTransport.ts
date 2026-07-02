@@ -77,12 +77,33 @@ class JobScopedRunnerTransport implements RunnerTransport {
  * - `container` → requires `LOCAL_DEPLOY_IMAGE` (the deploy-harness image ref). Runs one
  *   cold-started container per deploy job (no warm pool) on the selected `LOCAL_CONTAINER_RUNTIME`.
  */
-export function buildLocalDeployTransport(env: NodeJS.ProcessEnv): RunnerTransport | null {
-  const mode = env.LOCAL_DEPLOY_RUNTIME?.trim().toLowerCase() || 'native'
+export function buildLocalDeployTransport(
+  env: NodeJS.ProcessEnv,
+  onWarn?: (message: string) => void,
+): RunnerTransport | null {
+  const rawMode = env.LOCAL_DEPLOY_RUNTIME?.trim().toLowerCase()
+  const mode = rawMode || 'native'
+  // A typo'd mode would otherwise silently become `native` — and then, with no
+  // LOCAL_DEPLOY_HARNESS_ENTRY, a silently-unwired deploy lifecycle. Keep the fail-safe
+  // fallback, but say so.
+  if (rawMode && rawMode !== 'native' && rawMode !== 'container') {
+    onWarn?.(
+      `LOCAL_DEPLOY_RUNTIME: unrecognized value '${rawMode}' (expected native | container) — ` +
+        `using the native default`,
+    )
+  }
   const sharedSecret = env.HARNESS_SHARED_SECRET?.trim() || undefined
   if (mode === 'container') {
     const image = env.LOCAL_DEPLOY_IMAGE?.trim()
-    if (!image) return null
+    if (!image) {
+      // Container mode was EXPLICITLY selected, so an unwired deploy is a misconfiguration,
+      // not the deploy-unused default — surface it instead of failing only at render time.
+      onWarn?.(
+        'LOCAL_DEPLOY_RUNTIME=container needs LOCAL_DEPLOY_IMAGE — the deploy lifecycle ' +
+          'stays unwired (environment configs that need a render will fail).',
+      )
+      return null
+    }
     // poolSize 0: a deploy is one-shot per run, so cold-start its own container and tear it
     // down on release — no warm pool (that's an agent-throughput optimisation).
     const container = new LocalContainerRunnerTransport({
@@ -98,9 +119,24 @@ export function buildLocalDeployTransport(env: NodeJS.ProcessEnv): RunnerTranspo
   }
   // Default: native host process.
   const harnessEntry = env.LOCAL_DEPLOY_HARNESS_ENTRY?.trim()
-  if (!harnessEntry) return null
+  if (!harnessEntry) {
+    // Only warn when the mode was EXPLICITLY set: an unset LOCAL_DEPLOY_RUNTIME with no
+    // entry is simply "deploy not used", the normal state for most local deployments.
+    if (rawMode) {
+      onWarn?.(
+        'LOCAL_DEPLOY_RUNTIME=native needs LOCAL_DEPLOY_HARNESS_ENTRY (the deploy-harness ' +
+          'server entry path) — the deploy lifecycle stays unwired (environment configs ' +
+          'that need a render will fail).',
+      )
+    }
+    return null
+  }
   return new NativeCliDeployTransport({
     harnessEntry,
     ...(sharedSecret ? { sharedSecret } : {}),
+    // The deploy harness shells out to the developer's kubectl/kustomize/helm, which run on
+    // ambient cloud/cluster env (KUBECONFIG, AWS_*, …) — so it inherits the full environment
+    // rather than the sanitized agent allow-list.
+    envMode: 'inherit',
   })
 }

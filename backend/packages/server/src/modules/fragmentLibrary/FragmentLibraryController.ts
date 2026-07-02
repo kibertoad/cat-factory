@@ -184,7 +184,7 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    await lib.sourceService.unlink(c.req.valid('param').id)
+    await lib.sourceService.unlink(ownerKind, ownerId(c), c.req.valid('param').id)
     return c.body(null, 204)
   })
 
@@ -192,14 +192,17 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.status(c.req.valid('param').id), 200)
+    return c.json(
+      await lib.sourceService.status(ownerKind, ownerId(c), c.req.valid('param').id),
+      200,
+    )
   })
 
   buildHonoRoute(app, syncFragmentSourceContract, async (c) => {
     const lib = requireLibrary(c)
     if (!lib) return unavailable(c)
     if (!lib.sourceService) return sourcesUnavailable(c)
-    return c.json(await lib.sourceService.sync(c.req.valid('param').id), 200)
+    return c.json(await lib.sourceService.sync(ownerKind, ownerId(c), c.req.valid('param').id), 200)
   })
 
   // ---- resolved (workspace only) — the merged catalog an agent sees -------

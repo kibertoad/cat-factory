@@ -18,6 +18,7 @@ import {
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
+  DrizzleNotificationRepository,
   createApp,
   createDbClient,
   createDrizzleRepositories,
@@ -27,7 +28,11 @@ import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { NoopBootstrapRunner, NoopEnvConfigRepairRunner, NoopWorkRunner } from '@cat-factory/kernel'
-import type { LocalRunner, UpsertLocalModelEndpointInput } from '@cat-factory/contracts'
+import type {
+  LocalRunner,
+  UpsertLocalModelEndpointInput,
+  UserSecretKind,
+} from '@cat-factory/contracts'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { buildLocalContainer } from '../src/container.js'
 
@@ -57,8 +62,9 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   AUTH_PASSWORD_ENABLED: 'false',
   ENVIRONMENT: 'test',
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
-  // Local mode requires AUTH_SESSION_SECRET (a fixed value is fine for the suite).
-  AUTH_SESSION_SECRET: 'test-session-secret',
+  // Local mode requires AUTH_SESSION_SECRET (a fixed value is fine for the suite; it must
+  // clear the 32-char minimum the local config loader enforces).
+  AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
   // Enable the Slack notification transport so its module + channel wire up through
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.
@@ -135,6 +141,7 @@ export function makeConformanceApp(
     deployJobClient?: CoreDependencies['deployJobClient']
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
+    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -179,6 +186,10 @@ export function makeConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
+    // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
+    // full QC loop is driven through the local composition root without a model, identically to
+    // the Worker/Node.
+    ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
     // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
     // the suite drives the container render path through the local composition root, identically
     // to the Worker/Node. Overrides win over buildLocalContainer's own deploy wiring (spread last).
@@ -329,6 +340,8 @@ export function makeConformanceApp(
     seedIncorporatedClarityReview,
     executionRepository: () => container.executionRepository,
     agentRunRepository: () => container.agentRunRepository,
+    blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
+    notificationRepository: () => new DrizzleNotificationRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),
@@ -349,6 +362,15 @@ export function makeConformanceApp(
       return {
         get: (workspaceId: string) => svc.get(workspaceId),
         upsert: (workspaceId: string, input) => svc.upsert(workspaceId, input),
+      }
+    },
+    userSecrets: () => {
+      const svc = container.userSecrets
+      if (!svc) return undefined
+      return {
+        store: (userId, kind, input) => svc.store(userId, kind as UserSecretKind, input),
+        resolve: (userId, kind) => svc.resolve(userId, kind as UserSecretKind),
+        describe: (kind) => svc.describe(kind as UserSecretKind),
       }
     },
   }

@@ -1,5 +1,5 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import { FRAGMENTS, getFragment } from '@cat-factory/prompt-fragments'
+import { universalFragments } from '@cat-factory/prompt-fragments'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
@@ -36,7 +36,13 @@ export interface FragmentLibraryServiceDependencies {
   clock: Clock
   /** Relevance selector; defaults to the deterministic matcher when omitted. */
   selector?: FragmentSelector
-  /** Built-in catalog tier; overridable for tests. Defaults to the shipped FRAGMENTS. */
+  /**
+   * Built-in catalog tier; overridable for tests. Defaults to the UNIVERSAL pool —
+   * the shipped FRAGMENTS plus any deployment-registered fragments — read lazily per
+   * catalog resolve, so a `registerPromptFragment` override of a built-in id (and any
+   * extra registered fragment) is part of the merged tenant catalog and can be
+   * shadowed or tombstoned per tier like every other built-in.
+   */
   builtins?: PromptFragment[]
   /**
    * Live document reader for document-backed fragments. When absent the feature
@@ -51,17 +57,18 @@ export interface FragmentLibraryServiceDependencies {
 /**
  * The fragment library's management service (ADR 0006). It owns the per-tier CRUD
  * (account / workspace) and resolves the merged catalog a workspace sees (built-in ∪
- * account ∪ workspace, override-by-id, tombstone-suppressed). It still implements
- * {@link FragmentResolver} (`resolveForRun`), but the execution engine NO LONGER
- * consumes it: fragment delivery is now the service-scoped `serviceFragmentIds` folded
- * into `code-aware` agents, so this is a management surface only.
+ * account ∪ workspace, override-by-id, tombstone-suppressed). The execution engine
+ * consumes it at run time through {@link resolveBodiesForRun} (wired as the engine's
+ * `fragmentResolver`), so managed and document-backed fragments actually reach a
+ * `code-aware` step; the automatic per-run relevance selector ({@link resolveForRun})
+ * is a management-surface leftover the run path no longer drives.
  */
 export class FragmentLibraryService implements FragmentResolver {
   private readonly repo: PromptFragmentRepository
   private readonly workspaces: WorkspaceRepository
   private readonly clock: Clock
   private readonly selector: FragmentSelector
-  private readonly builtins: PromptFragment[]
+  private readonly builtinsOverride?: PromptFragment[]
   private readonly documentResolver?: DocumentContentResolver
   private readonly ttlMs: number
 
@@ -70,9 +77,18 @@ export class FragmentLibraryService implements FragmentResolver {
     this.workspaces = deps.workspaceRepository
     this.clock = deps.clock
     this.selector = deps.selector ?? new DeterministicFragmentSelector()
-    this.builtins = deps.builtins ?? FRAGMENTS
+    this.builtinsOverride = deps.builtins
     this.documentResolver = deps.documentContentResolver
     this.ttlMs = deps.documentFragmentTtlMs ?? DEFAULT_DOCUMENT_FRAGMENT_TTL_MS
+  }
+
+  /**
+   * The built-in tier: the injected test override, else the UNIVERSAL pool (shipped
+   * catalog + deployment-registered fragments), read lazily so registrations made at
+   * startup are seen regardless of construction order.
+   */
+  private builtins(): PromptFragment[] {
+    return this.builtinsOverride ?? universalFragments()
   }
 
   /** This tier's hand-authored/sourced fragments (raw, not merged), newest first. */
@@ -305,7 +321,7 @@ export class FragmentLibraryService implements FragmentResolver {
       accountId ? this.repo.listByOwner('account', accountId, true) : Promise.resolve([]),
       this.repo.listByOwner('workspace', workspaceId, true),
     ])
-    return mergeCatalog(this.builtins, accountRows, workspaceRows)
+    return mergeCatalog(this.builtins(), accountRows, workspaceRows)
   }
 
   /** The merged catalog as wire {@link ResolvedFragment}s for the management UI. */
@@ -359,15 +375,23 @@ export class FragmentLibraryService implements FragmentResolver {
    * body is stale (older than the TTL), it live-fetches the page's current
    * content via the document resolver, persists the refreshed body, and uses it;
    * any fetch failure falls back to the last-resolved `body` so a run never
-   * blocks. Unknown ids are dropped; the result preserves the input order.
+   * blocks. Ids absent from the catalog are dropped — deliberately with NO static
+   * fallback: the built-in tier already includes every deployment-registered
+   * fragment, so a missing id is either stale or tier-tombstoned, and resolving it
+   * from the static pool anyway would defeat suppression (ADR 0006). The result
+   * preserves the input order.
+   *
+   * A caller that has already resolved the merged catalog (e.g. to also read titles)
+   * may pass it in to avoid a second resolve of the same tenant catalog.
    */
   async resolveBodiesForRun(
     workspaceId: string,
     ids: string[],
+    catalog?: ResolvedCatalogEntry[],
   ): Promise<{ id: string; body: string }[]> {
     if (ids.length === 0) return []
-    const catalog = await this.resolveCatalog(workspaceId)
-    const byId = new Map(catalog.map((e) => [e.id, e]))
+    const entries = catalog ?? (await this.resolveCatalog(workspaceId))
+    const byId = new Map(entries.map((e) => [e.id, e]))
 
     const out: { id: string; body: string }[] = []
     const seen = new Set<string>()
@@ -375,13 +399,7 @@ export class FragmentLibraryService implements FragmentResolver {
       if (seen.has(id)) continue
       seen.add(id)
       const entry = byId.get(id)
-      if (!entry) {
-        // Not in the tenant catalog — fall back to a deployment-registered
-        // built-in (the static pool), else drop the stale selection.
-        const builtin = getFragment(id)
-        if (builtin) out.push({ id, body: builtin.body })
-        continue
-      }
+      if (!entry) continue
       const body = entry.documentRef
         ? await this.resolveDocumentBody(workspaceId, entry)
         : entry.body

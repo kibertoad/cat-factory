@@ -67,6 +67,18 @@ export interface SweepDeps {
   leaseMs: number
   /** A `missing` execution stale longer than this is failed `stalled` instead of re-driven. */
   hardStallMs: number
+  /**
+   * Per-process "first observed orphaned" clock, keyed by run id, MUTATED IN PLACE across
+   * sweeps. The hard-stall deadline is measured from this — NOT the raw lease age
+   * (`ref.updatedAt`) — so a cron outage / deploy freeze / sustained sweep failure longer than
+   * `hardStallMs` can't fail an otherwise-recoverable run on the very first post-outage tick
+   * (lease age inflates during the gap, but observed-orphaned time does not). This mirrors the
+   * Node sweeper's `orphanedSince` map. Pass a caller-owned persistent map (e.g. a
+   * module-global in the cron handler) to get cross-tick memory; omit it and each sweep is
+   * independent — the hard-stall backstop then only fires for a non-positive `hardStallMs`
+   * (the degenerate unit-test case), never wrongly on a first observation.
+   */
+  orphanedSince?: Map<string, number>
 }
 
 /** What a sweep did, for logging. */
@@ -99,30 +111,54 @@ export async function sweepStuckRuns({
   clock,
   leaseMs,
   hardStallMs,
+  orphanedSince = new Map<string, number>(),
 }: SweepDeps): Promise<SweepResult> {
   const now = clock.now()
   const stale = await agentRunRepository.listStale(now - leaseMs)
   let redriven = 0
   let finalized = 0
   let stalled = 0
+  // Which runs were observed still-orphaned (`missing`) THIS tick — used to prune the
+  // per-process clock of any run that recovered or went terminal so its deadline restarts
+  // if it ever stalls again.
+  const stillOrphaned = new Set<string>()
   for (const ref of stale) {
     const state = await instanceState(ref)
-    if (state === 'alive') continue
+    if (state === 'alive') {
+      orphanedSince.delete(ref.id)
+      continue
+    }
     if (state === 'terminal') {
+      orphanedSince.delete(ref.id)
       await finalizeOrphan(ref)
       finalized++
       continue
     }
-    // `missing`: re-create the driver — unless an execution has stayed missing past the hard
-    // deadline (re-driving isn't resurrecting it), in which case fail it `stalled` so it stops
-    // showing `running` forever and surfaces the failure banner + retry.
-    if (ref.kind === 'execution' && now - ref.updatedAt > hardStallMs) {
+    // `missing`: the instance was lost (eviction, a missed event) and can be re-created.
+    // Start (or carry forward) this run's per-process orphaned clock so the hard-stall
+    // deadline below measures time-observed-orphaned, not raw lease age — a run first seen
+    // orphaned this tick (e.g. right after a long cron outage) is always re-driven at least
+    // once before it can ever be given up on.
+    const firstSeenOrphaned = orphanedSince.get(ref.id) ?? now
+    orphanedSince.set(ref.id, firstSeenOrphaned)
+    stillOrphaned.add(ref.id)
+    // An execution stuck `missing` past the hard deadline (re-driving isn't resurrecting it)
+    // is failed `stalled` so it stops showing `running` forever and surfaces the failure
+    // banner + retry.
+    if (ref.kind === 'execution' && now - firstSeenOrphaned > hardStallMs) {
       await failStalled(ref)
       stalled++
+      orphanedSince.delete(ref.id)
+      stillOrphaned.delete(ref.id)
       continue
     }
     await redrive(ref)
     redriven++
+  }
+  // Forget runs that recovered (bumped their lease → left the stale set) or went terminal, so
+  // their per-process orphaned clock restarts if they ever stall again.
+  for (const id of orphanedSince.keys()) {
+    if (!stillOrphaned.has(id)) orphanedSince.delete(id)
   }
   return { redriven, finalized, stalled }
 }

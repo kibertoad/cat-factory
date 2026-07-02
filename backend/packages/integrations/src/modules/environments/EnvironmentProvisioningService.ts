@@ -416,6 +416,10 @@ export class EnvironmentProvisioningService {
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a manifest can
     // template against it without the caller repeating it. The typed git/PR/repo context is
     // flattened into the same namespace. Explicit inputs win over the derived block id + context.
+    // A deployer step also passes `inputs.frontendOrigins` (comma-joined) — the browser origins
+    // of the `frontend` frames that bind this service — so a manifest can fold them into the
+    // backend's CORS allow-list via `{{input.frontendOrigins}}` (the reverse of the frontend's
+    // `backendBindings`). It is absent when no frontend binds the service.
     const inputs: Record<string, string> = {}
     if (args.blockId) inputs.blockId = args.blockId
     Object.assign(inputs, contextInputs(args.context))

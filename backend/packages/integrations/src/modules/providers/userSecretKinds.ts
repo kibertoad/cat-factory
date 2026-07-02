@@ -1,13 +1,17 @@
-import type { ConnectionTestResult, ProviderConfigField, UserSecretKind } from '@cat-factory/kernel'
+import type { ConnectionTestResult, ProviderConfigField } from '@cat-factory/kernel'
 import { getErrorMessage } from '@cat-factory/kernel'
 
-// Registry of per-user secret KINDS. Each kind declares the config fields the UI
-// renders (exactly one `secret: true` field — the value stored encrypted; the rest
-// ride as non-secret metadata) and an optional connection test. New kinds (GitLab
-// PAT, …) are a new registry entry + a new `UserSecretKind` value, no schema change.
+// The per-user secret KIND registry. Each kind declares the config fields the UI renders
+// (exactly one `secret: true` field — the value stored encrypted; the rest ride as
+// non-secret metadata) and an optional connection test. New kinds (GitLab PAT, …) are a
+// new registry entry, no schema change.
 //
-// Mirrors the provider self-describe/test seam used by the environment + runner-pool
-// providers — one mechanism, three consumers.
+// The registry is an INSTANCE owned by the composition root ({@link UserSecretKindRegistry}),
+// NOT a module-global Map. The app builds it via `defaultUserSecretKindRegistry()` /
+// `createBackendRegistries()` and injects it into `UserSecretService`; a deployment registers
+// a custom kind by reference (`registry.register(handler)`), so the old "must share the same
+// module instance to be seen" footgun is gone. Mirrors `RunnerBackendRegistry`. See
+// `docs/initiatives/registry-di-migration.md`.
 
 export interface UserSecretTestInput {
   secret: string
@@ -15,7 +19,10 @@ export interface UserSecretTestInput {
 }
 
 export interface UserSecretKindHandler {
-  kind: UserSecretKind
+  // `string`, not the contract's discriminated `UserSecretKind`, so a CUSTOM third-party
+  // kind can register. Pinned explicitly so a future contract re-narrowing can't re-lock
+  // the registry. The built-ins still use a `UserSecretKind` literal.
+  kind: string
   /** Display name shown in the connect form. */
   label: string
   /** Fields the UI renders. Exactly one has `secret: true` (→ the stored secret). */
@@ -27,19 +34,37 @@ export interface UserSecretKindHandler {
   ): Promise<ConnectionTestResult>
 }
 
-const registry = new Map<UserSecretKind, UserSecretKindHandler>()
+/**
+ * The app-owned registry of per-user secret KINDS, keyed by `kind`. Constructed by the
+ * composition root (via {@link defaultUserSecretKindRegistry} / `createBackendRegistries`)
+ * and injected into `UserSecretService`. A deployment teaches the platform a custom secret
+ * kind by holding the same instance and calling {@link register} — registration is by
+ * reference, so it never depends on module identity (the old module-global `Map` footgun is
+ * gone). Mirrors `RunnerBackendRegistry`. See `docs/initiatives/registry-di-migration.md`.
+ */
+export class UserSecretKindRegistry {
+  private readonly map = new Map<string, UserSecretKindHandler>()
 
-/** Register a per-user secret kind (call once at startup; later wins on conflict). */
-export function registerUserSecretKind(handler: UserSecretKindHandler): void {
-  registry.set(handler.kind, handler)
+  /** Register (or replace by `kind`) a secret-kind handler. Returns `this` for chaining. */
+  register(handler: UserSecretKindHandler): this {
+    this.map.set(handler.kind, handler)
+    return this
+  }
+
+  /** The handler for a secret kind, or undefined when unregistered. */
+  get(kind: string): UserSecretKindHandler | undefined {
+    return this.map.get(kind)
+  }
+
+  /** Every registered handler (for rendering the available connect forms). */
+  list(): UserSecretKindHandler[] {
+    return [...this.map.values()]
+  }
 }
 
-export function getUserSecretKind(kind: UserSecretKind): UserSecretKindHandler | undefined {
-  return registry.get(kind)
-}
-
-export function listUserSecretKinds(): UserSecretKindHandler[] {
-  return [...registry.values()]
+/** A registry pre-loaded with the built-in `github_pat` kind. */
+export function defaultUserSecretKindRegistry(): UserSecretKindRegistry {
+  return new UserSecretKindRegistry().register(githubPatUserSecretKind)
 }
 
 // The token is always validated against (and used against) public github.com. A
@@ -50,7 +75,7 @@ export function listUserSecretKinds(): UserSecretKindHandler[] {
 const GITHUB_API_BASE = 'https://api.github.com'
 
 /** The GitHub PAT kind: a single token secret, validated against github.com. */
-registerUserSecretKind({
+export const githubPatUserSecretKind: UserSecretKindHandler = {
   kind: 'github_pat',
   label: 'GitHub personal access token',
   configFields: [
@@ -83,4 +108,4 @@ registerUserSecretKind({
       return { ok: false, message: getErrorMessage(err) }
     }
   },
-})
+}

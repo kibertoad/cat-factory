@@ -1,5 +1,151 @@
 # @cat-factory/contracts
 
+## 0.82.0
+
+### Minor Changes
+
+- 5ce03c6: Frontend-config inspector: add repo autodetection, a frontend-directory field, clearer serve-mode
+  help, and collapsible field groups.
+
+  - **Detect from repo**: a new deterministic, checkout-free detector proposes a frontend config
+    (package manager from the lockfile, install command, build script + output dir from
+    package.json/framework markers, serve mode/script, and backend-binding env-var names from dotenv
+    examples). Exposed as `POST /workspaces/:ws/environments/detect-frontend-config`
+    (`detectFrontendConfig` on the environments connection service) and surfaced in the panel as a
+    non-binding preview the user reviews and applies (backend bindings are appended, never
+    overwriting existing service links).
+  - **Frontend directory**: `FrontendConfig.directory` scopes a monorepo frontend's build/serve to a
+    subdirectory (threaded into the harness job-body builder).
+  - **Serve mode**: replaced the single hint with per-mode descriptions and a note distinguishing it
+    from the separate env-injection axis.
+  - **Grouping**: the panel's fields are now collapsible sections (Build / Serve / Mocking / Env
+    injection / Backend bindings / Preview), collapsed by default.
+
+## 0.81.3
+
+### Patch Changes
+
+- 4a7a3f1: Preserve a task run's error trail across retries. A failed run's `failure` is now
+  appended to a new `failureHistory` on the fresh attempt (persisted in the shared
+  `agent_runs.detail`, so both runtimes get it with no migration), and cleared on the
+  running attempt — so the top failure banner disappears the moment the task restarts
+  while every previous error stays viewable in a "previous errors" history on the task
+  inspector. Applies to both retry (resume-from-failure) and restart-from-step.
+
+## 0.81.2
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+
+## 0.81.1
+
+### Patch Changes
+
+- 2a91615: Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview initiative):
+
+  - **Reverse CORS origin injection.** A `deployer` step now passes `inputs.frontendOrigins` — the
+    comma-joined browser origins (`http://localhost:<servePort>`) of every `frontend` frame that
+    binds the service being provisioned (the reverse of the frontend's `backendBindings`). A
+    backend manifest folds it into its CORS allow-list via `{{input.frontendOrigins}}` (HTTP-manifest
+    provider) or `{{frontendOrigins}}` (Kubernetes native adapter, flat scope), so an ephemeral
+    frontend can reach an ephemeral backend. Derivation is automatic (`frontendOriginsForService`,
+    a single workspace block-list read — no N+1); the CORS env-var mapping stays operator-authored,
+    and the backend must be re-provisioned to pick up a newly-linked frontend. The served port is
+    resolved through the shared `resolveFrontendServePort` (contracts) — the same reserved-port
+    sanitization the harness infra spec uses — so a `servePort` set to a reserved in-container port
+    (8080/8089) injects the port the app is actually served on (4173), not the raw value.
+  - **Binding-resolution correctness.** `resolveFrontendBindings` now dedupes a repeated `envVar`
+    deterministically (last non-empty binding wins, matching the injected env map) instead of leaving
+    it to insertion order. New `duplicateBindingEnvVars` predicate (contracts) surfaces the collision
+    for the inspector + run-start notes (a follow-up slice); it is advisory, not a schema reject
+    (bindings persist per-blur with an allowed empty `envVar`).
+
+  Runtime-neutral (all facades). The inspector visibility panel + run-detail projection (6b) and the
+  deterministic local preview host port (6c) are tracked follow-ups in
+  `docs/initiatives/frontend-preview-ui-testing.md`.
+
+## 0.81.0
+
+### Minor Changes
+
+- 67d3876: feat(github): search available repos server-side in the "add service from repo" picker.
+  The picker no longer prefetches the entire installation repo list on open (slow for a wide
+  App install or PAT with hundreds of repos, and it blocked filtering until the whole list
+  loaded). Instead the user types at least 3 characters and the (debounced) query is sent to
+  `GET /github/available-repos?q=…`, which returns only the `owner/name` matches. The `q`
+  param is optional, so the repo-link management panel's browse-all is unchanged. The now-moot
+  manual "refresh list" button is removed (each search hits GitHub live).
+
+## 0.80.1
+
+### Patch Changes
+
+- d7f6e1c: Correctness fixes across the engine, the Node facade, and the SPA stores:
+
+  - **Engine:** `finalizeMerge` and the merger resolver are now idempotent under
+    durable-driver replays — a re-resolved merger step on an already-`done` (= merged)
+    block is a no-op instead of re-merging, downgrading the block to `pr_ready`, and
+    raising a spurious `merge_review` notification. `approveStep` now runs under the same
+    optimistic-concurrency write as its siblings (`resolveDecision`/`requestStepChanges`),
+    so an approve holding a stale snapshot can no longer resurrect a run a racing reject
+    already failed (it now returns 409).
+  - **CI gate (behavior change):** a check run concluding `stale` (superseded by GitHub)
+    no longer fails the CI gate — previously it looped the `ci-fixer` against a check it
+    could never fix until the attempt budget failed the run. `cancelled`/`timed_out`/
+    `action_required` still fail the gate.
+  - **Node facade parity:** the retention sweep now prunes the `github_commits`
+    projection to `retention.commitMs` (previously it grew without bound; the Worker
+    already pruned it), and a new every-2-min GitHub reconcile sweeper re-syncs stale
+    repo projections and tombstones uninstalled installations — the backstop for missed
+    webhooks the Worker's `github-reconcile` cron already provided.
+  - **SPA stores:** the execution store now reconciles snapshots/events monotonically by
+    the run's `rev` (a lagging refresh can no longer revert a just-terminal run to
+    `running`), the requirements/clarity/brainstorm stores guard live-event upserts by
+    `updatedAt` (out-of-order events no longer revert just-submitted answers), and
+    `board.moveBlock`/`updateBlock` roll their optimistic mutation back on API failure.
+
+## 0.80.0
+
+### Minor Changes
+
+- 120de05: feat(testing): pipeline-builder toggle + Test Report surfacing for the test quality companion (PR 2)
+
+  Completes the test quality-control (QC) companion (see
+  `docs/initiatives/tester-quality-companion.md`) with its authoring + observability surfaces:
+
+  - **Pipeline builder**: a per-Tester-step toggle (enabled by default) turns the QC companion
+    off, and an optional estimate-gating panel runs the coverage audit only on tasks whose
+    estimate clears a threshold (mirroring the companion-gating panel). The estimator-required
+    hint now covers QC gating too.
+  - **Test Report window**: a "Coverage review" section renders each QC verdict (adequate /
+    gaps-found, the reviewer's feedback + concrete gaps, model, timestamp) plus the loop budget
+    and a "budget spent" badge — so a report that greenlit only after a QC-driven re-run shows
+    why it looped.
+  - **Persistence fix**: the pipeline create/update/clone API + `PipelineService` now thread
+    `testerQuality` (and the sibling `followUps`, which had the same latent gap) end-to-end, so a
+    custom pipeline's builder toggle actually persists instead of being silently stripped by the
+    request-body validator. This includes the persistence layer itself: new `follow_ups` +
+    `tester_quality` JSON columns on the `pipelines` table, mirrored D1 (migration
+    `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+    repos and read by the shared `rowToPipeline` mapper. A QC estimate gate is validated like
+    companion gating (a threshold must be set and a `task-estimator` must run earlier).
+  - **Conformance**: the full QC loop (audit → loop the Tester on gaps → conclude on an adequate
+    report) is now driven through an injected deterministic reviewer on every runtime, asserting
+    the verdicts + counters persist identically across D1 and Drizzle. A separate round-trip
+    assertion saves a custom pipeline with a `followUps` opt-out + a gated `testerQuality` config
+    and re-reads it from the store, so the new columns can't silently drop the toggles on either
+    runtime.
+
+  All new user-facing copy is translated across every shipped locale.
+
 ## 0.79.0
 
 ### Minor Changes

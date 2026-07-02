@@ -53,6 +53,8 @@ export interface JobView<TResult extends JobResultBase = JobResultBase> {
 interface JobEntry<TResult extends JobResultBase> extends JobView<TResult> {
   /** The in-flight work; retained so the entry isn't GC-surprising (not awaited externally). */
   promise: Promise<void>
+  /** Abort the in-flight run (see {@link JobRegistry.abortAll}); set while running only. */
+  abort?: (reason: string) => void
 }
 
 /** Watchdog windows that bound every job. Tunable via the container's env. */
@@ -78,7 +80,7 @@ export function loadRunnerLimits(env: NodeJS.ProcessEnv = process.env): RunnerLi
 }
 
 function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobView<TResult> {
-  const { promise: _promise, ...view } = entry
+  const { promise: _promise, abort: _abort, ...view } = entry
   return { ...view }
 }
 
@@ -125,6 +127,32 @@ export class JobRegistry<
     return entry ? toView(entry) : undefined
   }
 
+  /**
+   * Abort every RUNNING job (fires each run's abort signal, which kills its kubectl/helm
+   * children). The graceful-shutdown hook: a harness dying to SIGTERM must not orphan a
+   * live CLI subprocess mid-apply. Returns the number of jobs aborted.
+   */
+  abortAll(reason: string): number {
+    let aborted = 0
+    for (const entry of this.jobs.values()) {
+      if (entry.state === 'running' && entry.abort) {
+        entry.abort(reason)
+        aborted += 1
+      }
+    }
+    return aborted
+  }
+
+  /**
+   * How many jobs are still RUNNING. Graceful shutdown polls this so it can exit the moment the
+   * aborted jobs have actually settled instead of waiting out a fixed kill-grace window.
+   */
+  runningCount(): number {
+    let running = 0
+    for (const entry of this.jobs.values()) if (entry.state === 'running') running += 1
+    return running
+  }
+
   private async drive(entry: JobEntry<TResult>, job: TJob): Promise<void> {
     const controller = new AbortController()
     let killReason: 'inactivity' | 'max-duration' | undefined
@@ -153,6 +181,8 @@ export class JobRegistry<
       resetInactivity()
     }
     resetInactivity()
+    // Expose the abort for shutdown (see abortAll); cleared in `finally` once the job settles.
+    entry.abort = (reason) => controller.abort(new Error(reason))
 
     jobLog.info('deploy job started', {})
     try {
@@ -186,6 +216,7 @@ export class JobRegistry<
     } finally {
       clearTimeout(inactivity)
       clearTimeout(cap)
+      entry.abort = undefined
       entry.heartbeatAt = Date.now()
     }
   }

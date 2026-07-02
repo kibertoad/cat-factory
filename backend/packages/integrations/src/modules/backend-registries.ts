@@ -4,6 +4,10 @@ import {
   type EnvironmentBackendRegistry,
 } from './environments/environment-backends.js'
 import {
+  defaultUserSecretKindRegistry,
+  type UserSecretKindRegistry,
+} from './providers/userSecretKinds.js'
+import {
   defaultRunnerBackendRegistry,
   type RunnerBackendRegistry,
 } from './runners/runner-backends.js'
@@ -28,6 +32,13 @@ export interface BackendRegistries {
    * (the built-ins are the `manifest`/`kubernetes` BACKENDS, not custom manifest types).
    */
   customManifestTypeRegistry: CustomManifestTypeRegistry
+  /**
+   * The app-owned registry of per-user secret KINDS (a GitHub PAT built-in today). A
+   * deployment registers a custom kind by reference (`registries.userSecretKindRegistry.register(...)`)
+   * the same way it registers a custom backend; the facade threads it into `UserSecretService`
+   * so a programmatically-registered kind is described/tested regardless of module identity.
+   */
+  userSecretKindRegistry: UserSecretKindRegistry
 }
 
 /** Build the backend registries pre-loaded with the built-in (`manifest` + `kubernetes`) kinds. */
@@ -36,5 +47,6 @@ export function createBackendRegistries(): BackendRegistries {
     environmentBackendRegistry: defaultEnvironmentBackendRegistry(),
     runnerBackendRegistry: defaultRunnerBackendRegistry(),
     customManifestTypeRegistry: new CustomManifestTypeRegistry(),
+    userSecretKindRegistry: defaultUserSecretKindRegistry(),
   }
 }

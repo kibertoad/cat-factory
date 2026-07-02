@@ -26,7 +26,13 @@ import { startScheduleSweeper } from './recurring.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
+import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { startGitHubReconcileSweeper } from './githubReconcile.js'
+import {
+  DrizzleCommitProjectionRepository,
+  DrizzleRepoProjectionRepository,
+} from './repositories/github.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
@@ -217,6 +223,7 @@ export async function start(
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
       provisioningLogRepository: repos.provisioningLogRepository,
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
+      commitRepository: new DrizzleCommitProjectionRepository(db),
     },
     container.config.retention,
     clock,
@@ -245,6 +252,20 @@ export async function start(
   // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
   // unless the Kaizen feature is wired.
   const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
+  // Re-sync stale GitHub repo projections — the backstop for missed webhooks (the
+  // Worker's `github-reconcile` cron); no-op unless the GitHub App module is wired.
+  const stopGitHubReconcile = container.github
+    ? startGitHubReconcileSweeper(
+        {
+          repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+          installationRepository: new DrizzleGitHubInstallationRepository(db),
+          syncRepoById: (workspaceId, repoGithubId) =>
+            container.github!.syncService.syncRepoById(workspaceId, repoGithubId),
+        },
+        clock,
+        logger,
+      )
+    : () => {}
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process
@@ -261,6 +282,7 @@ export async function start(
     stopEnvironmentSweeper()
     stopNotificationEscalation()
     stopKaizenSweeper()
+    stopGitHubReconcile()
     stopRealtime()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
@@ -268,6 +290,15 @@ export async function start(
       await pool.end()
     } catch (err) {
       logger.error({ err: err instanceof Error ? err.message : String(err) }, 'shutdown error')
+    }
+    try {
+      // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
+      // released in their OWN try so a failing boss.stop()/pool.end() above can't skip them and
+      // orphan the in-flight agent children they abort. Graceful teardown beats the exit-hook
+      // backstop.
+      await container.onShutdown?.()
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'onShutdown error')
     }
     process.exit(0)
   }

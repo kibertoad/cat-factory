@@ -18,6 +18,7 @@ import {
   type BackendRegistries,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
+  type UserSecretKindRegistry,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
@@ -76,6 +77,9 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
+  type HarnessCallsRecordInput,
+  LlmObservabilityService,
+  makeHarnessCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -766,6 +770,7 @@ function buildNodeContainerExecutor(
   agentContextObservability?: AgentContextObservabilityService,
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
   resolveRepoOrigin?: ResolveRepoOrigin,
+  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -826,6 +831,9 @@ function buildNodeContainerExecutor(
             subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
+    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
+    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
+    ...(recordHarnessCalls ? { recordHarnessCalls } : {}),
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions
@@ -1086,6 +1094,7 @@ function buildNodeUserSecretService(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb | undefined,
   clock: Clock,
+  userSecretKindRegistry: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
@@ -1095,6 +1104,7 @@ function buildNodeUserSecretService(
     userSecretRepository: new DrizzleUserSecretRepository(db),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
+    userSecretKindRegistry,
   })
 }
 
@@ -1265,8 +1275,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
   // selectors. A deployment registers a custom backend by reference; the conformance suite
   // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
-  const { environmentBackendRegistry, runnerBackendRegistry, customManifestTypeRegistry } =
-    options.backendRegistries ?? createBackendRegistries()
+  const {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+  } = options.backendRegistries ?? createBackendRegistries()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
@@ -1369,7 +1383,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   )
   // The per-user generic secret store (a GitHub PAT today), shared by the user-secret
   // controller and the run-initiator PAT resolver below.
-  const userSecrets = buildNodeUserSecretService(env, db, clock)
+  const userSecrets = buildNodeUserSecretService(env, db, clock, userSecretKindRegistry)
   // Resolve the run initiator's stored GitHub PAT (when set) — preferred over the
   // App/env token by the container push-token mint + the engine GitHub client.
   const resolveUserGitHubToken: ResolveUserGitHubToken | undefined = userSecrets
@@ -1538,6 +1552,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     recordPrompts: config.observability.recordPrompts,
   })
+  // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
+  // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
+  // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
+  const recordHarnessCalls = makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: repos.llmCallMetricRepository,
+      idGenerator,
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+    }),
+  )
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
@@ -1574,6 +1599,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentContextObservability,
     resolveWebSearchEnabled,
     options.resolveRepoOrigin,
+    recordHarnessCalls,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds

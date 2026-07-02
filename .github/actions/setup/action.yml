@@ -1,0 +1,70 @@
+name: Setup pnpm + Node + install
+description: >
+  Shared toolchain setup for every job: pnpm, Node 26 (with the pnpm store cache),
+  the optional node_modules/.nuxt cache, the optional actions/cache-backed Turbo
+  remote cache, and a frozen-lockfile install. Checkout must have already run.
+
+inputs:
+  node-modules-cache:
+    description: >
+      Restore/save the node_modules + .nuxt cache. Deploy/publish lanes set 'false' —
+      they only use the pnpm store cache, so production artifacts install fresh.
+    default: 'true'
+  turbo-cache:
+    description: >
+      Start the actions/cache-backed Turbo remote cache so turbo tasks (pnpm build)
+      share outputs across jobs of a run. CI test/build jobs set 'true'; deploy,
+      release, and image-publish lanes keep it off — production artifacts are always
+      built fresh (mirroring docker-publish's no-cache philosophy).
+    default: 'false'
+  registry-url:
+    description: Passed to setup-node (the release job sets https://registry.npmjs.org).
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install pnpm
+      uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+    # An empty registry-url behaves as unset (setup-node only writes .npmrc auth
+    # config when the input is non-empty).
+    - name: Set up Node
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: 26
+        cache: pnpm
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Cache node_modules
+      if: ${{ inputs.node-modules-cache == 'true' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
+        # is a near-no-op on a hit and the frontend typecheck still resolves.
+        path: |
+          node_modules
+          backend/packages/*/node_modules
+          backend/runtimes/*/node_modules
+          backend/internal/*/node_modules
+          frontend/app/node_modules
+          frontend/app/.nuxt
+          deploy/backend/node_modules
+          deploy/frontend/node_modules
+          deploy/frontend/.nuxt
+          deploy/node/node_modules
+          deploy/local/node_modules
+        key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
+
+    # Localhost proxy backed by actions/cache that exports TURBO_API/TURBO_TOKEN/
+    # TURBO_TEAM for the job — no secrets, no external service. actions/cache is
+    # ref-scoped (a PR can read the base branch's cache but only write its own), so a
+    # fork PR can't poison main's turbo cache. Optional later hardening:
+    # TURBO_REMOTE_CACHE_SIGNATURE_KEY.
+    - name: Turbo remote cache (actions/cache-backed)
+      if: ${{ inputs.turbo-cache == 'true' }}
+      uses: rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9 # v2.5.0
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

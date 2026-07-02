@@ -28,12 +28,18 @@ export interface ResolvedFrontendBinding {
  * URL); every `mock` source — and every `service` with no live env — is left for the harness
  * to mock (no `serviceUrl`). Empty env-var bindings (an unfinished inspector row, allowed by
  * the schema) are dropped so nothing inert is ever injected.
+ *
+ * The injected env is a MAP keyed by `envVar`, so two bindings sharing a (non-empty) `envVar`
+ * can't both survive — we keep the LAST (deterministic: whatever the operator sees at the
+ * bottom of the inspector list wins) rather than letting Map insertion order decide silently.
+ * The duplicate names are surfaced by {@link duplicateBindingEnvVars} (inspector warning) and
+ * the run-start soft note; this just makes the resolved result match that "last wins" rule.
  */
 export function resolveFrontendBindings(
   config: FrontendConfig,
   liveServiceEnvUrls: ReadonlyMap<string, string>,
 ): ResolvedFrontendBinding[] {
-  const resolved: ResolvedFrontendBinding[] = []
+  const byEnvVar = new Map<string, ResolvedFrontendBinding>()
   for (const binding of config.backendBindings) {
     const envVar = binding.envVar.trim()
     if (!envVar) continue
@@ -41,9 +47,9 @@ export function resolveFrontendBindings(
       binding.source.kind === 'service'
         ? liveServiceEnvUrls.get(binding.source.serviceBlockId)
         : undefined
-    resolved.push(serviceUrl ? { envVar, serviceUrl } : { envVar })
+    byEnvVar.set(envVar, serviceUrl ? { envVar, serviceUrl } : { envVar })
   }
-  return resolved
+  return [...byEnvVar.values()]
 }
 
 /** A live-environment handle as far as the frontend binding resolution cares. */

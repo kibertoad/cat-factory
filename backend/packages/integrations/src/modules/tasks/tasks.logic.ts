@@ -1,7 +1,8 @@
-import type { TaskSourceKind } from '@cat-factory/kernel'
+import type { TaskSearchRepoScope, TaskSourceKind } from '@cat-factory/kernel'
 import type { TaskSourceProvider, TaskSourceRegistry, TaskContent } from '@cat-factory/kernel'
 import type { TaskRecord } from '@cat-factory/kernel'
 import { markdownToText, buildExcerpt, MapSourceRegistry } from '@cat-factory/kernel'
+import { parseGitHubIssueExternalId } from './github-issues.logic.js'
 
 export type { TaskContextView } from '@cat-factory/kernel'
 export { renderTaskContext } from '@cat-factory/kernel'
@@ -22,6 +23,28 @@ export function buildTaskExcerpt(content: TaskContent | TaskRecord, max = 280): 
   const description = markdownToText(content.description)
   const lead = description ? `${content.title} — ${description}` : content.title
   return buildExcerpt(lead, max)
+}
+
+/**
+ * Whether an imported task belongs to a repo scope. Only GitHub issues carry a
+ * repo (their `owner/repo#number` external id), so a repo-less source (Jira,
+ * Linear) always passes — the scope narrows the GitHub view without hiding
+ * trackers that have no repo notion. Matching is case-insensitive (GitHub
+ * owner/repo names are), mirroring the `repo:owner/name` search qualifier. A
+ * GitHub id that doesn't parse (a stale/hand-edited row) is treated as
+ * out-of-scope rather than leaking into every repo's list.
+ */
+export function taskInRepoScope(
+  record: Pick<TaskRecord, 'source' | 'externalId'>,
+  scope: TaskSearchRepoScope,
+): boolean {
+  if (record.source !== 'github') return true
+  const parts = parseGitHubIssueExternalId(record.externalId)
+  if (!parts) return false
+  return (
+    parts.owner.toLowerCase() === scope.owner.toLowerCase() &&
+    parts.repo.toLowerCase() === scope.repo.toLowerCase()
+  )
 }
 
 /**

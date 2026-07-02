@@ -33,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, labels, archived, builtin, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, labels, archived, builtin, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -45,6 +45,8 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+        pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
         pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         pipeline.archived ? 1 : null,
         pipeline.builtin ? 1 : null,
@@ -59,7 +61,7 @@ export class D1PipelineRepository implements PipelineRepository {
     // `version` IS rewritten so a reseed bumps the stored copy to the current catalog version.
     await this.db
       .prepare(
-        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, labels = ?, archived = ?, version = ? WHERE workspace_id = ? AND id = ?',
+        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, follow_ups = ?, tester_quality = ?, labels = ?, archived = ?, version = ? WHERE workspace_id = ? AND id = ?',
       )
       .bind(
         pipeline.name,
@@ -69,6 +71,8 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+        pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
         pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         pipeline.archived ? 1 : null,
         pipeline.version ?? null,

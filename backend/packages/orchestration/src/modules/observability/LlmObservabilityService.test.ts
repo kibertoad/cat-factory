@@ -10,8 +10,10 @@ import type {
   LlmPromptChainTip,
   LlmTraceSink,
 } from '@cat-factory/kernel'
+import type { HarnessCallMetric } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
+  makeHarnessCallRecorder,
   MAX_BODY_CHARS,
   type RecordLlmCallInput,
 } from './LlmObservabilityService.js'
@@ -417,5 +419,117 @@ describe('LlmObservabilityService.exportForExecution', () => {
     expect(out.executionId).toBe('exec')
     expect(out.generatedAt).toBe(1700)
     expect(out.totals.calls).toBe(1)
+  })
+})
+
+describe('makeHarnessCallRecorder', () => {
+  function metric(overrides: Partial<HarnessCallMetric> = {}): HarnessCallMetric {
+    return {
+      model: 'claude-opus-4-8',
+      promptText: '[{"role":"system","content":"s"}]',
+      messageCount: 1,
+      responseText: 'hi',
+      reasoningText: '',
+      inputTokens: 120,
+      cachedInputTokens: 20,
+      outputTokens: 30,
+      finishReason: 'end_turn',
+      ...overrides,
+    }
+  }
+
+  it('maps a harness call onto a recorded llm_call_metrics row (tokens, bodies, vendor)', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      calls: [metric()],
+    })
+
+    expect(repo.recorded).toHaveLength(1)
+    const m = repo.recorded[0]!
+    expect(m.provider).toBe('claude')
+    // The call's own model wins over the dispatch `provider:model`.
+    expect(m.model).toBe('claude-opus-4-8')
+    expect(m.promptTokens).toBe(120)
+    expect(m.cachedPromptTokens).toBe(20)
+    expect(m.completionTokens).toBe(30)
+    expect(m.totalTokens).toBe(150)
+    expect(m.finishReason).toBe('end_turn')
+    expect(m.responseText).toBe('hi')
+    // The CLIs expose no per-HTTP timing, so both are zero (overhead derives zero).
+    expect(m.totalMs).toBe(0)
+    expect(m.upstreamMs).toBe(0)
+    expect(m.overheadMs).toBe(0)
+    expect(m.ok).toBe(true)
+  })
+
+  it('records calls in order so the prompt-delta chain stays intact', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      calls: [
+        metric({
+          promptText: '[{"role":"system","content":"s"}]',
+          messageCount: 1,
+          responseText: 'a',
+        }),
+        metric({
+          promptText: '[{"role":"system","content":"s"},{"role":"assistant","content":"a"}]',
+          messageCount: 2,
+          responseText: 'b',
+        }),
+      ],
+    })
+
+    expect(repo.recorded).toHaveLength(2)
+    // Second row chained onto the first: only the new tail message is stored as a delta.
+    expect(repo.recorded[1]!.promptPrefixCount).toBe(1)
+    expect(repo.chainTipReads).toBeGreaterThan(0)
+  })
+
+  it('mints deterministic per-call ids off the job id so a replay is idempotent', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [metric({ responseText: 'a' }), metric({ responseText: 'b' })],
+    })
+
+    // Ids are derived from the job id + call index, so a durable-driver replay of the
+    // same job produces the SAME ids (a duplicate insert the store then rejects).
+    expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
   })
 })
