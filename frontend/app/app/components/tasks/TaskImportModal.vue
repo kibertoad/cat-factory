@@ -1,13 +1,14 @@
 <script setup lang="ts">
-// Import an issue from a connected task source (by key or URL). An imported issue
-// can be attached to an existing task for context from the inspector (see
-// TaskContextIssues.vue), or turned into a new board task here: pick a container
-// (service frame or module), then click a search hit to open the prefilled
-// add-task form (title seeded, issue staged as linked context) where the user
-// confirms the pipeline / presets before creating it. A separate icon button on
-// each row opens the issue on GitHub.
-import type { TaskSearchResult, TaskSourceKind } from '~/types/domain'
-import type { AddTaskPrefill } from '~/stores/ui'
+// Create a board task from a connected tracker's issue. Pick a container (service
+// frame or module), then use the inline picker below to find an issue (search by
+// title, pick an already-imported one, or paste a URL/key) — choosing one opens the
+// prefilled add-task form (title seeded, issue staged as linked context) where the
+// user confirms the pipeline / presets before it's created. This is the same picker
+// the add-task form uses for "context issues", so the two behave identically. A
+// pasted parent/epic reference can instead be spawned as a whole linked task group.
+import type { TaskSourceKind } from '~/types/domain'
+import type { PendingContext } from '~/composables/useContextLinking'
+import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t } = useI18n()
@@ -24,6 +25,9 @@ const open = computed({
 })
 const back = useIntegrationBack(open)
 
+// The tracker being browsed. Owned here (not the picker) so the epic action and the
+// ref-input placeholder share the same selected source; passed to the picker via
+// `v-model:source` with `always-show-source` so it's always visible + selectable.
 const source = ref<TaskSourceKind | undefined>(undefined)
 const ref_ = ref('')
 const importing = ref(false)
@@ -34,59 +38,10 @@ const title = computed(() =>
   ui.taskImport?.containerId ? t('tasks.import.titleCreate') : t('tasks.import.titleBrowse'),
 )
 
-const sourceItems = computed(() =>
-  tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
-)
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
-const searchable = computed(() => descriptor.value?.searchable ?? false)
 
-// The container (service frame or module) a new task is created in. Also the repo
-// scope for the issue search — declared up here so the search watch can read it.
+// The container (service frame or module) a new task is created in.
 const containerId = ref<string | undefined>(undefined)
-
-// Browse the tracker by free text so an issue can be turned into a task without
-// knowing its key. Debounced; a created/imported hit also lands in the list below.
-const searchQuery = ref('')
-const searchResults = ref<TaskSearchResult[]>([])
-const searching = ref(false)
-const searchError = ref<string | null>(null)
-
-let searchTimer: ReturnType<typeof setTimeout> | undefined
-// Re-run when the chosen container changes too: a GitHub search is scoped to the
-// selected service's repo, so switching containers re-scopes the results.
-watch([searchQuery, source, () => containerId.value], () => {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchResults.value = []
-  searchError.value = null
-  const q = searchQuery.value.trim()
-  if (!q || !searchable.value) return
-  searchTimer = setTimeout(runSearch, 300)
-})
-
-async function runSearch() {
-  const q = searchQuery.value.trim()
-  if (!q || !source.value) return
-  searching.value = true
-  searchError.value = null
-  try {
-    // Scope to the selected container's repo so hits stay in-repo and a pasted
-    // URL / bare issue number resolves to the exact issue.
-    searchResults.value = await tasks.search(source.value, q, containerId.value)
-  } catch (e) {
-    searchResults.value = []
-    searchError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    searching.value = false
-  }
-}
-
-// Search hits not yet imported (imported ones already render in the list below).
-const importedIds = computed(
-  () => new Set(tasks.tasks.filter((t) => t.source === source.value).map((t) => t.externalId)),
-)
-const freshHits = computed(() =>
-  searchResults.value.filter((r) => !importedIds.value.has(r.externalId)),
-)
 
 // Containers a new task can be created in: every service frame and module on the
 // board. Modules are labelled with their parent frame so the choice is unambiguous.
@@ -104,69 +59,28 @@ const containerItems = computed(() =>
 watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
-    searchQuery.value = ''
-    searchResults.value = []
-    searchError.value = null
     source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
-    // Opened from a service frame → preselect it as the create-in target (and the
-    // search's repo scope); otherwise fall back to the first container on the board.
+    // Opened from a service frame → preselect it as the create-in target; otherwise
+    // fall back to the first container on the board.
     containerId.value = ui.taskImport?.containerId ?? containerItems.value[0]?.value
     tasks.loadTasks().catch(() => {})
   }
 })
 
-// Selecting an issue hands off to the add-task form, prefilled with the issue title
-// and the issue staged as linked context (so agents see its description + comments).
-// The user still confirms pipeline / preset there before the task is created. The
-// issue body is carried when already in hand (imported issues); for a search hit it's
-// resolved in the add-task form (by importing). Either way the form shows it read-only
-// and folds it into the new task's description, so the original description is visible
-// and included — the user adds their own notes on top.
-function selectIssue(
-  issue: { externalId: string; title: string; status?: string; description?: string },
-  needsImport: boolean,
-) {
-  if (!source.value || !containerId.value) return
-  const prefill: AddTaskPrefill = {
-    title: issue.title,
-    context: [
-      {
-        kind: 'task',
-        source: source.value,
-        externalId: issue.externalId,
-        title: `${issue.externalId} · ${issue.title}`,
-        subtitle: issue.status || undefined,
-        icon: descriptor.value?.icon,
-        description: issue.description || undefined,
-        needsImport,
-      },
-    ],
-  }
+// Choosing an issue in the picker hands off to the add-task form, prefilled with the
+// issue title and the issue staged as linked context (so agents see its description +
+// comments). The user still confirms pipeline / preset there before the task is
+// created. A search hit / pasted ref carries `needsImport`, so the add-task form
+// resolves its body (by importing) and folds it into the new task's description; an
+// already-imported issue carries its body directly.
+function createFromPick(item: PendingContext) {
+  if (!containerId.value) return
+  // The picker titles rows as "EXTERNALID · Title"; seed the task with the clean
+  // title. A pasted ref has no title (title === the raw ref), so leave it blank for
+  // the user to name in the form.
+  const seededTitle = item.title === item.externalId ? '' : item.title.replace(/^[^·]+·\s*/, '')
   ui.closeTaskImport()
-  ui.openAddTask(containerId.value, prefill)
-}
-
-async function doImport() {
-  const value = ref_.value.trim()
-  if (!value || !source.value) return
-  importing.value = true
-  try {
-    const task = await tasks.importTask(source.value, value)
-    ref_.value = ''
-    toast.add({
-      title: t('tasks.import.imported', { title: task.title }),
-      icon: 'i-lucide-file-down',
-    })
-  } catch (e) {
-    toast.add({
-      title: t('tasks.import.importFailed'),
-      description: e instanceof Error ? e.message : String(e),
-      icon: 'i-lucide-triangle-alert',
-      color: 'error',
-    })
-  } finally {
-    importing.value = false
-  }
+  ui.openAddTask(containerId.value, { title: seededTitle, context: [item] })
 }
 
 // Spawn the referenced issue as an EPIC: an epic node + a task per child issue (into the
@@ -227,150 +141,63 @@ async function doSpawnEpic() {
         </div>
       </div>
 
+      <!-- No service frame yet → nowhere to create a task. -->
+      <p v-else-if="!containerItems.length" class="text-center text-xs text-slate-500">
+        {{ t('tasks.import.needFrameFirst') }}
+      </p>
+
       <!-- Main form -->
       <div v-else class="space-y-4">
-        <UFormField v-if="sourceItems.length > 1" :label="t('tasks.import.source')">
-          <USelect v-model="source" :items="sourceItems" class="w-full" />
+        <!-- Where the new task lands (preselected when opened from a service frame). -->
+        <UFormField :label="t('tasks.import.createTasksIn')">
+          <USelect
+            v-model="containerId"
+            :items="containerItems"
+            :placeholder="t('tasks.import.pickContainer')"
+            class="w-full"
+          />
         </UFormField>
 
-        <div class="flex items-end gap-2">
-          <UFormField :label="descriptor?.refLabel ?? t('tasks.import.refLabel')" class="flex-1">
-            <UInput
-              v-model="ref_"
-              :placeholder="descriptor?.refPlaceholder"
-              class="w-full"
-              @keydown.enter="doImport"
-            />
-          </UFormField>
-          <UButton
-            color="primary"
-            icon="i-lucide-file-down"
-            :loading="importing"
-            :disabled="!ref_.trim()"
-            @click="doImport"
-          >
-            {{ t('tasks.import.import') }}
-          </UButton>
-          <UButton
-            color="primary"
-            variant="soft"
-            icon="i-lucide-layers"
-            :loading="importing"
-            :disabled="!ref_.trim() || !containerId"
-            :title="
-              containerId
-                ? t('tasks.import.asEpicTitleReady')
-                : t('tasks.import.asEpicTitleNeedsContainer')
-            "
-            @click="doSpawnEpic"
-          >
+        <!-- Find an issue and create a task from it. Same picker the add-task form
+             uses for context issues: search by title, pick an already-imported one,
+             or paste a URL/key — choosing one opens the prefilled add-task form. The
+             source selector is always shown here so it's clear which tracker is in
+             use. -->
+        <UFormField :label="t('tasks.import.searchIssues')">
+          <ContextIssuePicker v-model:source="source" always-show-source @pick="createFromPick" />
+        </UFormField>
+
+        <!-- Secondary: spawn a parent/epic issue as a whole linked task group. -->
+        <div class="space-y-2 border-t border-slate-800 pt-3">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
             {{ t('tasks.import.asEpic') }}
-          </UButton>
-        </div>
-
-        <!-- Container for epic children when spawning from a pasted ref (the shared
-             "Create tasks in" selector below covers the search-results case). -->
-        <UFormField
-          v-if="containerItems.length && !freshHits.length"
-          :label="t('tasks.import.epicChildrenContainer')"
-          class="w-72"
-        >
-          <USelect
-            v-model="containerId"
-            :items="containerItems"
-            :placeholder="t('tasks.import.pickContainer')"
-            class="w-full"
-          />
-        </UFormField>
-
-        <!-- Browse: search the tracker by title so an issue can be turned into a
-             task without knowing its key. -->
-        <UFormField v-if="searchable" :label="t('tasks.import.searchIssues')">
-          <UInput
-            v-model="searchQuery"
-            :icon="searching ? 'i-lucide-loader-circle' : 'i-lucide-search'"
-            :ui="{ leadingIcon: searching ? 'animate-spin' : '' }"
-            :placeholder="t('tasks.import.searchPlaceholder')"
-            class="w-full"
-          />
-        </UFormField>
-
-        <!-- Shared target container for every "Create task" action below. -->
-        <UFormField
-          v-if="containerItems.length && freshHits.length"
-          :label="t('tasks.import.createTasksIn')"
-          class="w-72"
-        >
-          <USelect
-            v-model="containerId"
-            :items="containerItems"
-            :placeholder="t('tasks.import.pickContainer')"
-            class="w-full"
-          />
-        </UFormField>
-        <p
-          v-else-if="!containerItems.length && freshHits.length"
-          class="text-[11px] text-slate-500"
-        >
-          {{ t('tasks.import.needFrameFirst') }}
-        </p>
-
-        <!-- Search results (not yet imported): click a hit to create a task from it
-             (opens the prefilled add-task form); the icon button views it on GitHub. -->
-        <div v-if="searchError" class="text-[11px] text-amber-400">
-          {{ t('tasks.import.searchFailed', { error: searchError }) }}
-        </div>
-        <div v-if="freshHits.length" class="space-y-2">
-          <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-            {{ t('tasks.import.searchResults') }}
-          </h3>
-          <div
-            v-for="hit in freshHits"
-            :key="`hit:${hit.source}:${hit.externalId}`"
-            class="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3 transition-colors hover:border-primary-500/60 hover:bg-slate-900"
-          >
-            <button
-              type="button"
-              class="min-w-0 flex-1 text-start disabled:cursor-not-allowed disabled:opacity-60"
-              :disabled="!containerId"
+          </span>
+          <div class="flex items-end gap-2">
+            <UFormField :label="descriptor?.refLabel ?? t('tasks.import.refLabel')" class="flex-1">
+              <UInput
+                v-model="ref_"
+                :placeholder="descriptor?.refPlaceholder"
+                class="w-full"
+                @keydown.enter="doSpawnEpic"
+              />
+            </UFormField>
+            <UButton
+              color="primary"
+              variant="soft"
+              icon="i-lucide-layers"
+              :loading="importing"
+              :disabled="!ref_.trim() || !containerId"
               :title="
                 containerId
-                  ? t('tasks.import.createFromIssue')
-                  : t('tasks.import.pickContainerFirst')
+                  ? t('tasks.import.asEpicTitleReady')
+                  : t('tasks.import.asEpicTitleNeedsContainer')
               "
-              @click="selectIssue(hit, true)"
+              @click="doSpawnEpic"
             >
-              <span class="block truncate text-sm font-medium text-white">
-                {{ hit.externalId }} · {{ hit.title }}
-              </span>
-              <span v-if="hit.excerpt" class="mt-0.5 line-clamp-2 block text-xs text-slate-500">
-                {{ hit.excerpt }}
-              </span>
-            </button>
-            <div class="flex shrink-0 items-center gap-2">
-              <UBadge v-if="hit.status" color="neutral" variant="soft" size="xs">
-                {{ hit.status }}
-              </UBadge>
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                icon="i-lucide-external-link"
-                :to="hit.url"
-                target="_blank"
-                rel="noopener"
-                :aria-label="t('tasks.import.viewOnGitHub', { id: hit.externalId })"
-              />
-            </div>
+              {{ t('tasks.import.asEpic') }}
+            </UButton>
           </div>
         </div>
-
-        <p
-          v-if="!freshHits.length && !searchQuery.trim()"
-          class="text-center text-xs text-slate-500"
-        >
-          {{ t('tasks.import.emptyHint') }}
-        </p>
       </div>
     </template>
   </UModal>
