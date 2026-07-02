@@ -17,6 +17,15 @@ export interface WorkRunner {
     decisionId: string,
     choice: string,
   ): Promise<void>
+  /**
+   * Wake a spend-paused run that is parked waiting for its budget so it re-checks and resumes
+   * immediately, instead of only on its next periodic budget re-check. Optional: a runner whose
+   * `startRun` already re-drives a paused run from scratch (e.g. the pg-boss runner re-enqueues
+   * the same run id) needs no separate wake and can leave this unimplemented. On the Cloudflare
+   * runner the paused run's Workflows instance stays alive parked on a `waitForEvent`, so this
+   * delivers the event that wakes it. Best-effort + idempotent, like `signalDecision`.
+   */
+  signalResume?(workspaceId: string, executionId: string): Promise<void>
   /** Best-effort cancel of the durable run. */
   cancelRun(workspaceId: string, executionId: string): Promise<void>
 }

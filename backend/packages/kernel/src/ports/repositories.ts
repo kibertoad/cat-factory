@@ -144,18 +144,32 @@ export interface ExecutionRepository {
    */
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>
   /**
-   * Insert a brand-new run, but ONLY if the block has no other LIVE execution run
-   * (`running`/`blocked`/`paused`). Enforced atomically by a partial unique index on
-   * `(workspace_id, block_id)` over live execution rows, so two concurrent starts
-   * (double-click, a recurring fire racing a manual start, a notification retry racing a
-   * human retry) can never create two live runs — two drivers, two containers — for one
-   * block. Returns `true` when the row was inserted (and sets the in-memory `execution.rev`
-   * to its fresh value); returns `false` with NO write when a live run already exists, so
-   * the caller rejects the duplicate start rather than materialising a second run. Callers
-   * `deleteByBlock` first, so in the uncontended path there is never a live row to conflict
-   * with — the guard only bites the genuinely-concurrent double start.
+   * Atomically replace a block's prior run with a brand-new live one, but ONLY if no OTHER
+   * live execution run (`running`/`blocked`/`paused`) exists for the block. In ONE
+   * transaction it (1) deletes the block's terminal (`done`/`failed`) rows plus, when
+   * `replaceId` is given, that specific prior row (the run the caller is knowingly
+   * superseding — e.g. a `restart` that already tore its source down), then (2) inserts the
+   * new run guarded by the partial unique index on `(workspace_id, block_id)` over live rows.
+   *
+   * Doing the cleanup and the insert as a single unit is what makes the one-live-run-per-block
+   * invariant hold under concurrency: a losing insert never deletes the winner (the delete only
+   * ever removes terminal rows and the caller's own `replaceId` — never another writer's fresh
+   * live row), and the index rejects a second live insert. So two genuinely-concurrent starts
+   * (double-click, a recurring fire racing a manual start, a notification retry racing a human
+   * retry) can never create two live runs — two drivers, two containers — for one block. This
+   * is why callers MUST NOT `deleteByBlock` first: an unconditional pre-delete would wipe a
+   * concurrent winner and re-open the exact race this method closes.
+   *
+   * Returns `true` when the row was inserted (and sets the in-memory `execution.rev` to its
+   * fresh value); returns `false` with NO net write (the transaction still commits the
+   * terminal/`replaceId` cleanup, but no new run) when another live run already exists, so the
+   * caller rejects the duplicate start rather than materialising a second run.
    */
-  insertLive(workspaceId: string, execution: ExecutionInstance): Promise<boolean>
+  insertLive(
+    workspaceId: string,
+    execution: ExecutionInstance,
+    opts?: { replaceId?: string },
+  ): Promise<boolean>
   /**
    * Optimistic-concurrency write: persist `execution` only if the stored row's `rev`
    * still equals the `rev` last read onto this instance. Returns `true` (and bumps the

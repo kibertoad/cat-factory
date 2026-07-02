@@ -340,19 +340,59 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(await repo.insertLive(workspace.id, run('exec_live_c', 'running'))).toBe(false)
 
         // Once the first run reaches a terminal state it leaves the partial index, freeing the
-        // block for a fresh live run (the retry-after-failure path) — even without a delete,
-        // which proves the index predicate excludes done/failed rows.
+        // block for a fresh live run (the retry-after-failure path). `insertLive` also atomically
+        // clears the terminal row in the SAME write, so the block keeps EXACTLY one row (the new
+        // live one) — the board's by-block projection never sees a stale terminal alongside it.
         first.status = 'done'
         await repo.upsert(workspace.id, first)
         expect(await repo.insertLive(workspace.id, run('exec_live_d', 'running'))).toBe(true)
+        expect((await repo.getByBlock(workspace.id, 'blk_live'))?.id).toBe('exec_live_d')
+        // The superseded terminal run was cleaned up in the same transaction.
+        expect(await repo.get(workspace.id, 'exec_live_a')).toBeNull()
+      })
+
+      it('supersedes the caller’s own prior LIVE run via replaceId (retry/restart)', async () => {
+        // `restart` tears its source run down and replaces it while that source is still LIVE
+        // (running/paused/blocked). It passes the source id as `replaceId` so `insertLive`
+        // removes THAT specific row and inserts the new one atomically — WITHOUT an unconditional
+        // delete that would let a concurrent start wipe the winner. Proven on both runtimes.
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+        const run = (id: string, status: ExecutionInstance['status']): ExecutionInstance => ({
+          id,
+          blockId: 'blk_rep',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status,
+          initiatedBy: null,
+        })
+
+        const source = run('exec_src', 'running')
+        expect(await repo.insertLive(workspace.id, source)).toBe(true)
+
+        // Without replaceId, a second live insert is refused — the source is still live.
+        expect(await repo.insertLive(workspace.id, run('exec_other', 'running'))).toBe(false)
+        expect((await repo.getByBlock(workspace.id, 'blk_rep'))?.id).toBe('exec_src')
+
+        // WITH replaceId pointing at the live source, the insert supersedes it and lands.
+        expect(
+          await repo.insertLive(workspace.id, run('exec_restart', 'running'), {
+            replaceId: 'exec_src',
+          }),
+        ).toBe(true)
+        expect((await repo.getByBlock(workspace.id, 'blk_rep'))?.id).toBe('exec_restart')
+        expect(await repo.get(workspace.id, 'exec_src')).toBeNull()
       })
     })
 
-    describe('agent_runs sweeper read primitives (listStale + liveRunIds)', () => {
-      // The stale-run sweeper reads these two `agent_runs` primitives to recover/flag orphaned
-      // runs (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local
-      // orphaned-container reap). Assert they behave identically on D1 and Postgres so a facade
-      // can't silently drift the recovery path.
+    describe('agent_runs sweeper read primitives (listStale + liveRunIds + listPausedExecutions)', () => {
+      // The stale-run sweeper reads these `agent_runs` primitives to recover/flag orphaned runs
+      // (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local orphaned-container
+      // reap; `listPausedExecutions` → the Node/local budget-freed auto-resume). Assert they behave
+      // identically on D1 and Postgres so a facade can't silently drift the recovery path.
       it('listStale carries updatedAt (running only) and liveRunIds filters terminal runs', async () => {
         const app = harness.makeApp()
         const runs = app.agentRunRepository()
@@ -408,6 +448,15 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(live.has('exec_sweep_failed')).toBe(false)
         expect(live.has('exec_sweep_missing')).toBe(false)
         expect(await runs.liveRunIds([])).toEqual([])
+
+        // `listPausedExecutions` returns ONLY the spend-paused execution rows (the Node/local
+        // auto-resume candidates) — never running/blocked/terminal ones.
+        const pausedIds = new Set((await runs.listPausedExecutions()).map((r) => r.id))
+        expect(pausedIds.has('exec_sweep_paused')).toBe(true)
+        expect(pausedIds.has('exec_sweep_running')).toBe(false)
+        expect(pausedIds.has('exec_sweep_blocked')).toBe(false)
+        expect(pausedIds.has('exec_sweep_done')).toBe(false)
+        expect(pausedIds.has('exec_sweep_failed')).toBe(false)
       })
     })
 

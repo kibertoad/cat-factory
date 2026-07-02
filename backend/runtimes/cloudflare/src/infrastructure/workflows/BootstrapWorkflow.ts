@@ -65,24 +65,25 @@ export class BootstrapWorkflow extends WorkflowEntrypoint<Env, BootstrapWorkflow
           return container.bootstrap.service.pollBootstrapJob(workspaceId, jobId)
         })) as BootstrapPollResult
       } catch (error) {
+        // Do NOT return on a thrown poll. Returning makes this Workflows instance TERMINAL, and
+        // the cron sweep can't re-drive a terminal instance (its id can't be recreated) — it
+        // takes the `finalizeOrphan` branch and STOPS the job, force-failing a bootstrap that was
+        // merely busy (a long clone/install) instead of recovering it. So we keep the instance
+        // alive and keep polling with the durable sleep between attempts (cheap, survives
+        // eviction): the container's own inactivity + max-duration watchdogs bound the work, a
+        // vanished container surfaces as a 404→`failed` RESULT (handled below, not a throw), and
+        // `jobMaxPolls` is the sole backstop for a container that never reports terminal.
+        //
+        // `pollReadFailures` is therefore diagnostic ONLY (how long we've been blind) — it drives
+        // no control flow here, unlike the ExecutionWorkflow job/gate loops where a thrown poll
+        // past `jobPollFailureTolerance` fails the run. A bootstrap has no cheap way to tell a
+        // half-alive-but-busy container from a dead one, so we favour recovery and let the poll
+        // budget + container watchdogs (not a throw-count) decide the end.
         pollReadFailures += 1
         log.warn(
           { err: error instanceof Error ? error.message : String(error), pollReadFailures },
           'bootstrap poll could not read job status; treating as still running and retrying',
         )
-        // Sustained unreachability past tolerance: do NOT return. Returning makes this
-        // Workflows instance TERMINAL, and the cron sweep can't re-drive a terminal
-        // instance (its id can't be recreated) — it takes the `finalizeOrphan` branch
-        // and STOPS the job, force-failing a bootstrap that was merely busy (a long
-        // clone/install) instead of recovering it. So we keep the instance alive and
-        // keep polling with the durable sleep between attempts (cheap, survives
-        // eviction): the container's own inactivity + max-duration watchdogs bound the
-        // work, a vanished container surfaces as a 404→`failed` value (handled below),
-        // and `jobMaxPolls` backstops a container that never reports terminal. A brief
-        // unreachability window is exactly what the tolerance was meant to ride out.
-        if (pollReadFailures === execConfig.jobPollFailureTolerance) {
-          log.warn('bootstrap poll unreadable past tolerance; keeping instance alive and polling')
-        }
         continue
       }
       pollReadFailures = 0

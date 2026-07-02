@@ -125,16 +125,32 @@ export class D1ExecutionRepository implements ExecutionRepository {
     if (row) execution.rev = row.rev
   }
 
-  async insertLive(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
+  async insertLive(
+    workspaceId: string,
+    execution: ExecutionInstance,
+    opts?: { replaceId?: string },
+  ): Promise<boolean> {
     // One live run per block, enforced atomically by the partial unique index
-    // `uniq_live_execution_per_block` (migration 0033) on (workspace_id, block_id) over
-    // live execution rows. A fresh run always has a unique new id, so the ONLY conflict
-    // this insert can hit is that block index — and DO NOTHING makes a concurrent
-    // double-start a clean no-op (empty RETURNING) instead of a second live run. The
+    // `uniq_live_execution_per_block` (migration 0033) on (workspace_id, block_id) over live
+    // execution rows. The cleanup and the insert run as ONE `db.batch` transaction so a losing
+    // concurrent insert can never wipe the winner: the DELETE only ever removes the block's
+    // TERMINAL rows and the caller's own `replaceId` (the run it is knowingly superseding) —
+    // NEVER another writer's fresh live row — and the index then rejects a second live insert
+    // via DO NOTHING (empty RETURNING). Callers therefore MUST NOT `deleteByBlock` first (an
+    // unconditional pre-delete would remove a concurrent winner and re-open the race). The
     // ON CONFLICT target MUST mirror the index predicate exactly.
     const now = this.clock.now()
     const detail = executionToDetail(execution)
-    const row = await this.db
+    // `replaceId ?? null`: with no replaceId, `id = NULL` matches nothing, so only terminal
+    // rows are cleared.
+    const cleanup = this.db
+      .prepare(
+        `DELETE FROM agent_runs
+         WHERE workspace_id = ? AND block_id = ? AND kind = 'execution'
+           AND (status NOT IN ('running', 'blocked', 'paused') OR id = ?)`,
+      )
+      .bind(workspaceId, execution.blockId, opts?.replaceId ?? null)
+    const insert = this.db
       .prepare(
         `INSERT INTO agent_runs
            (workspace_id, id, kind, block_id, status, detail, created_at, updated_at,
@@ -158,7 +174,10 @@ export class D1ExecutionRepository implements ExecutionRepository {
         workspaceId,
         execution.blockId,
       )
-      .first<{ rev: number }>()
+    // `db.batch` runs both statements sequentially in a single implicit transaction, so the
+    // INSERT sees the DELETE's effect and the pair is atomic (all-or-nothing).
+    const results = await this.db.batch<{ rev: number }>([cleanup, insert])
+    const row = results[1]?.results?.[0]
     if (!row) return false
     execution.rev = row.rev
     return true
