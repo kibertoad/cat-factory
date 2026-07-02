@@ -25,11 +25,21 @@ export function planResumedSteps(prev: { steps: PipelineStep[]; currentStep: num
 }
 
 /**
+ * The most prior failures kept in a run's error trail. Each {@link AgentFailure} can carry
+ * a large `detail` (an HTTP body / harness reason) and rides in the shared `agent_runs.detail`
+ * JSON that is re-serialized on every step-progress write, so an uncapped trail would bloat
+ * every write for the rest of a flaky run's life. We keep only the most recent few — the
+ * newest errors are the ones worth looking at — and drop the oldest.
+ */
+export const MAX_FAILURE_HISTORY = 20
+
+/**
  * Accumulate a failed run's error trail across a retry/restart: append the outgoing
  * attempt's own {@link AgentFailure} (if it has one) to the failures it already carried,
- * oldest→newest. The fresh attempt is minted with `failure` CLEARED (so the top failure
- * banner, keyed on `status === 'failed'`, disappears the moment the task restarts) but
- * this history preserved — so every prior error stays viewable. Called by both
+ * oldest→newest, keeping at most the {@link MAX_FAILURE_HISTORY} most recent. The fresh
+ * attempt is minted with `failure` CLEARED (so the top failure banner, keyed on
+ * `status === 'failed'`, disappears the moment the task restarts) but this history
+ * preserved — so every recent prior error stays viewable. Called by both
  * {@link ExecutionService.retry} and {@link ExecutionService.restartFromStep}.
  *
  * Pure + deterministic so it can be unit-tested without the service's ports.
@@ -39,7 +49,8 @@ export function carryForwardFailures(prev: {
   failureHistory?: AgentFailure[]
 }): AgentFailure[] {
   const history = prev.failureHistory ?? []
-  return prev.failure ? [...history, prev.failure] : history
+  const next = prev.failure ? [...history, prev.failure] : history
+  return next.length > MAX_FAILURE_HISTORY ? next.slice(-MAX_FAILURE_HISTORY) : next
 }
 
 /**

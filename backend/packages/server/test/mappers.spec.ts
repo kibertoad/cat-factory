@@ -341,12 +341,24 @@ describe('rowToExecution', () => {
   })
 
   it('parses a valid failure but ignores garbage / partial shapes', () => {
-    const ok = rowToExecution({
-      ...base,
-      failure: JSON.stringify({ kind: 'agent', message: 'boom' }),
-    })
-    expect(ok.failure).toEqual({ kind: 'agent', message: 'boom' })
+    const complete = {
+      kind: 'agent' as const,
+      message: 'boom',
+      detail: null,
+      hint: null,
+      occurredAt: 1,
+      lastSubtasks: null,
+    }
+    const ok = rowToExecution({ ...base, failure: JSON.stringify(complete) })
+    expect(ok.failure).toEqual(complete)
     expect(rowToExecution({ ...base, failure: '{bad' }).failure).toBeNull()
+    // A known-kind but structurally-incomplete record is dropped: it can't satisfy the wire
+    // `agentFailureSchema` (missing occurredAt/detail/hint/lastSubtasks), so surfacing it would
+    // fail the SPA's snapshot re-validation.
+    expect(
+      rowToExecution({ ...base, failure: JSON.stringify({ kind: 'agent', message: 'boom' }) })
+        .failure,
+    ).toBeNull()
     expect(
       rowToExecution({ ...base, failure: JSON.stringify({ kind: 'agent' }) }).failure,
     ).toBeNull()
@@ -376,6 +388,9 @@ describe('rowToExecution', () => {
         { kind: 'decision_timeout', message: 'stale', occurredAt: 2 },
         // A structurally-broken entry is dropped too.
         { message: 'no kind' },
+        // A known-kind but incomplete record (missing occurredAt/detail/hint/lastSubtasks)
+        // is dropped — surfacing it would fail the SPA's snapshot re-validation.
+        { kind: 'agent', message: 'partial' },
       ],
     })
     const mapped = rowToExecution({ ...base, detail })

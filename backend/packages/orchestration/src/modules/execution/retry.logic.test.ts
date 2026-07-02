@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentFailure, AgentKind, PipelineStep } from '@cat-factory/kernel'
-import { carryForwardFailures, planResumedSteps, planRestartFromStep } from './retry.logic.js'
+import {
+  carryForwardFailures,
+  MAX_FAILURE_HISTORY,
+  planResumedSteps,
+  planRestartFromStep,
+} from './retry.logic.js'
 
 const step = (
   agentKind: AgentKind,
@@ -192,5 +197,16 @@ describe('carryForwardFailures', () => {
     // retry #3: failed again (c) → [a, b, c]
     const afterThird = carryForwardFailures({ failure: c, failureHistory: afterSecond })
     expect(afterThird).toEqual([a, b, c])
+  })
+
+  it('caps the trail at MAX_FAILURE_HISTORY, dropping the oldest', () => {
+    // A run that flapped past the cap: a full history plus one more outgoing failure.
+    const full = Array.from({ length: MAX_FAILURE_HISTORY }, (_, i) => failure(`old ${i}`, i))
+    const newest = failure('newest', MAX_FAILURE_HISTORY)
+    const trail = carryForwardFailures({ failure: newest, failureHistory: full })
+    expect(trail).toHaveLength(MAX_FAILURE_HISTORY)
+    // The oldest is evicted; the newest is retained at the tail.
+    expect(trail[0]).toEqual(full[1])
+    expect(trail.at(-1)).toEqual(newest)
   })
 })

@@ -9,11 +9,12 @@ import type {
 } from '@cat-factory/contracts'
 import {
   agentFailureKindSchema,
+  agentFailureSchema,
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
 } from '@cat-factory/contracts'
-import { array, string, type GenericSchema } from 'valibot'
+import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
 
 /** Contract for `blocks.depends_on`: a JSON array of block-id strings. */
@@ -566,16 +567,19 @@ export function isKnownAgentFailureKind(kind: string): boolean {
   return KNOWN_FAILURE_KINDS.has(kind)
 }
 
-/** Whether a decoded value is a usable {@link AgentFailure} (tolerating removed legacy kinds). */
+/**
+ * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
+ * wire schema, not just `kind`/`message`: the SPA re-validates the whole snapshot against
+ * `agentFailureSchema` (both the `failure` field and the `failureHistory` array), so a
+ * structurally-incomplete record — a removed legacy kind, OR a known kind missing
+ * `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire workspace snapshot
+ * decode if surfaced. Dropping it here keeps the run readable (its `status`/`error` still
+ * describe what happened) and, for the history, means a retry can't make a bad record
+ * permanent. (`is()` rejects removed kinds too, since the picklist no longer lists them —
+ * subsuming the old `isKnownAgentFailureKind` check.)
+ */
 function isUsableFailure(o: unknown): o is AgentFailure {
-  const f = o as AgentFailure | null
-  return (
-    !!f &&
-    typeof f.kind === 'string' &&
-    typeof f.message === 'string' &&
-    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
-    isKnownAgentFailureKind(f.kind)
-  )
+  return is(agentFailureSchema, o)
 }
 
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
@@ -592,8 +596,9 @@ function parseAgentFailure(raw: string | null): AgentFailure | null {
 
 /**
  * The prior-attempts failure trail packed into `detail`. Tolerant like
- * {@link parseAgentFailure}: a non-array or an entry with a removed legacy kind is
- * dropped rather than bricking the whole snapshot decode.
+ * {@link parseAgentFailure}: a non-array, or an entry that doesn't fully match the wire
+ * schema (removed legacy kind, or a structurally-incomplete record), is dropped rather
+ * than bricking the whole snapshot decode.
  */
 function parseFailureHistory(list: unknown): AgentFailure[] {
   return Array.isArray(list) ? list.filter(isUsableFailure) : []

@@ -5,6 +5,7 @@
 // banner disappears, but this collapsed history stays available so every previous error
 // remains viewable. Renders nothing when there is no trail.
 import type { AgentFailure } from '~/types/domain'
+import FailureDetail from '~/components/board/FailureDetail.vue'
 
 const props = defineProps<{ failures: AgentFailure[] }>()
 
@@ -29,8 +30,8 @@ const ordered = computed(() => [...props.failures].reverse())
 
     <ol class="mt-2 space-y-2">
       <li
-        v-for="(failure, i) in ordered"
-        :key="i"
+        v-for="failure in ordered"
+        :key="failure.occurredAt"
         class="rounded-md border border-slate-800/80 bg-slate-950/50 px-2.5 py-2"
         data-testid="agent-failure-history-entry"
       >
@@ -47,15 +48,12 @@ const ordered = computed(() => [...props.failures].reverse())
           {{ failure.hint }}
         </p>
 
-        <details v-if="failure.detail && failure.detail !== failure.message" class="mt-1">
-          <summary class="cursor-pointer text-[10px] text-slate-500 hover:text-slate-300">
-            {{ t('board.failure.showDetail') }}
-          </summary>
-          <pre
-            class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-slate-950/80 p-1.5 text-[10px] text-slate-400"
-            >{{ failure.detail }}</pre
-          >
-        </details>
+        <FailureDetail
+          :detail="failure.detail"
+          :message="failure.message"
+          summary-class="text-[10px] text-slate-500 hover:text-slate-300"
+          pre-class="bg-slate-950/80 text-[10px] text-slate-400"
+        />
       </li>
     </ol>
   </details>
