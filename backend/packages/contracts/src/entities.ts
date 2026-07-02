@@ -14,6 +14,7 @@ import {
 } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
 import { frontendConfigSchema } from './frontend.js'
+import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -190,6 +191,22 @@ export const blockSchema = v.object({
    * docs/initiatives/frontend-preview-ui-testing.md. Absent on non-frontend frames.
    */
   frontendConfig: v.optional(frontendConfigSchema),
+  /**
+   * Service-frame-level (`type: 'service'`): this service's directed connections
+   * to the other services it uses, stored on the consumer end (see
+   * {@link serviceConnectionSchema}). Drawn as board edges, and the source of the
+   * per-task "involved services" choices ({@link blockSchema.entries.involvedServiceIds}).
+   * Absent on non-service blocks.
+   */
+  serviceConnections: v.optional(serviceConnectionsSchema),
+  /**
+   * Task-level: the connected service frames "directly involved" in this task
+   * beyond the task's own service (always implicitly involved, never listed here).
+   * Each id must be a connection neighbor of the task's service frame. Involved
+   * services are spun up as ephemeral environments alongside the task's own
+   * service, and the coding agent may change their repos too.
+   */
+  involvedServiceIds: v.optional(v.array(v.string())),
   /**
    * The pull request the block's implementation ("implementer") agent opened for
    * its work. Set on a task once its container agent pushes a branch and opens a

@@ -7,7 +7,7 @@ import type {
   ReparentInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
-import type { Block, BlockType, Position } from '@cat-factory/kernel'
+import type { Block, BlockType, Position, ServiceConnection } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
@@ -27,6 +27,8 @@ import {
   canReparent,
   descendantIds,
   gridSlot,
+  involvedServiceIdsError,
+  serviceConnectionsError,
   serviceOf,
   tasksOf,
   wouldCreateCycle,
@@ -598,6 +600,44 @@ export class BoardService {
       const { serviceFragmentIds: _ignored, ...rest } = patch
       effective = rest
     }
+    // `serviceConnections` lives only on service-type frames (the consumer end of each
+    // edge); dropped elsewhere for the same never-persist-dead-data reason as above.
+    if (effective.serviceConnections !== undefined) {
+      if (block.level !== 'frame' || block.type !== 'service') {
+        const { serviceConnections: _ignored, ...rest } = effective
+        effective = rest
+      } else if (effective.serviceConnections.length) {
+        // Resolve targets from ONE home-workspace read; only ids not homed here (a
+        // service mounted from another workspace) fall back to the cross-home-aware
+        // per-id resolve — a bounded user-authored list, not a data-sized loop.
+        const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+        const byId = new Map(homeBlocks.map((b) => [b.id, b]))
+        const resolved = new Map<string, Block>()
+        for (const { serviceBlockId } of effective.serviceConnections) {
+          if (byId.has(serviceBlockId) || resolved.has(serviceBlockId)) continue
+          const found = await this.resolveBlock(workspaceId, serviceBlockId).catch(() => null)
+          if (found) resolved.set(serviceBlockId, found.block)
+        }
+        const error = serviceConnectionsError(
+          id,
+          effective.serviceConnections,
+          (targetId) => byId.get(targetId) ?? resolved.get(targetId),
+        )
+        if (error) throw new ValidationError(error)
+      }
+    }
+    // `involvedServiceIds` is a task-level selection drawn from the enclosing service
+    // frame's connection neighbors; dropped on non-tasks, validated on tasks.
+    if (effective.involvedServiceIds !== undefined) {
+      if (block.level !== 'task') {
+        const { involvedServiceIds: _ignored, ...rest } = effective
+        effective = rest
+      } else if (effective.involvedServiceIds.length) {
+        const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+        const error = involvedServiceIdsError(homeBlocks, block, effective.involvedServiceIds)
+        if (error) throw new ValidationError(error)
+      }
+    }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
     await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id)
@@ -723,10 +763,25 @@ export class BoardService {
   ): Promise<void> {
     for (const b of survivors) {
       if (removed.has(b.id)) continue
-      const patch: { dependsOn?: string[]; epicId?: string | null } = {}
+      const patch: {
+        dependsOn?: string[]
+        epicId?: string | null
+        serviceConnections?: ServiceConnection[]
+        involvedServiceIds?: string[]
+      } = {}
       const next = b.dependsOn.filter((d) => !removed.has(d))
       if (next.length !== b.dependsOn.length) patch.dependsOn = next
       if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+      // Service-connection edges into the removed set, and task selections of a removed
+      // involved service, dangle the same way dependency edges do — drop them here too.
+      const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))
+      if (connections.length !== (b.serviceConnections ?? []).length) {
+        patch.serviceConnections = connections
+      }
+      const involved = (b.involvedServiceIds ?? []).filter((sid) => !removed.has(sid))
+      if (involved.length !== (b.involvedServiceIds ?? []).length) {
+        patch.involvedServiceIds = involved
+      }
       if (Object.keys(patch).length) {
         await this.blockRepository.update(homeWorkspaceId, b.id, patch)
       }

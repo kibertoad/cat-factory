@@ -480,6 +480,14 @@
         }
       }
     },
+    "serviceConnections": {
+      "title": "Conexiones de servicios",
+      "hint": "Los otros servicios que este utiliza, p. ej. un servicio que envía sus correos. Las conexiones dibujan aristas en el tablero, y las tareas pueden marcar un servicio conectado como directamente involucrado.",
+      "descriptionPlaceholder": "Cómo lo usa este servicio, p. ej. envía correos a través de él",
+      "remove": "Eliminar conexión",
+      "empty": "Sin conexiones. Añade una para vincular este servicio con otro servicio que utiliza.",
+      "usedBy": "Usado por"
+    },
     "releaseHealth": {
       "title": "Salud posterior al lanzamiento",
       "clear": "Limpiar",
@@ -703,7 +711,11 @@
       "responsibleProduct": "Producto responsable",
       "responsibleEmpty": "Sin asignar. Define un responsable de producto para notificarle cuando la revisión de requisitos marque esta tarea.",
       "autoStartDependents": "Iniciar dependientes automáticamente",
-      "autoStartHint": "Cuando esta tarea se fusione, inicia automáticamente las tareas que dependen de ella (una vez que sus otras dependencias también estén completas)."
+      "autoStartHint": "Cuando esta tarea se fusione, inicia automáticamente las tareas que dependen de ella (una vez que sus otras dependencias también estén completas).",
+      "involvedServices": "Servicios involucrados",
+      "involvedServicesHint": "Servicios conectados directamente involucrados en esta tarea: cada uno se levanta como un entorno efímero junto al servicio propio de la tarea, y el agente de código puede modificar también sus repositorios.",
+      "involvedServicesEmpty": "No hay servicios conectados. Conecta servicios en el marco del servicio para seleccionarlos aquí.",
+      "involvedServiceStale": "Ya no está conectado al servicio de esta tarea; se eliminará con el próximo cambio."
     }
   },
   "panels": {
