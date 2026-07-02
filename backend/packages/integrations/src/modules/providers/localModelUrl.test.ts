@@ -34,6 +34,26 @@ describe('localRunnerUrlError (SSRF allow-list)', () => {
     }
   })
 
+  it('rejects public DNS hostnames that merely start with an IPv6 ULA prefix', () => {
+    // Regression: the ULA fc00::/7 test must be gated behind an "is IPv6 literal" check,
+    // else any registrable domain starting with `fc`/`fd`/`fe80` is treated as private
+    // and forwarded server-side (an SSRF pivot under attacker-controlled DNS).
+    for (const url of [
+      'http://fc2.com/v1',
+      'http://fd-internal.attacker.com/v1',
+      'http://fdanything.evil.com/v1',
+      'http://fe80spoof.com/v1',
+    ]) {
+      expect(localRunnerUrlError(url), url).toBeTruthy()
+    }
+  })
+
+  it('still accepts genuine IPv6 ULA and loopback literals', () => {
+    for (const url of ['http://[fc00::1]/v1', 'http://[fd12:3456::1]:8080/v1', 'http://[::1]/v1']) {
+      expect(localRunnerUrlError(url), url).toBeNull()
+    }
+  })
+
   it('rejects malformed URLs and non-http(s) schemes', () => {
     expect(localRunnerUrlError('not a url')).toBeTruthy()
     expect(localRunnerUrlError('file:///etc/passwd')).toBeTruthy()

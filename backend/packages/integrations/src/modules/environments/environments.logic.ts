@@ -13,6 +13,7 @@ import {
   STRICT_URL_SAFETY_POLICY,
   ValidationError,
 } from '@cat-factory/kernel'
+import { safeFetch } from '../shared/safe-fetch.js'
 
 // Pure helpers for the ephemeral-environment integration: SSRF validation of the
 // URLs we fetch/expose, `{{var}}` interpolation over a bounded scope, dot-path
@@ -175,16 +176,18 @@ export async function probeConnection(
   timeoutMs = 10_000,
 ): Promise<ConnectionTestResult> {
   try {
-    assertSafeEnvironmentUrl(baseUrl, 'base URL', policy)
-  } catch (err) {
-    return { ok: false, message: getErrorMessage(err) }
-  }
-  try {
-    const res = await fetch(baseUrl, {
-      method: 'GET',
-      headers: { accept: 'application/json', ...headers },
-      signal: AbortSignal.timeout(timeoutMs),
-    })
+    // Re-validate every redirect hop (not just the initial URL), so a permitted base
+    // URL can't 302 the probe to an internal/metadata host with the creds attached.
+    const res = await safeFetch(
+      baseUrl,
+      {
+        method: 'GET',
+        headers: { accept: 'application/json', ...headers },
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+      (u) => assertSafeEnvironmentUrl(u, 'base URL', policy),
+      (status, message) => new Error(`${message} (HTTP ${status})`),
+    )
     if (res.status === 401 || res.status === 403) {
       return { ok: false, message: `Credentials rejected (HTTP ${res.status})` }
     }
