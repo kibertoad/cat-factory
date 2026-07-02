@@ -732,6 +732,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/executor-harness':
+        specifier: workspace:*
+        version: link:../../internal/executor-harness
       '@cat-factory/gitlab':
         specifier: workspace:*
         version: link:../../packages/gitlab
