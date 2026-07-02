@@ -4937,6 +4937,122 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         },
       )
 
+      it.skipIf(harness.name === 'mothership')(
+        'injects the derived frontend origins into the deployer provision and stamps run-start notes',
+        async () => {
+          // Slice 6b (frontend-preview-ui-testing): the REVERSE of a frontend's backend bindings —
+          // the browser origins a bound service's ephemeral env must accept (CORS) — is derived by
+          // reading the frontend frame's `frontend_config` and passed to the deployer as
+          // `inputs.frontendOrigins` (which an operator's manifest folds in via
+          // `{{input.frontendOrigins}}`; the render itself is unit-tested in 6a). This pins the
+          // cross-runtime half: a facade that dropped/mismapped `frontend_config` would derive NO
+          // origins. It ALSO asserts the run-start `notes` (the resolved-binding advisories) round-
+          // trip through each store's `agent_runs.detail` JSON (D1 ⇄ Drizzle).
+          let capturedFrontendOrigins: string | undefined
+          const provider = {
+            provision: async (req: { inputs: Record<string, string> }) => {
+              capturedFrontendOrigins = req.inputs.frontendOrigins
+              return {
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+                expiresAt: null,
+                access: null,
+                fields: {},
+              }
+            },
+            status: async () =>
+              ({
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+              }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+            resolveBinaryArtifactStore: STORAGE_ON,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // A manifest connection gives the deployer a provider to reach; its `bodyTemplate` is
+          // where the operator folds the derived origins into the backend's CORS allow-list.
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: {
+              method: 'POST',
+              pathTemplate: '/environments',
+              bodyTemplate: '{"cors":"{{input.frontendOrigins}}"}',
+            },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // Bind the frontend frame to the auth service BEFORE provisioning, so the deployer
+          // derives the frontend's origin. A duplicate env var (mock, then `service` LAST so the
+          // live binding wins the resolution) makes the run-start note deterministic.
+          const patched = await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+            frontendConfig: {
+              backendBindings: [
+                { envVar: 'PUB_API_URL', source: { kind: 'mock' } },
+                { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+              ],
+            },
+          })
+          expect(patched.status).toBe(200)
+
+          // Provision the auth service's live env via a deployer on a task inside its frame.
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy auth',
+            agentKinds: ['deployer'],
+          })
+          const startDeploy = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: deployPipeline.body.id },
+          )
+          expect(startDeploy.status).toBe(201)
+          await app.drive(wsId)
+
+          // The derived origin (the frontend's default serve port) reached the provider — proving
+          // each store read `frontend_config` to compute `frontendOriginsForService`.
+          expect(capturedFrontendOrigins).toBe('http://localhost:4173')
+
+          // A UI-tester run against the frontend now starts (blk_auth is live) and carries the
+          // duplicate-env-var run-start note.
+          const task = await app.call<Block>(
+            'POST',
+            `/workspaces/${wsId}/blocks/blk_frontend/tasks`,
+            { title: 'Exercise the dashboard' },
+          )
+          const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Build + UI test',
+            agentKinds: ['coder', 'tester-ui'],
+          })
+          const started = await app.call<{ id: string; notes?: string[] }>(
+            'POST',
+            `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
+            { pipelineId: uiPipeline.body.id },
+          )
+          expect(started.status).toBe(201)
+          expect(started.body.notes?.some((n) => n.includes('PUB_API_URL'))).toBe(true)
+
+          // Re-read from the store (fresh snapshot): the note persisted in `agent_runs.detail`
+          // identically on D1 and Postgres.
+          const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+          const persisted = snapshot.body.executions.find((e) => e.id === started.body.id)
+          expect(persisted?.notes?.some((n) => n.includes('only the last binding'))).toBe(true)
+        },
+      )
+
       // Slice 5c (frontend-preview-ui-testing): the browsable-preview lifecycle + its ephemeral
       // `environments`-row persistence, driven through a FAKE preview transport (the real one is a
       // per-runtime differentiator, wired only in local). Skipped on Cloudflare (the Worker reports

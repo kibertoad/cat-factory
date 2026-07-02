@@ -23,6 +23,7 @@ import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
 import { recurringApi } from './api/recurring'
 import { previewApi } from './api/preview'
+import { environmentsApi } from './api/environments'
 import { releaseHealthApi } from './api/releaseHealth'
 import { sandboxApi } from './api/sandbox'
 import { reviewsApi } from './api/reviews'
@@ -113,6 +114,7 @@ export function useApi() {
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
     ...previewApi(ctx),
+    ...environmentsApi(ctx),
     ...recurringApi(ctx),
     ...sandboxApi(ctx),
     ...githubApi(ctx),

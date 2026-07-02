@@ -206,6 +206,156 @@ export const frontendConfigSchema = v.object({
 export type FrontendConfig = v.InferOutput<typeof frontendConfigSchema>
 
 // ---------------------------------------------------------------------------
+// Frontend backend-binding RESOLUTION (pure, shared by the backend + the SPA).
+//
+// A frontend declares backend BINDINGS (env-var name → where its URL resolves). At UI-test /
+// preview time each `service` binding whose bound service has a LIVE ephemeral env resolves to
+// that env's real URL (a "service under test"); every `mock` binding — and every `service` with
+// no live env — is left for WireMock. These helpers do that resolution with NO IO, so the exact
+// same rule drives the run-start gate (orchestration), the reverse-origin CORS injection, the
+// inspector's resolved-binding view, and the run-detail projection — they can't drift. (They
+// live here, next to `frontendOriginsForService`, for the same reason: one source of truth the
+// backend and the SPA both import.)
+// ---------------------------------------------------------------------------
+
+/** A frontend backend binding resolved to a concrete upstream for a UI-test / preview run. */
+export const resolvedFrontendBindingSchema = v.object({
+  /** The frontend's env var for this upstream URL (e.g. `PUB_BACKEND_URL`). */
+  envVar: v.string(),
+  /** The bound service's live ephemeral env URL (the service under test); absent ⇒ mocked. */
+  serviceUrl: v.optional(v.string()),
+})
+export type ResolvedFrontendBinding = v.InferOutput<typeof resolvedFrontendBindingSchema>
+
+/** A live-environment handle as far as the frontend binding resolution cares. */
+export interface LiveEnvHandle {
+  frameId?: string | null
+  url?: string | null
+  status: string
+  createdAt: number
+}
+
+/** The distinct service FRAME ids a frontend config binds via a `service` source. */
+export function boundServiceFrameIds(config: Pick<FrontendConfig, 'backendBindings'>): Set<string> {
+  return new Set(
+    config.backendBindings
+      .filter((b) => b.source.kind === 'service')
+      .map((b) => (b.source as { serviceBlockId: string }).serviceBlockId),
+  )
+}
+
+/**
+ * Index live-environment handles to a `serviceFrameId → url` map for the service FRAMES a
+ * frontend binds. A binding's `serviceBlockId` names a service FRAME, so we match on the handle's
+ * `frameId` (the deployer's block walked up to its frame), NOT `blockId` (the task the deployer
+ * ran on). A frame can hold more than one live env (two tasks under it each ran a deployer, since
+ * supersede is per-task `blockId`), so keep the NEWEST by `createdAt` — the "current env wins"
+ * rule the tester point-read applies via `ORDER BY created_at DESC`. Shared by the backend
+ * (AgentContextBuilder / the preview job builder) and the SPA's live-binding view so the two
+ * can't drift on which env a live `service` binding resolves to.
+ */
+export function indexLiveServiceEnvUrls(
+  handles: Iterable<LiveEnvHandle>,
+  serviceFrameIds: ReadonlySet<string>,
+): Map<string, string> {
+  const liveServiceEnvUrls = new Map<string, string>()
+  if (serviceFrameIds.size === 0) return liveServiceEnvUrls
+  const newestAt = new Map<string, number>()
+  for (const handle of handles) {
+    if (
+      handle.frameId &&
+      handle.url &&
+      handle.status === 'ready' &&
+      serviceFrameIds.has(handle.frameId) &&
+      handle.createdAt >= (newestAt.get(handle.frameId) ?? Number.NEGATIVE_INFINITY)
+    ) {
+      newestAt.set(handle.frameId, handle.createdAt)
+      liveServiceEnvUrls.set(handle.frameId, handle.url)
+    }
+  }
+  return liveServiceEnvUrls
+}
+
+/**
+ * Resolve a frontend frame's backend bindings to concrete upstreams. Each `service` binding whose
+ * service FRAME id is in `liveServiceEnvUrls` becomes the service under test (its real URL); every
+ * `mock` source — and every `service` with no live env — is left for the harness to mock (no
+ * `serviceUrl`). Empty env-var bindings (an unfinished inspector row, allowed by the schema) are
+ * dropped so nothing inert is ever injected.
+ *
+ * The injected env is a MAP keyed by `envVar`, so two bindings sharing a (non-empty) `envVar`
+ * can't both survive — we keep the LAST (deterministic: whatever the operator sees at the bottom
+ * of the inspector list wins) rather than letting Map insertion order decide silently. The
+ * duplicate names are surfaced by {@link duplicateBindingEnvVars} (inspector warning) and the
+ * run-start soft note ({@link buildFrontendRunNotes}); this just makes the resolved result match
+ * that "last wins" rule.
+ */
+export function resolveFrontendBindings(
+  config: Pick<FrontendConfig, 'backendBindings'>,
+  liveServiceEnvUrls: ReadonlyMap<string, string>,
+): ResolvedFrontendBinding[] {
+  const byEnvVar = new Map<string, ResolvedFrontendBinding>()
+  for (const binding of config.backendBindings) {
+    const envVar = binding.envVar.trim()
+    if (!envVar) continue
+    const serviceUrl =
+      binding.source.kind === 'service'
+        ? liveServiceEnvUrls.get(binding.source.serviceBlockId)
+        : undefined
+    byEnvVar.set(envVar, serviceUrl ? { envVar, serviceUrl } : { envVar })
+  }
+  return [...byEnvVar.values()]
+}
+
+/**
+ * Non-fatal advisories about a frontend UI-test / preview run's resolved backend bindings — the
+ * SPA-visible mirror of the harness's own `buildInfraNotes`. Two cases, both a misconfiguration
+ * the run tolerates rather than a failure:
+ *   - **duplicate env vars** — more than one binding names the same env var; only the last takes
+ *     effect (see {@link resolveFrontendBindings}), so the others silently do nothing.
+ *   - **partial-live** — at least one bound service resolved to a live env (so the run started),
+ *     but another bound service has no live env and falls back to WireMock. (A frontend where NO
+ *     bound service is live is refused at the start gate, so that case never reaches here.)
+ * Pure + no IO so the wording/ordering is unit-tested; empty array ⇒ nothing to flag.
+ */
+export function buildFrontendRunNotes(
+  config: Pick<FrontendConfig, 'backendBindings'>,
+  liveServiceEnvUrls: ReadonlyMap<string, string>,
+): string[] {
+  const notes: string[] = []
+  const duplicates = duplicateBindingEnvVars(config)
+  if (duplicates.length > 0) {
+    notes.push(
+      `More than one backend binding uses the env var${duplicates.length === 1 ? '' : 's'} ` +
+        `${duplicates.join(', ')}; only the last binding for each takes effect and the earlier ` +
+        `ones are ignored. Give each upstream a distinct env var.`,
+    )
+  }
+  const serviceBindings = config.backendBindings.filter(
+    (b) => b.source.kind === 'service' && b.envVar.trim().length > 0,
+  )
+  const serviceFrameId = (b: (typeof serviceBindings)[number]) =>
+    (b.source as { serviceBlockId: string }).serviceBlockId
+  const anyLive = serviceBindings.some((b) => liveServiceEnvUrls.has(serviceFrameId(b)))
+  const mocked = [
+    ...new Set(
+      serviceBindings
+        .filter((b) => !liveServiceEnvUrls.has(serviceFrameId(b)))
+        .map((b) => b.envVar.trim()),
+    ),
+  ].sort()
+  if (anyLive && mocked.length > 0) {
+    notes.push(
+      `${mocked.length === 1 ? 'A bound service has' : 'Some bound services have'} no live ` +
+        `environment, so ${mocked.join(', ')} ${mocked.length === 1 ? 'is' : 'are'} served by ` +
+        `WireMock instead of the real backend. Provision ${mocked.length === 1 ? 'it' : 'them'} ` +
+        `to exercise the live service.`,
+    )
+  }
+  return notes
+}
+
+// ---------------------------------------------------------------------------
 // Frontend config AUTO-DETECTION (the "Detect from repo" affordance): a deterministic,
 // checkout-free heuristic reads the frontend repo and proposes a NON-BINDING recommended
 // {@link FrontendConfig} — the package manager (from the lockfile), install command, build

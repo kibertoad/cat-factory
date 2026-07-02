@@ -139,6 +139,9 @@ export type {
   FrontendConfig,
   FrontendBackendBinding,
   FrontendBackendSource,
+  // Frontend backend-binding resolution (shared pure helpers' types).
+  ResolvedFrontendBinding,
+  LiveEnvHandle,
   KubernetesEngineConfig,
   InfraHandlerConfig,
   CustomManifestType,

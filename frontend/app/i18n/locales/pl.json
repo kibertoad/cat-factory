@@ -501,6 +501,12 @@
           "failed": "Błąd",
           "stopped": "Nie uruchomiono"
         }
+      },
+      "resolved": {
+        "title": "Rozwiązuje się na",
+        "duplicateWarning": "Użyte w więcej niż jednym powiązaniu, więc obowiązuje tylko ostatnie: {vars}.",
+        "serviceOffline": "{service}: brak działającego środowiska (zamockowane)",
+        "mock": "Mock (WireMock)"
       }
     },
     "releaseHealth": {

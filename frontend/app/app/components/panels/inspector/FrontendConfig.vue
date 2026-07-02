@@ -10,6 +10,7 @@ import type {
   FrontendServeMode,
   PreviewStatus,
 } from '~/types/domain'
+import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
 // frontend for a self-contained UI test (+ an optional browsable preview on local/node),
@@ -624,6 +625,13 @@ onUnmounted(() => preview.stopPolling(props.block.id))
         </div>
         <div v-else class="text-[11px] text-slate-500">
           {{ t('inspector.frontendConfig.bindings.empty') }}
+        </div>
+
+        <!-- How the bindings resolve RIGHT NOW: each env var → a bound service's live ephemeral
+             URL, or WireMock — plus the duplicate-env-var warning. The same view a UI-test run
+             would resolve against (shared helpers), so what you see is what a run will drive. -->
+        <div class="border-t border-slate-800/60 pt-2">
+          <FrontendBindingsResolved :config="config" />
         </div>
       </div>
     </div>

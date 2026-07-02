@@ -542,6 +542,8 @@ interface ExecutionDetail {
   initiatedBy: string | null
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
+  /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
+  notes?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -650,6 +652,11 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
     // no dedicated column); a run that never failed-then-retried simply has none.
     failureHistory: parseFailureHistory(detail.failureHistory),
+    // Run-start advisories ride in `detail` too (only present for a frontend UI-test run that
+    // had something to flag); tolerate a non-array-of-strings by dropping it.
+    ...(Array.isArray(detail.notes) && detail.notes.every((n) => typeof n === 'string')
+      ? { notes: detail.notes }
+      : {}),
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
@@ -671,5 +678,7 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
+    // Likewise only persist run-start notes when there is something to flag.
+    notes: instance.notes?.length ? instance.notes : undefined,
   } satisfies ExecutionDetail)
 }

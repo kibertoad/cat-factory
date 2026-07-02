@@ -90,6 +90,7 @@ export {
 } from './modules/execution/release.logic.js'
 export {
   resolveFrontendBindings,
+  buildFrontendRunNotes,
   hasLiveServiceBinding,
   hasServiceBinding,
   boundServiceFrameIds,

@@ -544,6 +544,12 @@
           "failed": "Failed",
           "stopped": "Not running"
         }
+      },
+      "resolved": {
+        "title": "Resolves to",
+        "duplicateWarning": "Used on more than one binding, so only the last applies: {vars}.",
+        "serviceOffline": "{service}: no live environment (mocked)",
+        "mock": "Mock (WireMock)"
       }
     },
     "releaseHealth": {

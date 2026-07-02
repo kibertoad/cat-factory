@@ -501,6 +501,12 @@
           "failed": "Помилка",
           "stopped": "Не запущено"
         }
+      },
+      "resolved": {
+        "title": "Розв'язується як",
+        "duplicateWarning": "Використано в кількох прив'язках, тож застосовується лише остання: {vars}.",
+        "serviceOffline": "{service}: немає активного середовища (мок)",
+        "mock": "Mock (WireMock)"
       }
     },
     "releaseHealth": {

@@ -1327,6 +1327,13 @@ export class ExecutionService {
     if (steps.length === 0) {
       throw new ValidationError('Pipeline has no enabled steps to run.')
     }
+    // For a visual (UI-test) pipeline on a frontend frame, resolve its backend bindings ONCE at
+    // start and stamp the non-fatal advisories on the run (duplicate env vars, or a partial-live
+    // set of bound services). Only paid for a visual pipeline — the same condition the tester
+    // infra gate keys off — so a plain backend run does no extra env read. Absent → no notes.
+    const frontendRun = pipelineHasVisualStep({ agentKinds: pipeline.agentKinds })
+      ? await this.contextBuilder.resolveFrontendRunInfo(workspaceId, block)
+      : undefined
     const instance: ExecutionInstance = {
       id: executionId,
       blockId,
@@ -1336,6 +1343,7 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
     }
     await this.insertLiveRunOrConflict(workspaceId, instance, prior?.id)
     await this.blockRepository.update(workspaceId, blockId, {

@@ -1520,6 +1520,16 @@ export const executionInstanceSchema = v.object({
    */
   failureHistory: v.optional(v.array(agentFailureSchema)),
   /**
+   * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
+   * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live
+   * set of bound services where some fall back to WireMock). Mirrors the harness's own
+   * `buildInfraNotes` but surfaced on the RUN so the SPA renders it in the run/step detail
+   * (distinct from a `failure`, which aborts the run). Absent/empty when there is nothing to
+   * flag. Rides in the `detail` JSON column (no dedicated column), reflecting the start-time
+   * state even after the underlying envs change.
+   */
+  notes: v.optional(v.array(v.string())),
+  /**
    * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
    * so the individual-usage restricted mode can use the initiator's OWN personal
    * subscription (e.g. Claude) for the run's steps — a personal credential is never

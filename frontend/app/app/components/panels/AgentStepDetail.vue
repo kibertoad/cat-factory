@@ -7,6 +7,8 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
 import StepTestReport from '~/components/panels/StepTestReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
+import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
+import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
@@ -57,6 +59,18 @@ const testPhase = computed(() => step.value?.test ?? null)
 // The ephemeral environment this step runs against (deployer provisions it; tester/
 // coder consume it), so the panel shows its spinning-up/running/shutdown/errored state.
 const stepEnvironment = computed(() => step.value?.environment ?? null)
+
+// For a frontend UI-test step (`tester-ui`): the enclosing `frontend` frame's backend-binding
+// config, so the detail can project how each env var resolves (live URL | mocked) — the same
+// resolution a run drives against. Plus the run-start advisories the engine stamped on the run
+// (duplicate env vars / partially-mocked services), shown here where the frontend infra matters.
+const frontendFrame = computed(() => (block.value ? board.serviceOf(block.value) : undefined))
+const frontendConfig = computed(() =>
+  step.value?.agentKind === UI_TESTER_AGENT_KIND && frontendFrame.value?.type === 'frontend'
+    ? (frontendFrame.value.frontendConfig ?? null)
+    : null,
+)
+const runNotes = computed(() => (frontendConfig.value ? (instance.value?.notes ?? []) : []))
 
 // The run's infrastructure attempts (container/runner/env spin-up + tear-down), behind
 // a toggle. This is the surface that makes the per-run `container` log rows + the
@@ -344,6 +358,21 @@ async function copyOutput() {
               <!-- ephemeral environment lifecycle (spinning up / running / shut down /
                    errored + the exact error), when this step runs against one -->
               <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
+
+              <!-- frontend UI-test: how the frame's backend bindings resolved (env var →
+                   live URL | mocked) + the run-start advisories (duplicate env vars /
+                   partially-mocked services) the engine stamped on the run -->
+              <FrontendBindingsResolved v-if="frontendConfig" :config="frontendConfig" />
+              <ul v-if="runNotes.length" class="space-y-1" data-testid="run-notes">
+                <li
+                  v-for="(note, i) in runNotes"
+                  :key="i"
+                  class="flex items-start gap-1.5 text-[11px] leading-snug text-amber-300/80"
+                >
+                  <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{{ note }}</span>
+                </li>
+              </ul>
 
               <!-- this run's infrastructure attempts (container/runner/env spin-up +
                    tear-down): the surface for the per-run container log rows + the exact

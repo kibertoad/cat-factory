@@ -501,6 +501,12 @@
           "failed": "Échec",
           "stopped": "Non démarré"
         }
+      },
+      "resolved": {
+        "title": "Résolution actuelle",
+        "duplicateWarning": "Utilisé sur plusieurs liaisons, seule la dernière s'applique : {vars}.",
+        "serviceOffline": "{service} : aucun environnement actif (simulé)",
+        "mock": "Mock (WireMock)"
       }
     },
     "releaseHealth": {

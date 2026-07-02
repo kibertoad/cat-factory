@@ -52,7 +52,7 @@ build on. Link the merged pilot PR here once it lands.
 | 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop               | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
 | 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector                     | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
 | 6a  | Reverse CORS origin injection (`{{input.frontendOrigins}}`) + binding dedup correctness           | done   | this PR                                                   |
-| 6b  | Inspector resolved-binding visibility (envVar → service → live URL/mock) + run-detail + soft note | todo   | (its own PR)                                              |
+| 6b  | Inspector resolved-binding visibility (envVar → service → live URL/mock) + run-detail + soft note | done   | this PR                                                   |
 | 6c  | Pin local preview host port (deterministic preview origin) + fold into `frontendOrigins`          | todo   | (its own PR)                                              |
 
 ## Conventions & gotchas carried between iterations
@@ -402,3 +402,44 @@ URL | mocked` mapping in `FrontendConfig.vue` (one workspace-environments read i
     the captured value on both Postgres runtimes) lands with 6b. 6a pins the operator contract with unit
     tests on `frontendOriginsForService` + both render syntaxes (`interpolateTemplate` /
     `renderTemplate`∘`templateVars`).
+- Slice 6b conventions & gotchas (resolved-binding visibility + run-detail projection + run-start note):
+  - **The pure binding-resolution helpers now live in `@cat-factory/contracts`, NOT orchestration.**
+    `resolveFrontendBindings` / `indexLiveServiceEnvUrls` / `boundServiceFrameIds` / the
+    `ResolvedFrontendBinding` + `LiveEnvHandle` types / the new `buildFrontendRunNotes` moved next to
+    `frontendOriginsForService` so the SPA and the backend import the SAME resolution (they can't drift on
+    which env a live `service` binding resolves to). `frontend-infra.logic.ts` (orchestration) now just
+    RE-EXPORTS them + keeps the two gate-only predicates (`hasLiveServiceBinding` / `hasServiceBinding`),
+    so every existing importer is unchanged. A new SPA consumer imports from `@cat-factory/contracts`
+    directly, not from orchestration.
+  - **The run-start note is persisted on the RUN, in the `detail` JSON — no migration.**
+    `ExecutionInstance.notes?: string[]` rides in `agent_runs.detail` (like `failureHistory`), so both
+    stores round-trip it through the shared `@cat-factory/server` mapper (`executionToDetail` /
+    `rowToExecution`) with ZERO schema change. It is computed ONCE at start (`ExecutionService.start`
+    → `AgentContextBuilder.resolveFrontendRunInfo`), gated on `pipelineHasVisualStep` so only a visual
+    pipeline pays the extra env read; a non-frontend run carries none. Notes reflect the START-time
+    resolution (they don't re-derive when envs later change) — the honest historical advisory, mirroring
+    the harness's own `buildInfraNotes`. Two cases: duplicate env vars, and a partial-live set (some bound
+    services live, others fall back to WireMock). A frontend with NO live bound service is refused at the
+    gate, so that case never produces a note.
+  - **`resolveFrontendConfig` and `resolveFrontendRunInfo` share ONE resolution** (`resolveFrontendResolution`),
+    so the agent-context path and the run-notes path read `listHandles` the same way (still one query,
+    no N+1). `resolveFrontendRunInfo` returns `{ bindings, notes }`; only `notes` is persisted on the run —
+    the resolved-binding TABLE in the run/step detail is recomputed LIVE in the SPA (same shared helpers +
+    the env store), so a completed run's detail shows current resolution while the note preserves the
+    start-time advisory.
+  - **The SPA resolved-binding view is one shared component with a LIVE env read.** `FrontendBindingsResolved.vue`
+    (used by both `FrontendConfig.vue` inspector and a `tester-ui` step's `AgentStepDetail.vue`) reads the
+    workspace env handles via the new lightweight `useEnvironmentsStore` (`GET /workspaces/:ws/environments`,
+    load-on-open, no snapshot delivery / no self-poll) and feeds the SAME `resolveFrontendBindings` /
+    `indexLiveServiceEnvUrls` the backend uses. It joins off the LAST config binding per envVar (matching the
+    last-wins dedup) purely to LABEL a mocked upstream as `mock` vs `service-offline` — the canonical
+    resolution still comes from the shared helper. The duplicate-envVar warning uses `duplicateBindingEnvVars`.
+  - **Conformance uses a capturing FAKE provider, not a real fetch.** The 6b conformance test injects an
+    `environmentProvider` whose `provision(req)` captures `req.inputs.frontendOrigins` (the manifest carries a
+    `bodyTemplate` documenting where the operator folds it in; the render itself is unit-tested in 6a). This is
+    the runtime-neutral proof that BOTH stores read `frontend_config` to DERIVE the origins — stubbing global
+    `fetch` across workerd + node was avoided deliberately. The same test then starts a UI-tester run and asserts
+    the duplicate-env-var `notes` round-trip through a fresh snapshot read (`agent_runs.detail` D1 ⇄ Drizzle).
+    Skipped on `mothership` (its env connect/provision write surface is unproxied), like the sibling 4b test.
+  - **6c is unaffected.** The local-preview host-port pinning + folding the preview origin into
+    `frontendOriginsForService` remains the last open slice; nothing here touches the preview transport.
