@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { mkdir, opendir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { mkdir, mkdtemp, opendir, rm } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type {
@@ -229,9 +230,130 @@ function extractJsonObject(text: string): unknown {
   }
 }
 
+/**
+ * The service work directory for a checkout at `dir`: the monorepo service subtree
+ * (`repo.serviceDirectory`, created if missing) when the job is service-scoped, else the clone
+ * root. Shared so the explore/preview flows derive `workDir` identically.
+ */
+async function deriveWorkDir(dir: string, serviceDirectory: string | undefined): Promise<string> {
+  const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
+  if (serviceDirectory) await mkdir(workDir, { recursive: true })
+  return workDir
+}
+
+/**
+ * Fresh-clone `job.branch` into `dir` and return the derived service work directory. Shared by
+ * the explore and preview flows, which both start from a clean single-branch checkout. (The
+ * coding and persistent-checkout paths keep their own resume / full-clone logic.)
+ */
+async function cloneServiceCheckout(
+  dir: string,
+  job: AgentJob,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  await cloneRepo({
+    repo: { ...job.repo, baseBranch: job.branch },
+    ghToken: job.ghToken,
+    dir,
+    full: job.full,
+    signal,
+  })
+  return deriveWorkDir(dir, job.repo.serviceDirectory)
+}
+
 /** Run one generic agent job end to end, dispatching on `mode`. */
 export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise<AgentResult> {
+  if (job.mode === 'preview') return runPreviewMode(job, opts)
   return job.mode === 'coding' ? runCodingMode(job, opts) : runExploreMode(job, opts)
+}
+
+/**
+ * Decide a preview stand-up's outcome from its result (pure, so the success/failure boundary
+ * is unit-tested without spawning a build). A preview must actually come up: unlike the tester's
+ * "test what you can" fallback, a stand-up that produced no reachable serve URL (failed build /
+ * server never bound) is a hard failure and its `note` becomes the failure reason. When the app
+ * is up but WireMock is not, the `note` rides along as a non-fatal warning.
+ */
+export function buildPreviewOutcome(standUp: {
+  serveUrl?: string
+  note?: string
+}): { ok: true; url: string; note?: string } | { ok: false; error: string } {
+  if (!standUp.serveUrl) {
+    return {
+      ok: false,
+      error: standUp.note
+        ? `the frontend preview did not come up (${standUp.note})`
+        : 'the frontend preview did not come up (the served app was never reachable)',
+    }
+  }
+  return { ok: true, url: standUp.serveUrl, ...(standUp.note ? { note: standUp.note } : {}) }
+}
+
+/**
+ * Long-lived browsable preview (local/node only): clone the frontend branch, then build +
+ * serve the app with its other upstreams mocked using the SAME {@link standUpFrontend} the UI
+ * tester uses — but KEEP IT RUNNING. No agent runs, and the serve / WireMock child processes
+ * are deliberately NOT torn down when the job returns, so the app stays reachable inside the
+ * container until the container itself is stopped (the transport's explicit stop path). Because
+ * the served files must outlive the job, the checkout is cloned into a directory that is NOT
+ * auto-removed (unlike the explore/coding `withWorkspace`); the ephemeral preview container
+ * reclaims it on teardown. A preview that never comes up is a hard failure — the partial
+ * stand-up is torn down and its temp checkout removed so a failed attempt leaks nothing.
+ */
+async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
+  const logger = opts.log ?? log
+  const infra = job.infra
+  if (infra?.kind !== 'frontend') {
+    // Invalid dispatch (a preview job MUST carry the frontend infra spec). No checkout or
+    // processes exist yet, so return the structured hard failure the rest of this flow uses
+    // rather than throwing a bare exception at the job registry.
+    return {
+      error: "invalid preview job: 'infra.kind' must be 'frontend'",
+      failureCause: 'no-usable-output',
+    }
+  }
+  opts.onPhase?.('clone')
+  logger.info('agent(preview): cloning')
+  // Not a `withWorkspace` temp dir: that is removed in a `finally` the moment this function
+  // returns, which would delete the files the kept-alive server serves. The preview container
+  // is single-purpose and torn down on stop, so leaving the checkout in place is intended.
+  const dir = await mkdtemp(join(tmpdir(), 'agent-preview-'))
+  try {
+    const workDir = await cloneServiceCheckout(dir, job, opts.signal)
+
+    opts.onPhase?.('serve')
+    logger.info('agent(preview): building + serving', {
+      serviceDirectory: job.repo.serviceDirectory,
+    })
+    const fe = await standUpFrontend(workDir, infra, opts.signal, opts.onActivity, logger)
+    const infraSetupFields: { infraSetup?: InfraSetupRecord } = fe.record
+      ? { infraSetup: fe.record }
+      : {}
+    const outcome = buildPreviewOutcome(fe)
+    if (!outcome.ok) {
+      // Never came up: tear the partial stand-up down and drop the checkout so a failed preview
+      // leaks neither processes nor disk. The backend surfaces the stand-up record + failure.
+      await tearDownFrontend(fe.processes, logger)
+      await rm(dir, { recursive: true, force: true })
+      return { error: outcome.error, failureCause: 'no-usable-output', ...infraSetupFields }
+    }
+    // Deliberately NOT torn down: the serve/WireMock children outlive this job and keep the app
+    // reachable until the container is stopped. `outcome.note` (WireMock down) is a soft warning.
+    logger.info('agent(preview): serving (kept alive)', { url: outcome.url })
+    return {
+      summary: outcome.note
+        ? `Frontend preview built and served at ${outcome.url} (${outcome.note}).`
+        : `Frontend preview built and served at ${outcome.url}.`,
+      preview: { url: outcome.url },
+      ...infraSetupFields,
+    }
+  } catch (err) {
+    // A throw BEFORE the stand-up handed off (a failed / aborted clone, an mkdir error) would
+    // otherwise leak the checkout that `withWorkspace` normally reclaims — no serve processes
+    // are running yet, so drop the dir and rethrow for the job registry to record the failure.
+    await rm(dir, { recursive: true, force: true })
+    throw err
+  }
 }
 
 /**
@@ -246,6 +368,10 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
     { persistent: job.persistentCheckout === true, prefix: 'agent-explore', repo: job.repo },
     async (dir) => {
       opts.onPhase?.('clone')
+      // Monorepo: run with cwd set to the service subtree (created if missing), mirroring the
+      // coding flow so a service-scoped exploration sees the right subdirectory.
+      const serviceDirectory = job.repo.serviceDirectory
+      let workDir: string
       if (job.persistentCheckout) {
         logger.info('agent(explore): preparing reused checkout')
         await prepareExistingCheckout({
@@ -257,22 +383,11 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           existing: true,
           signal: opts.signal,
         })
+        workDir = await deriveWorkDir(dir, serviceDirectory)
       } else {
         logger.info('agent(explore): cloning')
-        await cloneRepo({
-          repo: { ...job.repo, baseBranch: job.branch },
-          ghToken: job.ghToken,
-          dir,
-          full: job.full,
-          signal: opts.signal,
-        })
+        workDir = await cloneServiceCheckout(dir, job, opts.signal)
       }
-
-      // Monorepo: run with cwd set to the service subtree (created if missing), mirroring
-      // the coding flow so a service-scoped exploration sees the right subdirectory.
-      const serviceDirectory = job.repo.serviceDirectory
-      const workDir = serviceDirectory ? join(dir, serviceDirectory) : dir
-      if (serviceDirectory) await mkdir(workDir, { recursive: true })
 
       // Optional infra stand-up (the tester): bring the service's docker-compose
       // dependencies up at the repo root for the duration of the run, tearing them down in

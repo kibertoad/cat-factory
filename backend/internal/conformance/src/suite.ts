@@ -2243,6 +2243,90 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         })
         expect(ok.status).toBe(201)
       })
+
+      it('runs the SAME provider guard on RETRY as on start (refuses a retry gone unsatisfiable)', async () => {
+        // A retry re-drives the failed run through the same steps, so it must be gated exactly
+        // like a start — otherwise a run that failed under a now-unconfigured model silently
+        // re-dispatches and fails again mid-run (the drift that let a subscription-only preset
+        // slip past retry). Start under a configured model, fail it, remove the provider, retry →
+        // refused up front with the same conflict a fresh start gives.
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { asyncKinds: ['coder'], dispatchThrowKinds: ['coder'] },
+          { cloudflareModelsEnabled: false },
+        )
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // Configure a qwen key + pin qwen so the start guard passes, then fail the run.
+        const key = await call<{ id: string }>('POST', `/workspaces/${wsId}/api-keys`, KEY)
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+
+        // Remove the provider key → the pinned model is no longer usable for THIS workspace.
+        const removed = await call('DELETE', `/workspaces/${wsId}/api-keys/${key.body.id}`)
+        expect(removed.status).toBe(204)
+
+        // Retry the failed run → refused with the same providers_unconfigured conflict as a start,
+        // because retry now shares start's `assertRunnable` gate.
+        const retried = await call<{ error: { details?: { reason?: string } } }>(
+          'POST',
+          `/workspaces/${wsId}/agent-runs/${exec.id}/retry`,
+        )
+        expect(retried.status).toBe(409)
+        expect(retried.body.error.details?.reason).toBe('providers_unconfigured')
+      })
+
+      it('runs the SAME provider guard on RESTART-from-step as on start', async () => {
+        // A restart re-dispatches the stored steps just like a retry (from an arbitrary step),
+        // so it must be gated identically — otherwise a run whose model went unconfigured slips
+        // past restart and strands mid-run. Start under a configured model, fail it, remove the
+        // provider, restart from step 0 → refused up front with the same conflict a start gives.
+        const { call, createWorkspace, drive } = harness.makeApp(
+          { asyncKinds: ['coder'], dispatchThrowKinds: ['coder'] },
+          { cloudflareModelsEnabled: false },
+        )
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const key = await call<{ id: string }>('POST', `/workspaces/${wsId}/api-keys`, KEY)
+        await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, { modelId: 'qwen' })
+        const pipeline = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build only',
+          agentKinds: ['coder'],
+        })
+        const start = await call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const exec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('failed')
+
+        const removed = await call('DELETE', `/workspaces/${wsId}/api-keys/${key.body.id}`)
+        expect(removed.status).toBe(204)
+
+        // Restart from the first step → refused with providers_unconfigured, because restart now
+        // shares start's `assertRunnable` gate over the stored steps it re-drives.
+        const restarted = await call<{ error: { details?: { reason?: string } } }>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/restart`,
+          { fromStepIndex: 0 },
+        )
+        expect(restarted.status).toBe(409)
+        expect(restarted.body.error.details?.reason).toBe('providers_unconfigured')
+      })
     })
 
     describe('merge presets', () => {
