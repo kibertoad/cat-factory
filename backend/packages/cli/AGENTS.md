@@ -5,6 +5,5 @@ crypto secrets, mints a GitHub/GitLab PAT, writes the gitignored `.env` files). 
 [README.md](./README.md).**
 
 Flat `src/`: pure functions (`buildPlan` / `generateSecrets` / `buildLocalEnv` / `mergeGitignore`
-
-- the VCS URL helpers) under an injectable IO+FS seam, so the whole flow is tested; `@clack/prompts`
-  is confined to the real IO impl.
+plus the VCS URL helpers) under an injectable IO+FS seam, so the whole flow is tested;
+`@clack/prompts` is confined to the real IO impl.

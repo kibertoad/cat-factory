@@ -88,6 +88,14 @@ The pilot — the environment-backend + runner-backend registries — is the tem
   already-built `container.<service>`, so they get it for free.
 - **Pre-1.0 = no back-compat.** Remove the old free functions outright; flag breaking in
   the changeset. Don't keep a shim.
+- **A closed-union registry key limits what a deployment can register.** Unlike the pilot's
+  open-string backend keys, `UserSecretKindRegistry` is keyed by the closed contract union
+  `UserSecretKind` (`USER_SECRET_KINDS = ['github_pat']` in `contracts/src/user-secret.ts`).
+  So `register(...)` can only **override** `github_pat` today, not add a genuinely new external
+  kind — adding one first needs a `contracts` change to widen the union. The DI move still
+  removes the module-identity footgun (the by-reference override path is what the conformance
+  suite asserts), but the "register a custom kind" story isn't reachable for a new kind until
+  the union opens up.
 - **Agent-kind / pipeline / gate registries are read deep in the engine** (lazily, on first
   use). Migrating those means threading the registry into `ExecutionService` /
   `seedPipelines` — larger blast radius than the backend registries; scope each carefully.

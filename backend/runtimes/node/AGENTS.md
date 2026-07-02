@@ -20,8 +20,8 @@ transport, and Node model provisioning.
 - `container.ts` — the DI composition root (`buildNodeContainer`, with injected
   `resolveTransport`/`mintInstallationToken`/`githubClient` seams the local facade overrides).
 - `execution/` — pg-boss durable execution (`pgBossRunner`, `drive`).
-- `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts` — Node gateway
-  - model + transport wiring and the retention sweep.
+- `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts` — Node gateway,
+  model, and transport wiring plus the retention sweep.
 
 **See also:** `CLAUDE.md` → "Multi-runtime facades", "Resolving conflicting Drizzle migrations
 (post-merge)".

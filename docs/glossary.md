@@ -84,8 +84,9 @@ The step taxonomy is `CLAUDE.md` → "Gates vs agents". Code:
 - The built-in gate suite (`ci`, `conflicts`, `post-release-health`, `on-call`) —
   `@cat-factory/gates` (`backend/packages/gates/src/gates.ts` + `providers.ts`), registered via
   the public `registerGate` seam.
-- Gate _consumption_ (the engine driving them) — `backend/packages/orchestration/src/modules/
-execution/` (`evaluateGate` / `dispatchGateHelper` / `pollGate` in the run engine).
+- Gate _consumption_ (the engine driving them) —
+  `backend/packages/orchestration/src/modules/execution/` (`evaluateGate` / `dispatchGateHelper` /
+  `pollGate` in the run engine).
 
 ### Agent kinds
 
@@ -109,9 +110,9 @@ symmetric"):
   `sandbox-migrations/`, `migrations-provisioning/`). Duplicate numeric prefixes are fine (they
   apply in lexical order).
 - **Node (Drizzle/Postgres)** — one `backend/runtimes/node/drizzle/` dir of generated migrations
-  - the single source of truth `backend/runtimes/node/src/db/schema.ts`. It is a content-addressed
-    DAG (`prevIds`), not a linear journal — see `CLAUDE.md` → "Resolving conflicting Drizzle
-    migrations (post-merge)".
+  plus the single source of truth `backend/runtimes/node/src/db/schema.ts`. It is a
+  content-addressed DAG (`prevIds`), not a linear journal — see `CLAUDE.md` → "Resolving conflicting
+  Drizzle migrations (post-merge)".
 
 The two systems share no naming convention, so correlating a pair means reading the SQL bodies;
 the cross-runtime conformance suite (`backend/internal/conformance`) is what actually asserts the

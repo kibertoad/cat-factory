@@ -228,7 +228,7 @@ export interface UserSecretsProbe {
     userId: string,
     kind: string,
     input: { secret: string; metadata?: Record<string, string>; label?: string },
-  ): Promise<{ kind: string; hasSecret: boolean; metadata?: Record<string, string> }>
+  ): Promise<{ kind: string; label: string; hasSecret: boolean; metadata?: Record<string, string> }>
   resolve(userId: string, kind: string): Promise<string | null>
   describe(kind: string): {
     kind: string

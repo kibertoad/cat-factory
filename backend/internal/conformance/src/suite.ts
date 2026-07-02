@@ -2893,6 +2893,13 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const descriptor = probe.describe('github_pat')
         expect(descriptor?.supportsTest).toBe(false)
         expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('pat')
+
+        // …and the write path reads the SAME injected handler: storing without an explicit
+        // label falls back to the customised handler's label, not the built-in's. This proves
+        // `store()` (not just `describe()`) consults the injected registry by reference.
+        const userId = `usr_secret_injected_${Date.now()}`
+        const stored = await probe.store(userId, 'github_pat', { secret: 'ghp_injected_1' })
+        expect(stored.label).toBe('Conformance PAT')
       })
     })
 

@@ -38,6 +38,7 @@ import {
   LinearDocumentProvider,
   LinearTaskProvider,
   createBackendRegistries,
+  defaultUserSecretKindRegistry,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
   type UserSecretKindRegistry,
@@ -1170,7 +1171,7 @@ function buildUserSecretService(
   env: Env,
   db: D1Database,
   clock: Clock,
-  userSecretKindRegistry?: UserSecretKindRegistry,
+  userSecretKindRegistry: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
@@ -1178,7 +1179,7 @@ function buildUserSecretService(
     userSecretRepository: new D1UserSecretRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
-    ...(userSecretKindRegistry ? { userSecretKindRegistry } : {}),
+    userSecretKindRegistry,
   })
 }
 
@@ -1192,7 +1193,10 @@ function buildResolveUserGitHubToken(
   db: D1Database,
   clock: Clock,
 ): ResolveUserGitHubToken | undefined {
-  const userSecrets = buildUserSecretService(env, db, clock)
+  // Resolve-only: `.resolve()` never consults the kind registry, so this second service can
+  // keep the built-in-only default rather than threading the injected (possibly customised)
+  // instance. See the registry-DI migration tracker's "resolve-only construction sites" gotcha.
+  const userSecrets = buildUserSecretService(env, db, clock, defaultUserSecretKindRegistry())
   return userSecrets ? (userId) => userSecrets.resolve(userId, 'github_pat') : undefined
 }
 
