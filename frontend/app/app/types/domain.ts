@@ -37,6 +37,8 @@ export type {
   FrontendPackageManager,
   FrontendServeMode,
   FrontendEnvInjection,
+  FrontendConfigRecommendation,
+  FrontendDetectionNote,
   AgentConfigOption,
   AgentConfigDescriptor,
   TestConcernSeverity,

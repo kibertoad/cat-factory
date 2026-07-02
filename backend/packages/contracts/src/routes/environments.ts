@@ -25,6 +25,7 @@ import {
   providerDescriptorSchema,
   repoValidationResultSchema,
 } from '../provider-config.js'
+import { detectFrontendConfigSchema, frontendConfigRecommendationSchema } from '../frontend.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -111,6 +112,15 @@ export const detectServiceProvisioningContract = defineApiContract({
   pathResolver: () => '/environments/detect-provisioning',
   requestBodySchema: detectServiceProvisioningSchema,
   responsesByStatusCode: { 200: provisioningRecommendationSchema, ...errorResponses },
+})
+
+// Auto-detect a NON-BINDING recommended FRONTEND config from a frontend repo (read checkout-free
+// over RepoFiles). Nothing persisted — the SPA prefills a preview the user applies.
+export const detectFrontendConfigContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/environments/detect-frontend-config',
+  requestBodySchema: detectFrontendConfigSchema,
+  responsesByStatusCode: { 200: frontendConfigRecommendationSchema, ...errorResponses },
 })
 
 // Generate (or fix) a service's custom manifest file via the fixer coding agent. Returns a

@@ -290,6 +290,12 @@ export interface ServiceInfraSpec {
  */
 export interface FrontendInfraSpec {
   kind: 'frontend'
+  /**
+   * The frontend app's subdirectory within the checkout (a monorepo frontend). Absent ⇒ the
+   * checkout root. When set, install/build/serve run there and `outputDir`/`wiremockMappingsPath`
+   * are resolved relative to it.
+   */
+  directory?: string
   /** Package manager for install/build. Default `pnpm`. */
   packageManager?: 'pnpm' | 'npm' | 'yarn'
   /** Explicit install command, overriding the one derived from `packageManager`. */
@@ -661,6 +667,7 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   const wiremockPort = port(o.wiremockPort)
   return {
     kind: 'frontend',
+    ...(typeof o.directory === 'string' && o.directory ? { directory: o.directory } : {}),
     ...(packageManager ? { packageManager } : {}),
     ...(typeof o.install === 'string' && o.install ? { install: o.install } : {}),
     ...(typeof o.buildScript === 'string' && o.buildScript ? { buildScript: o.buildScript } : {}),
