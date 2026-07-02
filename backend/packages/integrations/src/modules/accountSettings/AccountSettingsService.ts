@@ -19,6 +19,7 @@ import {
   parseAccountSettingsConfig,
   parseAccountSettingsSecrets,
 } from '@cat-factory/contracts'
+import * as environmentsLogic from '../environments/environments.logic.js'
 
 /** Capability used when a facade doesn't supply one (storage disabled — e.g. in tests). */
 const DISABLED_CONTENT_STORAGE_CAPABILITY: ContentStorageCapability = {
@@ -140,6 +141,16 @@ export class AccountSettingsService {
     const current = existing?.secretsCipher ? await this.decryptSecrets(existing.secretsCipher) : {}
     const merged: AccountSettingsSecrets = { ...current }
     if (input.secrets) {
+      // SSRF: an account-supplied SearXNG URL is fetched server-side, so reject a private/
+      // internal/metadata host at the write boundary (it's re-checked on every fetch hop
+      // too). Public host over http/https only — matches the web-search upstream guard.
+      const searxngUrl = input.secrets.webSearch?.searxngUrl
+      if (searxngUrl) {
+        environmentsLogic.assertSafeEnvironmentUrl(searxngUrl, 'SearXNG URL', {
+          schemes: ['http', 'https'],
+          allowHosts: [],
+        })
+      }
       for (const key of ['slackOAuth', 'linearOAuth', 'webSearch', 's3'] as const) {
         if (!(key in input.secrets)) continue
         const value = input.secrets[key]

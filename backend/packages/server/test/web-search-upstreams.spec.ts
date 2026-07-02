@@ -13,7 +13,7 @@ import {
 // real URL building + header handling are exercised; `disableNetConnect` fails loudly on
 // any un-mocked request.
 const BRAVE = 'https://api.search.brave.com'
-const SEARX = 'https://searx.local'
+const SEARX = 'https://searx.example.com'
 
 let agent: MockAgent
 let previousDispatcher: ReturnType<typeof getGlobalDispatcher>
@@ -99,7 +99,7 @@ describe('SearxngWebSearchUpstream', () => {
     const seen = captureGet(SEARX, '/search', {
       results: [{ url: 'https://d.example', title: 'D', content: 'snippet' }],
     })
-    const res = await new SearxngWebSearchUpstream('https://searx.local/', 'sx-key').search('q')
+    const res = await new SearxngWebSearchUpstream('https://searx.example.com/', 'sx-key').search('q')
     expect(res.results).toEqual([{ url: 'https://d.example', title: 'D', content: 'snippet' }])
     expect(seen[0]!.path).toBe('/search?q=q&format=json')
     expect(seen[0]!.headers.authorization).toBe('Bearer sx-key')
@@ -107,7 +107,7 @@ describe('SearxngWebSearchUpstream', () => {
 
   it('omits the bearer when no key is set', async () => {
     const seen = captureGet(SEARX, '/search', { results: [] })
-    await new SearxngWebSearchUpstream('https://searx.local').search('q')
+    await new SearxngWebSearchUpstream('https://searx.example.com').search('q')
     expect(seen[0]!.headers.authorization).toBeUndefined()
   })
 })
@@ -120,13 +120,13 @@ describe('createWebSearchUpstream', () => {
   it('prefers Brave when its key is set', () => {
     const up = createWebSearchUpstream({
       braveApiKey: 'k',
-      searxngUrl: 'https://searx.local',
+      searxngUrl: 'https://searx.example.com',
     })
     expect(up).toBeInstanceOf(BraveWebSearchUpstream)
   })
 
   it('falls back to a self-hosted SearXNG', () => {
-    const up = createWebSearchUpstream({ searxngUrl: 'https://searx.local' })
+    const up = createWebSearchUpstream({ searxngUrl: 'https://searx.example.com' })
     expect(up).toBeInstanceOf(SearxngWebSearchUpstream)
   })
 })
