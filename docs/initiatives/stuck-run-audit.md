@@ -1,6 +1,6 @@
 # Initiative: stuck-run audit (agent / step / container wedge cases)
 
-**Status:** audit complete, fixes not started · **Owner:** core · **Started:** 2026-07-02
+**Status:** Group A landed (F1/F2/F5); B–D todo · **Owner:** core · **Started:** 2026-07-02
 **Audited at:** `main` @ `fc8df61` (file:line references are against that commit)
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -234,24 +234,56 @@ never trips either and burns the whole budget (and the engine budget behind it).
 Fixes are grouped by cohesion; each group is one PR-sized slice. Update the table at the end
 of each PR.
 
-| #   | Finding                                             | Area                   | Fix group                | Status  | PR  |
-| --- | --------------------------------------------------- | ---------------------- | ------------------------ | ------- | --- |
-| F1  | CF sweeper hard-stall on raw lease age              | CF sweeper             | A — recovery correctness | ⬜ todo |     |
-| F2  | BootstrapWorkflow terminal-return vs sweeper        | CF workflow/sweeper    | A                        | ⬜ todo |     |
-| F5  | `blocked` + dead instance discards decision         | CF workflow/sweeper    | A                        | ⬜ todo |     |
-| F3  | Spend-pause: no signal, no auto-resume              | engine + notifications | B — invisible parks      | ⬜ todo |     |
-| F7  | `ensureWaitingNotification` suppression             | engine                 | B                        | ⬜ todo |     |
-| F10 | Recurring fire clobbers `blocked` run               | integrations           | B                        | ⬜ todo |     |
-| F4  | Pool transport: no eviction mapping / no-op release | integrations           | C — transport bounds     | ⬜ todo |     |
-| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C                        | ⬜ todo |     |
-| F11 | `pr_ready` before `merge_review` raise              | engine                 | C                        | ⬜ todo |     |
-| F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D — hang ceilings        | ⬜ todo |     |
-| F9  | Node advance has no timeout                         | node driver            | D                        | ⬜ todo |     |
-| F12 | Sleep-eviction burns the single recovery            | CF container           | D                        | ⬜ todo |     |
-| F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                        | ⬜ todo |     |
+| #   | Finding                                             | Area                   | Fix group                | Status     | PR      |
+| --- | --------------------------------------------------- | ---------------------- | ------------------------ | ---------- | ------- |
+| F1  | CF sweeper hard-stall on raw lease age              | CF sweeper             | A — recovery correctness | ✅ done    | this PR |
+| F2  | BootstrapWorkflow terminal-return vs sweeper        | CF workflow/sweeper    | A                        | ✅ done    | this PR |
+| F5  | `blocked` + dead instance discards decision         | CF workflow/sweeper    | A                        | 🟨 partial | this PR |
+| F3  | Spend-pause: no signal, no auto-resume              | engine + notifications | B — invisible parks      | ⬜ todo    |         |
+| F7  | `ensureWaitingNotification` suppression             | engine                 | B                        | ⬜ todo    |         |
+| F10 | Recurring fire clobbers `blocked` run               | integrations           | B                        | ⬜ todo    |         |
+| F4  | Pool transport: no eviction mapping / no-op release | integrations           | C — transport bounds     | ⬜ todo    |         |
+| F8  | `reinitAndPush` not abort-aware                     | harness (image bump)   | C                        | ⬜ todo    |         |
+| F11 | `pr_ready` before `merge_review` raise              | engine                 | C                        | ⬜ todo    |         |
+| F6  | Harness event-loop starvation vs watchdogs          | harness (image bump)   | D — hang ceilings        | ⬜ todo    |         |
+| F9  | Node advance has no timeout                         | node driver            | D                        | ⬜ todo    |         |
+| F12 | Sleep-eviction burns the single recovery            | CF container           | D                        | ⬜ todo    |         |
+| F13 | Chatty-hang runs full 60 min                        | harness (image bump)   | D                        | ⬜ todo    |         |
 
 Suggested order: A (guaranteed wrong-kill on common operational events), then B (parks with
 no signal), then C, then D (most invasive; D is deferrable).
+
+### Group A implementation notes (landed)
+
+- **F1** — `sweepStuckRuns` (`cloudflare/.../workflows/sweeper.ts`) gained an `orphanedSince`
+  `Map<runId, firstSeenMs>` (mutated in place, defaulting to a fresh map when omitted). The
+  hard-stall check now compares `now - firstSeenOrphaned` instead of `now - ref.updatedAt`, and
+  the loop prunes the map of runs that recovered / went terminal / were stalled. The cron
+  handler (`index.ts`) owns a **per-isolate** module-global `runSweepOrphanedSince` and threads
+  it in; a warm isolate carries it across the 2-min ticks and an eviction just resets it (the
+  safe direction — more grace, never a premature kill). Unit-tested with fakes in
+  `durable-execution.spec.ts` (huge-lease-age → re-driven-not-stalled on first tick; forgets a
+  recovered run).
+- **F2** — `BootstrapWorkflow` **and** `EnvConfigRepairWorkflow` no longer `return` on a
+  poll-read failure past `jobPollFailureTolerance`; they `continue` (keep the instance alive).
+  `pollReadFailures` is now purely diagnostic. Reasoning: a thrown poll error is always
+  transient — a vanished container surfaces as a 404→`failed` poll RESULT, not a throw — and the
+  container's own max-duration watchdog (60 min) is shorter than the 70-min poll budget, so a
+  healthy run can never legitimately reach the budget-exhausted tail (where the sweeper's
+  finalize-as-stopped is the correct terminal outcome for a truly-wedged run).
+- **F5** — **partial.** Added `buildWorkflowRuntime` (`workflows/runtime.ts`): retries the
+  per-wake `buildContainer`/`loadConfig` a few times with durable `step.sleep`s, applied at the
+  top of all three workflows. This closes the **transient** wake-throw door (the audit's stated
+  trigger). It does NOT close the deterministic case: a persistent construction throw still
+  rethrows → terminal instance, and because a terminal Workflows instance id can never be
+  re-created, the sweeper still can only finalize (not re-drive) such a `blocked` run — so the
+  decision can still be discarded on a genuinely broken deployment.
+  **Deferred:** the complete fix (and F2's option (a), and the general "terminal id can't be
+  reused" limitation behind several findings) needs **attempt-suffixed Workflows instance ids**
+  so the sweeper can re-drive a terminal instance under a fresh id, plus tracking the current
+  attempt for `signal`/`cancel`. That's a cross-workflow refactor (execution + bootstrap +
+  env-config-repair) — carve it out as its own slice before relying on `finalizeOrphan` to
+  resume rather than stop.
 
 ## Conventions & gotchas for implementers
 
