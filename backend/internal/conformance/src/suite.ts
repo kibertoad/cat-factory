@@ -4535,7 +4535,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           expect(before.status).toBe(200)
           expect(before.body.status).toBe('stopped')
 
-          // Start → 201, provisioning; a `preview`-typed env row is keyed by the FRAME.
+          // Start → 201, provisioning; a `preview`-typed env row is persisted keyed by the FRAME.
           const started = await app.call<{ status: string; frameId: string }>(
             'POST',
             `/workspaces/${wsId}/frames/blk_frontend/preview`,
@@ -4544,13 +4544,11 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           expect(started.body.status).toBe('starting')
           expect(started.body.frameId).toBe('blk_frontend')
 
-          const envs = await app.call<{ blockId: string | null; frameId?: string | null }[]>(
-            'GET',
-            `/workspaces/${wsId}/environments`,
-          )
-          expect(envs.body).toHaveLength(1)
-          expect(envs.body[0]!.frameId).toBe('blk_frontend')
-          expect(envs.body[0]!.blockId).toBe('blk_frontend')
+          // The preview row shares the `environments` table but is NOT a provisioned environment,
+          // so it must be ISOLATED from the deployer-env listing the SPA renders (the persistence
+          // itself is proven by the preview endpoints below, which read it back on both runtimes).
+          const envs = await app.call<unknown[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(0)
 
           // Get → the fake transport reports it serving, so it flips to `ready` with the URL.
           const ready = await app.call<{ status: string; url?: string }>(
@@ -4561,7 +4559,7 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
           expect(ready.body.status).toBe('ready')
           expect(ready.body.url).toBe('http://preview.test:4173')
 
-          // Stop → soft-deletes the row; a subsequent get + env list are empty again.
+          // Stop → soft-deletes the row; a subsequent get reports `stopped` again.
           const stopped = await app.call<{ status: string }>(
             'DELETE',
             `/workspaces/${wsId}/frames/blk_frontend/preview`,

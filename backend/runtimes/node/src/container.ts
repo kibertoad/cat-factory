@@ -1210,6 +1210,15 @@ function buildNodeGitHubIssueFiler(
 export function buildNodeContainer(options: NodeContainerOptions): ServerContainer {
   const env = options.env ?? process.env
   const config = options.config ?? loadNodeConfig(env)
+  // A browsable preview needs a per-runtime host-port-publish transport. Plain Node (runner
+  // pool) has none, so advertise support ONLY when a `previewTransport` is actually wired
+  // (local mode, or a facade/test that injects one) — otherwise the SPA would offer a Start
+  // button that 503s. Local pre-sets its own descriptor before calling in, so this ??= is
+  // skipped there; the check covers a stock Node build (false) and the conformance harness
+  // (which injects a fake transport via `overrides` → true).
+  const previewTransportWired = Boolean(
+    options.previewTransport ?? options.overrides?.previewTransport,
+  )
   // The Node service has no built-in per-run container runtime: repo-operating agents run on
   // a self-hosted runner pool, and Tester environments via the environment provider. Surface
   // that so the SPA's infrastructure selector reads accurately. Local mode pre-sets its own
@@ -1217,9 +1226,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   config.infrastructure ??= buildInfrastructureCapabilities({
     execution: { available: ['runner-pool'], active: 'runner-pool' },
     testEnv: { available: ['environment-provider'], active: 'environment-provider' },
-    // Node can keep a built frontend served on a host-reachable URL, so a browsable preview is
-    // supported here (the local facade sets its own descriptor before this default is reached).
-    frontendPreview: { supported: true },
+    frontendPreview: { supported: previewTransportWired },
   })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()

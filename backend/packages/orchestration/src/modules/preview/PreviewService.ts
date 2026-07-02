@@ -6,6 +6,7 @@ import type {
   PreviewRef,
   PreviewTransport,
 } from '@cat-factory/kernel'
+import { PREVIEW_PROVISION_TYPE } from '@cat-factory/kernel'
 import type { PreviewState } from '@cat-factory/contracts'
 
 // The browsable frontend PREVIEW service (slice 5c of the frontend-preview initiative). It is
@@ -44,9 +45,6 @@ export interface PreviewServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
 }
-
-/** Marks a preview row apart from a provisioned (deployer) env sharing the registry table. */
-const PREVIEW_PROVISION_TYPE = 'preview'
 
 export class PreviewService {
   constructor(private readonly deps: PreviewServiceDependencies) {}
@@ -116,7 +114,8 @@ export class PreviewService {
   async get(workspaceId: string, frameId: string): Promise<PreviewState> {
     const row = await this.currentPreview(workspaceId, frameId)
     if (!row) return this.state(frameId, 'stopped')
-    if (row.status !== 'provisioning') return this.rowState(row)
+    // A terminal `failed` row is authoritative — no transport call.
+    if (row.status === 'failed') return this.rowState(row)
 
     let view
     try {
@@ -127,6 +126,9 @@ export class PreviewService {
     }
 
     if (view.state === 'failed') {
+      // Covers both a build that never came up (a `provisioning` row) AND a served preview whose
+      // container has since vanished/been evicted (a `ready` row) — the transport reports either
+      // as `failed`, so a dead preview stops reporting a stale, unreachable URL.
       const error = view.error ?? 'The preview failed'
       await this.deps.environmentRegistryRepository.update(workspaceId, row.id, {
         status: 'failed',
@@ -141,8 +143,11 @@ export class PreviewService {
       })
       return this.state(frameId, 'ready', { url: view.url })
     }
-    // Still building/serving (no reachable URL yet).
-    return this.state(frameId, 'starting')
+    // The container is alive but the transport can't (re)confirm a URL — e.g. after a process
+    // restart the served-app port lookup is only possible within the starting process. For an
+    // already-`ready` row keep its authoritative persisted URL rather than demoting a healthy
+    // preview to `starting`; a still-`provisioning` row simply stays `starting`.
+    return this.rowState(row)
   }
 
   /** Stop the frame's preview: reclaim the container and tombstone the row. Idempotent. */

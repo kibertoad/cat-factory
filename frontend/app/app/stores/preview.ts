@@ -18,6 +18,8 @@ export const usePreviewStore = defineStore('preview', () => {
   const byFrame = ref<Record<string, PreviewState>>({})
   /** frameId → a start/stop request is in flight (drives the button loading state). */
   const busy = ref<Record<string, boolean>>({})
+  /** frameId → the last start/stop request error (e.g. the runtime 503s), else undefined. */
+  const requestError = ref<Record<string, string | undefined>>({})
 
   // Active poll timers while a preview is `starting`, so a settled/left preview stops polling.
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
@@ -55,28 +57,38 @@ export const usePreviewStore = defineStore('preview', () => {
     }
   }
 
-  /** Start (or restart) the preview for a frame. */
+  /**
+   * Start (or restart) the preview for a frame. A request failure (e.g. the runtime replies 503)
+   * is captured in {@link requestError} rather than escaping as an unhandled rejection from the
+   * click handler.
+   */
   async function start(frameId: string): Promise<void> {
     const ws = useWorkspaceStore()
     busy.value[frameId] = true
+    requestError.value[frameId] = undefined
     try {
       apply(frameId, await api.startPreview(ws.requireId(), frameId))
+    } catch (err) {
+      requestError.value[frameId] = err instanceof Error ? err.message : String(err)
     } finally {
       busy.value[frameId] = false
     }
   }
 
-  /** Stop the preview for a frame. */
+  /** Stop the preview for a frame. Failures are captured in {@link requestError}, not thrown. */
   async function stop(frameId: string): Promise<void> {
     const ws = useWorkspaceStore()
     busy.value[frameId] = true
+    requestError.value[frameId] = undefined
     try {
       stopPolling(frameId)
       apply(frameId, await api.stopPreview(ws.requireId(), frameId))
+    } catch (err) {
+      requestError.value[frameId] = err instanceof Error ? err.message : String(err)
     } finally {
       busy.value[frameId] = false
     }
   }
 
-  return { byFrame, busy, refresh, start, stop }
+  return { byFrame, busy, requestError, refresh, start, stop, stopPolling }
 })

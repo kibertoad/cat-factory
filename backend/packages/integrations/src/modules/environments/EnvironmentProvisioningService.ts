@@ -30,6 +30,7 @@ import type { EnvironmentAccessHandle, EnvironmentHandle } from '@cat-factory/ke
 import {
   assertFound,
   getErrorMessage,
+  PREVIEW_PROVISION_TYPE,
   STRICT_URL_SAFETY_POLICY,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -711,10 +712,17 @@ export class EnvironmentProvisioningService {
     return recordToHandle({ ...record, ...patch })
   }
 
-  /** List a workspace's environments (no creds). */
+  /**
+   * List a workspace's environments (no creds). Browsable-preview rows share the registry table
+   * but are NOT provisioned environments (they carry the {@link PREVIEW_PROVISION_TYPE}
+   * discriminator and are owned by the PreviewService), so they are filtered out here — they must
+   * not surface in the deployer-env listing the SPA renders.
+   */
   async listHandles(workspaceId: string): Promise<EnvironmentHandle[]> {
     const records = await this.deps.environmentRegistryRepository.listByWorkspace(workspaceId)
-    return records.map((r) => recordToHandle(r))
+    return records
+      .filter((r) => r.provisionType !== PREVIEW_PROVISION_TYPE)
+      .map((r) => recordToHandle(r))
   }
 
   /** A single environment handle (no creds), or null. */
@@ -736,7 +744,9 @@ export class EnvironmentProvisioningService {
    */
   async resolveForBlock(workspaceId: string, blockId: string): Promise<ResolvedEnvironment | null> {
     const record = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
-    if (!record) return null
+    // A browsable-preview row is not a provisioned environment — never resolve it as a block's
+    // live env (e.g. for tester context enrichment); it is owned solely by the PreviewService.
+    if (!record || record.provisionType === PREVIEW_PROVISION_TYPE) return null
     return {
       url: record.url,
       status: record.status,
@@ -753,7 +763,8 @@ export class EnvironmentProvisioningService {
    */
   async getHandleForBlock(workspaceId: string, blockId: string): Promise<EnvironmentHandle | null> {
     const record = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
-    return record ? recordToHandle(record) : null
+    // Exclude a browsable-preview row (see resolveForBlock) — it is not a provisioned env.
+    return record && record.provisionType !== PREVIEW_PROVISION_TYPE ? recordToHandle(record) : null
   }
 
   /**

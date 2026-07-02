@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import type {
   Block,
   FrontendBackendBinding,
@@ -105,6 +105,9 @@ const previewActive = computed(() => previewSupported.value && config.value.prev
 const previewState = computed(() => preview.byFrame[props.block.id])
 const previewStatus = computed<PreviewStatus>(() => previewState.value?.status ?? 'stopped')
 const previewBusy = computed(() => preview.busy[props.block.id] === true)
+// A start/stop request error (e.g. an unsupported runtime 503s) — shown inline; distinct from a
+// `failed` preview (a build that came up then broke), which carries `previewState.error`.
+const previewRequestError = computed(() => preview.requestError[props.block.id])
 
 // Exhaustive status → catalog key (tier-2 guard for the runtime-built lookup): adding a
 // PreviewStatus value without a label trips the typecheck on this map.
@@ -123,6 +126,9 @@ function refreshPreview() {
 }
 onMounted(refreshPreview)
 watch(() => [previewActive.value, props.block.id], refreshPreview)
+// Stop the store's self-poll for this frame when the inspector closes, so a `starting` preview
+// doesn't keep polling in the background after the panel is gone.
+onUnmounted(() => preview.stopPolling(props.block.id))
 </script>
 
 <template>
@@ -453,6 +459,14 @@ watch(() => [previewActive.value, props.block.id], refreshPreview)
           data-testid="preview-error"
         >
           {{ previewState.error }}
+        </p>
+
+        <p
+          v-if="previewRequestError"
+          class="text-[11px] leading-snug text-rose-400"
+          data-testid="preview-request-error"
+        >
+          {{ previewRequestError }}
         </p>
       </div>
     </div>

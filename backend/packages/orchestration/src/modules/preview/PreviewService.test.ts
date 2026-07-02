@@ -44,7 +44,7 @@ class FakeTransport implements PreviewTransport {
   started: PreviewRef[] = []
   stopped: PreviewRef[] = []
   constructor(
-    private readonly view: PreviewView = { state: 'running', url: 'http://p:4173' },
+    public view: PreviewView = { state: 'running', url: 'http://p:4173' },
     private readonly startError?: Error,
   ) {}
   async start(ref: PreviewRef): Promise<void> {
@@ -104,6 +104,36 @@ describe('PreviewService', () => {
     expect(state).toMatchObject({ status: 'ready', url: 'http://p:4173' })
     const row = await repo.getByBlock('ws', 'blk_fe')
     expect(row).toMatchObject({ status: 'ready', url: 'http://p:4173' })
+  })
+
+  it('demotes a ready preview to failed once its container has vanished', async () => {
+    const transport = new FakeTransport()
+    const { service, repo } = makeService(transport)
+    await service.start('ws', 'blk_fe')
+    // First get drives it to ready.
+    expect(await service.get('ws', 'blk_fe')).toMatchObject({ status: 'ready' })
+    // The container is later evicted — a subsequent get re-polls the ready row and reflects it.
+    transport.view = { state: 'failed', error: 'The preview container has gone away' }
+    const state = await service.get('ws', 'blk_fe')
+    expect(state).toMatchObject({ status: 'failed', error: 'The preview container has gone away' })
+    expect(await repo.getByBlock('ws', 'blk_fe')).toMatchObject({ status: 'failed' })
+  })
+
+  it('keeps a ready preview and its URL when the transport cannot reconfirm the URL', async () => {
+    const transport = new FakeTransport()
+    const { service } = makeService(transport)
+    await service.start('ws', 'blk_fe')
+    expect(await service.get('ws', 'blk_fe')).toMatchObject({
+      status: 'ready',
+      url: 'http://p:4173',
+    })
+    // Container alive but the served-app URL can't be re-derived (e.g. after a process restart):
+    // the healthy preview is NOT demoted — its authoritative persisted URL stands.
+    transport.view = { state: 'starting' }
+    expect(await service.get('ws', 'blk_fe')).toMatchObject({
+      status: 'ready',
+      url: 'http://p:4173',
+    })
   })
 
   it('records a start-time transport failure as a failed state', async () => {

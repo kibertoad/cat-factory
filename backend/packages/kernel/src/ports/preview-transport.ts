@@ -21,6 +21,14 @@
  */
 export const PREVIEW_HARNESS_JOB_ID = 'preview'
 
+/**
+ * The `provisionType`/`providerId`/`engine` discriminator a running preview is persisted with in
+ * the shared `environments` table. It is deliberately OUTSIDE `provisionTypeSchema` (previews are
+ * not a user-selectable provision kind), so the environment subsystem filters rows carrying it out
+ * of its generic listing + block-resolution paths — a preview is owned solely by the PreviewService.
+ */
+export const PREVIEW_PROVISION_TYPE = 'preview'
+
 /** Addresses one preview: the workspace + the `frontend` frame it serves (its stable id). */
 export interface PreviewRef {
   workspaceId: string
