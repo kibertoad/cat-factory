@@ -204,7 +204,10 @@
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
       "showDetail": "הצג פרטים",
-      "retrying": "מנסה שוב…"
+      "retrying": "מנסה שוב…",
+      "history": {
+        "previousErrors": "שגיאה קודמת {count} | {count} שגיאות קודמות"
+      }
     },
     "stop": {
       "label": "עצור",
@@ -439,14 +442,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "כיצד לבנות, להגיש ולדמות את ה-frontend הזה לבדיקת ממשק עצמאית. הקישורים למטה מחברים אותו לשירותי ה-backend שהוא קורא אליהם.",
+      "detect": {
+        "title": "זהה מהמאגר",
+        "button": "זהה",
+        "hint": "קורא את המאגר המקושר ומציע תצורה לבדיקה לפני החלה. שום דבר לא נשמר עד שתחיל.",
+        "error": "לא ניתן לקרוא את המאגר. ודא שה-frontend מקושר למאגר מחובר.",
+        "none": "לא זוהה דבר בעל מבנה frontend. הגדר את תיקיית ה-frontend (עבור monorepo) או מלא את השדות ידנית.",
+        "apply": "החל",
+        "dismiss": "בטל",
+        "confidenceHigh": "בטוח",
+        "confidenceLow": "ניחוש"
+      },
+      "groups": {
+        "build": "בנייה",
+        "serve": "הגשה",
+        "mocking": "הדמיה",
+        "envInjection": "הזרקת סביבה",
+        "bindings": "קישורי backend",
+        "preview": "תצוגה מקדימה"
+      },
       "packageManager": "מנהל חבילות",
+      "directory": "תיקיית frontend",
+      "directoryHint": "תת-התיקייה של אפליקציית ה-frontend במאגר (monorepo, למשל frontend/). השאר ריק אם האפליקציה נמצאת בשורש המאגר.",
       "installCommand": "פקודת התקנה",
       "buildScript": "סקריפט בנייה",
       "outputDir": "תיקיית פלט",
       "serveMode": "מצב הגשה",
       "serveStatic": "סטטי",
       "serveCommand": "פקודה",
-      "serveModeHint": "סטטי מגיש את תיקיית פלט הבנייה; פקודה מריצה סקריפט מ-package.json (למשל preview).",
+      "serveStaticDesc": "מגיש את תיקיית פלט הבנייה כקבצים סטטיים. הזול ביותר לבדיקת ממשק של אפליקציה בנויה במלואה.",
+      "serveCommandDesc": "מריץ סקריפט מ-package.json (למשל preview) כדי להגיש את האפליקציה, עבור בנייה הזקוקה לשרת פעיל.",
+      "serveEnvAxisNote": "נפרד מהזרקת הסביבה (בזמן בנייה מול זמן ריצה) שלמטה, השולטת כיצד כתובות ה-backend מגיעות לאפליקציה, לא כיצד היא מוגשת.",
       "serveScript": "סקריפט הגשה",
       "servePort": "פורט הגשה",
       "mockMappingsPath": "נתיב מיפויי הדמיה",
@@ -3596,7 +3622,8 @@
       "connectFirst": "חבר תחילה מקור מסמכים (Confluence, Notion או GitHub) תחת אינטגרציות.",
       "refPlaceholder": "מזהה עמוד או כתובת (למשל עמוד Confluence/Notion או כתובת קובץ GitHub)",
       "tagsPlaceholder": "תגיות, מופרדות בפסיקים (אופציונלי)",
-      "link": "קשר כמקטע חי"
+      "link": "קשר כמקטע חי",
+      "githubBrowseHint": "עיין במאגר ובחר את הקובץ לקישור."
     },
     "sources": {
       "metaSynced": "סונכרן · ref {ref}",
@@ -3608,7 +3635,10 @@
       "repoPlaceholder": "מאגר",
       "dirPlaceholder": "נתיב תיקייה (למשל guidelines)",
       "refPlaceholder": "ref (ברירת מחדל HEAD)",
-      "link": "קשר וסנכרן"
+      "link": "קשר וסנכרן",
+      "browseHint": "עיין במאגר ובחר את תיקיית הנחיות ה-Markdown (או קשר את המאגר כולו).",
+      "selectedDir": "תיקייה:",
+      "wholeRepo": "המאגר כולו (השורש)."
     },
     "toast": {
       "added": "המקטע נוסף",
@@ -3632,7 +3662,8 @@
     "confirmRemove": {
       "title": "למחוק את המקטע הזה?",
       "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
-    }
+    },
+    "unavailable": "ספריית מקטעי הפרומפט אינה מופעלת בפריסה זו."
   },
   "sandbox": {
     "title": "Sandbox: בדיקת פרומפטים ומודלים",

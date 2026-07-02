@@ -335,11 +335,96 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
-    describe('agent_runs sweeper read primitives (listStale + liveRunIds)', () => {
-      // The stale-run sweeper reads these two `agent_runs` primitives to recover/flag orphaned
-      // runs (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local
-      // orphaned-container reap). Assert they behave identically on D1 and Postgres so a facade
-      // can't silently drift the recovery path.
+    describe('one live execution run per block (insertLive)', () => {
+      // Two concurrent starts (double-click, recurring-vs-manual, notification-vs-human retry)
+      // must never create two live runs for one block. `insertLive` enforces it atomically via
+      // the partial unique index; asserted at the repository layer so D1 and Postgres are proven
+      // to reject the second live insert identically.
+      it('refuses a second live run for a block until the first goes terminal', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const run = (id: string, status: ExecutionInstance['status']): ExecutionInstance => ({
+          id,
+          blockId: 'blk_live',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status,
+          initiatedBy: null,
+        })
+
+        // The first live insert lands (and gets a fresh rev).
+        const first = run('exec_live_a', 'running')
+        expect(await repo.insertLive(workspace.id, first)).toBe(true)
+        expect(first.rev).toBe(0)
+
+        // A second live insert for the SAME block — WITHOUT a delete between — is refused with
+        // NO write (the concurrent double-start guard). The block keeps exactly the first run.
+        expect(await repo.insertLive(workspace.id, run('exec_live_b', 'running'))).toBe(false)
+        expect((await repo.getByBlock(workspace.id, 'blk_live'))?.id).toBe('exec_live_a')
+
+        // The index is partial: a `paused`/`blocked` run is still LIVE, so it too blocks a second.
+        first.status = 'paused'
+        await repo.upsert(workspace.id, first)
+        expect(await repo.insertLive(workspace.id, run('exec_live_c', 'running'))).toBe(false)
+
+        // Once the first run reaches a terminal state it leaves the partial index, freeing the
+        // block for a fresh live run (the retry-after-failure path). `insertLive` also atomically
+        // clears the terminal row in the SAME write, so the block keeps EXACTLY one row (the new
+        // live one) — the board's by-block projection never sees a stale terminal alongside it.
+        first.status = 'done'
+        await repo.upsert(workspace.id, first)
+        expect(await repo.insertLive(workspace.id, run('exec_live_d', 'running'))).toBe(true)
+        expect((await repo.getByBlock(workspace.id, 'blk_live'))?.id).toBe('exec_live_d')
+        // The superseded terminal run was cleaned up in the same transaction.
+        expect(await repo.get(workspace.id, 'exec_live_a')).toBeNull()
+      })
+
+      it('supersedes the caller’s own prior LIVE run via replaceId (retry/restart)', async () => {
+        // `restart` tears its source run down and replaces it while that source is still LIVE
+        // (running/paused/blocked). It passes the source id as `replaceId` so `insertLive`
+        // removes THAT specific row and inserts the new one atomically — WITHOUT an unconditional
+        // delete that would let a concurrent start wipe the winner. Proven on both runtimes.
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+        const run = (id: string, status: ExecutionInstance['status']): ExecutionInstance => ({
+          id,
+          blockId: 'blk_rep',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status,
+          initiatedBy: null,
+        })
+
+        const source = run('exec_src', 'running')
+        expect(await repo.insertLive(workspace.id, source)).toBe(true)
+
+        // Without replaceId, a second live insert is refused — the source is still live.
+        expect(await repo.insertLive(workspace.id, run('exec_other', 'running'))).toBe(false)
+        expect((await repo.getByBlock(workspace.id, 'blk_rep'))?.id).toBe('exec_src')
+
+        // WITH replaceId pointing at the live source, the insert supersedes it and lands.
+        expect(
+          await repo.insertLive(workspace.id, run('exec_restart', 'running'), {
+            replaceId: 'exec_src',
+          }),
+        ).toBe(true)
+        expect((await repo.getByBlock(workspace.id, 'blk_rep'))?.id).toBe('exec_restart')
+        expect(await repo.get(workspace.id, 'exec_src')).toBeNull()
+      })
+    })
+
+    describe('agent_runs sweeper read primitives (listStale + liveRunIds + listPausedExecutions)', () => {
+      // The stale-run sweeper reads these `agent_runs` primitives to recover/flag orphaned runs
+      // (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local orphaned-container
+      // reap; `listPausedExecutions` → the Node/local budget-freed auto-resume). Assert they behave
+      // identically on D1 and Postgres so a facade can't silently drift the recovery path.
       it('listStale carries updatedAt (running only) and liveRunIds filters terminal runs', async () => {
         const app = harness.makeApp()
         const runs = app.agentRunRepository()
@@ -395,6 +480,15 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(live.has('exec_sweep_failed')).toBe(false)
         expect(live.has('exec_sweep_missing')).toBe(false)
         expect(await runs.liveRunIds([])).toEqual([])
+
+        // `listPausedExecutions` returns ONLY the spend-paused execution rows (the Node/local
+        // auto-resume candidates) — never running/blocked/terminal ones.
+        const pausedIds = new Set((await runs.listPausedExecutions()).map((r) => r.id))
+        expect(pausedIds.has('exec_sweep_paused')).toBe(true)
+        expect(pausedIds.has('exec_sweep_running')).toBe(false)
+        expect(pausedIds.has('exec_sweep_blocked')).toBe(false)
+        expect(pausedIds.has('exec_sweep_done')).toBe(false)
+        expect(pausedIds.has('exec_sweep_failed')).toBe(false)
       })
     })
 
@@ -3080,6 +3174,31 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const descriptor = probe.describe('github_pat')
         expect(descriptor?.supportsTest).toBe(true)
         expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('token')
+      })
+
+      it('resolves a deployment-registered custom kind through the injected app-owned registry — on every runtime', async () => {
+        // The secret-kind registry is app-owned (no module-global Map): a deployment
+        // registers a custom kind BY REFERENCE into the registry the harness injects via
+        // `makeApp({ backendRegistries })`, so the facade's UserSecretService describes it
+        // regardless of module identity — the migration's whole point. See
+        // `docs/initiatives/registry-di-migration.md`.
+        const backendRegistries = createBackendRegistries()
+        backendRegistries.userSecretKindRegistry.register({
+          kind: 'conformance-secret',
+          label: 'Conformance secret',
+          configFields: [{ key: 'token', label: 'Token', secret: true, required: true }],
+        })
+        const app = harness.makeApp(undefined, { backendRegistries })
+        const probe = app.userSecrets?.()
+        if (!probe) return
+
+        // The injected custom kind is describable...
+        const custom = probe.describe('conformance-secret')
+        expect(custom?.kind).toBe('conformance-secret')
+        expect(custom?.supportsTest).toBe(false)
+        expect(custom?.configFields.find((f) => f.secret)?.key).toBe('token')
+        // ...and the built-in still resolves off the SAME registry instance.
+        expect(probe.describe('github_pat')?.supportsTest).toBe(true)
       })
     })
 

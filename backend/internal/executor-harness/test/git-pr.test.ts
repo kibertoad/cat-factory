@@ -275,6 +275,24 @@ describe('openPullRequest (transient retry)', () => {
     expect(seq.count()).toBe(2)
   })
 
+  it('returns null on a 422 "No commits between" (nothing to PR — a clean no-op)', async () => {
+    // A resumed branch reachable from base has nothing ahead: GitHub answers 422 "No commits
+    // between main and <branch>". That is not an API failure — it must surface as a no-op
+    // (null), not the opaque `Failed to open PR` HarnessFailure, and it must not be retried.
+    const seq = stubFetchSequence([
+      {
+        status: 422,
+        body: {
+          message: 'Validation Failed',
+          errors: [{ message: 'No commits between main and feature' }],
+        },
+      },
+    ])
+    await expect(openPullRequest({ ...githubPr })).resolves.toBeNull()
+    // Exactly one call: the POST is not retried and there is no existing-PR lookup.
+    expect(seq.count()).toBe(1)
+  })
+
   it('does NOT retry a 422 "already exists" — returns the existing PR', async () => {
     // 422 is not transient: it must fall straight through to the existing-PR lookup, not retry.
     const seq = stubFetchSequence([

@@ -2359,12 +2359,16 @@ export class RunDispatcher {
       // Defensive: evaluateGate only calls this when async-capable.
       return { kind: 'job_failed', error: `No async executor available for the ${gate.kind} gate.` }
     }
+    // Build the context AS the helper kind: the hosting step's kind is the gate
+    // (`ci` / `post-release-health`), so trait-driven context — the `code-aware`
+    // service-fragment fold for `ci-fixer` / `on-call` — must key off the helper.
     const base = await this.contextBuilder.buildContext(
       workspaceId,
       instance,
       step,
       isFinalStep,
       block,
+      { agentKind: gate.helperKind },
     )
     // A gate may build richer helper context asynchronously (the on-call agent gets the
     // full Datadog evidence bundle); otherwise fall back to the simple summary prior.

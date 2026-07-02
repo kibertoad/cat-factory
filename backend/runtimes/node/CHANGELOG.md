@@ -1,5 +1,182 @@
 # @cat-factory/node-server
 
+## 0.59.4
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/integrations@0.56.0
+  - @cat-factory/server@0.67.0
+  - @cat-factory/agents@0.26.12
+  - @cat-factory/consensus@0.8.13
+  - @cat-factory/gates@0.2.69
+  - @cat-factory/gitlab@0.4.40
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/orchestration@0.58.1
+  - @cat-factory/prompt-fragments@0.9.42
+  - @cat-factory/spend@0.10.73
+  - @cat-factory/provider-bedrock@0.7.118
+  - @cat-factory/provider-cloudflare@0.7.118
+  - @cat-factory/observability-langfuse@0.7.112
+  - @cat-factory/provider-s3@0.2.62
+
+## 0.59.3
+
+### Patch Changes
+
+- 7f9d215: Fix critical/high race conditions from the July 2026 audit:
+
+  - **Spend-resume on Cloudflare (1.1):** a spend-paused run's `ExecutionWorkflow`
+    instance no longer returns (going terminal). It now stays alive **parked on a
+    `waitForEvent`** (like a human-decision wait, not a busy sleep-loop), so a long pause
+    no longer accretes unbounded durable steps. `/spend/resume` wakes it immediately via a
+    new `WorkRunner.signalResume` (a `spend-resume` event), and a 24h re-check chunk
+    auto-resumes it when the monthly budget frees — instead of the terminal-instance-id
+    trap that let the cron sweeper force-fail the "resumed" run.
+  - **Spend-resume on Node/local (parity):** Node/local now auto-resume spend-paused runs
+    when the monthly budget frees, via a new `agentRunRepository.listPausedExecutions`
+    polled by the reclaim sweeper (gated on `isOverBudget`, so a still-exhausted workspace
+    causes no churn) — matching the Cloudflare facade. Covered by a conformance assertion.
+  - **BootstrapWorkflow re-drive (1.2):** past the poll-read tolerance the workflow no
+    longer returns (going terminal, which made the sweeper force-fail a merely-busy
+    container). It keeps the instance alive and keeps polling, so a long clone/install
+    recovers.
+  - **One live execution run per block (2.1):** a new partial unique index on live
+    execution rows per block (D1 migration `0033` ⇄ Drizzle) plus an **atomic**
+    `ExecutionRepository.insertLive` that deletes the block's terminal rows (and the
+    caller's own `replaceId`) and inserts the new run **in one transaction** (D1
+    `db.batch` / Drizzle `transaction`). `start`/`retry`/`restartFromStep` no longer
+    `deleteByBlock` first, so a genuinely-concurrent double start is rejected with a 409
+    instead of the pre-delete wiping a concurrent winner and creating two live runs — two
+    drivers, two containers — on one branch. Covered by cross-runtime conformance
+    assertions (terminal cleanup + `replaceId` supersede).
+
+- 05d1b08: refactor(integrations): app-own the user-secret-kind registry (registry DI migration)
+
+  Migrates the per-user secret KIND registry off its module-global `Map` onto an app-owned
+  instance, the next slice of the registry-DI initiative (see
+  `docs/initiatives/registry-di-migration.md`). The composition root now owns the registry and
+  injects it, so a deployment-registered custom kind is seen by reference regardless of module
+  identity — the same footgun-free pattern as the environment/runner backend registries.
+
+  - New `UserSecretKindRegistry` class (`register`/`get`/`list`) + `defaultUserSecretKindRegistry()`
+    pre-loaded with the built-in `github_pat` kind, added to `BackendRegistries` /
+    `createBackendRegistries()`. `UserSecretService` reads the injected registry.
+  - **Breaking:** the free `registerUserSecretKind` / `getUserSecretKind` / `listUserSecretKinds`
+    exports are removed (pre-1.0, no back-compat). The built-in kind is now the exported
+    `githubPatUserSecretKind` handler, registered into the default registry.
+  - Wired symmetrically into the Worker + Node facades (local inherits via `buildNodeContainer`);
+    the cross-runtime conformance suite asserts a programmatically-registered custom kind is
+    described identically on every runtime.
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/consensus@0.8.12
+  - @cat-factory/gates@0.2.68
+  - @cat-factory/gitlab@0.4.39
+  - @cat-factory/observability-langfuse@0.7.111
+  - @cat-factory/provider-bedrock@0.7.117
+  - @cat-factory/provider-cloudflare@0.7.117
+  - @cat-factory/provider-s3@0.2.61
+  - @cat-factory/spend@0.10.72
+
+## 0.59.2
+
+### Patch Changes
+
+- 9577c4a: Fix a batch of native-mode (`LOCAL_NATIVE_AGENTS`) agent-harness bugs:
+
+  - The harnesses (executor + deploy) now shut down gracefully on SIGTERM/SIGINT:
+    every running job is aborted (`JobRegistry.abortAll`) so in-flight `claude`/
+    `codex`/git/kubectl children are killed instead of being orphaned. Previously a
+    dev-server restart left the agent CLI running unsupervised on the developer's
+    login. The abort now targets the child's whole process group (POSIX), so the
+    CLI's own grandchildren (a shell tool, a build, its git) die with it rather than
+    reparenting to init. Shutdown exits as soon as the aborted jobs settle (capped at
+    6s) instead of always waiting the fixed window. Both harness servers also honor a
+    new `HARNESS_BIND_HOST` env, which the native transport sets to `127.0.0.1` so the
+    unsandboxed agent-spawning API is no longer reachable from the LAN (containers keep
+    binding all interfaces).
+  - The native host-process transport sanitizes the harness child's environment to an
+    allow-list (`LOCAL_HARNESS_ENV_ALLOW` extends it), so the orchestrator's secrets
+    (DATABASE_URL, ENCRYPTION_KEY, GITHUB_PAT, provider keys) no longer leak into the
+    ambient agent's env; the inline ambient CLI runner is sanitized the same way. The
+    allow-list keeps the TLS trust-anchor vars (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, ...)
+    alongside the proxy vars, so a corporate TLS-terminating proxy still works. The
+    deploy transport keeps full inheritance (kubectl/helm need ambient cluster env).
+  - Process-lifecycle fixes in `LocalProcessRunnerTransport`: a harness that never
+    becomes healthy is killed instead of leaking one process per retry, and
+    `shutdown()` racing an in-flight lazy start now kills the child instead of
+    resurrecting it. The local/Node graceful-shutdown path now invokes the
+    container's `onShutdown`, which stops the native harnesses; that call is isolated
+    in its own try so a failing pg-boss/pool teardown can't skip it.
+  - `NativeRoutingRunnerTransport` no longer reports a blanket eviction for refs it
+    doesn't know: after an orchestrator restart both `poll` and `release` fall back to
+    the container leg (which re-finds a per-run container by label), so a still-running
+    container job is re-attached / torn down instead of spuriously re-driven or leaked.
+  - Config typos are no longer silent: unrecognized `LOCAL_NATIVE_AGENTS` tokens and
+    an unrecognized/under-configured `LOCAL_DEPLOY_RUNTIME` now log a boot warning
+    (behavior still fails safe).
+
+- Updated dependencies [4955639]
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+  - @cat-factory/server@0.66.6
+  - @cat-factory/consensus@0.8.11
+  - @cat-factory/provider-bedrock@0.7.116
+  - @cat-factory/provider-cloudflare@0.7.116
+
+## 0.59.1
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/server@0.66.5
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/consensus@0.8.10
+  - @cat-factory/gates@0.2.67
+  - @cat-factory/gitlab@0.4.38
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/prompt-fragments@0.9.41
+  - @cat-factory/spend@0.10.71
+  - @cat-factory/provider-bedrock@0.7.115
+  - @cat-factory/provider-cloudflare@0.7.115
+  - @cat-factory/observability-langfuse@0.7.110
+  - @cat-factory/provider-s3@0.2.60
+
+## 0.59.0
+
+### Minor Changes
+
+- 4e82496: Enable the prompt-fragment library by default and streamline linking GitHub-backed fragments.
+
+  - The prompt-fragment library (ADR 0006) is now **on by default** in both runtimes; opt out
+    with `PROMPT_LIBRARY_ENABLED=false`. Previously it was off unless `PROMPT_LIBRARY_ENABLED=true`
+    was set, so linking a GitHub document as a fragment failed with "Prompt-fragment library is
+    not configured" on a stock deployment.
+  - The fragment-library manager now reuses the same GitHub affordances as the other repo
+    windows: a **server-side repo search** (new `GitHubRepoSearchSelect`) plus the
+    `RepoTreeBrowser` to browse to a **file** (document-backed fragments) or **directory**
+    (repo sources), instead of hand-typing `owner`/`repo`/`path`/`ref`. Manual entry remains as
+    a fallback when the GitHub App isn't connected.
+  - When the library is explicitly disabled, the manager now shows a clear notice instead of
+    offering forms that fail with a raw 503.
+
+### Patch Changes
+
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+  - @cat-factory/server@0.66.4
+
 ## 0.58.6
 
 ### Patch Changes

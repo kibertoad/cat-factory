@@ -184,9 +184,31 @@ function makeRegistry(): {
       upsertOpenForBlock: async (ws: string) => ({ ws }),
       upsert: async (ws: string) => ({ ws }),
     },
+    // The repo-bootstrap management / retry / stop surface: reads/updates echo the workspaceId
+    // (arg0); the record-based `insert` binds on the job's `workspaceId` FIELD.
     bootstrapJobRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
+      get: async (ws: string, id: string) => ({ ws, id }),
+      insert: async () => undefined,
+      update: async () => undefined,
+    },
+    // The reference-architecture library (bootstrap modal CRUD + retry re-resolve): reads/updates/
+    // deletes echo the workspaceId (arg0); the record-based `insert` binds on the record's field.
+    referenceArchitectureRepository: {
+      get: async (ws: string, id: string) => ({ ws, id }),
+      listByWorkspace: async (ws: string) => [{ ws }],
+      insert: async () => undefined,
+      update: async () => undefined,
+      softDelete: async () => undefined,
+    },
+    // The env-config-repair retry/stop surface: reads/updates echo the workspaceId (arg0); the
+    // record-based `insert` binds on the job's `workspaceId` FIELD.
+    envConfigRepairJobRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+      get: async (ws: string, id: string) => ({ ws, id }),
+      insert: async () => undefined,
+      update: async () => undefined,
     },
     // The board's run-control entry (retry/stop): resolve a run's kind by (workspaceId, id). The
     // stub echoes the workspaceId; `listStale` is wired but sweeper-only (absent from the allow-list).
@@ -761,6 +783,93 @@ describe('agent-run control surface (retry/stop entry — workspace-scoped)', ()
     // `listStale` is wired on the fake repo but sweeper-internal — never remotely callable.
     await expect(remoteRegistry().agentRunRepository!.listStale!(0)).rejects.toThrow(/not callable/)
   })
+})
+
+describe('bootstrap / reference-arch / env-config-repair management surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The workspace-scoped reads/updates/deletes (arg0 = workspaceId → the `workspace` rule) that
+  // make the bootstrap flow (start / board-card poll / retry / stop), the reference-architecture
+  // library, and the env-config-repair retry/stop functional in mothership mode. Value-returning
+  // methods (`echoes: true`) echo the workspaceId so we prove the call reached the bound workspace;
+  // void writes just resolve.
+  const WORKSPACE_METHODS: Array<{
+    repo: string
+    method: string
+    args: unknown[]
+    echoes?: boolean
+  }> = [
+    { repo: 'bootstrapJobRepository', method: 'get', args: ['boot_1'], echoes: true },
+    { repo: 'bootstrapJobRepository', method: 'update', args: ['boot_1', { status: 'failed' }] },
+    { repo: 'referenceArchitectureRepository', method: 'get', args: ['arch_1'], echoes: true },
+    { repo: 'referenceArchitectureRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'referenceArchitectureRepository', method: 'update', args: ['arch_1', { name: 'x' }] },
+    { repo: 'referenceArchitectureRepository', method: 'softDelete', args: ['arch_1', 0] },
+    { repo: 'envConfigRepairJobRepository', method: 'get', args: ['repair_1'], echoes: true },
+    {
+      repo: 'envConfigRepairJobRepository',
+      method: 'update',
+      args: ['repair_1', { status: 'failed' }],
+    },
+  ]
+
+  for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoes) {
+        const echoed = Array.isArray(result) ? result[0] : result
+        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // The record-based `insert(record)` methods bind on the job/record's `workspaceId` FIELD (the
+  // `workspaceField` rule): the row is stored under exactly `record.workspaceId`, so an
+  // out-of-scope workspace in the record is refused before any repo write, and a missing/non-object
+  // arg fails closed.
+  const INSERTS = [
+    'bootstrapJobRepository',
+    'referenceArchitectureRepository',
+    'envConfigRepairJobRepository',
+  ]
+
+  for (const repo of INSERTS) {
+    it(`forwards ${repo}.insert when the record targets an in-scope workspace`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.insert!({ workspaceId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.insert when the record targets an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.insert!({ workspaceId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.insert when the record has no workspaceId field (404, fail-closed)`, async () => {
+      await expect(remoteRegistry()[repo]!.insert!({})).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
 })
 
 describe('post-release-health settings surface (observability / release-health / incident)', () => {

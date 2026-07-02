@@ -1,4 +1,4 @@
-import type { PiRunStats } from './pi.js'
+import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
 
@@ -146,7 +146,10 @@ function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
  * `..` segment) — the agent's cwd is built from this, so a hostile value must never
  * point outside the cloned repo.
  */
-function sanitizeServiceDirectory(value: unknown): string | undefined {
+function sanitizeServiceDirectory(
+  value: unknown,
+  field = 'repo.serviceDirectory',
+): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value
     .trim()
@@ -156,7 +159,7 @@ function sanitizeServiceDirectory(value: unknown): string | undefined {
   const segments = normalized.split('/').filter((s) => s !== '' && s !== '.')
   if (segments.length === 0) return undefined
   if (segments.some((s) => s === '..')) {
-    throw new Error("Invalid job: 'repo.serviceDirectory' must be a path inside the repo")
+    throw new Error(`Invalid job: '${field}' must be a path inside the repo`)
   }
   return segments.join('/')
 }
@@ -290,6 +293,12 @@ export interface ServiceInfraSpec {
  */
 export interface FrontendInfraSpec {
   kind: 'frontend'
+  /**
+   * The frontend app's subdirectory within the checkout (a monorepo frontend). Absent ⇒ the
+   * checkout root. When set, install/build/serve run there and `outputDir`/`wiremockMappingsPath`
+   * are resolved relative to it.
+   */
+  directory?: string
   /** Package manager for install/build. Default `pnpm`. */
   packageManager?: 'pnpm' | 'npm' | 'yarn'
   /** Explicit install command, overriding the one derived from `packageManager`. */
@@ -520,6 +529,12 @@ export interface AgentResult {
    */
   failureCause?: FailureCause
   usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * Per-model-call telemetry from a subscription harness's CLI stream (absent for the
+   * proxy-metered Pi harness). The backend records these into `llm_call_metrics`. See
+   * {@link HarnessCallMetric}.
+   */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /** Parse the coding-mode bootstrap spec, or undefined when absent. Validates the target. */
@@ -659,8 +674,13 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   }
   const servePort = port(o.servePort)
   const wiremockPort = port(o.wiremockPort)
+  // The app's monorepo subdirectory becomes the install/build/serve cwd, so it goes through the
+  // same escape-guard as `repo.serviceDirectory` — strip slashes and reject any `..` segment so a
+  // hostile value can't point the stand-up outside the cloned repo.
+  const directory = sanitizeServiceDirectory(o.directory, 'frontend.directory')
   return {
     kind: 'frontend',
+    ...(directory ? { directory } : {}),
     ...(packageManager ? { packageManager } : {}),
     ...(typeof o.install === 'string' && o.install ? { install: o.install } : {}),
     ...(typeof o.buildScript === 'string' && o.buildScript ? { buildScript: o.buildScript } : {}),

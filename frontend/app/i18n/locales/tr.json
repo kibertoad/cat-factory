@@ -204,7 +204,10 @@
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
       "showDetail": "Ayrıntıyı göster",
-      "retrying": "Yeniden deneniyor…"
+      "retrying": "Yeniden deneniyor…",
+      "history": {
+        "previousErrors": "{count} önceki hata | {count} önceki hata"
+      }
     },
     "stop": {
       "label": "Durdur",
@@ -439,14 +442,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "Bağımsız bir arayüz testi için bu frontend'in nasıl derleneceği, sunulacağı ve taklit edileceği. Aşağıdaki bağlamalar onu çağırdığı backend hizmetlerine bağlar.",
+      "detect": {
+        "title": "Depodan algıla",
+        "button": "Algıla",
+        "hint": "Bağlı depoyu okur ve uygulamadan önce gözden geçirmeniz için bir yapılandırma önerir. Uygulayana kadar hiçbir şey kaydedilmez.",
+        "error": "Depo okunamadı. Frontend'in bağlı bir depoya bağlı olduğunu kontrol edin.",
+        "none": "Frontend biçiminde bir şey algılanmadı. Frontend dizinini ayarlayın (bir monorepo için) veya alanları elle doldurun.",
+        "apply": "Uygula",
+        "dismiss": "Yoksay",
+        "confidenceHigh": "kesin",
+        "confidenceLow": "tahmin"
+      },
+      "groups": {
+        "build": "Derleme",
+        "serve": "Sunma",
+        "mocking": "Taklit",
+        "envInjection": "Ortam enjeksiyonu",
+        "bindings": "Backend bağlantıları",
+        "preview": "Önizleme"
+      },
       "packageManager": "Paket yöneticisi",
+      "directory": "Frontend dizini",
+      "directoryHint": "Depodaki frontend uygulamasının alt klasörü (bir monorepo, örn. frontend/). Uygulama deponun kökündeyse boş bırakın.",
       "installCommand": "Kurulum komutu",
       "buildScript": "Derleme betiği",
       "outputDir": "Çıktı dizini",
       "serveMode": "Sunma modu",
       "serveStatic": "Statik",
       "serveCommand": "Komut",
-      "serveModeHint": "Statik, derleme çıktı dizinini sunar; Komut, bir package.json betiğini (örn. preview) çalıştırır.",
+      "serveStaticDesc": "derlenen çıktı dizinini statik dosyalar olarak sunar. Tamamen derlenmiş bir uygulamanın arayüz testi için en ucuzu.",
+      "serveCommandDesc": "uygulamayı sunmak için bir package.json betiği (örn. preview) çalıştırır; çalışan bir sunucu gerektiren derlemeler için.",
+      "serveEnvAxisNote": "Aşağıdaki Ortam enjeksiyonundan (derleme zamanı vs çalışma zamanı) ayrıdır; o, backend URL'lerinin uygulamaya nasıl ulaştığını kontrol eder, nasıl sunulduğunu değil.",
       "serveScript": "Sunma betiği",
       "servePort": "Sunma bağlantı noktası",
       "mockMappingsPath": "Taklit eşleme yolu",
@@ -3598,7 +3624,8 @@
       "connectFirst": "Önce Entegrasyonlar altında bir belge kaynağı (Confluence, Notion veya GitHub) bağlayın.",
       "refPlaceholder": "Sayfa kimliği veya URL (örn. bir Confluence/Notion sayfası veya GitHub dosya URL'si)",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (isteğe bağlı)",
-      "link": "Canlı parça olarak bağla"
+      "link": "Canlı parça olarak bağla",
+      "githubBrowseHint": "Depoya göz atın ve bağlanacak dosyayı seçin."
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
@@ -3610,7 +3637,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dizin yolu (örn. guidelines)",
       "refPlaceholder": "ref (varsayılan HEAD)",
-      "link": "Bağla ve eşitle"
+      "link": "Bağla ve eşitle",
+      "browseHint": "Depoya göz atın ve Markdown yönerge dizinini seçin (veya tüm depoyu bağlayın).",
+      "selectedDir": "Dizin:",
+      "wholeRepo": "Tüm depo (kök)."
     },
     "toast": {
       "added": "Parça eklendi",
@@ -3634,7 +3664,8 @@
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",
       "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
-    }
+    },
+    "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",

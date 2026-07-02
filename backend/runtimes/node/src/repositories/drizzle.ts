@@ -135,7 +135,21 @@ import {
   rowToSandboxRun,
   rowToWorkspace,
 } from '@cat-factory/server'
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
@@ -575,6 +589,68 @@ class DrizzleExecutionRepository implements ExecutionRepository {
     if (rows[0]) execution.rev = rows[0].rev
   }
 
+  async insertLive(
+    workspaceId: string,
+    execution: ExecutionInstance,
+    opts?: { replaceId?: string },
+  ): Promise<boolean> {
+    // One live run per block, enforced atomically by the partial unique index
+    // `uniq_live_execution_per_block` on (workspace_id, block_id) over live execution rows. The
+    // cleanup and the insert run inside ONE transaction so a losing concurrent insert can never
+    // wipe the winner: the DELETE only ever removes the block's TERMINAL rows and the caller's
+    // own `replaceId` (the run it is knowingly superseding) — NEVER another writer's fresh live
+    // row — and the index then rejects a second live insert via DO NOTHING (empty returning).
+    // Callers therefore MUST NOT `deleteByBlock` first. The conflict target mirrors the D1 repo
+    // and the index predicate exactly; the insert columns mirror upsert (service_id subquery,
+    // rev 0).
+    const now = this.clock.now()
+    const detail = executionToDetail(execution)
+    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const terminalOrReplaced = opts?.replaceId
+      ? or(
+          notInArray(agentRuns.status, ['running', 'blocked', 'paused']),
+          eq(agentRuns.id, opts.replaceId),
+        )
+      : notInArray(agentRuns.status, ['running', 'blocked', 'paused'])
+    const rows = await this.db.transaction(async (tx) => {
+      await tx
+        .delete(agentRuns)
+        .where(
+          and(
+            eq(agentRuns.workspace_id, workspaceId),
+            eq(agentRuns.block_id, execution.blockId),
+            eq(agentRuns.kind, 'execution'),
+            terminalOrReplaced,
+          ),
+        )
+      return tx
+        .insert(agentRuns)
+        .values({
+          workspace_id: workspaceId,
+          id: execution.id,
+          kind: 'execution',
+          block_id: execution.blockId,
+          status: execution.status,
+          detail,
+          created_at: now,
+          updated_at: now,
+          workflow_instance_id: execution.id,
+          service_id: serviceIdSub,
+          rev: 0,
+        })
+        .onConflictDoNothing({
+          target: [agentRuns.workspace_id, agentRuns.block_id],
+          // For DO NOTHING, `where` is the conflict target's partial-index predicate (the
+          // DO-UPDATE `targetWhere`); it must mirror uniq_live_execution_per_block exactly.
+          where: sql`${agentRuns.kind} = 'execution' AND ${agentRuns.status} IN ('running', 'blocked', 'paused')`,
+        })
+        .returning({ rev: agentRuns.rev })
+    })
+    if (!rows[0]) return false
+    execution.rev = rows[0].rev
+    return true
+  }
+
   async compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
     // Conditional update guarded on the rev last read onto this instance; only writes
     // when the stored row is unchanged. No insert — the run must already exist.
@@ -688,6 +764,15 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
         id: r.id,
       }),
     }))
+  }
+
+  async listPausedExecutions(): Promise<AgentRunRef[]> {
+    const rows = await this.db
+      .select({ workspaceId: agentRuns.workspace_id, id: agentRuns.id })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.kind, 'execution'), eq(agentRuns.status, 'paused')))
+      .orderBy(agentRuns.updated_at)
+    return rows.map((r) => ({ workspaceId: r.workspaceId, id: r.id, kind: 'execution' as const }))
   }
 
   async liveRunIds(ids: string[]): Promise<string[]> {

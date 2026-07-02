@@ -16,6 +16,12 @@ import { log } from './logger.js'
 
 const PORT = Number(process.env.PORT ?? 8080)
 
+// Optional bind address. Default (unset) binds all interfaces — a container needs that for
+// its published port. The native local transport runs the harness UNSANDBOXED on the
+// developer's host and only ever connects over loopback, so it sets 127.0.0.1 to keep the
+// agent-spawning API off the LAN.
+const BIND_HOST = process.env.HARNESS_BIND_HOST?.trim() || undefined
+
 // Optional inbound auth. When HARNESS_SHARED_SECRET is set, every non-health
 // request must present a matching `x-harness-secret` header (constant-time
 // compared). When it is unset the harness behaves as before (open), so local/dev
@@ -145,9 +151,40 @@ const server = createServer((req, res) => {
 
 // Only auto-listen when run as the entry point (tests import handleRun directly).
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => {
-    console.log(`executor-harness listening on :${PORT}`)
+  server.listen(PORT, BIND_HOST, () => {
+    console.log(`executor-harness listening on ${BIND_HOST ?? ''}:${PORT}`)
   })
+
+  // Graceful shutdown: dying to a bare SIGTERM/SIGINT (the default handler) would ORPHAN any
+  // in-flight `claude`/`codex`/git child — reparented, it keeps working unsupervised (and in
+  // native local mode on the developer's own login). Abort every running job first (the
+  // SIGTERM→SIGKILL escalation in killChildProcess), then exit as SOON as the aborted jobs have
+  // settled — the CLI usually honours SIGTERM in milliseconds, so don't block every shutdown on
+  // a fixed window. The 6s cap covers a job that ignored SIGTERM and had to be force-killed (the
+  // 5s escalation) plus a margin. Nothing running ⇒ exit immediately. A second signal takes the
+  // default (immediate) exit, since `once` leaves it unhandled.
+  const shutdown = (signal: string): void => {
+    const aborted = Object.values(KINDS).reduce(
+      (count, { registry }) => count + registry.abortAll(`harness shutting down (${signal})`),
+      0,
+    )
+    log.info('shutting down', { signal, abortedJobs: aborted })
+    server.close()
+    if (aborted === 0) {
+      process.exit(0)
+      return
+    }
+    const deadline = Date.now() + 6_000
+    const timer = setInterval(() => {
+      const stillRunning = Object.values(KINDS).some(({ registry }) => registry.runningCount() > 0)
+      if (!stillRunning || Date.now() >= deadline) {
+        clearInterval(timer)
+        process.exit(0)
+      }
+    }, 50)
+  }
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+  process.once('SIGINT', () => shutdown('SIGINT'))
 }
 
 export { server }

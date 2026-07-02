@@ -46,6 +46,7 @@ import {
   PublicApiKeyService,
   LocalModelEndpointService,
   UserSecretService,
+  type UserSecretKindRegistry,
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
   PersonalSubscriptionService,
@@ -71,6 +72,8 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
+  LlmObservabilityService,
+  makeHarnessCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -1192,6 +1195,10 @@ function buildUserSecretService(
   env: Env,
   db: D1Database,
   clock: Clock,
+  // The app-owned secret-kind registry. Optional: the resolve-only throwaway services (the
+  // PAT resolver) never consult the kind registry, so they omit it (default); only the
+  // container-wired service that serves describe/test needs the injected instance.
+  userSecretKindRegistry?: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
@@ -1199,6 +1206,7 @@ function buildUserSecretService(
     userSecretRepository: new D1UserSecretRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
+    ...(userSecretKindRegistry ? { userSecretKindRegistry } : {}),
   })
 }
 
@@ -1264,6 +1272,19 @@ function buildContainerExecutor(
 
   const registry = buildAppRegistry(env, config, db, clock)
   const resolveRepoTarget = buildResolveRepoTarget(db)
+  // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
+  // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
+  // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
+  // A standalone service over the required telemetry DB (the proxy path builds its own
+  // from the same table; both are stateless writers).
+  const recordHarnessCalls = makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+      idGenerator: new CryptoIdGenerator(),
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+    }),
+  )
   // Prefer the run initiator's per-user PAT (when stored) over the App token, so the
   // container's clone/push/PR is attributed to them. Falls back to the App token.
   const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
@@ -1325,6 +1346,9 @@ function buildContainerExecutor(
             subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
+    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
+    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
+    recordHarnessCalls,
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions
@@ -1954,6 +1978,8 @@ export function buildContainer(
     overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
   const customManifestTypeRegistry =
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
+  const userSecretKindRegistry =
+    overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
@@ -2041,7 +2067,7 @@ export function buildContainer(
 
   // The per-user generic secret store (a GitHub PAT today) — shared by the user-secret
   // controller; also backs the run-initiator PAT resolver used by the executor + gates.
-  const userSecrets = buildUserSecretService(env, db, clock)
+  const userSecrets = buildUserSecretService(env, db, clock, userSecretKindRegistry)
 
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.

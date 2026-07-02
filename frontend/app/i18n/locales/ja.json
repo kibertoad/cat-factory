@@ -204,7 +204,10 @@
       "retryBootstrap": "ブートストラップを再試行",
       "retryRun": "実行を再試行",
       "showDetail": "詳細を表示",
-      "retrying": "再試行中…"
+      "retrying": "再試行中…",
+      "history": {
+        "previousErrors": "以前のエラー {count} 件 | 以前のエラー {count} 件"
+      }
     },
     "stop": {
       "label": "停止",
@@ -439,14 +442,37 @@
     "frontendConfig": {
       "title": "フロントエンド",
       "hint": "自己完結型の UI テストのために、このフロントエンドをビルド、配信、モックする方法。下のバインディングは、呼び出すバックエンドサービスとフロントエンドをつなぎます。",
+      "detect": {
+        "title": "リポジトリから検出",
+        "button": "検出",
+        "hint": "リンクされたリポジトリを読み取り、適用前に確認できる設定を提案します。適用するまで何も保存されません。",
+        "error": "リポジトリを読み取れませんでした。フロントエンドが接続済みリポジトリにリンクされているか確認してください。",
+        "none": "フロントエンドらしきものは検出されませんでした。（モノレポの場合は）フロントエンドのディレクトリを指定するか、手動で入力してください。",
+        "apply": "適用",
+        "dismiss": "却下",
+        "confidenceHigh": "確実",
+        "confidenceLow": "推測"
+      },
+      "groups": {
+        "build": "ビルド",
+        "serve": "配信",
+        "mocking": "モック",
+        "envInjection": "環境変数の注入",
+        "bindings": "バックエンドバインディング",
+        "preview": "プレビュー"
+      },
       "packageManager": "パッケージマネージャー",
+      "directory": "フロントエンドのディレクトリ",
+      "directoryHint": "リポジトリ内のフロントエンドアプリのサブフォルダー（モノレポ、例: frontend/）。アプリがリポジトリのルートにある場合は空のままにします。",
       "installCommand": "インストールコマンド",
       "buildScript": "ビルドスクリプト",
       "outputDir": "出力ディレクトリ",
       "serveMode": "配信モード",
       "serveStatic": "静的",
       "serveCommand": "コマンド",
-      "serveModeHint": "静的はビルド出力ディレクトリを配信します。コマンドは package.json のスクリプト（例: preview）を実行します。",
+      "serveStaticDesc": "ビルド出力ディレクトリを静的ファイルとして配信します。完全にビルド済みのアプリの UI テストに最も低コストです。",
+      "serveCommandDesc": "package.json のスクリプト（例: preview）を実行してアプリを配信します。サーバーの起動が必要なビルド向けです。",
+      "serveEnvAxisNote": "下の環境変数の注入（ビルド時とランタイム）とは別物で、そちらはバックエンド URL がアプリにどう届くかを制御し、配信方法ではありません。",
       "serveScript": "配信スクリプト",
       "servePort": "配信ポート",
       "mockMappingsPath": "モックマッピングのパス",
@@ -3598,7 +3624,8 @@
       "connectFirst": "まず Integrations でドキュメントソース (Confluence、Notion または GitHub) を接続してください。",
       "refPlaceholder": "ページ id または URL (例: Confluence/Notion ページや GitHub ファイル URL)",
       "tagsPlaceholder": "タグ、カンマ区切り (任意)",
-      "link": "リビングフラグメントとしてリンク"
+      "link": "リビングフラグメントとしてリンク",
+      "githubBrowseHint": "リポジトリを参照してリンクするファイルを選択します。"
     },
     "sources": {
       "metaSynced": "同期済み · ref {ref}",
@@ -3610,7 +3637,10 @@
       "repoPlaceholder": "repo",
       "dirPlaceholder": "ディレクトリパス (例: guidelines)",
       "refPlaceholder": "ref (デフォルト HEAD)",
-      "link": "リンクして同期"
+      "link": "リンクして同期",
+      "browseHint": "リポジトリを参照して Markdown ガイドラインのディレクトリを選択します（またはリポジトリ全体をリンク）。",
+      "selectedDir": "ディレクトリ:",
+      "wholeRepo": "リポジトリ全体（ルート）。"
     },
     "toast": {
       "added": "フラグメントを追加しました",
@@ -3634,7 +3664,8 @@
     "confirmRemove": {
       "title": "このフラグメントを削除しますか？",
       "body": "「{name}」が削除されます。 この操作は取り消せません。"
-    }
+    },
+    "unavailable": "このデプロイではプロンプトフラグメントライブラリが有効になっていません。"
   },
   "sandbox": {
     "title": "Sandbox: プロンプトとモデルのテスト",

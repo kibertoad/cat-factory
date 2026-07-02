@@ -1,10 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "350f3ca5-942e-433c-b915-39a02d5294e9",
+  "id": "0b00f8e2-a94f-40c6-9367-192a23152126",
   "prevIds": [
-    "b94f60db-f390-4854-b9b0-2c58fcd50ff2"
+    "6a061720-13ad-4adf-8ea5-37507b729150"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -10646,6 +10646,34 @@
       "method": "btree",
       "concurrently": false,
       "name": "idx_agent_runs_service",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_runs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "block_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"kind\" = 'execution' AND \"status\" IN ('running', 'blocked', 'paused')",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "uniq_live_execution_per_block",
       "entityType": "indexes",
       "schema": "public",
       "table": "agent_runs"
