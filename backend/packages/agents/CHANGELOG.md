@@ -1,5 +1,25 @@
 # @cat-factory/agents
 
+## 0.26.8
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/prompt-fragments@0.9.40
+
+## 0.26.7
+
+### Patch Changes
+
+- fc8df61: Fix a cross-tenant access hole on the fragment-source routes: `unlink`/`status`/`sync`
+  resolved the source by its id alone, so an authenticated member of one account/workspace
+  could read, resync or delete another tenant's fragment source by addressing its id under
+  their own prefix. `FragmentSourceService.unlink/sync/status` now take the addressed
+  `(ownerKind, ownerId)` and 404 when the source belongs to a different owner (breaking
+  signature change for direct callers of those three methods).
+
 ## 0.26.6
 
 ### Patch Changes

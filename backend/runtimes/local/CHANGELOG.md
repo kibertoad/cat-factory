@@ -1,5 +1,49 @@
 # @cat-factory/local-server
 
+## 0.38.4
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/node-server@0.58.6
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.3
+
+### Patch Changes
+
+- Updated dependencies [fc8df61]
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/node-server@0.58.5
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.2
+
+### Patch Changes
+
+- 9468b90: Force fully non-interactive git auth in the harness so native local mode never triggers a Git
+  Credential Manager popup. Every git invocation now empties the host credential-helper list
+  (`-c credential.helper=`) and disables interactive credential backends, so git falls back to the
+  harness's own askpass PAT instead of the host's GCM — which on Windows either stole focus with a
+  stray auth window or, when modal, hung the git command (clone/fetch/push) until it timed out. A
+  per-command git timeout is now surfaced as an explicit stall (naming the likely causes) rather
+  than a contentless "Command failed", and a genuine git failure now folds in git's stderr.
+
+  Bumps the executor-harness image tag (and the matched `RECOMMENDED_HARNESS_IMAGE` pin) to 1.31.5.
+
+- Updated dependencies [9468b90]
+  - @cat-factory/executor-harness@1.31.6
+
 ## 0.38.1
 
 ### Patch Changes

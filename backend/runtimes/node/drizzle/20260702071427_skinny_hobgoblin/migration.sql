@@ -1,0 +1,1 @@
+ALTER TABLE "blocks" ADD COLUMN "seq" serial;

@@ -276,6 +276,11 @@ export const blocks = pgTable(
     // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
     tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),
     tracker_resolve_on_merge: text('tracker_resolve_on_merge'),
+    // Monotonic insert sequence (Postgres has no SQLite rowid): block list reads come
+    // back in insertion order — sibling order in the board tree, deterministic
+    // snapshots — matching the Cloudflare facade (which orders by `rowid`).
+    // Auto-assigned on insert.
+    seq: serial('seq').notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),

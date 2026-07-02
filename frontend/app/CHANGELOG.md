@@ -1,5 +1,33 @@
 # @cat-factory/app
 
+## 0.74.3
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+
+## 0.74.2
+
+### Patch Changes
+
+- 9638bf3: Fix the "Create task from issue" window: it now reuses the same tracker-issue
+  picker as the add-task "context issues" flow. Search-by-title works and is scoped
+  to the repo of the container the task is being created in (so GitHub hits stay in
+  that service's repo), pasting an issue URL/key now actually creates a task instead
+  of silently importing it, and the tracker source (GitHub / Jira / Linear) is always
+  shown and selectable. The shared `ContextIssuePicker` also now recognises
+  Jira/Linear issue keys (e.g. `PROJ-123`) as attach-by-reference input and re-runs
+  its search when the scoped block changes.
+
 ## 0.74.1
 
 ### Patch Changes

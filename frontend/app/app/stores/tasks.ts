@@ -119,6 +119,18 @@ export const useTasksStore = defineStore('tasks', () => {
     tasks.value = await api.listTasks(workspace.requireId())
   }
 
+  /**
+   * Fetch imported issues scoped to a block's service repo (GitHub only — a
+   * repo-backed source narrows to that service's linked repo, exactly as `search`
+   * does; repo-less sources are unaffected). Returns the list WITHOUT touching the
+   * shared `tasks` state, so a repo-scoped view (the issue picker) can hold its own
+   * list without narrowing the workspace-wide one other views rely on. Omit
+   * `blockId` for the whole workspace.
+   */
+  async function listTasksForBlock(blockId?: string): Promise<SourceTask[]> {
+    return api.listTasks(workspace.requireId(), blockId)
+  }
+
   /** Import (fetch + persist) an issue by key or URL from a source. */
   async function importTask(source: TaskSourceKind, ref: string): Promise<SourceTask> {
     loading.value = true
@@ -218,6 +230,7 @@ export const useTasksStore = defineStore('tasks', () => {
     disconnect,
     setEnabled,
     loadTasks,
+    listTasksForBlock,
     importTask,
     search,
     linkToBlock,

@@ -1,10 +1,10 @@
 {
-  "dialect": "postgres",
-  "id": "b94f60db-f390-4854-b9b0-2c58fcd50ff2",
-  "prevIds": [
-    "78093022-a35b-4877-a09f-307613e8b223"
-  ],
   "version": "8",
+  "dialect": "postgres",
+  "id": "78093022-a35b-4877-a09f-307613e8b223",
+  "prevIds": [
+    "53054df0-b6e9-4375-a327-356f69427198"
+  ],
   "ddl": [
     {
       "name": "provisioning",
@@ -6594,32 +6594,6 @@
       "generated": null,
       "identity": null,
       "name": "gating",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pipelines"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "follow_ups",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pipelines"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "tester_quality",
       "entityType": "columns",
       "schema": "public",
       "table": "pipelines"

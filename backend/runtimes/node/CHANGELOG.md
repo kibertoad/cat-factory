@@ -1,5 +1,44 @@
 # @cat-factory/node-server
 
+## 0.58.6
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/consensus@0.8.9
+  - @cat-factory/gates@0.2.66
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/prompt-fragments@0.9.40
+  - @cat-factory/spend@0.10.70
+  - @cat-factory/provider-bedrock@0.7.114
+  - @cat-factory/provider-cloudflare@0.7.114
+  - @cat-factory/observability-langfuse@0.7.109
+  - @cat-factory/provider-s3@0.2.59
+
+## 0.58.5
+
+### Patch Changes
+
+- fc8df61: Restore cross-runtime block-ordering parity: the Postgres block repository's list reads
+  (`listByWorkspace`/`listByService`/`listByServices`) had no `ORDER BY`, so block iteration
+  order was non-deterministic and diverged from the Cloudflare facade's `ORDER BY rowid`.
+  The `blocks` table gains a `seq` insert-sequence column (same pattern as `pipelines.seq`)
+  and all three list reads order by it. Existing rows are backfilled by the migration in
+  whatever order Postgres returns them (pre-1.0: close enough, self-heals as rows churn).
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/consensus@0.8.8
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/provider-bedrock@0.7.113
+  - @cat-factory/provider-cloudflare@0.7.113
+
 ## 0.58.4
 
 ### Patch Changes

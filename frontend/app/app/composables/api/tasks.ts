@@ -62,7 +62,11 @@ export function tasksApi({ send, ws }: ApiContext) {
     checkTaskSource: (workspaceId: string, source: TaskSourceKind) =>
       send(diagnoseTaskSourceContract, { pathPrefix: ws(workspaceId), pathParams: { source } }),
 
-    listTasks: (workspaceId: string) => send(listTasksContract, { pathPrefix: ws(workspaceId) }),
+    // `blockId` scopes the listed issues to that block's service repo for a
+    // repo-backed source (GitHub Issues), exactly as search does; omitted → the
+    // whole workspace.
+    listTasks: (workspaceId: string, blockId?: string) =>
+      send(listTasksContract, { pathPrefix: ws(workspaceId), queryParams: { blockId } }),
 
     importTask: (workspaceId: string, source: TaskSourceKind, body: { ref: string }) =>
       send(importTaskContract, { pathPrefix: ws(workspaceId), pathParams: { source }, body }),
