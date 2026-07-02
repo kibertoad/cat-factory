@@ -54,12 +54,17 @@ export type {
   TaskLimitMode,
   WorkspaceSettings,
   UpdateWorkspaceSettingsInput,
+  InfraSetup,
+  InfraSetupStatus,
+  InfraSetupArea,
   ServiceFragmentDefaults,
   KaizenGradingStatus,
   KaizenGrading,
   KaizenVerifiedCombo,
   KaizenOverview,
   WorkspaceEvent,
+  PreviewState,
+  PreviewStatus,
 } from '@cat-factory/contracts'
 
 import type { AgentCategory, AgentKind } from '@cat-factory/contracts'

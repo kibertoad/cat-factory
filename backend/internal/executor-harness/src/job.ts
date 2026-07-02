@@ -76,6 +76,17 @@ function posInt(value: unknown): number | undefined {
 }
 
 /**
+ * A valid TCP port (1..65535), or undefined for anything else. The backend already validates
+ * frontend ports against this range, but the harness re-checks at its untrusted-body boundary:
+ * an out-of-range value can never bind, so dropping it falls back to the harness default rather
+ * than spawning a server that fails to listen.
+ */
+function port(value: unknown): number | undefined {
+  const n = posInt(value)
+  return n !== undefined && n <= 65535 ? n : undefined
+}
+
+/**
  * Parse the optional per-job progress-guard overrides. Each knob must be a positive
  * int; a malformed value is dropped (the run keeps the env / default for that knob).
  * This only validates the SHAPE — it does NOT enforce loosen-only. The loosen-only
@@ -238,15 +249,26 @@ export interface BootstrapTargetSpec {
 // RepoFiles port — never here.
 
 /** How the generic agent runs: read-only exploration, or edit-and-push coding. */
-export type AgentMode = 'explore' | 'coding'
+export type AgentMode = 'explore' | 'coding' | 'preview'
 
 /**
  * Explore mode: how a container agent stands its dependencies up before the run (the
- * tester). `local` brings the service's docker-compose infra up on localhost for the
- * duration of the run; `ephemeral` is a no-op stand-up (the env is already deployed and
- * its URL reaches the agent through its prompt). Absent ⇒ the harness manages no infra.
+ * tester). Two shapes, discriminated by `kind` (absent ⇒ `service`, the backend tester):
+ *   - `service` — a backend service under test: `local` brings the service's
+ *     docker-compose infra up on localhost for the run; `ephemeral` is a no-op stand-up
+ *     (the env is already deployed and its URL reaches the agent through its prompt).
+ *   - `frontend` — a frontend app under test (the self-contained UI-test flow): build the
+ *     frontend, stand WireMock up for its mocked upstreams, serve the built app, and point
+ *     the (`tester-ui`) agent at it. Everything runs as localhost PROCESSES in the one
+ *     container (no Docker-in-Docker), so it works on Cloudflare + Apple `container` too.
+ * Absent ⇒ the harness manages no infra.
  */
-export interface AgentInfraSpec {
+export type AgentInfraSpec = ServiceInfraSpec | FrontendInfraSpec
+
+/** Backend-service tester infra (docker-compose local, or a deployed ephemeral env). */
+export interface ServiceInfraSpec {
+  /** Discriminant. Absent ⇒ `service` (the backend tester). */
+  kind?: 'service'
   /** `local` stands infra up via docker-compose; `ephemeral` tests a deployed env. */
   environment: 'local' | 'ephemeral'
   /** Local mode: the service declared no infra dependencies (spin nothing up). */
@@ -255,6 +277,41 @@ export interface AgentInfraSpec {
   composePath?: string
   /** Ephemeral mode: the provisioned environment URL (echoed for context only). */
   environmentUrl?: string
+}
+
+/**
+ * Frontend UI-test infra (the self-contained `tester-ui` flow). The backend has already
+ * resolved every backend upstream to a concrete URL — the bound service's live ephemeral
+ * env URL for the service under test, `http://localhost:<wiremockPort>` for every mocked
+ * upstream — and handed them here as {@link env}. The harness installs, builds (injecting
+ * `env` at build time, or writing a `window.env` shim for runtime injection), stands
+ * WireMock up on {@link wiremockPort} seeded from {@link wiremockMappingsPath}, serves the
+ * built app on {@link servePort}, health-checks it, and tells the agent the serve URL.
+ */
+export interface FrontendInfraSpec {
+  kind: 'frontend'
+  /** Package manager for install/build. Default `pnpm`. */
+  packageManager?: 'pnpm' | 'npm' | 'yarn'
+  /** Explicit install command, overriding the one derived from `packageManager`. */
+  install?: string
+  /** package.json script that produces the built app. Default `build`. */
+  buildScript?: string
+  /** The build's output directory, served in `static` mode. Default `dist`. */
+  outputDir?: string
+  /** How the built app is served: static server of `outputDir`, or run `serveScript`. */
+  serveMode?: 'static' | 'command'
+  /** package.json script to run when `serveMode: 'command'` (e.g. `preview`). */
+  serveScript?: string
+  /** The port the served app listens on inside the container. Default 4173. */
+  servePort?: number
+  /** Build-time env vars vs a runtime `window.env` shim. Default `build`. */
+  envInjection?: 'build' | 'runtime'
+  /** Resolved backend upstream env vars (name → URL) to inject. Empty names filtered out. */
+  env?: Record<string, string>
+  /** The WireMock mappings directory in the FE repo. Default `mocks/`. */
+  wiremockMappingsPath?: string
+  /** The port WireMock listens on inside the container. Default 8089. */
+  wiremockPort?: number
 }
 
 /**
@@ -303,10 +360,13 @@ export interface AgentOutputSpec {
 
 /**
  * The generic agent job. `mode` selects the flow; the remaining fields are the union
- * the two flows need. Explore: clone `branch`, run read-only, return prose (or a parsed
+ * the flows need. Explore: clone `branch`, run read-only, return prose (or a parsed
  * `custom` JSON object when `output.kind==='structured'`). Coding: clone `branch` (or
  * resume `newBranch`), run, commit + push to `pushBranch`, and open `pr` when one is set
- * and the run produced changes.
+ * and the run produced changes. Preview (local/node only): clone `branch`, build + serve
+ * the frontend (`infra.kind==='frontend'`) with its other upstreams mocked and KEEP IT
+ * RUNNING — no agent runs and the serve is deliberately not torn down when the job returns
+ * (see {@link AgentResult.preview}).
  */
 export interface AgentJob extends HarnessAuthFields {
   jobId: string
@@ -348,6 +408,10 @@ export interface AgentJob extends HarnessAuthFields {
    * tester). Brings the docker-compose infra up on localhost for the duration of the
    * run and tears it down afterward; a stand-up failure is non-fatal (surfaced to the
    * agent as a note). The agent makes no commits regardless. Absent ⇒ no infra managed.
+   *
+   * Preview mode: REQUIRED and must be the `frontend` variant — it is the whole job (build
+   * + serve + WireMock, kept alive). No agent runs and, unlike the tester, the stand-up is
+   * NOT torn down when the job returns.
    */
   infra?: AgentInfraSpec
   /** Coding mode: a fresh branch to create off the clone before running (else work on `branch`). */
@@ -435,6 +499,13 @@ export interface AgentResult {
    * — the failure-class artifact the orchestrator-side provisioning logs can't capture.
    */
   infraSetup?: InfraSetupRecord
+  /**
+   * Preview mode: the in-container URL the built app is served at (e.g. `http://localhost:4173`).
+   * This is NOT host-reachable on its own — the container runtime publishes the serve port to an
+   * ephemeral host port and the backend forms the browsable URL from that; this is echoed for
+   * logging/context. Present only on a successful preview stand-up.
+   */
+  preview?: { url: string }
   /** Coding mode: whether a change was pushed. */
   pushed?: boolean
   prUrl?: string
@@ -510,6 +581,7 @@ function parseContextFiles(value: unknown): ContextFileSpec[] {
 function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const o = value as Record<string, unknown>
+  if (o.kind === 'frontend') return parseFrontendInfraSpec(o)
   const environment =
     o.environment === 'local' ? 'local' : o.environment === 'ephemeral' ? 'ephemeral' : undefined
   if (!environment) return undefined
@@ -523,14 +595,109 @@ function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
   }
 }
 
+/**
+ * Env-var names never injected from a frontend binding: spread over `process.env` at build
+ * time, so any of these would break the toolchain (or enable code execution / cert overrides)
+ * rather than name an upstream URL. Matched exactly (Linux env is case-sensitive); the
+ * {@link RESERVED_ENV_PREFIXES} below cover whole families (`npm_config_*`, `GIT_*`, …).
+ */
+const RESERVED_ENV_NAMES = new Set([
+  'PATH',
+  'HOME',
+  'NODE_OPTIONS',
+  'NODE_PATH',
+  'NODE_EXTRA_CA_CERTS',
+  'LD_PRELOAD',
+  'LD_LIBRARY_PATH',
+  'BASH_ENV',
+  'ENV',
+  'SHELL',
+  'IFS',
+])
+
+/**
+ * Env-var name PREFIXES never injected from a frontend binding. `npm_config_*` reconfigures the
+ * package manager (registry, scripts, prefix), and `GIT_*` reconfigures git — both run during a
+ * frontend install/build, so a binding in either family is toolchain control, not an upstream URL.
+ * Compared case-INSENSITIVELY (lower-cased here, matched lower-cased below): npm reads its config
+ * env with a case-insensitive `/^npm_config_/i`, so `NPM_CONFIG_REGISTRY` is honoured just like
+ * `npm_config_registry` — a case-sensitive prefix match would let the upper-cased form slip through.
+ */
+const RESERVED_ENV_PREFIXES = ['npm_config_', 'git_']
+
+/**
+ * Whether an env-var name is reserved (an exact name, or a reserved family prefix). The exact
+ * names are canonical upper-case env vars matched verbatim (Linux env is case-sensitive, so a
+ * distinct lower-cased `home` is a different, harmless var); the family PREFIXES are matched
+ * case-insensitively because npm interprets `npm_config_*` regardless of case (see above).
+ */
+function isReservedEnvName(key: string): boolean {
+  if (RESERVED_ENV_NAMES.has(key)) return true
+  const lower = key.toLowerCase()
+  return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
+}
+
+/** Parse the frontend UI-test infra spec (`kind: 'frontend'`), tolerating missing knobs. */
+function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
+  const packageManager =
+    o.packageManager === 'pnpm' || o.packageManager === 'npm' || o.packageManager === 'yarn'
+      ? o.packageManager
+      : undefined
+  const serveMode = o.serveMode === 'static' || o.serveMode === 'command' ? o.serveMode : undefined
+  const envInjection =
+    o.envInjection === 'build' || o.envInjection === 'runtime' ? o.envInjection : undefined
+  // Only string→string entries survive; a non-string value is dropped so a malformed
+  // binding can't inject `[object Object]` (or undefined) as an upstream URL. Reserved names
+  // that would break the toolchain or enable injection (PATH, NODE_OPTIONS, LD_PRELOAD, …) are
+  // dropped too: they are spread over `process.env` at build time, so a binding named `PATH`
+  // would replace it with a URL and the build would no longer find its tools.
+  const env: Record<string, string> = {}
+  if (typeof o.env === 'object' && o.env !== null) {
+    for (const [key, val] of Object.entries(o.env as Record<string, unknown>)) {
+      if (key && !isReservedEnvName(key) && typeof val === 'string') env[key] = val
+    }
+  }
+  const servePort = port(o.servePort)
+  const wiremockPort = port(o.wiremockPort)
+  return {
+    kind: 'frontend',
+    ...(packageManager ? { packageManager } : {}),
+    ...(typeof o.install === 'string' && o.install ? { install: o.install } : {}),
+    ...(typeof o.buildScript === 'string' && o.buildScript ? { buildScript: o.buildScript } : {}),
+    ...(typeof o.outputDir === 'string' && o.outputDir ? { outputDir: o.outputDir } : {}),
+    ...(serveMode ? { serveMode } : {}),
+    ...(typeof o.serveScript === 'string' && o.serveScript ? { serveScript: o.serveScript } : {}),
+    ...(servePort !== undefined ? { servePort } : {}),
+    ...(envInjection ? { envInjection } : {}),
+    ...(Object.keys(env).length ? { env } : {}),
+    ...(typeof o.wiremockMappingsPath === 'string' && o.wiremockMappingsPath
+      ? { wiremockMappingsPath: o.wiremockMappingsPath }
+      : {}),
+    ...(wiremockPort !== undefined ? { wiremockPort } : {}),
+  }
+}
+
 /** Validate + narrow an untrusted body into an {@link AgentJob}, throwing on bad input. */
 export function parseAgentJob(input: unknown): AgentJob {
   if (typeof input !== 'object' || input === null) {
     throw new Error('Invalid job: body must be an object')
   }
   const o = input as Record<string, unknown>
-  const mode = o.mode === 'coding' ? 'coding' : o.mode === 'explore' ? 'explore' : undefined
-  if (!mode) throw new Error("Invalid job: 'mode' must be 'explore' or 'coding'")
+  const mode =
+    o.mode === 'coding'
+      ? 'coding'
+      : o.mode === 'explore'
+        ? 'explore'
+        : o.mode === 'preview'
+          ? 'preview'
+          : undefined
+  if (!mode) throw new Error("Invalid job: 'mode' must be 'explore', 'coding' or 'preview'")
+  // Preview runs NO agent (it only builds + serves the frontend), so the agent-only fields
+  // (system/user prompt, model) are unused there — accept them absent rather than forcing the
+  // preview dispatch to send dummy values it has no reason to supply. Every other mode still
+  // requires them (throws when missing/empty), exactly as before.
+  const agentField = (value: unknown, path: string): string =>
+    mode === 'preview' ? (typeof value === 'string' ? value : '') : str(value, path)
   const repo = (o.repo ?? {}) as Record<string, unknown>
   const output =
     typeof o.output === 'object' && o.output !== null
@@ -563,9 +730,9 @@ export function parseAgentJob(input: unknown): AgentJob {
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
     mode,
-    systemPrompt: str(o.systemPrompt, 'systemPrompt'),
-    userPrompt: str(o.userPrompt, 'userPrompt'),
-    model: str(o.model, 'model'),
+    systemPrompt: agentField(o.systemPrompt, 'systemPrompt'),
+    userPrompt: agentField(o.userPrompt, 'userPrompt'),
+    model: agentField(o.model, 'model'),
     ...parseHarnessAuth(o),
     ghToken: str(o.ghToken, 'ghToken'),
     repo: parseRepoSpec(repo),

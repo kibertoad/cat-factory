@@ -33,6 +33,7 @@ const emit = defineEmits<{ connected: [] }>()
 const { t } = useI18n()
 const store = useProviderConnectionsStore()
 const toast = useToast()
+const { confirmAction } = useConfirmAction()
 
 const descriptor = computed(() => store.descriptorFor(props.kind))
 const connection = computed(() => store.connectionFor(props.kind))
@@ -328,6 +329,7 @@ async function saveConfig(payload: {
 }
 
 async function remove() {
+  if (!(await confirmAction('remove', descriptor.value?.label ?? props.kind))) return
   busy.value = true
   try {
     await store.remove(props.kind)

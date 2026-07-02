@@ -805,6 +805,14 @@ export const environmentHandleSchema = v.object({
   id: v.string(),
   workspaceId: v.string(),
   blockId: v.nullable(v.string()),
+  /**
+   * The service FRAME this environment belongs to (the deployer step's block walked up to its
+   * enclosing frame). This is the key a cross-frame consumer resolves an env by — notably a
+   * `frontend` frame's `service` binding, whose `serviceBlockId` names a service FRAME, not the
+   * task the deployer happened to run on (which is `blockId`). Null for legacy rows / a block-less
+   * or frame-less provision.
+   */
+  frameId: v.optional(v.nullable(v.string())),
   executionId: v.nullable(v.string()),
   providerId: v.string(),
   externalId: v.nullable(v.string()),

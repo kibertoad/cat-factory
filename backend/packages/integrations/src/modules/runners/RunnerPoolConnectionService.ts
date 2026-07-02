@@ -241,6 +241,15 @@ export class RunnerPoolConnectionService {
     return this.toConnection(record, keys)
   }
 
+  /**
+   * Whether a runner-pool connection is registered for the workspace — a presence probe that does
+   * NOT decrypt the secret bundle (unlike {@link getConnection}). Used by the infra-setup snapshot
+   * projection, which only needs the yes/no and runs on the hot board-load path.
+   */
+  async hasConnection(workspaceId: string): Promise<boolean> {
+    return (await this.deps.runnerPoolConnectionRepository.getByWorkspace(workspaceId)) !== null
+  }
+
   /** Resolve the live connection + parsed config, or throw if not registered. */
   async requireConnection(
     workspaceId: string,

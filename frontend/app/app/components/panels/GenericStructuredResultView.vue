@@ -60,6 +60,8 @@ const customJson = computed<string | null>(() => {
     >
       <div
         class="m-4 flex w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
       >
         <!-- Header -->
         <header class="flex items-center gap-3 border-b border-slate-800 px-5 py-3">

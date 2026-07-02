@@ -6,6 +6,9 @@
     // own esbuild transform for the specs. Node globals + the DOM lib (the specs
     // use Playwright's `page`, but Web types keep editor checks honest).
     "noEmit": true,
+    // The backend runs via Node type stripping (`node src/testServer.ts`), which requires
+    // relative imports to carry their real `.ts` extension — allow that in the type check.
+    "allowImportingTsExtensions": true,
     "types": ["node"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },

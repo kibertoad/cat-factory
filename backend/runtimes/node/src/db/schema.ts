@@ -1039,6 +1039,7 @@ export const mergeThresholdPresets = pgTable(
     max_requirement_concern_allowed: text('max_requirement_concern_allowed')
       .notNull()
       .default('none'),
+    max_tester_quality_iterations: integer('max_tester_quality_iterations').notNull().default(3),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
@@ -1295,6 +1296,10 @@ export const environments = pgTable(
     id: text('id').primaryKey(),
     workspace_id: text('workspace_id').notNull(),
     block_id: text('block_id'),
+    // The service FRAME this env belongs to (the deployer block walked up to its frame). The
+    // cross-frame discovery key — a `frontend` frame's `service` binding resolves the live env
+    // by the bound service FRAME id, not the task the deployer ran on (`block_id`).
+    frame_id: text('frame_id'),
     execution_id: text('execution_id'),
     provider_id: text('provider_id').notNull(),
     external_id: text('external_id'),

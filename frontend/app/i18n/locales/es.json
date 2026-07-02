@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "Cargando…",
+    "loadingBoard": "Cargando tablero…",
+    "backendUnreachable": "No se puede conectar con el backend",
+    "reconnecting": "Reconectando…"
+  },
   "language": {
     "switcher": "Idioma",
     "warning": {
@@ -15,7 +21,36 @@
     "copy": "Copiar",
     "actionFailed": "La acción falló",
     "close": "Cerrar",
-    "block": "Bloque"
+    "block": "Bloque",
+    "delete": "Eliminar",
+    "remove": "Quitar",
+    "confirm": {
+      "defaultTitle": "¿Estás seguro?",
+      "confirm": "Confirmar",
+      "irreversible": "Esta acción no se puede deshacer.",
+      "reconnectHint": "Tendrás que volver a conectarlo antes de poder usarlo de nuevo.",
+      "titles": {
+        "disconnect": "¿Desconectar {name}?",
+        "remove": "¿Quitar {name}?",
+        "revoke": "¿Revocar {name}?",
+        "clear": "¿Borrar {name}?",
+        "destroy": "¿Destruir {name}?"
+      },
+      "reconfigureHint": "Puedes volver a configurarlo más tarde."
+    },
+    "copied": "Copiado al portapapeles",
+    "disconnect": "Desconectar",
+    "copyFailed": "No se pudo copiar al portapapeles",
+    "revoke": "Revocar",
+    "clear": "Borrar",
+    "destroy": "Destruir",
+    "toast": {
+      "disconnected": "{name} desconectado",
+      "removed": "{name} eliminado",
+      "revoked": "{name} revocado",
+      "cleared": "{name} borrado",
+      "destroyed": "{name} destruido"
+    }
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -39,6 +74,14 @@
     "infrastructure": "Infraestructura"
   },
   "board": {
+    "toast": {
+      "updateFailed": "No se pudieron guardar los cambios",
+      "epicFailed": "No se pudo cambiar la épica",
+      "moveFailed": "No se pudo mover",
+      "deleteFailed": "No se pudo eliminar",
+      "linkFailed": "No se pudieron vincular las tareas",
+      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente"
+    },
     "repoTypes": {
       "service": "Servicio",
       "frontend": "Frontend",
@@ -231,11 +274,20 @@
       "openPrOnGithub": "Abrir {pr} en GitHub",
       "review": "Revisar",
       "merge": "Fusionar",
+      "mergeConfirm": {
+        "title": "¿Fusionar esta pull request?",
+        "body": "Esto fusiona la PR en su rama base y completa la tarea. Esto no se puede deshacer.",
+        "confirm": "Fusionar"
+      },
       "implemented": "implementada",
       "module": "Módulo: {name}",
       "buildSteps": "Pasos de build",
       "reviewAndApprove": "Revisar y aprobar",
-      "clickToViewStep": "Haz clic para ver los detalles y la salida del paso"
+      "clickToViewStep": "Haz clic para ver los detalles y la salida del paso",
+      "startedToast": {
+        "title": "Ejecución iniciada",
+        "body": "Ejecutando \"{name}\"."
+      }
     },
     "epic": {
       "label": "Épica",
@@ -260,7 +312,9 @@
         "no_pr_to_merge": "No hay PR para fusionar",
         "github_not_connected": "GitHub no conectado",
         "bootstrap_not_retryable": "La inicialización no se puede reintentar",
-        "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido"
+        "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido",
+        "preset_unsatisfiable": "El preajuste de modelo no puede ejecutar esta canalización",
+        "visual_pipeline_no_frontend": "No hay frontend que probar"
       },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
       "providersUnconfigured": {
@@ -322,6 +376,10 @@
         "step2": "Abre el archivo de credenciales que Codex escribió en ~/.codex/auth.json (en Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "Copia todo el contenido de auth.json, pégalo abajo y elige una contraseña personal para protegerlo."
       }
+    },
+    "confirmDisconnect": {
+      "title": "¿Desconectar esta suscripción?",
+      "body": "Se desconectará tu suscripción de \"{vendor}\". Esta acción no se puede deshacer."
     }
   },
   "inspector": {
@@ -392,18 +450,31 @@
       "serveScript": "Script de servicio",
       "servePort": "Puerto de servicio",
       "mockMappingsPath": "Ruta de asignaciones de simulación",
+      "mockMappingsHint": "Directorio raíz de WireMock. Coloca los JSON de stub en una subcarpeta mappings/ dentro de él (y los cuerpos de respuesta en __files/), p. ej. mocks/mappings/. Una carpeta sin mappings/ dentro ejecuta un mock vacío.",
       "envInjection": "Inyección de variables de entorno",
       "envBuild": "En compilación",
       "envRuntime": "En ejecución",
-      "envInjectionHint": "En compilación inyecta las URL del backend como variables de entorno de compilación; En ejecución las escribe en un shim de window.env.",
+      "envInjectionHint": "En compilación inyecta las URL del backend como variables de entorno de compilación; En ejecución las escribe en un shim de window.env. Ten en cuenta que tu herramienta de compilación puede exponer al navegador solo variables con prefijo (p. ej. VITE_), así que nombra los enlaces según su convención.",
       "previewEnabled": "Activar vista previa navegable",
       "previewHint": "Mantiene una vista previa servida en ejecución con una URL clicable. Solo en los entornos Local y Node.",
+      "previewUnsupported": "Este despliegue no puede alojar una vista previa navegable. Ejecuta en un despliegue Local o Node para mantener una vista previa servida con una URL clicable.",
       "bindings": {
         "title": "Vinculaciones del backend",
         "hint": "Cada variable de entorno que el frontend lee para una URL upstream, y dónde se resuelve: el entorno efímero de un servicio vinculado, o un stub de WireMock.",
         "mock": "Simulación (WireMock)",
         "remove": "Eliminar vinculación",
         "empty": "No hay vinculaciones de backend. Añade una para apuntar una variable de entorno a un servicio o a una simulación."
+      },
+      "preview": {
+        "open": "Abrir vista previa",
+        "start": "Iniciar vista previa",
+        "stop": "Detener",
+        "status": {
+          "starting": "Iniciando…",
+          "ready": "En ejecución",
+          "failed": "Error",
+          "stopped": "No iniciada"
+        }
       }
     },
     "releaseHealth": {
@@ -419,7 +490,8 @@
       "saveMonitoring": "Guardar monitoreo",
       "savedToast": "Monitoreo guardado",
       "saveFailed": "No se pudo guardar la asignación",
-      "clearFailed": "No se pudo limpiar la asignación"
+      "clearFailed": "No se pudo limpiar la asignación",
+      "configNoun": "la configuración de salud de la versión"
     },
     "testConfig": {
       "title": "Infraestructura de pruebas",
@@ -514,7 +586,11 @@
       "merged": "Fusionado",
       "notMerged": "Aún sin fusionar",
       "empty": "Sin dependencias. Puede ejecutarse en cualquier momento.",
-      "blocked": "Bloqueado hasta que se fusionen las dependencias."
+      "blocked": "Bloqueado hasta que se fusionen las dependencias.",
+      "confirmRemove": {
+        "title": "¿Quitar esta dependencia?",
+        "body": "Esta tarea ya no esperará a \"{name}\"."
+      }
     },
     "estimate": {
       "title": "Estimación",
@@ -544,6 +620,16 @@
       "stopTooltip": "Detener la ejecución pero conservarla (legible y reintentable)",
       "reset": "Restablecer",
       "resetTooltip": "Descartar esta ejecución y restablecer la tarea a planificada",
+      "resetConfirm": {
+        "title": "¿Descartar esta ejecución?",
+        "body": "Esto elimina la ejecución y devuelve la tarea a planificada. Esto no se puede deshacer.",
+        "confirm": "Descartar ejecución"
+      },
+      "mergeConfirm": {
+        "title": "¿Fusionar esta pull request?",
+        "body": "Esto fusiona la PR en su rama base y completa la tarea. Esto no se puede deshacer.",
+        "confirm": "Fusionar"
+      },
       "viewDetailsOutput": "Ver detalles y leer la salida",
       "viewDetails": "Ver detalles del paso",
       "companion": "Acompañante",
@@ -559,7 +645,11 @@
       "companionOf": "{label} (acompañante)",
       "merged": "Fusionado",
       "open": "Abierto",
-      "mergePr": "Fusionar PR"
+      "mergePr": "Fusionar PR",
+      "empty": {
+        "title": "Aún no hay ejecuciones",
+        "body": "Inicia un pipeline para ver el historial de ejecución aquí."
+      }
     },
     "structure": {
       "module": "Módulo",
@@ -631,6 +721,33 @@
       "noResult": "Aún no hay resultado.",
       "noResultHint": "La salida estructurada aparece cuando este agente termina. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
     },
+    "mergerResult": {
+      "title": "Decisión de fusión",
+      "titleWithBlock": "Decisión de fusión: {title}",
+      "description": "Cómo se puntuó el PR y qué decidió el motor.",
+      "outcome": {
+        "auto_merged": "Fusionado automáticamente",
+        "awaiting_review": "Esperando revisión humana"
+      },
+      "reason": {
+        "within_thresholds": "Todas las puntuaciones están dentro de los umbrales de {preset}, por lo que el PR se fusionó automáticamente.",
+        "exceeded_thresholds": "{axes} superó los umbrales de {preset}, por lo que el PR espera a que una persona lo fusione.",
+        "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
+        "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
+        "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
+        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione."
+      },
+      "scores": "Puntuaciones",
+      "axis": {
+        "complexity": "Complejidad",
+        "risk": "Riesgo",
+        "impact": "Impacto"
+      },
+      "ceiling": "límite {value}",
+      "rationale": "Justificación",
+      "noAssessment": "El fusionador no devolvió una evaluación puntuada.",
+      "noResult": "Aún no se ha registrado ninguna decisión de fusión."
+    },
     "testReport": {
       "title": "Informe de pruebas",
       "greenlit": "Aprobado",
@@ -689,7 +806,9 @@
           "done": "Finalizando"
         },
         "id": "Contenedor",
-        "url": "Dirección"
+        "url": "Dirección",
+        "copyId": "Copiar id del contenedor",
+        "copyUrl": "Copiar dirección"
       }
     },
     "stepDetail": {
@@ -759,7 +878,25 @@
       "viewRequirements": "Ver requisitos",
       "reRun": "Reejecutar",
       "run": "Ejecutar",
-      "focus": "Enfocar"
+      "focus": "Enfocar",
+      "confirmDelete": {
+        "task": {
+          "title": "¿Eliminar esta tarea?",
+          "body": "Se eliminarán \"{name}\" y su historial de ejecución. Esta acción no se puede deshacer."
+        },
+        "module": {
+          "title": "¿Eliminar este módulo?",
+          "body": "Se eliminará \"{name}\" y todo su contenido. Esta acción no se puede deshacer."
+        },
+        "service": {
+          "title": "¿Eliminar este servicio?",
+          "body": "Se eliminará \"{name}\" y todo su contenido. Esta acción no se puede deshacer."
+        },
+        "recurring": {
+          "title": "¿Eliminar este pipeline recurrente?",
+          "body": "Se eliminarán \"{name}\", su programación y su historial de ejecución. Esta acción no se puede deshacer."
+        }
+      }
     }
   },
   "observability": {
@@ -1019,7 +1156,8 @@
         "revokeInvite": "No se pudo revocar la invitación",
         "connectEmail": "No se pudo conectar el remitente de correo",
         "disconnectEmail": "No se pudo desconectar el remitente de correo"
-      }
+      },
+      "emailNoun": "el envío de correo"
     },
     "boardSwitcher": {
       "accountFallback": "Cuenta",
@@ -1063,6 +1201,10 @@
         "openBoardFailed": "No se pudo abrir el tablero",
         "boardDeleted": "Tablero eliminado",
         "deleteBoardFailed": "No se pudo eliminar el tablero"
+      },
+      "confirmDelete": {
+        "title": "¿Eliminar este tablero?",
+        "body": "Se eliminará \"{name}\" y todo su contenido. Esta acción no se puede deshacer."
       }
     },
     "notifications": {
@@ -1084,6 +1226,12 @@
         "human_review": "Marcar como leída",
         "followup_pending": "Marcar como leída",
         "markRead": "Marcar como leída"
+      },
+      "toast": {
+        "acted": "Marcado como resuelto",
+        "dismissed": "Descartado",
+        "actFailed": "No se pudo completar esa acción",
+        "dismissFailed": "No se pudo descartar"
       }
     },
     "aiProvidersBanner": {
@@ -1114,6 +1262,27 @@
       "action": {
         "environment": "Configurar proveedor de entorno",
         "runner-pool": "Configurar grupo de ejecutores"
+      }
+    },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "Ejecutor de agentes no configurado",
+        "body": "Este despliegue ejecuta los agentes en un pool de runners autoalojado, pero no hay ninguno registrado, así que ningún agente podrá ejecutarse hasta que conectes uno.",
+        "action": "Configurar pool de runners"
+      },
+      "ephemeralEnvironments": {
+        "title": "Entorno de pruebas no configurado",
+        "body": "No hay ningún proveedor de entornos efímeros registrado, así que los agentes de pruebas que necesitan un entorno activo no pueden ejecutarse. Conecta uno para habilitarlos.",
+        "action": "Configurar entorno"
+      },
+      "binaryStorage": {
+        "title": "Almacenamiento de contenido no configurado",
+        "body": "No hay ningún backend de almacenamiento binario configurado para esta cuenta, así que las capturas de la interfaz y las imágenes de referencia no tienen dónde guardarse y las comprobaciones visuales se omiten. Configura el almacenamiento para habilitarlas.",
+        "action": "Configurar almacenamiento"
+      },
+      "dismiss": {
+        "session": "Descartar durante esta sesión",
+        "permanent": "Acepto las limitaciones, no volver a avisarme"
       }
     },
     "spendWarningBanner": {
@@ -1183,7 +1352,8 @@
         "serviceFragmentDefaults": "Buenas prácticas del servicio por defecto",
         "accountSettings": "Ajustes de la cuenta",
         "localModels": "Mis ejecutores locales",
-        "sandbox": "Abrir el entorno de pruebas"
+        "sandbox": "Abrir el entorno de pruebas",
+        "shortcuts": "Atajos de teclado"
       },
       "keywords": {
         "newPipeline": "canalización agentes cadena pipeline",
@@ -1202,7 +1372,8 @@
         "serviceFragmentDefaults": "fragmento buenas prácticas directriz servicio por defecto consciente del código",
         "accountSettings": "cuenta equipo miembros roles invitaciones correo claves api fragmento buenas prácticas biblioteca contexto organización personal",
         "localModels": "modelo local ejecutor ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar"
+        "sandbox": "entorno de pruebas prompt modelo prueba experimento juez fixture benchmark evaluar",
+        "shortcuts": "atajos teclado teclas ayuda"
       }
     },
     "integrationsHub": {
@@ -1275,6 +1446,13 @@
           "description": "Tus ejecutores de modelos en tu propia máquina (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "Atajos de teclado",
+      "commandBar": "Abrir la barra de comandos",
+      "deselect": "Deseleccionar / cerrar el inspector",
+      "deleteBlock": "Eliminar el bloque seleccionado",
+      "help": "Mostrar esta ayuda"
     }
   },
   "settings": {
@@ -1317,6 +1495,10 @@
         "nameRequiredTitle": "Nombre obligatorio",
         "nameRequiredBody": "Dale un nombre al ajuste.",
         "saveFailed": "No se pudo guardar el ajuste"
+      },
+      "confirmDelete": {
+        "title": "¿Eliminar este preset de modelo?",
+        "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
       }
     },
     "account": {
@@ -1536,6 +1718,10 @@
         "saveFailed": "No se pudo guardar el secreto",
         "removed": "Secreto eliminado",
         "removeFailed": "No se pudo eliminar el secreto"
+      },
+      "confirmRemove": {
+        "title": "¿Quitar este secreto?",
+        "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       }
     },
     "mergeThresholds": {
@@ -1582,7 +1768,11 @@
         "deleteFailed": "No se pudo eliminar el ajuste"
       },
       "autoMergeOnHint": "Fusionar automáticamente cuando esté dentro de los umbrales.",
-      "autoMergeOffHint": "Enviar siempre el PR a revisión humana."
+      "autoMergeOffHint": "Enviar siempre el PR a revisión humana.",
+      "confirmDelete": {
+        "title": "¿Eliminar este preset de fusión?",
+        "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
+      }
     },
     "observabilityConnection": {
       "title": "Salud posterior al lanzamiento",
@@ -1622,7 +1812,9 @@
         "connected": "Observabilidad conectada",
         "connectFailed": "No se pudo guardar la conexión",
         "disconnectFailed": "No se pudo desconectar"
-      }
+      },
+      "connectionNoun": "la conexión de observabilidad",
+      "incidentNoun": "el proveedor de incidencias"
     },
     "localMode": {
       "title": "Modo local",
@@ -1789,6 +1981,10 @@
         "saveFailed": "No se pudo guardar el runner",
         "removed": "Runner eliminado",
         "removeFailed": "No se pudo eliminar el runner"
+      },
+      "confirmRemove": {
+        "title": "¿Quitar este runner?",
+        "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       }
     },
     "infrastructure": {
@@ -1823,6 +2019,9 @@
         "apiServerUrlHelp": "La raíz del kube-apiserver, p. ej. https://my-cluster.example:6443.",
         "apiToken": "Token de ServiceAccount",
         "apiTokenHelp": "Solo escritura; vuelve a introducirlo para rotarlo. Se guarda cifrado y nunca se devuelve.",
+        "apiTokenHelpStored": "Hay un token guardado que se reutiliza para las pruebas. Déjalo en blanco para conservarlo o introduce uno nuevo para reemplazarlo.",
+        "apiTokenPlaceholderStored": "Déjalo en blanco para conservar el token guardado",
+        "tokenSaved": "Guardado",
         "urlSourceLabel": "Origen de la URL del entorno",
         "urlIngressTemplate": "Plantilla de host de Ingress",
         "urlIngressStatus": "Estado de Ingress",
@@ -1875,6 +2074,9 @@
       "handler": {
         "intro": "Configura cómo se gestiona cada tipo de aprovisionamiento que declara un servicio: el motor y la conexión. Los manifiestos o la ruta de compose de un servicio (el qué/dónde) se definen en el servicio.",
         "activeEngine": "Motor:",
+        "connectionEstablished": "Conexión establecida",
+        "notConnected": "Aún no hay ninguna conexión configurada",
+        "disconnect": "Eliminar conexión",
         "engineLabel": "Motor",
         "customHandlerTitle": "Gestor remote-custom",
         "customTypeLabel": "Tipo personalizado",
@@ -1888,7 +2090,10 @@
         "overrideActive": "Activa",
         "personalOverrideHint": "Anula el gestor del espacio de trabajo para este tipo de aprovisionamiento en tu propia máquina. Se guarda por usuario.",
         "removeOverride": "Quitar anulación",
-        "loading": "Cargando la configuración de infraestructura…"
+        "loading": "Cargando la configuración de infraestructura…",
+        "kubeNoun": "el controlador de Kubernetes",
+        "kubeOverrideNoun": "la anulación de Kubernetes",
+        "customNoun": "este controlador"
       }
     }
   },
@@ -2012,7 +2217,8 @@
           "step1": "Genera una clave virtual en tu pasarela LiteLLM (o usa su clave maestra).",
           "step2": "La URL base de la pasarela la establece el operador de tu despliegue (LITELLM_BASE_URL), no aquí."
         }
-      }
+      },
+      "keyNoun": "esta clave de API"
     },
     "vendorCredentials": {
       "title": "Proveedores de LLM",
@@ -2050,6 +2256,10 @@
           "step2": "Copia la clave de API. Los pasos de agente se ejecutarán vía Claude Code contra el endpoint de Anthropic de DeepSeek con contexto completo.",
           "step3": "Pega la clave abajo."
         }
+      },
+      "confirmRemove": {
+        "title": "¿Quitar esta credencial?",
+        "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       }
     }
   },
@@ -2146,6 +2356,10 @@
         "createBranch": "No se pudo crear la rama",
         "openPr": "No se pudo abrir la solicitud de incorporación de cambios",
         "merge": "No se pudo fusionar"
+      },
+      "confirmDisconnect": {
+        "title": "¿Desconectar GitHub?",
+        "body": "La app perderá acceso a tus repositorios hasta que vuelvas a conectar."
       }
     },
     "addService": {
@@ -2254,6 +2468,10 @@
       "disconnect": "No se pudo desconectar Slack",
       "saveRouting": "No se pudo guardar el enrutamiento",
       "saveMap": "No se pudo guardar el mapa de miembros"
+    },
+    "confirmDisconnect": {
+      "title": "¿Desconectar Slack?",
+      "body": "Las notificaciones de Slack se detendrán hasta que vuelvas a conectar."
     }
   },
   "documents": {
@@ -2471,6 +2689,10 @@
         "cloned": "Clonado \"{name}\" — ahora editando \"{copy}\"",
         "cloneFailed": "No se pudo clonar el pipeline",
         "updateFailed": "No se pudo actualizar el pipeline"
+      },
+      "confirmDeletePipeline": {
+        "title": "¿Eliminar este pipeline?",
+        "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
       }
     },
     "progress": {
@@ -3031,7 +3253,9 @@
       "completed": "completado",
       "failed": "fallido",
       "inProgress": "en curso"
-    }
+    },
+    "envNoun": "el entorno de prueba",
+    "destroyFailed": "No se pudo destruir el entorno"
   },
   "testing": {
     "title": "Informe de pruebas",
@@ -3380,6 +3604,10 @@
       "checkSourceFailed": "No se pudo comprobar el origen",
       "sourceUnlinked": "Origen desvinculado",
       "unlinkSourceFailed": "No se pudo desvincular el origen"
+    },
+    "confirmRemove": {
+      "title": "¿Eliminar este fragmento?",
+      "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
     }
   },
   "sandbox": {
@@ -3505,6 +3733,7 @@
     },
     "targetRepo": {
       "label": "Nombre del repositorio de destino",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "Crea un repositorio nuevo con este nombre bajo {owner} y luego la inicialización hace push a él. Un README, .gitignore o licencia ya creados están bien.",
       "descNoOwner": "Crea un repositorio nuevo con este nombre y luego la inicialización hace push a él. Un README, .gitignore o licencia ya creados están bien."
     },
@@ -3520,7 +3749,8 @@
     },
     "description": {
       "label": "Descripción",
-      "help": "Resumen opcional de una línea para el repositorio."
+      "help": "Resumen opcional de una línea para el repositorio.",
+      "placeholder": "Gestiona intenciones de pago y reembolsos"
     },
     "instructions": {
       "labelReference": "Instrucciones adicionales para el inicializador",
@@ -3550,18 +3780,23 @@
       "add": "Añadir",
       "pickRepo": {
         "label": "Elige un repositorio de GitHub existente",
-        "description": "Elige un repositorio al que tengas acceso para rellenar su propietario y nombre, o introdúcelos manualmente abajo."
+        "description": "Elige un repositorio al que tengas acceso para rellenar su propietario y nombre, o introdúcelos manualmente abajo.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "Nombre",
-        "description": "Una etiqueta descriptiva para esta base."
+        "description": "Una etiqueta descriptiva para esta base.",
+        "placeholder": "Plantilla de servicio"
       },
       "repoOwner": "Propietario del repositorio",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "Nombre del repositorio",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "Resumen opcional de esta base",
       "defaultInstructions": {
         "label": "Instrucciones por defecto del inicializador",
-        "description": "Se anteponen a las instrucciones de cada ejecución siempre que se use esta base."
+        "description": "Se anteponen a las instrucciones de cada ejecución siempre que se use esta base.",
+        "placeholder": "p. ej. mantén la estructura; renombra los paquetes para que coincidan con el nuevo servicio"
       }
     },
     "toast": {

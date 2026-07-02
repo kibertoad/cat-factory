@@ -22,6 +22,12 @@ export function buildInfrastructureCapabilities(input: {
     suggestedExecutorImage?: string
   }
   testEnv: { available: TestEnvBackendKind[]; active: TestEnvBackendKind }
+  /**
+   * Whether this runtime can host a long-lived, browsable frontend preview. A local/node
+   * differentiator (they can keep a served app up on a host-reachable URL); the Worker only
+   * runs the self-contained UI-test container, so it passes `false`.
+   */
+  frontendPreview: { supported: boolean }
 }): InfrastructureCapabilities {
   return {
     execution: {
@@ -30,5 +36,6 @@ export function buildInfrastructureCapabilities(input: {
       suggestedExecutorImage: input.execution.suggestedExecutorImage,
     },
     testEnv: { available: input.testEnv.available, active: input.testEnv.active },
+    frontendPreview: { supported: input.frontendPreview.supported },
   }
 }

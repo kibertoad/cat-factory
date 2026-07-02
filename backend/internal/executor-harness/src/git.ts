@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process'
-import { appendFile, chmod, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { appendFile, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { BootstrapTargetSpec, PrSpec, RepoSpec } from './job.js'
+import { pathExists } from './fs-utils.js'
 import { redactSecrets } from './redact.js'
 import { loadRunnerLimits } from './runner.js'
 import { HarnessFailure } from './failure.js'
@@ -207,16 +208,6 @@ export async function cloneExistingBranch(opts: {
   })
   await git(['config', 'user.name', GIT_AUTHOR], { cwd: opts.dir, signal: opts.signal })
   await git(['config', 'user.email', GIT_EMAIL], { cwd: opts.dir, signal: opts.signal })
-}
-
-/** Whether `path` exists (a file or directory). */
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
 }
 
 /**

@@ -18,6 +18,11 @@ import type {
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
 import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
+import {
+  boundServiceFrameIds,
+  indexLiveServiceEnvUrls,
+  resolveFrontendBindings,
+} from './frontend-infra.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -175,6 +180,7 @@ export class AgentContextBuilder {
     )
     const environment = await this.resolveEnvironment(workspaceId, block.id)
     const service = await this.resolveServiceConfig(workspaceId, block)
+    const frontend = await this.resolveFrontendConfig(workspaceId, block)
     const agentConfig = block.agentConfig
     // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
     // replace the description) as a synthetic prior output so the architect and downstream
@@ -247,6 +253,7 @@ export class AgentContextBuilder {
       },
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
+      ...(frontend ? { frontend } : {}),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -266,13 +273,22 @@ export class AgentContextBuilder {
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */
   async resolveServiceFrameId(workspaceId: string, blockId: string): Promise<string | null> {
+    return (await this.resolveServiceFrame(workspaceId, blockId))?.id ?? null
+  }
+
+  /**
+   * The service-frame BLOCK for a block (walks up frame → module → task; cycle-guarded).
+   * Returns the frame itself rather than its id, so a caller that needs the frame's fields
+   * (e.g. `frontendConfig`) doesn't re-fetch the row the walk already loaded.
+   */
+  async resolveServiceFrame(workspaceId: string, blockId: string): Promise<Block | null> {
     let current = await this.deps.blockRepository.get(workspaceId, blockId)
     // Bounded walk (the tree is at most frame → module → task) guarded against cycles.
     for (let i = 0; current && i < 8; i++) {
-      if (current.level === 'frame' || !current.parentId) return current.id
+      if (current.level === 'frame' || !current.parentId) return current
       current = await this.deps.blockRepository.get(workspaceId, current.parentId)
     }
-    return current?.id ?? null
+    return current ?? null
   }
 
   /**
@@ -306,6 +322,41 @@ export class AgentContextBuilder {
     }
     if (frame.instanceSize) service.instanceSize = frame.instanceSize
     return Object.keys(service).length ? service : undefined
+  }
+
+  /**
+   * Resolve the frontend-frame configuration for a run's block — the frame's
+   * `frontendConfig` (build/serve/mock knobs) plus its backend bindings ALREADY resolved to
+   * concrete upstreams — by walking up to the service frame. Only a `type: 'frontend'` frame
+   * that carries a `frontendConfig` yields a result; every other frame returns undefined so
+   * the context stays unchanged for backend services. Each `service` binding whose bound
+   * service has a LIVE ephemeral env (status `ready` + a URL) becomes the service under test
+   * (its real URL); every other upstream is left for the harness to mock. The live env URLs
+   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by the
+   * service-frame id (no per-binding point read), so this is a single query regardless of
+   * binding count.
+   */
+  async resolveFrontendConfig(
+    workspaceId: string,
+    block: Block,
+  ): Promise<AgentRunContext['frontend'] | undefined> {
+    const frame =
+      block.level === 'frame' ? block : await this.resolveServiceFrame(workspaceId, block.id)
+    if (!frame || frame.type !== 'frontend' || !frame.frontendConfig) return undefined
+    const config = frame.frontendConfig
+    // The distinct service FRAMES this frontend binds — the only envs whose live URLs matter.
+    const serviceFrameIds = boundServiceFrameIds(config)
+    // One list read, then index the ready-with-URL handles for the bound services — never a
+    // per-binding `getByBlock` loop (the N+1 the "reuse an already-fetched list" rule bans). The
+    // frame-keyed newest-wins indexing is shared with the preview job builder (see the helper).
+    const liveServiceEnvUrls =
+      this.deps.environmentProvisioning && serviceFrameIds.size > 0
+        ? indexLiveServiceEnvUrls(
+            await this.deps.environmentProvisioning.listHandles(workspaceId),
+            serviceFrameIds,
+          )
+        : new Map<string, string>()
+    return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
   }
 
   /**

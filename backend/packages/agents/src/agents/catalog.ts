@@ -9,7 +9,7 @@ import { companionSystemPrompt } from './prompts/companion.js'
 import { companionTargets, isCompanionKind } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
-import { mockSystemPrompt } from './prompts/mock.js'
+import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
 import {
   registeredAgentStep,
@@ -191,6 +191,8 @@ function buildBaseUserPrompt(
   if (targetSection) lines.push(targetSection)
   const testerEnv = testerEnvironmentSection(context)
   if (testerEnv) lines.push(testerEnv)
+  const mockFrontend = mockFrontendSection(context)
+  if (mockFrontend) lines.push(mockFrontend)
   const allDecisions = resolvedDecision ? [...decisions, resolvedDecision] : decisions
   if (allDecisions.length) {
     lines.push('', 'Resolved decisions:')

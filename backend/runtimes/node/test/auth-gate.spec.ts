@@ -1,5 +1,5 @@
 import { NoopBootstrapRunner, NoopWorkRunner } from '@cat-factory/kernel'
-import { FakeAgentExecutor } from '@cat-factory/conformance'
+import { FakeAgentExecutor, FakePreviewTransport } from '@cat-factory/conformance'
 import { describe, expect, it } from 'vitest'
 import { buildNodeContainer } from '../src/container.js'
 import { createDbClient } from '../src/db/client.js'
@@ -66,5 +66,56 @@ describe('Node auth gate wiring', () => {
     // tier, so loadNodeConfig fails fast at boot rather than starting a 503-only app that
     // looks broken instead of misconfigured (see config.ts).
     expect(() => makeApp(AUTH_UNCONFIGURED)).toThrow(/anonymous access/i)
+  })
+
+  // Symmetric with the Worker's auth.spec: a hosted deployment advertises the PAT-login
+  // providers so a user can sign in with their own PAT (GitHub always; GitLab when a GitLab
+  // connection is configured). "Keep the runtimes symmetric" — both facades wire vcsIdentity.
+  it('advertises GitHub PAT login on a hosted deployment', async () => {
+    const call = makeApp(AUTH_ENABLED)
+    const res = await call('GET', '/auth/config')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { patLogin?: { providers: string[] } }
+    expect(body.patLogin?.providers).toEqual(['github'])
+  })
+
+  it('adds GitLab to the PAT-login providers when GITLAB_TOKEN is configured', async () => {
+    const call = makeApp({ ...AUTH_ENABLED, GITLAB_TOKEN: 'glpat-test-token' })
+    const res = await call('GET', '/auth/config')
+    const body = (await res.json()) as { patLogin?: { providers: string[] } }
+    expect(body.patLogin?.providers).toEqual(['github', 'gitlab'])
+  })
+
+  // The browsable-preview capability tracks whether a per-runtime preview transport is actually
+  // wired: a stock Node build (runner pool, no host-port-publish primitive) advertises `false`,
+  // so the SPA never offers a Start button that would 503. Local mode (and any facade that
+  // injects a `previewTransport`) advertises `true` — asserted below.
+  it('does NOT advertise browsable-preview support on a stock Node facade (no transport wired)', async () => {
+    const call = makeApp(AUTH_ENABLED)
+    const res = await call('GET', '/auth/config')
+    const body = (await res.json()) as {
+      infrastructure?: { frontendPreview?: { supported?: boolean } }
+    }
+    expect(body.infrastructure?.frontendPreview?.supported).toBe(false)
+  })
+
+  it('advertises browsable-preview support when a preview transport is wired', async () => {
+    const { db } = createDbClient('postgres://unused:unused@127.0.0.1:5432/unused')
+    const container = buildNodeContainer({
+      db,
+      env: AUTH_ENABLED,
+      previewTransport: new FakePreviewTransport(),
+      overrides: {
+        agentExecutor: new FakeAgentExecutor(),
+        workRunner: new NoopWorkRunner(),
+        bootstrapRunner: new NoopBootstrapRunner(),
+      },
+    })
+    const app = createApp(container, AUTH_ENABLED)
+    const res = await app.fetch(new Request(`${BASE}/auth/config`, { method: 'GET' }))
+    const body = (await res.json()) as {
+      infrastructure?: { frontendPreview?: { supported?: boolean } }
+    }
+    expect(body.infrastructure?.frontendPreview?.supported).toBe(true)
   })
 })

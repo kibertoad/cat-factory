@@ -171,6 +171,12 @@ jobs:
             node scripts/check-runner-image-tag.mjs
           fi
 
+      # Guard the human/LLM-facing package map: every workspace package must have a
+      # package.json description AND a row in the README repository-layout tables, so a new
+      # package can't become invisible to the docs an LLM reads first. Pure node; no install.
+      - name: Guard package catalog
+        run: node scripts/check-package-catalog.mjs
+
       - name: Install pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
@@ -231,6 +237,17 @@ jobs:
       # script header and CLAUDE.md → Internationalization.
       - name: Check i18n keys
         run: pnpm --filter @cat-factory/app run i18n:check
+
+      # i18n locale-parity guard: a PR that changes an `en.json` message key must change the
+      # SAME key in every other locale too, so translations don't silently go stale. Change-
+      # coupling against the PR base (only the keys THIS PR touched in `en` are enforced), so it
+      # doesn't fight the pre-existing incremental-translation lag. BASE_REF is empty off PRs
+      # (push/dispatch) → the script prints a notice and passes.
+      - name: Check i18n locale parity
+        if: ${{ github.base_ref != '' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node frontend/app/scripts/i18n-locale-parity.mjs --since "origin/${BASE_REF}"
 
       # Actually COMPILE the SPA. `vue-tsc` (above) is lenient about template-expression
       # syntax, so an SFC that the real Vue/Vite build rejects (e.g. a multi-statement
@@ -464,11 +481,13 @@ jobs:
   # check instead of a green one — but, being out of `test-gate.needs`, it still doesn't
   # block the merge. Promote it into `test-gate.needs` once it has proven stable.
   #
-  # SHARDED across 2 jobs via Playwright's --shard (deterministic file partition), mirroring
+  # SHARDED across 3 jobs via Playwright's --shard (deterministic file partition), mirroring
   # the `test-worker` vitest sharding above. Each shard is its own job, so the Postgres
   # service below is instantiated per shard — every shard gets a fresh, private datastore,
   # which keeps the serial `workers: 1` config valid within a shard. Each shard emits a
-  # `blob` report; the `test-e2e-report` job merges them into one HTML report.
+  # `blob` report; the `test-e2e-report` job merges them into one HTML report. (Bumped 2 → 3
+  # as the spec count grew — each shard runs its files serially, so more shards keeps the
+  # per-shard wall-clock bounded as coverage expands.)
   test-e2e:
     name: Test e2e (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
@@ -477,7 +496,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:18
@@ -545,7 +564,7 @@ jobs:
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
 
       - name: Run e2e shard
-        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/2
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/3
 
       # Each shard uploads its `blob` report (mergeable) so `test-e2e-report` can recombine
       # them into a single HTML report. `test-results/` carries the per-failure trace + video

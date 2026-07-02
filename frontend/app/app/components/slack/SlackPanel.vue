@@ -13,6 +13,7 @@ const ui = useUiStore()
 const slack = useSlackStore()
 const toast = useToast()
 const { t } = useI18n()
+const { confirm } = useConfirm()
 
 const open = computed({
   get: () => ui.slackOpen,
@@ -108,6 +109,14 @@ async function connectWithToken() {
 }
 
 async function disconnect() {
+  const ok = await confirm({
+    title: t('slack.confirmDisconnect.title'),
+    description: t('slack.confirmDisconnect.body'),
+    variant: 'destructive',
+    confirmLabel: t('common.disconnect'),
+    icon: 'i-lucide-unplug',
+  })
+  if (!ok) return
   try {
     await slack.disconnect()
   } catch (e) {

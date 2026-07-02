@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "טוען…",
+    "loadingBoard": "טוען לוח…",
+    "backendUnreachable": "לא ניתן להתחבר לבקאנד",
+    "reconnecting": "מתחבר מחדש…"
+  },
   "language": {
     "switcher": "שפה",
     "warning": {
@@ -15,7 +21,36 @@
     "copy": "העתק",
     "block": "בלוק",
     "actionFailed": "הפעולה נכשלה",
-    "close": "סגור"
+    "close": "סגור",
+    "delete": "מחק",
+    "remove": "הסר",
+    "confirm": {
+      "defaultTitle": "האם אתה בטוח?",
+      "confirm": "אישור",
+      "irreversible": "לא ניתן לבטל פעולה זו.",
+      "reconnectHint": "יהיה עליך לחבר אותו מחדש כדי להשתמש בו שוב.",
+      "titles": {
+        "disconnect": "לנתק את {name}?",
+        "remove": "להסיר את {name}?",
+        "revoke": "לבטל את {name}?",
+        "clear": "לנקות את {name}?",
+        "destroy": "להשמיד את {name}?"
+      },
+      "reconfigureHint": "אפשר להגדיר זאת שוב מאוחר יותר."
+    },
+    "copied": "הועתק ללוח",
+    "disconnect": "נתק",
+    "copyFailed": "לא ניתן להעתיק ללוח",
+    "revoke": "לבטל",
+    "clear": "לנקות",
+    "destroy": "להשמיד",
+    "toast": {
+      "disconnected": "{name} נותק",
+      "removed": "{name} הוסר",
+      "revoked": "{name} בוטל",
+      "cleared": "{name} נוקה",
+      "destroyed": "{name} הושמד"
+    }
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -39,6 +74,14 @@
     "accountSettings": "הגדרות חשבון"
   },
   "board": {
+    "toast": {
+      "updateFailed": "לא ניתן היה לשמור את השינויים",
+      "epicFailed": "לא ניתן היה לשנות את האפיק",
+      "moveFailed": "לא ניתן היה להעביר",
+      "deleteFailed": "לא ניתן היה למחוק",
+      "linkFailed": "לא ניתן היה לקשר משימות",
+      "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר"
+    },
     "repoTypes": {
       "service": "שירות",
       "frontend": "פרונט-אנד",
@@ -231,11 +274,20 @@
       "openPrOnGithub": "פתח את {pr} ב-GitHub",
       "review": "סקירה",
       "merge": "מזג",
+      "mergeConfirm": {
+        "title": "למזג בקשת משיכה זו?",
+        "body": "פעולה זו ממזגת את ה-PR לענף הבסיס שלו ומשלימה את המשימה. לא ניתן לבטל פעולה זו.",
+        "confirm": "מזג"
+      },
       "implemented": "מומש",
       "module": "מודול: {name}",
       "buildSteps": "שלבי בנייה",
       "reviewAndApprove": "סקור ואשר",
-      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט"
+      "clickToViewStep": "לחץ לצפייה בפרטי השלב ובפלט",
+      "startedToast": {
+        "title": "ההרצה החלה",
+        "body": "מריץ את \"{name}\"."
+      }
     },
     "epic": {
       "label": "אפיק",
@@ -260,7 +312,9 @@
         "no_pr_to_merge": "אין PR למיזוג",
         "github_not_connected": "GitHub אינו מחובר",
         "bootstrap_not_retryable": "לא ניתן להריץ מחדש את האתחול",
-        "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה"
+        "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה",
+        "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו",
+        "visual_pipeline_no_frontend": "אין frontend לבדיקה"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
       "providersUnconfigured": {
@@ -322,6 +376,10 @@
         "step2": "פתח את קובץ אישורי הגישה ש-Codex כתב ב-~/.codex/auth.json (ב-Windows %USERPROFILE%\\.codex\\auth.json).",
         "step3": "העתק את כל תוכן auth.json, הדבק אותו למטה ובחר סיסמה אישית כדי להגן עליו."
       }
+    },
+    "confirmDisconnect": {
+      "title": "לנתק את המנוי הזה?",
+      "body": "המנוי שלך ל־\"{vendor}\" ינותק. לא ניתן לבטל פעולה זו."
     }
   },
   "inspector": {
@@ -392,18 +450,31 @@
       "serveScript": "סקריפט הגשה",
       "servePort": "פורט הגשה",
       "mockMappingsPath": "נתיב מיפויי הדמיה",
+      "mockMappingsHint": "תיקיית השורש של WireMock. הניחו קובצי JSON של stub בתת-תיקייה mappings/ בתוכה (וגופי תגובה ב-__files/), למשל mocks/mappings/. תיקייה ללא mappings/ בתוכה מפעילה mock ריק.",
       "envInjection": "הזרקת משתני סביבה",
       "envBuild": "בזמן בנייה",
       "envRuntime": "בזמן ריצה",
-      "envInjectionHint": "בזמן בנייה מזריק את כתובות ה-backend כמשתני סביבה של בנייה; בזמן ריצה כותב אותן ל-shim של window.env.",
+      "envInjectionHint": "בזמן בנייה מזריק את כתובות ה-backend כמשתני סביבה של בנייה; בזמן ריצה כותב אותן ל-shim של window.env. שים לב שכלי הבנייה שלך עשוי לחשוף לדפדפן רק משתנים עם קידומת (למשל VITE_), לכן תן שמות לקישורים בהתאם למוסכמה שלו.",
       "previewEnabled": "הפעל תצוגה מקדימה לגלישה",
       "previewHint": "משאיר תצוגה מקדימה מוגשת פועלת עם כתובת URL לחיצה. רק בסביבות Local ו-Node.",
+      "previewUnsupported": "פריסה זו אינה יכולה לארח תצוגה מקדימה לגלישה. הפעל בפריסת Local או Node כדי לשמור תצוגה מקדימה מוגשת עם כתובת URL לחיצה.",
       "bindings": {
         "title": "קישורי backend",
         "hint": "כל משתנה סביבה שה-frontend קורא עבור כתובת URL במעלה הזרם, והיכן הוא נפתר: הסביבה הזמנית של שירות מקושר, או stub של WireMock.",
         "mock": "הדמיה (WireMock)",
         "remove": "הסר קישור",
         "empty": "אין קישורי backend. הוסף אחד כדי להפנות משתנה סביבה לשירות או להדמיה."
+      },
+      "preview": {
+        "open": "פתח תצוגה מקדימה",
+        "start": "הפעל תצוגה מקדימה",
+        "stop": "עצור",
+        "status": {
+          "starting": "מתחיל…",
+          "ready": "פועל",
+          "failed": "נכשל",
+          "stopped": "לא פועל"
+        }
       }
     },
     "releaseHealth": {
@@ -419,7 +490,8 @@
       "saveMonitoring": "שמור ניטור",
       "savedToast": "הניטור נשמר",
       "saveFailed": "לא ניתן לשמור את המיפוי",
-      "clearFailed": "לא ניתן לנקות את המיפוי"
+      "clearFailed": "לא ניתן לנקות את המיפוי",
+      "configNoun": "תצורת בריאות הגרסה"
     },
     "testConfig": {
       "title": "תשתית בדיקות",
@@ -514,7 +586,11 @@
       "merged": "מוזג",
       "notMerged": "טרם מוזג",
       "empty": "אין תלויות. יכול לרוץ בכל עת.",
-      "blocked": "חסום עד שהתלויות ימוזגו."
+      "blocked": "חסום עד שהתלויות ימוזגו.",
+      "confirmRemove": {
+        "title": "להסיר את התלות הזו?",
+        "body": "משימה זו כבר לא תמתין ל־\"{name}\"."
+      }
     },
     "estimate": {
       "title": "הערכה",
@@ -544,6 +620,16 @@
       "stopTooltip": "עצור את ההרצה אך שמור אותה (ניתנת לקריאה ולחזרה)",
       "reset": "אפס",
       "resetTooltip": "השלך הרצה זו ואפס את המשימה למתוכננת",
+      "resetConfirm": {
+        "title": "להשליך הרצה זו?",
+        "body": "פעולה זו מוחקת את ההרצה ומחזירה את המשימה למתוכננת. לא ניתן לבטל פעולה זו.",
+        "confirm": "השלך הרצה"
+      },
+      "mergeConfirm": {
+        "title": "למזג בקשת משיכה זו?",
+        "body": "פעולה זו ממזגת את ה-PR לענף הבסיס שלו ומשלימה את המשימה. לא ניתן לבטל פעולה זו.",
+        "confirm": "מזג"
+      },
       "viewDetailsOutput": "הצג פרטים וקרא פלט",
       "viewDetails": "הצג פרטי שלב",
       "companion": "מלווה",
@@ -559,7 +645,11 @@
       "companionOf": "{label} (מלווה)",
       "merged": "מוזג",
       "open": "פתוח",
-      "mergePr": "מזג PR"
+      "mergePr": "מזג PR",
+      "empty": {
+        "title": "אין הרצות עדיין",
+        "body": "התחל pipeline כדי לראות כאן את היסטוריית ההרצות."
+      }
     },
     "structure": {
       "module": "מודול",
@@ -631,6 +721,33 @@
       "noResult": "אין עדיין תוצאה.",
       "noResultHint": "הפלט המובנה מופיע ברגע שהסוכן מסיים. בזמן הריצה השלב מציג התקדמות חיה על הלוח."
     },
+    "mergerResult": {
+      "title": "החלטת מיזוג",
+      "titleWithBlock": "החלטת מיזוג: {title}",
+      "description": "כיצד ה-PR דורג ומה המנוע החליט.",
+      "outcome": {
+        "auto_merged": "מוזג אוטומטית",
+        "awaiting_review": "ממתין לבדיקת אדם"
+      },
+      "reason": {
+        "within_thresholds": "כל הציונים בתוך ספי {preset}, ולכן ה-PR מוזג אוטומטית.",
+        "exceeded_thresholds": "{axes} חרג מספי {preset}, ולכן ה-PR ממתין למיזוג ידני.",
+        "auto_merge_disabled": "הקדם-הגדרה {preset} שולחת כל PR לאדם, ולכן זה ממתין לבדיקה.",
+        "no_rationale": "הממזג נתן ציון ל-PR אך לא סיפק נימוק, ולכן לא ניתן היה לסמוך על ההכרעה למיזוג אוטומטי; ה-PR ממתין למיזוג ידני.",
+        "no_assessment": "הממזג לא החזיר הערכה שניתן לפענח, ולכן ה-PR ממתין למיזוג ידני.",
+        "merge_failed": "הציונים היו בתוך ספי {preset}, אך המיזוג האוטומטי לא הושלם (למשל הגנת ענף או התנגשות), ולכן ה-PR ממתין למיזוג ידני."
+      },
+      "scores": "ציונים",
+      "axis": {
+        "complexity": "מורכבות",
+        "risk": "סיכון",
+        "impact": "השפעה"
+      },
+      "ceiling": "תקרה {value}",
+      "rationale": "נימוק",
+      "noAssessment": "הממזג לא החזיר הערכה מדורגת.",
+      "noResult": "עדיין לא נרשמה החלטת מיזוג."
+    },
     "testReport": {
       "title": "דוח בדיקות",
       "greenlit": "אושר",
@@ -669,7 +786,9 @@
           "done": "מסיים"
         },
         "id": "מכולה",
-        "url": "כתובת"
+        "url": "כתובת",
+        "copyId": "העתק את מזהה הקונטיינר",
+        "copyUrl": "העתק כתובת"
       },
       "subtasks": "תת-משימות · {completed}/{total}",
       "standardsApplied": "תקנים שהוחלו",
@@ -759,7 +878,25 @@
       "viewRequirements": "הצג דרישות",
       "reRun": "הרץ מחדש",
       "run": "הרץ",
-      "focus": "מקד"
+      "focus": "מקד",
+      "confirmDelete": {
+        "task": {
+          "title": "למחוק את המשימה הזו?",
+          "body": "\"{name}\" והיסטוריית ההרצות שלה יימחקו. לא ניתן לבטל פעולה זו."
+        },
+        "module": {
+          "title": "למחוק את המודול הזה?",
+          "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
+        },
+        "service": {
+          "title": "למחוק את השירות הזה?",
+          "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
+        },
+        "recurring": {
+          "title": "למחוק את ה־pipeline החוזר הזה?",
+          "body": "\"{name}\", התזמון שלו והיסטוריית ההרצות יימחקו. לא ניתן לבטל פעולה זו."
+        }
+      }
     }
   },
   "observability": {
@@ -1019,7 +1156,8 @@
         "revokeInvite": "לא ניתן היה לבטל הזמנה",
         "connectEmail": "לא ניתן היה לחבר שולח אימייל",
         "disconnectEmail": "לא ניתן היה לנתק שולח אימייל"
-      }
+      },
+      "emailNoun": "שליחת האימייל"
     },
     "boardSwitcher": {
       "accountFallback": "חשבון",
@@ -1063,6 +1201,10 @@
         "openBoardFailed": "לא ניתן היה לפתוח את הלוח",
         "boardDeleted": "הלוח נמחק",
         "deleteBoardFailed": "לא ניתן היה למחוק את הלוח"
+      },
+      "confirmDelete": {
+        "title": "למחוק את הלוח הזה?",
+        "body": "\"{name}\" וכל התוכן שבו יימחקו. לא ניתן לבטל פעולה זו."
       }
     },
     "notifications": {
@@ -1084,6 +1226,12 @@
         "human_review": "סמן כנקרא",
         "followup_pending": "סמן כנקרא",
         "markRead": "סמן כנקרא"
+      },
+      "toast": {
+        "acted": "סומן כטופל",
+        "dismissed": "נדחה",
+        "actFailed": "לא ניתן היה להשלים את הפעולה",
+        "dismissFailed": "לא ניתן היה לבטל"
       }
     },
     "aiProvidersBanner": {
@@ -1114,6 +1262,27 @@
       "action": {
         "environment": "הגדר ספק סביבה",
         "runner-pool": "הגדר מאגר מריצים"
+      }
+    },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "מנוע הסוכנים אינו מוגדר",
+        "body": "פריסה זו מריצה סוכנים במאגר ראנרים בניהול עצמי, אך אף מאגר אינו רשום, ולכן אף סוכן לא יוכל לפעול עד שתחברו אחד.",
+        "action": "הגדרת מאגר ראנרים"
+      },
+      "ephemeralEnvironments": {
+        "title": "סביבת בדיקות אינה מוגדרת",
+        "body": "לא רשום שום ספק סביבות ארעיות, ולכן סוכני בדיקה הזקוקים לסביבה פעילה אינם יכולים לפעול. חברו ספק כדי להפעיל אותם.",
+        "action": "הגדרת סביבה"
+      },
+      "binaryStorage": {
+        "title": "אחסון תוכן אינו מוגדר",
+        "body": "לא הוגדר שום מנגנון אחסון בינארי לחשבון זה, ולכן לצילומי המסך של הממשק ולתמונות הייחוס אין היכן להישמר והבדיקות הוויזואליות מדולגות. הגדירו אחסון כדי להפעיל אותן.",
+        "action": "הגדרת אחסון"
+      },
+      "dismiss": {
+        "session": "התעלם להפעלה זו",
+        "permanent": "אני מסכים למגבלות, אל תודיעו לי שוב"
       }
     },
     "spendWarningBanner": {
@@ -1183,7 +1352,8 @@
         "serviceFragmentDefaults": "שיטות עבודה מומלצות לשירות כברירת מחדל",
         "accountSettings": "הגדרות חשבון",
         "localModels": "המריצים המקומיים שלי",
-        "sandbox": "פתח ארגז חול"
+        "sandbox": "פתח ארגז חול",
+        "shortcuts": "קיצורי מקלדת"
       },
       "keywords": {
         "newPipeline": "צינור סוכנים שרשרת",
@@ -1202,7 +1372,8 @@
         "serviceFragmentDefaults": "מקטע שיטת עבודה מומלצת הנחיה שירות ברירת מחדל מודע-קוד",
         "accountSettings": "חשבון צוות חברים תפקידים הזמנות אימייל מפתחות api מקטע ספריית שיטות עבודה מומלצות הקשר ארגון אישי",
         "localModels": "מקומי מודל מריץ ollama lm studio llamacpp vllm endpoint",
-        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה"
+        "sandbox": "ארגז חול פרומפט מודל בדיקה ניסוי שיפוט פיקסצ'ר בנצ'מרק הערכה",
+        "shortcuts": "קיצורים מקלדת מקשים עזרה"
       }
     },
     "integrationsHub": {
@@ -1275,6 +1446,13 @@
           "description": "מריצי מודלים על המכונה שלך (Ollama, LM Studio, vLLM…)."
         }
       }
+    },
+    "shortcuts": {
+      "title": "קיצורי מקלדת",
+      "commandBar": "פתח את שורת הפקודות",
+      "deselect": "בטל בחירה / סגור את המפקח",
+      "deleteBlock": "מחק את הבלוק הנבחר",
+      "help": "הצג את דף העזר הזה"
     }
   },
   "settings": {
@@ -1317,6 +1495,10 @@
         "nameRequiredTitle": "נדרש שם",
         "nameRequiredBody": "תן לתצורה שם.",
         "saveFailed": "לא ניתן היה לשמור את התצורה"
+      },
+      "confirmDelete": {
+        "title": "למחוק את קדם־הגדרת המודל הזו?",
+        "body": "\"{name}\" יימחק. משימות המשתמשות בו יחזרו לברירת המחדל של סביבת העבודה."
       }
     },
     "account": {
@@ -1370,6 +1552,9 @@
         "apiServerUrlHelp": "שורש ה-kube-apiserver, לדוגמה https://my-cluster.example:6443.",
         "apiToken": "אסימון ServiceAccount",
         "apiTokenHelp": "לכתיבה בלבד; הזן מחדש כדי להחליף. נשמר מוצפן ולעולם לא מוחזר.",
+        "apiTokenHelpStored": "אסימון שמור ונעשה בו שימוש חוזר לבדיקות. השאר ריק כדי לשמור אותו, או הזן חדש כדי להחליף.",
+        "apiTokenPlaceholderStored": "השאר ריק כדי לשמור את האסימון השמור",
+        "tokenSaved": "נשמר",
         "urlSourceLabel": "מקור כתובת הסביבה",
         "urlIngressTemplate": "תבנית מארח של Ingress",
         "urlIngressStatus": "סטטוס Ingress",
@@ -1422,6 +1607,9 @@
       "handler": {
         "intro": "הגדר כיצד מטופל כל סוג אספקה שהשירות מצהיר עליו: המנוע והחיבור. המניפסטים או נתיב ה-compose של שירות (מה/היכן) מוגדרים על השירות.",
         "activeEngine": "מנוע:",
+        "connectionEstablished": "החיבור נוצר",
+        "notConnected": "עדיין לא הוגדר חיבור",
+        "disconnect": "הסר חיבור",
         "engineLabel": "מנוע",
         "customHandlerTitle": "מטפל remote-custom",
         "customTypeLabel": "סוג מותאם",
@@ -1435,7 +1623,10 @@
         "overrideActive": "פעילה",
         "personalOverrideHint": "עקוף את מטפל מרחב העבודה עבור סוג אספקה זה במכונה שלך. נשמר לכל משתמש.",
         "removeOverride": "הסר עקיפה",
-        "loading": "טוען הגדרות תשתית…"
+        "loading": "טוען הגדרות תשתית…",
+        "kubeNoun": "מטפל ה-Kubernetes",
+        "kubeOverrideNoun": "עקיפת ה-Kubernetes",
+        "customNoun": "מטפל זה"
       }
     },
     "providerConnection": {
@@ -1647,6 +1838,10 @@
         "saveFailed": "לא ניתן היה לשמור את הסוד",
         "removed": "הסוד הוסר",
         "removeFailed": "לא ניתן היה להסיר את הסוד"
+      },
+      "confirmRemove": {
+        "title": "להסיר את הסוד הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     },
     "mergeThresholds": {
@@ -1693,7 +1888,11 @@
         "deleteFailed": "לא ניתן היה למחוק את התצורה"
       },
       "autoMergeOnHint": "מזג אוטומטית כשבתוך הספים.",
-      "autoMergeOffHint": "נתב תמיד את ה-PR לבדיקה אנושית."
+      "autoMergeOffHint": "נתב תמיד את ה-PR לבדיקה אנושית.",
+      "confirmDelete": {
+        "title": "למחוק את קדם־הגדרת המיזוג הזו?",
+        "body": "\"{name}\" יימחק. משימות המשתמשות בו יחזרו לברירת המחדל של סביבת העבודה."
+      }
     },
     "observabilityConnection": {
       "title": "בריאות שלאחר שחרור",
@@ -1733,7 +1932,9 @@
         "connected": "התצפיתיות מחוברת",
         "connectFailed": "לא ניתן היה לשמור את החיבור",
         "disconnectFailed": "לא ניתן היה להתנתק"
-      }
+      },
+      "connectionNoun": "חיבור התצפיתיות",
+      "incidentNoun": "ספק התקריות"
     },
     "localMode": {
       "title": "מצב מקומי",
@@ -1900,6 +2101,10 @@
         "saveFailed": "לא ניתן היה לשמור מריץ",
         "removed": "המריץ הוסר",
         "removeFailed": "לא ניתן היה להסיר מריץ"
+      },
+      "confirmRemove": {
+        "title": "להסיר את ה־runner הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     }
   },
@@ -2023,7 +2228,8 @@
           "step1": "צור מפתח וירטואלי בשער LiteLLM שלך (או השתמש במפתח המאסטר שלו).",
           "step2": "כתובת הבסיס של השער נקבעת על ידי מפעיל הפריסה שלך (LITELLM_BASE_URL), ולא כאן."
         }
-      }
+      },
+      "keyNoun": "מפתח API זה"
     },
     "vendorCredentials": {
       "title": "ספקי LLM",
@@ -2061,6 +2267,10 @@
           "step2": "העתק את מפתח ה-API. שלבי הסוכן ירוצו דרך Claude Code מול נקודת הקצה של Anthropic של DeepSeek עם הקשר מלא.",
           "step3": "הדבק את המפתח למטה."
         }
+      },
+      "confirmRemove": {
+        "title": "להסיר את פרטי הגישה האלה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     }
   },
@@ -2157,6 +2367,10 @@
         "createBranch": "לא ניתן היה ליצור ענף",
         "openPr": "לא ניתן היה לפתוח בקשת משיכה",
         "merge": "לא ניתן היה למזג"
+      },
+      "confirmDisconnect": {
+        "title": "לנתק את GitHub?",
+        "body": "האפליקציה תאבד גישה למאגרים שלך עד לחיבור מחדש."
       }
     },
     "addService": {
@@ -2265,6 +2479,10 @@
       "disconnect": "לא ניתן לנתק את Slack",
       "saveRouting": "לא ניתן לשמור את הניתוב",
       "saveMap": "לא ניתן לשמור את מפת החברים"
+    },
+    "confirmDisconnect": {
+      "title": "לנתק את Slack?",
+      "body": "התראות Slack ייפסקו עד לחיבור מחדש."
     }
   },
   "documents": {
@@ -2482,6 +2700,10 @@
         "cloned": "שוכפל \"{name}\" — עורך כעת את \"{copy}\"",
         "cloneFailed": "לא ניתן לשכפל את הצינור",
         "updateFailed": "לא ניתן לעדכן את הצינור"
+      },
+      "confirmDeletePipeline": {
+        "title": "למחוק את ה־pipeline הזה?",
+        "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
     },
     "progress": {
@@ -3042,7 +3264,9 @@
       "completed": "הושלם",
       "failed": "נכשל",
       "inProgress": "בתהליך"
-    }
+    },
+    "envNoun": "סביבת הבדיקה",
+    "destroyFailed": "לא ניתן להשמיד את הסביבה"
   },
   "testing": {
     "title": "דוח בדיקה",
@@ -3391,6 +3615,10 @@
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",
       "unlinkSourceFailed": "לא ניתן היה לבטל את קישור המקור"
+    },
+    "confirmRemove": {
+      "title": "למחוק את המקטע הזה?",
+      "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
     }
   },
   "sandbox": {
@@ -3516,6 +3744,7 @@
     },
     "targetRepo": {
       "label": "שם מאגר היעד",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "צור מאגר חדש בשם הזה תחת {owner}, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר.",
       "descNoOwner": "צור מאגר חדש בשם הזה, ואז האתחול דוחף אליו. README, .gitignore או רישיון מאוכלסים מראש הם בסדר."
     },
@@ -3531,7 +3760,8 @@
     },
     "description": {
       "label": "תיאור",
-      "help": "תקציר אופציונלי בשורה אחת למאגר."
+      "help": "תקציר אופציונלי בשורה אחת למאגר.",
+      "placeholder": "מטפל בכוונות תשלום והחזרים"
     },
     "instructions": {
       "labelReference": "הנחיות נוספות למאתחל",
@@ -3561,18 +3791,23 @@
       "add": "הוסף",
       "pickRepo": {
         "label": "בחר מאגר GitHub קיים",
-        "description": "בחר מאגר שיש לך גישה אליו כדי למלא את הבעלים והשם שלו, או הזן אותם ידנית למטה."
+        "description": "בחר מאגר שיש לך גישה אליו כדי למלא את הבעלים והשם שלו, או הזן אותם ידנית למטה.",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "שם",
-        "description": "תווית ידידותית לבסיס הזה."
+        "description": "תווית ידידותית לבסיס הזה.",
+        "placeholder": "תבנית שירות"
       },
       "repoOwner": "בעלי המאגר",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "שם המאגר",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "תקציר אופציונלי של הבסיס הזה",
       "defaultInstructions": {
         "label": "הנחיות מאתחל ברירת מחדל",
-        "description": "מצורפות לפני ההנחיות הפר-הרצה בכל פעם שנעשה שימוש בבסיס הזה."
+        "description": "מצורפות לפני ההנחיות הפר-הרצה בכל פעם שנעשה שימוש בבסיס הזה.",
+        "placeholder": "לדוגמה, שמור על המבנה; שנה את שמות החבילות כך שיתאימו לשירות החדש"
       }
     },
     "toast": {

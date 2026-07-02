@@ -8,6 +8,10 @@ import { beforeEach, vi } from 'vitest'
 vi.stubGlobal('useApi', () => ({}))
 vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
 vi.stubGlobal('usePipelineErrorToast', () => ({ present: vi.fn() }))
+// Some stores resolve translations through the Nuxt app's global i18n instance (they run
+// outside a component `setup`, so `useI18n()` isn't available). Stub it with a passthrough
+// `$i18n.t` that echoes the key.
+vi.stubGlobal('useNuxtApp', () => ({ $i18n: { t: (key: string) => key } }))
 
 // @nuxtjs/i18n auto-imports `useI18n`. Under plain Vitest the module isn't booted, so
 // stub it with a passthrough: `t` echoes the key and `n`/`d` stringify. `te` reports NO key

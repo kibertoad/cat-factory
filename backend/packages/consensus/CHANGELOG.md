@@ -1,5 +1,72 @@
 # @cat-factory/consensus
 
+## 0.8.3
+
+### Patch Changes
+
+- Updated dependencies [dcc8b32]
+  - @cat-factory/contracts@0.79.0
+  - @cat-factory/kernel@0.69.0
+  - @cat-factory/agents@0.26.2
+
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [16ee6cc]
+  - @cat-factory/contracts@0.78.1
+  - @cat-factory/kernel@0.68.1
+  - @cat-factory/agents@0.26.1
+
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [16621f8]
+  - @cat-factory/contracts@0.78.0
+  - @cat-factory/kernel@0.68.0
+  - @cat-factory/agents@0.26.0
+
+## 0.8.0
+
+### Minor Changes
+
+- 6c51e31: Run inline LLM steps through the ambient Claude Code / Codex CLI in local mode, and refuse to
+  start a pipeline whose model preset can't satisfy every step.
+
+  - **Local inline harness execution**: with native agents enabled (`LOCAL_NATIVE_AGENTS`), the
+    inline steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) now run
+    on the developer's ambient `claude`/`codex` subscription CLI as a host subprocess — the inline
+    analogue of the existing container ambient-auth path. Previously a subscription-only preset
+    (e.g. Claude Opus) degraded these inline steps to the routing default and failed against an
+    unconfigured provider (the confusing "requirements reviewer (qwen:qwen3-max) failed" error).
+    Implemented via a new AI-SDK `CliInlineLanguageModel` (`@cat-factory/agents`) wired into the
+    local model provider; `inlineModelRef` now keeps an ambient-eligible harness ref instead of
+    degrading it. The consensus executor (an inline path) threads the same predicate, so a
+    subscription-only consensus participant model is kept inline in local mode too.
+  - **Preset satisfiability guard**: the pipeline-start guard now checks INLINE steps against
+    inline-usability, not just container-usability. A subscription-only model that satisfies the
+    container agents but can't run the inline reviewers (and this deployment has no inline harness)
+    is refused up front with a new `preset_unsatisfiable` conflict reason and an actionable message,
+    instead of failing mid-run. The SPA maps the new reason to a translated toast.
+
+  Breaking: `inlineModelRef` gains an optional third `opts` argument; the `ConflictReason` wire
+  union gains `preset_unsatisfiable`.
+
+### Patch Changes
+
+- Updated dependencies [9e93fe8]
+- Updated dependencies [9b26ff1]
+- Updated dependencies [e0aa45e]
+- Updated dependencies [f70c273]
+- Updated dependencies [edf4e69]
+- Updated dependencies [f21279e]
+- Updated dependencies [6c51e31]
+- Updated dependencies [33687cf]
+  - @cat-factory/contracts@0.77.0
+  - @cat-factory/kernel@0.67.0
+  - @cat-factory/agents@0.25.0
+
 ## 0.7.104
 
 ### Patch Changes

@@ -3,10 +3,12 @@ import BoardCanvas from '~/components/board/BoardCanvas.vue'
 import SideBar from '~/components/layout/SideBar.vue'
 import BoardToolbar from '~/components/layout/BoardToolbar.vue'
 import SpendWarningBanner from '~/components/layout/SpendWarningBanner.vue'
+import ConnectionStatusBanner from '~/components/layout/ConnectionStatusBanner.vue'
 import TranslationWarningBanner from '~/components/layout/TranslationWarningBanner.vue'
 import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
+import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
 // Always-mounted, fast-path surfaces (opened frequently during a run / board edits, or
 // store-driven so they must react from anywhere — kept eager for snappy open/close).
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
@@ -18,6 +20,8 @@ import AddTaskModal from '~/components/board/AddTaskModal.vue'
 import GitHubOnboarding from '~/components/github/GitHubOnboarding.vue'
 import CommandBar from '~/components/layout/CommandBar.vue'
 import PersonalCredentialModal from '~/components/providers/PersonalCredentialModal.vue'
+import ConfirmDialog from '~/components/common/ConfirmDialog.vue'
+import KeyboardShortcutsHelp from '~/components/common/KeyboardShortcutsHelp.vue'
 
 // Heavy, rarely-open panels — code-split into their own chunks via defineAsyncComponent
 // and mounted only while their ui open-flag is set (the v-if gates in the template), so
@@ -113,6 +117,10 @@ const models = useModelsStore()
 const ui = useUiStore()
 const aiReadiness = useAiReadiness()
 
+// App-wide keyboard shortcuts (Escape to deselect, Delete to remove the selected block, ?
+// for the cheatsheet). Registered ONCE here so a single global listener owns them.
+useKeyboardShortcuts()
+
 // Load the board from the backend before rendering it.
 onMounted(() => {
   void workspace.init()
@@ -141,6 +149,8 @@ watch(
       autoOpenedSetup.value = false
       autoOpenedPreset.value = false
       ui.resetAiOnboarding()
+      // Infra-setup banner session dismissals are per-workspace too — clear them on switch.
+      ui.resetInfraSetupDismissals()
       // A different board has its own pipeline library, so re-arm the once-per-session advisory.
       ui.pipelineHealthSeen = false
     }
@@ -242,10 +252,23 @@ watch(
     <TranslationWarningBanner />
     <!-- Local-mode setup prompt (missing GitHub PAT); floats over whatever is shown below. -->
     <GitHubPatBanner />
-    <!-- AI-readiness prompt (no usable model source, or default preset uses unavailable models). -->
-    <AiProvidersBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
-    <!-- Infrastructure provider prompt (env/runner-pool wired but missing mandatory config). -->
-    <ProviderConfigBanner v-if="workspace.ready && !needsGitHubInstall && !githubProbePending" />
+    <!-- Stacked advisory banners: one click-through column so concurrent prompts never draw on
+         top of each other (a fresh, unconfigured deployment can raise all three at once — no AI
+         model + no runner pool + no storage). The wrapper is `pointer-events-none`; each banner
+         re-enables pointer events on its own card, so the empty strip never intercepts clicks on
+         the board chrome underneath.
+         - AI-readiness (no usable model source, or default preset uses unavailable models).
+         - Infrastructure provider (env/runner-pool wired but missing mandatory config).
+         - Infra-setup (this deployment needs an executor / test env / storage the operator hasn't
+           defined yet, so a class of agents can't run). -->
+    <div
+      v-if="workspace.ready && !needsGitHubInstall && !githubProbePending"
+      class="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 px-4 pt-4"
+    >
+      <AiProvidersBanner />
+      <ProviderConfigBanner />
+      <InfraSetupBanner />
+    </div>
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->
     <div
@@ -253,7 +276,7 @@ watch(
       class="m-auto flex flex-col items-center gap-3 text-slate-400"
     >
       <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-      <span class="text-sm">Loading…</span>
+      <span class="text-sm">{{ $t('app.loading') }}</span>
     </div>
 
     <!-- App enabled but not installed on this workspace: hard onboarding gate. -->
@@ -290,6 +313,7 @@ watch(
         />
         <BoardToolbar />
         <SpendWarningBanner />
+        <ConnectionStatusBanner :connected="streamConnected" />
         <InspectorPanel />
         <!-- Code-split focus view. The fade lives here (not inside the component) so the
              leave animation still plays when `focusBlockId` clears and the v-if unmounts
@@ -307,6 +331,8 @@ watch(
       <AddTaskModal />
       <CommandBar />
       <PersonalCredentialModal />
+      <ConfirmDialog />
+      <KeyboardShortcutsHelp />
 
       <!-- Lazy panels: mounted only while their ui open-flag is set, so each loads on
            first open (its own chunk) rather than bloating the initial bundle. -->
@@ -344,17 +370,17 @@ watch(
     <!-- Backend unreachable / bootstrap failed -->
     <div v-else-if="workspace.error" class="m-auto max-w-md p-8 text-center">
       <UIcon name="i-lucide-plug-zap" class="mx-auto mb-3 h-10 w-10 text-amber-400" />
-      <h1 class="mb-1 text-lg font-semibold">Can’t reach the backend</h1>
+      <h1 class="mb-1 text-lg font-semibold">{{ $t('app.backendUnreachable') }}</h1>
       <p class="mb-4 text-sm text-slate-400">{{ workspace.error }}</p>
       <UButton color="primary" icon="i-lucide-rotate-ccw" @click="workspace.init()">
-        Retry
+        {{ $t('common.retry') }}
       </UButton>
     </div>
 
     <!-- Initial load -->
     <div v-else class="m-auto flex flex-col items-center gap-3 text-slate-400">
       <UIcon name="i-lucide-loader" class="h-8 w-8 animate-spin" />
-      <span class="text-sm">Loading board…</span>
+      <span class="text-sm">{{ $t('app.loadingBoard') }}</span>
     </div>
   </div>
 </template>

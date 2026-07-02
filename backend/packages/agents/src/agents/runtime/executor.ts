@@ -44,6 +44,13 @@ export interface AiAgentExecutorDependencies {
     modelPresetId?: string,
   ) => Promise<string | undefined>
   /**
+   * Whether a container-only subscription harness ref can run as an INLINE call in this
+   * deployment (local mode's ambient CLI). Supplied by the facade from
+   * `config.agents.inlineHarnessRef`; keeps an ambient-eligible harness ref instead of
+   * degrading it, so the harness-aware model provider serves it. Absent → always degrade.
+   */
+  runsInline?: (ref: ModelRef) => boolean
+  /**
    * Opt-in provider-hosted web search for the design/research inline kinds. When
    * supplied (and the resolved model's provider has a hosted search — Anthropic /
    * OpenAI), the allow-listed kinds get a `web_search` tool plus a usage nudge.
@@ -69,6 +76,7 @@ export class AiAgentExecutor implements AgentExecutor {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  private readonly runsInline?: (ref: ModelRef) => boolean
   private readonly webSearch?: InlineWebSearchOptions
 
   constructor({
@@ -77,6 +85,7 @@ export class AiAgentExecutor implements AgentExecutor {
     agentRouting,
     resolveBlockModel,
     resolveWorkspaceModelDefault,
+    runsInline,
     webSearch,
   }: AiAgentExecutorDependencies) {
     if (!modelProviderResolver && !modelProvider) {
@@ -87,6 +96,7 @@ export class AiAgentExecutor implements AgentExecutor {
     this.agentRouting = agentRouting
     this.resolveBlockModel = resolveBlockModel ?? (() => undefined)
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
+    this.runsInline = runsInline
     this.webSearch = webSearch
   }
 
@@ -122,6 +132,7 @@ export class AiAgentExecutor implements AgentExecutor {
         agentRouting: this.agentRouting,
         resolveBlockModel: this.resolveBlockModel,
         resolveWorkspaceModelDefault: this.resolveWorkspaceModelDefault,
+        ...(this.runsInline ? { runsInline: this.runsInline } : {}),
       },
       {
         agentKind: context.agentKind,

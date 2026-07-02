@@ -78,6 +78,13 @@ export interface IterativeReviewDeps {
   modelRef?: ModelRef
   /** Resolve a block's selected model id to a ref (the deployment-aware resolver). */
   resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Whether a container-only subscription harness ref can run as an INLINE call in this
+   * deployment (local mode's ambient CLI). Keeps an ambient-eligible harness ref instead of
+   * degrading it to the routing default, so the harness-aware model provider serves the
+   * reviewer/rework on a subscription model. Absent → always degrade (Node/Worker).
+   */
+  runsInline?: (ref: ModelRef) => boolean
   /** Resolve the workspace's per-agent-kind default model id (consulted when the block pins none). */
   resolveWorkspaceModelDefault?: (
     workspaceId: string,
@@ -413,7 +420,9 @@ export abstract class IterativeReviewService<
    */
   protected async modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
     const fallback = this.deps.modelRef
-    const resolve = (ref: ModelRef): ModelRef => inlineModelRef(ref, fallback ?? ref)
+    const runsInline = this.deps.runsInline
+    const resolve = (ref: ModelRef): ModelRef =>
+      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
     const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
     if (fromBlock) return resolve(fromBlock)
     const defaultId = await this.deps.resolveWorkspaceModelDefault?.(

@@ -1,4 +1,10 @@
 {
+  "app": {
+    "loading": "読み込み中…",
+    "loadingBoard": "ボードを読み込み中…",
+    "backendUnreachable": "バックエンドに接続できません",
+    "reconnecting": "再接続中…"
+  },
   "language": {
     "switcher": "言語",
     "warning": {
@@ -15,7 +21,36 @@
     "copy": "コピー",
     "block": "ブロック",
     "actionFailed": "操作に失敗しました",
-    "close": "閉じる"
+    "close": "閉じる",
+    "delete": "削除",
+    "remove": "削除",
+    "confirm": {
+      "defaultTitle": "よろしいですか？",
+      "confirm": "確認",
+      "irreversible": "この操作は取り消せません。",
+      "reconnectHint": "再び使用するには、接続し直す必要があります。",
+      "titles": {
+        "disconnect": "{name} を切断しますか？",
+        "remove": "{name} を削除しますか？",
+        "revoke": "{name} を取り消しますか？",
+        "clear": "{name} をクリアしますか？",
+        "destroy": "{name} を破棄しますか？"
+      },
+      "reconfigureHint": "後で再設定できます。"
+    },
+    "copied": "クリップボードにコピーしました",
+    "disconnect": "切断",
+    "copyFailed": "クリップボードにコピーできませんでした",
+    "revoke": "取り消す",
+    "clear": "クリア",
+    "destroy": "破棄",
+    "toast": {
+      "disconnected": "{name} を切断しました",
+      "removed": "{name} を削除しました",
+      "revoked": "{name} を取り消しました",
+      "cleared": "{name} をクリアしました",
+      "destroyed": "{name} を破棄しました"
+    }
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -39,6 +74,14 @@
     "accountSettings": "アカウント設定"
   },
   "board": {
+    "toast": {
+      "updateFailed": "変更を保存できませんでした",
+      "epicFailed": "エピックを変更できませんでした",
+      "moveFailed": "移動できませんでした",
+      "deleteFailed": "削除できませんでした",
+      "linkFailed": "タスクをリンクできませんでした",
+      "recurringDeleteFailed": "定期パイプラインを削除できませんでした"
+    },
     "repoTypes": {
       "service": "サービス",
       "frontend": "フロントエンド",
@@ -231,11 +274,20 @@
       "openPrOnGithub": "{pr} を GitHub で開く",
       "review": "レビュー",
       "merge": "マージ",
+      "mergeConfirm": {
+        "title": "このプルリクエストをマージしますか？",
+        "body": "PR をベースブランチにマージし、タスクを完了します。この操作は取り消せません。",
+        "confirm": "マージ"
+      },
       "implemented": "実装済み",
       "module": "モジュール: {name}",
       "buildSteps": "ビルドステップ",
       "reviewAndApprove": "レビューして承認",
-      "clickToViewStep": "クリックしてステップの詳細と出力を表示"
+      "clickToViewStep": "クリックしてステップの詳細と出力を表示",
+      "startedToast": {
+        "title": "実行を開始しました",
+        "body": "「{name}」を実行中です。"
+      }
     },
     "epic": {
       "label": "エピック",
@@ -260,7 +312,9 @@
         "no_pr_to_merge": "マージする PR がありません",
         "github_not_connected": "GitHub が接続されていません",
         "bootstrap_not_retryable": "ブートストラップは再試行できません",
-        "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません"
+        "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません",
+        "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません",
+        "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
       "providersUnconfigured": {
@@ -322,6 +376,10 @@
         "step2": "Codex が書き込んだ認証情報ファイル ~/.codex/auth.json (Windows では %USERPROFILE%\\.codex\\auth.json) を開きます。",
         "step3": "auth.json の内容全体をコピーして下に貼り付け、保護用の個人パスワードを設定してください。"
       }
+    },
+    "confirmDisconnect": {
+      "title": "このサブスクリプションを切断しますか？",
+      "body": "「{vendor}」のサブスクリプションが切断されます。 この操作は取り消せません。"
     }
   },
   "inspector": {
@@ -392,18 +450,31 @@
       "serveScript": "配信スクリプト",
       "servePort": "配信ポート",
       "mockMappingsPath": "モックマッピングのパス",
+      "mockMappingsHint": "WireMock のルートディレクトリ。スタブ JSON はその中の mappings/ サブフォルダーに置きます（レスポンス本文は __files/ に）。例: mocks/mappings/。中に mappings/ がないフォルダーは空のモックを起動します。",
       "envInjection": "環境変数の注入",
       "envBuild": "ビルド時",
       "envRuntime": "ランタイム",
-      "envInjectionHint": "ビルド時はバックエンドの URL をビルド環境変数として注入します。ランタイムは window.env シムに書き込みます。",
+      "envInjectionHint": "ビルド時はバックエンドの URL をビルド環境変数として注入します。ランタイムは window.env シムに書き込みます。なお、ビルドツールはプレフィックス付きの変数（例: VITE_）のみをブラウザーに公開する場合があるため、その規約に合わせてバインディングに名前を付けてください。",
       "previewEnabled": "閲覧可能なプレビューを有効にする",
       "previewHint": "クリック可能な URL 付きの配信プレビューを実行し続けます。Local および Node ランタイムのみ。",
+      "previewUnsupported": "このデプロイでは閲覧可能なプレビューをホストできません。クリック可能な URL 付きの配信プレビューを維持するには、Local または Node のデプロイで実行してください。",
       "bindings": {
         "title": "バックエンドバインディング",
         "hint": "フロントエンドがアップストリーム URL のために読み取る各環境変数と、その解決先: バインドされたサービスの一時環境、または WireMock スタブ。",
         "mock": "モック（WireMock）",
         "remove": "バインディングを削除",
         "empty": "バックエンドバインディングがありません。追加して、環境変数をサービスまたはモックに向けてください。"
+      },
+      "preview": {
+        "open": "プレビューを開く",
+        "start": "プレビューを開始",
+        "stop": "停止",
+        "status": {
+          "starting": "開始中…",
+          "ready": "実行中",
+          "failed": "失敗",
+          "stopped": "停止中"
+        }
       }
     },
     "releaseHealth": {
@@ -419,7 +490,8 @@
       "saveMonitoring": "監視を保存",
       "savedToast": "監視を保存しました",
       "saveFailed": "マッピングを保存できませんでした",
-      "clearFailed": "マッピングをクリアできませんでした"
+      "clearFailed": "マッピングをクリアできませんでした",
+      "configNoun": "リリースヘルス設定"
     },
     "testConfig": {
       "title": "テストインフラ",
@@ -514,7 +586,11 @@
       "merged": "マージ済み",
       "notMerged": "未マージ",
       "empty": "依存関係はありません。いつでも実行できます。",
-      "blocked": "依存関係がマージされるまでブロックされます。"
+      "blocked": "依存関係がマージされるまでブロックされます。",
+      "confirmRemove": {
+        "title": "この依存関係を削除しますか？",
+        "body": "このタスクは今後「{name}」を待たなくなります。"
+      }
     },
     "estimate": {
       "title": "見積もり",
@@ -544,6 +620,16 @@
       "stopTooltip": "実行を停止しますが保持します (閲覧および再実行が可能)",
       "reset": "リセット",
       "resetTooltip": "この実行を破棄し、タスクを計画済みにリセットします",
+      "resetConfirm": {
+        "title": "この実行を破棄しますか？",
+        "body": "実行を削除し、タスクを計画済みに戻します。この操作は取り消せません。",
+        "confirm": "実行を破棄"
+      },
+      "mergeConfirm": {
+        "title": "このプルリクエストをマージしますか？",
+        "body": "PR をベースブランチにマージし、タスクを完了します。この操作は取り消せません。",
+        "confirm": "マージ"
+      },
       "viewDetailsOutput": "詳細を表示して出力を読む",
       "viewDetails": "ステップの詳細を表示",
       "companion": "コンパニオン",
@@ -559,7 +645,11 @@
       "companionOf": "{label} (コンパニオン)",
       "merged": "マージ済み",
       "open": "開く",
-      "mergePr": "PR をマージ"
+      "mergePr": "PR をマージ",
+      "empty": {
+        "title": "実行履歴はまだありません",
+        "body": "パイプラインを開始すると、ここに実行履歴が表示されます。"
+      }
     },
     "structure": {
       "module": "モジュール",
@@ -631,6 +721,33 @@
       "noResult": "まだ結果はありません。",
       "noResultHint": "構造化出力はこのエージェントの完了後に表示されます。実行中はステップがボード上にライブ進捗を表示します。"
     },
+    "mergerResult": {
+      "title": "マージの判定",
+      "titleWithBlock": "マージの判定: {title}",
+      "description": "PR のスコアとエンジンの判断内容。",
+      "outcome": {
+        "auto_merged": "自動マージ済み",
+        "awaiting_review": "人によるレビュー待ち"
+      },
+      "reason": {
+        "within_thresholds": "すべてのスコアが {preset} のしきい値内のため、PR は自動的にマージされました。",
+        "exceeded_thresholds": "{axes} が {preset} のしきい値を超えたため、PR は人によるマージを待っています。",
+        "auto_merge_disabled": "{preset} プリセットはすべての PR を人に回すため、この PR はレビュー待ちです。",
+        "no_rationale": "マージ担当は PR を採点しましたが根拠を示さなかったため、自動マージするには判定を信頼できませんでした。PR は人によるマージを待っています。",
+        "no_assessment": "マージ担当が解析可能な評価を返さなかったため、PR は人によるマージを待っています。",
+        "merge_failed": "スコアは {preset} のしきい値内でしたが、自動マージを完了できなかった（例: ブランチ保護や競合）ため、PR は人によるマージを待っています。"
+      },
+      "scores": "スコア",
+      "axis": {
+        "complexity": "複雑さ",
+        "risk": "リスク",
+        "impact": "影響"
+      },
+      "ceiling": "上限 {value}",
+      "rationale": "根拠",
+      "noAssessment": "マージ担当はスコア付き評価を返しませんでした。",
+      "noResult": "マージの判定はまだ記録されていません。"
+    },
     "testReport": {
       "title": "テストレポート",
       "greenlit": "承認済み",
@@ -669,7 +786,9 @@
           "done": "仕上げ中"
         },
         "id": "コンテナ",
-        "url": "アドレス"
+        "url": "アドレス",
+        "copyId": "コンテナIDをコピー",
+        "copyUrl": "アドレスをコピー"
       },
       "subtasks": "サブタスク · {completed}/{total}",
       "standardsApplied": "適用された基準",
@@ -759,7 +878,25 @@
       "viewRequirements": "要件を表示",
       "reRun": "再実行",
       "run": "実行",
-      "focus": "フォーカス"
+      "focus": "フォーカス",
+      "confirmDelete": {
+        "task": {
+          "title": "このタスクを削除しますか？",
+          "body": "「{name}」と実行履歴が削除されます。この操作は取り消せません。"
+        },
+        "module": {
+          "title": "このモジュールを削除しますか？",
+          "body": "「{name}」とその中のすべてが削除されます。この操作は取り消せません。"
+        },
+        "service": {
+          "title": "このサービスを削除しますか？",
+          "body": "「{name}」とその中のすべてが削除されます。この操作は取り消せません。"
+        },
+        "recurring": {
+          "title": "この定期パイプラインを削除しますか？",
+          "body": "「{name}」、そのスケジュール、実行履歴が削除されます。この操作は取り消せません。"
+        }
+      }
     }
   },
   "observability": {
@@ -1019,7 +1156,8 @@
         "revokeInvite": "招待を取り消せませんでした",
         "connectEmail": "メール送信者を接続できませんでした",
         "disconnectEmail": "メール送信者を切断できませんでした"
-      }
+      },
+      "emailNoun": "メール送信"
     },
     "boardSwitcher": {
       "accountFallback": "アカウント",
@@ -1063,6 +1201,10 @@
         "openBoardFailed": "ボードを開けませんでした",
         "boardDeleted": "ボードを削除しました",
         "deleteBoardFailed": "ボードを削除できませんでした"
+      },
+      "confirmDelete": {
+        "title": "このボードを削除しますか？",
+        "body": "「{name}」とその中のすべてが削除されます。 この操作は取り消せません。"
       }
     },
     "notifications": {
@@ -1084,6 +1226,12 @@
         "human_review": "既読にする",
         "followup_pending": "既読にする",
         "markRead": "既読にする"
+      },
+      "toast": {
+        "acted": "対応済みにしました",
+        "dismissed": "却下しました",
+        "actFailed": "その操作を完了できませんでした",
+        "dismissFailed": "却下できませんでした"
       }
     },
     "aiProvidersBanner": {
@@ -1114,6 +1262,27 @@
       "action": {
         "environment": "環境プロバイダーを設定",
         "runner-pool": "ランナープールを設定"
+      }
+    },
+    "infraSetupBanner": {
+      "agentExecutor": {
+        "title": "エージェント実行環境が未設定です",
+        "body": "このデプロイはセルフホストのランナープールでエージェントを実行しますが、登録されているものがないため、接続するまでエージェントを実行できません。",
+        "action": "ランナープールを設定"
+      },
+      "ephemeralEnvironments": {
+        "title": "テスト環境が未設定です",
+        "body": "エフェメラル環境プロバイダーが登録されていないため、稼働中の環境を必要とするテストエージェントを実行できません。有効にするには接続してください。",
+        "action": "環境を設定"
+      },
+      "binaryStorage": {
+        "title": "コンテンツストレージが未設定です",
+        "body": "このアカウントにはバイナリストレージのバックエンドが設定されていないため、UI のスクリーンショットや参照画像を保存する場所がなく、ビジュアルチェックはスキップされます。有効にするにはストレージを設定してください。",
+        "action": "ストレージを設定"
+      },
+      "dismiss": {
+        "session": "このセッションでは非表示にする",
+        "permanent": "制限を理解しました。今後通知しない"
       }
     },
     "spendWarningBanner": {
@@ -1183,7 +1352,8 @@
         "serviceFragmentDefaults": "デフォルトのサービスベストプラクティス",
         "accountSettings": "アカウント設定",
         "localModels": "マイローカルランナー",
-        "sandbox": "Sandbox を開く"
+        "sandbox": "Sandbox を開く",
+        "shortcuts": "キーボードショートカット"
       },
       "keywords": {
         "newPipeline": "pipeline agents chain パイプライン エージェント チェーン",
@@ -1202,7 +1372,8 @@
         "serviceFragmentDefaults": "fragment best practice guideline service default code-aware フラグメント ベストプラクティス ガイドライン サービス デフォルト コード対応",
         "accountSettings": "account team members roles invitations email api keys fragment best practice library context organization personal アカウント チーム メンバー ロール 招待 メール APIキー フラグメント ベストプラクティス ライブラリ コンテキスト 組織 個人",
         "localModels": "local model runner ollama lm studio llamacpp vllm endpoint ローカル モデル ランナー Ollama LM Studio llamacpp vLLM エンドポイント",
-        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価"
+        "sandbox": "sandbox prompt model test experiment judge fixture benchmark evaluate サンドボックス プロンプト モデル テスト 実験 ジャッジ フィクスチャ ベンチマーク 評価",
+        "shortcuts": "キーボード ショートカット キー ヘルプ"
       }
     },
     "integrationsHub": {
@@ -1275,6 +1446,13 @@
           "description": "自分のマシンで動かすモデルランナー (Ollama、LM Studio、vLLM…)。"
         }
       }
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "commandBar": "コマンドバーを開く",
+      "deselect": "選択を解除 / インスペクターを閉じる",
+      "deleteBlock": "選択したブロックを削除",
+      "help": "このチートシートを表示"
     }
   },
   "settings": {
@@ -1317,6 +1495,10 @@
         "nameRequiredTitle": "名前が必要です",
         "nameRequiredBody": "プリセットに名前を付けてください。",
         "saveFailed": "プリセットを保存できませんでした"
+      },
+      "confirmDelete": {
+        "title": "このモデルプリセットを削除しますか？",
+        "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
       }
     },
     "account": {
@@ -1372,6 +1554,9 @@
         "apiServerUrlHelp": "kube-apiserver のルート。例: https://my-cluster.example:6443。",
         "apiToken": "ServiceAccount トークン",
         "apiTokenHelp": "書き込み専用。ローテーションするには再入力してください。暗号化して保存され、返却されることはありません。",
+        "apiTokenHelpStored": "トークンは保存され、テストで再利用されます。空欄のままにすると保持され、新しい値を入力すると置き換えられます。",
+        "apiTokenPlaceholderStored": "保存済みトークンを保持するには空欄のままにします",
+        "tokenSaved": "保存済み",
         "urlSourceLabel": "環境 URL の取得元",
         "urlIngressTemplate": "Ingress ホストテンプレート",
         "urlIngressStatus": "Ingress ステータス",
@@ -1424,6 +1609,9 @@
       "handler": {
         "intro": "サービスが宣言する各プロビジョニングタイプの処理方法（エンジンと接続）を構成します。サービスのマニフェストや compose パス（何を/どこで）はサービス側で設定します。",
         "activeEngine": "エンジン:",
+        "connectionEstablished": "接続が確立されました",
+        "notConnected": "まだ接続が構成されていません",
+        "disconnect": "接続を削除",
         "engineLabel": "エンジン",
         "customHandlerTitle": "remote-custom ハンドラー",
         "customTypeLabel": "カスタムタイプ",
@@ -1437,7 +1625,10 @@
         "overrideActive": "有効",
         "personalOverrideHint": "このプロビジョニングタイプのワークスペースハンドラーを自分のマシンで上書きします。ユーザーごとに保存されます。",
         "removeOverride": "オーバーライドを削除",
-        "loading": "インフラ設定を読み込んでいます…"
+        "loading": "インフラ設定を読み込んでいます…",
+        "kubeNoun": "Kubernetes ハンドラー",
+        "kubeOverrideNoun": "Kubernetes のオーバーライド",
+        "customNoun": "このハンドラー"
       }
     },
     "providerConnection": {
@@ -1649,6 +1840,10 @@
         "saveFailed": "シークレットを保存できませんでした",
         "removed": "シークレットを削除しました",
         "removeFailed": "シークレットを削除できませんでした"
+      },
+      "confirmRemove": {
+        "title": "このシークレットを削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     },
     "mergeThresholds": {
@@ -1695,7 +1890,11 @@
         "deleteFailed": "プリセットを削除できませんでした"
       },
       "autoMergeOnHint": "しきい値内なら自動的にマージします。",
-      "autoMergeOffHint": "常にPRを人間のレビューに回します。"
+      "autoMergeOffHint": "常にPRを人間のレビューに回します。",
+      "confirmDelete": {
+        "title": "このマージプリセットを削除しますか？",
+        "body": "「{name}」が削除されます。使用中のタスクはワークスペースの既定に戻ります。"
+      }
     },
     "observabilityConnection": {
       "title": "リリース後のヘルス",
@@ -1735,7 +1934,9 @@
         "connected": "オブザーバビリティを接続しました",
         "connectFailed": "接続を保存できませんでした",
         "disconnectFailed": "切断できませんでした"
-      }
+      },
+      "connectionNoun": "オブザーバビリティ接続",
+      "incidentNoun": "インシデントプロバイダー"
     },
     "localMode": {
       "title": "ローカルモード",
@@ -1902,6 +2103,10 @@
         "saveFailed": "ランナーを保存できませんでした",
         "removed": "ランナーを削除しました",
         "removeFailed": "ランナーを削除できませんでした"
+      },
+      "confirmRemove": {
+        "title": "このランナーを削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     }
   },
@@ -2025,7 +2230,8 @@
           "step1": "LiteLLM ゲートウェイで仮想キーを生成します (またはマスターキーを使用します)。",
           "step2": "ゲートウェイのベース URL は、ここではなくデプロイ運用者が設定します (LITELLM_BASE_URL)。"
         }
-      }
+      },
+      "keyNoun": "この API キー"
     },
     "vendorCredentials": {
       "title": "LLM ベンダー",
@@ -2063,6 +2269,10 @@
           "step2": "API キーをコピーします。エージェントステップは Claude Code 経由で DeepSeek の Anthropic エンドポイントに対し、完全なコンテキストで実行されます。",
           "step3": "下にキーを貼り付けます。"
         }
+      },
+      "confirmRemove": {
+        "title": "この認証情報を削除しますか？",
+        "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
     }
   },
@@ -2159,6 +2369,10 @@
         "createBranch": "ブランチを作成できませんでした",
         "openPr": "プルリクエストを開けませんでした",
         "merge": "マージできませんでした"
+      },
+      "confirmDisconnect": {
+        "title": "GitHub を切断しますか？",
+        "body": "再接続するまでアプリはリポジトリにアクセスできなくなります。"
       }
     },
     "addService": {
@@ -2267,6 +2481,10 @@
       "disconnect": "Slackの接続を解除できませんでした",
       "saveRouting": "ルーティングを保存できませんでした",
       "saveMap": "メンバーマップを保存できませんでした"
+    },
+    "confirmDisconnect": {
+      "title": "Slack を切断しますか？",
+      "body": "再接続するまで Slack の通知が停止します。"
     }
   },
   "documents": {
@@ -2484,6 +2702,10 @@
         "cloned": "「{name}」を複製しました、「{copy}」を編集中です",
         "cloneFailed": "パイプラインを複製できませんでした",
         "updateFailed": "パイプラインを更新できませんでした"
+      },
+      "confirmDeletePipeline": {
+        "title": "このパイプラインを削除しますか？",
+        "body": "「{name}」が削除されます。この操作は取り消せません。"
       }
     },
     "progress": {
@@ -3044,7 +3266,9 @@
       "completed": "完了",
       "failed": "失敗",
       "inProgress": "進行中"
-    }
+    },
+    "envNoun": "テスト環境",
+    "destroyFailed": "環境を破棄できませんでした"
   },
   "testing": {
     "title": "テストレポート",
@@ -3393,6 +3617,10 @@
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",
       "unlinkSourceFailed": "ソースのリンクを解除できませんでした"
+    },
+    "confirmRemove": {
+      "title": "このフラグメントを削除しますか？",
+      "body": "「{name}」が削除されます。 この操作は取り消せません。"
     }
   },
   "sandbox": {
@@ -3518,6 +3746,7 @@
     },
     "targetRepo": {
       "label": "ターゲットリポジトリ名",
+      "namePlaceholder": "payments-service",
       "descWithOwner": "{owner} の下にこの名前で新しいリポジトリを作成し、ブートストラップがそこにプッシュします。README、.gitignore、ライセンスがあらかじめ入っていても問題ありません。",
       "descNoOwner": "この名前で新しいリポジトリを作成し、ブートストラップがそこにプッシュします。README、.gitignore、ライセンスがあらかじめ入っていても問題ありません。"
     },
@@ -3533,7 +3762,8 @@
     },
     "description": {
       "label": "説明",
-      "help": "リポジトリの任意の1行要約。"
+      "help": "リポジトリの任意の1行要約。",
+      "placeholder": "支払いインテントと返金を処理します"
     },
     "instructions": {
       "labelReference": "ブートストラッパーへの追加指示",
@@ -3563,18 +3793,23 @@
       "add": "追加",
       "pickRepo": {
         "label": "既存の GitHub リポジトリを選択",
-        "description": "アクセスできるリポジトリを選んでオーナーと名前を入力するか、下で手動で入力してください。"
+        "description": "アクセスできるリポジトリを選んでオーナーと名前を入力するか、下で手動で入力してください。",
+        "placeholder": "owner/name"
       },
       "name": {
         "label": "名前",
-        "description": "このベースのわかりやすいラベル。"
+        "description": "このベースのわかりやすいラベル。",
+        "placeholder": "サービステンプレート"
       },
       "repoOwner": "リポジトリオーナー",
+      "repoOwnerPlaceholder": "acme",
       "repoName": "リポジトリ名",
+      "repoNamePlaceholder": "service-template",
       "descriptionPlaceholder": "このベースの任意の要約",
       "defaultInstructions": {
         "label": "デフォルトのブートストラッパー指示",
-        "description": "このベースを使用するたびに、実行ごとの指示の前に付加されます。"
+        "description": "このベースを使用するたびに、実行ごとの指示の前に付加されます。",
+        "placeholder": "例: 構造を維持し、パッケージ名を新しいサービスに合わせて変更する"
       }
     },
     "toast": {

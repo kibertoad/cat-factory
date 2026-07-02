@@ -13,6 +13,16 @@ import * as v from 'valibot'
 // job-body builder fills the defaults (pnpm, `build`, `dist`, static serve, …).
 // ---------------------------------------------------------------------------
 
+/**
+ * Default WireMock `--root-dir` in the FE repo when a `frontend` frame declares no
+ * {@link frontendConfigSchema.mockMappingsPath}. The single source of truth shared by the
+ * frontend-aware mocker prompt (`@cat-factory/agents`) and the harness `frontend` infra spec —
+ * WireMock reads stubs from `<dir>/mappings/*.json` + `<dir>/__files/` under it. (The harness
+ * package keeps its own literal copy because bumping it is an image-tag change; keep the two in
+ * lock-step.)
+ */
+export const DEFAULT_FRONTEND_MOCK_MAPPINGS_PATH = 'mocks/'
+
 /** The package manager the frontend build uses. Defaults to `pnpm`. */
 export const frontendPackageManagerSchema = v.picklist(['pnpm', 'npm', 'yarn'])
 export type FrontendPackageManager = v.InferOutput<typeof frontendPackageManagerSchema>
@@ -92,7 +102,7 @@ export type FrontendBranch = v.InferOutput<typeof frontendBranchSchema>
  * browsable preview). Stored serialized on the block. All fields optional except
  * {@link backendBindings}; the harness / job-body builder supplies the defaults
  * (packageManager `pnpm`, buildScript `build`, outputDir `dist`, serveMode
- * `static`, servePort 8080, envInjection `build`, mockMappingsPath `mocks/`).
+ * `static`, servePort 4173, envInjection `build`, mockMappingsPath `mocks/`).
  */
 export const frontendConfigSchema = v.object({
   /** Package manager for install/build. Default `pnpm`. */
@@ -107,13 +117,21 @@ export const frontendConfigSchema = v.object({
   serveMode: v.optional(frontendServeModeSchema),
   /** package.json script to run when `serveMode: 'command'` (e.g. `preview`). */
   serveScript: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
-  /** The port the served app listens on inside the container. Default 8080. */
+  /**
+   * The port the served app listens on inside the container. Default 4173 (deliberately NOT
+   * 8080: the harness's own job HTTP server owns 8080 in the same container). Avoid 8080.
+   */
   servePort: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(65535))),
   /** Build-time env vars vs a runtime `window.env` shim. Default `build`. */
   envInjection: v.optional(frontendEnvInjectionSchema),
   /** Which branch to build for a UI test / preview. Absent ⇒ the FE default branch. */
   branch: v.optional(frontendBranchSchema),
-  /** The WireMock mappings directory in the FE repo. Default `mocks/`. */
+  /**
+   * WireMock's `--root-dir` in the FE repo. Default `mocks/`. NOTE: WireMock loads stubs from a
+   * `mappings/` subdirectory (and response bodies from `__files/`) UNDER this dir — so with the
+   * default, put stub JSON in `mocks/mappings/`, not directly in `mocks/`. A dir with no
+   * `mappings/` inside starts an empty WireMock that 404s every mocked call.
+   */
   mockMappingsPath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(400))),
   /** Browsable preview (local/node only). Default false. */
   previewEnabled: v.optional(v.boolean()),

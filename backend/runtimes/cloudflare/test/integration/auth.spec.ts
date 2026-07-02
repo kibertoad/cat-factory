@@ -40,6 +40,8 @@ const INFRASTRUCTURE = {
     active: 'environment-provider',
     available: ['environment-provider'],
   },
+  // The Worker serves only the self-contained UI-test container, so a browsable preview is off.
+  frontendPreview: { supported: false },
 }
 
 function fetchWith(
@@ -75,6 +77,9 @@ describe('auth', () => {
       expect(await res.json()).toEqual({
         enabled: false,
         providers: { github: false, password: false, google: false },
+        // Hosted PAT login is always offered for GitHub (a user pastes their own PAT); it is
+        // independent of the OAuth app being configured.
+        patLogin: { providers: ['github'] },
         infrastructure: INFRASTRUCTURE,
       })
     })
@@ -84,6 +89,22 @@ describe('auth', () => {
       expect(await res.json()).toEqual({
         enabled: true,
         providers: { github: true, password: false, google: false },
+        patLogin: { providers: ['github'] },
+        infrastructure: INFRASTRUCTURE,
+      })
+    })
+
+    it('advertises GitLab PAT login when a GitLab connection is configured', async () => {
+      // A GitLab-only (or GitHub+GitLab) Worker deployment must let a GitLab user sign in with
+      // their own PAT — the hosted analogue of local mode's configured GITLAB_PAT. Setting
+      // GITLAB_TOKEN enables the provider, so it joins the advertised PAT-login providers.
+      const res = await fetchWith({ ...authEnv, GITLAB_TOKEN: 'glpat-test-token' } as typeof env, {
+        path: '/auth/config',
+      })
+      expect(await res.json()).toEqual({
+        enabled: true,
+        providers: { github: true, password: false, google: false },
+        patLogin: { providers: ['github', 'gitlab'] },
         infrastructure: INFRASTRUCTURE,
       })
     })
@@ -96,6 +117,7 @@ describe('auth', () => {
       expect(await res.json()).toEqual({
         enabled: false,
         providers: { github: false, password: false, google: false },
+        patLogin: { providers: ['github'] },
         testingNoAuth: true,
         infrastructure: INFRASTRUCTURE,
       })

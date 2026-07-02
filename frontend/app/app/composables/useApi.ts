@@ -22,6 +22,7 @@ import { presetsApi } from './api/presets'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
 import { recurringApi } from './api/recurring'
+import { previewApi } from './api/preview'
 import { releaseHealthApi } from './api/releaseHealth'
 import { sandboxApi } from './api/sandbox'
 import { reviewsApi } from './api/reviews'
@@ -111,6 +112,7 @@ export function useApi() {
     ...infraHandlersApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
+    ...previewApi(ctx),
     ...recurringApi(ctx),
     ...sandboxApi(ctx),
     ...githubApi(ctx),

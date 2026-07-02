@@ -129,8 +129,9 @@ const showOAuthDivider = computed(
 
 // Hosted (remote node) PAT login: the user pastes their OWN source-control PAT, which the
 // server resolves to an account and holds to its login/org/domain allowlist. The available
-// providers come from the server (`auth.patProviders`); empty in local mode (which uses the
-// configured-token flow above) and on OAuth-only facades like the Worker.
+// providers come from the server (`auth.patProviders`) — GitHub always, GitLab when configured,
+// on both hosted facades (Node + Worker); empty in local mode (which uses the configured-token
+// flow above).
 const remotePatProviders = computed<PatProvider[]>(() =>
   isLocalMode.value ? [] : (auth.patProviders as PatProvider[]),
 )

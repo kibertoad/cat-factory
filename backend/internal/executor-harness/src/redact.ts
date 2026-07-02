@@ -58,6 +58,26 @@ export function redactSecrets(input: string): string {
   return redact(input)
 }
 
+/** Cap on captured command output kept on an infra record (tail-biased — failures show last). */
+export const MAX_CAPTURED_OUTPUT_CHARS = 16_000
+
+/**
+ * Combine, redact and tail-bound captured stdout+stderr into a single stored string. Keeps
+ * the LAST {@link MAX_CAPTURED_OUTPUT_CHARS} (where a failure's error lives), prefixed with a
+ * truncation marker when trimmed. Returns undefined for empty output so a record stays sparse.
+ * Shared by the docker-compose and the frontend UI-test stand-ups.
+ */
+export function captureRedactedOutput(stdout: unknown, stderr: unknown): string | undefined {
+  const merged = [String(stdout ?? ''), String(stderr ?? '')]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n')
+  if (!merged) return undefined
+  const redacted = redactSecrets(merged)
+  if (redacted.length <= MAX_CAPTURED_OUTPUT_CHARS) return redacted
+  return `…(${redacted.length - MAX_CAPTURED_OUTPUT_CHARS} earlier chars trimmed)\n${redacted.slice(-MAX_CAPTURED_OUTPUT_CHARS)}`
+}
+
 /** Recursively harvest token-like string leaves from a parsed JSON value. */
 function collectStrings(value: unknown, out: Set<string>): void {
   if (typeof value === 'string') {

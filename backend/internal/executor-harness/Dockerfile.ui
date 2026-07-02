@@ -2,11 +2,12 @@
 #
 # UI-tester image — the executor-harness image for the `tester-ui` agent kind ONLY.
 #
-# It layers Playwright + a Chromium browser on top of the slim base executor image, so the
-# (hundreds of MB) browser is isolated to the one kind that needs it and never bloats the
-# cold-start / pull of every other agent (coder, merger, ci-fixer, …). A transport routes a
-# job to this image when the dispatch option `image: 'ui'` is set (see RunnerDispatchOptions);
-# the base `Dockerfile` is unchanged.
+# It layers Playwright + a Chromium browser — plus the self-contained frontend UI-test
+# tooling (pnpm/yarn via corepack, the `serve` static server, a headless JRE + WireMock
+# standalone) — on top of the slim base executor image, so all of it is isolated to the one
+# kind that needs it and never bloats the cold-start / pull of every other agent (coder,
+# merger, ci-fixer, …). A transport routes a job to this image when the dispatch option
+# `image: 'ui'` is set (see RunnerDispatchOptions); the base `Dockerfile` is unchanged.
 #
 # SECURITY: like the base image, this carries NO secrets — per-job GitHub / proxy / artifact
 # tokens are passed in the dispatch body at runtime. The `tester-ui` agent drives Playwright
@@ -33,5 +34,27 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
 RUN npm install -g playwright@1.61.1 \
   && PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npx --yes playwright@1.61.1 install --with-deps chromium \
   && chown -R harness:harness /opt/pw-browsers
+
+# Self-contained frontend UI-test tooling (see src/frontend-infra.ts). The `tester-ui` flow
+# builds a frontend, mocks its other backend upstreams with WireMock, serves the built app,
+# and drives Playwright against it — all as localhost processes in this one container. So the
+# UI image layers on:
+#   - pnpm + yarn (via corepack) alongside the base image's npm, so a frontend's declared
+#     package manager resolves without a per-repo install of the manager itself;
+#   - `serve`, the static file server used for `serveMode: 'static'`;
+#   - a headless JRE + WireMock standalone (pinned), the mock upstream for every backend the
+#     frontend depends on that is NOT the service currently under test.
+# All pinned so the image is reproducible; bump alongside the harness version.
+RUN corepack enable && corepack prepare pnpm@10.20.0 --activate && corepack prepare yarn@4.10.3 --activate
+RUN npm install -g serve@14.2.5
+ARG WIREMOCK_VERSION=3.13.1
+ENV WIREMOCK_JAR=/opt/wiremock/wiremock-standalone.jar
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends default-jre-headless \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /opt/wiremock \
+  && curl -fsSL "https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/${WIREMOCK_VERSION}/wiremock-standalone-${WIREMOCK_VERSION}.jar" \
+     -o "${WIREMOCK_JAR}" \
+  && chown -R harness:harness /opt/wiremock
 
 USER harness

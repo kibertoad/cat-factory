@@ -1,10 +1,41 @@
 import { type APIRequestContext, type Locator, type Page, expect } from '@playwright/test'
+// The infra-setup dismissal key + the area list are owned by the contracts package, so the e2e
+// seed below shares ONE source of truth with the SPA's `InfraSetupBanner.vue` (no drift).
+import { INFRA_SETUP_AREAS, INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-factory/contracts'
+// The wire shape is owned by the backend seam (`src/fakeProfile.ts`); import it here so the
+// test side can't drift from the control-channel payload the backend parses. Type-only, so it
+// pulls in none of that module's runtime deps (`@cat-factory/conformance`).
+import type { FakeProfile } from '../src/fakeProfile.ts'
 
 // The backend origin the specs seed/trigger state against. The auth gate is open in the
 // e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
 // backend runs on a non-default port.
 export const BACKEND_URL =
   process.env.E2E_BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 8787}`
+
+// The test-only control channel `testServer.ts` listens on (a separate port, so it never
+// couples to the app's CORS/auth). Defaults to `PORT + 1` — the same derivation the backend
+// uses. A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE starting a run.
+export const CONTROL_URL =
+  process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
+
+/**
+ * Re-export the backend `FakeProfile` so specs get the per-workspace fake-behaviour shape
+ * (all fields optional; absent ⇒ base backend behaviour) from the same source of truth as the
+ * control channel that consumes it. Set a profile BEFORE starting a run — the backend reads it
+ * when the run's first agent step dispatches.
+ */
+export type { FakeProfile }
+
+/** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
+export async function setFakeProfile(
+  request: APIRequestContext,
+  workspaceId: string,
+  profile: FakeProfile,
+): Promise<void> {
+  const res = await request.post(`${CONTROL_URL}/fake-profile`, { data: { workspaceId, profile } })
+  if (!res.ok()) throw new Error(`fake-profile control ${res.status()}: ${await res.text()}`)
+}
 
 // Shared timeouts for LIVE (WebSocket-pushed) assertions. A live run advances through
 // several durable pg-boss steps, so web-first assertions need headroom over the default
@@ -87,15 +118,67 @@ export async function startRun(
   )
 }
 
+/** One bootstrap job as the controller returns it (only the fields the specs read). */
+export interface BootstrapJob {
+  id: string
+  status: string
+  repoName: string
+  /** The provisional service frame the run materialises (the board node to assert on). */
+  blockId: string | null
+}
+
+/**
+ * Start a "bootstrap repo" run over REST (the same endpoint the launch modal calls). Returns
+ * immediately with a `running` job whose `blockId` is the provisional service frame now on the
+ * board — the spec asserts on that frame's live progress / failure. The fake bootstrapper (see
+ * `FakeProfile.bootstrapProgress` / `bootstrapFailWith`) drives the scripted lifecycle.
+ */
+export async function startBootstrap(
+  request: APIRequestContext,
+  workspaceId: string,
+  repoName: string,
+): Promise<BootstrapJob> {
+  return json<BootstrapJob>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/bootstrap/jobs`, {
+      data: {
+        referenceArchitectureId: null,
+        repoName,
+        description: 'e2e bootstrap',
+        private: true,
+        instructions: 'a small Hono API with a /health route',
+        type: 'service',
+      },
+    }),
+  )
+}
+
 /**
  * Make the SPA open a specific workspace on load by pre-seeding the persisted store
  * (pinia-plugin-persistedstate writes the `workspace` store's picked `workspaceId` to
  * localStorage). Must be called BEFORE `page.goto`.
+ *
+ * Also permanently dismisses the infra-setup banner for every area. The e2e backend is a
+ * stock Node deployment (ENCRYPTION_KEY set ⇒ the runner-pool surface is wired but no pool is
+ * registered, content storage defaults to `off`), so the advisory `InfraSetupBanner` would
+ * legitimately render a full-width top overlay and intercept clicks on the board chrome the
+ * specs drive — orthogonal noise for every non-banner spec. The banner reads its permanent
+ * dismissals from `INFRA_SETUP_DISMISSED_STORAGE_KEY` keyed by user id; auth is off in e2e so the
+ * key is `local`. Seeding it here (before `goto`, the single choke point every board spec routes
+ * through) keeps the suite deterministic without a test-only branch in product code. The key + area
+ * list come from `@cat-factory/contracts`, the same source the banner reads, so they can't drift.
  */
 export async function pinWorkspace(page: Page, workspaceId: string): Promise<void> {
-  await page.addInitScript((id) => {
-    window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
-  }, workspaceId)
+  await page.addInitScript(
+    ({ id, dismissKey, areas }) => {
+      window.localStorage.setItem('workspace', JSON.stringify({ workspaceId: id }))
+      window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas }))
+    },
+    {
+      id: workspaceId,
+      dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
+      areas: [...INFRA_SETUP_AREAS],
+    },
+  )
 }
 
 /** Navigate to the board and wait for it to finish bootstrapping (canvas mounted). The

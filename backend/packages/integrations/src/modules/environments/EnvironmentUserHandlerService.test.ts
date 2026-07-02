@@ -121,6 +121,42 @@ describe('EnvironmentUserHandlerService', () => {
     ).rejects.toThrow(/Missing secret values/)
   })
 
+  it('preserves the stored token on a non-secret edit and replaces it on a new value', async () => {
+    const repo = fakeRepo()
+    const svc = makeService(repo)
+    await svc.upsert('user-1', 'ws-1', {
+      provisionType: 'kubernetes',
+      config: KUBE_CONFIG,
+      secrets: { apiToken: 'personal-token' },
+    })
+
+    // Re-save with a changed label and NO secrets — the token must survive (no Missing-secret
+    // throw) and still report as set.
+    const edited = await svc.upsert('user-1', 'ws-1', {
+      provisionType: 'kubernetes',
+      config: {
+        engine: 'remote-kubernetes',
+        kubernetes: { ...KUBE_CONFIG.kubernetes, label: 'Renamed' },
+      },
+      secrets: {},
+    })
+    expect(edited.label).toBe('Renamed')
+    expect(edited.secretKeys).toEqual(['apiToken'])
+    expect((await svc.resolveOverrides('user-1', 'ws-1'))[0]!.secretsCipher).toBe(
+      `enc:${JSON.stringify({ apiToken: 'personal-token' })}`,
+    )
+
+    // A new value replaces it.
+    await svc.upsert('user-1', 'ws-1', {
+      provisionType: 'kubernetes',
+      config: KUBE_CONFIG,
+      secrets: { apiToken: 'rotated' },
+    })
+    expect((await svc.resolveOverrides('user-1', 'ws-1'))[0]!.secretsCipher).toBe(
+      `enc:${JSON.stringify({ apiToken: 'rotated' })}`,
+    )
+  })
+
   it('round-trips a remote-custom override carrying its acceptsManifestId', async () => {
     const repo = fakeRepo()
     const svc = makeService(repo)

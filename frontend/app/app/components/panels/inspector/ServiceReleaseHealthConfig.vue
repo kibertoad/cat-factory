@@ -12,6 +12,7 @@ const store = useReleaseHealthStore()
 const ui = useUiStore()
 const toast = useToast()
 const { t } = useI18n()
+const { confirmAction, toastDone } = useConfirmAction()
 
 const busy = ref(false)
 const draft = reactive({ monitorIds: '', sloIds: '', envTag: '' })
@@ -70,12 +71,15 @@ async function save() {
 }
 
 async function clear() {
+  const noun = t('inspector.releaseHealth.configNoun')
+  if (!(await confirmAction('clear', noun))) return
   busy.value = true
   try {
     await store.removeConfig(props.block.id)
     draft.monitorIds = ''
     draft.sloIds = ''
     draft.envTag = ''
+    toastDone('clear', noun)
   } catch (e) {
     notifyError(t('inspector.releaseHealth.clearFailed'), e)
   } finally {

@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
-import { appendFile, mkdir, stat, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess } from './process.js'
+import { pathExists } from './fs-utils.js'
 import { redactSecrets } from './redact.js'
 import { log } from './logger.js'
 
@@ -225,15 +226,6 @@ async function findGitRoot(dir: string): Promise<string | null> {
     current = parent
   }
   return null
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
 }
 
 /** The monorepo note appended to AGENTS.md when a run is scoped to a service subdirectory. */

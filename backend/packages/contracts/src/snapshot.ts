@@ -19,6 +19,7 @@ import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
 import { customAgentKindSchema } from './agent-presentation.js'
 import { infraEngineSchema } from './environments.js'
+import { infraSetupSchema } from './infra-setup.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -173,5 +174,14 @@ export const workspaceSnapshotSchema = v.object({
    * symmetric across runtimes), optional on the wire for forward-compatibility.
    */
   mergePresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
+   * storage), computed server-side from whatever THIS deployment wired — so the SPA can raise
+   * a loud "configure your infra" banner when a workspace runs on a deployment that needs a
+   * piece of infrastructure the operator hasn't defined yet. Runtime-symmetric by construction
+   * (built in the shared `WorkspaceController` from the request container); optional on the
+   * wire (absent on an older backend), the SPA then simply shows no banner.
+   */
+  infraSetup: v.optional(infraSetupSchema),
 })
 export type WorkspaceSnapshot = v.InferOutput<typeof workspaceSnapshotSchema>

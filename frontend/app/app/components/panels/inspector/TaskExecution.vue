@@ -8,6 +8,7 @@ import {
   containerPhaseLabel,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import EmptyState from '~/components/common/EmptyState.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -17,6 +18,7 @@ const ui = useUiStore()
 const models = useModelsStore()
 const reviews = useReviewStage()
 const { t, te } = useI18n()
+const { confirm } = useConfirm()
 
 // The async stage this task's iterative reviewer gate (requirements-review / clarity-review)
 // is mid-cycle in (folding the answers, then re-reviewing), or null. While set, the gate is
@@ -34,6 +36,16 @@ const reviewStageLabel = computed(() =>
 )
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
+
+// Nothing to show yet: no run, no failed run, no PR, and not awaiting a merge — render an
+// empty state instead of a blank gap so the section reads as "no runs yet" rather than broken.
+const isEmpty = computed(
+  () =>
+    !instance.value &&
+    !failedRun.value &&
+    !props.block.pullRequest &&
+    props.block.status !== 'pr_ready',
+)
 // A failed run is no longer executing: a step left mid-flight must stop showing
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
@@ -88,7 +100,12 @@ function labelForStep(s: {
   // container is still cold-booting → "Spinning up"; up with a known phase → the phase
   // label ("Agent running" / "Preparing workspace"), so a finished cold-boot no longer
   // collapses into a blank "Working". A failed run's mid-flight step isn't booting.
-  if (!runFailed.value) {
+  //
+  // Only while the step is STILL RUNNING, though: the run's one shared container is kept
+  // alive until the pipeline's final step, so a step that has already finished (e.g. the
+  // merger, which resolves + advances to a trailing gate) would otherwise keep reading the
+  // stale "Agent running" phase even though its state is `done`. A done step reads "Done".
+  if (!runFailed.value && s.state !== 'done') {
     if (s.container?.status === 'starting') return t('inspector.execution.spinningUp')
     if (s.container?.status === 'up') {
       const label = containerPhaseLabel(s.container.phase, { t, te })
@@ -130,12 +147,35 @@ async function stopRun() {
 const resetting = ref(false)
 async function resetRun() {
   if (resetting.value) return
+  // Destructive: discards the run and returns the task to planned — gate it behind a confirm,
+  // matching the confirm-then-mutate contract the board delete path uses.
+  const ok = await confirm({
+    title: t('inspector.execution.resetConfirm.title'),
+    description: t('inspector.execution.resetConfirm.body'),
+    variant: 'destructive',
+    confirmLabel: t('inspector.execution.resetConfirm.confirm'),
+    icon: 'i-lucide-trash-2',
+  })
+  if (!ok) return
   resetting.value = true
   try {
     await execution.cancel(props.block.id)
   } finally {
     resetting.value = false
   }
+}
+
+// Merging a PR is consequential and effectively irreversible — confirm first. `execution.mergePr`
+// surfaces its own error toast, so no catch is needed here.
+async function mergePr() {
+  const ok = await confirm({
+    title: t('inspector.execution.mergeConfirm.title'),
+    description: t('inspector.execution.mergeConfirm.body'),
+    confirmLabel: t('inspector.execution.mergeConfirm.confirm'),
+    icon: 'i-lucide-git-merge',
+  })
+  if (!ok) return
+  await execution.mergePr(props.block.id)
 }
 </script>
 
@@ -184,6 +224,9 @@ async function resetRun() {
           :key="i"
           class="rounded-md px-2 py-1"
           :class="i === instance.currentStep ? 'bg-slate-800/70' : ''"
+          data-testid="run-step"
+          :data-step-kind="s.agentKind"
+          :data-step-state="s.state"
         >
           <div class="flex items-center gap-2">
             <!-- Every agent is clickable: it opens the step-detail overlay (timing,
@@ -221,6 +264,7 @@ async function resetRun() {
             <span
               v-if="s.subtasks && s.subtasks.total > 0"
               class="ms-auto font-mono text-[10px] tabular-nums text-slate-300"
+              data-testid="run-subtasks"
               :title="
                 s.subtasks.inProgress > 0
                   ? t('inspector.execution.subtasksProgress', {
@@ -399,6 +443,15 @@ async function resetRun() {
       </p>
     </div>
 
+    <!-- No run yet: read as "nothing here" rather than a blank gap. -->
+    <EmptyState
+      v-if="isEmpty"
+      compact
+      icon="i-lucide-play-circle"
+      :title="t('inspector.execution.empty.title')"
+      :description="t('inspector.execution.empty.body')"
+    />
+
     <!-- PR ready: merge -->
     <UButton
       v-if="block.status === 'pr_ready'"
@@ -407,7 +460,7 @@ async function resetRun() {
       size="sm"
       icon="i-lucide-git-merge"
       block
-      @click="execution.mergePr(block.id)"
+      @click="mergePr"
     >
       {{ t('inspector.execution.mergePr') }}
     </UButton>

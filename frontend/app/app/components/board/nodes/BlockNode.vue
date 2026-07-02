@@ -256,7 +256,11 @@ const ITEM_ICON: Record<string, string> = {
     >
       <div class="h-1.5 w-full" :style="{ backgroundColor: accent }" />
       <!-- bootstrap-in-progress banner -->
-      <div v-if="bootstrapping" class="border-b border-amber-900/50 bg-amber-950/30 px-3 py-2">
+      <div
+        v-if="bootstrapping"
+        class="border-b border-amber-900/50 bg-amber-950/30 px-3 py-2"
+        data-testid="bootstrap-progress"
+      >
         <div class="flex items-center gap-1.5 text-[11px]">
           <UIcon
             name="i-lucide-loader-circle"
@@ -334,7 +338,11 @@ const ITEM_ICON: Record<string, string> = {
     >
       <div class="h-1.5 w-full rounded-t-2xl" :style="{ backgroundColor: accent }" />
       <!-- bootstrap-in-progress banner -->
-      <div v-if="bootstrapping" class="border-b border-amber-900/50 bg-amber-950/30 px-4 py-2">
+      <div
+        v-if="bootstrapping"
+        class="border-b border-amber-900/50 bg-amber-950/30 px-4 py-2"
+        data-testid="bootstrap-progress"
+      >
         <div class="flex items-center gap-1.5 text-xs">
           <UIcon
             name="i-lucide-loader-circle"

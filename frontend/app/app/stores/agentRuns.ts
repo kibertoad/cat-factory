@@ -59,9 +59,34 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
    */
   const envConfigRepairJobs = ref<EnvConfigRepairJob[]>([])
 
-  /** Replace the cached bootstrap runs with a server snapshot. */
-  function hydrate(jobs: BootstrapJob[]) {
-    bootstrapJobs.value = [...jobs].sort((a, b) => b.createdAt - a.createdAt)
+  /**
+   * Reconcile the cached bootstrap runs with a server snapshot for `workspaceId`. A snapshot is
+   * authoritative EXCEPT where a live event has already advanced (or ADDED) a run past what this
+   * (possibly stale) read observed: a `board` event triggers a debounced `workspace.refresh()`,
+   * and the stream's on-(re)connect resync also refetches — either read can resolve AFTER a newer
+   * `bootstrap` event already landed. Two clobber hazards, both handled here:
+   *   - REGRESS: a run present in BOTH the snapshot and the cache — keep the newer-by-`updatedAt`
+   *     version so a lagging refresh can't revert a `failed`/`succeeded` run to `running`.
+   *   - DROP: a run a live event just ADDED that the (older) snapshot never saw — mapping over the
+   *     snapshot alone would silently drop it, and a terminal bootstrap emits nothing further, so
+   *     the frame would be stranded on a stale "bootstrapping…" badge with no event to correct it.
+   *     Preserve such cached runs. Scoped to `workspaceId` (bootstrap runs carry it), so a board
+   *     SWITCH — whose snapshot is for a different workspace — still discards the previous board's
+   *     runs instead of leaking them onto the new board.
+   */
+  function hydrate(jobs: BootstrapJob[], workspaceId: string) {
+    const incomingIds = new Set(jobs.map((j) => j.id))
+    const held = new Map(bootstrapJobs.value.map((j) => [j.id, j]))
+    const reconciled = jobs.map((incoming) => {
+      const current = held.get(incoming.id)
+      return current && current.updatedAt > incoming.updatedAt ? current : incoming
+    })
+    // Live-added runs the snapshot hasn't observed yet — keep only this workspace's (a switch
+    // starts clean), so a resync that races a fresh `bootstrap` event can't drop the run.
+    const preserved = [...held.values()].filter(
+      (j) => !incomingIds.has(j.id) && j.workspaceId === workspaceId,
+    )
+    bootstrapJobs.value = [...reconciled, ...preserved].sort((a, b) => b.createdAt - a.createdAt)
   }
 
   /** Replace the cached env-config-repair runs with a server snapshot. */
@@ -92,8 +117,11 @@ export const useAgentRunsStore = defineStore('agentRuns', () => {
    */
   function upsertBootstrap(job: BootstrapJob) {
     const i = bootstrapJobs.value.findIndex((j) => j.id === job.id)
-    if (i >= 0) bootstrapJobs.value[i] = job
-    else bootstrapJobs.value.unshift(job)
+    // Monotonic by `updatedAt`: never let a stale/out-of-order event regress a run a
+    // newer one already advanced (same guard as {@link hydrate}).
+    if (i >= 0) {
+      if (job.updatedAt >= bootstrapJobs.value[i]!.updatedAt) bootstrapJobs.value[i] = job
+    } else bootstrapJobs.value.unshift(job)
   }
 
   /**

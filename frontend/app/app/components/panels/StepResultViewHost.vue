@@ -22,6 +22,7 @@ import ConsensusSessionWindow from '~/components/consensus/ConsensusSessionWindo
 import GenericStructuredResultView from '~/components/panels/GenericStructuredResultView.vue'
 import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
+import MergerResultView from '~/components/panels/MergerResultView.vue'
 
 const ui = useUiStore()
 
@@ -48,6 +49,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // The future-looking Follow-up companion: the Coder's surfaced loose ends / questions.
   // Opened directly via `ui.openFollowUps` (the blinking chip + the `followup_pending` card).
   'follow-ups': FollowUpWindow,
+  // The merger's verdict: the PR's complexity/risk/impact scores + the engine's auto-merge
+  // or awaiting-review decision (and why), instead of the agent's raw JSON.
+  merger: MergerResultView,
 }
 
 const active = computed<Component | null>(() => {

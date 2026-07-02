@@ -45,6 +45,31 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--container-runtime', 'lxc'])).toThrow(ArgError)
   })
 
+  it('parses and validates --execution-mode', () => {
+    expect(parseArgs(['--execution-mode', 'native']).executionMode).toBe('native')
+    expect(parseArgs(['--execution-mode=pool']).executionMode).toBe('pool')
+    expect(() => parseArgs(['--execution-mode', 'vm'])).toThrow(ArgError)
+  })
+
+  it('parses --native-harnesses (comma list, claude alias) and rejects unknowns', () => {
+    expect(parseArgs(['--native-harnesses', 'claude-code,codex']).nativeHarnesses).toEqual([
+      'claude-code',
+      'codex',
+    ])
+    // `claude` is an alias for `claude-code`, deduped.
+    expect(parseArgs(['--native-harnesses=claude,claude-code']).nativeHarnesses).toEqual([
+      'claude-code',
+    ])
+    expect(() => parseArgs(['--native-harnesses', 'gemini'])).toThrow(ArgError)
+    expect(() => parseArgs(['--native-harnesses', ''])).toThrow(ArgError)
+  })
+
+  it('parses --harness-entry verbatim', () => {
+    expect(parseArgs(['--harness-entry', '/opt/harness/server.js']).harnessEntry).toBe(
+      '/opt/harness/server.js',
+    )
+  })
+
   it('rejects an unknown flag and a missing value', () => {
     expect(() => parseArgs(['--bogus'])).toThrow(ArgError)
     expect(() => parseArgs(['--dir'])).toThrow(/Missing value/)

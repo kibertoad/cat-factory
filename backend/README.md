@@ -37,13 +37,35 @@ a minimal deployment is just boards + pipelines.
 
 ## Packages
 
+The **complete** package/runtime/deployment catalog (every published library, runtime facade,
+internal package, and example deployment) is the layout tables in the
+[root README](../README.md#repository-layout). The table below is the domain-layer summary; the
+rows after it list the opt-in libraries and the runtime facades so this doc stays self-contained.
+
 | Package                                                                                             | Role                                                                                                            |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `@cat-factory/contracts`                                                                            | Valibot wire contract (entities + request bodies). Shared by the frontend and the backend.                      |
 | `@cat-factory/kernel`                                                                               | Shared vocabulary: domain types, pure logic + constants, and **all** repository/port interfaces.                |
 | `@cat-factory/orchestration`                                                                        | Domain layer: module services + the composition root (`createCore()`). No framework, no Cloudflare, no LLM SDK. |
 | `@cat-factory/integrations`, `@cat-factory/agents`, `@cat-factory/spend`, `@cat-factory/workspaces` | The rest of the framework-agnostic domain, split by concern (integrations, agent prompts, spend, workspaces).   |
-| `@cat-factory/worker`                                                                               | Infrastructure + API layer: Hono controllers, D1 repositories, composition root, the Worker.                    |
+| `@cat-factory/server`                                                                               | Runtime-neutral HTTP layer (Hono controllers, middleware, gateway seams) shared by every facade.                |
+
+**Runtime facades** (each serves the shared `@cat-factory/server` app; keep them symmetric):
+
+| Package                     | Role                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@cat-factory/worker`       | Cloudflare Worker facade (`backend/runtimes/cloudflare`): D1 repos, Durable Objects, Workflows, per-run Containers. |
+| `@cat-factory/node-server`  | Node.js service facade (`backend/runtimes/node`): Drizzle/Postgres repos + pg-boss durable execution.               |
+| `@cat-factory/local-server` | Local-mode facade (`backend/runtimes/local`): the Node stack with local Docker containers + a GitHub PAT.           |
+
+**Opt-in libraries** (wired only when configured): `@cat-factory/gates` (the built-in
+polling-gate suite), `@cat-factory/consensus` (multi-run agent reconciliation),
+`@cat-factory/gitlab` (GitLab VCS provider), `@cat-factory/provider-bedrock` /
+`@cat-factory/provider-cloudflare` (extra model registries), `@cat-factory/provider-s3` (S3
+blob backend), `@cat-factory/observability-langfuse` (Langfuse trace sink),
+`@cat-factory/prompt-fragments` (fragment catalog), `@cat-factory/sandbox` +
+`@cat-factory/sandbox-fixtures` (prompt/model testing surface), `@cat-factory/cli` (the
+bootstrap CLI).
 
 ### Layering (per the template's architecture doc)
 
