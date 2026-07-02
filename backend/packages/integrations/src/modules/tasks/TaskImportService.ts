@@ -6,7 +6,7 @@ import { ConflictError, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { TaskConnectionService } from './TaskConnectionService.js'
-import { buildTaskExcerpt } from './tasks.logic.js'
+import { buildTaskExcerpt, taskInRepoScope } from './tasks.logic.js'
 
 // TaskImportService: fetches an issue from a connected source and persists it as
 // a local, structured projection. The cached record backs both the agent-context
@@ -145,10 +145,18 @@ export class TaskImportService {
     return provider.search(credentials, query, workspaceId, scope)
   }
 
-  /** Every issue imported into the workspace, across sources, as wire shapes. */
-  async listTasks(workspaceId: string): Promise<SourceTask[]> {
+  /**
+   * Every issue imported into the workspace, across sources, as wire shapes.
+   *
+   * `scope` (resolved by the controller from an originating block) pins a
+   * repo-backed source to one repository: GitHub issues from other repos are
+   * dropped so a service's quick-pick list stays in-repo, while repo-less sources
+   * (Jira, Linear) are returned in full. Omitted → the whole workspace.
+   */
+  async listTasks(workspaceId: string, scope?: TaskSearchRepoScope): Promise<SourceTask[]> {
     const records = await this.deps.taskRepository.listByWorkspace(workspaceId)
-    return records.map(toSourceTask)
+    const scoped = scope ? records.filter((r) => taskInRepoScope(r, scope)) : records
+    return scoped.map(toSourceTask)
   }
 
   /** Resolve a stored task record or throw if not imported. */

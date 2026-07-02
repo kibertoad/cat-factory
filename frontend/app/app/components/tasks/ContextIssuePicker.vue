@@ -66,6 +66,26 @@ const results = ref<TaskSearchResult[]>([])
 const searching = ref(false)
 const searchError = ref<string | null>(null)
 
+// Already-imported issues, scoped to the target container's repo on the backend
+// (GitHub narrows to the service's linked repo, exactly as search does; repo-less
+// sources are unaffected). Held locally rather than read from the shared workspace
+// list, so a task created for one service never offers issues from sibling repos.
+const imported = ref<SourceTask[]>([])
+async function reloadImported() {
+  try {
+    imported.value = await tasks.listTasksForBlock(props.scopeBlockId)
+  } catch {
+    imported.value = []
+  }
+}
+// Re-scope when the target container changes (its repo, hence the in-repo issues, differ).
+watch(
+  () => props.scopeBlockId,
+  () => {
+    reloadImported()
+  },
+)
+
 // Debounced search: free text hits the tracker; a query that's clearly a URL/key
 // is left to the explicit "by reference" row below (search won't surface it).
 // Re-scope when `scopeBlockId` changes too (a GitHub search is scoped to the block's
@@ -108,7 +128,7 @@ function keyFor(externalId: string): string {
 const importedRows = computed(() => {
   if (!source.value) return []
   const q = query.value.trim().toLowerCase()
-  return tasks.tasks
+  return imported.value
     .filter((t) => t.source === source.value)
     .filter((t) => !chosen.value.has(keyFor(t.externalId)))
     .filter(
@@ -120,7 +140,7 @@ const importedRows = computed(() => {
 const searchRows = computed(() => {
   if (!source.value) return []
   const importedIds = new Set(
-    tasks.tasks.filter((t) => t.source === source.value).map((t) => t.externalId),
+    imported.value.filter((t) => t.source === source.value).map((t) => t.externalId),
   )
   return results.value
     .filter((r) => !importedIds.has(r.externalId))
@@ -195,8 +215,8 @@ function pickRef(q: string) {
 }
 
 onMounted(() => {
-  // Keep the quick-pick list current (cheap; the store dedupes).
-  tasks.loadTasks().catch(() => {})
+  // Load the quick-pick list, scoped to the target container's repo.
+  reloadImported()
 })
 </script>
 
