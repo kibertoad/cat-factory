@@ -1,5 +1,32 @@
 # @cat-factory/executor-harness
 
+## 1.32.0
+
+### Minor Changes
+
+- eb67d40: Record per-call LLM telemetry for the Claude Code and Codex subscription harnesses,
+  so their calls appear in the same `llm_call_metrics` store (and the "Model activity"
+  observability panel) as the proxy-metered Pi harness.
+
+  These harnesses talk direct to the vendor and bypass the LLM proxy, so the harness now
+  lifts per-call metrics off each CLI's event stream: Claude Code (`stream-json --verbose`)
+  carries full request/response bodies, per-turn tokens, model, and finish reason; Codex
+  (`exec --json`) is thinner — flat assistant text plus per-turn token counts, with no
+  request transcript (a CLI limitation). The executor records these into the SAME
+  `LlmObservabilityService` the proxy uses (with zero per-HTTP timing, since the CLIs don't
+  expose it), wired symmetrically on the Cloudflare and Node facades. Captured bodies are
+  credential-scrubbed and honour the existing `LLM_RECORD_PROMPTS` switch. Telemetry is
+  recorded on failed runs too (not only successful ones), so a token-spending run that
+  ends with no changes / unusable output stays observable, and each row is minted a
+  deterministic id off the job id so a durable-driver replay re-records idempotently.
+
+  Also tightens `LLM_RECORD_PROMPTS`: it now empties the response and reasoning bodies as
+  well as the prompt when recording is off (previously only the prompt was suppressed),
+  so a deployment that opts out of retaining prompts no longer retains model replies
+  either.
+
+  Bumps the executor-harness runner image (harness `src/**` changed).
+
 ## 1.31.12
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @cat-factory/workspaces
 
+## 0.10.21
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+
 ## 0.10.20
 
 ### Patch Changes
