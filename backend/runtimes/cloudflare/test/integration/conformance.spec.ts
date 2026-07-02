@@ -65,6 +65,11 @@ const harness: ConformanceHarness = {
         ...(opts?.resolveRepoFilesForCoords
           ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
           : {}),
+        // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
+        // full QC loop is driven against real D1 without a model, identically to Node.
+        ...(opts?.testerQualityReviewer
+          ? { testerQualityReviewer: opts.testerQualityReviewer }
+          : {}),
         // Inject the async deploy lifecycle (a fake deploy-job client + clone-target resolver) so
         // the suite drives the container render path through this facade's wiring, identically to
         // Node — asserting the `deploy` dispatch is accepted and the stubbed view finalizes the same.

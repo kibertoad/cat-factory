@@ -2632,6 +2632,10 @@
       "consensusRevertTooltip": "Consenso activado. Haz clic para volver a un solo agente.",
       "followUpEnableTooltip": "Compañero de seguimiento desactivado. Haz clic para activarlo (Coder detecta cabos sueltos / preguntas).",
       "followUpDisableTooltip": "Compañero de seguimiento activado. Coder detecta cabos sueltos / subtareas / preguntas; haz clic para desactivarlo.",
+      "testerQualityEnableTooltip": "Compañero de calidad de pruebas desactivado. Haz clic para activarlo (audita la cobertura del informe y reitera el Tester ante lagunas).",
+      "testerQualityDisableTooltip": "Compañero de calidad de pruebas activado. Audita la cobertura del informe antes de la aprobación y reitera el Tester ante lagunas; haz clic para desactivarlo.",
+      "testerQualityLabel": "Compañero de calidad de pruebas",
+      "testerQualityGateTooltip": "Ejecutar la auditoría de calidad solo cuando la estimación de la tarea supere un umbral (requiere un Estimador de Tareas antes)",
       "moveUp": "Subir el paso",
       "moveDown": "Bajar el paso",
       "removeStep": "Quitar este paso del pipeline",
@@ -3272,6 +3276,15 @@
       "completed": "Completado",
       "failed": "Falló",
       "addressed": "Abordando"
+    },
+    "quality": {
+      "heading": "Revisión de cobertura",
+      "reruns": "Reejecuciones del Tester impulsadas por calidad",
+      "rerunCount": "{attempts}/{max} reejecuciones",
+      "exceeded": "Presupuesto agotado",
+      "adequate": "Cobertura adecuada",
+      "inadequate": "Se encontraron lagunas de cobertura",
+      "gaps": "Lagunas por cerrar"
     },
     "empty": {
       "title": "Aún no hay informe de pruebas.",

@@ -1,5 +1,6 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
+import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
   DeployCloneTarget,
@@ -318,4 +319,12 @@ export interface ConformanceAppOptions {
    * Worker's `buildContainer` overrides). Absent → the facade's default built-in-only registry.
    */
   backendRegistries?: BackendRegistries
+  /**
+   * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
+   * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an
+   * adequate report — is driven on EVERY runtime without a real model. Each facade harness
+   * threads it into its core overrides (the `testerQualityReviewer` seam `createCore` reads);
+   * absent ⇒ the facade's model-derived reviewer (a pass-through with no model wired).
+   */
+  testerQualityReviewer?: TesterQualityReviewer
 }

@@ -59,6 +59,7 @@ import {
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
+import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -418,6 +419,45 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         })
         const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
         expect(res.status).toBe(422)
+      })
+
+      it('round-trips the per-step companion toggles (followUps + testerQuality) on every store', async () => {
+        // The pipeline builder's two per-step companion toggles live on their own JSON columns
+        // (D1/Drizzle `follow_ups` + `tester_quality`), so a custom pipeline that opts a Coder
+        // step OUT of the Follow-up companion and configures a Tester step's QC companion (an
+        // estimate gate) must survive the store round-trip identically — otherwise the builder
+        // toggle silently reverts to the default on the next load.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Toggles',
+          agentKinds: ['task-estimator', 'coder', 'tester-api'],
+          // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
+          // task estimate (an estimator runs earlier, so the gate is valid).
+          followUps: [null, false, null],
+          testerQuality: [
+            null,
+            null,
+            { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+          ],
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.followUps?.[1]).toBe(false)
+        expect(created.body.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
+
+        // A fresh snapshot read re-hydrates both columns from the store, identically on D1 ⇄ Postgres.
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+        expect(stored.followUps?.[1]).toBe(false)
+        expect(stored.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
       })
     })
 
@@ -4313,6 +4353,83 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // One fixer attempt was dispatched, and the final report greenlit.
         expect(testerStep.test?.attempts).toBe(1)
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
+      })
+
+      it('loops the Tester via the quality-control companion until coverage is adequate, then completes', async () => {
+        // Both reports greenlight with no concerns, so the FIXER never runs — but the QC reviewer
+        // judges the first report's coverage inadequate (it claims three areas but records one
+        // outcome), so the engine loops the Tester for a focused additional pass on its OWN budget,
+        // then the second report's coverage is adequate and the run advances. Drives the full QC
+        // loop — inject a deterministic reviewer, audit → re-run → audit → conclude — on EVERY
+        // runtime, asserting the verdicts + counters persist identically through the step JSON.
+        const shallow = {
+          greenlight: true,
+          summary: 'happy path only',
+          tested: ['login', 'logout', 'session refresh'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const thorough = {
+          greenlight: true,
+          summary: 'covered every area',
+          tested: ['login', 'logout', 'session refresh'],
+          outcomes: [
+            { name: 'login', status: 'passed' as const },
+            { name: 'logout', status: 'passed' as const },
+            { name: 'session refresh', status: 'passed' as const },
+          ],
+          concerns: [],
+        }
+        const reviewer = new FakeTesterQualityReviewer([
+          {
+            adequate: false,
+            gaps: ['logout not exercised', 'session refresh not exercised'],
+            feedback:
+              'Only the happy path was checked; two claimed areas have no recorded outcome.',
+          },
+          { adequate: true, gaps: [], feedback: 'Every listed area now has a recorded outcome.' },
+        ])
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'tester-api'],
+            asyncPolls: 1,
+            testReports: [shallow, thorough],
+            pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
+          },
+          { testerQualityReviewer: reviewer },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test + QC',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.state).toBe('done')
+        // The QC companion looped the Tester exactly once, on its OWN budget — the fixer never ran.
+        expect(testerStep.testerQuality?.attempts).toBe(1)
+        expect(testerStep.test?.attempts).toBe(0)
+        // Two QC verdicts recorded (inadequate → adequate); the round-trip through the step JSON
+        // is identical on D1 and Drizzle.
+        expect(testerStep.testerQuality?.verdicts.map((v) => v.adequate)).toEqual([false, true])
+        expect(testerStep.testerQuality?.verdicts[0]?.gaps.length).toBeGreaterThan(0)
+        expect(testerStep.testerQuality?.exceeded).toBeFalsy()
+        // The final, adequate report is the one that concluded the step.
+        expect(testerStep.test?.lastReport?.summary).toBe('covered every area')
+        // The reviewer audited exactly two reports (the shallow one, then the thorough re-run).
+        expect(reviewer.calls).toHaveLength(2)
+        expect(reviewer.calls.map((c) => c.adequate)).toEqual([false, true])
       })
 
       it('persists the tester docker-compose stand-up record on both stores', async () => {
