@@ -1,5 +1,17 @@
 # @cat-factory/local-server
 
+## 0.38.3
+
+### Patch Changes
+
+- Updated dependencies [fc8df61]
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/node-server@0.58.5
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/executor-harness@1.31.6
+
 ## 0.38.2
 
 ### Patch Changes
