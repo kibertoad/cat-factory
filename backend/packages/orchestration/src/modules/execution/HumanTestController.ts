@@ -406,12 +406,15 @@ export class HumanTestController {
     }
     const helperKind = roundKind === 'fix' ? FIXER_AGENT_KIND : CONFLICT_RESOLVER_AGENT_KIND
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Build the context AS the helper kind, so trait-driven context (the `code-aware`
+    // service-fragment fold for the fixer) keys off the helper, not the hosting step.
     const base = await this.deps.contextBuilder.buildContext(
       workspaceId,
       instance,
       step,
       isFinalStep,
       block,
+      { agentKind: helperKind },
     )
     const context: AgentRunContext =
       roundKind === 'fix'

@@ -940,9 +940,11 @@ export interface TrackerModule {
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
   /**
-   * Per-tier CRUD + the merged-catalog resolver. A management surface only: the run
-   * path no longer consumes it (service-scoped `serviceFragmentIds` folded into
-   * `code-aware` agents replaced the automatic per-run relevance selector).
+   * Per-tier CRUD + the merged-catalog resolver. The run path consumes it through
+   * `resolveBodiesForRun` (wired as the engine's `fragmentResolver`), so an already-
+   * selected id — a frame's `serviceFragmentIds` / a block pin — resolves against the
+   * merged tenant catalog (managed + document-backed fragments included). Only the
+   * automatic per-run relevance selector (`resolveForRun`) is retired from the run path.
    */
   libraryService: FragmentLibraryService
   /** Repo-sourced fragments; present only when the GitHub client + source repo are wired. */
@@ -1473,6 +1475,7 @@ function createTesterQualityReviewer(
 function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
+  fragmentLibrary?: FragmentLibraryModule,
 ): RequirementsModule | undefined {
   const { requirementReviewRepository } = deps
   if (!requirementReviewRepository) return undefined
@@ -1514,7 +1517,9 @@ function createRequirementsModule(
     resolveRunRepoContext: deps.resolveRunRepoContext,
     // …and on the block's best-practice fragments (team/org standards), checked FIRST. Walk
     // the owning frame's service standards then union the block's own pins (same precedence
-    // as the agent context builder), resolved against the universal fragment pool.
+    // as the agent context builder), resolved against the merged tenant catalog when the
+    // fragment library is wired (so managed + document-backed fragments ground the review
+    // exactly like they reach a code-aware run), else the static universal pool.
     resolveBlockFragments: async (workspaceId: string, blockId: string) => {
       const block = await deps.blockRepository.get(workspaceId, blockId)
       if (!block) return []
@@ -1535,6 +1540,18 @@ function createRequirementsModule(
         current = await deps.blockRepository.get(workspaceId, current.parentId)
       }
       for (const id of block.fragmentIds ?? []) add(id)
+      if (fragmentLibrary) {
+        // Resolve the merged tenant catalog ONCE and reuse it for both the titles map and
+        // the body resolution (which would otherwise re-resolve the same catalog).
+        const catalog = await fragmentLibrary.libraryService.resolveCatalog(workspaceId)
+        const titles = new Map(catalog.map((e) => [e.id, e.title]))
+        const bodies = await fragmentLibrary.libraryService.resolveBodiesForRun(
+          workspaceId,
+          ids,
+          catalog,
+        )
+        return bodies.map(({ id, body }) => ({ id, title: titles.get(id) ?? id, body }))
+      }
       const out: { id: string; title: string; body: string }[] = []
       for (const id of ids) {
         const fragment = getFragment(id)
@@ -2130,7 +2147,11 @@ export function createCore(dependencies: CoreDependencies): Core {
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
-  const requirements = createRequirementsModule(dependencies, notifications?.service)
+  const requirements = createRequirementsModule(
+    dependencies,
+    notifications?.service,
+    fragmentLibrary,
+  )
   const clarity = createClarityModule(dependencies, notifications?.service)
   const brainstorm = createBrainstormModule(dependencies, notifications?.service)
   // Built before the execution engine so the engine's terminal hook can schedule a
