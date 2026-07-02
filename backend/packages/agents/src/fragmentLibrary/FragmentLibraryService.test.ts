@@ -8,7 +8,11 @@ import type {
   PromptFragmentRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  clearRegisteredPromptFragments,
+  registerPromptFragment,
+} from '@cat-factory/prompt-fragments'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_DOCUMENT_FRAGMENT_TTL_MS,
   FragmentLibraryService,
@@ -249,5 +253,74 @@ describe('FragmentLibraryService — document-backed fragments', () => {
     await expect(
       svc.createFromDocument('workspace', 'ws1', { source: 'notion', ref: 'p' }, 'ws1'),
     ).rejects.toThrow()
+  })
+})
+
+describe('FragmentLibraryService — built-in tier, suppression and registered fragments', () => {
+  let repo: FakeFragmentRepo
+  let svc: FragmentLibraryService
+
+  beforeEach(() => {
+    repo = new FakeFragmentRepo()
+    svc = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock: fakeClock(),
+    })
+  })
+
+  afterEach(() => clearRegisteredPromptFragments())
+
+  it('drops a tier-tombstoned built-in from a run resolution (suppression sticks)', async () => {
+    // Pinned before the workspace suppressed it — the stale selection must NOT
+    // resurrect the built-in from the static pool.
+    const before = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(before).toHaveLength(1)
+
+    await svc.remove('workspace', 'ws1', 'node.performance')
+
+    const after = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(after).toEqual([])
+  })
+
+  it('serves a deployment-registered OVERRIDE of a built-in id to runs and the catalog', async () => {
+    registerPromptFragment({
+      id: 'node.performance',
+      version: '2.0.0',
+      title: 'Our perf rules',
+      category: 'Node',
+      summary: 'Deployment-refined performance guidance.',
+      body: 'OVERRIDDEN-PERF-BODY',
+    })
+    const bodies = await svc.resolveBodiesForRun('ws1', ['node.performance'])
+    expect(bodies).toEqual([{ id: 'node.performance', body: 'OVERRIDDEN-PERF-BODY' }])
+
+    const catalog = await svc.resolvedCatalog('ws1')
+    const entry = catalog.find((f) => f.id === 'node.performance')
+    expect(entry?.body).toBe('OVERRIDDEN-PERF-BODY')
+    expect(entry?.tier).toBe('builtin')
+  })
+
+  it('folds a registered EXTRA fragment into the catalog, tier-shadowable and tombstonable', async () => {
+    registerPromptFragment({
+      id: 'org.review-standard',
+      version: '1.0.0',
+      title: 'Org review standard',
+      category: 'Org',
+      summary: 'A proprietary org standard.',
+      body: 'ORG-BODY',
+    })
+    const bodies = await svc.resolveBodiesForRun('ws1', ['org.review-standard'])
+    expect(bodies).toEqual([{ id: 'org.review-standard', body: 'ORG-BODY' }])
+    const catalog = await svc.resolvedCatalog('ws1')
+    expect(catalog.find((f) => f.id === 'org.review-standard')?.tier).toBe('builtin')
+
+    // A workspace tombstone suppresses it exactly like a shipped built-in.
+    await svc.remove('workspace', 'ws1', 'org.review-standard')
+    expect(await svc.resolveBodiesForRun('ws1', ['org.review-standard'])).toEqual([])
+  })
+
+  it('drops an id the catalog does not know at all', async () => {
+    expect(await svc.resolveBodiesForRun('ws1', ['gone.stale-id'])).toEqual([])
   })
 })

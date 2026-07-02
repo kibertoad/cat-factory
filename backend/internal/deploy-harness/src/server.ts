@@ -16,6 +16,11 @@ import { log } from './logger.js'
 
 const PORT = Number(process.env.PORT ?? 8080)
 
+// Optional bind address, identical to the executor harness: default (unset) binds all
+// interfaces (a container's published port needs it); the native local transport sets
+// 127.0.0.1 so a host-process deploy harness stays off the LAN.
+const BIND_HOST = process.env.HARNESS_BIND_HOST?.trim() || undefined
+
 // Optional inbound auth, identical to the executor harness: when HARNESS_SHARED_SECRET
 // is set, every non-health request must present a matching `x-harness-secret` header
 // (constant-time compared). Unset ⇒ open (local/dev).
@@ -118,9 +123,36 @@ const server = createServer((req, res) => {
 
 // Only auto-listen when run as the entry point (tests import the handlers directly).
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => {
-    console.log(`deploy-harness listening on :${PORT}`)
+  server.listen(PORT, BIND_HOST, () => {
+    console.log(`deploy-harness listening on ${BIND_HOST ?? ''}:${PORT}`)
   })
+
+  // Graceful shutdown, identical to the executor harness: abort running jobs so their
+  // kubectl/helm children die with us instead of being orphaned mid-apply, then exit as SOON as
+  // they settle (don't block every shutdown on a fixed window). The 6s cap covers a job that
+  // ignored SIGTERM and had to be force-killed; nothing running ⇒ exit immediately.
+  const shutdown = (signal: string): void => {
+    const aborted = Object.values(KINDS).reduce(
+      (count, { registry }) => count + registry.abortAll(`harness shutting down (${signal})`),
+      0,
+    )
+    log.info('shutting down', { signal, abortedJobs: aborted })
+    server.close()
+    if (aborted === 0) {
+      process.exit(0)
+      return
+    }
+    const deadline = Date.now() + 6_000
+    const timer = setInterval(() => {
+      const stillRunning = Object.values(KINDS).some(({ registry }) => registry.runningCount() > 0)
+      if (!stillRunning || Date.now() >= deadline) {
+        clearInterval(timer)
+        process.exit(0)
+      }
+    }, 50)
+  }
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+  process.once('SIGINT', () => shutdown('SIGINT'))
 }
 
 export { server }

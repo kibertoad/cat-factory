@@ -219,9 +219,11 @@ describe('prompt-fragment library (ADR 0006)', () => {
     })
   })
 
-  // NOTE: the tenant library no longer feeds the run path. The automatic per-run
-  // relevance selector was retired in favour of an explicit, service-scoped selection
-  // (a frame's `serviceFragmentIds`) folded only into `code-aware` agents — see the
-  // cross-runtime conformance suite's "service-scoped fragments + agent traits" tests.
-  // This file now covers the library's management surface (tier CRUD + repo sources) only.
+  // NOTE: the tenant library feeds the run path through `resolveBodiesForRun` (the
+  // engine's `fragmentResolver`): an explicit, service-scoped selection (a frame's
+  // `serviceFragmentIds`) plus block pins, resolved against the merged tenant catalog
+  // and folded only into `code-aware` agents — see the cross-runtime conformance
+  // suite's "service-scoped fragments + agent traits" tests. Only the automatic
+  // per-run relevance selector is retired. This file covers the library's management
+  // surface (tier CRUD + repo sources).
 })
