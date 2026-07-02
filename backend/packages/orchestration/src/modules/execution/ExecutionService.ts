@@ -81,6 +81,7 @@ import {
   type VisualConfirmActions,
 } from './gate-window-facades.js'
 import { TesterController } from './TesterController.js'
+import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -182,6 +183,13 @@ export interface ExecutionServiceDependencies {
    * through so pipelines run unchanged without the feature.
    */
   requirementReviewService?: RequirementReviewService
+  /**
+   * Optional: the inline reviewer for the test quality-control companion. When wired (and a
+   * Tester step has the companion enabled), each Tester report is audited for coverage before
+   * the greenlight/fixer decision and an inadequate report loops the Tester. Passed straight
+   * to the {@link TesterController}. Absent → QC is a pass-through.
+   */
+  testerQualityReviewer?: TesterQualityReviewer
   /**
    * Optional: the Kaizen agent's scheduler. When wired, a run reaching a terminal state
    * schedules a post-run grading for each completed agent step (skipping verified combos).
@@ -496,6 +504,7 @@ export class ExecutionService {
     taskRepository,
     requirementReviewRepository,
     requirementReviewService,
+    testerQualityReviewer,
     kaizenScheduler,
     clarityReviewRepository,
     clarityReviewService,
@@ -593,6 +602,10 @@ export class ExecutionService {
       contextBuilder: this.contextBuilder,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
       stateMachine: this.runStateMachine,
+      // The test quality-control companion's inline reviewer (when wired); absent → QC
+      // pass-through. Stamps its verdicts with the engine clock.
+      ...(testerQualityReviewer ? { qualityReviewer: testerQualityReviewer } : {}),
+      clockNow: () => this.clock.now(),
     })
     this.humanTestController = new HumanTestController({
       blockRepository,
@@ -1224,6 +1237,24 @@ export class ExecutionService {
                   items: [],
                   loops: 0,
                   maxLoops: DEFAULT_FOLLOW_UP_MAX_LOOPS,
+                },
+              }
+            : {}),
+          // The test quality-control companion is on by default for a Tester step; the
+          // pipeline's per-step `testerQuality[i].enabled === false` disables it. `maxAttempts`
+          // is seeded with the default ceiling here and refreshed from the task's resolved
+          // merge preset on the first report (TesterController). Optional estimate gating is
+          // carried through so it can be evaluated against the block estimate at gate time.
+          ...(isTesterKind(kind) && pipeline.testerQuality?.[i]?.enabled !== false
+            ? {
+                testerQuality: {
+                  enabled: true,
+                  attempts: 0,
+                  maxAttempts: DEFAULT_MERGE_PRESET.maxTesterQualityIterations,
+                  verdicts: [],
+                  ...(pipeline.testerQuality?.[i]?.gating
+                    ? { gating: pipeline.testerQuality[i]!.gating }
+                    : {}),
                 },
               }
             : {}),
@@ -2070,6 +2101,7 @@ export class ExecutionService {
     ciMaxAttempts: number
     maxRequirementIterations: number
     maxRequirementConcernAllowed: RequirementConcernLevel
+    maxTesterQualityIterations: number
     releaseWatchWindowMinutes: number
     releaseMaxAttempts: number
     humanReviewGraceMinutes: number

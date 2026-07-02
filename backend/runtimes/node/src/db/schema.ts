@@ -1039,6 +1039,7 @@ export const mergeThresholdPresets = pgTable(
     max_requirement_concern_allowed: text('max_requirement_concern_allowed')
       .notNull()
       .default('none'),
+    max_tester_quality_iterations: integer('max_tester_quality_iterations').notNull().default(3),
     release_watch_window_minutes: integer('release_watch_window_minutes').notNull().default(30),
     release_max_attempts: integer('release_max_attempts').notNull().default(1),
     human_review_grace_minutes: integer('human_review_grace_minutes').notNull().default(10),
