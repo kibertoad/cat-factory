@@ -46,7 +46,37 @@ const decision = computed<MergeDecision | null>(() => {
 })
 
 const merged = computed(() => decision.value?.outcome === 'auto_merged')
-const exceeded = computed(() => new Set<MergeAxis>(decision.value?.exceededAxes ?? []))
+// Only redden bars when a threshold breach is the ACTUAL reason for review. For
+// `auto_merge_disabled` / `no_rationale` / `no_assessment` a score above its ceiling is
+// incidental, so it must not imply the axis is what caused the review.
+const exceeded = computed(() =>
+  decision.value?.reason === 'exceeded_thresholds'
+    ? new Set<MergeAxis>(decision.value.exceededAxes)
+    : new Set<MergeAxis>(),
+)
+
+// Exhaustive enum → i18n-key maps keyed off the contract unions, so adding a new
+// `MergeDecision` reason/outcome (or a merge axis) fails typecheck here until its key is
+// added — the drift guard the dynamic `t(\`...\${x}\`)` lookups can't provide on their own.
+const REASON_KEYS: Record<MergeDecision['reason'], string> = {
+  within_thresholds: 'panels.mergerResult.reason.within_thresholds',
+  exceeded_thresholds: 'panels.mergerResult.reason.exceeded_thresholds',
+  auto_merge_disabled: 'panels.mergerResult.reason.auto_merge_disabled',
+  no_rationale: 'panels.mergerResult.reason.no_rationale',
+  no_assessment: 'panels.mergerResult.reason.no_assessment',
+  merge_failed: 'panels.mergerResult.reason.merge_failed',
+}
+const OUTCOME_KEYS: Record<MergeDecision['outcome'], string> = {
+  auto_merged: 'panels.mergerResult.outcome.auto_merged',
+  awaiting_review: 'panels.mergerResult.outcome.awaiting_review',
+}
+const AXIS_KEYS: Record<MergeAxis, string> = {
+  complexity: 'panels.mergerResult.axis.complexity',
+  risk: 'panels.mergerResult.axis.risk',
+  impact: 'panels.mergerResult.axis.impact',
+}
+
+const outcomeText = computed(() => (decision.value ? t(OUTCOME_KEYS[decision.value.outcome]) : ''))
 
 /** The three axes with their score + preset ceiling, for the bar rows. */
 const axes = computed(() => {
@@ -55,19 +85,19 @@ const axes = computed(() => {
   return [
     {
       key: 'complexity' as const,
-      label: t('panels.mergerResult.axis.complexity'),
+      label: t(AXIS_KEYS.complexity),
       score: d.assessment.complexity,
       ceiling: d.thresholds.maxComplexity,
     },
     {
       key: 'risk' as const,
-      label: t('panels.mergerResult.axis.risk'),
+      label: t(AXIS_KEYS.risk),
       score: d.assessment.risk,
       ceiling: d.thresholds.maxRisk,
     },
     {
       key: 'impact' as const,
-      label: t('panels.mergerResult.axis.impact'),
+      label: t(AXIS_KEYS.impact),
       score: d.assessment.impact,
       ceiling: d.thresholds.maxImpact,
     },
@@ -78,8 +108,8 @@ const axes = computed(() => {
 const reasonText = computed(() => {
   const d = decision.value
   if (!d) return ''
-  const axisLabels = d.exceededAxes.map((a) => t(`panels.mergerResult.axis.${a}`)).join(', ')
-  return t(`panels.mergerResult.reason.${d.reason}`, {
+  const axisLabels = d.exceededAxes.map((a) => t(AXIS_KEYS[a])).join(', ')
+  return t(REASON_KEYS[d.reason], {
     preset: d.thresholds.presetName,
     axes: axisLabels,
   })
@@ -146,7 +176,7 @@ const reasonText = computed(() => {
                     class="text-sm font-semibold"
                     :class="merged ? 'text-emerald-200' : 'text-amber-200'"
                   >
-                    {{ t(`panels.mergerResult.outcome.${decision.outcome}`) }}
+                    {{ outcomeText }}
                   </p>
                   <p class="mt-0.5 text-[13px] leading-relaxed text-slate-300">{{ reasonText }}</p>
                 </div>

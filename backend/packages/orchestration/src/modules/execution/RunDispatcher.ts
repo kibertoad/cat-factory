@@ -2082,10 +2082,13 @@ export class RunDispatcher {
           )
           // Record the structured verdict on the step so the SPA's dedicated merger result
           // view renders the assessment + explains the auto-merge / awaiting-review decision,
-          // instead of showing the agent's raw JSON. Replaces the raw JSON output too.
+          // instead of showing the agent's raw JSON.
           if (decision) {
             step.custom = decision
-            step.output = ''
+            // Drop the raw JSON only when we captured a structured assessment (the view
+            // renders it from `step.custom`). When the merger produced NO parseable
+            // assessment, keep the raw reply so an operator can still diagnose what it sent.
+            if (decision.assessment) step.output = ''
           }
           return { ownsTerminalStatus: true }
         },

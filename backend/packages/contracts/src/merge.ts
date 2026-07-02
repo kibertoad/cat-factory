@@ -200,7 +200,9 @@ export const mergeDecisionSchema = v.object({
    *  - `within_thresholds`: auto-merged; every axis at/below the preset ceiling.
    *  - `exceeded_thresholds`: review; one or more axes over the ceiling (`exceededAxes`).
    *  - `auto_merge_disabled`: review; the preset routes every PR to a human.
-   *  - `no_assessment`: review; the merger produced no valid assessment.
+   *  - `no_rationale`: review; the merger returned scores but no rationale, so the verdict
+   *    can't be trusted to auto-merge (the assessment IS present, just not credible).
+   *  - `no_assessment`: review; the merger produced no parseable assessment at all.
    *  - `merge_failed`: review; within threshold but the real merge threw (e.g. branch
    *    protection / conflict), so it fell through to human review.
    */
@@ -208,6 +210,7 @@ export const mergeDecisionSchema = v.object({
     'within_thresholds',
     'exceeded_thresholds',
     'auto_merge_disabled',
+    'no_rationale',
     'no_assessment',
     'merge_failed',
   ]),

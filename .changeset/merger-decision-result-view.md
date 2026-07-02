@@ -10,7 +10,8 @@ Surface the merger's verdict as a structured decision instead of raw JSON.
 The engine now records a `MergeDecision` on the completed `merger` step (`step.custom`): the
 assessment scores, the resolved preset ceilings, and — crucially — whether it auto-merged or routed
 the PR to a human, and WHY (`within_thresholds` / `exceeded_thresholds` / `auto_merge_disabled` /
-`no_assessment` / `merge_failed`). The SPA renders it in a dedicated `MergerResultView` (complexity /
+`no_rationale` / `no_assessment` / `merge_failed` — `no_rationale` distinguishes a scored-but-
+unexplained assessment from a truly absent one). The SPA renders it in a dedicated `MergerResultView` (complexity /
 risk / impact bars vs their ceilings + a plain-language decision banner — "Auto-merged — every score
 is within the Balanced thresholds" / "Awaiting human review — risk exceeded the thresholds") instead
 of the agent's raw JSON.

@@ -693,7 +693,8 @@
         "within_thresholds": "Tous les scores sont dans les seuils de {preset}, la PR a donc été fusionnée automatiquement.",
         "exceeded_thresholds": "{axes} a dépassé les seuils de {preset}, la PR attend donc une fusion par une personne.",
         "auto_merge_disabled": "Le préréglage {preset} envoie chaque PR à une personne ; celle-ci attend donc une revue.",
-        "no_assessment": "Le fusionneur n'a pas pu produire d'évaluation crédible, la PR attend donc une fusion par une personne.",
+        "no_rationale": "Le fusionneur a évalué la PR mais n'a donné aucune justification, le verdict n'a donc pas pu être approuvé pour une fusion automatique ; la PR attend une fusion par une personne.",
+        "no_assessment": "Le fusionneur n'a pas renvoyé d'évaluation exploitable, la PR attend donc une fusion par une personne.",
         "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne."
       },
       "scores": "Scores",

@@ -693,7 +693,8 @@
         "within_thresholds": "Todas las puntuaciones están dentro de los umbrales de {preset}, por lo que el PR se fusionó automáticamente.",
         "exceeded_thresholds": "{axes} superó los umbrales de {preset}, por lo que el PR espera a que una persona lo fusione.",
         "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
-        "no_assessment": "El fusionador no pudo producir una evaluación creíble, por lo que el PR espera a que una persona lo fusione.",
+        "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
+        "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
         "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione."
       },
       "scores": "Puntuaciones",

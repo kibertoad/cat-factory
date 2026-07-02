@@ -5447,15 +5447,16 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(task.status).toBe('pr_ready')
         expect(task.status).not.toBe('done')
         // The engine records its structured decision on the merger step (`step.custom`) so
-        // the SPA can explain WHY review was needed — here, an uncredible (empty-rationale)
-        // assessment routes to review, not an auto-merge.
+        // the SPA can explain WHY review was needed — here, an assessment WITH scores but no
+        // rationale routes to review as `no_rationale` (distinct from a truly absent one),
+        // not an auto-merge.
         const exec = ticked.find((e) => e.blockId === 'task_login')!
         const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
           outcome?: string
           reason?: string
         }
         expect(decision.outcome).toBe('awaiting_review')
-        expect(decision.reason).toBe('no_assessment')
+        expect(decision.reason).toBe('no_rationale')
       })
 
       it('runs the merger merge at its step even when a later step follows it', async () => {

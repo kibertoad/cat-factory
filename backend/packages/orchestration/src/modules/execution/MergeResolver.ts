@@ -110,12 +110,17 @@ export class MergeResolver {
     }
 
     await this.raiseReviewAndBlock(workspaceId, instance, block, assessment)
-    // Classify WHY review is needed, most-specific first, so the banner is precise.
+    // Classify WHY review is needed, most-specific first, so the banner is precise. A
+    // missing/unparseable assessment (`no_assessment`) is distinct from one that returned
+    // scores but no rationale (`no_rationale`): the latter DID produce visible scores, so
+    // the banner must not claim there was no assessment at all.
     const reason: MergeDecision['reason'] = !preset.autoMergeEnabled
       ? 'auto_merge_disabled'
-      : !credible
+      : assessment === null
         ? 'no_assessment'
-        : 'exceeded_thresholds'
+        : !credible
+          ? 'no_rationale'
+          : 'exceeded_thresholds'
     return { ...base, outcome: 'awaiting_review', reason, exceededAxes }
   }
 
