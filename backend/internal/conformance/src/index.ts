@@ -15,6 +15,7 @@ export {
 export { FakeRepoBootstrapper } from './FakeRepoBootstrapper.js'
 export { FakeVcsClient, type FakeVcsCalls, type FakeVcsClientOptions } from './FakeVcsClient.js'
 export { FakeEnvConfigRepairer } from './FakeEnvConfigRepairer.js'
+export { FakePreviewTransport, fakeBuildPreviewJob } from './FakePreviewTransport.js'
 export { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 export {
   makeOnboardingProbe,

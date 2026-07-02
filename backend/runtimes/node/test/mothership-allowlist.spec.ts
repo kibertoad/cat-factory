@@ -168,7 +168,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `put` is now allow-listed (the tracker-settings editor); `get` was already remote.
   trackerSettingsRepository: {},
   serviceRepository: {
-    get: 'pending',
+    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock` are allow-listed (the org-catalog mount
+    // flow + board composition + run-path frame resolution). The remaining CRUD + `getByRepo`
+    // (the GitHub-sync repo→service link) stay off the SPA path — a later slice.
     listByFrameBlocks: 'pending',
     getByRepo: 'pending',
     insert: 'pending',
@@ -177,12 +179,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     deleteMany: 'pending',
   },
   workspaceMountRepository: {
+    // `listByWorkspace`/`countByServiceIds`/`get`/`upsert`/`update`/`remove` are allow-listed (the
+    // shared-service mount management surface). The real-time fan-out reads
+    // (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
+    // (`removeByServices`) stay off the SPA path — mothership-internal / a later slice.
     listByService: 'pending',
     listWorkspaceIdsMountingBlock: 'pending',
-    get: 'pending',
-    upsert: 'pending',
-    update: 'pending',
-    remove: 'pending',
     removeByServices: 'pending',
   },
   // The whole requirement-review repo is now remote (getByBlock/get/upsert were exposed earlier;
