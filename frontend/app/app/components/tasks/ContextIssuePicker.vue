@@ -68,8 +68,10 @@ const searchError = ref<string | null>(null)
 
 // Debounced search: free text hits the tracker; a query that's clearly a URL/key
 // is left to the explicit "by reference" row below (search won't surface it).
+// Re-scope when `scopeBlockId` changes too (a GitHub search is scoped to the block's
+// repo, so switching the target container re-runs against the new repo).
 let timer: ReturnType<typeof setTimeout> | undefined
-watch([query, source], () => {
+watch([query, source, () => props.scopeBlockId], () => {
   if (timer) clearTimeout(timer)
   results.value = []
   searchError.value = null

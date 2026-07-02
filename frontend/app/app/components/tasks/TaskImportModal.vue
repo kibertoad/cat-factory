@@ -161,10 +161,16 @@ async function doSpawnEpic() {
         <!-- Find an issue and create a task from it. Same picker the add-task form
              uses for context issues: search by title, pick an already-imported one,
              or paste a URL/key — choosing one opens the prefilled add-task form. The
-             source selector is always shown here so it's clear which tracker is in
-             use. -->
+             search is scoped to the chosen container's repo (so a GitHub search stays
+             in that service's repo and a pasted URL / bare number resolves there), and
+             the source selector is always shown so it's clear which tracker is in use. -->
         <UFormField :label="t('tasks.import.searchIssues')">
-          <ContextIssuePicker v-model:source="source" always-show-source @pick="createFromPick" />
+          <ContextIssuePicker
+            v-model:source="source"
+            :scope-block-id="containerId"
+            always-show-source
+            @pick="createFromPick"
+          />
         </UFormField>
 
         <!-- Secondary: spawn a parent/epic issue as a whole linked task group. -->
