@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/sandbox-fixtures",
-  "version": "0.7.85",
+  "version": "0.7.86",
   "description": "Hand-authored, standardized, graded no-repo fixtures for the Sandbox: inline agent inputs (requirements/clarity/code-review/architecture-proposal review) with expectations rated by trickiness and impact.",
   "repository": {
     "type": "git",
