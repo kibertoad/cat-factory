@@ -83,8 +83,9 @@ export const mergeThresholdPresetSchema = v.object({
   /**
    * How many times the test quality-control companion may loop the Tester for a more
    * complete report before it stops gating and lets the run proceed to the greenlight /
-   * fixer decision. One QC-driven Tester re-run = one iteration. Independent of the
-   * `ciMaxAttempts` fixer budget. `1` effectively means "one QC pass, no re-run".
+   * fixer decision. One QC-driven Tester re-run = one iteration, so this is the maximum
+   * number of QC re-runs: `1` permits a single re-run before the gate gives up. Independent
+   * of the `ciMaxAttempts` fixer budget.
    */
   maxTesterQualityIterations: v.pipe(v.number(), v.integer(), v.minValue(1)),
   /**

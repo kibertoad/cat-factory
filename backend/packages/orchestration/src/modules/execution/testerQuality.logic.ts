@@ -69,10 +69,14 @@ export function coerceTesterQualityVerdict(text: string): TesterQualityOutcome {
         .map((g) => g.trim())
     : []
   const feedback = typeof o.feedback === 'string' ? o.feedback.trim() : ''
-  // Defensive: only treat the report as adequate when the model says so AND lists no gaps.
-  // A verdict that claims `adequate` while naming gaps is contradictory — the gaps win, so
-  // the Tester is looped rather than silently concluding on an incomplete report.
-  const adequate = o.adequate === true && gaps.length === 0
+  // Defensive coercion in two directions:
+  //  - A verdict that claims `adequate` while naming gaps is contradictory — the gaps win, so
+  //    the Tester is looped rather than silently concluding on an incomplete report.
+  //  - An `inadequate` verdict with NO gaps AND NO feedback gives the Tester nothing to act on;
+  //    looping it would just re-run the same container blind until the QC budget is spent. Treat
+  //    that content-free "inadequate" as adequate so the run proceeds instead of thrashing.
+  const hasActionableContent = gaps.length > 0 || feedback.length > 0
+  const adequate = (o.adequate === true && gaps.length === 0) || !hasActionableContent
   return { adequate, gaps, feedback }
 }
 

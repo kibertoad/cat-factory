@@ -198,15 +198,6 @@ export class TesterController {
       )
     }
 
-    // Test quality-control companion: BEFORE the greenlight/fixer decision, audit the report
-    // for completeness. When the companion is enabled (and any estimate gating passes) and QC
-    // budget remains, an inline reviewer judges whether the report adequately covers what it
-    // claimed to test; if not, it loops the Tester (folding the prior report + gaps in) for a
-    // more thorough pass. A pass-through (companion off / no model / budget spent) returns null
-    // and the normal greenlight → fixer logic below runs unchanged.
-    const qualityResult = await this.runQualityGate(workspaceId, instance, step, block, report)
-    if (qualityResult) return qualityResult
-
     // The FIRST testing round always loops the fixer when the report flags ANYTHING — any
     // concern (regardless of severity) or a withheld greenlight — so the first batch of
     // findings is always handed to the fixer. From the SECOND round onward the normal
@@ -217,6 +208,20 @@ export class TesterController {
     const accepted = firstRound
       ? report.greenlight === true && report.concerns.length === 0 && !hasFailedOutcome(report)
       : isGreenlit(report)
+
+    // Test quality-control companion: gate a report that would otherwise CONCLUDE the step
+    // (accepted) for coverage completeness BEFORE it is accepted. A report that will loop the
+    // fixer (real failures / blocking concerns) is deliberately left to the fixer — QC re-audits
+    // the fixed report on a later round rather than re-testing unfixed code or spending its
+    // budget before anything is fixed. When the accepted report's coverage is inadequate, QC
+    // loops the Tester (folding the prior report + gaps in) for a more thorough pass. A
+    // pass-through (companion off / no model / gated out / budget spent / adequate) returns null
+    // and the accept-or-fix decision below runs unchanged.
+    if (accepted) {
+      const qualityResult = await this.runQualityGate(workspaceId, instance, step, block, report)
+      if (qualityResult) return qualityResult
+    }
+
     if (accepted) return null
 
     // Withheld greenlight: loop the fixer if any budget remains, else give up.
@@ -241,11 +246,12 @@ export class TesterController {
   }
 
   /**
-   * The test quality-control gate, run on each Tester report BEFORE the greenlight/fixer
-   * decision. Returns an `awaiting_job` result when it looped the Tester for a more thorough
-   * pass; returns `null` (proceed to the normal decision) when the companion is disabled,
-   * unwired, gated out by the task estimate, the report is judged adequate, or the QC budget
-   * is spent. Records a verdict per evaluation on `step.testerQuality` for the UI.
+   * The test quality-control gate, run on each report that would otherwise CONCLUDE the step
+   * (be accepted) BEFORE it is accepted — a report bound for the fixer is left to the fixer.
+   * Returns an `awaiting_job` result when it looped the Tester for a more thorough pass;
+   * returns `null` (proceed to the accept decision) when the companion is disabled, unwired,
+   * gated out by the task estimate, the report is judged adequate, or the QC budget is spent.
+   * Records a verdict per evaluation on `step.testerQuality` for the UI.
    */
   private async runQualityGate(
     workspaceId: string,

@@ -26,7 +26,7 @@ const instance = (step: PipelineStep): ExecutionInstance =>
 function makeController(over: Partial<TesterControllerDeps> = {}) {
   const raise = vi.fn(async () => ({}) as never)
   const persistInstance = vi.fn(async () => {})
-  const startJob = vi.fn(async () => ({ jobId: 'j1' }))
+  const startJob = vi.fn(async (_context?: unknown) => ({ jobId: 'j1' }))
   const deps = {
     blockRepository: { get: async () => block() },
     notificationService: { raise },
