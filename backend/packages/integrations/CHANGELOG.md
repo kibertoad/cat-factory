@@ -1,5 +1,50 @@
 # @cat-factory/integrations
 
+## 0.56.2
+
+### Patch Changes
+
+- 0d51638: Harden three server-side SSRF surfaces:
+
+  - **Local-runner allow-list** no longer treats a DNS hostname that merely starts with `fc`/`fd`
+    (e.g. `fc2.com`) as a private IPv6 ULA — the ULA/loopback tests are now gated behind an
+    "is IPv6 literal" check and the classification reuses the vetted kernel `ip-host` primitives.
+  - **Runner-pool provider** (`HttpRunnerPoolProvider.execute`/`oauthToken`) and the shared
+    `probeConnection` now follow redirects by hand and re-run the SSRF guard on every hop, so a
+    permitted scheduler host can't 302 the secret-bearing dispatch body to an internal/metadata
+    target. Factored the per-hop `safeFetch` + capped-read helpers into a shared module reused by
+    the environment provider. `safeFetch` additionally drops the request body and strips
+    credential headers (`authorization`/`cookie`/`proxy-authorization`) on any **cross-origin**
+    redirect hop, so a permitted host also can't bounce the secrets to a _different_ public host
+    (re-establishing the cross-origin credential stripping the platform `fetch` would have done,
+    which the manual `redirect: 'manual'` follower had bypassed).
+  - **Account-configured SearXNG web-search URL** is now validated (public host, http/https, no
+    private/internal/metadata target) both at the write boundary and with per-hop revalidation on
+    fetch.
+
+- 0d51638: Secret-handling hardening:
+
+  - **LLM telemetry** (`LlmObservabilityService`) now scrubs credential shapes from the
+    prompt/response/reasoning bodies AND the `errorMessage` with a shared `redactSecrets`
+    (promoted to `@cat-factory/kernel`, reused by the provisioning-log path) BEFORE anything is
+    stored or fanned out to an external trace sink (Langfuse). `errorMessage` is kept as
+    diagnostic metadata even when bodies are dropped and is fanned out ungated, so it is
+    scrubbed too (an upstream 4xx/5xx string can echo an auth header). Prompt/response/reasoning
+    body capture is additionally gated on the per-workspace `storeAgentContext` toggle (numeric
+    telemetry is always recorded). Also fixed a latent O(n²) regex backtrack in the URL-userinfo
+    redaction rule that a large prompt could trigger.
+  - **Signed tokens** (`HmacSigner`) now derive an independent HKDF-SHA256 subkey per audience
+    (`session`/`oauth-state`/`llm-proxy`/`ws`/`machine`), so a token class is cryptographically
+    isolated rather than sharing one raw HMAC key. Key derivation is bounded to that fixed
+    audience set — `verify` selects the key from the token's attacker-controlled claimed `aud`
+    before the MAC check, so an unrecognised (or absent) audience falls back to the raw-secret
+    base key rather than deriving+caching a fresh subkey, preventing an unbounded key-cache /
+    per-request-HKDF DoS from a flood of junk-audience tokens. Breaking: any tokens signed before
+    this change no longer verify (pre-1.0, no migration — clients re-authenticate).
+
+- Updated dependencies [0d51638]
+  - @cat-factory/kernel@0.70.1
+
 ## 0.56.1
 
 ### Patch Changes
