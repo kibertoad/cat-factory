@@ -66,6 +66,18 @@ export class WorkflowsWorkRunner implements WorkRunner {
     }
   }
 
+  async signalResume(_workspaceId: string, executionId: string): Promise<void> {
+    try {
+      const instance = await this.workflow.get(executionId)
+      // Wake the paused run's `waitForEvent('spend-resume-*')` so it re-advances now instead of
+      // waiting out the periodic budget re-check. The event type is fixed (one pause per run).
+      await instance.sendEvent({ type: 'spend-resume', payload: {} })
+    } catch {
+      // No live instance to wake (already resumed / finished). The DB flip to `running` in
+      // resumePaused is the source of truth; the instance picks it up on its next re-check.
+    }
+  }
+
   async cancelRun(_workspaceId: string, executionId: string): Promise<void> {
     try {
       const instance = await this.workflow.get(executionId)

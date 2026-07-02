@@ -5,6 +5,7 @@
 // inspector, task panel) gets identical behaviour from one place. Replaces the
 // three hand-rolled bootstrap banners that used to duplicate this logic.
 import type { AgentRunSummary } from '~/stores/agentRuns'
+import FailureDetail from '~/components/board/FailureDetail.vue'
 
 const props = withDefaults(
   defineProps<{ run: AgentRunSummary; variant?: 'compact' | 'expanded' }>(),
@@ -82,15 +83,13 @@ async function retry() {
       {{ failure.hint }}
     </p>
 
-    <details v-if="!compact && failure?.detail && failure.detail !== failure.message" class="mt-1">
-      <summary class="cursor-pointer text-[10px] text-rose-400/60 hover:text-rose-300">
-        {{ t('board.failure.showDetail') }}
-      </summary>
-      <pre
-        class="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded bg-rose-950/60 p-1.5 text-[10px] text-rose-200/80"
-        >{{ failure.detail }}</pre
-      >
-    </details>
+    <FailureDetail
+      v-if="!compact && failure"
+      :detail="failure.detail"
+      :message="failure.message"
+      summary-class="text-[10px] text-rose-400/60 hover:text-rose-300"
+      pre-class="bg-rose-950/60 text-[10px] text-rose-200/80"
+    />
 
     <button
       type="button"

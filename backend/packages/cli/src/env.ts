@@ -137,8 +137,10 @@ export function buildLocalEnv(input: LocalEnvInput): string {
  * Execution-mode entries: PREWARMED DOCKER POOL (default) or NATIVE host agents. In pool
  * mode the native knobs are written commented (advertising the alternative) plus a pointer
  * to the UI-configured warm pool with recommended sizing. In native mode `LOCAL_NATIVE_AGENTS`
- * + `LOCAL_HARNESS_ENTRY` are written active, annotated with the models that actually run
- * natively (every other step still runs in a container, so LOCAL_HARNESS_IMAGE stays needed).
+ * is written active, annotated with the models that actually run natively (every other step
+ * still runs in a container, so LOCAL_HARNESS_IMAGE stays needed); `LOCAL_HARNESS_ENTRY` is
+ * written only when an explicit path was given, else left commented (it defaults to the
+ * bundled `@cat-factory/executor-harness`).
  */
 function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
   if (input.executionMode === 'native') {
@@ -158,15 +160,25 @@ function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
         key: 'LOCAL_NATIVE_AGENTS',
         value: harnesses.join(','),
       },
-      {
-        comment: [
-          'REQUIRED for native mode: path to the executor-harness server entry run as the host',
-          'process (its built server.js, or src/server.ts via Node type-stripping). Fill this in',
-          'before starting — native dispatch fails loudly without it.',
-        ],
-        key: 'LOCAL_HARNESS_ENTRY',
-        value: input.harnessEntry ?? '',
-      },
+      input.harnessEntry
+        ? {
+            comment: [
+              'Executor-harness server entry (custom, from --harness-entry). Optional in general:',
+              'it defaults to the bundled @cat-factory/executor-harness; set here because you',
+              'passed an explicit path.',
+            ],
+            key: 'LOCAL_HARNESS_ENTRY',
+            value: input.harnessEntry,
+          }
+        : {
+            comment: [
+              'Optional: the executor-harness server entry run as the host process. Defaults to',
+              'the bundled @cat-factory/executor-harness (ships with local-server), so native mode',
+              'works out of the box. Uncomment only to point at a custom or source-checkout build.',
+            ],
+            key: '# LOCAL_HARNESS_ENTRY',
+            value: '',
+          },
     ]
   }
   return [
@@ -179,9 +191,10 @@ function executionModeEntries(input: LocalEnvInput): EnvEntry[] {
         'size 3, pre-warm 1, idle timeout 10m.',
         '',
         'To switch to NATIVE host agents instead (your own installed claude/codex CLI — no',
-        'container, no leased credential), set LOCAL_NATIVE_AGENTS (e.g. claude-code,codex) and',
-        'LOCAL_HARNESS_ENTRY (the harness server entry path). Only Claude/ChatGPT models go',
-        'native; every other model still uses the container path above.',
+        'container, no leased credential), set LOCAL_NATIVE_AGENTS (e.g. claude-code,codex). The',
+        'harness server entry defaults to the bundled @cat-factory/executor-harness, so no other',
+        'setting is needed. Only Claude/ChatGPT models go native; every other model still uses',
+        'the container path above.',
       ],
       key: '# LOCAL_NATIVE_AGENTS',
       value: '',

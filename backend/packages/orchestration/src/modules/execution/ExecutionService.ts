@@ -129,7 +129,7 @@ import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
-import { planResumedSteps, planRestartFromStep } from './retry.logic.js'
+import { carryForwardFailures, planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
 import { hasLiveServiceBinding, hasServiceBinding } from './frontend-infra.logic.js'
 
@@ -1004,10 +1004,13 @@ export class ExecutionService {
       // pipeline has one.
       check(block.modelId, agentKinds.some(isInlineModelStep))
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of agentKinds) {
-        const id = await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId)
-        check(id, isInlineModelStep(kind))
-      }
+      // Independent per-kind resolutions on the start path — run them concurrently.
+      const ids = await Promise.all(
+        agentKinds.map((kind) =>
+          this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
+        ),
+      )
+      agentKinds.forEach((kind, i) => check(ids[i], isInlineModelStep(kind)))
     }
     if (unconfigured.size > 0) {
       throw new ConflictError(
@@ -1055,9 +1058,13 @@ export class ExecutionService {
     if (block.modelId) {
       ids.push(block.modelId)
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of agentKinds) {
-        ids.push(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
-      }
+      ids.push(
+        ...(await Promise.all(
+          agentKinds.map((kind) =>
+            this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
+          ),
+        )),
+      )
     } else {
       ids.push(undefined)
     }
@@ -1161,6 +1168,9 @@ export class ExecutionService {
     return {
       agentKinds: steps.map((s) => s.agentKind),
       gating: steps.map((s) => s.gating ?? null),
+      // The QC companion's live step-state carries the same `gating` config the pipeline set, so
+      // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
+      testerQuality: steps.map((s) => s.testerQuality ?? null),
     }
   }
 
@@ -1216,27 +1226,33 @@ export class ExecutionService {
     const executionId = this.idGenerator.next('exec')
     await activate?.(executionId)
 
+    // Read the block's prior run once: a manual re-start of an already-running block REPLACES
+    // it (the board offers "start" on a live block), so we pass its id to `insertLive` as the
+    // `replaceId` it supersedes atomically. A genuinely-CONCURRENT second start reads the SAME
+    // prior (or none), so only one insert wins and the other is rejected 409 — the loser's
+    // `replaceId` deletes only what it read, never the winner's fresh row (see insertLive).
+    const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
     // Replacing the block's prior run: clear its per-run activation now (it never reaches
     // the terminal cleanup in emitInstance when it's still running), so a replaced run's
     // system-encrypted token copy doesn't linger to its TTL. Keyed by the OLD run id, so
     // the activation just minted for the new run is untouched.
-    if (this.subscriptionActivations) {
-      const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
-      if (prior && prior.id !== executionId) {
-        // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
-        // failure here must never derail the start. In mothership mode this repo is remote and
-        // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
-        // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
-        // stale activation row as the backstop.
-        try {
-          await this.subscriptionActivations.deleteByExecution(prior.id)
-        } catch {
-          // Swallow — see above.
-        }
+    if (this.subscriptionActivations && prior && prior.id !== executionId) {
+      // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
+      // failure here must never derail the start. In mothership mode this repo is remote and
+      // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
+      // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
+      // stale activation row as the backstop.
+      try {
+        await this.subscriptionActivations.deleteByExecution(prior.id)
+      } catch {
+        // Swallow — see above.
       }
     }
 
-    await this.executionRepository.deleteByBlock(workspaceId, blockId)
+    // NB: do NOT `deleteByBlock` here — `insertLiveRunOrConflict` (below) atomically clears the
+    // block's terminal rows AND the `prior` run it replaces, then inserts the new live run, so a
+    // concurrent double-start is rejected by the live-run index instead of both wiping each
+    // other's row (see insertLive).
 
     // Build the run only from the ENABLED steps. A step the pipeline marked
     // `enabled[i] === false` is kept in the saved pipeline (so it can be toggled back
@@ -1321,7 +1337,7 @@ export class ExecutionService {
       status: 'running',
       initiatedBy: initiatedBy ?? null,
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance, prior?.id)
     await this.blockRepository.update(workspaceId, blockId, {
       status: 'in_progress',
       progress: 0,
@@ -1372,17 +1388,16 @@ export class ExecutionService {
    * Augment a workspace's block list (in place) with any dependency blocks referenced by
    * `depIds` that aren't already present — a `dependsOn` edge can point at a task homed in a
    * DIFFERENT workspace (a shared/mounted service). Resolved via the cross-workspace
-   * {@link BlockRepository.findById}, so a shared-service blocker is evaluated by its real
-   * status instead of being silently treated as satisfied (missing ⇒ done). Returns the same
-   * (now-augmented) array for chaining.
+   * {@link BlockRepository.findByIds} (one batched query, not a point-read per id), so a
+   * shared-service blocker is evaluated by its real status instead of being silently treated
+   * as satisfied (missing ⇒ done). Returns the same (now-augmented) array for chaining.
    */
   private async augmentWithCrossWorkspaceDeps(blocks: Block[], depIds: string[]): Promise<Block[]> {
     const have = new Set(blocks.map((b) => b.id))
-    for (const id of depIds) {
-      if (have.has(id)) continue
-      have.add(id)
-      const found = await this.blockRepository.findById(id)
-      if (found) blocks.push(found.block)
+    const missing = [...new Set(depIds)].filter((id) => !have.has(id))
+    if (missing.length === 0) return blocks
+    for (const found of await this.blockRepository.findByIds(missing)) {
+      blocks.push(found.block)
     }
     return blocks
   }
@@ -2057,6 +2072,11 @@ export class ExecutionService {
   private async finalizeMerge(workspaceId: string, blockId: string): Promise<void> {
     const block = await this.blockRepository.get(workspaceId, blockId)
     if (!block) return
+    // Idempotent under durable-driver replays: a crash between the real merge and the
+    // instance persist re-runs the merger resolver, and re-merging an already-merged PR
+    // throws — which the resolver's fall-through would then misread as a failed merge
+    // and downgrade the block to `pr_ready`. `done` already means "merged"; keep it.
+    if (block.status === 'done') return
     if (this.prMerger && block.pullRequest) {
       // Throws on a blocked/failed merge — the caller decides what to do next.
       await this.prMerger.mergeForBlock(workspaceId, blockId)
@@ -2101,37 +2121,37 @@ export class ExecutionService {
       blocks,
       dependents.flatMap((d) => d.dependsOn),
     )
+    // The workspace's first pipeline (the board's "Run" default for a dependent with no
+    // pinned pipeline) is invariant across the loop — read it once, not per dependent.
+    const firstPipeline = dependents.some((d) => !d.pipelineId)
+      ? ((await this.pipelineRepository.listByWorkspace(workspaceId))[0] ?? null)
+      : null
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue
       // Only auto-start a fresh task — never replace a run already in flight or a finished one.
       if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
-      const pipelineId = await this.resolveDefaultPipelineId(workspaceId, dependent)
-      if (!pipelineId) continue
-      // Skip dependents that would lease an individual-usage credential (can't unlock unattended).
-      const individual = await this.individualVendorsForBlock(workspaceId, dependent.id, pipelineId)
+      const pipeline = dependent.pipelineId
+        ? await this.pipelineRepository.get(workspaceId, dependent.pipelineId)
+        : firstPipeline
+      if (!pipeline) continue
+      // Skip dependents that would lease an individual-usage credential (can't unlock
+      // unattended) — resolved from the block + pipeline already in hand, no re-reads.
+      const individual = await this.resolveIndividualVendors(
+        workspaceId,
+        dependent.modelId,
+        dependent.modelPresetId,
+        pipeline.agentKinds,
+        () => false,
+      )
       if (individual.length > 0) continue
       try {
-        await this.start(workspaceId, dependent.id, pipelineId, null)
+        await this.start(workspaceId, dependent.id, pipeline.id, null)
       } catch {
         // Already running, no usable provider, still-unmet dep racing, etc. — leave this
         // dependent for a manual start; the others still get their chance.
       }
     }
-  }
-
-  /**
-   * The pipeline id a dependent task should auto-start with: its pinned `pipelineId` when
-   * set, else the workspace's first pipeline (mirrors the board's "Run" default). Null
-   * when no pipeline exists at all.
-   */
-  private async resolveDefaultPipelineId(
-    workspaceId: string,
-    block: Block,
-  ): Promise<string | null> {
-    if (block.pipelineId) return block.pipelineId
-    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
-    return pipelines[0]?.id ?? null
   }
 
   /**
@@ -2243,26 +2263,43 @@ export class ExecutionService {
     opts: { proposal?: string } = {},
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
-    const step = instance.steps[stepIndex]
-    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotIterativeGate(step)
-    if (step.approval.status === 'approved') return instance
+    // Optimistic-concurrency write like resolveDecision/requestStepChanges: an approve
+    // holding a stale snapshot (a racing reject, a driver poll, a terminal transition)
+    // must re-read and re-validate rather than blind-write — otherwise it can resurrect
+    // a run another writer already failed. The advance's in-memory half runs inside the
+    // CAS; the non-idempotent side effects (block writes, driver signal, emit) run once
+    // after, on the winning state.
+    let stepIndex = -1
+    let alreadyApproved = false
+    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
+      alreadyApproved = false
+      stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
+      const step = inst.steps[stepIndex]
+      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+      this.assertNotIterativeGate(step)
+      if (step.approval.status === 'approved') {
+        alreadyApproved = true
+        return
+      }
+      if (step.approval.status === 'rejected') {
+        throw new ConflictError(`Approval '${approvalId}' was rejected`)
+      }
+      if (inst.status === 'failed' || inst.status === 'done') {
+        throw new ConflictError(`Execution '${executionId}' is already ${inst.status}`)
+      }
 
-    // A human edit to the proposal replaces the agent's text, so the revised
-    // proposal is what downstream steps read (via priorOutputs).
-    if (opts.proposal !== undefined) {
-      step.output = opts.proposal
-      step.approval.proposal = opts.proposal
-    }
-    step.approval.status = 'approved'
-    // A gate is never raised on the final step, but the shared advance stays defensive.
-    await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, stepIndex)
+      // A human edit to the proposal replaces the agent's text, so the revised
+      // proposal is what downstream steps read (via priorOutputs).
+      if (opts.proposal !== undefined) {
+        step.output = opts.proposal
+        step.approval.proposal = opts.proposal
+      }
+      step.approval.status = 'approved'
+      // A gate is never raised on the final step, but the shared advance stays defensive.
+      this.runStateMachine.advanceRunPastGate(inst, stepIndex)
+    })
+    if (alreadyApproved) return instance
+    await this.runStateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
     return instance
   }
 
@@ -2490,13 +2527,13 @@ export class ExecutionService {
     // Mint the activation before replacing the failed run, so a bad password aborts
     // the retry without losing the retryable terminal run.
     const newId = this.idGenerator.next('exec')
+    const replaceId = previous.id
     await activate?.(newId)
-    // Replace the terminal failed run for this block with the resumed one (single
-    // run per block, matching the board's by-block projection). This mints a FRESH run id
-    // (delete + insert), so there is no prior row for a concurrent writer to lose an update
-    // against — the CAS/`mutateInstance` lost-update fix is structurally N/A here; the
-    // one-run-per-block projection is what serialises a double-retry.
-    await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
+    // Replace the terminal failed run for this block with the resumed one (single run per
+    // block, matching the board's by-block projection). This mints a FRESH run id; the
+    // atomic `insertLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
+    // any terminal rows in the SAME transaction, so a concurrent double-retry is serialised by
+    // the live-run index (the loser gets a 409) instead of both deleting-then-inserting.
     const instance: ExecutionInstance = {
       id: newId,
       blockId: previous.blockId,
@@ -2506,8 +2543,11 @@ export class ExecutionService {
       currentStep,
       status: 'running',
       initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+      // Preserve the error trail: the failure this retry is clearing is appended to the
+      // history so it stays viewable after the top banner disappears on restart.
+      failureHistory: carryForwardFailures(previous),
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
@@ -2596,10 +2636,12 @@ export class ExecutionService {
     // Mint the activation before replacing the prior run, so a bad password aborts the
     // restart without losing the source run.
     const newId = this.idGenerator.next('exec')
+    const replaceId = previous.id
     await activate?.(newId)
-    // Like retry(), this mints a FRESH run id (delete + insert), so there is no prior row for
-    // a concurrent writer to lose an update against — the CAS lost-update fix is N/A here.
-    await this.executionRepository.deleteByBlock(workspaceId, previous.blockId)
+    // Like retry(), this mints a FRESH run id. `insertLiveRunOrConflict` atomically supersedes
+    // the torn-down source run (`replaceId`, which here may still be LIVE — running/paused/
+    // blocked) and clears terminal rows in one transaction, so a concurrent start that already
+    // created a NEW live run for the block loses (409) instead of being silently clobbered.
     const instance: ExecutionInstance = {
       id: newId,
       blockId: previous.blockId,
@@ -2609,8 +2651,11 @@ export class ExecutionService {
       currentStep,
       status: 'running',
       initiatedBy: initiatedBy ?? previous.initiatedBy ?? null,
+      // Preserve the error trail across a restart too (a failed run is a valid restart
+      // source), so the prior failure stays viewable once the run is running again.
+      failureHistory: carryForwardFailures(previous),
     }
-    await this.executionRepository.upsert(workspaceId, instance)
+    await this.insertLiveRunOrConflict(workspaceId, instance, replaceId)
     const done = steps.filter((s) => s.state === 'done').length
     await this.blockRepository.update(workspaceId, previous.blockId, {
       status: 'in_progress',
@@ -2620,6 +2665,31 @@ export class ExecutionService {
     await this.workRunner.startRun(workspaceId, instance.id)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     return instance
+  }
+
+  /**
+   * Insert a freshly-built run, enforcing the one-live-run-per-block invariant at the DB in a
+   * single atomic write (see `ExecutionRepository.insertLive`). Callers must NOT `deleteByBlock`
+   * first: `insertLive` itself clears the block's terminal rows (and `replaceId`, the specific
+   * prior run a `retry`/`restart` is knowingly superseding) in the SAME transaction as the
+   * insert. A `false` return means a genuinely-concurrent start (double click,
+   * recurring-vs-manual, notification-vs-human retry) already created the block's live run — so
+   * we REFUSE this duplicate rather than materialise a second driver + container on the same
+   * branch. The winning run is untouched (the losing transaction only deletes terminal rows /
+   * its own `replaceId`, never the winner). Surfaces as a 409 the SPA shows as a toast.
+   */
+  private async insertLiveRunOrConflict(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    replaceId?: string,
+  ): Promise<void> {
+    const inserted = await this.executionRepository.insertLive(workspaceId, instance, { replaceId })
+    if (!inserted) {
+      // No machine `reason`: this is a rare double-start edge, not a distinct client-handled
+      // conflict, so the human message drives the SPA's generic 409 toast (no new
+      // ConflictReason + exhaustive-Record/i18n cascade for a transient race).
+      throw new ConflictError('A run is already active for this block.')
+    }
   }
 
   /**
@@ -2644,7 +2714,12 @@ export class ExecutionService {
         })
         .catch(() => null)
       if (resumed && flipped) {
+        // `startRun` re-drives runners that re-create the run from scratch (pg-boss re-enqueues
+        // the same id). On Cloudflare the paused run's Workflows instance is still ALIVE parked
+        // on a `waitForEvent`, so `startRun`'s `create` no-ops there; `signalResume` delivers the
+        // event that wakes it immediately instead of waiting out the periodic budget re-check.
         await this.workRunner.startRun(workspaceId, resumed.id)
+        await this.workRunner.signalResume?.(workspaceId, resumed.id)
         await this.runStateMachine.emitInstance(workspaceId, resumed)
       }
     }

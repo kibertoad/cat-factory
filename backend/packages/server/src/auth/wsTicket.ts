@@ -1,5 +1,5 @@
 import type { AuthConfig } from '../config/types.js'
-import { HmacSigner, TOKEN_AUDIENCE } from './signing.js'
+import { signerFor, TOKEN_AUDIENCE } from './signing.js'
 
 // The short-lived, single-workspace ticket that authorises ONE WebSocket event-stream
 // handshake. A browser can't set `Authorization` on a WS handshake, so the SPA mints
@@ -33,7 +33,7 @@ export async function mintWsTicket(auth: AuthConfig, workspaceId: string): Promi
     workspaceId,
     exp: Date.now() + WS_TICKET_TTL_MS,
   }
-  return new HmacSigner(auth.sessionSecret).sign(ticket)
+  return signerFor(auth.sessionSecret).sign(ticket)
 }
 
 /**
@@ -55,7 +55,7 @@ export async function authorizeWsUpgrade(
   workspaceId: string,
 ): Promise<WsUpgradeAuth> {
   if (auth.enabled) {
-    const verified = await new HmacSigner(auth.sessionSecret).verify<WsTicket>(ticket, {
+    const verified = await signerFor(auth.sessionSecret).verify<WsTicket>(ticket, {
       aud: TOKEN_AUDIENCE.wsTicket,
     })
     if (!verified || verified.workspaceId !== workspaceId) {

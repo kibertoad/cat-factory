@@ -1,5 +1,6 @@
 import type { BlockRepository, GitHubClient, PullRequestMerger } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
+import { logger } from '../observability/logger.js'
 
 export interface GitHubPullRequestMergerDependencies {
   githubClient: GitHubClient
@@ -39,13 +40,21 @@ export class GitHubPullRequestMerger implements PullRequestMerger {
     // Tear down the work branch now that it is merged. The branch is deterministic
     // per task (`cat-factory/<blockId>`), so leaving it behind would let a later
     // re-run of this block RESUME on already-merged commits — which a squash/rebase
-    // merge would re-introduce wholesale (those commits are not ancestors of base).
-    // Best-effort: a failed delete must never undo or fail the completed merge.
+    // merge would re-introduce wholesale (those commits are not ancestors of base),
+    // and which for a merge-commit merge leaves a branch reachable from base that a
+    // resumed run can't open a PR for ("No commits between ..."). Best-effort: a
+    // failed delete must never undo or fail the completed merge — but log it, since a
+    // silently-skipped delete is exactly what strands a resumable-but-empty branch.
     const branch = block?.pullRequest?.branch
     if (branch) {
       await this.deps.githubClient
         .deleteBranch(target.installationId, { owner: target.owner, repo: target.name }, branch)
-        .catch(() => {})
+        .catch((err: unknown) => {
+          logger.warn(
+            { workspaceId, blockId, branch, err },
+            'mergeForBlock: failed to delete merged work branch (left behind)',
+          )
+        })
     }
   }
 }

@@ -137,7 +137,7 @@ class_name = "EnvConfigRepairWorkflow"
 # pin that tag here (the account id below is THIS deployment's — change it).
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.31.0"
+image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.31.11"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes
@@ -162,7 +162,7 @@ class_name = "ExecutionContainer"
 # raw-manifest REST path still works); a render-needing config then fails loudly.
 [[containers]]
 class_name = "DeployContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-deploy:0.2.3"
+image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-deploy:0.2.5"
 max_instances = 10
 # kustomize/helm rendering + kubectl apply/rollout is light vs a coding run, but the
 # slim base still wants real headroom for a large manifest tree; standard-1 matches the

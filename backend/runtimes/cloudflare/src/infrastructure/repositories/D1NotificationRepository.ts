@@ -134,6 +134,22 @@ export class D1NotificationRepository implements NotificationRepository {
       .run()
   }
 
+  async escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]> {
+    // One statement flips every overdue open card and returns the rows for re-delivery —
+    // the sweep never loops per-row upserts.
+    const { results } = await this.db
+      .prepare(
+        `UPDATE notifications SET severity = 'urgent'
+           WHERE workspace_id = ? AND status = 'open'
+             AND (severity = 'normal' OR severity IS NULL)
+             AND created_at <= ?
+         RETURNING *`,
+      )
+      .bind(workspaceId, cutoff)
+      .all<NotificationRow>()
+    return (results ?? []).map(rowToNotification)
+  }
+
   async upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification> {
     // Atomic dedup: the conflict arbiter is the partial unique index on
     // (workspace_id, block_id, type) WHERE status='open' (migration 0023). A second

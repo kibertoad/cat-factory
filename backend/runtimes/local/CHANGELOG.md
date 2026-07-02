@@ -1,5 +1,294 @@
 # @cat-factory/local-server
 
+## 0.38.8
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/node-server@0.59.3
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/gitlab@0.4.39
+  - @cat-factory/executor-harness@1.31.10
+
+## 0.38.7
+
+### Patch Changes
+
+- 9577c4a: Fix a batch of native-mode (`LOCAL_NATIVE_AGENTS`) agent-harness bugs:
+
+  - The harnesses (executor + deploy) now shut down gracefully on SIGTERM/SIGINT:
+    every running job is aborted (`JobRegistry.abortAll`) so in-flight `claude`/
+    `codex`/git/kubectl children are killed instead of being orphaned. Previously a
+    dev-server restart left the agent CLI running unsupervised on the developer's
+    login. The abort now targets the child's whole process group (POSIX), so the
+    CLI's own grandchildren (a shell tool, a build, its git) die with it rather than
+    reparenting to init. Shutdown exits as soon as the aborted jobs settle (capped at
+    6s) instead of always waiting the fixed window. Both harness servers also honor a
+    new `HARNESS_BIND_HOST` env, which the native transport sets to `127.0.0.1` so the
+    unsandboxed agent-spawning API is no longer reachable from the LAN (containers keep
+    binding all interfaces).
+  - The native host-process transport sanitizes the harness child's environment to an
+    allow-list (`LOCAL_HARNESS_ENV_ALLOW` extends it), so the orchestrator's secrets
+    (DATABASE_URL, ENCRYPTION_KEY, GITHUB_PAT, provider keys) no longer leak into the
+    ambient agent's env; the inline ambient CLI runner is sanitized the same way. The
+    allow-list keeps the TLS trust-anchor vars (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, ...)
+    alongside the proxy vars, so a corporate TLS-terminating proxy still works. The
+    deploy transport keeps full inheritance (kubectl/helm need ambient cluster env).
+  - Process-lifecycle fixes in `LocalProcessRunnerTransport`: a harness that never
+    becomes healthy is killed instead of leaking one process per retry, and
+    `shutdown()` racing an in-flight lazy start now kills the child instead of
+    resurrecting it. The local/Node graceful-shutdown path now invokes the
+    container's `onShutdown`, which stops the native harnesses; that call is isolated
+    in its own try so a failing pg-boss/pool teardown can't skip it.
+  - `NativeRoutingRunnerTransport` no longer reports a blanket eviction for refs it
+    doesn't know: after an orchestrator restart both `poll` and `release` fall back to
+    the container leg (which re-finds a per-run container by label), so a still-running
+    container job is re-attached / torn down instead of spuriously re-driven or leaked.
+  - Config typos are no longer silent: unrecognized `LOCAL_NATIVE_AGENTS` tokens and
+    an unrecognized/under-configured `LOCAL_DEPLOY_RUNTIME` now log a boot warning
+    (behavior still fails safe).
+
+- Updated dependencies [9577c4a]
+- Updated dependencies [4955639]
+  - @cat-factory/executor-harness@1.31.10
+  - @cat-factory/node-server@0.59.2
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+  - @cat-factory/server@0.66.6
+
+## 0.38.6
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/server@0.66.5
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/gitlab@0.4.38
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/node-server@0.59.1
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.5
+
+### Patch Changes
+
+- 6347d0e: Fix opaque "Failed to open PR (HTTP 422): No commits between ..." run failure when a
+  coding run resumes a work branch that has nothing ahead of its base (e.g. its earlier PR
+  was merged with a merge commit, leaving the branch reachable from base and its best-effort
+  delete skipped).
+
+  - `runCodingAgent` no longer treats a resumed branch as work unconditionally: when the
+    branch has no new commits this pass, it confirms the branch is actually ahead of the PR
+    base (new `branchAheadOfBase`, tri-state so an undeterminable result keeps the prior
+    resume-is-work behaviour) and records a clean no-op otherwise.
+  - `openPullRequest` now maps GitHub's `422 "No commits between ..."` to a no-op (returns
+    `null`) instead of a hard `HarnessFailure`, as a backstop.
+
+  Image-bumping: `@cat-factory/executor-harness` → 1.31.7 with the three runner-image pins
+  synced.
+
+- Updated dependencies [4e82496]
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+- Updated dependencies [6347d0e]
+  - @cat-factory/node-server@0.59.0
+  - @cat-factory/server@0.66.4
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.4
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/node-server@0.58.6
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.3
+
+### Patch Changes
+
+- Updated dependencies [fc8df61]
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/node-server@0.58.5
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.2
+
+### Patch Changes
+
+- 9468b90: Force fully non-interactive git auth in the harness so native local mode never triggers a Git
+  Credential Manager popup. Every git invocation now empties the host credential-helper list
+  (`-c credential.helper=`) and disables interactive credential backends, so git falls back to the
+  harness's own askpass PAT instead of the host's GCM — which on Windows either stole focus with a
+  stray auth window or, when modal, hung the git command (clone/fetch/push) until it timed out. A
+  per-command git timeout is now surfaced as an explicit stall (naming the likely causes) rather
+  than a contentless "Command failed", and a genuine git failure now folds in git's stderr.
+
+  Bumps the executor-harness image tag (and the matched `RECOMMENDED_HARNESS_IMAGE` pin) to 1.31.5.
+
+- Updated dependencies [9468b90]
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.1
+
+### Patch Changes
+
+- Updated dependencies [986ed0e]
+  - @cat-factory/executor-harness@1.31.4
+
+## 0.38.0
+
+### Minor Changes
+
+- 063ef2b: Local native mode: default `LOCAL_HARNESS_ENTRY` to a bundled harness (no more manual path)
+
+  Native execution (`LOCAL_NATIVE_AGENTS`) previously required `LOCAL_HARNESS_ENTRY` to be set
+  to a filesystem path to the executor-harness server entry, which only existed inside a full
+  monorepo checkout — so consumers installing `@cat-factory/*` from npm had no stable target.
+
+  - `@cat-factory/executor-harness` is now **published** (was `private`). Its `.` export is the
+    zero-dependency `dist/server.js` HTTP server that native mode spawns via `node <entry>`.
+  - `@cat-factory/local-server` now depends on it and **auto-resolves** the entry via
+    `require.resolve('@cat-factory/executor-harness')` when `LOCAL_HARNESS_ENTRY` is unset — so a
+    fresh install runs native mode out of the box, mirroring how an unset `LOCAL_HARNESS_IMAGE`
+    falls back to the pinned recommended image. Setting `LOCAL_HARNESS_ENTRY` still overrides it
+    (for a custom or source-checkout build).
+  - `cat-factory init` (`@cat-factory/cli`) no longer treats the entry as required: it is written
+    commented (optional override) and the "set it before starting" warnings are gone.
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+- Updated dependencies [063ef2b]
+- Updated dependencies [063ef2b]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/orchestration@0.57.3
+  - @cat-factory/integrations@0.54.1
+  - @cat-factory/server@0.66.1
+  - @cat-factory/executor-harness@1.31.2
+  - @cat-factory/agents@0.26.6
+  - @cat-factory/gitlab@0.4.36
+  - @cat-factory/kernel@0.69.4
+  - @cat-factory/node-server@0.58.4
+
+## 0.37.3
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/integrations@0.54.0
+  - @cat-factory/server@0.66.0
+  - @cat-factory/agents@0.26.5
+  - @cat-factory/gitlab@0.4.35
+  - @cat-factory/kernel@0.69.3
+  - @cat-factory/orchestration@0.57.2
+  - @cat-factory/node-server@0.58.3
+
+## 0.37.2
+
+### Patch Changes
+
+- 63cf6de: Performance: batch reads, parallelize independent awaits, and push work into SQL on hot paths.
+
+  - `GET /workspaces/:id` (the board-load endpoint) now fetches its ~15 independent snapshot
+    ingredients concurrently instead of serially, so its latency is the slowest read rather
+    than the sum of every round-trip; the create-workspace route parallelizes its spend +
+    infra-setup reads the same way.
+  - Agent-context reference lookups (Jira keys / GitHub refs / URLs) run concurrently on the
+    per-step dispatch path; run-start model-default resolutions run concurrently per agent kind.
+  - New batched port methods, mirrored on both runtimes with conformance coverage:
+    `BlockRepository.findByIds` (cross-workspace dependency resolution — one chunked query
+    instead of a point-read per id, also allow-listed for mothership mode),
+    `NotificationRepository.escalateStaleOpen` (the escalation sweep is now one
+    `UPDATE … RETURNING` statement instead of a load-filter-upsert loop), and
+    `GitHubInstallationRepository.listByInstallationIds` (connect-UI annotation).
+  - GitHub webhook fan-out resolves linked workspaces via the existing batched
+    `linkedWorkspaces` read instead of a per-workspace point-read on every delivery.
+  - The Node Drizzle GitHub projections write chunked multi-row upserts (matching the D1
+    twins' `db.batch`) instead of one round-trip per row, and their list reads run
+    `ORDER BY`/`LIMIT` in SQL (NULLS LAST for D1 parity) instead of sorting full result
+    sets in JS.
+  - `autoStartDependents` hoists the invariant workspace-pipeline read out of its loop and
+    stops re-fetching blocks it already holds.
+  - Session/WS-ticket/machine-token verification reuses a memoized `HmacSigner` per secret,
+    so `crypto.subtle.importKey` no longer runs on every request (`signerFor` export).
+  - The Cloudflare Workflows drivers (execution / bootstrap / env-config-repair) build the
+    DI container once per wake instead of once per `step.do` poll tick.
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/orchestration@0.57.1
+  - @cat-factory/contracts@0.80.1
+  - @cat-factory/node-server@0.58.2
+  - @cat-factory/integrations@0.53.2
+  - @cat-factory/server@0.65.2
+  - @cat-factory/agents@0.26.4
+  - @cat-factory/gitlab@0.4.34
+
+## 0.37.1
+
+### Patch Changes
+
+- 120de05: feat(testing): pipeline-builder toggle + Test Report surfacing for the test quality companion (PR 2)
+
+  Completes the test quality-control (QC) companion (see
+  `docs/initiatives/tester-quality-companion.md`) with its authoring + observability surfaces:
+
+  - **Pipeline builder**: a per-Tester-step toggle (enabled by default) turns the QC companion
+    off, and an optional estimate-gating panel runs the coverage audit only on tasks whose
+    estimate clears a threshold (mirroring the companion-gating panel). The estimator-required
+    hint now covers QC gating too.
+  - **Test Report window**: a "Coverage review" section renders each QC verdict (adequate /
+    gaps-found, the reviewer's feedback + concrete gaps, model, timestamp) plus the loop budget
+    and a "budget spent" badge — so a report that greenlit only after a QC-driven re-run shows
+    why it looped.
+  - **Persistence fix**: the pipeline create/update/clone API + `PipelineService` now thread
+    `testerQuality` (and the sibling `followUps`, which had the same latent gap) end-to-end, so a
+    custom pipeline's builder toggle actually persists instead of being silently stripped by the
+    request-body validator. This includes the persistence layer itself: new `follow_ups` +
+    `tester_quality` JSON columns on the `pipelines` table, mirrored D1 (migration
+    `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+    repos and read by the shared `rowToPipeline` mapper. A QC estimate gate is validated like
+    companion gating (a threshold must be set and a `task-estimator` must run earlier).
+  - **Conformance**: the full QC loop (audit → loop the Tester on gaps → conclude on an adequate
+    report) is now driven through an injected deterministic reviewer on every runtime, asserting
+    the verdicts + counters persist identically across D1 and Drizzle. A separate round-trip
+    assertion saves a custom pipeline with a `followUps` opt-out + a gated `testerQuality` config
+    and re-reads it from the store, so the new columns can't silently drop the toggles on either
+    runtime.
+
+  All new user-facing copy is translated across every shipped locale.
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/orchestration@0.57.0
+  - @cat-factory/kernel@0.69.1
+  - @cat-factory/node-server@0.58.1
+  - @cat-factory/agents@0.26.3
+  - @cat-factory/gitlab@0.4.33
+  - @cat-factory/integrations@0.53.1
+  - @cat-factory/server@0.65.1
+
 ## 0.37.0
 
 ### Minor Changes

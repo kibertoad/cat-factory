@@ -114,6 +114,13 @@ export const getLinearInstallUrlContract = defineApiContract({
 export const listTasksContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/tasks',
+  // `blockId` (a service frame or a task/module under one) scopes the listed issues
+  // to that service's linked repository for a repo-backed source (GitHub Issues) —
+  // exactly as `searchTasks` does — so the quick-pick list never leaks in issues from
+  // sibling repos. Repo-less sources are unaffected. Omitted → the whole workspace.
+  requestQuerySchema: v.object({
+    blockId: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1))),
+  }),
   responsesByStatusCode: { 200: taskListSchema, ...errorResponses },
 })
 

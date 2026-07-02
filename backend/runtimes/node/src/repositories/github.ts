@@ -15,7 +15,7 @@ import type {
   SyncCursor,
   SyncCursorKind,
 } from '@cat-factory/kernel'
-import { and, eq, inArray, isNull, lt, notInArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
   githubBranches,
@@ -36,6 +36,29 @@ import {
 
 const bool = (v: number): boolean => v === 1
 const intBool = (v: boolean | undefined): number => (v ? 1 : 0)
+
+// The sync upserts land whole pages at a time, so each repository writes multi-row
+// INSERT ... ON CONFLICT statements in chunks (one round-trip per chunk, not per row),
+// mirroring the D1 twins' `db.batch` chunking.
+const UPSERT_CHUNK = 50
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+// A multi-row ON CONFLICT DO UPDATE rejects two rows with the same conflict key in one
+// statement ("cannot affect row a second time"), so dedupe by key first — last one wins,
+// matching what the former row-at-a-time loop converged on.
+function dedupeByKey<T>(items: T[], key: (item: T) => string): T[] {
+  const byKey = new Map<string, T>()
+  for (const item of items) byKey.set(key(item), item)
+  return [...byKey.values()]
+}
+
+/** `excluded.<column>` reference for a multi-row upsert's conflict-update set. */
+const excluded = (column: { name: string }) => sql.raw(`excluded."${column.name}"`)
 
 // ---- repositories projection (+ sync cursors) -----------------------------
 
@@ -59,33 +82,37 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
 
   async upsertMany(workspaceId: string, repos: GitHubRepo[]): Promise<void> {
     if (repos.length === 0) return
-    for (const repo of repos) {
-      const values = {
-        workspace_id: workspaceId,
-        github_id: repo.githubId,
-        installation_id: repo.installationId,
-        owner: repo.owner,
-        name: repo.name,
-        default_branch: repo.defaultBranch,
-        private: intBool(repo.private),
-        is_monorepo: intBool(repo.isMonorepo ?? false),
-        synced_at: repo.syncedAt,
-        deleted_at: null,
-      }
-      // `block_id` and `is_monorepo` are board-owned (set via linkBlock/setMonorepo),
-      // not sync — the update set deliberately omits them so sync never clobbers them.
+    // `block_id` and `is_monorepo` are board-owned (set via linkBlock/setMonorepo),
+    // not sync — the update set deliberately omits them so sync never clobbers them.
+    for (const batch of chunks(
+      dedupeByKey(repos, (r) => String(r.githubId)),
+      UPSERT_CHUNK,
+    )) {
       await this.db
         .insert(githubRepos)
-        .values(values)
+        .values(
+          batch.map((repo) => ({
+            workspace_id: workspaceId,
+            github_id: repo.githubId,
+            installation_id: repo.installationId,
+            owner: repo.owner,
+            name: repo.name,
+            default_branch: repo.defaultBranch,
+            private: intBool(repo.private),
+            is_monorepo: intBool(repo.isMonorepo ?? false),
+            synced_at: repo.syncedAt,
+            deleted_at: null,
+          })),
+        )
         .onConflictDoUpdate({
           target: [githubRepos.workspace_id, githubRepos.github_id],
           set: {
-            installation_id: values.installation_id,
-            owner: values.owner,
-            name: values.name,
-            default_branch: values.default_branch,
-            private: values.private,
-            synced_at: values.synced_at,
+            installation_id: excluded(githubRepos.installation_id),
+            owner: excluded(githubRepos.owner),
+            name: excluded(githubRepos.name),
+            default_branch: excluded(githubRepos.default_branch),
+            private: excluded(githubRepos.private),
+            synced_at: excluded(githubRepos.synced_at),
             deleted_at: null,
           },
         })
@@ -253,24 +280,29 @@ export class DrizzleBranchProjectionRepository implements BranchProjectionReposi
   constructor(private readonly db: DrizzleDb) {}
 
   async upsertMany(workspaceId: string, branches: GitHubBranch[]): Promise<void> {
-    for (const b of branches) {
+    for (const batch of chunks(
+      dedupeByKey(branches, (b) => `${b.repoGithubId}\u0000${b.name}`),
+      UPSERT_CHUNK,
+    )) {
       await this.db
         .insert(githubBranches)
-        .values({
-          workspace_id: workspaceId,
-          repo_github_id: b.repoGithubId,
-          name: b.name,
-          head_sha: b.headSha,
-          protected: intBool(b.protected),
-          synced_at: b.syncedAt,
-          deleted_at: null,
-        })
-        .onConflictDoUpdate({
-          target: [githubBranches.workspace_id, githubBranches.repo_github_id, githubBranches.name],
-          set: {
+        .values(
+          batch.map((b) => ({
+            workspace_id: workspaceId,
+            repo_github_id: b.repoGithubId,
+            name: b.name,
             head_sha: b.headSha,
             protected: intBool(b.protected),
             synced_at: b.syncedAt,
+            deleted_at: null,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [githubBranches.workspace_id, githubBranches.repo_github_id, githubBranches.name],
+          set: {
+            head_sha: excluded(githubBranches.head_sha),
+            protected: excluded(githubBranches.protected),
+            synced_at: excluded(githubBranches.synced_at),
             deleted_at: null,
           },
         })
@@ -305,35 +337,49 @@ export class DrizzlePullRequestProjectionRepository implements PullRequestProjec
   constructor(private readonly db: DrizzleDb) {}
 
   async upsertMany(workspaceId: string, pulls: GitHubPullRequest[]): Promise<void> {
-    for (const p of pulls) {
-      const set = {
-        github_id: p.githubId,
-        title: p.title,
-        state: p.state,
-        head_ref: p.headRef,
-        base_ref: p.baseRef,
-        head_sha: p.headSha,
-        merged: intBool(p.merged),
-        author: p.author,
-        gh_updated_at: p.updatedAt,
-        synced_at: p.syncedAt,
-        deleted_at: null,
-      }
+    for (const batch of chunks(
+      dedupeByKey(pulls, (p) => `${p.repoGithubId}:${p.number}`),
+      UPSERT_CHUNK,
+    )) {
       await this.db
         .insert(githubPullRequests)
-        .values({
-          workspace_id: workspaceId,
-          repo_github_id: p.repoGithubId,
-          number: p.number,
-          ...set,
-        })
+        .values(
+          batch.map((p) => ({
+            workspace_id: workspaceId,
+            repo_github_id: p.repoGithubId,
+            number: p.number,
+            github_id: p.githubId,
+            title: p.title,
+            state: p.state,
+            head_ref: p.headRef,
+            base_ref: p.baseRef,
+            head_sha: p.headSha,
+            merged: intBool(p.merged),
+            author: p.author,
+            gh_updated_at: p.updatedAt,
+            synced_at: p.syncedAt,
+            deleted_at: null,
+          })),
+        )
         .onConflictDoUpdate({
           target: [
             githubPullRequests.workspace_id,
             githubPullRequests.repo_github_id,
             githubPullRequests.number,
           ],
-          set,
+          set: {
+            github_id: excluded(githubPullRequests.github_id),
+            title: excluded(githubPullRequests.title),
+            state: excluded(githubPullRequests.state),
+            head_ref: excluded(githubPullRequests.head_ref),
+            base_ref: excluded(githubPullRequests.base_ref),
+            head_sha: excluded(githubPullRequests.head_sha),
+            merged: excluded(githubPullRequests.merged),
+            author: excluded(githubPullRequests.author),
+            gh_updated_at: excluded(githubPullRequests.gh_updated_at),
+            synced_at: excluded(githubPullRequests.synced_at),
+            deleted_at: null,
+          },
         })
     }
   }
@@ -366,10 +412,12 @@ export class DrizzlePullRequestProjectionRepository implements PullRequestProjec
           isNull(githubPullRequests.deleted_at),
         ),
       )
-    return rows.map((r) => this.rowToPr(r)).sort((a, b) => b.number - a.number)
+      .orderBy(desc(githubPullRequests.number))
+    return rows.map((r) => this.rowToPr(r))
   }
 
   async listByWorkspace(workspaceId: string): Promise<GitHubPullRequest[]> {
+    // NULLS LAST matches the D1 twin (SQLite sorts NULLs last on DESC).
     const rows = await this.db
       .select()
       .from(githubPullRequests)
@@ -379,7 +427,8 @@ export class DrizzlePullRequestProjectionRepository implements PullRequestProjec
           isNull(githubPullRequests.deleted_at),
         ),
       )
-    return rows.map((r) => this.rowToPr(r)).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+      .orderBy(sql`${githubPullRequests.gh_updated_at} DESC NULLS LAST`)
+    return rows.map((r) => this.rowToPr(r))
   }
 }
 
@@ -389,28 +438,39 @@ export class DrizzleIssueProjectionRepository implements IssueProjectionReposito
   constructor(private readonly db: DrizzleDb) {}
 
   async upsertMany(workspaceId: string, issues: GitHubIssue[]): Promise<void> {
-    for (const i of issues) {
-      const set = {
-        github_id: i.githubId,
-        title: i.title,
-        state: i.state,
-        author: i.author,
-        labels: JSON.stringify(i.labels),
-        gh_updated_at: i.updatedAt,
-        synced_at: i.syncedAt,
-        deleted_at: null,
-      }
+    for (const batch of chunks(
+      dedupeByKey(issues, (i) => `${i.repoGithubId}:${i.number}`),
+      UPSERT_CHUNK,
+    )) {
       await this.db
         .insert(githubIssues)
-        .values({
-          workspace_id: workspaceId,
-          repo_github_id: i.repoGithubId,
-          number: i.number,
-          ...set,
-        })
+        .values(
+          batch.map((i) => ({
+            workspace_id: workspaceId,
+            repo_github_id: i.repoGithubId,
+            number: i.number,
+            github_id: i.githubId,
+            title: i.title,
+            state: i.state,
+            author: i.author,
+            labels: JSON.stringify(i.labels),
+            gh_updated_at: i.updatedAt,
+            synced_at: i.syncedAt,
+            deleted_at: null,
+          })),
+        )
         .onConflictDoUpdate({
           target: [githubIssues.workspace_id, githubIssues.repo_github_id, githubIssues.number],
-          set,
+          set: {
+            github_id: excluded(githubIssues.github_id),
+            title: excluded(githubIssues.title),
+            state: excluded(githubIssues.state),
+            author: excluded(githubIssues.author),
+            labels: excluded(githubIssues.labels),
+            gh_updated_at: excluded(githubIssues.gh_updated_at),
+            synced_at: excluded(githubIssues.synced_at),
+            deleted_at: null,
+          },
         })
     }
   }
@@ -440,17 +500,18 @@ export class DrizzleIssueProjectionRepository implements IssueProjectionReposito
           isNull(githubIssues.deleted_at),
         ),
       )
-    return rows.map((r) => this.rowToIssue(r)).sort((a, b) => b.number - a.number)
+      .orderBy(desc(githubIssues.number))
+    return rows.map((r) => this.rowToIssue(r))
   }
 
   async listByWorkspace(workspaceId: string): Promise<GitHubIssue[]> {
+    // NULLS LAST matches the D1 twin (SQLite sorts NULLs last on DESC).
     const rows = await this.db
       .select()
       .from(githubIssues)
       .where(and(eq(githubIssues.workspace_id, workspaceId), isNull(githubIssues.deleted_at)))
-    return rows
-      .map((r) => this.rowToIssue(r))
-      .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+      .orderBy(sql`${githubIssues.gh_updated_at} DESC NULLS LAST`)
+    return rows.map((r) => this.rowToIssue(r))
   }
 }
 
@@ -460,19 +521,31 @@ export class DrizzleCommitProjectionRepository implements CommitProjectionReposi
   constructor(private readonly db: DrizzleDb) {}
 
   async upsertMany(workspaceId: string, commits: GitHubCommit[]): Promise<void> {
-    for (const c of commits) {
-      const set = {
-        message: c.message,
-        author: c.author,
-        authored_at: c.authoredAt,
-        synced_at: c.syncedAt,
-      }
+    for (const batch of chunks(
+      dedupeByKey(commits, (c) => `${c.repoGithubId}:${c.sha}`),
+      UPSERT_CHUNK,
+    )) {
       await this.db
         .insert(githubCommits)
-        .values({ workspace_id: workspaceId, repo_github_id: c.repoGithubId, sha: c.sha, ...set })
+        .values(
+          batch.map((c) => ({
+            workspace_id: workspaceId,
+            repo_github_id: c.repoGithubId,
+            sha: c.sha,
+            message: c.message,
+            author: c.author,
+            authored_at: c.authoredAt,
+            synced_at: c.syncedAt,
+          })),
+        )
         .onConflictDoUpdate({
           target: [githubCommits.workspace_id, githubCommits.repo_github_id, githubCommits.sha],
-          set,
+          set: {
+            message: excluded(githubCommits.message),
+            author: excluded(githubCommits.author),
+            authored_at: excluded(githubCommits.authored_at),
+            synced_at: excluded(githubCommits.synced_at),
+          },
         })
     }
   }
@@ -491,6 +564,8 @@ export class DrizzleCommitProjectionRepository implements CommitProjectionReposi
     repoGithubId: number,
     limit = 100,
   ): Promise<GitHubCommit[]> {
+    // NULLS LAST matches the D1 twin (SQLite sorts NULLs last on DESC); the limit runs
+    // in SQL so the query returns `limit` rows instead of the repo's full history.
     const rows = await this.db
       .select()
       .from(githubCommits)
@@ -500,17 +575,16 @@ export class DrizzleCommitProjectionRepository implements CommitProjectionReposi
           eq(githubCommits.repo_github_id, repoGithubId),
         ),
       )
-    return rows
-      .map((row) => ({
-        repoGithubId: row.repo_github_id,
-        sha: row.sha,
-        message: row.message,
-        author: row.author,
-        authoredAt: row.authored_at,
-        syncedAt: row.synced_at,
-      }))
-      .sort((a, b) => (b.authoredAt ?? 0) - (a.authoredAt ?? 0))
-      .slice(0, limit)
+      .orderBy(sql`${githubCommits.authored_at} DESC NULLS LAST`)
+      .limit(limit)
+    return rows.map((row) => ({
+      repoGithubId: row.repo_github_id,
+      sha: row.sha,
+      message: row.message,
+      author: row.author,
+      authoredAt: row.authored_at,
+      syncedAt: row.synced_at,
+    }))
   }
 }
 
@@ -520,29 +594,37 @@ export class DrizzleCheckRunProjectionRepository implements CheckRunProjectionRe
   constructor(private readonly db: DrizzleDb) {}
 
   async upsertMany(workspaceId: string, checks: GitHubCheckRun[]): Promise<void> {
-    for (const c of checks) {
-      const set = {
-        head_sha: c.headSha,
-        name: c.name,
-        status: c.status,
-        conclusion: c.conclusion,
-        synced_at: c.syncedAt,
-      }
+    for (const batch of chunks(
+      dedupeByKey(checks, (c) => `${c.repoGithubId}:${c.githubId}`),
+      UPSERT_CHUNK,
+    )) {
       await this.db
         .insert(githubCheckRuns)
-        .values({
-          workspace_id: workspaceId,
-          repo_github_id: c.repoGithubId,
-          github_id: c.githubId,
-          ...set,
-        })
+        .values(
+          batch.map((c) => ({
+            workspace_id: workspaceId,
+            repo_github_id: c.repoGithubId,
+            github_id: c.githubId,
+            head_sha: c.headSha,
+            name: c.name,
+            status: c.status,
+            conclusion: c.conclusion,
+            synced_at: c.syncedAt,
+          })),
+        )
         .onConflictDoUpdate({
           target: [
             githubCheckRuns.workspace_id,
             githubCheckRuns.repo_github_id,
             githubCheckRuns.github_id,
           ],
-          set,
+          set: {
+            head_sha: excluded(githubCheckRuns.head_sha),
+            name: excluded(githubCheckRuns.name),
+            status: excluded(githubCheckRuns.status),
+            conclusion: excluded(githubCheckRuns.conclusion),
+            synced_at: excluded(githubCheckRuns.synced_at),
+          },
         })
     }
   }

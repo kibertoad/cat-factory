@@ -6,6 +6,7 @@ import {
   type CliExec,
   makeInlineHarnessPredicate,
   runnerForVendor,
+  spawnCliExec,
   wrapResolverWithInlineHarness,
 } from './harnessInline.js'
 
@@ -139,5 +140,27 @@ describe('runnerForVendor', () => {
       expect(calls[0]!.command).toBe('codex')
       expect(calls[0]!.stdin).toBe('You are a reviewer.\n\n---\n\nReview it.')
     })
+  })
+})
+
+describe('spawnCliExec', () => {
+  it('spawns the CLI with the sanitized env (no orchestrator secrets in the agent process)', async () => {
+    const original = process.env.DATABASE_URL
+    process.env.DATABASE_URL = 'postgres://secret'
+    try {
+      // A real spawn of `node` printing its env — the CLI seam's env contract, end to end.
+      const stdout = await spawnCliExec(
+        process.execPath,
+        ['-e', 'process.stdout.write(JSON.stringify(process.env))'],
+        '',
+        { timeoutMs: 30_000 },
+      )
+      const childEnv = JSON.parse(stdout) as Record<string, string>
+      expect(childEnv.DATABASE_URL).toBeUndefined()
+      expect(childEnv.PATH ?? childEnv.Path).toBeDefined()
+    } finally {
+      if (original === undefined) delete process.env.DATABASE_URL
+      else process.env.DATABASE_URL = original
+    }
   })
 })

@@ -3,6 +3,7 @@ import { seedPipelines } from '@cat-factory/kernel'
 import {
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidTesterQualityGating,
   validatePipelineShape,
 } from './pipelineShape.js'
 
@@ -80,5 +81,53 @@ describe('validatePipelineShape', () => {
         { enabled: true, onMissingEstimate: 'run' },
       ]),
     ).toThrow()
+  })
+
+  describe('tester quality-control gating', () => {
+    it('requires an enabled task-estimator before a QC-gated Tester step', () => {
+      expect(() =>
+        assertValidTesterQualityGating(['coder', 'tester-api'], undefined, [
+          null,
+          { enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } },
+        ]),
+      ).toThrow()
+      expect(() =>
+        assertValidTesterQualityGating(['task-estimator', 'coder', 'tester-api'], undefined, [
+          null,
+          null,
+          { enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } },
+        ]),
+      ).not.toThrow()
+    })
+
+    it('rejects a QC gate that sets no axis threshold', () => {
+      expect(() =>
+        assertValidTesterQualityGating(['task-estimator', 'tester-api'], undefined, [
+          null,
+          { enabled: true, gating: { enabled: true, onMissingEstimate: 'run' } },
+        ]),
+      ).toThrow()
+    })
+
+    it('imposes no requirement when QC is enabled-but-ungated, disabled, or gate-disabled', () => {
+      // Enabled, no gating → nothing to validate.
+      expect(() =>
+        assertValidTesterQualityGating(['tester-api'], undefined, [{ enabled: true }]),
+      ).not.toThrow()
+      // A disabled Tester step with a QC gate imposes no requirement (it never runs).
+      expect(() =>
+        assertValidTesterQualityGating(
+          ['tester-api'],
+          [false],
+          [{ enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } }],
+        ),
+      ).not.toThrow()
+      // A QC gate flagged disabled needs no estimator.
+      expect(() =>
+        assertValidTesterQualityGating(['tester-api'], undefined, [
+          { enabled: true, gating: { enabled: false, onMissingEstimate: 'run' } },
+        ]),
+      ).not.toThrow()
+    })
   })
 })

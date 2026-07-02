@@ -76,6 +76,22 @@ export interface MachinePayload {
   exp: number
 }
 
+/**
+ * Process-wide signer cache keyed by secret, so per-request verifications reuse the
+ * instance's imported HMAC `CryptoKey` instead of re-running `crypto.subtle.importKey`
+ * on every call. The secrets are few and config-derived, so the map stays tiny.
+ */
+const signers = new Map<string, HmacSigner>()
+
+export function signerFor(secret: string): HmacSigner {
+  let signer = signers.get(secret)
+  if (!signer) {
+    signer = new HmacSigner(secret)
+    signers.set(secret, signer)
+  }
+  return signer
+}
+
 export class HmacSigner {
   private keyPromise?: Promise<CryptoKey>
 

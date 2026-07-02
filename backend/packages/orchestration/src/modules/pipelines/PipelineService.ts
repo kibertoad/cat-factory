@@ -4,7 +4,12 @@ import type {
   OrganizePipelineInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
-import type { ConsensusStepConfig, Pipeline, StepGating } from '@cat-factory/kernel'
+import type {
+  ConsensusStepConfig,
+  Pipeline,
+  StepGating,
+  TesterQualityConfig,
+} from '@cat-factory/kernel'
 import { assertFound, seedPipelines, ValidationError } from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRepository,
@@ -92,6 +97,7 @@ export class PipelineService {
       agentKinds: input.agentKinds,
       enabled: input.enabled,
       gating: input.gating,
+      testerQuality: input.testerQuality,
     })
     await this.assertObservabilityGatedStepAllowed(workspaceId, input.agentKinds, input.enabled)
     const pipeline: Pipeline = {
@@ -103,6 +109,8 @@ export class PipelineService {
       ...alignedEnabled(input.agentKinds, input.enabled),
       ...alignedConsensus(input.agentKinds, input.consensus),
       ...alignedGating(input.agentKinds, input.gating),
+      ...alignedFollowUps(input.agentKinds, input.followUps),
+      ...alignedTesterQuality(input.agentKinds, input.testerQuality),
       ...normalizedLabels(input.labels),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
@@ -128,6 +136,7 @@ export class PipelineService {
       agentKinds: source.agentKinds,
       enabled: source.enabled,
       gating: source.gating,
+      testerQuality: source.testerQuality,
     })
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
@@ -138,6 +147,8 @@ export class PipelineService {
       ...(source.enabled ? { enabled: [...source.enabled] } : {}),
       ...(source.consensus ? { consensus: [...source.consensus] } : {}),
       ...(source.gating ? { gating: [...source.gating] } : {}),
+      ...(source.followUps ? { followUps: [...source.followUps] } : {}),
+      ...(source.testerQuality ? { testerQuality: [...source.testerQuality] } : {}),
       ...(source.labels ? { labels: [...source.labels] } : {}),
       // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
@@ -164,14 +175,16 @@ export class PipelineService {
     const enabled = input.enabled ?? existing.enabled
     const consensus = input.consensus ?? existing.consensus
     const gating = input.gating ?? existing.gating
+    const followUps = input.followUps ?? existing.followUps
+    const testerQuality = input.testerQuality ?? existing.testerQuality
     const labels = input.labels ?? existing.labels
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
-    // while leaving its companion on would orphan the companion, and adding gating without
-    // an estimator is illegal — so validate whenever the chain, enable flags, OR gating
-    // change, not just on a chain replacement.
-    if (input.agentKinds || input.enabled || input.gating) {
-      validatePipelineShape({ agentKinds, enabled, gating })
+    // while leaving its companion on would orphan the companion, and adding gating (step or
+    // tester-QC) without an estimator is illegal — so validate whenever the chain, enable
+    // flags, gating, OR tester-QC change, not just on a chain replacement.
+    if (input.agentKinds || input.enabled || input.gating || input.testerQuality) {
+      validatePipelineShape({ agentKinds, enabled, gating, testerQuality })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }
     const pipeline: Pipeline = {
@@ -183,6 +196,8 @@ export class PipelineService {
       ...alignedEnabled(agentKinds, enabled),
       ...alignedConsensus(agentKinds, consensus),
       ...alignedGating(agentKinds, gating),
+      ...alignedFollowUps(agentKinds, followUps),
+      ...alignedTesterQuality(agentKinds, testerQuality),
       ...normalizedLabels(labels),
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
@@ -304,6 +319,29 @@ function alignedGating(
 ): Pick<Pipeline, 'gating'> {
   return gating?.some((g) => g?.enabled)
     ? { gating: agentKinds.map((_, i) => gating[i] ?? null) }
+    : {}
+}
+
+// Keep the Follow-up companion toggles aligned to agentKinds; only persist when at least one
+// step explicitly opts OUT (the default is on, so a `false` is the only value worth storing).
+function alignedFollowUps(
+  agentKinds: string[],
+  followUps: (boolean | null)[] | undefined,
+): Pick<Pipeline, 'followUps'> {
+  return followUps?.some((f) => f === false)
+    ? { followUps: agentKinds.map((_, i) => followUps[i] ?? null) }
+    : {}
+}
+
+// Keep the test quality-control companion configs aligned to agentKinds; only persist when at
+// least one Tester step deviates from the default (companion disabled, or an estimate gate
+// configured) — the default (null/enabled, ungated) needs no array at all.
+function alignedTesterQuality(
+  agentKinds: string[],
+  testerQuality: (TesterQualityConfig | null)[] | undefined,
+): Pick<Pipeline, 'testerQuality'> {
+  return testerQuality?.some((q) => q?.enabled === false || q?.gating?.enabled)
+    ? { testerQuality: agentKinds.map((_, i) => testerQuality[i] ?? null) }
     : {}
 }
 

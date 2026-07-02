@@ -31,6 +31,13 @@ describe('aggregateCi', () => {
     expect(aggregateCi([check('completed', 'skipped')])).toBe('success')
   })
 
+  it('does not fail the gate on a stale (superseded) check', () => {
+    expect(aggregateCi([check('completed', 'success'), check('completed', 'stale')])).toBe(
+      'success',
+    )
+    expect(aggregateCi([check('completed', 'stale'), check('in_progress', null)])).toBe('pending')
+  })
+
   it('reports `pending` while a check is still running and none have failed', () => {
     expect(aggregateCi([check('completed', 'success'), check('in_progress', null)])).toBe('pending')
     expect(aggregateCi([check('queued', null)])).toBe('pending')
@@ -40,6 +47,7 @@ describe('aggregateCi', () => {
   it('reports `failure` as soon as one completed check failed, even if others pend', () => {
     expect(aggregateCi([check('completed', 'failure'), check('in_progress', null)])).toBe('failure')
     expect(aggregateCi([check('completed', 'timed_out')])).toBe('failure')
+    expect(aggregateCi([check('completed', 'cancelled')])).toBe('failure')
     expect(isCiGreen('failure')).toBe(false)
   })
 })
@@ -79,5 +87,9 @@ describe('listFailingChecks', () => {
     expect(listFailingChecks([check('completed', 'success'), check('in_progress', null)])).toEqual(
       [],
     )
+  })
+
+  it('excludes stale (superseded) checks — nothing for the ci-fixer to fix', () => {
+    expect(listFailingChecks([check('completed', 'stale')])).toEqual([])
   })
 })

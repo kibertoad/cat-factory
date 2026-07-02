@@ -381,7 +381,10 @@ export function buildMigratedBuiltInBody(
         mergerUserPrompt(context, repo),
       )
     // The on-call agent clones the BASE branch (full, to locate + diff the merged
-    // release commit) and returns ONLY the regression assessment JSON.
+    // release commit) and returns ONLY the regression assessment JSON. It is
+    // `code-aware` (it reads the released code to correlate the diff with the
+    // evidence), so the service's resolved best-practice fragments are folded into
+    // its bespoke system prompt — the shared `roleSystemPrompt` is bypassed here.
     case ON_CALL_AGENT_KIND:
       return buildRegisteredAgentBody(
         context,
@@ -391,7 +394,7 @@ export function buildMigratedBuiltInBody(
           clone: { branch: 'base', full: true },
           output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
         },
-        ON_CALL_SYSTEM_PROMPT,
+        composeBlockSystemPrompt(ON_CALL_SYSTEM_PROMPT, context.block),
         onCallUserPrompt(context, repo),
       )
     // The tester clones the PR head branch (read-only — it makes NO commits), stands up

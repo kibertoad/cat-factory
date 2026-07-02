@@ -223,4 +223,67 @@ describe('GitHub projections (Postgres)', () => {
     const live = await repoRepo.list(ws)
     expect(live.map((r) => r.githubId).sort()).toEqual([1, 2])
   })
+
+  it('multi-row upserts update in place (last duplicate wins) and list reads order/limit in SQL', async () => {
+    const { body: snapshot } = await call<WorkspaceSnapshot>('POST', '/workspaces', {})
+    const ws = snapshot.workspace.id
+    const repoGithubId = 8080
+    const commits = new DrizzleCommitProjectionRepository(db)
+    const commit = (sha: string, authoredAt: number | null, message = sha) => ({
+      repoGithubId,
+      sha,
+      message,
+      author: 'octocat',
+      authoredAt,
+      syncedAt: 1000,
+    })
+
+    // One page lands as chunked multi-row INSERT ... ON CONFLICT; a duplicate sha within
+    // the page must not blow up ("cannot affect row a second time") — the last one wins,
+    // matching the former row-at-a-time loop.
+    await commits.upsertMany(ws, [
+      commit('sha_a', 3000, 'first write'),
+      commit('sha_b', 1000),
+      commit('sha_a', 3000, 'last write wins'),
+      commit('sha_null', null),
+    ])
+    // A second page updates an existing row in place.
+    await commits.upsertMany(ws, [commit('sha_b', 2000, 'updated'), commit('sha_c', 4000)])
+
+    // ORDER BY authored_at DESC + LIMIT run in SQL, with NULLs last (D1/SQLite parity).
+    const top2 = await commits.listByRepo(ws, repoGithubId, 2)
+    expect(top2.map((c) => c.sha)).toEqual(['sha_c', 'sha_a'])
+    expect(top2[1]?.message).toBe('last write wins')
+    const all = await commits.listByRepo(ws, repoGithubId)
+    expect(all.map((c) => c.sha)).toEqual(['sha_c', 'sha_a', 'sha_b', 'sha_null'])
+    expect(all.find((c) => c.sha === 'sha_b')?.message).toBe('updated')
+  })
+
+  it('listByInstallationIds batches the connect-UI annotation read (tombstones included)', async () => {
+    const { body: snapshot } = await call<WorkspaceSnapshot>('POST', '/workspaces', {})
+    const ws = snapshot.workspace.id
+    const repo = new DrizzleGitHubInstallationRepository(db)
+    const installation = (installationId: number) => ({
+      installationId,
+      // github_installations.workspace_id is UNIQUE — one binding per workspace.
+      workspaceId: `${ws}_${installationId}`,
+      accountId: null,
+      accountLogin: 'octo',
+      targetType: 'Organization' as const,
+      appId: null,
+      cachedToken: null,
+      tokenExpiresAt: null,
+      createdAt: 1000,
+      deletedAt: null,
+    })
+    await repo.upsert(installation(9001))
+    await repo.upsert(installation(9002))
+    await repo.softDelete(9002, 2000)
+
+    // The batched read mirrors the point read: tombstoned rows included, unknown ids absent.
+    const found = await repo.listByInstallationIds([9001, 9002, 9999])
+    expect(found.map((i) => i.installationId).sort()).toEqual([9001, 9002])
+    expect(found.find((i) => i.installationId === 9002)?.deletedAt).toBe(2000)
+    expect(await repo.listByInstallationIds([])).toEqual([])
+  })
 })

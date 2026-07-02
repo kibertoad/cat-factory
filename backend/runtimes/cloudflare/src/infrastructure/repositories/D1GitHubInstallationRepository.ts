@@ -1,5 +1,6 @@
 import type { GitHubInstallation, GitHubInstallationRepository } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
+import { chunkForIn } from './chunk'
 import {
   type GitHubInstallationRow,
   buildUpsert,
@@ -21,6 +22,22 @@ export class D1GitHubInstallationRepository implements GitHubInstallationReposit
       .bind(installationId)
       .first<GitHubInstallationRow>()
     return row ? rowToInstallation(row) : null
+  }
+
+  async listByInstallationIds(installationIds: number[]): Promise<GitHubInstallation[]> {
+    if (installationIds.length === 0) return []
+    const out: GitHubInstallation[] = []
+    // Chunk the IN list to stay under D1's bound-parameter limit. Tombstoned rows are
+    // included, exactly like the point read (`getByInstallationId`).
+    for (const chunk of chunkForIn(installationIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM github_installations WHERE installation_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<GitHubInstallationRow>()
+      out.push(...(results ?? []).map(rowToInstallation))
+    }
+    return out
   }
 
   async getByWorkspace(workspaceId: string): Promise<GitHubInstallation | null> {

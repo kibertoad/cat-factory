@@ -172,17 +172,13 @@ export class NotificationService {
    * Returns the number escalated.
    */
   async escalateStale(workspaceId: string, thresholdMs: number, now: number): Promise<number> {
-    const open = await this.notifications.listOpen(workspaceId)
-    let escalated = 0
-    for (const n of open) {
-      if ((n.severity ?? 'normal') !== 'normal') continue
-      if (now - n.createdAt < thresholdMs) continue
-      const updated: Notification = { ...n, severity: 'urgent' }
-      await this.notifications.upsert(workspaceId, updated)
-      await this.deliver(workspaceId, updated)
-      escalated++
+    // One SQL statement flips every overdue card (no load-filter-upsert loop); each
+    // escalated row is then re-delivered so the inbox re-renders it red in real time.
+    const escalated = await this.notifications.escalateStaleOpen(workspaceId, now - thresholdMs)
+    for (const n of escalated) {
+      await this.deliver(workspaceId, n)
     }
-    return escalated
+    return escalated.length
   }
 
   /** A single notification by id, or null. */

@@ -1,5 +1,122 @@
 # @cat-factory/executor-harness
 
+## 1.31.10
+
+### Patch Changes
+
+- 9577c4a: Fix a batch of native-mode (`LOCAL_NATIVE_AGENTS`) agent-harness bugs:
+
+  - The harnesses (executor + deploy) now shut down gracefully on SIGTERM/SIGINT:
+    every running job is aborted (`JobRegistry.abortAll`) so in-flight `claude`/
+    `codex`/git/kubectl children are killed instead of being orphaned. Previously a
+    dev-server restart left the agent CLI running unsupervised on the developer's
+    login. The abort now targets the child's whole process group (POSIX), so the
+    CLI's own grandchildren (a shell tool, a build, its git) die with it rather than
+    reparenting to init. Shutdown exits as soon as the aborted jobs settle (capped at
+    6s) instead of always waiting the fixed window. Both harness servers also honor a
+    new `HARNESS_BIND_HOST` env, which the native transport sets to `127.0.0.1` so the
+    unsandboxed agent-spawning API is no longer reachable from the LAN (containers keep
+    binding all interfaces).
+  - The native host-process transport sanitizes the harness child's environment to an
+    allow-list (`LOCAL_HARNESS_ENV_ALLOW` extends it), so the orchestrator's secrets
+    (DATABASE_URL, ENCRYPTION_KEY, GITHUB_PAT, provider keys) no longer leak into the
+    ambient agent's env; the inline ambient CLI runner is sanitized the same way. The
+    allow-list keeps the TLS trust-anchor vars (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, ...)
+    alongside the proxy vars, so a corporate TLS-terminating proxy still works. The
+    deploy transport keeps full inheritance (kubectl/helm need ambient cluster env).
+  - Process-lifecycle fixes in `LocalProcessRunnerTransport`: a harness that never
+    becomes healthy is killed instead of leaking one process per retry, and
+    `shutdown()` racing an in-flight lazy start now kills the child instead of
+    resurrecting it. The local/Node graceful-shutdown path now invokes the
+    container's `onShutdown`, which stops the native harnesses; that call is isolated
+    in its own try so a failing pg-boss/pool teardown can't skip it.
+  - `NativeRoutingRunnerTransport` no longer reports a blanket eviction for refs it
+    doesn't know: after an orchestrator restart both `poll` and `release` fall back to
+    the container leg (which re-finds a per-run container by label), so a still-running
+    container job is re-attached / torn down instead of spuriously re-driven or leaked.
+  - Config typos are no longer silent: unrecognized `LOCAL_NATIVE_AGENTS` tokens and
+    an unrecognized/under-configured `LOCAL_DEPLOY_RUNTIME` now log a boot warning
+    (behavior still fails safe).
+
+## 1.31.8
+
+### Patch Changes
+
+- 6347d0e: Fix opaque "Failed to open PR (HTTP 422): No commits between ..." run failure when a
+  coding run resumes a work branch that has nothing ahead of its base (e.g. its earlier PR
+  was merged with a merge commit, leaving the branch reachable from base and its best-effort
+  delete skipped).
+
+  - `runCodingAgent` no longer treats a resumed branch as work unconditionally: when the
+    branch has no new commits this pass, it confirms the branch is actually ahead of the PR
+    base (new `branchAheadOfBase`, tri-state so an undeterminable result keeps the prior
+    resume-is-work behaviour) and records a clean no-op otherwise.
+  - `openPullRequest` now maps GitHub's `422 "No commits between ..."` to a no-op (returns
+    `null`) instead of a hard `HarnessFailure`, as a backstop.
+
+  Image-bumping: `@cat-factory/executor-harness` → 1.31.7 with the three runner-image pins
+  synced.
+
+## 1.31.6
+
+### Patch Changes
+
+- 9468b90: Force fully non-interactive git auth in the harness so native local mode never triggers a Git
+  Credential Manager popup. Every git invocation now empties the host credential-helper list
+  (`-c credential.helper=`) and disables interactive credential backends, so git falls back to the
+  harness's own askpass PAT instead of the host's GCM — which on Windows either stole focus with a
+  stray auth window or, when modal, hung the git command (clone/fetch/push) until it timed out. A
+  per-command git timeout is now surfaced as an explicit stall (naming the likely causes) rather
+  than a contentless "Command failed", and a genuine git failure now folds in git's stderr.
+
+  Bumps the executor-harness image tag (and the matched `RECOMMENDED_HARNESS_IMAGE` pin) to 1.31.5.
+
+## 1.31.4
+
+### Patch Changes
+
+- 986ed0e: Fix npm publish: add the `repository` field required by sigstore provenance
+
+  The first publish of `@cat-factory/executor-harness` as a public package failed
+  with `E422 … Error verifying sigstore provenance bundle: package.json:
+"repository.url" is ""`. Provenance verification requires the package's
+  `repository.url` to match the source repo, and the manifest carried no
+  `repository` field at all. Add it (pointing at `backend/internal/executor-harness`,
+  like every other published package) plus the mandatory `prepublishOnly` build
+  guard so no publish path can ship an empty `dist/`.
+
+## 1.31.2
+
+### Patch Changes
+
+- 063ef2b: Local native mode: default `LOCAL_HARNESS_ENTRY` to a bundled harness (no more manual path)
+
+  Native execution (`LOCAL_NATIVE_AGENTS`) previously required `LOCAL_HARNESS_ENTRY` to be set
+  to a filesystem path to the executor-harness server entry, which only existed inside a full
+  monorepo checkout — so consumers installing `@cat-factory/*` from npm had no stable target.
+
+  - `@cat-factory/executor-harness` is now **published** (was `private`). Its `.` export is the
+    zero-dependency `dist/server.js` HTTP server that native mode spawns via `node <entry>`.
+  - `@cat-factory/local-server` now depends on it and **auto-resolves** the entry via
+    `require.resolve('@cat-factory/executor-harness')` when `LOCAL_HARNESS_ENTRY` is unset — so a
+    fresh install runs native mode out of the box, mirroring how an unset `LOCAL_HARNESS_IMAGE`
+    falls back to the pinned recommended image. Setting `LOCAL_HARNESS_ENTRY` still overrides it
+    (for a custom or source-checkout build).
+  - `cat-factory init` (`@cat-factory/cli`) no longer treats the entry as required: it is written
+    commented (optional override) and the "set it before starting" warnings are gone.
+
+- 063ef2b: Native local mode (Windows): make ephemeral agent-workspace teardown best-effort
+
+  `withWorkspace` removed its temp checkout with a bare `rm` inside a `finally`. On Windows
+  native execution (`LOCAL_NATIVE_AGENTS`) a just-exited child — git, or the developer's own
+  `claude`/`codex` CLI — can still hold a transient handle on a file in the checkout, so the
+  `rm` throws `EBUSY: resource busy or locked, rmdir '…/agent-XXXXXX'`. Running in the
+  `finally`, that throw propagated out and failed an otherwise-successful agent step.
+
+  Teardown is now resilient: it retries via `fs.rm`'s Windows backoff (`maxRetries`/
+  `retryDelay`) and, if the directory still can't be removed, logs a warning and swallows the
+  error. A leaked temp dir is harmless (the OS reclaims the temp root); failing the run is not.
+
 ## 1.31.0
 
 ### Minor Changes

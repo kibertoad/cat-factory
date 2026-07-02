@@ -104,7 +104,12 @@ export function githubController(): Hono<AppEnv> {
   buildHonoRoute(app, listGitHubAvailableReposContract, async (c) => {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)
-    return c.json(await github.syncService.listAvailableRepos(param(c, 'workspaceId')), 200)
+    return c.json(
+      await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
+        q: c.req.valid('query').q,
+      }),
+      200,
+    )
   })
 
   // Set the exact set of repos this workspace links. Projects the selection,

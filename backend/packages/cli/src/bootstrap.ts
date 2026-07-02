@@ -261,30 +261,20 @@ async function maybeShowNativeModels(io: Io, harnesses: NativeHarness[]): Promis
 }
 
 /**
- * Resolve the executor-harness server entry path required for native mode. There is no
- * universal default (it depends where the harness source lives), so an unset value is left
- * blank in `.env` with a warning to fill it in before starting.
+ * Resolve the executor-harness server entry path for native mode. Optional: when left blank,
+ * native mode defaults to the bundled `@cat-factory/executor-harness` (a dependency of
+ * `@cat-factory/local-server`), so no configuration is needed. A value is only used to point at
+ * a custom or source-checkout build.
  */
 async function resolveHarnessEntry(options: CliOptions, io: Io): Promise<string> {
   if (options.harnessEntry !== undefined) return options.harnessEntry
-  if (options.yes) {
-    // Non-interactive native mode with no --harness-entry: LOCAL_HARNESS_ENTRY is required, so
-    // warn loudly here too (the interactive branch below already does) — otherwise the misconfig
-    // only surfaces as a boot-time throw.
-    io.warn(
-      'LOCAL_HARNESS_ENTRY left blank (native mode, --yes with no --harness-entry) — set it ' +
-        'before starting or native dispatch fails.',
-    )
-    return ''
-  }
-  const entry = (
+  // Non-interactive (--yes): leave it blank; the bundled harness default kicks in at boot.
+  if (options.yes) return ''
+  return (
     await io.question(
-      'Path to the executor-harness server entry (LOCAL_HARNESS_ENTRY; leave blank to set later)',
+      'Path to a custom executor-harness server entry (LOCAL_HARNESS_ENTRY; blank = bundled default)',
     )
   ).trim()
-  if (entry === '')
-    io.warn('LOCAL_HARNESS_ENTRY left blank — set it before starting or native dispatch fails.')
-  return entry
 }
 
 /**
@@ -394,8 +384,8 @@ function printNextSteps(io: Io, input: NextStepsInput): void {
       .map((h) => NATIVE_HARNESS_INFO[h].cli)
       .join(' / ')
     lines.push(
-      `  - Native mode: install + log in to the ${clis} CLI on this host, and set`,
-      '    LOCAL_HARNESS_ENTRY in local/.env (the image above still runs non-native steps).',
+      `  - Native mode: install + log in to the ${clis} CLI on this host (the harness server`,
+      '    is bundled; the image above still runs non-native steps).',
     )
   } else {
     lines.push(

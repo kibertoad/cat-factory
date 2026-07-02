@@ -296,6 +296,8 @@ export type {
   TestOutcome,
   TestConcern,
   TestConcernSeverity,
+  // Test quality-control companion (per-Tester-step) config.
+  TesterQualityConfig,
   // Container provisioning vocabulary.
   CloudProvider,
   InstanceSize,

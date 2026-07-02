@@ -144,14 +144,25 @@ export interface AgentContextBuilderDeps {
 export class AgentContextBuilder {
   constructor(private readonly deps: AgentContextBuilderDeps) {}
 
-  /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
+  /**
+   * Assemble the {@link AgentRunContext} for a step from the run + block state.
+   *
+   * `options.agentKind` overrides the step's own kind as the kind that will actually
+   * RUN — a gate step dispatches its helper (`ci` → `ci-fixer`, `post-release-health` →
+   * `on-call`) and the Tester loop its `fixer` off the HOSTING step, whose kind is the
+   * gate/tester, not the helper. Trait-driven context (the `code-aware` fragment fold)
+   * must key off the helper's kind, else a code-aware helper never receives the
+   * service's standards.
+   */
   async buildContext(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
     block: Block,
+    options?: { agentKind?: string },
   ): Promise<AgentRunContext> {
+    const agentKind = options?.agentKind ?? step.agentKind
     // When a block's requirements have been reworked, that standardized document is
     // the single source of truth for every agent step: it already folds in the
     // description plus the linked docs / tracker issues, so it REPLACES the
@@ -200,9 +211,9 @@ export class AgentContextBuilder {
     // Resolve the best-practice fragments to inject for this step. `code-aware` kinds
     // get the running service's selected fragments unioned with the block's own pins;
     // other kinds keep only their block pins. Recorded on the step for observability.
-    const resolved = await this.resolveFragments(workspaceId, step, block)
+    const resolved = await this.resolveFragments(workspaceId, agentKind, step, block)
     return {
-      agentKind: step.agentKind,
+      agentKind,
       pipelineName: instance.pipelineName,
       workspaceId,
       executionId: instance.id,
@@ -442,10 +453,18 @@ export class AgentContextBuilder {
    */
   private async resolveFragments(
     workspaceId: string,
+    agentKind: string,
     step: PipelineStep,
     block: Block,
   ): Promise<{ fragments: { id: string; body: string }[] } | null> {
-    if (!hasTrait(step.agentKind, CODE_AWARE_TRAIT)) return null
+    // Recorded per dispatch, so it always reflects the kind that actually ran. A step
+    // reused across dispatches (a gate/tester host, then its code-aware helper, then a
+    // re-test) must not keep reporting a prior round's fragments: a non-code-aware kind
+    // receives none, so clear it here rather than leaving a stale selection behind.
+    if (!hasTrait(agentKind, CODE_AWARE_TRAIT)) {
+      step.selectedFragmentIds = undefined
+      return null
+    }
     try {
       const serviceIds = await this.resolveServiceFragmentIds(workspaceId, block)
       // Service standards first, then the block's own pins; deduped, stable order.
@@ -466,11 +485,17 @@ export class AgentContextBuilder {
               return fragment ? { id, body: fragment.body } : null
             })
             .filter((f): f is { id: string; body: string } => f !== null)
+      // Re-recorded per dispatch — including clearing it when a re-dispatch resolves to
+      // nothing (the selection was emptied between rounds), so the step never keeps
+      // reporting fragments a later round no longer received.
+      step.selectedFragmentIds = fragments.length ? fragments.map((f) => f.id) : undefined
       if (fragments.length === 0) return null
-      step.selectedFragmentIds = fragments.map((f) => f.id)
       return { fragments }
     } catch {
-      // Resolution must never wedge a run; fall back to the block's own pins.
+      // Resolution must never wedge a run; fall back to the block's own pins. Clear any
+      // stale selection so observability doesn't keep reporting a prior round's fragments
+      // that this dispatch did not actually inject.
+      step.selectedFragmentIds = undefined
       return null
     }
   }
@@ -523,35 +548,52 @@ export class AgentContextBuilder {
     }
 
     if (opts.includeLinked) {
-      if (this.deps.documents)
-        for (const d of await this.deps.documents.listByBlock(workspaceId, blockId)) addDoc(d)
-      if (this.deps.tasks)
-        for (const t of await this.deps.tasks.listByBlock(workspaceId, blockId)) addTask(t)
+      const [linkedDocs, linkedTasks] = await Promise.all([
+        this.deps.documents?.listByBlock(workspaceId, blockId) ?? [],
+        this.deps.tasks?.listByBlock(workspaceId, blockId) ?? [],
+      ])
+      for (const d of linkedDocs) addDoc(d)
+      for (const t of linkedTasks) addTask(t)
     }
 
     // Resolve explicitly-named references against the imported corpus by a POINT LOOKUP
     // per reference — never a full-corpus scan. Only items that actually exist are added
     // (a `UTF-8` that happens to match the Jira-key shape just resolves to nothing);
-    // nothing is fetched live.
+    // nothing is fetched live. The lookups are independent point reads on the per-step
+    // dispatch path, so they run concurrently; results are folded in in reference order
+    // so the dedupe (and the resulting context ordering) stays deterministic.
     const refs = extractReferences(description ?? '')
-    if (this.deps.tasks) {
-      for (const key of refs.jiraKeys) addTask(await this.deps.tasks.get(workspaceId, 'jira', key))
-      for (const ref of refs.githubRefs)
-        addTask(await this.deps.tasks.get(workspaceId, 'github', ref))
-    }
-    for (const url of refs.urls) {
-      if (this.deps.documents) {
-        // Prefer a precise match by the document's stable (source, externalId) — a pasted
-        // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
-        // title segment or tracking params still resolves. Fall back to the url-string
-        // lookup for any source the resolver doesn't claim (or when it isn't wired).
-        const ref = this.deps.documentUrlResolver?.(url)
-        const byRef = ref
-          ? await this.deps.documents.get(workspaceId, ref.source, ref.externalId)
-          : null
-        addDoc(byRef ?? (await this.deps.documents.getByUrl(workspaceId, url)))
-      }
-      if (this.deps.tasks) addTask(await this.deps.tasks.getByUrl(workspaceId, url))
+    const documents = this.deps.documents
+    const taskRepo = this.deps.tasks
+    const [keyTasks, refTasks, urlItems] = await Promise.all([
+      Promise.all(refs.jiraKeys.map((key) => taskRepo?.get(workspaceId, 'jira', key) ?? null)),
+      Promise.all(refs.githubRefs.map((ref) => taskRepo?.get(workspaceId, 'github', ref) ?? null)),
+      Promise.all(
+        refs.urls.map(async (url) => {
+          const [doc, task] = await Promise.all([
+            (async () => {
+              if (!documents) return null
+              // Prefer a precise match by the document's stable (source, externalId) — a pasted
+              // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
+              // title segment or tracking params still resolves. Fall back to the url-string
+              // lookup for any source the resolver doesn't claim (or when it isn't wired).
+              const ref = this.deps.documentUrlResolver?.(url)
+              const byRef = ref
+                ? await documents.get(workspaceId, ref.source, ref.externalId)
+                : null
+              return byRef ?? (await documents.getByUrl(workspaceId, url))
+            })(),
+            taskRepo?.getByUrl(workspaceId, url) ?? null,
+          ])
+          return { doc, task }
+        }),
+      ),
+    ])
+    for (const t of keyTasks) addTask(t)
+    for (const t of refTasks) addTask(t)
+    for (const { doc, task } of urlItems) {
+      addDoc(doc)
+      addTask(task)
     }
 
     return {

@@ -253,7 +253,10 @@ export function workspaceController(): Hono<AppEnv> {
     }
 
     const snapshot = await container.workspaceService.create(body, user?.id ?? null, accountId)
-    const spend = await container.spendService.status(snapshot.workspace.id)
+    const [spend, infraSetup] = await Promise.all([
+      container.spendService.status(snapshot.workspace.id),
+      snapshotInfraSetup(container, snapshot.workspace.id),
+    ])
     const customAgentKinds = snapshotCustomAgentKinds()
     return c.json(
       {
@@ -263,7 +266,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
-        infraSetup: await snapshotInfraSetup(container, snapshot.workspace.id),
+        infraSetup,
       },
       201,
     )
@@ -272,66 +275,67 @@ export function workspaceController(): Hono<AppEnv> {
   buildHonoRoute(app, getWorkspaceContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
-    const snapshot = await container.workspaceService.snapshot(workspaceId)
-    const spend = await container.spendService.status(workspaceId)
-    // Carry bootstrap runs in the snapshot so the board renders a bootstrap's live
-    // progress / failure + retry the moment it loads (no separate, independently
-    // failing fetch). No-op when the bootstrap module isn't configured.
-    const bootstrapJobs = container.bootstrap
-      ? await container.bootstrap.service.listJobs(workspaceId)
-      : undefined
-    // Env-config-repair runs (the durable agent fallback for provider config), so the
-    // infrastructure-providers window renders a repair's live progress / outcome on load.
-    // No-op when the repair module isn't configured.
-    const envConfigRepairJobs = container.envConfigRepair
-      ? await container.envConfigRepair.service.listJobs(workspaceId)
-      : undefined
-    // Open notifications + merge-preset library, so the board renders the inbox,
-    // per-block badges and the task preset picker on load. No-ops when unconfigured.
-    const notifications = container.notifications
-      ? await container.notifications.service.listOpen(workspaceId)
-      : undefined
-    const mergePresets = container.mergePresets
-      ? await container.mergePresets.service.list(workspaceId)
-      : undefined
-    // The workspace's model presets (the model→agent mapping library a task picks
-    // from), so the board renders the Model Configuration settings + the per-task
-    // preset picker on load. No-op when the module isn't configured. `list` seeds the
-    // built-in presets (Kimi K2.7 default + GLM-5.2) on first read.
-    const modelPresets = container.modelPresets
-      ? await container.modelPresets.service.list(workspaceId)
-      : undefined
-    // The workspace's default service-fragment selection, so the board renders the
-    // defaults settings on load. No-op when the module isn't configured.
-    const serviceFragmentDefaults = container.serviceFragmentDefaults
-      ? await container.serviceFragmentDefaults.service.get(workspaceId)
-      : undefined
-    // The workspace's recurring pipelines + issue-tracker selection, so the board
-    // renders the recurring-task badges and the tracker config on load. No-ops when
-    // the modules aren't configured. Run history is fetched lazily, not here.
-    const recurringPipelines = container.recurring
-      ? await container.recurring.service.list(workspaceId)
-      : undefined
-    const trackerSettings = container.tracker
-      ? await container.tracker.service.get(workspaceId)
-      : undefined
-    // The workspace's runtime settings (human-wait escalation threshold + per-service
-    // task limit), so the board renders the settings panel on load. No-op when unconfigured.
-    const settings = container.settings
-      ? await container.settings.service.get(workspaceId)
-      : undefined
-    // In-org shared services: the workspace's mounts + the org catalog it can mount from
-    // (each catalog service annotated with its mount count for the "Shared" badge).
-    const mounts = container.services
-      ? await container.services.service.listMounts(workspaceId)
-      : undefined
-    const accountId = container.services
-      ? await container.workspaceService.accountOf(workspaceId)
-      : undefined
-    const serviceCatalog =
-      container.services && accountId !== undefined
-        ? await container.services.service.listForAccount(accountId)
-        : undefined
+    // Every ingredient below is an independent read keyed by the workspace id (only the
+    // service catalog chains on the owning account), so they run concurrently: the
+    // board-load latency is the slowest read, not the sum of ~15 sequential round-trips.
+    const [
+      snapshot,
+      spend,
+      // Bootstrap runs, so the board renders a bootstrap's live progress / failure +
+      // retry the moment it loads (no separate, independently failing fetch). undefined
+      // when the bootstrap module isn't configured.
+      bootstrapJobs,
+      // Env-config-repair runs (the durable agent fallback for provider config), so the
+      // infrastructure-providers window renders a repair's live progress / outcome on load.
+      envConfigRepairJobs,
+      // Open notifications + merge-preset library, so the board renders the inbox,
+      // per-block badges and the task preset picker on load.
+      notifications,
+      mergePresets,
+      // The workspace's model presets (the model→agent mapping library a task picks
+      // from), so the board renders the Model Configuration settings + the per-task
+      // preset picker on load. `list` seeds the built-in presets (Kimi K2.7 default +
+      // GLM-5.2) on first read.
+      modelPresets,
+      // The workspace's default service-fragment selection, for the defaults settings.
+      serviceFragmentDefaults,
+      // The workspace's recurring pipelines + issue-tracker selection, so the board
+      // renders the recurring-task badges and the tracker config on load. Run history
+      // is fetched lazily, not here.
+      recurringPipelines,
+      trackerSettings,
+      // The workspace's runtime settings (human-wait escalation threshold + per-service
+      // task limit), so the board renders the settings panel on load.
+      settings,
+      // In-org shared services: the workspace's mounts + the org catalog it can mount
+      // from (each catalog service annotated with its mount count for the "Shared" badge).
+      mounts,
+      serviceCatalog,
+      infraSetup,
+    ] = await Promise.all([
+      container.workspaceService.snapshot(workspaceId),
+      container.spendService.status(workspaceId),
+      container.bootstrap?.service.listJobs(workspaceId),
+      container.envConfigRepair?.service.listJobs(workspaceId),
+      container.notifications?.service.listOpen(workspaceId),
+      container.mergePresets?.service.list(workspaceId),
+      container.modelPresets?.service.list(workspaceId),
+      container.serviceFragmentDefaults?.service.get(workspaceId),
+      container.recurring?.service.list(workspaceId),
+      container.tracker?.service.get(workspaceId),
+      container.settings?.service.get(workspaceId),
+      container.services?.service.listMounts(workspaceId),
+      container.services
+        ? container.workspaceService
+            .accountOf(workspaceId)
+            .then((accountId) =>
+              accountId !== undefined
+                ? container.services!.service.listForAccount(accountId)
+                : undefined,
+            )
+        : undefined,
+      snapshotInfraSetup(container, workspaceId),
+    ])
     const customAgentKinds = snapshotCustomAgentKinds()
     return c.json(
       {
@@ -352,7 +356,7 @@ export function workspaceController(): Hono<AppEnv> {
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
-        infraSetup: await snapshotInfraSetup(container, workspaceId),
+        infraSetup,
       },
       200,
     )

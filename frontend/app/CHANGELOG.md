@@ -1,5 +1,207 @@
 # @cat-factory/app
 
+## 0.75.2
+
+### Patch Changes
+
+- 4955639: Fix five bugs in how best-practice prompt fragments are managed and applied:
+
+  - **Code-aware helper agents now receive the service fragments.** `ci-fixer`, `fixer`
+    and `on-call` are dispatched off their HOSTING step (a `ci`/`post-release-health`
+    gate, the tester, the human-test/visual-confirmation loops), and the fragment fold
+    keyed off that step's kind — so the helpers never received the service's standards
+    despite being marked `code-aware`. `AgentContextBuilder.buildContext` now takes an
+    explicit `agentKind` override and every helper dispatch passes it; the on-call job
+    body additionally folds the resolved fragments into its bespoke system prompt
+    (previously bypassed). A stale `step.selectedFragmentIds` is also cleared when a
+    re-dispatch resolves to nothing, so observability can't over-report.
+  - **Tier tombstones now stick on the run path.** `resolveBodiesForRun` used to fall
+    back to the static pool for any id missing from the merged catalog — which is
+    exactly what a tombstone does to a built-in, so suppressing a fragment a service
+    had selected silently resurrected it. The fallback is gone; a missing id is dropped.
+  - **Deployment-registered fragments join the tenant catalog.** The library's built-in
+    tier now reads the UNIVERSAL pool (shipped catalog + `registerPromptFragment`
+    entries, lazily) instead of the raw shipped array, so a registered override of a
+    built-in id actually reaches runs and the resolved catalog, and registered
+    fragments can be tier-shadowed/tombstoned like any built-in.
+  - **Repo-source resync no longer mishandles renames and id edits.** The tombstone
+    sweep is keyed by the fragment ids the current tree produces, not by stale paths:
+    renaming a file that pins an explicit frontmatter `id` no longer tombstones the
+    fragment the rename just updated, and changing a file's explicit `id` in place now
+    retires the old id instead of leaving a live duplicate forever. The GitHub
+    installation is also resolved once per sync instead of once per file, and the
+    requirement writer's fragment grounding resolves through the merged tenant catalog
+    when the library is wired.
+  - **The SPA pickers now offer the merged catalog.** The per-service / per-block /
+    workspace-default fragment pickers loaded only the static built-in pool, so
+    managed, repo-sourced and document-backed fragments could be authored but never
+    attached (and a managed id set via API rendered no chip). The fragments store now
+    loads the workspace's resolved catalog (falling back to the static pool when the
+    library is off), invalidates on library edits, and unknown selected ids render as
+    removable chips instead of disappearing. The catalog is per-board, so a workspace
+    switch now invalidates it and the task inspector reloads it on mount — otherwise the
+    task picker kept showing the previous board's fragments.
+
+  Review follow-ups: `AgentContextBuilder` now clears a stale `step.selectedFragmentIds`
+  on the non-code-aware and error paths too (not only when a code-aware resolve is empty);
+  the requirement-writer grounding resolves the merged catalog once (reused for titles and
+  bodies) instead of twice; a repo-source RENAME of an explicit-id file inherits the
+  fragment's `version`/`createdAt` by id instead of resetting them; and the source `status`
+  count no longer double-counts a pure rename.
+
+## 0.75.1
+
+### Patch Changes
+
+- 4a7a3f1: Preserve a task run's error trail across retries. A failed run's `failure` is now
+  appended to a new `failureHistory` on the fresh attempt (persisted in the shared
+  `agent_runs.detail`, so both runtimes get it with no migration), and cleared on the
+  running attempt — so the top failure banner disappears the moment the task restarts
+  while every previous error stays viewable in a "previous errors" history on the task
+  inspector. Applies to both retry (resume-from-failure) and restart-from-step.
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+
+## 0.75.0
+
+### Minor Changes
+
+- 4e82496: Enable the prompt-fragment library by default and streamline linking GitHub-backed fragments.
+
+  - The prompt-fragment library (ADR 0006) is now **on by default** in both runtimes; opt out
+    with `PROMPT_LIBRARY_ENABLED=false`. Previously it was off unless `PROMPT_LIBRARY_ENABLED=true`
+    was set, so linking a GitHub document as a fragment failed with "Prompt-fragment library is
+    not configured" on a stock deployment.
+  - The fragment-library manager now reuses the same GitHub affordances as the other repo
+    windows: a **server-side repo search** (new `GitHubRepoSearchSelect`) plus the
+    `RepoTreeBrowser` to browse to a **file** (document-backed fragments) or **directory**
+    (repo sources), instead of hand-typing `owner`/`repo`/`path`/`ref`. Manual entry remains as
+    a fallback when the GitHub App isn't connected.
+  - When the library is explicitly disabled, the manager now shows a clear notice instead of
+    offering forms that fail with a raw 503.
+
+## 0.74.3
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+
+## 0.74.2
+
+### Patch Changes
+
+- 9638bf3: Fix the "Create task from issue" window: it now reuses the same tracker-issue
+  picker as the add-task "context issues" flow. Search-by-title works and is scoped
+  to the repo of the container the task is being created in (so GitHub hits stay in
+  that service's repo), pasting an issue URL/key now actually creates a task instead
+  of silently importing it, and the tracker source (GitHub / Jira / Linear) is always
+  shown and selectable. The shared `ContextIssuePicker` also now recognises
+  Jira/Linear issue keys (e.g. `PROJ-123`) as attach-by-reference input and re-runs
+  its search when the scoped block changes.
+
+## 0.74.1
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+
+## 0.74.0
+
+### Minor Changes
+
+- 67d3876: feat(github): search available repos server-side in the "add service from repo" picker.
+  The picker no longer prefetches the entire installation repo list on open (slow for a wide
+  App install or PAT with hundreds of repos, and it blocked filtering until the whole list
+  loaded). Instead the user types at least 3 characters and the (debounced) query is sent to
+  `GET /github/available-repos?q=…`, which returns only the `owner/name` matches. The `q`
+  param is optional, so the repo-link management panel's browse-all is unchanged. The now-moot
+  manual "refresh list" button is removed (each search hits GitHub live).
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+
+## 0.73.1
+
+### Patch Changes
+
+- d7f6e1c: Correctness fixes across the engine, the Node facade, and the SPA stores:
+
+  - **Engine:** `finalizeMerge` and the merger resolver are now idempotent under
+    durable-driver replays — a re-resolved merger step on an already-`done` (= merged)
+    block is a no-op instead of re-merging, downgrading the block to `pr_ready`, and
+    raising a spurious `merge_review` notification. `approveStep` now runs under the same
+    optimistic-concurrency write as its siblings (`resolveDecision`/`requestStepChanges`),
+    so an approve holding a stale snapshot can no longer resurrect a run a racing reject
+    already failed (it now returns 409).
+  - **CI gate (behavior change):** a check run concluding `stale` (superseded by GitHub)
+    no longer fails the CI gate — previously it looped the `ci-fixer` against a check it
+    could never fix until the attempt budget failed the run. `cancelled`/`timed_out`/
+    `action_required` still fail the gate.
+  - **Node facade parity:** the retention sweep now prunes the `github_commits`
+    projection to `retention.commitMs` (previously it grew without bound; the Worker
+    already pruned it), and a new every-2-min GitHub reconcile sweeper re-syncs stale
+    repo projections and tombstones uninstalled installations — the backstop for missed
+    webhooks the Worker's `github-reconcile` cron already provided.
+  - **SPA stores:** the execution store now reconciles snapshots/events monotonically by
+    the run's `rev` (a lagging refresh can no longer revert a just-terminal run to
+    `running`), the requirements/clarity/brainstorm stores guard live-event upserts by
+    `updatedAt` (out-of-order events no longer revert just-submitted answers), and
+    `board.moveBlock`/`updateBlock` roll their optimistic mutation back on API failure.
+
+- Updated dependencies [d7f6e1c]
+  - @cat-factory/contracts@0.80.1
+
+## 0.73.0
+
+### Minor Changes
+
+- 120de05: feat(testing): pipeline-builder toggle + Test Report surfacing for the test quality companion (PR 2)
+
+  Completes the test quality-control (QC) companion (see
+  `docs/initiatives/tester-quality-companion.md`) with its authoring + observability surfaces:
+
+  - **Pipeline builder**: a per-Tester-step toggle (enabled by default) turns the QC companion
+    off, and an optional estimate-gating panel runs the coverage audit only on tasks whose
+    estimate clears a threshold (mirroring the companion-gating panel). The estimator-required
+    hint now covers QC gating too.
+  - **Test Report window**: a "Coverage review" section renders each QC verdict (adequate /
+    gaps-found, the reviewer's feedback + concrete gaps, model, timestamp) plus the loop budget
+    and a "budget spent" badge — so a report that greenlit only after a QC-driven re-run shows
+    why it looped.
+  - **Persistence fix**: the pipeline create/update/clone API + `PipelineService` now thread
+    `testerQuality` (and the sibling `followUps`, which had the same latent gap) end-to-end, so a
+    custom pipeline's builder toggle actually persists instead of being silently stripped by the
+    request-body validator. This includes the persistence layer itself: new `follow_ups` +
+    `tester_quality` JSON columns on the `pipelines` table, mirrored D1 (migration
+    `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+    repos and read by the shared `rowToPipeline` mapper. A QC estimate gate is validated like
+    companion gating (a threshold must be set and a `task-estimator` must run earlier).
+  - **Conformance**: the full QC loop (audit → loop the Tester on gaps → conclude on an adequate
+    report) is now driven through an injected deterministic reviewer on every runtime, asserting
+    the verdicts + counters persist identically across D1 and Drizzle. A separate round-trip
+    assertion saves a custom pipeline with a `followUps` opt-out + a gated `testerQuality` config
+    and re-reads it from the store, so the new columns can't silently drop the toggles on either
+    runtime.
+
+  All new user-facing copy is translated across every shipped locale.
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+
 ## 0.72.1
 
 ### Patch Changes

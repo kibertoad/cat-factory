@@ -1,6 +1,7 @@
 import {
   bootstrapEnvironmentRepoContract,
   describeEnvironmentProviderContract,
+  detectFrontendConfigContract,
   detectServiceProvisioningContract,
   getEnvironmentAccessContract,
   getEnvironmentConnectionContract,
@@ -141,6 +142,20 @@ export function environmentController(): Hono<AppEnv> {
     if (!env) return unavailable(c)
     return c.json(
       await env.connectionService.detectServiceProvisioning(
+        param(c, 'workspaceId'),
+        c.req.valid('json'),
+      ),
+      200,
+    )
+  })
+
+  // Auto-detect a non-binding recommended frontend config from a frontend repo (read checkout-free
+  // over RepoFiles). Nothing persisted — the SPA prefills a preview the user applies.
+  buildHonoRoute(app, detectFrontendConfigContract, async (c) => {
+    const env = requireEnvironments(c)
+    if (!env) return unavailable(c)
+    return c.json(
+      await env.connectionService.detectFrontendConfig(
         param(c, 'workspaceId'),
         c.req.valid('json'),
       ),

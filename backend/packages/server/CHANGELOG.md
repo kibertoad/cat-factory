@@ -1,5 +1,309 @@
 # @cat-factory/server
 
+## 0.66.7
+
+### Patch Changes
+
+- 7f9d215: Fix critical/high race conditions from the July 2026 audit:
+
+  - **Spend-resume on Cloudflare (1.1):** a spend-paused run's `ExecutionWorkflow`
+    instance no longer returns (going terminal). It now stays alive **parked on a
+    `waitForEvent`** (like a human-decision wait, not a busy sleep-loop), so a long pause
+    no longer accretes unbounded durable steps. `/spend/resume` wakes it immediately via a
+    new `WorkRunner.signalResume` (a `spend-resume` event), and a 24h re-check chunk
+    auto-resumes it when the monthly budget frees — instead of the terminal-instance-id
+    trap that let the cron sweeper force-fail the "resumed" run.
+  - **Spend-resume on Node/local (parity):** Node/local now auto-resume spend-paused runs
+    when the monthly budget frees, via a new `agentRunRepository.listPausedExecutions`
+    polled by the reclaim sweeper (gated on `isOverBudget`, so a still-exhausted workspace
+    causes no churn) — matching the Cloudflare facade. Covered by a conformance assertion.
+  - **BootstrapWorkflow re-drive (1.2):** past the poll-read tolerance the workflow no
+    longer returns (going terminal, which made the sweeper force-fail a merely-busy
+    container). It keeps the instance alive and keeps polling, so a long clone/install
+    recovers.
+  - **One live execution run per block (2.1):** a new partial unique index on live
+    execution rows per block (D1 migration `0033` ⇄ Drizzle) plus an **atomic**
+    `ExecutionRepository.insertLive` that deletes the block's terminal rows (and the
+    caller's own `replaceId`) and inserts the new run **in one transaction** (D1
+    `db.batch` / Drizzle `transaction`). `start`/`retry`/`restartFromStep` no longer
+    `deleteByBlock` first, so a genuinely-concurrent double start is rejected with a 409
+    instead of the pre-delete wiping a concurrent winner and creating two live runs — two
+    drivers, two containers — on one branch. Covered by cross-runtime conformance
+    assertions (terminal cleanup + `replaceId` supersede).
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/spend@0.10.72
+
+## 0.66.6
+
+### Patch Changes
+
+- 4955639: Fix five bugs in how best-practice prompt fragments are managed and applied:
+
+  - **Code-aware helper agents now receive the service fragments.** `ci-fixer`, `fixer`
+    and `on-call` are dispatched off their HOSTING step (a `ci`/`post-release-health`
+    gate, the tester, the human-test/visual-confirmation loops), and the fragment fold
+    keyed off that step's kind — so the helpers never received the service's standards
+    despite being marked `code-aware`. `AgentContextBuilder.buildContext` now takes an
+    explicit `agentKind` override and every helper dispatch passes it; the on-call job
+    body additionally folds the resolved fragments into its bespoke system prompt
+    (previously bypassed). A stale `step.selectedFragmentIds` is also cleared when a
+    re-dispatch resolves to nothing, so observability can't over-report.
+  - **Tier tombstones now stick on the run path.** `resolveBodiesForRun` used to fall
+    back to the static pool for any id missing from the merged catalog — which is
+    exactly what a tombstone does to a built-in, so suppressing a fragment a service
+    had selected silently resurrected it. The fallback is gone; a missing id is dropped.
+  - **Deployment-registered fragments join the tenant catalog.** The library's built-in
+    tier now reads the UNIVERSAL pool (shipped catalog + `registerPromptFragment`
+    entries, lazily) instead of the raw shipped array, so a registered override of a
+    built-in id actually reaches runs and the resolved catalog, and registered
+    fragments can be tier-shadowed/tombstoned like any built-in.
+  - **Repo-source resync no longer mishandles renames and id edits.** The tombstone
+    sweep is keyed by the fragment ids the current tree produces, not by stale paths:
+    renaming a file that pins an explicit frontmatter `id` no longer tombstones the
+    fragment the rename just updated, and changing a file's explicit `id` in place now
+    retires the old id instead of leaving a live duplicate forever. The GitHub
+    installation is also resolved once per sync instead of once per file, and the
+    requirement writer's fragment grounding resolves through the merged tenant catalog
+    when the library is wired.
+  - **The SPA pickers now offer the merged catalog.** The per-service / per-block /
+    workspace-default fragment pickers loaded only the static built-in pool, so
+    managed, repo-sourced and document-backed fragments could be authored but never
+    attached (and a managed id set via API rendered no chip). The fragments store now
+    loads the workspace's resolved catalog (falling back to the static pool when the
+    library is off), invalidates on library edits, and unknown selected ids render as
+    removable chips instead of disappearing. The catalog is per-board, so a workspace
+    switch now invalidates it and the task inspector reloads it on mount — otherwise the
+    task picker kept showing the previous board's fragments.
+
+  Review follow-ups: `AgentContextBuilder` now clears a stale `step.selectedFragmentIds`
+  on the non-code-aware and error paths too (not only when a code-aware resolve is empty);
+  the requirement-writer grounding resolves the merged catalog once (reused for titles and
+  bodies) instead of twice; a repo-source RENAME of an explicit-id file inherits the
+  fragment's `version`/`createdAt` by id instead of resetting them; and the source `status`
+  count no longer double-counts a pure rename.
+
+- Updated dependencies [4955639]
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+
+## 0.66.5
+
+### Patch Changes
+
+- 4a7a3f1: Preserve a task run's error trail across retries. A failed run's `failure` is now
+  appended to a new `failureHistory` on the fresh attempt (persisted in the shared
+  `agent_runs.detail`, so both runtimes get it with no migration), and cleared on the
+  running attempt — so the top failure banner disappears the moment the task restarts
+  while every previous error stays viewable in a "previous errors" history on the task
+  inspector. Applies to both retry (resume-from-failure) and restart-from-step.
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/prompt-fragments@0.9.41
+  - @cat-factory/spend@0.10.71
+
+## 0.66.4
+
+### Patch Changes
+
+- 6347d0e: `GitHubPullRequestMerger` now logs (at warn) when the best-effort delete of a merged work
+  branch fails, instead of swallowing it silently. A skipped delete is what strands a
+  resumable-but-empty branch that a later re-dispatch then fails to open a PR for — so making
+  it observable is the diagnostic hook for that class of stuck run.
+- 6439181: mothership: allow-list the bootstrap / reference-architecture / env-config-repair management surface
+
+  In mothership mode the repo-bootstrap flow and the env-config-repair retry/stop path were only
+  partially remotely callable over `/internal/persistence`: the board-load reads
+  (`bootstrapJobRepository.listByWorkspace`/`listByServices`, `envConfigRepairJobRepository.listByWorkspace`)
+  were exposed, but the single-job reads and the write methods the flows drive came back
+  `unknown_method`, so a mothership-mode SPA could list bootstrap/repair runs but not start a
+  bootstrap, poll a single job's card, retry a failed run, or stop a running one. This completes the
+  `AgentRunController` retry/stop surface for those two run kinds (the execution-run branch landed
+  earlier) and makes the bootstrap modal + reference-architecture library functional. It widens
+  `REMOTE_PERSISTENCE_METHODS`, each with a correct scope rule:
+
+  - `bootstrapJobRepository.get`/`update` — the board-card poll (`GET .../bootstrap/jobs/:id`) and the
+    retry/stop patches. Workspace-scoped on arg0 (the `workspace` rule).
+  - `bootstrapJobRepository.insert` — the record-based start/retry write. Bound by the `workspaceField`
+    rule on the job's `workspaceId` FIELD (the row is stored under — and later read by — that
+    workspace). The record's sibling ids (`blockId`, `referenceArchitectureId`) are not re-validated
+    over the RPC: a foreign `referenceArchitectureId` is harmless because the retry run re-resolves it
+    via the workspace-scoped `referenceArchitectureRepository.get`, which 404s a cross-workspace id.
+  - `referenceArchitectureRepository.get`/`listByWorkspace`/`update`/`softDelete` — the reference-arch
+    library the bootstrap modal reads + edits and that a retry re-resolves its base repo from.
+    Workspace-scoped on arg0; the record-based `insert` binds on the record's `workspaceId` field.
+  - `envConfigRepairJobRepository.get`/`update` — the repair retry (reads the prior failed job before
+    starting a fresh one) and stop (patches the running job). Workspace-scoped on arg0; `insert` binds
+    on the job's `workspaceId` field.
+
+  Each method is member-level (none of the bootstrap / reference-arch / env-config-repair endpoints is
+  admin-gated) and workspace-scoped, matching the block/pipeline mutation policy. These are the
+  non-core repositories the Node/local facade routes through the `pickRepoSource` seam, which already
+  sources them from the full-surface remote registry when `db` is undefined — so this is an allow-list
+  change only, symmetric by construction (the dispatcher reflects over each facade's registry).
+  Round-trip + cross-account-scope + missing-workspaceId (fail-closed) unit tests for every new method
+  are in `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` — the whole
+  `bootstrapJob` (bar the serviceId-keyed `listByService` + the `blockServiceId` helper),
+  `referenceArchitecture`, and `envConfigRepairJob` repos are now remote.
+
+## 0.66.3
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/prompt-fragments@0.9.40
+  - @cat-factory/spend@0.10.70
+
+## 0.66.2
+
+### Patch Changes
+
+- fc8df61: Fix a cross-tenant access hole on the fragment-source routes: `unlink`/`status`/`sync`
+  resolved the source by its id alone, so an authenticated member of one account/workspace
+  could read, resync or delete another tenant's fragment source by addressing its id under
+  their own prefix. `FragmentSourceService.unlink/sync/status` now take the addressed
+  `(ownerKind, ownerId)` and 404 when the source belongs to a different owner (breaking
+  signature change for direct callers of those three methods).
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/orchestration@0.57.4
+
+## 0.66.1
+
+### Patch Changes
+
+- 2a91615: Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview initiative):
+
+  - **Reverse CORS origin injection.** A `deployer` step now passes `inputs.frontendOrigins` — the
+    comma-joined browser origins (`http://localhost:<servePort>`) of every `frontend` frame that
+    binds the service being provisioned (the reverse of the frontend's `backendBindings`). A
+    backend manifest folds it into its CORS allow-list via `{{input.frontendOrigins}}` (HTTP-manifest
+    provider) or `{{frontendOrigins}}` (Kubernetes native adapter, flat scope), so an ephemeral
+    frontend can reach an ephemeral backend. Derivation is automatic (`frontendOriginsForService`,
+    a single workspace block-list read — no N+1); the CORS env-var mapping stays operator-authored,
+    and the backend must be re-provisioned to pick up a newly-linked frontend. The served port is
+    resolved through the shared `resolveFrontendServePort` (contracts) — the same reserved-port
+    sanitization the harness infra spec uses — so a `servePort` set to a reserved in-container port
+    (8080/8089) injects the port the app is actually served on (4173), not the raw value.
+  - **Binding-resolution correctness.** `resolveFrontendBindings` now dedupes a repeated `envVar`
+    deterministically (last non-empty binding wins, matching the injected env map) instead of leaving
+    it to insertion order. New `duplicateBindingEnvVars` predicate (contracts) surfaces the collision
+    for the inspector + run-start notes (a follow-up slice); it is advisory, not a schema reject
+    (bindings persist per-blur with an allowed empty `envVar`).
+
+  Runtime-neutral (all facades). The inspector visibility panel + run-detail projection (6b) and the
+  deterministic local preview host port (6c) are tracked follow-ups in
+  `docs/initiatives/frontend-preview-ui-testing.md`.
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/orchestration@0.57.3
+  - @cat-factory/integrations@0.54.1
+  - @cat-factory/agents@0.26.6
+  - @cat-factory/kernel@0.69.4
+  - @cat-factory/prompt-fragments@0.9.39
+  - @cat-factory/spend@0.10.69
+
+## 0.66.0
+
+### Minor Changes
+
+- 67d3876: feat(github): search available repos server-side in the "add service from repo" picker.
+  The picker no longer prefetches the entire installation repo list on open (slow for a wide
+  App install or PAT with hundreds of repos, and it blocked filtering until the whole list
+  loaded). Instead the user types at least 3 characters and the (debounced) query is sent to
+  `GET /github/available-repos?q=…`, which returns only the `owner/name` matches. The `q`
+  param is optional, so the repo-link management panel's browse-all is unchanged. The now-moot
+  manual "refresh list" button is removed (each search hits GitHub live).
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/integrations@0.54.0
+  - @cat-factory/agents@0.26.5
+  - @cat-factory/kernel@0.69.3
+  - @cat-factory/orchestration@0.57.2
+  - @cat-factory/prompt-fragments@0.9.38
+  - @cat-factory/spend@0.10.68
+
+## 0.65.2
+
+### Patch Changes
+
+- 63cf6de: Performance: batch reads, parallelize independent awaits, and push work into SQL on hot paths.
+
+  - `GET /workspaces/:id` (the board-load endpoint) now fetches its ~15 independent snapshot
+    ingredients concurrently instead of serially, so its latency is the slowest read rather
+    than the sum of every round-trip; the create-workspace route parallelizes its spend +
+    infra-setup reads the same way.
+  - Agent-context reference lookups (Jira keys / GitHub refs / URLs) run concurrently on the
+    per-step dispatch path; run-start model-default resolutions run concurrently per agent kind.
+  - New batched port methods, mirrored on both runtimes with conformance coverage:
+    `BlockRepository.findByIds` (cross-workspace dependency resolution — one chunked query
+    instead of a point-read per id, also allow-listed for mothership mode),
+    `NotificationRepository.escalateStaleOpen` (the escalation sweep is now one
+    `UPDATE … RETURNING` statement instead of a load-filter-upsert loop), and
+    `GitHubInstallationRepository.listByInstallationIds` (connect-UI annotation).
+  - GitHub webhook fan-out resolves linked workspaces via the existing batched
+    `linkedWorkspaces` read instead of a per-workspace point-read on every delivery.
+  - The Node Drizzle GitHub projections write chunked multi-row upserts (matching the D1
+    twins' `db.batch`) instead of one round-trip per row, and their list reads run
+    `ORDER BY`/`LIMIT` in SQL (NULLS LAST for D1 parity) instead of sorting full result
+    sets in JS.
+  - `autoStartDependents` hoists the invariant workspace-pipeline read out of its loop and
+    stops re-fetching blocks it already holds.
+  - Session/WS-ticket/machine-token verification reuses a memoized `HmacSigner` per secret,
+    so `crypto.subtle.importKey` no longer runs on every request (`signerFor` export).
+  - The Cloudflare Workflows drivers (execution / bootstrap / env-config-repair) build the
+    DI container once per wake instead of once per `step.do` poll tick.
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/orchestration@0.57.1
+  - @cat-factory/contracts@0.80.1
+  - @cat-factory/integrations@0.53.2
+  - @cat-factory/agents@0.26.4
+  - @cat-factory/spend@0.10.67
+  - @cat-factory/prompt-fragments@0.9.37
+
+## 0.65.1
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/orchestration@0.57.0
+  - @cat-factory/kernel@0.69.1
+  - @cat-factory/agents@0.26.3
+  - @cat-factory/integrations@0.53.1
+  - @cat-factory/prompt-fragments@0.9.36
+  - @cat-factory/spend@0.10.66
+
 ## 0.65.0
 
 ### Minor Changes
