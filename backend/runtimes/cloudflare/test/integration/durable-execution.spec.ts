@@ -6,6 +6,7 @@ import { buildContainer } from '../../src/infrastructure/container'
 import { D1AgentRunRepository } from '../../src/infrastructure/repositories/D1AgentRunRepository'
 import { D1ExecutionRepository } from '../../src/infrastructure/repositories/D1ExecutionRepository'
 import { sweepStuckRuns } from '../../src/infrastructure/workflows/sweeper'
+import { buildWorkflowRuntime } from '../../src/infrastructure/workflows/runtime'
 import { makeApp } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import { FakeWorkRunner, ThrowingAgentExecutor } from '../fakes/FakeWorkRunner'
@@ -334,5 +335,145 @@ describe('durable execution: sweeper', () => {
     const failed = await starter.executionRepository.get(wsId, instance.id)
     expect(failed?.status).toBe('failed')
     expect(failed?.failure?.kind).toBe('stalled')
+  })
+
+  it('re-drives (not stalls) a missing run on first observation even with a huge lease age', async () => {
+    // F1: the hard-stall deadline must key off time-OBSERVED-orphaned, not raw lease age.
+    // A run whose `updated_at` is hours old (e.g. after a cron outage) must still get at
+    // least one re-drive before it can ever be failed `stalled`.
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+
+    // Backdate the lease far past the (realistic, positive) hard-stall deadline.
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const longAgo = Date.now() - 6 * 60 * 60 * 1000
+    await env.DB.prepare(`UPDATE agent_runs SET updated_at = ? WHERE workspace_id = ? AND id = ?`)
+      .bind(longAgo, wsId, instance.id)
+      .run()
+
+    const orphanedSince = new Map<string, number>()
+    const redrove: AgentRunRef[] = []
+    const stalledRuns: AgentRunRef[] = []
+    const sweep = () =>
+      sweepStuckRuns({
+        agentRunRepository,
+        instanceState: async () => 'missing',
+        redrive: async (ref) => {
+          redrove.push(ref)
+        },
+        finalizeOrphan: async () => {},
+        failStalled: async (ref) => {
+          stalledRuns.push(ref)
+        },
+        clock,
+        leaseMs: -60_000,
+        // Realistic positive deadline; only the per-process clock (not the 6h lease age)
+        // should govern whether the run is stalled.
+        hardStallMs: 60 * 60 * 1000,
+        orphanedSince,
+      })
+
+    // First tick: despite the 6h lease age, the run is re-driven, not stalled.
+    const first = await sweep()
+    expect(first.redriven).toBeGreaterThanOrEqual(1)
+    expect(first.stalled).toBe(0)
+    expect(redrove.some((r) => r.id === instance.id)).toBe(true)
+    expect(stalledRuns.length).toBe(0)
+    // The per-process clock now remembers when the run was first seen orphaned.
+    expect(orphanedSince.has(instance.id)).toBe(true)
+
+    // Rewind that clock past the deadline to simulate the run staying orphaned across ticks.
+    orphanedSince.set(instance.id, Date.now() - 2 * 60 * 60 * 1000)
+    const second = await sweep()
+    expect(second.stalled).toBeGreaterThanOrEqual(1)
+    expect(stalledRuns.some((r) => r.id === instance.id)).toBe(true)
+    // Once failed, the run is dropped from the clock.
+    expect(orphanedSince.has(instance.id)).toBe(false)
+  })
+
+  it('forgets a run that recovered so its hard-stall clock restarts', async () => {
+    const wsId = await seedWorkspace()
+    const starter = buildContainer(env, {
+      agentExecutor: new FakeAgentExecutor(),
+      workRunner: new FakeWorkRunner(),
+    })
+    const instance = await starter.executionService.start(wsId, 'task_login', 'pl_quick')
+
+    const agentRunRepository = new D1AgentRunRepository({ db: env.DB })
+    const orphanedSince = new Map<string, number>()
+    const base = {
+      agentRunRepository,
+      redrive: async () => {},
+      finalizeOrphan: async () => {},
+      failStalled: async () => {},
+      clock,
+      leaseMs: -60_000,
+      hardStallMs: 60 * 60 * 1000,
+      orphanedSince,
+    }
+
+    // Tick 1: missing → clock started.
+    await sweepStuckRuns({ ...base, instanceState: async () => 'missing' })
+    expect(orphanedSince.has(instance.id)).toBe(true)
+
+    // Tick 2: instance came back alive → clock forgotten.
+    await sweepStuckRuns({ ...base, instanceState: async () => 'alive' })
+    expect(orphanedSince.has(instance.id)).toBe(false)
+  })
+})
+
+describe('workflow runtime construction (F5: survive a transient wake blip)', () => {
+  // A fake durable sleeper that records each sleep instead of parking.
+  const fakeStep = () => {
+    const sleeps: string[] = []
+    return { sleeps, sleep: async (name: string) => void sleeps.push(name) }
+  }
+
+  it('returns the build result on the first successful attempt (no sleeps)', async () => {
+    const step = fakeStep()
+    const out = await buildWorkflowRuntime(() => ({ ok: true }), step, 'exec')
+    expect(out).toEqual({ ok: true })
+    expect(step.sleeps).toEqual([])
+  })
+
+  it('retries a transient throw with a durable sleep, then succeeds', async () => {
+    const step = fakeStep()
+    let calls = 0
+    const out = await buildWorkflowRuntime(
+      () => {
+        calls += 1
+        if (calls < 2) throw new Error('transient wake blip')
+        return { ok: true }
+      },
+      step,
+      'exec',
+    )
+    expect(out).toEqual({ ok: true })
+    expect(calls).toBe(2)
+    // Exactly one durable sleep between the failed and the successful attempt.
+    expect(step.sleeps).toEqual(['exec-build-retry-0'])
+  })
+
+  it('rethrows a persistent (deterministic) build failure after exhausting attempts', async () => {
+    const step = fakeStep()
+    let calls = 0
+    await expect(
+      buildWorkflowRuntime(
+        () => {
+          calls += 1
+          throw new Error('missing required binding')
+        },
+        step,
+        'exec',
+        3,
+      ),
+    ).rejects.toThrow('missing required binding')
+    // All attempts tried; a sleep between each but NOT after the last.
+    expect(calls).toBe(3)
+    expect(step.sleeps).toEqual(['exec-build-retry-0', 'exec-build-retry-1'])
   })
 })
