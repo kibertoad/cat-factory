@@ -140,7 +140,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           if git rev-parse -q --verify refs/tags/prod-deployed >/dev/null 2>&1; then
-            sha="$(git rev-parse refs/tags/prod-deployed^{commit})"
+            sha="$(git rev-parse "refs/tags/prod-deployed^{commit}")"
             if git merge-base --is-ancestor "$sha" HEAD; then
               echo "sha=${sha}" >> "$GITHUB_OUTPUT"
             else

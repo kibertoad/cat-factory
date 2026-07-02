@@ -24,6 +24,9 @@
     ".": {
       "entry": ["scripts/*.mjs"],
       "project": ["scripts/**/*.mjs"],
+      // `attw` is invoked as a spawned binary (`pnpm exec attw`) from
+      // scripts/check-publish-integrity.mjs, never statically imported, so knip can't see it.
+      "ignoreDependencies": ["@arethetypeswrong/cli"],
     },
     "backend/packages/*": {
       "entry": ["src/bin.ts", "src/**/*.test.ts"],
@@ -94,6 +97,15 @@
       "entry": ["src/main.ts", "src/**/*.test.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["@cat-factory/prompt-fragments"],
+    },
+    "backend/runtimes/local": {
+      "entry": ["src/main.ts", "src/link-repo.ts", "src/**/*.test.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      // `@cat-factory/executor-harness` is resolved dynamically at runtime via
+      // createRequire(import.meta.url).resolve('@cat-factory/executor-harness') in
+      // LocalProcessRunnerTransport (native mode spawns its bundled dist/server.js), so knip
+      // sees no static import.
+      "ignoreDependencies": ["@cat-factory/executor-harness"],
     },
     "backend/internal/*": {
       "entry": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts"],

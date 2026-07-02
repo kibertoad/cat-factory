@@ -4,7 +4,8 @@
 // points resolve to nothing (exactly how @cat-factory/gitlab and @cat-factory/provider-s3
 // once reached npm as shells; `prepublishOnly` now rebuilds on publish, this is the CI
 // backstop). Three layers, run over every non-private workspace package after `pnpm build`:
-//   1. Empty-shell guard: every file that `main`/`types`/`bin`/`exports` points at exists.
+//   1. Empty-shell guard: every file that `main`/`types`/`bin`/`exports` points at exists
+//      and is non-empty.
 //   2. publint: the package.json publish contract (files/exports/type shape) is coherent.
 //   3. attw --pack --profile esm-only: the *packed tarball*'s types resolve for node16-ESM
 //      and bundler consumers (every package here is ESM-only, so the node10/CJS resolutions
@@ -51,6 +52,13 @@ const ATTW_EXTRA_FLAGS = new Map([
 
 // attw shells out to `npm pack` per package (~2-4s each); bound the parallelism.
 const ATTW_CONCURRENCY = 4
+
+// Run via a shell so the `pnpm` shim resolves cross-platform: bare `spawn('pnpm', …)` without
+// a shell throws ENOENT on win32 (this repo's dev platform, where the binary is `pnpm.cmd`),
+// and naming the `.cmd` shim explicitly instead throws EINVAL under Node's CVE-2024-27980
+// mitigation. `shell: true` sidesteps both (cmd.exe resolves it via PATHEXT; /bin/sh on posix).
+// The args below are all repo-controlled literals/paths with no spaces, so no quoting is needed.
+const USE_SHELL = true
 
 function expandGlob(glob) {
   if (!glob.endsWith('/*')) return [glob]
@@ -105,11 +113,16 @@ function runAttw({ relDir, pkg }) {
       {
         cwd: repoRoot,
         stdio: ['ignore', 'pipe', 'pipe'],
+        shell: USE_SHELL,
       },
     )
     let output = ''
     child.stdout.on('data', (chunk) => (output += chunk))
     child.stderr.on('data', (chunk) => (output += chunk))
+    // A spawn failure (binary missing, shim unresolved) emits 'error' and NEVER 'close';
+    // with no handler Node would throw it uncaught and leave the Promise pending (hanging
+    // Promise.all). Resolve it as a non-zero code so it surfaces as a normal problem.
+    child.on('error', (err) => resolvePromise({ relDir, code: 1, output: `${output}${err.message}` }))
     child.on('close', (code) => resolvePromise({ relDir, code, output }))
   })
 }
@@ -132,13 +145,27 @@ const packages = WORKSPACE_GLOBS.flatMap(expandGlob)
   .filter((entry) => entry && entry.pkg.name && !entry.pkg.private)
 
 const problems = []
+// Packages whose entry files are missing/empty — attw would only re-report those missing
+// files more verbosely, so it's skipped for exactly these (and only these) below.
+const shellFailed = new Set()
 
 // 1. Empty-shell guard + 2. publint (in-process API, one pass over all packages).
 for (const { relDir, pkg } of packages) {
   for (const entryFile of collectEntryFiles(pkg)) {
-    if (!existsSync(join(repoRoot, relDir, entryFile))) {
+    const abs = join(repoRoot, relDir, entryFile)
+    // A present-but-empty artifact (0 bytes) is an empty shell too — importing it resolves
+    // to nothing — so existence alone isn't enough; require actual content.
+    let size = -1
+    try {
+      size = statSync(abs).size
+    } catch {
+      // missing → size stays -1
+    }
+    if (size <= 0) {
+      shellFailed.add(relDir)
+      const why = size < 0 ? 'does not exist' : 'is empty (0 bytes)'
       problems.push(
-        `${pkg.name}: entry point ${entryFile} does not exist — the package would publish as an empty shell. Run \`pnpm build\` first; if dist/ is built, the exports map is wrong.`,
+        `${pkg.name}: entry point ${entryFile} ${why} — the package would publish as an empty shell. Run \`pnpm build\` first; if dist/ is built, the exports map is wrong.`,
       )
     }
   }
@@ -151,18 +178,19 @@ for (const { relDir, pkg } of packages) {
   }
 }
 
-// 3. attw over the packed tarball (skip when the shell guard already failed the package —
-// attw would only re-report the missing files more verbosely).
-if (problems.length === 0) {
-  const attwTargets = packages.filter(({ pkg }) => !ATTW_SKIP.has(pkg.name))
-  const results = await mapWithConcurrency(attwTargets, ATTW_CONCURRENCY, runAttw)
-  for (const { relDir, code, output } of results) {
-    if (code !== 0) {
-      console.error(output)
-      problems.push(
-        `${relDir}: attw found type-resolution problems in the packed tarball (see output above).`,
-      )
-    }
+// 3. attw over the packed tarball. Run it independently of the publint/shell problems above
+// (a publint error in package A must not hide an attw regression in package B), skipping only
+// the specific packages whose shell guard already failed — for those attw adds no signal.
+const attwTargets = packages.filter(
+  ({ relDir, pkg }) => !ATTW_SKIP.has(pkg.name) && !shellFailed.has(relDir),
+)
+const results = await mapWithConcurrency(attwTargets, ATTW_CONCURRENCY, runAttw)
+for (const { relDir, code, output } of results) {
+  if (code !== 0) {
+    console.error(output)
+    problems.push(
+      `${relDir}: attw found type-resolution problems in the packed tarball (see output above).`,
+    )
   }
 }
 
