@@ -2706,6 +2706,10 @@
       "consensusRevertTooltip": "Consensus enabled. Click to revert to a single agent.",
       "followUpEnableTooltip": "Follow-up companion disabled. Click to enable (Coder surfaces loose ends / questions).",
       "followUpDisableTooltip": "Follow-up companion enabled. Coder surfaces loose ends / side-tasks / questions; click to disable.",
+      "testerQualityEnableTooltip": "Test quality companion disabled. Click to enable (audits the report for coverage and loops the Tester on gaps).",
+      "testerQualityDisableTooltip": "Test quality companion enabled. Audits the report for coverage before greenlight and loops the Tester on gaps; click to disable.",
+      "testerQualityLabel": "Test quality companion",
+      "testerQualityGateTooltip": "Only run the quality audit when the task estimate clears a threshold (needs a Task Estimator earlier)",
       "moveUp": "Move step up",
       "moveDown": "Move step down",
       "removeStep": "Remove this step from the pipeline",
@@ -3395,6 +3399,15 @@
       "completed": "Completed",
       "failed": "Failed",
       "addressed": "Addressing"
+    },
+    "quality": {
+      "heading": "Coverage review",
+      "reruns": "Quality-driven Tester re-runs",
+      "rerunCount": "{attempts}/{max} re-runs",
+      "exceeded": "Budget spent",
+      "adequate": "Coverage adequate",
+      "inadequate": "Coverage gaps found",
+      "gaps": "Gaps to close"
     },
     "empty": {
       "title": "No test report yet.",

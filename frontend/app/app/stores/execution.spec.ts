@@ -26,7 +26,7 @@ describe('execution store gate grouping', () => {
         ]),
         instance('e2', 'b2', [{ agentKind: 'architect', decision: { id: 'd3', chosen: null } }]),
       ],
-      new Set(['b1', 'b2']),
+      'ws1',
     )
     expect(store.decisionsByBlock.get('b1')?.map((d) => d.decision.id)).toEqual(['d1'])
     expect(store.decisionsByBlock.get('b2')?.map((d) => d.decision.id)).toEqual(['d3'])
@@ -41,56 +41,61 @@ describe('execution store gate grouping', () => {
           { agentKind: 'merger', approval: { id: 'a2', status: 'approved' } }, // not pending ⇒ excluded
         ]),
       ],
-      new Set(['b1']),
+      'ws1',
     )
     expect(store.approvalsByBlock.get('b1')?.map((a) => a.approval.id)).toEqual(['a1'])
     expect(store.approvalsByBlock.get('b2')).toBeUndefined()
   })
 })
 
-/** Run fixture for the reconcile tests — `rev`/`status` are what hydrate/upsert compare. */
-function run(id: string, blockId: string, rev: number, status: string): ExecutionInstance {
-  return { id, blockId, rev, status, steps: [] } as unknown as ExecutionInstance
+/** A run fixture carrying the fields the reconcile guards read (`id`, `rev`, `status`). */
+function run(id: string, rev: number, status: string): ExecutionInstance {
+  return { id, blockId: `blk_${id}`, steps: [], status, rev } as unknown as ExecutionInstance
 }
 
-describe('execution store snapshot/live-event reconciliation', () => {
+describe('execution store snapshot/event reconcile', () => {
   let store: ReturnType<typeof useExecutionStore>
   beforeEach(() => {
     store = useExecutionStore()
   })
 
-  it('hydrate keeps a run a newer live event already advanced (REGRESS guard)', () => {
-    // Live event lands while a (stale) snapshot fetch is in flight…
-    store.upsert(run('e1', 'b1', 5, 'failed'))
-    // …then the older snapshot resolves. It must not revert the run to `running`.
-    store.hydrate([run('e1', 'b1', 3, 'running')], new Set(['b1']))
-    expect(store.getInstance('e1')?.status).toBe('failed')
-  })
-
-  it('hydrate takes the snapshot version when it is at least as new', () => {
-    store.upsert(run('e1', 'b1', 3, 'running'))
-    store.hydrate([run('e1', 'b1', 6, 'done')], new Set(['b1']))
+  it('a lagging snapshot cannot regress a run a live event already advanced (REGRESS)', () => {
+    store.hydrate([run('e1', 3, 'running')], 'ws1')
+    // Live event: the run reached a terminal state (rev 4). It emits nothing further.
+    store.upsert(run('e1', 4, 'done'))
+    // A snapshot read BEFORE the event resolves after it — same run at the older rev.
+    store.hydrate([run('e1', 3, 'running')], 'ws1')
     expect(store.getInstance('e1')?.status).toBe('done')
   })
 
-  it('hydrate preserves a live-added run the older snapshot never saw (DROP guard)', () => {
-    store.upsert(run('e-new', 'b1', 1, 'running'))
-    store.hydrate([], new Set(['b1']))
-    expect(store.getInstance('e-new')?.status).toBe('running')
+  it('keeps a live-added run a lagging snapshot never saw (DROP)', () => {
+    store.hydrate([run('e1', 1, 'running')], 'ws1')
+    store.upsert(run('e2', 1, 'running'))
+    store.hydrate([run('e1', 2, 'running')], 'ws1') // stale read: predates e2
+    expect(store.getInstance('e2')).toBeTruthy()
+    expect(store.getInstance('e1')?.rev).toBe(2)
   })
 
-  it("hydrate discards a previous board's runs on a workspace switch", () => {
-    store.upsert(run('e-old', 'b-other-board', 1, 'running'))
-    store.hydrate([run('e1', 'b1', 1, 'running')], new Set(['b1']))
-    expect(store.getInstance('e-old')).toBeUndefined()
-    expect(store.getInstance('e1')).toBeDefined()
+  it('a workspace switch replaces the cache outright (no cross-board leak)', () => {
+    store.hydrate([run('e1', 1, 'running')], 'ws1')
+    store.upsert(run('e2', 1, 'running'))
+    store.hydrate([run('e3', 1, 'running')], 'ws2')
+    expect(store.getInstance('e1')).toBeUndefined()
+    expect(store.getInstance('e2')).toBeUndefined()
+    expect(store.getInstance('e3')).toBeTruthy()
   })
 
-  it('upsert never regresses a run below its cached rev', () => {
-    store.upsert(run('e1', 'b1', 5, 'failed'))
-    store.upsert(run('e1', 'b1', 4, 'running')) // stale/out-of-order event
+  it('an out-of-order live event cannot regress a newer cached run; same-rev replaces', () => {
+    store.upsert(run('e1', 5, 'done'))
+    store.upsert(run('e1', 4, 'running')) // stale event → ignored
+    expect(store.getInstance('e1')?.status).toBe('done')
+    store.upsert(run('e1', 5, 'failed')) // equal rev → latest event wins
     expect(store.getInstance('e1')?.status).toBe('failed')
-    store.upsert(run('e1', 'b1', 6, 'done'))
+  })
+
+  it('treats a missing rev as 0 (legacy rows still hydrate)', () => {
+    store.hydrate([{ id: 'e1', blockId: 'b1', steps: [], status: 'running' } as never], 'ws1')
+    store.upsert(run('e1', 1, 'done'))
     expect(store.getInstance('e1')?.status).toBe('done')
   })
 })

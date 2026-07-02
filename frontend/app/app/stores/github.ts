@@ -131,12 +131,21 @@ export const useGitHubStore = defineStore('github', () => {
     if (connected.value && repos.value.length === 0) await load()
   }
 
-  /** Load the repos the installation can access, with this workspace's link state. */
-  async function loadAvailableRepos() {
+  /**
+   * Load the repos the installation can access, with this workspace's link state.
+   * With a `q` the backend filters `owner/name` server-side (the add-service picker
+   * searches instead of prefetching a huge installation); without one it browses all
+   * (the repo-link panel). A blank/short `q` clears the list rather than fetching.
+   */
+  async function loadAvailableRepos(q?: string) {
     if (!connected.value) return
+    if (q !== undefined && q.trim() === '') {
+      availableRepos.value = []
+      return
+    }
     loadingAvailable.value = true
     try {
-      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId())
+      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId(), q)
     } finally {
       loadingAvailable.value = false
     }

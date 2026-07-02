@@ -87,6 +87,10 @@ export const connectGitHubContract = defineApiContract({
 export const listGitHubAvailableReposContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/github/available-repos',
+  // Optional `owner/name` substring filter. The add-service picker searches
+  // server-side (so a wide install/PAT with hundreds of repos isn't shipped whole on
+  // open); a blank query returns every accessible repo (the repo-link panel browses all).
+  requestQuerySchema: v.object({ q: v.optional(v.string()) }),
   responsesByStatusCode: { 200: availableReposViewSchema, ...errorResponses },
 })
 

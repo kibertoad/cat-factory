@@ -17,6 +17,7 @@ import {
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleNotificationRepository,
   buildNodeContainer,
   createApp,
   createDbClient,
@@ -187,6 +188,7 @@ export function makeMothershipConformanceApp(
     environmentProvider?: CoreDependencies['environmentProvider']
     resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
     backendRegistries?: BackendRegistries
+    testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   },
 ): ConformanceApp {
   const ms = getMothership(db)
@@ -251,6 +253,10 @@ export function makeMothershipConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
+    // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
+    // full QC loop is driven through the mothership composition root without a model, identically
+    // to the Worker/Node/local-standalone harnesses.
+    ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),
   }
 
   const container = buildNodeContainer({
@@ -407,6 +413,9 @@ export function makeMothershipConformanceApp(
     // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
     executionRepository: () => ms.container.executionRepository,
     agentRunRepository: () => ms.container.agentRunRepository,
+    // Direct-store probes read the mothership's authoritative Postgres, like seedService.
+    blockRepository: () => mothershipRepos().blockRepository,
+    notificationRepository: () => new DrizzleNotificationRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

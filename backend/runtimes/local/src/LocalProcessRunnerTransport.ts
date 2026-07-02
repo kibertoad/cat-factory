@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import type {
   RunnerDispatchKind,
@@ -214,21 +215,44 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
 }
 
 /**
- * Build a {@link LocalProcessRunnerTransport} from the environment. Requires
- * `LOCAL_HARNESS_ENTRY` (the path to the executor-harness server entry to run as a host
- * process). The native CLIs (`claude` / `codex`) must already be installed on the host.
+ * The executor-harness server entry to spawn as a host process (`node <entry>`).
+ *
+ * Mirrors {@link resolveHarnessImage} for the container path: an explicit `LOCAL_HARNESS_ENTRY`
+ * wins (a custom build or a source checkout), else we resolve the `@cat-factory/executor-harness`
+ * package that ships with this backend — its `.` export is the zero-dependency `dist/server.js`.
+ * So a fresh install runs native mode out of the box with no extra configuration, exactly like
+ * an unset `LOCAL_HARNESS_IMAGE` falls back to the pinned recommended image.
+ *
+ * We only throw when native mode is on AND neither source is available — a case that should not
+ * happen for a normal `pnpm add @cat-factory/local-server` install, but is worth a clear message
+ * (e.g. a pruned/hoisting-broken `node_modules`).
+ */
+export function resolveHarnessEntry(env: NodeJS.ProcessEnv): string {
+  const explicit = env.LOCAL_HARNESS_ENTRY?.trim()
+  if (explicit) return explicit
+  try {
+    return createRequire(import.meta.url).resolve('@cat-factory/executor-harness')
+  } catch (cause) {
+    throw new Error(
+      'Native local mode (LOCAL_NATIVE_AGENTS) needs the executor-harness server entry, but ' +
+        "'@cat-factory/executor-harness' could not be resolved. It ships as a dependency of " +
+        '@cat-factory/local-server — reinstall dependencies, or set LOCAL_HARNESS_ENTRY to the ' +
+        'harness server entry path (its built dist/server.js) explicitly.',
+      { cause },
+    )
+  }
+}
+
+/**
+ * Build a {@link LocalProcessRunnerTransport} from the environment. The executor-harness server
+ * entry is resolved via {@link resolveHarnessEntry} (`LOCAL_HARNESS_ENTRY` overrides, else the
+ * bundled `@cat-factory/executor-harness`). The native CLIs (`claude` / `codex`) must already be
+ * installed on the host.
  */
 export function createLocalProcessTransportFromEnv(
   env: NodeJS.ProcessEnv,
 ): LocalProcessRunnerTransport {
-  const harnessEntry = env.LOCAL_HARNESS_ENTRY?.trim()
-  if (!harnessEntry) {
-    throw new Error(
-      'LOCAL_HARNESS_ENTRY is required for native local mode (LOCAL_NATIVE_AGENTS): set it to ' +
-        'the executor-harness server entry path (its built server.js, or src/server.ts run via ' +
-        'Node type-stripping).',
-    )
-  }
+  const harnessEntry = resolveHarnessEntry(env)
   const nodeArgs = env.LOCAL_HARNESS_NODE_ARGS?.trim()
     ? env.LOCAL_HARNESS_NODE_ARGS.trim().split(/\s+/)
     : undefined

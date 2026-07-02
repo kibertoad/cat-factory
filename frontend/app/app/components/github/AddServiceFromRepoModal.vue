@@ -4,14 +4,14 @@
 // it in a container), this just links a repo the App can access to a fresh,
 // `ready` service frame. The workspace need not track the repo yet: the backend
 // links + syncs it on import. If the App can't see the wanted repo, the user
-// grants it access from here, then refreshes the list.
+// grants it access from here, then searches for it again.
 //
 // MONOREPO support: a repo flagged a monorepo can back SEVERAL services, each
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
 // browses its tree and picks the service's directory before adding (and may add
 // more than one, a subset of the repo's services).
 import { refDebounced } from '@vueuse/core'
-import type { FrameRepoType } from '~/types/domain'
+import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
@@ -42,7 +42,10 @@ const adding = ref(false)
 async function loadRepos() {
   try {
     await github.probe()
-    if (github.connected) await Promise.all([github.load(), github.loadAvailableRepos()])
+    // Load only the linked-repo projection (to flag repos already on the board). The
+    // available-repos list is NOT prefetched — it's searched server-side on demand once
+    // the user types (see the repoQueryRaw watcher), so a wide install isn't shipped whole.
+    if (github.connected) await github.load()
   } catch {
     // Integration off / unreachable → the picker stays empty, GitHubConnect shows.
   }
@@ -66,75 +69,56 @@ const onBoardIds = computed(
   () => new Set(github.repos.filter((r) => r.blockId).map((r) => r.githubId)),
 )
 
-const repoItems = computed(() =>
-  github.availableRepos.map((r) => {
-    const onBoard = onBoardIds.value.has(r.githubId) && !r.isMonorepo
-    const suffix = [
-      r.private ? t('github.addService.repoLabel.private') : '',
-      r.isMonorepo ? t('github.addService.repoLabel.monorepo') : '',
-      onBoard ? t('github.addService.repoLabel.onBoard') : '',
-    ].join('')
-    return {
-      label: `${r.owner}/${r.name}${suffix}`,
-      // Searched on (lowercased once) — the owner/name, so the filter matches either.
-      search: `${r.owner}/${r.name}`.toLowerCase(),
-      value: r.githubId,
-      disabled: onBoard,
-    }
-  }),
-)
+// Map an available repo to a combobox item. The label carries the private/monorepo/
+// on-board suffixes; an on-board whole-repo is disabled (it already backs a service).
+function toRepoItem(r: GitHubAvailableRepo) {
+  const onBoard = onBoardIds.value.has(r.githubId) && !r.isMonorepo
+  const suffix = [
+    r.private ? t('github.addService.repoLabel.private') : '',
+    r.isMonorepo ? t('github.addService.repoLabel.monorepo') : '',
+    onBoard ? t('github.addService.repoLabel.onBoard') : '',
+  ].join('')
+  return { label: `${r.owner}/${r.name}${suffix}`, value: r.githubId, disabled: onBoard }
+}
 
-// The PAT (or a wide App install) can expose hundreds of repos, far too many for a plain
-// dropdown — so the picker is a typeahead combobox. The user types and matching repos
-// surface: matching is a debounced, case-insensitive substring over `owner/name` (so any
-// part of either matches). For a LARGE list the search only kicks in once at least
-// MIN_SEARCH_LEN characters are typed, to keep early keystrokes from listing hundreds of
-// rows; but when the whole list is small enough to browse (<= BROWSE_ALL_MAX) the gate is
-// dropped and every repo is offered up-front (typing then narrows), so a handful of repos
-// stays pickable without having to type — matching the old always-open dropdown.
+const repoItems = computed(() => github.availableRepos.map(toRepoItem))
+
+// A wide App install (or a PAT) can expose hundreds of repos, far too many to prefetch and
+// filter in the browser — so the picker searches SERVER-SIDE. Nothing is fetched on open;
+// once the user types at least MIN_SEARCH_LEN characters the (debounced) query is sent to
+// the backend, which returns only the `owner/name` matches. Below the gate the list stays
+// empty and the field prompts for more characters.
 const MIN_SEARCH_LEN = 3
-const BROWSE_ALL_MAX = 25
 const repoSearch = ref('')
 const repoSearchDebounced = refDebounced(repoSearch, 250)
-// Trimmed (original case) for display; lowercased for matching.
+// Trimmed for display + the min-length gate; the backend matches case-insensitively.
 const repoQueryRaw = computed(() => repoSearchDebounced.value.trim())
-const repoQuery = computed(() => repoQueryRaw.value.toLowerCase())
 
-// Small lists are browseable without typing; large lists require the min-length gate.
-const browseAll = computed(() => repoItems.value.length <= BROWSE_ALL_MAX)
-// True only on a large list whose query is still too short to search.
-const belowMinChars = computed(() => !browseAll.value && repoQuery.value.length < MIN_SEARCH_LEN)
+// True while the query is too short to search — the picker shows the "type N chars" hint.
+const belowMinChars = computed(() => repoQueryRaw.value.length < MIN_SEARCH_LEN)
 
-// Matches for the current query. On a small list an empty query lists everything; on a
-// large list nothing surfaces until the query passes the min length.
-const queryMatches = computed(() => {
-  if (belowMinChars.value) return []
-  if (!repoQuery.value) return repoItems.value
-  return repoItems.value.filter((r) => r.search.includes(repoQuery.value))
+// The selected repo, captured when picked (below). The loaded list is volatile — a later
+// search replaces it — so the selection can't be derived from `availableRepos` after the fact.
+const selectedRepo = ref<GitHubAvailableRepo | undefined>(undefined)
+
+// Fetch matches server-side as the debounced query changes; below the gate clear the list
+// so stale matches don't linger (the hint shows instead). Granting the App access needs no
+// manual refresh — the next search hits GitHub live, with no cached list to invalidate.
+watch(repoQueryRaw, (q) => {
+  void github.loadAvailableRepos(q.length >= MIN_SEARCH_LEN ? q : '')
 })
 
-// Items fed to the combobox: the query matches plus the current selection kept present,
-// so the menu can still render the selected repo's label once the (reset) search term no
-// longer matches it.
+// The server already filtered, so the matches ARE the loaded repos (empty below the gate).
+const queryMatches = computed(() => (belowMinChars.value ? [] : repoItems.value))
+
+// Items fed to the combobox: the matches plus the current selection kept present, so the
+// menu still renders the selected repo's label after a later search replaces the list.
 const repoMenuItems = computed(() => {
   const matches = queryMatches.value
   if (selectedRepoId.value === undefined) return matches
   if (matches.some((r) => r.value === selectedRepoId.value)) return matches
-  const selected = repoItems.value.find((r) => r.value === selectedRepoId.value)
-  return selected ? [selected, ...matches] : matches
+  return selectedRepo.value ? [toRepoItem(selectedRepo.value), ...matches] : matches
 })
-
-// The count summary under the field is shown only when it's meaningful: there are matches
-// to count AND the user is actually searching (or browsing a small list). After a
-// selection resets the search term this is false, so the field doesn't claim "Showing 0"
-// or nag "type 3 characters" right under the repo the user just picked. The zero-match and
-// min-length messages are owned by the combobox's own empty state instead.
-const showResultCount = computed(() => !belowMinChars.value && queryMatches.value.length > 0)
-
-const hasRepos = computed(() => github.availableRepos.length > 0)
-const selectedRepo = computed(() =>
-  github.availableRepos.find((r) => r.githubId === selectedRepoId.value),
-)
 
 // ---- monorepo flag + directory picker ------------------------------------
 
@@ -151,8 +135,14 @@ function toggleMonorepo(value: boolean) {
   selectedDirectory.value = undefined
 }
 
-// On repo change, seed the toggle from the repo's persisted flag and clear the rest.
-watch(selectedRepoId, () => {
+// On repo change, capture the picked repo (from the volatile loaded list, before a later
+// search replaces it), seed the monorepo toggle from its persisted flag, and clear the rest.
+watch(selectedRepoId, (id) => {
+  if (id === undefined) selectedRepo.value = undefined
+  else {
+    const found = github.availableRepos.find((r) => r.githubId === id)
+    if (found) selectedRepo.value = found
+  }
   isMonorepo.value = selectedRepo.value?.isMonorepo === true
   selectedDirectory.value = undefined
   configuredBlockId.value = undefined
@@ -286,10 +276,7 @@ function done() {
             :description="t('github.addService.repositoryHint')"
             required
           >
-            <div v-if="!hasRepos" class="text-sm text-slate-400">
-              {{ t('github.addService.noReposAvailable') }}
-            </div>
-            <div v-else class="space-y-1.5">
+            <div class="space-y-1.5">
               <UInputMenu
                 v-model="selectedRepoId"
                 v-model:search-term="repoSearch"
@@ -317,19 +304,11 @@ function done() {
                       t('github.addService.searchMinChars', { min: MIN_SEARCH_LEN }, MIN_SEARCH_LEN)
                     }}
                   </span>
-                  <span v-else>{{
+                  <span v-else-if="!github.loadingAvailable">{{
                     t('github.addService.noMatches', { query: repoQueryRaw })
                   }}</span>
                 </template>
               </UInputMenu>
-              <p v-if="showResultCount" class="text-xs text-slate-500">
-                {{
-                  t('github.addService.showingCount', {
-                    shown: queryMatches.length,
-                    total: repoItems.length,
-                  })
-                }}
-              </p>
             </div>
           </UFormField>
 
@@ -401,16 +380,6 @@ function done() {
               @click="openManageInstall"
             >
               {{ t('github.addService.grantAccess') }}
-            </UButton>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              icon="i-lucide-refresh-cw"
-              :loading="github.loadingAvailable"
-              @click="github.loadAvailableRepos()"
-            >
-              {{ t('github.addService.refreshList') }}
             </UButton>
           </div>
 

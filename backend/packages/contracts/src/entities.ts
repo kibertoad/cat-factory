@@ -1524,8 +1524,10 @@ export const executionInstanceSchema = v.object({
    * bumped on every write. Read back by the repository and used by
    * `compareAndSwap` so a human-action write (resolve decision / approve /
    * request changes) that raced another writer is detected and retried on fresh
-   * state instead of silently clobbering it. Internal; defaults to 0 for a run
-   * that has never been persisted and is ignored by clients.
+   * state instead of silently clobbering it. Defaults to 0 for a run that has
+   * never been persisted. The SPA's execution store also keys its monotonic
+   * reconcile on it, so a lagging snapshot refresh can't regress a run a live
+   * event already advanced.
    */
   rev: v.optional(v.number()),
 })

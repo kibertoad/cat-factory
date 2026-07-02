@@ -87,6 +87,16 @@ export const useClarityStore = defineStore('clarity', () => {
     reviews.value = { ...reviews.value, [review.blockId]: review }
   }
 
+  /** Patch the cache from a live `clarity` stream event (newest wins per block). */
+  function upsert(review: ClarityReview) {
+    const existing = reviews.value[review.blockId]
+    // Keep the freshest by updatedAt (the consensus-store guard): `store()` also runs on
+    // API responses, so a slightly-older event racing a just-submitted answer over the
+    // separate WS transport must not revert the review the response already delivered.
+    if (existing && existing.id === review.id && existing.updatedAt > review.updatedAt) return
+    store(review)
+  }
+
   /** Drop all cached reviews + in-flight state (called on workspace switch). */
   function reset() {
     available.value = null
@@ -205,7 +215,6 @@ export const useClarityStore = defineStore('clarity', () => {
     proceed,
     resolveExceeded,
     reset,
-    // Patch the cache from a live `clarity` stream event.
-    upsert: store,
+    upsert,
   }
 })

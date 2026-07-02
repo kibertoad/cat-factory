@@ -25,42 +25,54 @@ export const useExecutionStore = defineStore('execution', () => {
   // gets identical handling, including the fire-and-forget ones that never caught.
   const runErrors = usePipelineErrorToast()
   const instances = ref<ExecutionInstance[]>([])
+  // The workspace whose snapshot last hydrated the cache. Scopes the DROP-preservation
+  // below: a board SWITCH replaces the cache outright instead of leaking the previous
+  // board's runs (an ExecutionInstance carries no workspaceId of its own).
+  let hydratedWorkspaceId: string | null = null
+
+  /** A run's monotonic server revision (bumped on every persisted write; absent = 0). */
+  function revOf(e: ExecutionInstance): number {
+    return e.rev ?? 0
+  }
 
   /**
-   * Reconcile the cached executions with a server snapshot. A snapshot is authoritative
-   * EXCEPT where a live `execution` event already advanced (or ADDED) a run past what
-   * this (possibly stale) read observed — a `board` event triggers a debounced
-   * `workspace.refresh()`, and the stream's on-(re)connect resync also refetches, so
-   * either read can resolve AFTER a newer event landed. Same two clobber hazards the
-   * agentRuns store guards (see its `hydrate`), keyed here by the run's monotonic `rev`:
-   *   - REGRESS: a run in BOTH — keep the newer-by-`rev` version so a lagging refresh
-   *     can't revert a `failed`/`done` run to `running` (terminal runs emit nothing
-   *     further, so the stale badge would stick).
-   *   - DROP: a run a live event just ADDED that the older snapshot never saw — preserve
-   *     it, but only when its block is on the hydrated board (`snapshotBlockIds`);
-   *     executions carry no workspaceId, so block membership is what keeps a board
-   *     SWITCH from leaking the previous board's runs.
+   * Reconcile the cached executions with a server snapshot for `workspaceId`. A snapshot
+   * is authoritative EXCEPT where a live `execution` event already advanced (or ADDED) a
+   * run past what this (possibly stale) read observed — the same two clobber hazards the
+   * `agentRuns` store guards, keyed here on the run's monotonic `rev`:
+   *   - REGRESS: a run present in BOTH — keep the newer-by-`rev` version, so a lagging
+   *     refresh (the stream's on-(re)connect resync, the debounced `board`-event refetch)
+   *     can't revert a just-terminal run to `running`. A terminal run emits nothing
+   *     further, so a regression here would strand the UI until an unrelated refresh.
+   *   - DROP: a run a live event just ADDED that the (older) snapshot never saw — keep it
+   *     rather than silently dropping it.
    */
-  function hydrate(next: ExecutionInstance[], snapshotBlockIds: ReadonlySet<string>) {
+  function hydrate(next: ExecutionInstance[], workspaceId: string) {
+    const sameWorkspace = hydratedWorkspaceId === workspaceId
+    hydratedWorkspaceId = workspaceId
+    if (!sameWorkspace) {
+      instances.value = next
+      return
+    }
     const incomingIds = new Set(next.map((e) => e.id))
     const held = new Map(instances.value.map((e) => [e.id, e]))
     const reconciled = next.map((incoming) => {
       const current = held.get(incoming.id)
-      return current && (current.rev ?? 0) > (incoming.rev ?? 0) ? current : incoming
+      return current && revOf(current) > revOf(incoming) ? current : incoming
     })
-    const preserved = [...held.values()].filter(
-      (e) => !incomingIds.has(e.id) && snapshotBlockIds.has(e.blockId),
-    )
+    const preserved = [...held.values()].filter((e) => !incomingIds.has(e.id))
     instances.value = [...reconciled, ...preserved]
   }
 
-  /** Insert or replace a single execution instance pushed by the event stream. */
+  /**
+   * Insert or replace a single execution instance pushed by the event stream.
+   * Monotonic by `rev`: an out-of-order/stale event can't regress a run a newer
+   * write already advanced (same guard as {@link hydrate}).
+   */
   function upsert(instance: ExecutionInstance) {
     const i = instances.value.findIndex((e) => e.id === instance.id)
-    // Monotonic by `rev`: never let a stale/out-of-order write regress a run a newer
-    // one already advanced (same guard as {@link hydrate}).
     if (i >= 0) {
-      if ((instance.rev ?? 0) >= (instances.value[i]!.rev ?? 0)) instances.value[i] = instance
+      if (revOf(instance) >= revOf(instances.value[i]!)) instances.value[i] = instance
     } else instances.value.push(instance)
   }
 

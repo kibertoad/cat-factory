@@ -1,13 +1,16 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
+import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
+  BlockRepository,
   DeployCloneTarget,
   EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
   LlmCallActivity,
+  NotificationRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -146,6 +149,18 @@ export interface ConformanceApp {
    * filters out terminal runs (the local orphaned-container reap keys off it).
    */
   agentRunRepository(): AgentRunRepository
+  /**
+   * The facade's block repository over its real store, so the suite can assert the batched
+   * cross-workspace read (`findByIds`) resolves each block to its HOME workspace identically
+   * on D1 and Postgres.
+   */
+  blockRepository(): BlockRepository
+  /**
+   * The facade's notification repository over its real store, so the suite can assert the
+   * escalation sweep's single-statement `escalateStaleOpen` flips exactly the overdue open
+   * cards — and returns them for re-delivery — identically on D1 and Postgres.
+   */
+  notificationRepository(): NotificationRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim
@@ -318,4 +333,12 @@ export interface ConformanceAppOptions {
    * Worker's `buildContainer` overrides). Absent → the facade's default built-in-only registry.
    */
   backendRegistries?: BackendRegistries
+  /**
+   * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
+   * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an
+   * adequate report — is driven on EVERY runtime without a real model. Each facade harness
+   * threads it into its core overrides (the `testerQualityReviewer` seam `createCore` reads);
+   * absent ⇒ the facade's model-derived reviewer (a pass-through with no model wired).
+   */
+  testerQualityReviewer?: TesterQualityReviewer
 }

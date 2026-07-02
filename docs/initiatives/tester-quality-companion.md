@@ -63,6 +63,26 @@ report inside the Tester gate, before `resolveTesterResult`'s greenlight/fixer b
 - **Runtime symmetry**: the preset column is mirrored D1 ⇄ Drizzle with a conformance assertion
   (`suite.ts`, the merge-presets round-trip). Bumping the seed `version` to 2 required updating the
   catalog-version + reseed assertions in the conformance suite.
+- **The pipeline create/update/clone API must thread `testerQuality`** (PR 2): the field lives on
+  the `pipelineSchema` ENTITY, but the `createPipelineSchema`/`updatePipelineSchema` REQUEST bodies
+  and `PipelineService` did not carry it — Valibot silently strips unknown keys, so a custom
+  pipeline's builder toggle was dropped on save. PR 2 adds it (an `alignedTesterQuality` helper +
+  the request-schema fields), and fixed the identical pre-existing gap for the sibling `followUps`
+  toggle (same latent bug). The QC companion's optional estimate GATE is validated like companion
+  gating (`assertValidTesterQualityGating`: threshold set + a preceding `task-estimator`), but on
+  the Tester step itself rather than a companion row. **The fix reaches the persistence layer, not
+  just the request schema** (the original gap was that `pipelines` had no column for either field,
+  so threading them through the service alone still dropped them at the DB): new `follow_ups` +
+  `tester_quality` JSON columns on `pipelines`, mirrored D1 (migration
+  `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+  repos and read by the shared `rowToPipeline` mapper — with a conformance round-trip assertion
+  (save a `followUps` opt-out + a gated `testerQuality`, re-read from the store) guarding it on
+  both runtimes.
+- **Conformance drives the loop through an injected reviewer**: `createCore` now honours a
+  `testerQualityReviewer` override (else it builds the model-derived one), and the suite injects
+  a `FakeTesterQualityReviewer` (a scripted verdict sequence) via a `ConformanceAppOptions` seam
+  threaded through all three facade harnesses — so the full audit → loop → conclude loop runs on
+  every runtime without a model, asserting the verdicts + counters persist identically.
 
 ## Per-item status
 
@@ -75,5 +95,6 @@ report inside the Tester gate, before `resolveTesterResult`'s greenlight/fixer b
 | Runtimes: preset column + migration (D1 + Drizzle) + repos symmetric                                                                            | done   | (this PR) |
 | Conformance: preset round-trip assertion + version bump                                                                                         | done   | (this PR) |
 | `TesterController` QC unit tests (loop / adequate / budget-spent / disabled)                                                                    | done   | (this PR) |
-| **Frontend: pipeline-builder toggle + gating panel; QC verdicts in the Test Report window; i18n**                                               | todo   | PR 2      |
-| **Conformance: full QC loop driven through a fake reviewer via the harness**                                                                    | todo   | PR 2      |
+| Frontend: pipeline-builder toggle + gating panel; QC verdicts in the Test Report window; i18n                                                   | done   | PR 2      |
+| Persist `testerQuality` (+ the sibling `followUps`) through the pipeline create/update/clone API + QC-gating estimator validation               | done   | PR 2      |
+| Conformance: full QC loop driven through a fake reviewer via the harness                                                                        | done   | PR 2      |

@@ -1004,10 +1004,13 @@ export class ExecutionService {
       // pipeline has one.
       check(block.modelId, agentKinds.some(isInlineModelStep))
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of agentKinds) {
-        const id = await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId)
-        check(id, isInlineModelStep(kind))
-      }
+      // Independent per-kind resolutions on the start path — run them concurrently.
+      const ids = await Promise.all(
+        agentKinds.map((kind) =>
+          this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
+        ),
+      )
+      agentKinds.forEach((kind, i) => check(ids[i], isInlineModelStep(kind)))
     }
     if (unconfigured.size > 0) {
       throw new ConflictError(
@@ -1055,9 +1058,13 @@ export class ExecutionService {
     if (block.modelId) {
       ids.push(block.modelId)
     } else if (this.resolveWorkspaceModelDefault) {
-      for (const kind of agentKinds) {
-        ids.push(await this.resolveWorkspaceModelDefault(workspaceId, kind, block.modelPresetId))
-      }
+      ids.push(
+        ...(await Promise.all(
+          agentKinds.map((kind) =>
+            this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
+          ),
+        )),
+      )
     } else {
       ids.push(undefined)
     }
@@ -1161,6 +1168,9 @@ export class ExecutionService {
     return {
       agentKinds: steps.map((s) => s.agentKind),
       gating: steps.map((s) => s.gating ?? null),
+      // The QC companion's live step-state carries the same `gating` config the pipeline set, so
+      // the tester-QC gating validation re-runs on a retry against exactly what re-executes.
+      testerQuality: steps.map((s) => s.testerQuality ?? null),
     }
   }
 
@@ -1372,17 +1382,16 @@ export class ExecutionService {
    * Augment a workspace's block list (in place) with any dependency blocks referenced by
    * `depIds` that aren't already present — a `dependsOn` edge can point at a task homed in a
    * DIFFERENT workspace (a shared/mounted service). Resolved via the cross-workspace
-   * {@link BlockRepository.findById}, so a shared-service blocker is evaluated by its real
-   * status instead of being silently treated as satisfied (missing ⇒ done). Returns the same
-   * (now-augmented) array for chaining.
+   * {@link BlockRepository.findByIds} (one batched query, not a point-read per id), so a
+   * shared-service blocker is evaluated by its real status instead of being silently treated
+   * as satisfied (missing ⇒ done). Returns the same (now-augmented) array for chaining.
    */
   private async augmentWithCrossWorkspaceDeps(blocks: Block[], depIds: string[]): Promise<Block[]> {
     const have = new Set(blocks.map((b) => b.id))
-    for (const id of depIds) {
-      if (have.has(id)) continue
-      have.add(id)
-      const found = await this.blockRepository.findById(id)
-      if (found) blocks.push(found.block)
+    const missing = [...new Set(depIds)].filter((id) => !have.has(id))
+    if (missing.length === 0) return blocks
+    for (const found of await this.blockRepository.findByIds(missing)) {
+      blocks.push(found.block)
     }
     return blocks
   }
@@ -2057,6 +2066,11 @@ export class ExecutionService {
   private async finalizeMerge(workspaceId: string, blockId: string): Promise<void> {
     const block = await this.blockRepository.get(workspaceId, blockId)
     if (!block) return
+    // Idempotent under durable-driver replays: a crash between the real merge and the
+    // instance persist re-runs the merger resolver, and re-merging an already-merged PR
+    // throws — which the resolver's fall-through would then misread as a failed merge
+    // and downgrade the block to `pr_ready`. `done` already means "merged"; keep it.
+    if (block.status === 'done') return
     if (this.prMerger && block.pullRequest) {
       // Throws on a blocked/failed merge — the caller decides what to do next.
       await this.prMerger.mergeForBlock(workspaceId, blockId)
@@ -2101,37 +2115,37 @@ export class ExecutionService {
       blocks,
       dependents.flatMap((d) => d.dependsOn),
     )
+    // The workspace's first pipeline (the board's "Run" default for a dependent with no
+    // pinned pipeline) is invariant across the loop — read it once, not per dependent.
+    const firstPipeline = dependents.some((d) => !d.pipelineId)
+      ? ((await this.pipelineRepository.listByWorkspace(workspaceId))[0] ?? null)
+      : null
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue
       // Only auto-start a fresh task — never replace a run already in flight or a finished one.
       if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
-      const pipelineId = await this.resolveDefaultPipelineId(workspaceId, dependent)
-      if (!pipelineId) continue
-      // Skip dependents that would lease an individual-usage credential (can't unlock unattended).
-      const individual = await this.individualVendorsForBlock(workspaceId, dependent.id, pipelineId)
+      const pipeline = dependent.pipelineId
+        ? await this.pipelineRepository.get(workspaceId, dependent.pipelineId)
+        : firstPipeline
+      if (!pipeline) continue
+      // Skip dependents that would lease an individual-usage credential (can't unlock
+      // unattended) — resolved from the block + pipeline already in hand, no re-reads.
+      const individual = await this.resolveIndividualVendors(
+        workspaceId,
+        dependent.modelId,
+        dependent.modelPresetId,
+        pipeline.agentKinds,
+        () => false,
+      )
       if (individual.length > 0) continue
       try {
-        await this.start(workspaceId, dependent.id, pipelineId, null)
+        await this.start(workspaceId, dependent.id, pipeline.id, null)
       } catch {
         // Already running, no usable provider, still-unmet dep racing, etc. — leave this
         // dependent for a manual start; the others still get their chance.
       }
     }
-  }
-
-  /**
-   * The pipeline id a dependent task should auto-start with: its pinned `pipelineId` when
-   * set, else the workspace's first pipeline (mirrors the board's "Run" default). Null
-   * when no pipeline exists at all.
-   */
-  private async resolveDefaultPipelineId(
-    workspaceId: string,
-    block: Block,
-  ): Promise<string | null> {
-    if (block.pipelineId) return block.pipelineId
-    const pipelines = await this.pipelineRepository.listByWorkspace(workspaceId)
-    return pipelines[0]?.id ?? null
   }
 
   /**
@@ -2243,26 +2257,43 @@ export class ExecutionService {
     opts: { proposal?: string } = {},
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    const stepIndex = instance.steps.findIndex((s) => s.approval?.id === approvalId)
-    const step = instance.steps[stepIndex]
-    if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-    this.assertNotIterativeGate(step)
-    if (step.approval.status === 'approved') return instance
+    // Optimistic-concurrency write like resolveDecision/requestStepChanges: an approve
+    // holding a stale snapshot (a racing reject, a driver poll, a terminal transition)
+    // must re-read and re-validate rather than blind-write — otherwise it can resurrect
+    // a run another writer already failed. The advance's in-memory half runs inside the
+    // CAS; the non-idempotent side effects (block writes, driver signal, emit) run once
+    // after, on the winning state.
+    let stepIndex = -1
+    let alreadyApproved = false
+    const instance = await this.runStateMachine.mutateInstance(workspaceId, executionId, (inst) => {
+      alreadyApproved = false
+      stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
+      const step = inst.steps[stepIndex]
+      if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
+      this.assertNotIterativeGate(step)
+      if (step.approval.status === 'approved') {
+        alreadyApproved = true
+        return
+      }
+      if (step.approval.status === 'rejected') {
+        throw new ConflictError(`Approval '${approvalId}' was rejected`)
+      }
+      if (inst.status === 'failed' || inst.status === 'done') {
+        throw new ConflictError(`Execution '${executionId}' is already ${inst.status}`)
+      }
 
-    // A human edit to the proposal replaces the agent's text, so the revised
-    // proposal is what downstream steps read (via priorOutputs).
-    if (opts.proposal !== undefined) {
-      step.output = opts.proposal
-      step.approval.proposal = opts.proposal
-    }
-    step.approval.status = 'approved'
-    // A gate is never raised on the final step, but the shared advance stays defensive.
-    await this.runStateMachine.advancePastResolvedGate(workspaceId, instance, stepIndex)
+      // A human edit to the proposal replaces the agent's text, so the revised
+      // proposal is what downstream steps read (via priorOutputs).
+      if (opts.proposal !== undefined) {
+        step.output = opts.proposal
+        step.approval.proposal = opts.proposal
+      }
+      step.approval.status = 'approved'
+      // A gate is never raised on the final step, but the shared advance stays defensive.
+      this.runStateMachine.advanceRunPastGate(inst, stepIndex)
+    })
+    if (alreadyApproved) return instance
+    await this.runStateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
     return instance
   }
 

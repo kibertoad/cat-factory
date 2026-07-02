@@ -324,6 +324,28 @@ class DrizzleBlockRepository implements BlockRepository {
     }
   }
 
+  async findByIds(
+    blockIds: string[],
+  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>> {
+    if (blockIds.length === 0) return []
+    const out: Array<{ workspaceId: string; serviceId: string | null; block: Block }> = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < blockIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(blocks)
+        .where(inArray(blocks.id, blockIds.slice(i, i + 500)))
+      out.push(
+        ...rows.map((row) => ({
+          workspaceId: row.workspace_id,
+          serviceId: row.service_id ?? null,
+          block: rowToBlock(row),
+        })),
+      )
+    }
+    return out
+  }
+
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
     await this.db.insert(blocks).values({
       workspace_id: workspaceId,
@@ -392,6 +414,8 @@ class DrizzlePipelineRepository implements PipelineRepository {
       enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
       consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
       gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+      follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+      tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
       labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
@@ -413,6 +437,8 @@ class DrizzlePipelineRepository implements PipelineRepository {
         enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+        tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,

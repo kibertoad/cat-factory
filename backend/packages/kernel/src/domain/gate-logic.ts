@@ -76,13 +76,18 @@ export const FIXER_AGENT_KIND = 'fixer'
  * The aggregate CI verdict for a PR head commit, derived from its check runs:
  *  - `none`    — no checks reported (nothing to gate; treated as green).
  *  - `pending` — at least one check is still queued/in-progress and none failed.
- *  - `success` — every completed check succeeded (or was neutral/skipped) and none pending.
+ *  - `success` — every completed check succeeded (or was neutral/skipped/stale) and none pending.
  *  - `failure` — at least one check concluded in a non-success terminal state.
  */
 export type CiVerdict = 'none' | 'pending' | 'success' | 'failure'
 
-/** Conclusions GitHub reports for a *completed* check that are NOT failures. */
-const PASSING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped'])
+/**
+ * Conclusions GitHub reports for a *completed* check that are NOT failures. `stale`
+ * means the check was superseded (the ref moved / a newer run replaced it) — there is
+ * nothing for the ci-fixer to fix, so it must not fail the gate. Genuinely negative
+ * terminal states (`failure`, `cancelled`, `timed_out`, `action_required`) still fail.
+ */
+const NON_FAILING_CONCLUSIONS = new Set(['success', 'neutral', 'skipped', 'stale'])
 
 /**
  * Reduce a set of check runs to a single verdict. A failure dominates (one red
@@ -100,7 +105,7 @@ export function aggregateCi(checks: CiCheck[]): CiVerdict {
       continue
     }
     const conclusion = check.conclusion ?? ''
-    if (!PASSING_CONCLUSIONS.has(conclusion)) return 'failure'
+    if (!NON_FAILING_CONCLUSIONS.has(conclusion)) return 'failure'
   }
   return pending ? 'pending' : 'success'
 }
@@ -115,7 +120,7 @@ export function listFailingChecks(
   checks: CiCheck[],
 ): { name: string; conclusion: string | null; url: string | null }[] {
   return checks
-    .filter((c) => c.status === 'completed' && !PASSING_CONCLUSIONS.has(c.conclusion ?? ''))
+    .filter((c) => c.status === 'completed' && !NON_FAILING_CONCLUSIONS.has(c.conclusion ?? ''))
     .map((c) => ({ name: c.name, conclusion: c.conclusion, url: c.url ?? null }))
 }
 

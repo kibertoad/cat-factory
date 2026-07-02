@@ -2645,6 +2645,10 @@
       "consensusRevertTooltip": "Fikir birliği etkin. Tek ajana dönmek için tıklayın.",
       "followUpEnableTooltip": "Takip eşlikçisi devre dışı. Etkinleştirmek için tıklayın (Coder, açık uçları / soruları yüzeye çıkarır).",
       "followUpDisableTooltip": "Takip eşlikçisi etkin. Coder açık uçları / yan görevleri / soruları yüzeye çıkarır; devre dışı bırakmak için tıklayın.",
+      "testerQualityEnableTooltip": "Test kalitesi yardımcısı devre dışı. Etkinleştirmek için tıklayın (raporun kapsamını denetler ve eksiklerde Test aracını yeniden çalıştırır).",
+      "testerQualityDisableTooltip": "Test kalitesi yardımcısı etkin. Onaydan önce raporun kapsamını denetler ve eksiklerde Test aracını yeniden çalıştırır; devre dışı bırakmak için tıklayın.",
+      "testerQualityLabel": "Test kalitesi yardımcısı",
+      "testerQualityGateTooltip": "Kalite denetimini yalnızca görev tahmini bir eşiği aştığında çalıştır (önce bir Görev Tahmincisi gerekir)",
       "moveUp": "Adımı yukarı taşı",
       "moveDown": "Adımı aşağı taşı",
       "removeStep": "Bu adımı pipeline'dan kaldır",
@@ -3285,6 +3289,15 @@
       "completed": "Tamamlandı",
       "failed": "Başarısız",
       "addressed": "Ele alınıyor"
+    },
+    "quality": {
+      "heading": "Kapsam incelemesi",
+      "reruns": "Kalite kaynaklı Test aracı yeniden çalıştırmaları",
+      "rerunCount": "{attempts}/{max} yeniden çalıştırma",
+      "exceeded": "Bütçe tükendi",
+      "adequate": "Kapsam yeterli",
+      "inadequate": "Kapsam eksikleri bulundu",
+      "gaps": "Kapatılacak eksikler"
     },
     "empty": {
       "title": "Henüz test raporu yok.",

@@ -48,14 +48,96 @@ const GIT_TIMEOUT_MS = Math.max(
   loadRunnerLimits().inactivityMs - GIT_TIMEOUT_MARGIN_MS,
 )
 
-/** Wrap an error so its message/stack carry no credentials. */
-function redactError(err: unknown): Error {
-  if (err instanceof Error) {
-    const redacted = new Error(redactSecrets(err.message))
-    if (err.stack) redacted.stack = redactSecrets(err.stack)
-    return redacted
+// Config prefixed to EVERY git invocation to force fully non-interactive authentication.
+//
+// WHY: in native local mode the harness runs as a plain host process, so `git` inherits the
+// developer's host git config. On Windows that config has `credential.helper=manager` (Git
+// Credential Manager), and git consults its credential helpers BEFORE ever reaching
+// `GIT_ASKPASS`. GCM then pops up an interactive OS auth dialog on clone/fetch/push — which in
+// an autonomous, non-interactive run either steals focus with a stray window or, when the
+// dialog is modal, blocks the git process until it hits GIT_TIMEOUT_MS and is killed (the
+// classic "git push hung for ~7 minutes then failed" symptom).
+//
+// Emptying the helper list (`credential.helper=` with no value RESETS the multi-valued config,
+// dropping the system/global/local helpers) removes GCM from the chain, so git falls back to
+// the harness's own askpass helper — which returns the per-job PAT we already hold (see
+// `authEnv`). `credential.interactive=false` is belt-and-suspenders for any backend that still
+// runs. The token is never in argv; only this non-secret config is.
+const NON_INTERACTIVE_CREDENTIAL_ARGS = [
+  '-c',
+  'credential.helper=',
+  '-c',
+  'credential.interactive=false',
+]
+
+/**
+ * Env applied to git commands that DON'T carry {@link authEnv} (local ops like config/checkout/
+ * rev-parse). Keeps them from ever going interactive too — `GIT_TERMINAL_PROMPT=0` blocks the
+ * terminal prompt and `GCM_INTERACTIVE=never` blocks a Git Credential Manager popup even if a
+ * helper somehow survives. `authEnv` sets the same pair for the network ops.
+ */
+function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' }
+}
+
+/** The shape `execFile` decorates its rejection with — the bits we read to classify a failure. */
+type ExecError = Error & {
+  killed?: boolean
+  signal?: NodeJS.Signals | null
+  code?: number | string | null
+  stderr?: string | Buffer
+  stdout?: string | Buffer
+}
+
+/**
+ * Whether `err` is a per-command TIMEOUT kill (the child exceeded `execFile`'s `timeout`, so
+ * Node killed it with `killSignal` and set `killed=true`) — as opposed to a normal non-zero
+ * exit or a watchdog/caller abort. `aborted` is the caller signal's state: an abort ALSO
+ * kills the child, but it's the outer watchdog's story (recorded via `killReason` upstream),
+ * so it must NOT be reported here as a git timeout. Pure, so the classification is unit-tested.
+ */
+export function isGitTimeoutKill(err: unknown, aborted: boolean): boolean {
+  if (aborted) return false
+  const e = err as ExecError
+  if (e?.name === 'AbortError') return false
+  return e?.killed === true && e?.signal != null
+}
+
+/** The first non-flag token of a git argv (the subcommand — `push`/`clone`/…), for messages. */
+function gitSubcommand(args: string[]): string {
+  return args.find((a) => a !== '' && !a.startsWith('-')) ?? 'command'
+}
+
+/**
+ * Wrap a git failure into a credential-scrubbed {@link HarnessFailure}('git') with an ACCURATE
+ * message. Three cases the old bare "Command failed: git …" collapsed together:
+ *  - a per-command timeout kill → say it STALLED (and name the usual causes) instead of a blank
+ *    "Command failed", so a hung push/clone reads as a timeout rather than a mystery rejection;
+ *  - a real non-zero exit → fold in git's `stderr` (execFile puts the actual reason THERE, not
+ *    on `.message`, which is only "Command failed: <cmd>"), so the surfaced error has content;
+ *  - anything else → the scrubbed message.
+ */
+function gitFailure(err: unknown, args: string[], aborted: boolean): HarnessFailure {
+  const e = err as ExecError
+  if (isGitTimeoutKill(err, aborted)) {
+    const failure = new HarnessFailure(
+      'git',
+      redactSecrets(
+        `git ${gitSubcommand(args)} timed out after ${Math.round(GIT_TIMEOUT_MS / 1000)}s with no ` +
+          'progress — the operation stalled. Likely a very large clone/push, a slow or blocked ' +
+          'network, or an interactive credential prompt (e.g. a Git Credential Manager popup) that ' +
+          'a non-interactive run cannot answer.',
+      ),
+    )
+    if (e?.stack) failure.stack = redactSecrets(e.stack)
+    return failure
   }
-  return new Error(redactSecrets(String(err)))
+  const stderr = typeof e?.stderr === 'string' ? e.stderr : (e?.stderr?.toString() ?? '')
+  const base = e instanceof Error ? e.message : String(err)
+  const combined = stderr.trim() ? `${base}\n${stderr.trim()}` : base
+  const failure = new HarnessFailure('git', redactSecrets(combined))
+  if (e?.stack) failure.stack = redactSecrets(e.stack)
+  return failure
 }
 
 /**
@@ -102,8 +184,11 @@ async function authEnv(ghToken: string): Promise<NodeJS.ProcessEnv> {
     ...process.env,
     GIT_ASKPASS: await ensureAskpass(),
     GIT_ASKPASS_TOKEN: ghToken,
-    // Never fall back to an interactive prompt (which would hang the job).
+    // Never fall back to an interactive prompt / GUI credential dialog (which would hang the
+    // job or steal focus). Paired with the emptied credential helper in the git argv, this is
+    // what keeps a native-mode run from ever surfacing a Git Credential Manager popup.
     GIT_TERMINAL_PROMPT: '0',
+    GCM_INTERACTIVE: 'never',
   }
 }
 
@@ -117,12 +202,16 @@ async function git(
   args: string[],
   opts: { cwd?: string; signal?: AbortSignal; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
+  // Force non-interactive auth on EVERY git op: empty the credential-helper list (drops the
+  // host's Git Credential Manager, whose popup otherwise steals focus or hangs the command)
+  // and, for ops without the auth env, still block a terminal/GCM prompt. See the notes on
+  // NON_INTERACTIVE_CREDENTIAL_ARGS / authEnv above.
   try {
-    const { stdout } = await exec('git', args, {
+    const { stdout } = await exec('git', [...NON_INTERACTIVE_CREDENTIAL_ARGS, ...args], {
       ...(opts.cwd ? { cwd: opts.cwd } : {}),
       maxBuffer: 16 * 1024 * 1024,
       timeout: GIT_TIMEOUT_MS,
-      ...(opts.env ? { env: opts.env } : {}),
+      env: opts.env ?? nonInteractiveGitEnv(),
       ...(opts.signal ? { signal: opts.signal } : {}),
     })
     return stdout
@@ -130,10 +219,7 @@ async function git(
     // Tag the failure as `git` so the registry's catch records the real cause instead of
     // the generic `agent`. A watchdog abort still wins: `describeFailure` keys off
     // `killReason` first, so an abort during a git op keeps the timeout message/cause.
-    const redacted = redactError(err)
-    const failure = new HarnessFailure('git', redacted.message)
-    if (redacted.stack) failure.stack = redacted.stack
-    throw failure
+    throw gitFailure(err, args, opts.signal?.aborted === true)
   }
 }
 

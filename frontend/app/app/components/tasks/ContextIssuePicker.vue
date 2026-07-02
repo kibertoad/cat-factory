@@ -18,19 +18,45 @@ const props = defineProps<{
    * in-repo and a pasted URL / bare issue number resolves to the exact issue.
    */
   scopeBlockId?: string
+  /**
+   * Controlled source: when provided the parent owns the selected tracker (via
+   * `v-model:source`); omitted, the picker manages it internally (the add-task case).
+   */
+  source?: TaskSourceKind
+  /**
+   * Always render the source selector, even with a single offered tracker — so the
+   * user can see *which* tracker is being searched (the "create task from issue"
+   * surface, where the source is otherwise invisible). Off by default: the inline
+   * add-task picker stays compact and only shows a selector when there's a choice.
+   */
+  alwaysShowSource?: boolean
 }>()
-const emit = defineEmits<{ pick: [item: PendingContext] }>()
+const emit = defineEmits<{
+  pick: [item: PendingContext]
+  'update:source': [value: TaskSourceKind]
+}>()
 
 const { t } = useI18n()
 const tasks = useTasksStore()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
 
-// Source: default to the first offered tracker; a selector appears only when more
-// than one is offered (the common case is a single source).
-const source = ref<TaskSourceKind | undefined>(tasks.offeredSources[0]?.source)
+// Source: default to the first offered tracker. Controlled when the parent passes
+// `source` (write-through to `update:source`), else internal. A selector appears when
+// more than one source is offered, or whenever the parent asks (`alwaysShowSource`).
+const internalSource = ref<TaskSourceKind | undefined>(tasks.offeredSources[0]?.source)
+const source = computed<TaskSourceKind | undefined>({
+  get: () => props.source ?? internalSource.value,
+  set: (v) => {
+    internalSource.value = v
+    if (v) emit('update:source', v)
+  },
+})
 const sourceItems = computed(() =>
   tasks.offeredSources.map((s) => ({ label: s.label, value: s.source })),
+)
+const showSourceSelect = computed(
+  () => sourceItems.value.length > 1 || (props.alwaysShowSource && sourceItems.value.length > 0),
 )
 const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.value) : undefined))
 const searchable = computed(() => descriptor.value?.searchable ?? false)
@@ -42,8 +68,10 @@ const searchError = ref<string | null>(null)
 
 // Debounced search: free text hits the tracker; a query that's clearly a URL/key
 // is left to the explicit "by reference" row below (search won't surface it).
+// Re-scope when `scopeBlockId` changes too (a GitHub search is scoped to the block's
+// repo, so switching the target container re-runs against the new repo).
 let timer: ReturnType<typeof setTimeout> | undefined
-watch([query, source], () => {
+watch([query, source, () => props.scopeBlockId], () => {
   if (timer) clearTimeout(timer)
   results.value = []
   searchError.value = null
@@ -108,8 +136,10 @@ const refRow = computed(() => {
     searchRows.value.some((r) => r.externalId === q) ||
     chosen.value.has(keyFor(q))
   if (known) return null
-  // Only worth offering when it looks like a reference, not a search phrase.
-  const looksLikeRef = q.includes('#') || q.includes('/') || /^https?:\/\//i.test(q)
+  // Only worth offering when it looks like a reference, not a search phrase: a URL,
+  // an owner/repo#n or #n GitHub ref, or a Jira/Linear-style key (PROJ-123, ENG-42).
+  const looksLikeRef =
+    q.includes('#') || q.includes('/') || /^https?:\/\//i.test(q) || /^[a-z][a-z0-9]*-\d+$/i.test(q)
   return looksLikeRef ? q : null
 })
 
@@ -173,7 +203,7 @@ onMounted(() => {
 <template>
   <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
     <USelect
-      v-if="sourceItems.length > 1"
+      v-if="showSourceSelect"
       v-model="source"
       :items="sourceItems"
       size="xs"

@@ -476,6 +476,10 @@ export interface PipelineRow {
   consensus?: string | null
   /** Nullable JSON array of per-step estimate gating (migration 0003). */
   gating?: string | null
+  /** Nullable JSON array of per-step Follow-up companion toggles (migration 0032). */
+  follow_ups?: string | null
+  /** Nullable JSON array of per-step test quality-control companion configs (migration 0032). */
+  tester_quality?: string | null
   /** Nullable JSON array of organizational labels (migration 0003). */
   labels?: string | null
   /** Truthy (1) when the pipeline is archived / hidden from the default view (migration 0003). */
@@ -494,6 +498,10 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
     ...(row.consensus ? { consensus: JSON.parse(row.consensus) as Pipeline['consensus'] } : {}),
     ...(row.gating ? { gating: JSON.parse(row.gating) as Pipeline['gating'] } : {}),
+    ...(row.follow_ups ? { followUps: JSON.parse(row.follow_ups) as Pipeline['followUps'] } : {}),
+    ...(row.tester_quality
+      ? { testerQuality: JSON.parse(row.tester_quality) as Pipeline['testerQuality'] }
+      : {}),
     ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
     ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),

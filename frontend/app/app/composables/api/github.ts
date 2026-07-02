@@ -71,9 +71,14 @@ export function githubApi({ send, ws }: ApiContext) {
       send(createGitHubRepoContract, { pathPrefix: ws(workspaceId), body }),
 
     // Repos the connected installation can access, annotated with whether this
-    // workspace links each (drives the per-workspace repo picker).
-    listGitHubAvailableRepos: (workspaceId: string) =>
-      send(listGitHubAvailableReposContract, { pathPrefix: ws(workspaceId) }),
+    // workspace links each (drives the per-workspace repo picker). An optional `q`
+    // filters `owner/name` server-side so the add-service picker searches instead of
+    // prefetching the whole (possibly huge) installation; omitting it browses all.
+    listGitHubAvailableRepos: (workspaceId: string, q?: string) =>
+      send(listGitHubAvailableReposContract, {
+        pathPrefix: ws(workspaceId),
+        queryParams: { q },
+      }),
 
     // Set the exact set of repos this workspace links.
     setGitHubLinkedRepos: (workspaceId: string, repoGithubIds: number[]) =>
