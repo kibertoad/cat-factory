@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { HarnessAuthFields, RepoSpec } from './job.js'
 import {
+  branchAheadOfBase,
   branchHasCommitsSince,
   cloneExistingBranch,
   cloneRepo,
@@ -343,7 +344,24 @@ export async function runCodingAgent(
           })
         }
 
-        const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
+        // A fresh run produced work iff the branch advanced past its pre-run tip. A RESUMED
+        // run already carries prior work — UNLESS that branch turns out to have nothing ahead
+        // of the PR base (e.g. its earlier PR was merged with a merge commit, leaving the
+        // branch reachable from base and its best-effort delete skipped). Opening a PR for such
+        // a branch fails with GitHub's opaque 422 "No commits between ...", so a CONFIRMED-empty
+        // resumed branch is a no-op, not work. `undefined` (couldn't determine) keeps the prior
+        // resume-is-work behaviour; the PR-open path then no-ops on the 422 as a backstop.
+        const advancedThisPass = await branchHasCommitsSince(dir, baseSha, signal)
+        let hasWork = advancedThisPass || resumed
+        if (resumed && !advancedThisPass) {
+          const ahead = await branchAheadOfBase(dir, spec.repo.baseBranch, spec.ghToken, signal)
+          if (ahead === false) {
+            logger.info('coding-agent: resumed branch has no commits ahead of base — no-op', {
+              base: spec.repo.baseBranch,
+            })
+            hasWork = false
+          }
+        }
         if (!hasWork) {
           logger.info('coding-agent: no changes produced', { ...stats })
           outcome = {

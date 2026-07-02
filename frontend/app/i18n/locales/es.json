@@ -204,7 +204,10 @@
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
       "showDetail": "Mostrar detalle",
-      "retrying": "Reintentando…"
+      "retrying": "Reintentando…",
+      "history": {
+        "previousErrors": "{count} error anterior | {count} errores anteriores"
+      }
     },
     "stop": {
       "label": "Detener",
@@ -3608,7 +3611,8 @@
       "connectFirst": "Conecta primero una fuente de documentos (Confluence, Notion o GitHub) en Integraciones.",
       "refPlaceholder": "Id o URL de página (p. ej., una página de Confluence/Notion o la URL de un archivo de GitHub)",
       "tagsPlaceholder": "Etiquetas, separadas por comas (opcional)",
-      "link": "Vincular como fragmento vivo"
+      "link": "Vincular como fragmento vivo",
+      "githubBrowseHint": "Explora el repositorio y elige el archivo a enlazar."
     },
     "sources": {
       "metaSynced": "sincronizado · ref {ref}",
@@ -3620,7 +3624,10 @@
       "repoPlaceholder": "repositorio",
       "dirPlaceholder": "ruta del directorio (p. ej., guidelines)",
       "refPlaceholder": "ref (HEAD por defecto)",
-      "link": "Vincular y sincronizar"
+      "link": "Vincular y sincronizar",
+      "browseHint": "Explora el repositorio y elige el directorio de guías Markdown (o enlaza todo el repositorio).",
+      "selectedDir": "Directorio:",
+      "wholeRepo": "Repositorio completo (raíz)."
     },
     "toast": {
       "added": "Fragmento añadido",
@@ -3644,7 +3651,8 @@
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",
       "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
-    }
+    },
+    "unavailable": "La biblioteca de fragmentos de prompt no está habilitada en esta implementación."
   },
   "sandbox": {
     "title": "Sandbox: pruebas de prompts y modelos",

@@ -1,5 +1,50 @@
 # @cat-factory/worker
 
+## 0.53.0
+
+### Minor Changes
+
+- 4e82496: Enable the prompt-fragment library by default and streamline linking GitHub-backed fragments.
+
+  - The prompt-fragment library (ADR 0006) is now **on by default** in both runtimes; opt out
+    with `PROMPT_LIBRARY_ENABLED=false`. Previously it was off unless `PROMPT_LIBRARY_ENABLED=true`
+    was set, so linking a GitHub document as a fragment failed with "Prompt-fragment library is
+    not configured" on a stock deployment.
+  - The fragment-library manager now reuses the same GitHub affordances as the other repo
+    windows: a **server-side repo search** (new `GitHubRepoSearchSelect`) plus the
+    `RepoTreeBrowser` to browse to a **file** (document-backed fragments) or **directory**
+    (repo sources), instead of hand-typing `owner`/`repo`/`path`/`ref`. Manual entry remains as
+    a fallback when the GitHub App isn't connected.
+  - When the library is explicitly disabled, the manager now shows a clear notice instead of
+    offering forms that fail with a raw 503.
+
+### Patch Changes
+
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+  - @cat-factory/server@0.66.4
+
+## 0.52.10
+
+### Patch Changes
+
+- 9e55545: Stuck-run audit — Group A (Cloudflare recovery correctness): fix three ways a Worker run
+  could be wrongly killed instead of resumed.
+
+  - **F1** — the cron run-sweeper's hard-stall deadline now measures time-OBSERVED-orphaned via
+    a per-isolate `orphanedSince` clock (mirroring the Node sweeper), not raw lease age. A cron
+    outage / deploy freeze longer than the hard-stall window no longer fails a recoverable run on
+    the first post-outage tick; every orphan gets at least one re-drive attempt first.
+  - **F2** — `BootstrapWorkflow` / `EnvConfigRepairWorkflow` no longer return (making the
+    Workflows instance terminal) on a transient poll-read failure. A terminal instance for a
+    still-`running` job was being finalized as STOPPED by the sweeper, failing a bootstrap that
+    was merely slow or briefly unreachable. They now keep the instance alive and keep polling; a
+    genuinely vanished container still surfaces as a 404→`failed` poll result.
+  - **F5** — each workflow's per-wake DI construction is retried with durable sleeps
+    (`buildWorkflowRuntime`) so a transient throw can't kill a parked (`blocked`) instance
+    terminally and discard the human's resolved decision. A persistent misconfiguration still
+    fails loudly after the retries.
+
 ## 0.52.9
 
 ### Patch Changes
