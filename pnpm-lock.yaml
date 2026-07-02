@@ -70,7 +70,7 @@ importers:
         version: 6.0.214(zod@3.25.76)
       valibot:
         specifier: ^1.4.2
-        version: 1.4.2(typescript@6.0.3)
+        version: 1.4.2(typescript@7.0.1-rc)
       workers-ai-provider:
         specifier: ^3.2.1
         version: 3.2.1(@ai-sdk/anthropic@3.0.89(zod@3.25.76))(@ai-sdk/openai@3.0.77(zod@3.25.76))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@3.25.76))
@@ -79,11 +79,11 @@ importers:
         specifier: ^26.0.1
         version: 26.0.1
       typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
       vitest:
         specifier: ^4.1.9
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@6.0.3))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   backend/internal/conformance:
     dependencies:
@@ -212,17 +212,17 @@ importers:
         version: link:../../packages/kernel
       valibot:
         specifier: ^1.4.2
-        version: 1.4.2(typescript@6.0.3)
+        version: 1.4.2(typescript@7.0.1-rc)
     devDependencies:
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1
       typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
       vitest:
         specifier: ^4.1.9
-        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@6.0.3))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
 
   backend/packages/agents:
     dependencies:
@@ -871,8 +871,8 @@ importers:
         specifier: ^4.20260628.1
         version: 4.20260628.1
       typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
       wrangler:
         specifier: ^4.105.0
         version: 4.105.0(@cloudflare/workers-types@4.20260628.1)
