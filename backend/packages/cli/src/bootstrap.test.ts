@@ -113,6 +113,24 @@ describe('bootstrap (non-interactive)', () => {
     })
     expect(fs.files.get('/work/out/local/.env')).toContain('LOCAL_CONTAINER_RUNTIME=podman')
   })
+
+  it('threads native execution flags into the env', async () => {
+    const fs = memFs()
+    await bootstrap(
+      opts({
+        yes: true,
+        token: 't',
+        dir: 'out',
+        executionMode: 'native',
+        nativeHarnesses: ['codex'],
+        harnessEntry: '/opt/harness/server.js',
+      }),
+      { io: scriptIo(), fs, cwd: '/work', randomBytes: fixedBytes },
+    )
+    const env = fs.files.get('/work/out/local/.env') ?? ''
+    expect(env).toMatch(/^LOCAL_NATIVE_AGENTS=codex$/m)
+    expect(env).toMatch(/^LOCAL_HARNESS_ENTRY=\/opt\/harness\/server\.js$/m)
+  })
 })
 
 describe('bootstrap (interactive PAT flow)', () => {
@@ -136,6 +154,47 @@ describe('bootstrap (interactive PAT flow)', () => {
     expect(io.opened[0]).toContain('github.com/settings/tokens/new')
     expect(io.opened[0]).toContain('scopes=repo%2Cworkflow')
     expect(fs.files.get('/work/my-cats/local/.env')).toContain('GITHUB_PAT=ghp_pasted')
+  })
+
+  it('drives the interactive native-mode flow (mode + harness + entry)', async () => {
+    const fs = memFs()
+    // questions: name, title, db, api-base, harness entry
+    // selects: provider, runtime, execution-mode, native-harnesses
+    // confirms: show-models, open-browser, generate-secrets
+    const io = scriptIo(
+      [
+        'my-cats',
+        'My Cats',
+        'postgres://cat:cat@localhost:5432/catfactory',
+        'http://localhost:8787',
+        '/srv/harness/server.js',
+      ],
+      ['ghp_pasted'],
+      [true, true, true],
+      ['github', 'docker', 'native', 'both'],
+    )
+    await bootstrap(opts({}), { io, fs, cwd: '/work', randomBytes: fixedBytes })
+    const env = fs.files.get('/work/my-cats/local/.env') ?? ''
+    expect(env).toMatch(/^LOCAL_NATIVE_AGENTS=claude-code,codex$/m)
+    expect(env).toMatch(/^LOCAL_HARNESS_ENTRY=\/srv\/harness\/server\.js$/m)
+  })
+
+  it('leaves the secrets blank when the developer declines generation', async () => {
+    const fs = memFs()
+    const warn = vi.fn()
+    // Non-interactive-ish: options pre-set everything except the generate-secrets confirm.
+    const io = scriptIo([], [], [false])
+    io.warn = warn
+    await bootstrap(opts({ provider: 'github', token: 't', dir: 'out', executionMode: 'pool' }), {
+      io,
+      fs,
+      cwd: '/work',
+      randomBytes: fixedBytes,
+    })
+    const env = fs.files.get('/work/out/local/.env') ?? ''
+    expect(env).toMatch(/^AUTH_SESSION_SECRET=$/m)
+    expect(env).toMatch(/^ENCRYPTION_KEY=$/m)
+    expect(warn).toHaveBeenCalled()
   })
 
   it('does not open the browser with --no-open', async () => {

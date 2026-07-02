@@ -9,8 +9,17 @@ the **published** libraries, so the generated project stands alone outside the m
 
 It does the fiddly setup for you:
 
-- **Generates the crypto secrets** in the exact formats the server requires —
+- **Offers to generate the crypto secrets** in the exact formats the server requires —
   `AUTH_SESSION_SECRET` (32 random bytes, hex) and `ENCRYPTION_KEY` (32 random bytes, base64).
+  On by default; decline to leave them blank and paste your own.
+- **Lets you choose how agents run** — a **prewarmed Docker pool** (isolated per-run containers
+  from the executor image, the default) or **native host agents** (a host process driving your
+  own installed `claude`/`codex` CLI: no container, no leased credential, but no sandbox and only
+  Claude/ChatGPT models go native). The tradeoffs of each are printed before you pick, and in
+  native mode the CLI can list exactly which models will run natively.
+- **Surfaces the commonly-useful optional settings** in `local/.env` with sane defaults
+  (email/password sign-in, open signup, Langfuse tracing, Slack notifications, consensus, the
+  boot-time image refresh), all commented so you toggle them in place instead of hunting the docs.
 - **Mints a source-control token.** Pick GitHub or GitLab; the CLI opens your browser at the
   provider's "create a personal access token" page with the right **scopes pre-selected**
   (GitHub classic `repo,workflow`; GitLab `api`), then reads the token you paste back. Both
@@ -65,6 +74,9 @@ npx @cat-factory/cli init \
 | `--port <n>`              | `8787`                                  | Backend HTTP port (also sets the SPA's api-base).             |
 | `--harness-image <ref>`   | `ghcr.io/…/cat-factory-executor:latest` | Executor-harness image agent jobs run as.                     |
 | `--container-runtime <r>` | `docker`                                | Agent runtime: `docker`/`podman`/`orbstack`/`colima`/`apple`. |
+| `--execution-mode <m>`    | `pool`                                  | How agents run: `pool` (Docker pool) or `native` (host CLI).  |
+| `--native-harnesses <l>`  | `claude-code,codex`                     | Native mode: harnesses to run natively (comma list).          |
+| `--harness-entry <p>`     | (prompted)                              | Native mode: path to the executor-harness server entry.       |
 | `--no-open`               | off                                     | Print the token URL but don't open the browser.               |
 | `-y, --yes`               | off                                     | Non-interactive: use defaults/flags, never prompt.            |
 | `-f, --force`             | off                                     | Overwrite existing files.                                     |

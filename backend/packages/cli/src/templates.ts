@@ -25,6 +25,20 @@ export const DEFAULT_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:lat
 export const CONTAINER_RUNTIMES = ['docker', 'podman', 'orbstack', 'colima', 'apple'] as const
 export type ContainerRuntime = (typeof CONTAINER_RUNTIMES)[number]
 
+/**
+ * How agent jobs execute in local mode:
+ * - `pool`   — per-run Docker-family containers from the executor image, optionally kept
+ *              warm in a pool (the default, isolated, works with every model).
+ * - `native` — a host process driving the developer's OWN installed `claude` / `codex` CLI
+ *              (`LOCAL_NATIVE_AGENTS`): ambient login, no container, no leased credential.
+ */
+export const EXECUTION_MODES = ['pool', 'native'] as const
+export type ExecutionMode = (typeof EXECUTION_MODES)[number]
+
+/** The subscription harnesses local mode can drive as a NATIVE host process (`LOCAL_NATIVE_AGENTS`). */
+export const NATIVE_HARNESSES = ['claude-code', 'codex'] as const
+export type NativeHarness = (typeof NATIVE_HARNESSES)[number]
+
 export const localPackageJson = (projectName: string): string =>
   `${JSON.stringify(
     {
@@ -120,6 +134,8 @@ export interface LocalEnvExampleInput {
   databaseUrl?: string
   port?: number
   harnessImage?: string
+  executionMode?: ExecutionMode
+  nativeHarnesses?: NativeHarness[]
 }
 
 export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
@@ -129,11 +145,33 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
     databaseUrl = 'postgres://cat:cat@localhost:5432/catfactory',
     port = 8787,
     harnessImage = DEFAULT_HARNESS_IMAGE,
+    executionMode = 'pool',
+    nativeHarnesses,
   } = input
   // Show the chosen provider's PAT var active and the other commented, so the example matches
   // the populated `.env` the CLI writes for that provider.
   const tokenLines =
     provider === 'gitlab' ? ['# GITHUB_PAT=', 'GITLAB_PAT='] : ['GITHUB_PAT=', '# GITLAB_PAT=']
+  // Mirror the execution mode: native shows LOCAL_NATIVE_AGENTS + LOCAL_HARNESS_ENTRY active;
+  // pool shows them commented (with the warm-pool pointer to the UI).
+  const nativeList = nativeHarnesses?.length ? nativeHarnesses.join(',') : 'claude-code,codex'
+  const executionLines =
+    executionMode === 'native'
+      ? [
+          '# Execution mode: NATIVE host agents — steps whose model maps to a native vendor',
+          '# (Claude via claude-code, ChatGPT via codex) run as a host process driving your own',
+          '# installed CLI. Every other model still runs in a container (LOCAL_HARNESS_IMAGE).',
+          `LOCAL_NATIVE_AGENTS=${nativeList}`,
+          '# REQUIRED for native mode: the executor-harness server entry path.',
+          'LOCAL_HARNESS_ENTRY=',
+        ]
+      : [
+          '# Execution mode: PREWARMED DOCKER POOL — per-run containers from LOCAL_HARNESS_IMAGE.',
+          '# Warm-pool sizing lives in the UI (Integrations > "Local mode"); recommended: size 3,',
+          '# pre-warm 1, idle 10m. To switch to native host agents instead, set these two:',
+          '# LOCAL_NATIVE_AGENTS=claude-code,codex',
+          '# LOCAL_HARNESS_ENTRY=',
+        ]
   return `# Example env for the local-mode backend. Copy to \`.env\` (gitignored) and fill in.
 # \`cat-factory init\` generates a populated \`.env\` for you; this is the documented template
 # (the non-secret values below mirror the ones you chose at scaffold time).
@@ -151,6 +189,7 @@ ${tokenLines.join('\n')}
 LOCAL_HARNESS_IMAGE=${harnessImage}
 # Container runtime that spawns agent jobs: ${CONTAINER_RUNTIMES.join(' | ')}.
 LOCAL_CONTAINER_RUNTIME=${containerRuntime}
+${executionLines.join('\n')}
 # At least one model provider (Cloudflare Workers AI over REST shown; or a direct vendor key):
 # CLOUDFLARE_ACCOUNT_ID=
 # CLOUDFLARE_API_TOKEN=

@@ -71,11 +71,14 @@ export function persistenceController(): Hono<AppEnv> {
       (workspaceRepository?.accountOf?.(workspaceId) as Promise<string | null | undefined>) ??
       Promise.resolve(undefined)
 
-    // The `block`/`serviceList` scope checks resolve the owning account by reading the entity
-    // (`blockRepository.findById` / `serviceRepository.listByIds`). When the request ALSO
+    // The `block`/`serviceList`/`service` scope checks resolve the owning account by reading the
+    // entity (`blockRepository.findById` / `serviceRepository.listByIds`). When the request ALSO
     // dispatches that same read, memoise it per request so the resolver's read is reused instead
-    // of issuing a second identical query. (For every other `serviceList` method the dispatched
-    // method differs from the resolver's read, so there is nothing to dedupe.)
+    // of issuing a second identical query. `serviceRepository.get(id)` is the single-service form:
+    // its `service` scope resolves via `listByIds([id])`, so the dispatched `get` is routed through
+    // the same memo (a single-id `listByIds` yields the same row) rather than a second point read.
+    // (For every other `serviceList` method the dispatched method differs from the resolver's read,
+    // so there is nothing to dedupe.)
     const memoizeRead = (fn: (...args: unknown[]) => unknown) => {
       const cache = new Map<string, Promise<unknown>>()
       return (...args: unknown[]): Promise<unknown> => {
@@ -92,12 +95,16 @@ export function persistenceController(): Hono<AppEnv> {
     // For the two self-keyed reads, point the dispatcher's own call at the memo so it hits the
     // resolver's already-resolved result. Only the one dispatched method is overridden; the rest
     // of the registry is untouched.
+    const serviceGetViaMemo = async (id: unknown) =>
+      ((await serviceListByIds([id])) as Array<{ id: string }> | undefined)?.[0] ?? null
     const registryForDispatch =
       request.repo === 'blockRepository' && request.method === 'findById'
         ? { ...registry, blockRepository: { findById: blockFindById } }
         : request.repo === 'serviceRepository' && request.method === 'listByIds'
           ? { ...registry, serviceRepository: { listByIds: serviceListByIds } }
-          : registry
+          : request.repo === 'serviceRepository' && request.method === 'get'
+            ? { ...registry, serviceRepository: { get: serviceGetViaMemo } }
+            : registry
 
     const result = await dispatchPersistenceCall(request, {
       registry: registryForDispatch,
