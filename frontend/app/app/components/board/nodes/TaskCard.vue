@@ -14,6 +14,7 @@ const agentRuns = useAgentRunsStore()
 const reviews = useReviewStage()
 const toast = useToast()
 const { t } = useI18n()
+const { confirm } = useConfirm()
 
 const task = computed<Block | undefined>(() => board.getBlock(props.taskId))
 const statusMeta = computed(() => (task.value ? STATUS_META[task.value.status] : null))
@@ -106,8 +107,17 @@ function review() {
   ui.focus(props.taskId)
 }
 
-function merge() {
-  execution.mergePr(props.taskId)
+async function merge() {
+  // Merging a PR into its base is consequential and effectively irreversible — gate it behind a
+  // confirm (plain, not the destructive shape). `execution.mergePr` surfaces its own error toast.
+  const ok = await confirm({
+    title: t('board.task.mergeConfirm.title'),
+    description: t('board.task.mergeConfirm.body'),
+    confirmLabel: t('board.task.mergeConfirm.confirm'),
+    icon: 'i-lucide-git-merge',
+  })
+  if (!ok) return
+  await execution.mergePr(props.taskId)
 }
 
 // A `blocked` task is waiting on a human for one of two reasons — an agent-raised

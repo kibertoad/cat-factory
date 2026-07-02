@@ -11,7 +11,7 @@ import {
   localPackageJson,
   tsconfigJson,
 } from './templates.js'
-import type { ContainerRuntime } from './templates.js'
+import type { ContainerRuntime, ExecutionMode, NativeHarness } from './templates.js'
 import { patCreationUrl, patEnvVar, providerLabel, type VcsProvider } from './vcs.js'
 
 /** A single file the CLI will write, as a path relative to the project root + its content. */
@@ -34,6 +34,12 @@ export interface BootstrapInput {
   corsAllowedOrigins: string
   harnessImage: string
   containerRuntime: ContainerRuntime
+  /** How agent jobs execute: a Docker container pool (default) or native host agents. */
+  executionMode?: ExecutionMode
+  /** Native mode only: the subscription harnesses to run natively (`LOCAL_NATIVE_AGENTS`). */
+  nativeHarnesses?: NativeHarness[]
+  /** Native mode only: the executor-harness server entry path (`LOCAL_HARNESS_ENTRY`). */
+  harnessEntry?: string
   authSessionSecret: string
   encryptionKey: string
   /** Existing root `.gitignore` content, if the target dir already has one (rules are merged in). */
@@ -51,6 +57,9 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
     corsAllowedOrigins: input.corsAllowedOrigins,
     provider: input.provider,
     containerRuntime: input.containerRuntime,
+    executionMode: input.executionMode,
+    nativeHarnesses: input.nativeHarnesses,
+    harnessEntry: input.harnessEntry,
     token: input.token,
   })
   const frontendEnv = buildFrontendEnv({ apiBase: input.apiBase })
@@ -76,6 +85,8 @@ export function buildPlan(input: BootstrapInput): PlannedFile[] {
         databaseUrl: input.databaseUrl,
         port: input.port,
         harnessImage: input.harnessImage,
+        executionMode: input.executionMode,
+        nativeHarnesses: input.nativeHarnesses,
       }),
     },
     { path: 'local/.env', content: localEnv, secret: true },
