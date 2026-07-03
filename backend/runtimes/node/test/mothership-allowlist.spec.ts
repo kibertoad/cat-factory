@@ -107,12 +107,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     linkIdentity: 'onboarding',
     listIdentities: 'pending',
   },
+  // `listByAccount` is now allow-listed (the account members panel's pending-invite read,
+  // member-level). The lifecycle WRITES `create`/`setStatus` are admin-gated (inviting/revoking
+  // members), and `get`/`findByTokenHash` are the pre-auth accept-invite lookups (never a
+  // scoped-token call) — all stay mothership-internal.
   invitationRepository: {
-    create: 'pending',
+    create: 'admin',
     get: 'pending',
     findByTokenHash: 'pending',
-    listByAccount: 'pending',
-    setStatus: 'pending',
+    setStatus: 'admin',
   },
   passwordResetTokenRepository: {
     create: 'pending',
@@ -122,7 +125,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     consume: 'pending',
     deleteExpired: 'sweeper',
   },
-  emailConnectionRepository: { getByAccount: 'pending', upsert: 'pending', softDelete: 'pending' },
+  // `getByAccount` is now allow-listed (the email-settings panel's member-level read; the record's
+  // provider key rides a SEALED `apiKeyCipher` blob, so no plaintext crosses the machine API).
+  // `upsert`/`softDelete` (connect/disconnect) are admin-gated → stay mothership-internal.
+  emailConnectionRepository: { upsert: 'admin', softDelete: 'admin' },
   // `countActiveInternal` (the public API's initiative-start concurrency backstop, a
   // workspace-scoped SQL COUNT) is org/durable and REMOTE-eligible, but proxying the public-API
   // path is a later mothership slice, so it stays pending until then, like `listByService`.
@@ -297,18 +303,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'local',
     remove: 'local',
   },
+  // `listByOwner`/`upsert` are now allow-listed (the fragment-source library's list + link, owner
+  // scoped). The `sourceId`-keyed `get`/`updateSyncState`/`softDelete` back the repo-SYNC management
+  // the mothership owns (its source service needs a GitHub client a mothership node lacks) — they
+  // stay pending until a GitHub-sync-in-mothership slice adds a source→owner resolver.
   fragmentSourceRepository: {
-    listByOwner: 'pending',
     get: 'pending',
-    upsert: 'pending',
     updateSyncState: 'pending',
     softDelete: 'pending',
   },
+  // `listByOwner`/`get`/`upsert`/`softDelete` are now allow-listed (the prompt-fragment library
+  // management surface, owner scoped, member-level, no secrets). The `sourceId`-keyed `listBySource`
+  // is the repo-sync fan-out read (mothership-owned sync) — stays pending.
   promptFragmentRepository: {
-    listByOwner: 'pending',
-    get: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
     listBySource: 'pending',
   },
   notificationRepository: {},
