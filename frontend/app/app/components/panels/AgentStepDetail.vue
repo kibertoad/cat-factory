@@ -89,6 +89,14 @@ const executionId = computed(() => instance.value?.id ?? null)
 // "spinning up" phase, no spinner.
 const runFailed = computed(() => instance.value?.status === 'failed')
 
+// Whether the run is still doing something (can still spin infra up/down). A terminal
+// run (`done`/`failed`) has nothing left to provision, so the infra-attempts drawer
+// stops its background live-polling (manual refresh stays available).
+const runLive = computed(() => {
+  const status = instance.value?.status
+  return status != null && status !== 'done' && status !== 'failed'
+})
+
 // Live elapsed-time clock for the open step.
 const { isRunning, durationLabel } = useStepTimer({
   step: () => step.value,
@@ -406,6 +414,7 @@ async function copyOutput() {
                   v-if="showProvisioning"
                   class="mt-2"
                   :execution-id="executionId"
+                  :live="runLive"
                 />
               </div>
 
