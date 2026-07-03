@@ -6,6 +6,11 @@
 // window directly. Draggable within its frame like a task card.
 import type { InitiativeStatus } from '~/types/domain'
 import { useBlockDrag } from '~/composables/useBlockDrag'
+import {
+  INITIATIVE_STATUS_CHIPS,
+  INITIATIVE_STATUS_LABEL_KEYS,
+  initiativeProgress,
+} from '~/utils/initiative'
 
 const props = defineProps<{ blockId: string }>()
 const board = useBoardStore()
@@ -17,33 +22,10 @@ const { draggingId, startDrag } = useBlockDrag()
 const block = computed(() => board.getBlock(props.blockId))
 const initiative = computed(() => initiatives.forBlock(props.blockId))
 
-// Exhaustive (tier-2) status → label-key map: a new InitiativeStatus without a
-// label fails the typecheck rather than leaking a raw key into the badge.
-const STATUS_LABEL_KEYS: Record<InitiativeStatus, string> = {
-  planning: 'initiative.status.planning',
-  awaiting_approval: 'initiative.status.awaiting_approval',
-  executing: 'initiative.status.executing',
-  paused: 'initiative.status.paused',
-  done: 'initiative.status.done',
-  cancelled: 'initiative.status.cancelled',
-}
-const STATUS_CHIPS: Record<InitiativeStatus, string> = {
-  planning: 'neutral',
-  awaiting_approval: 'warning',
-  executing: 'info',
-  paused: 'neutral',
-  done: 'success',
-  cancelled: 'neutral',
-}
 const status = computed<InitiativeStatus>(() => initiative.value?.status ?? 'planning')
-const statusLabel = computed(() => t(STATUS_LABEL_KEYS[status.value]))
+const statusLabel = computed(() => t(INITIATIVE_STATUS_LABEL_KEYS[status.value]))
 
-const progress = computed(() => {
-  const items = initiative.value?.items ?? []
-  if (items.length === 0) return null
-  const settled = items.filter((i) => i.status === 'done' || i.status === 'skipped').length
-  return { settled, total: items.length }
-})
+const progress = computed(() => initiativeProgress(initiative.value?.items))
 
 const selected = computed(() => ui.selectedBlockId === props.blockId)
 
@@ -91,7 +73,7 @@ function onHandle(e: PointerEvent) {
           <UIcon name="i-lucide-milestone" class="h-4 w-4 shrink-0 text-indigo-400" />
           <div class="text-xs font-semibold text-white">{{ block.title }}</div>
         </div>
-        <UBadge :color="STATUS_CHIPS[status] as any" variant="subtle" size="sm">
+        <UBadge :color="INITIATIVE_STATUS_CHIPS[status] as any" variant="subtle" size="sm">
           {{ statusLabel }}
         </UBadge>
       </div>

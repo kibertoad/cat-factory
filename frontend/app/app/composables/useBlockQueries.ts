@@ -129,9 +129,17 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
    */
   function frameStatus(frameId: string): BlockStatus {
     const tasks = allTasksUnder(frameId)
-    if (tasks.length === 0) return 'planned'
-    if (tasks.some((t) => t.status === 'blocked')) return 'blocked'
-    if (tasks.some((t) => t.status === 'in_progress' || t.status === 'pr_ready'))
+    // Initiative containers are frame children too: a frame holding only an initiative
+    // is NOT empty, and an active (planning/executing → block `in_progress`) or blocked
+    // initiative drives the frame's activity dot just like a task does.
+    const inits = initiativesOf(frameId)
+    if (tasks.length === 0 && inits.length === 0) return 'planned'
+    if (tasks.some((t) => t.status === 'blocked') || inits.some((i) => i.status === 'blocked'))
+      return 'blocked'
+    if (
+      tasks.some((t) => t.status === 'in_progress' || t.status === 'pr_ready') ||
+      inits.some((i) => i.status === 'in_progress')
+    )
       return 'in_progress'
     return 'ready'
   }

@@ -909,6 +909,11 @@ export const initiatives = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     uniqueIndex('idx_initiatives_block').on(t.workspace_id, t.block_id),
+    // The tracker folder `docs/initiatives/<slug>/` is keyed by slug, so a slug must be
+    // unique per workspace — this backstops the read-then-insert slug derivation in
+    // InitiativeService.create against a concurrent same-title race (the loser's insert
+    // fails rather than silently sharing a folder with the winner).
+    uniqueIndex('idx_initiatives_slug').on(t.workspace_id, t.slug),
     // The cron sweeper's work list (slice 3): every `executing` initiative.
     index('idx_initiatives_status').on(t.status),
   ],

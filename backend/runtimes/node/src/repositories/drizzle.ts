@@ -116,7 +116,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
-import { agentRunKindSchema, safeParseInitiative } from '@cat-factory/contracts'
+import { agentRunKindSchema, decodeInitiativeRow } from '@cat-factory/contracts'
 import {
   decodeEnum,
   tryDecodeRows,
@@ -3065,33 +3065,9 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
   }
 }
 
-type InitiativeRow = typeof initiatives.$inferSelect
-
-/**
- * Decode a row's `doc` blob into the entity, re-imposing the column-lifted keys
- * (status/rev/timestamps are authoritative in their columns — the CAS predicate
- * runs on the `rev` column, so the blob must never win over it).
- */
-function rowToInitiative(row: InitiativeRow): Initiative | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(row.doc)
-  } catch {
-    return null
-  }
-  return (
-    safeParseInitiative({
-      ...(typeof parsed === 'object' && parsed !== null ? parsed : {}),
-      id: row.id,
-      blockId: row.block_id,
-      slug: row.slug,
-      status: row.status,
-      rev: row.rev,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }) ?? null
-  )
-}
+// The row → entity decode (doc blob + column-lifted keys) is the shared
+// `decodeInitiativeRow` (contracts), so the Drizzle and D1 repos can't drift.
+const rowToInitiative = decodeInitiativeRow
 
 /**
  * Initiatives over Postgres — the Drizzle mirror of the Worker's

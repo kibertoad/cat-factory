@@ -318,6 +318,49 @@ export function safeParseInitiative(value: unknown): Initiative | undefined {
   return result.success ? result.output : undefined
 }
 
+/**
+ * The persisted-row shape both facades store an initiative as: the entity as a JSON
+ * `doc` blob plus the loop-relevant keys lifted into their own columns (the CAS
+ * predicate runs on the `rev` COLUMN, so the columns — not the blob — are authoritative).
+ */
+export interface InitiativeRowLike {
+  id: string
+  block_id: string
+  slug: string
+  status: string
+  rev: number
+  doc: string
+  created_at: number
+  updated_at: number
+}
+
+/**
+ * Decode a stored row into the entity, re-imposing the column-lifted keys over the
+ * `doc` blob (a corrupt/unparseable row ⇒ null, so a list read can drop it rather than
+ * fail the whole board load). Shared by the D1 and Drizzle repositories so the
+ * column↔field contract lives in exactly one place and the runtimes can't drift.
+ */
+export function decodeInitiativeRow(row: InitiativeRowLike): Initiative | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(row.doc)
+  } catch {
+    return null
+  }
+  return (
+    safeParseInitiative({
+      ...(typeof parsed === 'object' && parsed !== null ? parsed : {}),
+      id: row.id,
+      blockId: row.block_id,
+      slug: row.slug,
+      status: row.status,
+      rev: row.rev,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }) ?? null
+  )
+}
+
 /** Strictly parse a planner plan draft. Throws on shape violations. */
 export function parseInitiativePlanDraft(value: unknown): InitiativePlanDraft {
   return v.parse(initiativePlanDraftSchema, value)

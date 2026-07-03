@@ -1,5 +1,5 @@
 import type { Initiative, InitiativeRepository } from '@cat-factory/kernel'
-import { safeParseInitiative } from '@cat-factory/contracts'
+import { decodeInitiativeRow } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface InitiativeRow {
@@ -14,30 +14,9 @@ interface InitiativeRow {
   updated_at: number
 }
 
-/**
- * Decode a row's `doc` blob into the entity, re-imposing the column-lifted keys
- * (status/rev/timestamps are authoritative in their columns — the CAS predicate
- * runs on the `rev` column, so the blob must never win over it).
- */
-function rowToInitiative(row: InitiativeRow): Initiative | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(row.doc)
-  } catch {
-    return null
-  }
-  const initiative = safeParseInitiative({
-    ...(typeof parsed === 'object' && parsed !== null ? parsed : {}),
-    id: row.id,
-    blockId: row.block_id,
-    slug: row.slug,
-    status: row.status,
-    rev: row.rev,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  })
-  return initiative ?? null
-}
+// The row → entity decode (doc blob + column-lifted keys) is the shared
+// `decodeInitiativeRow` (contracts), so the D1 and Drizzle repos can't drift.
+const rowToInitiative = decodeInitiativeRow
 
 /**
  * Initiatives, one row per entity in `initiatives` (migration 0035). The entity

@@ -8,7 +8,12 @@
 // as the planner step's result view. Live `initiative` stream events patch the
 // store, so an open window follows the plan as it is ingested and later executed.
 import { computed } from 'vue'
-import type { InitiativeItem, InitiativeItemStatus, InitiativeStatus } from '~/types/domain'
+import type { InitiativeItem } from '~/types/domain'
+import {
+  INITIATIVE_ITEM_STATUS_CHIPS,
+  INITIATIVE_ITEM_STATUS_LABEL_KEYS,
+  INITIATIVE_STATUS_LABEL_KEYS,
+} from '~/utils/initiative'
 
 const board = useBoardStore()
 const initiatives = useInitiativesStore()
@@ -20,32 +25,6 @@ const { open, blockId, close } = useResultView('initiative-tracker', {
 
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const initiative = computed(() => (blockId.value ? initiatives.forBlock(blockId.value) : null))
-
-// Exhaustive (tier-2) enum → key maps so a new status fails the typecheck here.
-const STATUS_LABEL_KEYS: Record<InitiativeStatus, string> = {
-  planning: 'initiative.status.planning',
-  awaiting_approval: 'initiative.status.awaiting_approval',
-  executing: 'initiative.status.executing',
-  paused: 'initiative.status.paused',
-  done: 'initiative.status.done',
-  cancelled: 'initiative.status.cancelled',
-}
-const ITEM_STATUS_LABEL_KEYS: Record<InitiativeItemStatus, string> = {
-  pending: 'initiative.itemStatus.pending',
-  in_progress: 'initiative.itemStatus.in_progress',
-  pr_open: 'initiative.itemStatus.pr_open',
-  done: 'initiative.itemStatus.done',
-  blocked: 'initiative.itemStatus.blocked',
-  skipped: 'initiative.itemStatus.skipped',
-}
-const ITEM_STATUS_CHIPS: Record<InitiativeItemStatus, string> = {
-  pending: 'neutral',
-  in_progress: 'info',
-  pr_open: 'warning',
-  done: 'success',
-  blocked: 'error',
-  skipped: 'neutral',
-}
 
 const phases = computed(() => initiative.value?.phases ?? [])
 function itemsOf(phaseId: string): InitiativeItem[] {
@@ -96,7 +75,7 @@ function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: 
             </p>
           </div>
           <UBadge v-if="initiative" color="primary" variant="subtle" size="sm">
-            {{ t(STATUS_LABEL_KEYS[initiative.status]) }}
+            {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}
           </UBadge>
           <button
             class="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
@@ -198,11 +177,11 @@ function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: 
                       </td>
                       <td class="px-3 py-2 align-top">
                         <UBadge
-                          :color="ITEM_STATUS_CHIPS[item.status] as any"
+                          :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status] as any"
                           variant="subtle"
                           size="sm"
                         >
-                          {{ t(ITEM_STATUS_LABEL_KEYS[item.status]) }}
+                          {{ t(INITIATIVE_ITEM_STATUS_LABEL_KEYS[item.status]) }}
                         </UBadge>
                       </td>
                       <td class="px-3 py-2 align-top">

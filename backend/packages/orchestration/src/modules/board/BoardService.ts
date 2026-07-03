@@ -783,12 +783,17 @@ export class BoardService {
       const patch: {
         dependsOn?: string[]
         epicId?: string | null
+        initiativeId?: string | null
         serviceConnections?: ServiceConnection[]
         involvedServiceIds?: string[]
       } = {}
       const next = b.dependsOn.filter((d) => !removed.has(d))
       if (next.length !== b.dependsOn.length) patch.dependsOn = next
       if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+      // Initiative membership is non-structural (epic-style): a task the loop spawned
+      // isn't a descendant of the deleted initiative block, so detach the dangling link
+      // here the same way epic membership is pruned above.
+      if (b.initiativeId && removed.has(b.initiativeId)) patch.initiativeId = null
       // Service-connection edges into the removed set, and task selections of a removed
       // involved service, dangle the same way dependency edges do — drop them here too.
       const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))

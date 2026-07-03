@@ -105,8 +105,11 @@ export class InitiativeService {
       createdAt: now,
       updatedAt: now,
     }
-    await this.deps.blockRepository.insert(workspaceId, block)
+    // Insert the initiative FIRST: its `(workspace_id, slug)` unique index is the
+    // backstop for the read-then-insert slug race, so a losing concurrent create throws
+    // here BEFORE a dangling initiative-block is written (rather than orphaning one).
     await this.deps.initiativeRepository.insert(workspaceId, initiative)
+    await this.deps.blockRepository.insert(workspaceId, block)
     await this.deps.events.boardChanged(workspaceId, 'initiative-added', block.id)
     await this.deps.events.initiativeChanged?.(workspaceId, initiative)
     return { initiative, block }

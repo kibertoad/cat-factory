@@ -353,7 +353,7 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-milestone',
     color: '#818cf8',
     description:
-      'Explores the codebase and drafts the initiative’s multi-phase plan (items, estimates, concurrency + pipeline policy) for approval.',
+      "Explores the codebase and drafts the initiative's multi-phase plan (items, estimates, concurrency + pipeline policy) for approval.",
     // Opens the dedicated tracker window (phases / items / policy) instead of the
     // generic prose step-detail panel.
     resultView: 'initiative-tracker',

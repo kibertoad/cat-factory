@@ -329,7 +329,7 @@ export function renderInitiativeTrackerMarkdown(initiative: Initiative): string 
     '',
     `**Status:** ${initiative.status} · **Started:** ${new Date(initiative.createdAt).toISOString().slice(0, 10)}`,
     '',
-    '> Generated initiative tracker (rendered from the platform’s initiative entity).',
+    "> Generated initiative tracker (rendered from the platform's initiative entity).",
     '> The per-item checklist is updated as the execution loop settles each item.',
   ]
 
@@ -479,15 +479,35 @@ export async function commitInitiativeTracker(
   const previous = parseInitiativeVersionFile(
     (await repo.getFile(initiativeVersionPath(initiative.slug), branch))?.content,
   )
-  const hash = await hashInitiative(initiative)
+  // Serialise + hash the entity ONCE, then thread both through the rendered files.
+  // (`canonicalInitiativeJson` IS the `initiative.json` body and the hash preimage, so
+  // recomputing them per file — as the generic `renderInitiativeFiles`/
+  // `nextInitiativeVersion` helpers do — is pure waste on the commit path.)
+  const canonical = canonicalInitiativeJson(initiative)
+  const hash = await sha256Hex(canonical)
   if (previous && previous.hash === hash) return null
 
-  const versionMeta = await nextInitiativeVersion(initiative, previous, now)
-  const files = await renderInitiativeFiles(initiative, versionMeta)
+  const version = (previous?.version ?? 0) + 1
+  const manifest: InitiativeVersion = {
+    version,
+    generatedAt: now.toISOString(),
+    hash,
+    items: initiative.items?.length ?? 0,
+  }
   await repo.commitFiles({
     branch,
     message: `Update initiative tracker: ${initiative.title}`,
-    files,
+    files: [
+      { path: initiativeJsonPath(initiative.slug), content: canonical },
+      {
+        path: initiativeTrackerPath(initiative.slug),
+        content: renderInitiativeTrackerMarkdown(initiative),
+      },
+      {
+        path: initiativeVersionPath(initiative.slug),
+        content: `${JSON.stringify(manifest, null, 2)}\n`,
+      },
+    ],
   })
-  return { version: versionMeta.version, hash }
+  return { version, hash }
 }

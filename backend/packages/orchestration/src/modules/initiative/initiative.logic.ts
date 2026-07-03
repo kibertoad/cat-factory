@@ -118,17 +118,23 @@ export function applyPlanDraft(
   draft: InitiativePlanDraft,
   now: number,
 ): Initiative {
-  const phaseIds = new Set<string>()
+  // Seed the taken-set with every EXPLICIT id up front, so an id-less phase whose
+  // title slugifies to an id used by a LATER explicit phase can't silently collide
+  // (a hand-supplied / re-plan draft mixing explicit and omitted ids).
+  const phaseIds = new Set<string>(
+    draft.phases.map((p) => p.id).filter((id): id is string => id !== undefined),
+  )
   const phases: InitiativePhase[] = draft.phases.map((p) => ({
     id: p.id ?? uniqueSlugId(p.title, phaseIds),
     title: p.title,
     goal: p.goal ?? '',
     ...(p.maxConcurrent !== undefined ? { maxConcurrent: p.maxConcurrent } : {}),
   }))
-  for (const p of phases) phaseIds.add(p.id)
 
   const existingItems = new Map((initiative.items ?? []).map((i) => [i.id, i]))
-  const itemIds = new Set<string>()
+  const itemIds = new Set<string>(
+    draft.items.map((d) => d.id).filter((id): id is string => id !== undefined),
+  )
   const items: InitiativeItem[] = draft.items.map((d) => {
     const id = d.id ?? uniqueSlugId(d.title, itemIds)
     itemIds.add(id)

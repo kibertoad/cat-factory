@@ -1651,6 +1651,18 @@ export class RunDispatcher {
       }
     }
 
+    // Flip the entity to `executing` FIRST, then render the tracker from the flipped
+    // entity — the committed mirror (and its content hash) must record the REAL
+    // `executing` status. Committing the pre-flip entity would bake a stale
+    // `awaiting_approval` status into `initiative.json`/`tracker.md` that nothing
+    // re-commits in this slice, AND would break replay-safety: a durable-driver replay
+    // re-reads the now-`executing` entity, whose hash no longer matches the committed
+    // `version.json`, so the no-change short-circuit would miss and re-commit. Ordering
+    // status-write before the git side effect also means a `markExecuting` CAS conflict
+    // aborts before any commit lands (no orphaned tracker commit).
+    const executing =
+      (await this.initiativeService.markExecuting(workspaceId, block.id, null)) ?? initiative
+
     let doc: { version: number; hash: string } | null = null
     let mirror = 'Repo tracker mirror skipped (GitHub not connected).'
     const runRepo = await this.resolveRunRepo(workspaceId, block.id)
@@ -1658,17 +1670,19 @@ export class RunDispatcher {
       doc = await commitInitiativeTracker(
         runRepo.repo,
         runRepo.baseBranch,
-        initiative,
+        executing,
         new Date(this.clock.now()),
       )
       mirror = doc
-        ? `Committed docs/initiatives/${initiative.slug}/ (v${doc.version}) to ${runRepo.baseBranch}.`
-        : `Tracker already up to date in docs/initiatives/${initiative.slug}/.`
+        ? `Committed docs/initiatives/${executing.slug}/ (v${doc.version}) to ${runRepo.baseBranch}.`
+        : `Tracker already up to date in docs/initiatives/${executing.slug}/.`
+      // Stamp the committed version/hash back onto the entity (content-unchanged tick ⇒
+      // no commit ⇒ nothing to stamp, so a replay skips this second write too).
+      if (doc) await this.initiativeService.markExecuting(workspaceId, block.id, doc)
     }
-    await this.initiativeService.markExecuting(workspaceId, block.id, doc)
 
-    const phases = (initiative.phases ?? []).length
-    const items = (initiative.items ?? []).length
+    const phases = (executing.phases ?? []).length
+    const items = (executing.items ?? []).length
     return {
       kind: 'ok',
       result: {

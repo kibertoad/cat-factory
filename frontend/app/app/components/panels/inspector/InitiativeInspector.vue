@@ -4,6 +4,7 @@
 // refuses any other on this block), and the tracker window opener. Read-only in
 // this slice; plan/policy editing lands with the execution loop.
 import type { Block, InitiativeStatus } from '~/types/domain'
+import { INITIATIVE_STATUS_LABEL_KEYS, initiativeProgress } from '~/utils/initiative'
 
 const props = defineProps<{ block: Block }>()
 
@@ -15,14 +16,6 @@ const { t } = useI18n()
 
 const initiative = computed(() => initiatives.forBlock(props.block.id))
 
-const STATUS_LABEL_KEYS: Record<InitiativeStatus, string> = {
-  planning: 'initiative.status.planning',
-  awaiting_approval: 'initiative.status.awaiting_approval',
-  executing: 'initiative.status.executing',
-  paused: 'initiative.status.paused',
-  done: 'initiative.status.done',
-  cancelled: 'initiative.status.cancelled',
-}
 const status = computed<InitiativeStatus>(() => initiative.value?.status ?? 'planning')
 
 // The ONLY pipeline runnable on an initiative block (see the engine's runnable guard).
@@ -36,19 +29,14 @@ function openTracker() {
   ui.openInitiativeTracker(props.block.id)
 }
 
-const progress = computed(() => {
-  const items = initiative.value?.items ?? []
-  if (items.length === 0) return null
-  const settled = items.filter((i) => i.status === 'done' || i.status === 'skipped').length
-  return { settled, total: items.length }
-})
+const progress = computed(() => initiativeProgress(initiative.value?.items))
 </script>
 
 <template>
   <div class="space-y-3" data-testid="initiative-inspector">
     <div class="flex items-center gap-2">
       <UBadge color="primary" variant="subtle" size="sm">
-        {{ t(STATUS_LABEL_KEYS[status]) }}
+        {{ t(INITIATIVE_STATUS_LABEL_KEYS[status]) }}
       </UBadge>
       <span v-if="progress" class="text-[11px] text-slate-400">
         {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
