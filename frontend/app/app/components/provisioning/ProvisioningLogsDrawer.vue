@@ -9,9 +9,10 @@
 // In `executionId` mode the drawer LIVE-tracks: while the run is active (`live`) it
 // silently re-polls so each container spin-up / tear-down appears with its timestamp as
 // it happens, and it does one final poll when the run goes terminal to catch the last
-// tear-down row (written just before the terminal event). Once the run is no longer
-// doing anything there is nothing left to refresh, so the refresh control (and its
-// spinner) is hidden and polling stops.
+// tear-down row (written just before the terminal event), after which the auto-poll
+// stops. Background polls never spin the refresh button (they're silent), but the manual
+// refresh control stays available even once the run is terminal — so a tear-down row that
+// was missed or not yet persisted at the terminal instant can always be refetched.
 import { onBeforeUnmount, onMounted, watch } from 'vue'
 import type {
   ProvisioningOperation,
@@ -40,10 +41,6 @@ function reload(silent = false) {
   else if (props.subsystem) void store.load(props.subsystem)
 }
 
-// The refresh affordance is hidden once a run is terminal ("nothing to refresh anymore"):
-// only shown in subsystem mode (always) or while a run-details drawer is still live.
-const canRefresh = computed(() => props.subsystem != null || props.live === true)
-
 // --- live polling (executionId mode only) --------------------------------
 const POLL_MS = 4000
 let timer: ReturnType<typeof setInterval> | undefined
@@ -63,15 +60,17 @@ function startPolling() {
 watch(
   () => props.live,
   (live, wasLive) => {
-    if (props.executionId == null) return
-    if (live) {
+    if (live && props.executionId != null) {
       startPolling()
-    } else {
-      stopPolling()
-      // On the active→terminal transition, poll once more (silently) to pick up the
-      // tear-down row the engine writes just before it emits the terminal state.
-      if (wasLive) reload(true)
+      return
     }
+    // Cleanup must NOT depend on `executionId` still being set: when the run's instance
+    // clears, `live` and `executionId` fall away in the same tick, so stop the interval
+    // unconditionally or it leaks (firing no-op reloads) for the component's lifetime.
+    stopPolling()
+    // On the active→terminal transition, poll once more (silently) to pick up the
+    // tear-down row the engine writes just before it emits the terminal state.
+    if (wasLive && props.executionId != null) reload(true)
   },
   { immediate: true },
 )
@@ -107,7 +106,6 @@ function when(epochMs: number): string {
         {{ t('provisioning.title') }}
       </p>
       <UButton
-        v-if="canRefresh"
         icon="i-lucide-rotate-ccw"
         variant="ghost"
         size="xs"

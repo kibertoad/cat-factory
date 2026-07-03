@@ -59,8 +59,8 @@ const qualityVerdicts = computed(() => [...(quality.value?.verdicts ?? [])].reve
 // run's infrastructure attempts + logs (container/runner/env spin-up), not just the
 // report. The container/subtask signals already flow onto the step via the generic poll.
 const runFailed = computed(() => instance.value?.status === 'failed')
-// A terminal run (done/failed) can't spin more infra: the attempts drawer stops
-// live-polling and hides its refresh spinner.
+// A terminal run (done/failed) can't spin more infra: the attempts drawer stops its
+// background live-polling (manual refresh stays available).
 const runLive = computed(() => {
   const status = instance.value?.status
   return status != null && status !== 'done' && status !== 'failed'

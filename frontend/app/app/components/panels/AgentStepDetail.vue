@@ -71,7 +71,7 @@ const runFailed = computed(() => instance.value?.status === 'failed')
 
 // Whether the run is still doing something (can still spin infra up/down). A terminal
 // run (`done`/`failed`) has nothing left to provision, so the infra-attempts drawer
-// stops live-polling and hides its refresh spinner.
+// stops its background live-polling (manual refresh stays available).
 const runLive = computed(() => {
   const status = instance.value?.status
   return status != null && status !== 'done' && status !== 'failed'
