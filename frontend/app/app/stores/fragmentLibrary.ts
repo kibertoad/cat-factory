@@ -42,8 +42,8 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
   const resolved = ref<ResolvedFragment[]>([])
   /** Linked guideline repos for this owner. */
   const sources = ref<FragmentSource[]>([])
-  /** Per-source "changes available" counts from the last status check. */
-  const sourceChanges = ref<Record<string, number>>({})
+  /** Per-source "changes available" flag from the last status check. */
+  const sourceChanges = ref<Record<string, boolean>>({})
   const loading = ref(false)
   /**
    * Account-tier document fragments only: the workspace whose stored
@@ -166,12 +166,12 @@ function fragmentLibrarySetup(kind: FragmentOwnerKind, resolveOwnerId: () => str
     }
   }
 
-  /** Cheap "check for changes" for a source; caches the changed count. */
+  /** Lightweight commit-version "check for changes" for a source; caches the flag. */
   async function checkSource(sourceId: string) {
     const status = await api.fragmentSourceStatus(kind, requireOwnerId(), sourceId)
     sourceChanges.value = {
       ...sourceChanges.value,
-      [sourceId]: status.changed ? status.changedCount : 0,
+      [sourceId]: status.changed,
     }
     return status
   }

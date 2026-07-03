@@ -537,6 +537,8 @@ export const fragmentSources = pgTable(
     repo_name: text('repo_name').notNull(),
     git_ref: text('git_ref').notNull().default('HEAD'),
     dir_path: text('dir_path').notNull().default(''),
+    // Head commit sha of the source dir at the last sync (name kept for column stability;
+    // it no longer stores the former tree-listing digest). Powers the staleness probe.
     last_synced_sha: text('last_synced_sha'),
     last_synced_at: bigint('last_synced_at', { mode: 'number' }),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

@@ -3680,7 +3680,7 @@
     "sources": {
       "metaSynced": "同期済み · ref {ref}",
       "metaNever": "未同期 · ref {ref}",
-      "changes": "{count} 件の変更 | {count} 件の変更",
+      "changes": "変更",
       "empty": "リンクされたガイドラインリポジトリはありません。下からリンクして Markdown ファイルをフラグメントとしてインポートしてください。",
       "linkTitle": "ガイドラインリポジトリをリンク",
       "ownerPlaceholder": "owner",
@@ -3705,7 +3705,7 @@
       "linkSourceFailed": "ソースをリンクできませんでした",
       "synced": "同期完了: {updated} 件更新、{removed} 件削除",
       "syncFailed": "ソースを同期できませんでした",
-      "changesAvailable": "{count} 件の変更が利用可能 | {count} 件の変更が利用可能",
+      "changesAvailable": "変更が利用可能",
       "upToDate": "最新です",
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",

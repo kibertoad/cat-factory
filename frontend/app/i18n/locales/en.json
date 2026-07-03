@@ -3802,7 +3802,7 @@
     "sources": {
       "metaSynced": "synced · ref {ref}",
       "metaNever": "never synced · ref {ref}",
-      "changes": "{count} change | {count} changes",
+      "changes": "Changes",
       "empty": "No linked guideline repos. Link one below to import its Markdown files as fragments.",
       "linkTitle": "Link a guideline repo",
       "ownerPlaceholder": "owner",
@@ -3827,7 +3827,7 @@
       "linkSourceFailed": "Could not link source",
       "synced": "Synced: {updated} updated, {removed} removed",
       "syncFailed": "Could not sync source",
-      "changesAvailable": "{count} change available | {count} changes available",
+      "changesAvailable": "Changes available",
       "upToDate": "Up to date",
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",

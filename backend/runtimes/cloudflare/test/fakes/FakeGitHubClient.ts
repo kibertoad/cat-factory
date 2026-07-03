@@ -147,6 +147,33 @@ export class FakeGitHubClient implements GitHubClient {
     return this.files[path] ?? null
   }
 
+  /**
+   * Pseudo head-commit sha for the dir, derived from its files' blob shas: any change
+   * to a file under the dir (edit/add/remove/rename) yields a new value, mirroring what
+   * the real commits API reports after a commit touches the directory. Null for an empty
+   * dir (no commit to pin against).
+   */
+  async latestCommitSha(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    path: string,
+    _gitRef?: string,
+  ): Promise<string | null> {
+    const prefix = path ? `${path.replace(/\/+$/, '')}/` : ''
+    const parts = Object.entries(this.files)
+      .filter(([p]) => (prefix ? p.startsWith(prefix) : !p.includes('/')))
+      .map(([p, f]) => `${p}:${f.sha}`)
+      .sort()
+    if (!parts.length) return null
+    const joined = parts.join('\n')
+    let hash = 0x811c9dc5
+    for (let i = 0; i < joined.length; i++) {
+      hash ^= joined.charCodeAt(i)
+      hash = Math.imul(hash, 0x01000193)
+    }
+    return `commit-${(hash >>> 0).toString(16).padStart(8, '0')}`
+  }
+
   async listPullRequests(): Promise<Paged<GitHubPullRequest>> {
     return { items: this.pulls }
   }

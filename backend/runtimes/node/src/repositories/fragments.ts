@@ -182,7 +182,8 @@ function rowToSource(row: FragmentSourceRow): FragmentSourceRecord {
     repoName: row.repo_name,
     gitRef: row.git_ref,
     dirPath: row.dir_path,
-    lastSyncedSha: row.last_synced_sha,
+    // Physical column keeps its historical name; it now stores a commit sha.
+    lastSyncedCommit: row.last_synced_sha,
     lastSyncedAt: row.last_synced_at,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
@@ -229,7 +230,7 @@ export class DrizzleFragmentSourceRepository implements FragmentSourceRepository
       repo_name: record.repoName,
       git_ref: record.gitRef,
       dir_path: record.dirPath,
-      last_synced_sha: record.lastSyncedSha,
+      last_synced_sha: record.lastSyncedCommit,
       last_synced_at: record.lastSyncedAt,
       created_at: record.createdAt,
       deleted_at: record.deletedAt,
@@ -251,10 +252,14 @@ export class DrizzleFragmentSourceRepository implements FragmentSourceRepository
       })
   }
 
-  async updateSyncState(id: string, lastSyncedSha: string, lastSyncedAt: number): Promise<void> {
+  async updateSyncState(
+    id: string,
+    lastSyncedCommit: string | null,
+    lastSyncedAt: number,
+  ): Promise<void> {
     await this.db
       .update(fragmentSources)
-      .set({ last_synced_sha: lastSyncedSha, last_synced_at: lastSyncedAt })
+      .set({ last_synced_sha: lastSyncedCommit, last_synced_at: lastSyncedAt })
       .where(eq(fragmentSources.id, id))
   }
 

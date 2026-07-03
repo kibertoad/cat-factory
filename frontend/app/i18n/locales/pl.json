@@ -3667,7 +3667,7 @@
     "sources": {
       "metaSynced": "zsynchronizowano · ref {ref}",
       "metaNever": "nigdy nie zsynchronizowano · ref {ref}",
-      "changes": "{count} zmiana | {count} zmiany | {count} zmian",
+      "changes": "Zmiany",
       "empty": "Brak połączonych repozytoriów wytycznych. Połącz jedno poniżej, aby zaimportować jego pliki Markdown jako fragmenty.",
       "linkTitle": "Połącz repozytorium wytycznych",
       "ownerPlaceholder": "właściciel",
@@ -3692,7 +3692,7 @@
       "linkSourceFailed": "Nie udało się połączyć źródła",
       "synced": "Zsynchronizowano: {updated} zaktualizowano, {removed} usunięto",
       "syncFailed": "Nie udało się zsynchronizować źródła",
-      "changesAvailable": "Dostępna {count} zmiana | Dostępne {count} zmiany | Dostępnych {count} zmian",
+      "changesAvailable": "Dostępne zmiany",
       "upToDate": "Aktualne",
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",

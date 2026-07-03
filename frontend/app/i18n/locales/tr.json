@@ -3680,7 +3680,7 @@
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
       "metaNever": "hiç eşitlenmedi · ref {ref}",
-      "changes": "{count} değişiklik | {count} değişiklik",
+      "changes": "Değişiklikler",
       "empty": "Bağlı yönerge reposu yok. Markdown dosyalarını parça olarak içe aktarmak için aşağıdan bir tane bağlayın.",
       "linkTitle": "Bir yönerge reposu bağla",
       "ownerPlaceholder": "sahip",
@@ -3705,7 +3705,7 @@
       "linkSourceFailed": "Kaynak bağlanamadı",
       "synced": "Eşitlendi: {updated} güncellendi, {removed} kaldırıldı",
       "syncFailed": "Kaynak eşitlenemedi",
-      "changesAvailable": "{count} değişiklik mevcut | {count} değişiklik mevcut",
+      "changesAvailable": "Değişiklikler mevcut",
       "upToDate": "Güncel",
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
