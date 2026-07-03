@@ -78,6 +78,10 @@ export interface BlockRow {
   instance_size: string | null
   /** Frontend-frame-level: serialized FrontendConfig (build/serve/mock + backend bindings), JSON object. */
   frontend_config?: string | null
+  /** Service-frame-level: directed consumer→provider service connections, JSON array. */
+  service_connections?: string | null
+  /** Task-level: connected service frames directly involved in the task, JSON array of ids. */
+  involved_service_ids?: string | null
   created_by: string | null
   responsible_product_user_id: string | null
   /** Task-level: the task-estimator's triage (complexity/risk/impact), JSON object. */
@@ -419,6 +423,45 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('instanceSize'),
   // Frontend-frame-level config (build/serve/mock + backend bindings) — a JSON object.
   optJsonField('frontendConfig'),
+  // Service-frame connections (consumer→provider edges). Patch treats an empty array as
+  // "clear them" (length check), mirroring `serviceFragmentIds`.
+  {
+    read: (row, out) => {
+      if (row.service_connections != null)
+        out.serviceConnections = JSON.parse(row.service_connections as string)
+    },
+    insert: (b, out) => {
+      out.service_connections = b.serviceConnections?.length
+        ? JSON.stringify(b.serviceConnections)
+        : null
+    },
+    patch: (p, out) => {
+      if (p.serviceConnections !== undefined) {
+        out.service_connections = p.serviceConnections?.length
+          ? JSON.stringify(p.serviceConnections)
+          : null
+      }
+    },
+  },
+  // A task's involved connected services. Patch treats an empty array as "clear it".
+  {
+    read: (row, out) => {
+      if (row.involved_service_ids != null)
+        out.involvedServiceIds = JSON.parse(row.involved_service_ids as string)
+    },
+    insert: (b, out) => {
+      out.involved_service_ids = b.involvedServiceIds?.length
+        ? JSON.stringify(b.involvedServiceIds)
+        : null
+    },
+    patch: (p, out) => {
+      if (p.involvedServiceIds !== undefined) {
+        out.involved_service_ids = p.involvedServiceIds?.length
+          ? JSON.stringify(p.involvedServiceIds)
+          : null
+      }
+    },
+  },
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
   // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
   legacyUserIdField('createdBy'),

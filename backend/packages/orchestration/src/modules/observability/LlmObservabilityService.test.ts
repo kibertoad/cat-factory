@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import type {
   Clock,
   IdGenerator,
@@ -318,6 +319,90 @@ describe('LlmObservabilityService trace-sink fan-out', () => {
 
     await expect(service.record(input())).resolves.toBeUndefined()
     expect(repo.recorded).toHaveLength(1)
+  })
+})
+
+/** A settings repo returning a fixed storeAgentContext value for every workspace. */
+function settingsRepo(storeAgentContext: boolean) {
+  return {
+    async get() {
+      return {
+        ...DEFAULT_WORKSPACE_SETTINGS,
+        storeAgentContext,
+      }
+    },
+    async upsert() {},
+  }
+}
+
+describe('LlmObservabilityService secret redaction', () => {
+  it('scrubs credential shapes from the stored + fanned-out prompt/response/reasoning', async () => {
+    const repo = new MemoryRepo()
+    const sink = new CaptureSink()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      traceSink: sink,
+    })
+
+    await service.record(
+      input({
+        promptText: 'clone https://x-access-token:ghp_abcdefghijklmnopqrstuvwx1234@github.com/o/r',
+        responseText: 'Authorization: Bearer sk-abcdefghijklmnopqrstuvwx',
+        reasoningText: 'the key is AKIAIOSFODNN7EXAMPLE',
+        errorMessage: 'upstream 401: Authorization: Bearer sk-leakedleakedleakedleaked',
+      }),
+    )
+
+    const m = repo.recorded[0]!
+    expect(m.promptText).not.toContain('ghp_abcdefghijklmnopqrstuvwx1234')
+    expect(m.promptText).toContain('[REDACTED]')
+    expect(m.responseText).not.toContain('sk-abcdefghijklmnopqrstuvwx')
+    expect(m.reasoningText).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    // errorMessage is the one exchange field kept even when bodies are dropped, so it must
+    // be scrubbed too (it can echo an upstream auth header).
+    expect(m.errorMessage).not.toContain('sk-leakedleakedleakedleaked')
+    expect(m.errorMessage).toContain('[REDACTED]')
+    // The external trace sink receives the redacted text too.
+    const e = sink.events[0]!
+    expect(e.input).not.toContain('ghp_abcdefghijklmnopqrstuvwx1234')
+    expect(e.output).not.toContain('sk-abcdefghijklmnopqrstuvwx')
+    expect(e.errorMessage).not.toContain('sk-leakedleakedleakedleaked')
+  })
+})
+
+describe('LlmObservabilityService storeAgentContext gating', () => {
+  it('records bodies when the workspace has storeAgentContext on', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      workspaceSettingsRepository: settingsRepo(true),
+    })
+    await service.record(input({ promptText: '[{"role":"user"}]', responseText: 'hello' }))
+    expect(repo.recorded[0]!.responseText).toBe('hello')
+  })
+
+  it('drops prompt/response bodies (but keeps numeric telemetry) when the workspace opted out', async () => {
+    const repo = new MemoryRepo()
+    const sink = new CaptureSink()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      traceSink: sink,
+      workspaceSettingsRepository: settingsRepo(false),
+    })
+    await service.record(input({ promptText: '[{"role":"user"}]', responseText: 'secret' }))
+
+    const m = repo.recorded[0]!
+    expect(m.promptText).toBe('')
+    expect(m.responseText).toBe('')
+    expect(m.promptTokens).toBe(100) // numeric telemetry still recorded
+    expect(sink.events[0]!.input).toBe('')
+    expect(sink.events[0]!.output).toBe('')
   })
 })
 

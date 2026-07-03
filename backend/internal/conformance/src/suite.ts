@@ -1019,6 +1019,59 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         )
       })
 
+      it('round-trips service connections + involved services (the JSON columns) on every store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // A service frame's `serviceConnections` (consumer→provider edges) and a task's
+        // `involvedServiceIds` are JSON columns on the block, mirroring `frontend_config`.
+        // A runtime that forgot to map either column drops it on write — so this asserts
+        // both survive PATCH + a fresh snapshot read on D1 and Postgres. The seed has one
+        // service-type frame (blk_auth), so create the provider frame to connect to.
+        const provider = await call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 900, y: 900 },
+        })
+        const providerId = provider.body.id
+        expect(providerId).toBeTruthy()
+
+        const serviceConnections = [
+          { serviceBlockId: providerId, description: 'sends transactional email via it' },
+        ]
+        const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceConnections,
+        })
+        expect(patched.status).toBe(200)
+        expect(patched.body.serviceConnections).toEqual(serviceConnections)
+
+        // The task may involve a connected neighbor (either direction); its own frame never.
+        const task = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          involvedServiceIds: [providerId],
+        })
+        expect(task.status).toBe(200)
+        expect(task.body.involvedServiceIds).toEqual([providerId])
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.serviceConnections).toEqual(
+          serviceConnections,
+        )
+        expect(snap.body.blocks.find((b) => b.id === 'task_login')?.involvedServiceIds).toEqual([
+          providerId,
+        ])
+
+        // Write-gate guards: a self-connection and an unconnected involved service are
+        // ValidationErrors (422 per the shared error handler).
+        const selfConn = await call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceConnections: [{ serviceBlockId: 'blk_auth' }],
+        })
+        expect(selfConn.status).toBe(422)
+        const unconnected = await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          involvedServiceIds: ['blk_db'],
+        })
+        expect(unconnected.status).toBe(422)
+      })
+
       it('rejects a dependency edge that would create a cycle', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()

@@ -1,5 +1,128 @@
 # @cat-factory/node-server
 
+## 0.60.2
+
+### Patch Changes
+
+- e0aab3f: Connections between services, phase 1 of the service-connections initiative (see
+  `backend/docs/service-connections.md` + `docs/initiatives/service-connections.md`):
+
+  - **Service connections**: a `service`-type frame carries `serviceConnections` — directed
+    consumer→provider edges to the other services it uses, each with an optional
+    description ("sends transactional email via it"). Stored as a JSON column on the block
+    (D1 migration `0034` ⇄ Drizzle), validated at the `updateBlock` write gate (no
+    self-connection, no duplicates, targets must be service frames; cycles are deliberately
+    legal), pruned when a connected frame is deleted, and drawn as emerald consumer→provider
+    edges on the board. A new inspector panel on service frames edits the connections and
+    shows the reverse "Used by" list.
+  - **Per-task involved services**: a task carries `involvedServiceIds` — the connected
+    services directly involved in it beyond its own service, picked (in the task's run
+    settings) from the frame's connection neighbors in either direction. Validated at the
+    write gate against the neighbor set; a selection whose connection was later removed is
+    badged stale in the UI and dropped on the next change. Later phases use the selection
+    to provision every involved service as an ephemeral environment and to let the coding
+    agent change every involved repo (multi-repo sibling checkouts) — designed in the
+    docs, not yet implemented.
+  - Cross-runtime conformance now round-trips both JSON columns and asserts the write-gate
+    rejections on both stores.
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+  - @cat-factory/orchestration@0.59.2
+  - @cat-factory/server@0.68.2
+  - @cat-factory/agents@0.26.15
+  - @cat-factory/consensus@0.8.16
+  - @cat-factory/gates@0.2.72
+  - @cat-factory/gitlab@0.4.43
+  - @cat-factory/integrations@0.56.3
+  - @cat-factory/prompt-fragments@0.9.43
+  - @cat-factory/spend@0.10.76
+  - @cat-factory/observability-langfuse@0.7.115
+  - @cat-factory/provider-bedrock@0.7.121
+  - @cat-factory/provider-cloudflare@0.7.121
+  - @cat-factory/provider-s3@0.2.65
+
+## 0.60.1
+
+### Patch Changes
+
+- 0d51638: Boundary hardening:
+
+  - **Local mode** now enforces a minimum strength on the required crypto secrets at config
+    load: `AUTH_SESSION_SECRET` must be ≥32 characters (local mode defaults the auth gate open,
+    so a weak secret would leave session/proxy/machine tokens forgeable) and `ENCRYPTION_KEY`
+    must decode to a full 32-byte key (surfaced early instead of deep in the first cipher build).
+  - **GitHub webhook verifier** fails closed when the webhook secret is unset (previously it would
+    import an empty HMAC key and compare), matching the GitLab verifier.
+  - **CORS** no longer reflects an arbitrary Origin by default outside development: an unset
+    `CORS_ALLOWED_ORIGINS` reflects any origin only when `ENVIRONMENT` is an explicitly
+    recognised development value (`development`/`dev`/`test`/`testing`/`local`/`e2e`). An
+    unset, unknown, or production `ENVIRONMENT` default-denies (fails safe), so a deployment
+    that forgets BOTH `ENVIRONMENT` and `CORS_ALLOWED_ORIGINS` no longer silently reflects.
+    An explicit `*` still opts into reflect-all.
+
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+  - @cat-factory/integrations@0.56.2
+  - @cat-factory/server@0.68.1
+  - @cat-factory/kernel@0.70.1
+  - @cat-factory/orchestration@0.59.1
+  - @cat-factory/agents@0.26.14
+  - @cat-factory/consensus@0.8.15
+  - @cat-factory/gates@0.2.71
+  - @cat-factory/gitlab@0.4.42
+  - @cat-factory/observability-langfuse@0.7.114
+  - @cat-factory/provider-bedrock@0.7.120
+  - @cat-factory/provider-cloudflare@0.7.120
+  - @cat-factory/provider-s3@0.2.64
+  - @cat-factory/spend@0.10.75
+
+## 0.60.0
+
+### Minor Changes
+
+- eb67d40: Record per-call LLM telemetry for the Claude Code and Codex subscription harnesses,
+  so their calls appear in the same `llm_call_metrics` store (and the "Model activity"
+  observability panel) as the proxy-metered Pi harness.
+
+  These harnesses talk direct to the vendor and bypass the LLM proxy, so the harness now
+  lifts per-call metrics off each CLI's event stream: Claude Code (`stream-json --verbose`)
+  carries full request/response bodies, per-turn tokens, model, and finish reason; Codex
+  (`exec --json`) is thinner — flat assistant text plus per-turn token counts, with no
+  request transcript (a CLI limitation). The executor records these into the SAME
+  `LlmObservabilityService` the proxy uses (with zero per-HTTP timing, since the CLIs don't
+  expose it), wired symmetrically on the Cloudflare and Node facades. Captured bodies are
+  credential-scrubbed and honour the existing `LLM_RECORD_PROMPTS` switch. Telemetry is
+  recorded on failed runs too (not only successful ones), so a token-spending run that
+  ends with no changes / unusable output stays observable, and each row is minted a
+  deterministic id off the job id so a durable-driver replay re-records idempotently.
+
+  Also tightens `LLM_RECORD_PROMPTS`: it now empties the response and reasoning bodies as
+  well as the prompt when recording is off (previously only the prompt was suppressed),
+  so a deployment that opts out of retaining prompts no longer retains model replies
+  either.
+
+  Bumps the executor-harness runner image (harness `src/**` changed).
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+  - @cat-factory/orchestration@0.59.0
+  - @cat-factory/server@0.68.0
+  - @cat-factory/agents@0.26.13
+  - @cat-factory/consensus@0.8.14
+  - @cat-factory/gates@0.2.70
+  - @cat-factory/gitlab@0.4.41
+  - @cat-factory/integrations@0.56.1
+  - @cat-factory/observability-langfuse@0.7.113
+  - @cat-factory/provider-bedrock@0.7.119
+  - @cat-factory/provider-cloudflare@0.7.119
+  - @cat-factory/provider-s3@0.2.63
+  - @cat-factory/spend@0.10.74
+
 ## 0.59.4
 
 ### Patch Changes

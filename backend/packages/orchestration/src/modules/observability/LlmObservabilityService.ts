@@ -1,10 +1,16 @@
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import {
+  type Clock,
+  type IdGenerator,
+  DEFAULT_WORKSPACE_SETTINGS,
+  redactSecrets,
+} from '@cat-factory/kernel'
 import type {
   HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmTraceSink,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
@@ -29,6 +35,14 @@ export interface LlmObservabilityServiceDependencies {
    * Fan-out is best-effort and never blocks or breaks the local recording.
    */
   traceSink?: LlmTraceSink
+  /**
+   * Optional per-workspace settings source. When wired, prompt/response BODY capture is
+   * ALSO gated on the workspace's `storeAgentContext` toggle (mirroring the agent-context
+   * snapshot path), so a workspace that opted out doesn't retain prompt bodies here even
+   * when prompt recording is on deployment-wide. Numeric telemetry is always recorded.
+   * Absent ⇒ gate only on {@link recordPrompts} (existing behaviour).
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
 }
 
 /**
@@ -107,6 +121,7 @@ export class LlmObservabilityService {
   private readonly clock: Clock
   private readonly recordPrompts: boolean
   private readonly traceSink?: LlmTraceSink
+  private readonly workspaceSettings?: WorkspaceSettingsRepository
 
   constructor({
     llmCallMetricRepository,
@@ -114,12 +129,14 @@ export class LlmObservabilityService {
     clock,
     recordPrompts = true,
     traceSink,
+    workspaceSettingsRepository,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.recordPrompts = recordPrompts
     this.traceSink = traceSink
+    this.workspaceSettings = workspaceSettingsRepository
   }
 
   /**
@@ -134,9 +151,32 @@ export class LlmObservabilityService {
    * stored empty and the chain-tip read is skipped entirely — the numeric telemetry is
    * still recorded.
    */
-  async record(input: RecordLlmCallInput): Promise<void> {
+  async record(rawInput: RecordLlmCallInput): Promise<void> {
+    // Unlike the agent-context snapshot (a structural allow-list), the prompt/response
+    // bodies captured here are free text that can contain a credential the agent read or
+    // echoed. Scrub known secret shapes BEFORE anything is stored, delta-chained, or
+    // fanned out to the external trace sink — the redacted text is what every downstream
+    // consumer sees. Done up front so the delta chain stays consistent (each tip is
+    // already redacted) and Langfuse never receives a raw secret.
+    const input: RecordLlmCallInput = {
+      ...rawInput,
+      promptText: redactSecrets(rawInput.promptText) ?? '',
+      responseText: redactSecrets(rawInput.responseText) ?? '',
+      reasoningText: redactSecrets(rawInput.reasoningText) ?? '',
+      // errorMessage is a free-text upstream/proxy error string that is kept as diagnostic
+      // metadata even when bodies are dropped (like httpStatus/finishReason) AND fanned out
+      // to the trace sink — so it too must be scrubbed. An upstream 4xx/5xx message can
+      // echo an `Authorization` header or a signed URL; redacting here keeps the one
+      // exchange field that isn't gated on `recordBodies` from leaking a secret shape.
+      errorMessage: redactSecrets(rawInput.errorMessage),
+    }
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
-    const stored = this.recordPrompts
+    // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a
+    // settings source is wired) the workspace hasn't opted out via `storeAgentContext` —
+    // the same double gate the agent-context snapshot path uses. Numeric telemetry is
+    // always recorded regardless.
+    const recordBodies = this.recordPrompts && (await this.bodiesEnabled(input.workspaceId))
+    const stored = recordBodies
       ? await this.computeStoredPromptForChain(input)
       : EMPTY_STORED_PROMPT
     const metric: LlmCallMetric = {
@@ -150,11 +190,11 @@ export class LlmObservabilityService {
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
-      // The privacy switch governs ALL captured bodies, not just the prompt: a response
-      // (which can echo verbatim repo source) and a reasoning trace are model content the
-      // same as the prompt, so both are stored empty when recording is off.
-      responseText: this.recordPrompts ? clampBody(input.responseText) : '',
-      reasoningText: this.recordPrompts ? clampBody(input.reasoningText) : '',
+      // Response + reasoning are bodies too: drop them (not just the prompt) when body
+      // recording is off, so an opted-out workspace / prompts-off deployment retains none
+      // of the model exchange, only the numeric telemetry.
+      responseText: recordBodies ? clampBody(input.responseText) : '',
+      reasoningText: recordBodies ? clampBody(input.reasoningText) : '',
     }
     await this.repository.record(metric)
     // Fan out to the external trace sink (Langfuse), if wired. We send the FULL prompt
@@ -181,16 +221,27 @@ export class LlmObservabilityService {
             finishReason: input.finishReason,
             ok: input.ok,
             errorMessage: input.errorMessage,
-            input: this.recordPrompts ? input.promptText : '',
+            input: recordBodies ? input.promptText : '',
             // Fall back to the reasoning trace when the turn produced no response text
             // (a thinking model that spent its budget reasoning) so the trace isn't blank.
-            output: this.recordPrompts ? input.responseText || input.reasoningText : '',
+            output: recordBodies ? input.responseText || input.reasoningText : '',
           }),
         ).catch(() => {})
       } catch {
         // Swallowed: the sink itself logs; observability never breaks the proxy.
       }
     }
+  }
+
+  /**
+   * Whether prompt/response bodies may be stored for this workspace. True when no settings
+   * source is wired (defer to the deployment switch); otherwise the workspace's
+   * `storeAgentContext` toggle (defaulting on for a workspace with no saved settings).
+   */
+  private async bodiesEnabled(workspaceId: string): Promise<boolean> {
+    if (!this.workspaceSettings) return true
+    const settings = (await this.workspaceSettings.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
+    return settings.storeAgentContext
   }
 
   /**

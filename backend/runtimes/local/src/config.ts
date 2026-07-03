@@ -1,6 +1,16 @@
 import { loadNodeConfig } from '@cat-factory/node-server'
 import type { AppConfig } from '@cat-factory/server'
+import { base64urlToBytes } from '@cat-factory/server'
 import { resolveHostAlias } from './runtimes/index.js'
+
+// Local mode defaults the auth gate OPEN and can be exposed on a LAN, so a weak
+// AUTH_SESSION_SECRET would leave sessions / machine / proxy tokens forgeable. The
+// hosted Node loader only enforces this length when gating its OAuth providers; local
+// mode must enforce it on the raw secret too. 32 chars matches MIN_SESSION_SECRET_LENGTH
+// in the Node loader.
+const MIN_SESSION_SECRET_LENGTH = 32
+/** The system encryption key must decode to at least this many bytes (AES-256). */
+const MIN_ENCRYPTION_KEY_BYTES = 32
 
 // Local mode is a single developer running the whole product on their own machine.
 // It reuses the Node facade's config loader verbatim and only changes the defaults
@@ -27,12 +37,41 @@ const DEFAULT_PORT = '8787'
  */
 function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name]?.trim()
-  if (value) return value
-  throw new Error(
-    `${name} is required in local mode but is not set. It must stay stable across restarts (a ` +
-      `fresh value each boot forces a re-login and orphans encrypted credentials). Generate ` +
-      `both secrets with \`pnpm secrets\` in deploy/local and add them to your .env.`,
-  )
+  if (!value) {
+    throw new Error(
+      `${name} is required in local mode but is not set. It must stay stable across restarts (a ` +
+        `fresh value each boot forces a re-login and orphans encrypted credentials). Generate ` +
+        `both secrets with \`pnpm secrets\` in deploy/local and add them to your .env.`,
+    )
+  }
+  // Local mode leaves the auth gate open by default, so a short session secret is a real
+  // token-forgery risk if the box is reachable on a LAN — reject it up front rather than
+  // running with a guessable HMAC key.
+  if (name === 'AUTH_SESSION_SECRET' && value.length < MIN_SESSION_SECRET_LENGTH) {
+    throw new Error(
+      `AUTH_SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters (it signs the ` +
+        `session/proxy/machine tokens). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
+    )
+  }
+  // Validate the encryption key decodes to a full AES-256 key at config load, so a too-short
+  // key fails with a clear message here rather than deep inside the first cipher build.
+  if (name === 'ENCRYPTION_KEY') {
+    let bytes: Uint8Array
+    try {
+      bytes = base64urlToBytes(value)
+    } catch {
+      throw new Error(
+        'ENCRYPTION_KEY must be a valid base64-encoded key. Generate one with `pnpm secrets`.',
+      )
+    }
+    if (bytes.length < MIN_ENCRYPTION_KEY_BYTES) {
+      throw new Error(
+        `ENCRYPTION_KEY must decode to at least ${MIN_ENCRYPTION_KEY_BYTES} bytes (it seals ` +
+          `credentials at rest). Generate one with \`pnpm secrets\` in deploy/local.`,
+      )
+    }
+  }
+  return value
 }
 
 /**

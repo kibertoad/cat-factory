@@ -516,7 +516,7 @@ describe('SqliteWorkRunner', () => {
 describe('buildLocalContainer (mothership, no Postgres)', () => {
   const MOTHERSHIP_ENV: NodeJS.ProcessEnv = {
     ENVIRONMENT: 'test',
-    AUTH_SESSION_SECRET: 'test-session-secret',
+    AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
     // The LOCAL key sealing the credential store — distinct from (and never) the mothership's.
     ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
     LOCAL_MOTHERSHIP_URL: 'https://m.test',

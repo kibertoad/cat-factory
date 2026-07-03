@@ -3,7 +3,11 @@ import { mountAuthGate, registerCoreControllers } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { CORS_ALLOWED_HEADERS, resolveCorsOrigin } from './infrastructure/config/cors'
+import {
+  CORS_ALLOWED_HEADERS,
+  corsReflectsWhenUnset,
+  resolveCorsOrigin,
+} from './infrastructure/config/cors'
 import { buildContainer } from './infrastructure/container'
 import { handleError } from './infrastructure/http/errorHandler'
 import type { AppEnv } from './infrastructure/http/types'
@@ -33,13 +37,18 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
 
   // CORS allowlist is per-deployment configuration (CORS_ALLOWED_ORIGINS), not
   // hardcoded, since each org provisions this system with its own frontend
-  // origin(s). Unset / `*` allows any origin — safe because every route is
-  // bearer-gated and fails closed; pinning origins is defense-in-depth. Auth is a
-  // bearer header (not cookies), so credentials mode stays off.
+  // origin(s). An explicit `*` reflects any origin; an unset allowlist reflects only
+  // in a non-production ENVIRONMENT (a production deployment that forgets it
+  // default-denies). Auth is a bearer header (not cookies), so credentials mode stays off.
   app.use(
     '*',
     cors({
-      origin: (origin, c) => resolveCorsOrigin(origin, c.env.CORS_ALLOWED_ORIGINS),
+      origin: (origin, c) =>
+        resolveCorsOrigin(
+          origin,
+          c.env.CORS_ALLOWED_ORIGINS,
+          corsReflectsWhenUnset(c.env.ENVIRONMENT),
+        ),
       // The shared allow-list (kept in @cat-factory/server so both facades match): the
       // SPA sends X-Personal-Password (personal-subscription unlock) and X-Connection-Id
       // (real-time self-echo suppression) on its calls, so each must be allow-listed or

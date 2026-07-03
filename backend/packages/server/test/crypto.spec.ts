@@ -69,4 +69,42 @@ describe('HmacSigner', () => {
     expect(await signer.verify('.leadingdot')).toBeNull()
     expect(await signer.verify('body.@@@not-base64@@@')).toBeNull()
   })
+
+  it('signs each audience with an independent (HKDF-derived) key', async () => {
+    // Swapping the `aud` claim of a token to another audience invalidates it: the
+    // signature was made under the original audience's derived key, so it can't validate
+    // once verification re-derives the key from the tampered claim — even before the
+    // audience pin is applied (verify with no opts.aud).
+    const sessionToken = await signer.sign({ sub: 1, aud: TOKEN_AUDIENCE.session })
+    const sig = sessionToken.slice(sessionToken.indexOf('.') + 1)
+    const forged = `${base64url(JSON.stringify({ sub: 1, aud: TOKEN_AUDIENCE.machine }))}.${sig}`
+    expect(await signer.verify(forged)).toBeNull()
+    expect(await signer.verify(forged, { aud: TOKEN_AUDIENCE.machine })).toBeNull()
+  })
+
+  it('round-trips an audience-less payload on the raw-secret fallback key', async () => {
+    const token = await signer.sign({ sub: 7 })
+    expect(await signer.verify(token)).toMatchObject({ sub: 7 })
+  })
+
+  it('treats an unrecognised audience as the base key, not its own derived subkey', async () => {
+    // An arbitrary (attacker-chosen) `aud` is NOT granted a derived subkey — it falls back
+    // to the raw-secret base key — so a flood of tokens carrying distinct junk audiences
+    // can't grow the per-audience key cache (an unauthenticated CPU/memory DoS, since
+    // `verify` selects the key from the claimed `aud` before the MAC check). It still
+    // round-trips and still can't satisfy a real audience pin.
+    const token = await signer.sign({ sub: 1, aud: 'not-a-real-audience-xyz' })
+    expect(await signer.verify(token)).toMatchObject({ sub: 1 })
+    expect(await signer.verify(token, { aud: TOKEN_AUDIENCE.session })).toBeNull()
+  })
+
+  it('does not cross-validate the same payload across audiences', async () => {
+    const container = await signer.sign({ sub: 1, aud: TOKEN_AUDIENCE.container })
+    // Right audience → ok; every other audience pin → rejected.
+    expect(await signer.verify(container, { aud: TOKEN_AUDIENCE.container })).toMatchObject({
+      sub: 1,
+    })
+    expect(await signer.verify(container, { aud: TOKEN_AUDIENCE.session })).toBeNull()
+    expect(await signer.verify(container, { aud: TOKEN_AUDIENCE.wsTicket })).toBeNull()
+  })
 })
