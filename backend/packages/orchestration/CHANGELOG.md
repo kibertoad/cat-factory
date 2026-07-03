@@ -1,5 +1,30 @@
 # @cat-factory/orchestration
 
+## 0.64.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+  - @cat-factory/integrations@0.59.0
+  - @cat-factory/agents@0.30.0
+  - @cat-factory/prompt-fragments@0.9.50
+  - @cat-factory/sandbox@0.8.95
+  - @cat-factory/spend@0.10.84
+  - @cat-factory/workspaces@0.11.2
+
 ## 0.63.0
 
 ### Minor Changes
