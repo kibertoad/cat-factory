@@ -32,10 +32,18 @@ import {
   buildRecommendationPrompt,
   buildReviewPrompt,
   buildReworkPrompt,
+  coerceRecommendations,
   coerceSingleRecommendation,
   extractJson,
   findSourceItem,
 } from './requirements.logic.js'
+
+/**
+ * Max findings answered by ONE batched Requirement-Writer call. Batching cuts N per-finding
+ * calls down to ceil(N / size); the bound keeps a single response from truncating (one
+ * recommendation per finding needs room) and isolates a failed call to just its chunk.
+ */
+const RECOMMENDATION_CHUNK_SIZE = 4
 
 export interface RequirementReviewServiceDependencies extends IterativeReviewDeps {
   requirementReviewRepository: RequirementReviewRepository
@@ -217,16 +225,18 @@ export class RequirementReviewService extends IterativeReviewService<
   }
 
   /**
-   * Fill every `pending` recommendation on a review by running the Requirement Writer once per
-   * finding, so progress streams in as `ready / total`. Grounding shared across findings (the
-   * block's best-practice fragments + the in-repo `spec/`/`tech-spec/` excerpts) is gathered
-   * ONCE; only web search runs per finding. Each filled recommendation is persisted and
-   * `onProgress` is invoked with the fresh review, so an open window tracks the count live and
-   * the board's "Recommending…" badge clears the moment the last placeholder settles. A
-   * per-finding Writer failure drops that placeholder and reopens its finding (so the human can
-   * answer manually) rather than wedging the whole batch. Best-effort and re-entrant: a replay
-   * that re-runs it simply finds no `pending` placeholders and produces nothing. Returns the
-   * number of recommendations produced (for the completion notification).
+   * Fill every `pending` recommendation on a review by running the Requirement Writer over
+   * CHUNKS of findings (up to {@link RECOMMENDATION_CHUNK_SIZE} per call), so a batch of N
+   * findings costs ceil(N / size) LLM calls instead of N. Grounding shared across findings (the
+   * block's best-practice fragments, the in-repo `spec/`/`tech-spec/` excerpts, and a single web
+   * search over the batch's titles) is gathered ONCE and reused across every chunk. Each chunk's
+   * results are persisted and `onProgress` is invoked with the fresh review, so an open window
+   * tracks the count live (`ready / total` advancing a chunk at a time) and the board's
+   * "Recommending…" badge clears the moment the last placeholder settles. A per-chunk Writer
+   * failure drops that chunk's placeholders and reopens their findings (so the human can answer
+   * manually) rather than wedging the whole batch. Best-effort and re-entrant: a replay that
+   * re-runs it simply finds no `pending` placeholders and produces nothing. Returns the number of
+   * recommendations produced (for the completion notification).
    */
   async fillPendingRecommendations(
     workspaceId: string,
@@ -273,61 +283,86 @@ export class RequirementReviewService extends IterativeReviewService<
       pending.map((p) => p.sourceFinding.title),
     )
 
+    // Group the pending placeholders by their "do it differently" note so every finding in a
+    // batched prompt shares the one note the prompt carries (a fresh batch shares null; a
+    // re-request carries its own note), then answer each group in chunks of RECOMMENDATION_CHUNK_SIZE.
+    const groups = new Map<string, RequirementRecommendation[]>()
+    for (const ph of pending) {
+      const key = ph.note ?? ''
+      const arr = groups.get(key)
+      if (arr) arr.push(ph)
+      else groups.set(key, [ph])
+    }
+
     let produced = 0
-    for (const placeholder of pending) {
-      // Re-anchor the placeholder to a LIVE finding — prefer the snapshotted finding id, falling
-      // back to title/detail when ids churned across a re-review. Gone → nothing to recommend for.
-      const before = assertFound(
-        await this.repository.get(workspaceId, reviewId),
-        this.entityName,
-        reviewId,
-      )
-      const liveFinding = findSourceItem(before.items, placeholder.sourceFinding)
-      const suggestion = liveFinding
-        ? await this.runWriterForFinding(
-            workspaceId,
-            model,
-            ref,
-            context,
-            liveFinding,
-            placeholder.note ?? undefined,
-            fragments,
-            sharedSpecExcerpts,
-            sharedWebResults,
-          )
-        : null
-      // Re-read fresh each iteration: the per-finding Writer calls take seconds, during which the
-      // human may have answered/dismissed other findings or accepted an earlier recommendation.
-      const review = assertFound(
-        await this.repository.get(workspaceId, reviewId),
-        this.entityName,
-        reviewId,
-      )
-      const rec = review.recommendations.find((r) => r.id === placeholder.id)
-      if (!rec || rec.status !== 'pending') continue // accepted/rejected/churned away meanwhile
-      const now = this.deps.clock.now()
-      if (suggestion) {
-        const standard = suggestion.fromStandard
-          ? fragmentById.get(suggestion.fromStandard)
-          : undefined
-        rec.recommendedText = suggestion.recommendation
-        rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
-        rec.status = 'ready'
-        rec.updatedAt = now
-        produced += 1
-      } else {
-        // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
-        // and reopen its finding so the human can answer it by hand.
-        review.recommendations = review.recommendations.filter((r) => r.id !== placeholder.id)
-        const item = findSourceItem(review.items, placeholder.sourceFinding)
-        if (item && item.status === 'recommend_requested') {
-          item.status = 'open'
-          item.updatedAt = now
+    for (const group of groups.values()) {
+      for (let i = 0; i < group.length; i += RECOMMENDATION_CHUNK_SIZE) {
+        const chunk = group.slice(i, i + RECOMMENDATION_CHUNK_SIZE)
+        // Re-anchor each placeholder to a LIVE finding against a fresh read: the Writer calls take
+        // seconds, during which the human may have answered/dismissed findings or item ids may have
+        // churned across a re-review. Prefer the snapshotted id, falling back to title/detail.
+        const before = assertFound(
+          await this.repository.get(workspaceId, reviewId),
+          this.entityName,
+          reviewId,
+        )
+        const targets = chunk
+          .filter((ph) => before.recommendations.find((r) => r.id === ph.id)?.status === 'pending')
+          .map((ph) => ({ ph, finding: findSourceItem(before.items, ph.sourceFinding) }))
+        if (targets.length === 0) continue // all accepted/rejected/churned away meanwhile
+        const liveFindings = targets
+          .map((t) => t.finding)
+          .filter((f): f is RequirementReviewItem => !!f)
+        // All placeholders in a chunk share one note (grouped above).
+        const note = chunk[0]?.note ?? undefined
+        const suggestions = liveFindings.length
+          ? await this.runWriterForChunk(
+              workspaceId,
+              model,
+              ref,
+              context,
+              liveFindings,
+              note,
+              fragments,
+              sharedSpecExcerpts,
+              sharedWebResults,
+            )
+          : new Map<string, { recommendation: string; fromStandard: string | null }>()
+        // Re-read fresh before applying: the human may have acted during the Writer call.
+        const review = assertFound(
+          await this.repository.get(workspaceId, reviewId),
+          this.entityName,
+          reviewId,
+        )
+        const now = this.deps.clock.now()
+        for (const { ph, finding } of targets) {
+          const rec = review.recommendations.find((r) => r.id === ph.id)
+          if (!rec || rec.status !== 'pending') continue
+          const suggestion = finding ? suggestions.get(finding.id) : undefined
+          if (suggestion) {
+            const standard = suggestion.fromStandard
+              ? fragmentById.get(suggestion.fromStandard)
+              : undefined
+            rec.recommendedText = suggestion.recommendation
+            rec.groundedInFragment = standard ? { id: standard.id, title: standard.title } : null
+            rec.status = 'ready'
+            rec.updatedAt = now
+            produced += 1
+          } else {
+            // The Writer failed for (or no longer matches) this finding: drop the dead placeholder
+            // and reopen its finding so the human can answer it by hand.
+            review.recommendations = review.recommendations.filter((r) => r.id !== ph.id)
+            const item = findSourceItem(review.items, ph.sourceFinding)
+            if (item && item.status === 'recommend_requested') {
+              item.status = 'open'
+              item.updatedAt = now
+            }
+          }
         }
+        review.updatedAt = now
+        await this.repository.upsert(workspaceId, review)
+        await opts.onProgress?.(review)
       }
-      review.updatedAt = now
-      await this.repository.upsert(workspaceId, review)
-      await opts.onProgress?.(review)
     }
     if (produced > 0) await this.notifyRecommendationsReady(workspaceId, block, produced)
     return { produced }
@@ -432,18 +467,24 @@ export class RequirementReviewService extends IterativeReviewService<
     })
   }
 
-  /** Run the Writer for one live finding; returns null when it fails (the caller reopens the finding). */
-  private async runWriterForFinding(
+  /**
+   * Run the Writer once for a CHUNK of live findings; returns a map of finding id → suggestion
+   * (empty when the call fails or yields nothing — the caller then drops+reopens those findings).
+   * A single-finding chunk uses the tolerant single-item coercion (a lone-finding prompt often
+   * omits the echoed itemId); a multi-finding chunk needs the itemIds to route each suggestion
+   * back to its finding.
+   */
+  private async runWriterForChunk(
     workspaceId: string,
     model: ReturnType<ModelProvider['resolve']>,
     ref: ModelRef,
     context: RequirementsContext,
-    finding: RequirementReviewItem,
+    findings: RequirementReviewItem[],
     note: string | undefined,
     fragments: GroundingFragment[],
     sharedSpecExcerpts: string[],
     sharedWebResults: GroundingWebResult[],
-  ): Promise<{ recommendation: string; fromStandard: string | null } | null> {
+  ): Promise<Map<string, { recommendation: string; fromStandard: string | null }>> {
     const grounding: RecommendationGrounding = {
       fragments,
       specExcerpts: sharedSpecExcerpts,
@@ -453,9 +494,11 @@ export class RequirementReviewService extends IterativeReviewService<
       const result = await generateText({
         model,
         system: WRITER_SYSTEM_PROMPT,
-        prompt: buildRecommendationPrompt(context, [finding], grounding, note),
+        prompt: buildRecommendationPrompt(context, findings, grounding, note),
         temperature: 0.2,
-        maxOutputTokens: 6000,
+        // Scale the output budget with the chunk size (bounded) so a batched call has room for one
+        // recommendation per finding without truncating.
+        maxOutputTokens: Math.min(6000 * findings.length, 16000),
         // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
         // gateway-RAG `webResults` already folded into the prompt cover other providers.
         ...(providerWebSearchTools(ref.provider)
@@ -463,12 +506,18 @@ export class RequirementReviewService extends IterativeReviewService<
           : {}),
         providerOptions: catFactoryObservability({ agentKind: 'requirements-writer', workspaceId }),
       })
-      // Single-finding call: tolerate a missing/garbled echoed itemId rather than discarding a
-      // valid suggestion (which would force-reopen the finding as if the Writer had failed).
-      return coerceSingleRecommendation(extractJson(result.text), finding.id)
+      const parsed = extractJson(result.text)
+      const only = findings.length === 1 ? findings[0] : undefined
+      if (only) {
+        // Single-finding call: tolerate a missing/garbled echoed itemId rather than discarding a
+        // valid suggestion (which would force-reopen the finding as if the Writer had failed).
+        const single = coerceSingleRecommendation(parsed, only.id)
+        return single ? new Map([[only.id, single]]) : new Map()
+      }
+      return coerceRecommendations(parsed)
     } catch {
-      // Best-effort per finding — a failure drops just this placeholder (the caller reopens it).
-      return null
+      // Best-effort per chunk — a failure drops just this chunk's placeholders (caller reopens them).
+      return new Map()
     }
   }
 

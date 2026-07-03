@@ -3056,6 +3056,9 @@
       "findings": "Findings",
       "open": "Open",
       "answered": "Answered",
+      "recommendations": "Recommendations",
+      "recsGenerating": "Generating",
+      "recsToReview": "To review",
       "model": "Model"
     },
     "actions": {

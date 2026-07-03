@@ -2960,6 +2960,9 @@
       "findings": "Uwagi",
       "open": "Otwarte",
       "answered": "Odpowiedziane",
+      "recommendations": "Rekomendacje",
+      "recsGenerating": "Generowanie",
+      "recsToReview": "Do przejrzenia",
       "model": "Model"
     },
     "actions": {

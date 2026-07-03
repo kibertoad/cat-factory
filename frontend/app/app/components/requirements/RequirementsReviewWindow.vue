@@ -38,6 +38,9 @@ const reRequestNotes = ref<Record<string, string>>({})
 // Freeform "do it differently" comment when redoing a merge the human was unhappy with.
 const redoComment = ref('')
 const showRedo = ref(false)
+// Human's explicit collapse choice for the whole incorporated-requirements section; null = follow
+// the default (collapse it while there's still work to do so it doesn't dominate the window).
+const docCollapsedOverride = ref<boolean | null>(null)
 
 // The seam contract (open/blockId/close + Escape handling + load-on-open) lives in
 // `useResultView`, so this window can't drift from the others. Declaring `onOpen` makes the
@@ -52,6 +55,7 @@ const { open, blockId, instanceId, stepIndex, close } = useResultView('requireme
     reRequestNotes.value = {}
     redoComment.value = ''
     showRedo.value = false
+    docCollapsedOverride.value = null
     void requirements.load(id)
   },
 })
@@ -256,6 +260,31 @@ const recommendationProgress = computed(() => {
   const ready = readyRecommendations.value.filter((r) => batchTimes.has(r.createdAt)).length
   return { ready, total: ready + generating.length }
 })
+// Whether the human still has something to act on (findings to answer/dismiss or recommendations
+// to decide). Drives the incorporated-document default collapse so the reference doc doesn't push
+// the actionable findings/recommendations off-screen while there's still work.
+const hasActionableWork = computed(() => {
+  if (!review.value) return false
+  const findingWork = review.value.items.some(
+    (i) => i.status === 'open' || i.status === 'answered' || i.status === 'recommend_requested',
+  )
+  return (
+    findingWork ||
+    readyRecommendations.value.length > 0 ||
+    generatingRecommendations.value.length > 0
+  )
+})
+// The whole incorporated-requirements section collapses as a unit (independent of the per-heading
+// collapse below). Default: collapsed while there's actionable work AND the review hasn't converged
+// — so the (potentially long) reference doc stays out of the way — else expanded. The human's
+// explicit toggle wins until the window is re-opened.
+const docCollapsed = computed(
+  () => docCollapsedOverride.value ?? (!incorporated.value && hasActionableWork.value),
+)
+function toggleDoc() {
+  docCollapsedOverride.value = !docCollapsed.value
+}
+
 function isMarkedForRecommend(item: RequirementReviewItem): boolean {
   return markedForRecommend.value.has(item.id)
 }
@@ -751,9 +780,19 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 </div>
               </section>
 
-              <!-- incorporated document: the standard-format requirements -->
+              <!-- incorporated document: the standard-format requirements. The whole section
+                   collapses as a unit (a long doc otherwise pushes the findings/recommendations
+                   off-screen); the per-heading toggles below still work when it's expanded. -->
               <section v-if="outline" class="mt-6 border-t border-slate-800 pt-5">
-                <div class="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-400">
+                <button
+                  class="mb-3 flex w-full items-center gap-1.5 text-[11px] text-emerald-400"
+                  @click="toggleDoc"
+                >
+                  <UIcon
+                    name="i-lucide-chevron-right"
+                    class="h-3.5 w-3.5 shrink-0 transition-transform"
+                    :class="docCollapsed ? '' : 'rotate-90'"
+                  />
                   <UIcon name="i-lucide-file-check-2" class="h-3.5 w-3.5" />
                   <span class="font-semibold uppercase tracking-wide">
                     {{
@@ -762,29 +801,31 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         : t('requirements.incorporatedDraft')
                     }}
                   </span>
-                </div>
-                <div v-for="s in outline.sections" :key="s.id" class="mb-2">
-                  <button
-                    v-if="s.title"
-                    class="group flex w-full items-center gap-2 text-start"
-                    @click="toggle(s.id)"
-                  >
-                    <UIcon
-                      name="i-lucide-chevron-right"
-                      class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
-                      :class="collapsed[s.id] ? '' : 'rotate-90'"
+                </button>
+                <div v-show="!docCollapsed">
+                  <div v-for="s in outline.sections" :key="s.id" class="mb-2">
+                    <button
+                      v-if="s.title"
+                      class="group flex w-full items-center gap-2 text-start"
+                      @click="toggle(s.id)"
+                    >
+                      <UIcon
+                        name="i-lucide-chevron-right"
+                        class="h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform"
+                        :class="collapsed[s.id] ? '' : 'rotate-90'"
+                      />
+                      <span
+                        class="font-semibold text-white"
+                        :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
+                        v-html="s.titleHtml"
+                      />
+                    </button>
+                    <div
+                      v-show="!s.title || !collapsed[s.id]"
+                      class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
+                      v-html="s.bodyHtml"
                     />
-                    <span
-                      class="font-semibold text-white"
-                      :class="s.depth <= 1 ? 'text-base' : s.depth === 2 ? 'text-sm' : 'text-xs'"
-                      v-html="s.titleHtml"
-                    />
-                  </button>
-                  <div
-                    v-show="!s.title || !collapsed[s.id]"
-                    class="reader-prose mt-1 ps-5.5 text-[13px] leading-relaxed text-slate-300"
-                    v-html="s.bodyHtml"
-                  />
+                  </div>
                 </div>
               </section>
             </template>
@@ -806,10 +847,59 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   <span>{{ t('requirements.stats.answered') }}</span>
                   <span class="text-slate-300">{{ answeredCount }}</span>
                 </div>
+                <!-- awaited recommendations — kept here (always visible) so the human can see what
+                     the Writer is still producing / what's waiting on them even while reading the
+                     incorporated document or acting elsewhere in the window. -->
+                <template v-if="generatingRecommendations.length || readyRecommendations.length">
+                  <div
+                    class="flex items-center gap-1.5 border-t border-slate-800/60 pt-2 text-indigo-300"
+                  >
+                    <UIcon name="i-lucide-wand-2" class="h-3 w-3" />
+                    <span class="font-medium">{{ t('requirements.stats.recommendations') }}</span>
+                  </div>
+                  <div
+                    v-if="generatingRecommendations.length"
+                    class="flex items-center justify-between"
+                  >
+                    <span>{{ t('requirements.stats.recsGenerating') }}</span>
+                    <span class="text-indigo-300">{{ generatingRecommendations.length }}</span>
+                  </div>
+                  <div v-if="readyRecommendations.length" class="flex items-center justify-between">
+                    <span>{{ t('requirements.stats.recsToReview') }}</span>
+                    <span class="text-indigo-300">{{ readyRecommendations.length }}</span>
+                  </div>
+                </template>
                 <div v-if="review.model" class="flex items-center justify-between">
                   <span>{{ t('requirements.stats.model') }}</span>
                   <span class="truncate ps-2 text-slate-500">{{ review.model }}</span>
                 </div>
+              </div>
+
+              <!-- Request the Requirement Writer for the marked findings. Kept OUT of the
+                   status-scoped blocks below so it's available whenever the review is still
+                   editable — the `ready` first pass AND a `merged` review being reworked — not
+                   only when status is exactly `ready`. -->
+              <div
+                v-if="review && markedForRecommend.size > 0 && !frozen"
+                class="border-t border-slate-800 pt-4"
+              >
+                <UButton
+                  color="primary"
+                  variant="soft"
+                  size="sm"
+                  block
+                  icon="i-lucide-wand-2"
+                  :loading="recommending"
+                  @click="requestRecommendations"
+                >
+                  {{
+                    t(
+                      'requirements.actions.requestRecommendations',
+                      { count: markedForRecommend.size },
+                      markedForRecommend.size,
+                    )
+                  }}
+                </UButton>
               </div>
 
               <!-- action: ready (answer → incorporate / proceed) -->
@@ -840,24 +930,6 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   @click="incorporate()"
                 >
                   {{ t('requirements.actions.incorporateAnswers') }}
-                </UButton>
-                <UButton
-                  v-if="markedForRecommend.size > 0"
-                  color="primary"
-                  variant="soft"
-                  size="sm"
-                  block
-                  icon="i-lucide-wand-2"
-                  :loading="recommending"
-                  @click="requestRecommendations"
-                >
-                  {{
-                    t(
-                      'requirements.actions.requestRecommendations',
-                      { count: markedForRecommend.size },
-                      markedForRecommend.size,
-                    )
-                  }}
                 </UButton>
                 <p class="text-[11px] leading-relaxed text-slate-500">
                   <template v-if="canProceed">
