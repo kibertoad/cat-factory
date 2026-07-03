@@ -4049,6 +4049,26 @@
       "hint": "המשך מאפשר למתכנן לשאול שאלות המשך; עבור לתכנון מתכנן עם התשובות עד כה.",
       "proceed": "עבור לתכנון",
       "continue": "המשך"
+    },
+    "followUpStatus": {
+      "open": "פתוח",
+      "promoted": "קודם",
+      "dismissed": "נדחה"
+    },
+    "curation": {
+      "promote": "קדם לפריט",
+      "promoteConfirm": "צור פריט",
+      "dismiss": "התעלם",
+      "retry": "נסה שוב",
+      "skip": "דלג",
+      "edit": "ערוך",
+      "save": "שמור",
+      "cancel": "בטל",
+      "phaseField": "שלב",
+      "itemTitlePlaceholder": "כותרת הפריט (ברירת מחדל: של המעקב)",
+      "maxConcurrentField": "מקסימום משימות במקביל",
+      "defaultPipelineField": "צינור ברירת מחדל",
+      "failed": "לא ניתן לעדכן את היוזמה"
     }
   }
 }

@@ -4038,6 +4038,26 @@
       "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
       "proceed": "Proceder a la planification",
       "continue": "Continuer"
+    },
+    "followUpStatus": {
+      "open": "Ouvert",
+      "promoted": "Promu",
+      "dismissed": "Rejete"
+    },
+    "curation": {
+      "promote": "Promouvoir en element",
+      "promoteConfirm": "Creer l'element",
+      "dismiss": "Rejeter",
+      "retry": "Reessayer",
+      "skip": "Ignorer",
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "phaseField": "Phase",
+      "itemTitlePlaceholder": "Titre de l'element (par defaut celui du suivi)",
+      "maxConcurrentField": "Taches simultanees maximales",
+      "defaultPipelineField": "Pipeline par defaut",
+      "failed": "Impossible de mettre a jour l'initiative"
     }
   }
 }

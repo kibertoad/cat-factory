@@ -4051,6 +4051,26 @@
       "hint": "Devam et, planlayicinin ek sorular sormasini saglar; Planlamaya gec, mevcut yanitlarla planlar.",
       "proceed": "Planlamaya gec",
       "continue": "Devam et"
+    },
+    "followUpStatus": {
+      "open": "Acik",
+      "promoted": "Yukseltildi",
+      "dismissed": "Yoksayildi"
+    },
+    "curation": {
+      "promote": "Ogeye yukselt",
+      "promoteConfirm": "Oge olustur",
+      "dismiss": "Yoksay",
+      "retry": "Yeniden dene",
+      "skip": "Atla",
+      "edit": "Duzenle",
+      "save": "Kaydet",
+      "cancel": "Iptal",
+      "phaseField": "Asama",
+      "itemTitlePlaceholder": "Oge basligi (varsayilan: takip ogesininki)",
+      "maxConcurrentField": "Maks. es zamanli gorev",
+      "defaultPipelineField": "Varsayilan pipeline",
+      "failed": "Girisim guncellenemedi"
     }
   }
 }
