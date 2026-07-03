@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { Block } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Per-service (frame) post-release-health mapping: which observability monitors/SLOs the
 // `post-release-health` gate watches after this service's PRs ship. Keyed by THIS block's
@@ -89,11 +90,11 @@ async function clear() {
 </script>
 
 <template>
-  <div class="space-y-2">
-    <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('inspector.releaseHealth.title') }}
-      </span>
+  <InspectorSection
+    :title="t('inspector.releaseHealth.title')"
+    :hint="t('inspector.releaseHealth.sectionHint')"
+  >
+    <template #actions>
       <UButton
         v-if="saved"
         color="error"
@@ -105,7 +106,7 @@ async function clear() {
       >
         {{ t('inspector.releaseHealth.clear') }}
       </UButton>
-    </div>
+    </template>
 
     <!-- Disabled affordance until an observability integration is connected. -->
     <div
@@ -153,5 +154,5 @@ async function clear() {
         </UButton>
       </div>
     </div>
-  </div>
+  </InspectorSection>
 </template>

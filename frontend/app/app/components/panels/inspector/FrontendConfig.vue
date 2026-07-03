@@ -11,6 +11,7 @@ import type {
   PreviewStatus,
 } from '~/types/domain'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
 // frontend for a self-contained UI test (+ an optional browsable preview on local/node),
@@ -96,6 +97,8 @@ function setBindingSource(index: number, value: string) {
 }
 
 function addBinding() {
+  // The "+" lives in the (possibly collapsed) group header — open the group so the new row shows.
+  showBindings.value = true
   save({ backendBindings: [...bindings.value, { envVar: '', source: { kind: 'mock' } }] })
 }
 
@@ -209,14 +212,10 @@ onUnmounted(() => preview.stopPolling(props.block.id))
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-      {{ t('inspector.frontendConfig.title') }}
-    </div>
-    <p class="text-[11px] leading-snug text-slate-500">
-      {{ t('inspector.frontendConfig.hint') }}
-    </p>
-
+  <InspectorSection
+    :title="t('inspector.frontendConfig.title')"
+    :hint="t('inspector.frontendConfig.hint')"
+  >
     <!-- Detect from repo: propose a config the user reviews + applies. Non-binding — nothing is
          persisted until Apply. Only shown when the frame is linked to a repo. -->
     <div
@@ -289,218 +288,179 @@ onUnmounted(() => preview.stopPolling(props.block.id))
     </div>
 
     <!-- Build: package manager + frontend directory + install command + build script + output dir -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showBuild = !showBuild"
-      >
-        <UIcon
-          :name="showBuild ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
-        />
-        {{ t('inspector.frontendConfig.groups.build') }}
-      </button>
-
-      <div v-if="showBuild" class="mt-2 space-y-3">
-        <div class="space-y-1">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.frontendConfig.packageManager')
-          }}</span>
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="pm in PACKAGE_MANAGERS"
-              :key="pm"
-              :color="packageManager === pm ? 'primary' : 'neutral'"
-              :variant="packageManager === pm ? 'soft' : 'ghost'"
-              size="xs"
-              @click="save({ packageManager: pm })"
-            >
-              {{ pm }}
-            </UButton>
-          </div>
-        </div>
-
-        <div class="space-y-1">
-          <label class="text-[11px] text-slate-400">{{
-            t('inspector.frontendConfig.directory')
-          }}</label>
-          <UInput
-            :model-value="config.directory ?? ''"
+    <InspectorSection v-model:open="showBuild" :title="t('inspector.frontendConfig.groups.build')">
+      <div class="space-y-1">
+        <span class="text-[11px] text-slate-400">{{
+          t('inspector.frontendConfig.packageManager')
+        }}</span>
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            v-for="pm in PACKAGE_MANAGERS"
+            :key="pm"
+            :color="packageManager === pm ? 'primary' : 'neutral'"
+            :variant="packageManager === pm ? 'soft' : 'ghost'"
             size="xs"
-            class="font-mono"
-            maxlength="400"
-            placeholder="frontend/"
-            @blur="(e: FocusEvent) => saveText('directory', (e.target as HTMLInputElement).value)"
-            @keydown.enter="
-              (e: KeyboardEvent) => saveText('directory', (e.target as HTMLInputElement).value)
-            "
-          />
-          <p class="text-[11px] leading-snug text-slate-500">
-            {{ t('inspector.frontendConfig.directoryHint') }}
-          </p>
-        </div>
-
-        <div class="space-y-1">
-          <label class="text-[11px] text-slate-400">{{
-            t('inspector.frontendConfig.installCommand')
-          }}</label>
-          <UInput
-            :model-value="config.installCommand ?? ''"
-            size="xs"
-            class="font-mono"
-            maxlength="400"
-            placeholder="pnpm install --frozen-lockfile"
-            @blur="
-              (e: FocusEvent) => saveText('installCommand', (e.target as HTMLInputElement).value)
-            "
-            @keydown.enter="
-              (e: KeyboardEvent) => saveText('installCommand', (e.target as HTMLInputElement).value)
-            "
-          />
-        </div>
-
-        <div class="grid grid-cols-2 gap-2">
-          <div class="space-y-1">
-            <label class="text-[11px] text-slate-400">{{
-              t('inspector.frontendConfig.buildScript')
-            }}</label>
-            <UInput
-              :model-value="config.buildScript ?? ''"
-              size="xs"
-              class="font-mono"
-              maxlength="200"
-              placeholder="build"
-              @blur="
-                (e: FocusEvent) => saveText('buildScript', (e.target as HTMLInputElement).value)
-              "
-              @keydown.enter="
-                (e: KeyboardEvent) => saveText('buildScript', (e.target as HTMLInputElement).value)
-              "
-            />
-          </div>
-          <div class="space-y-1">
-            <label class="text-[11px] text-slate-400">{{
-              t('inspector.frontendConfig.outputDir')
-            }}</label>
-            <UInput
-              :model-value="config.outputDir ?? ''"
-              size="xs"
-              class="font-mono"
-              maxlength="400"
-              placeholder="dist"
-              @blur="(e: FocusEvent) => saveText('outputDir', (e.target as HTMLInputElement).value)"
-              @keydown.enter="
-                (e: KeyboardEvent) => saveText('outputDir', (e.target as HTMLInputElement).value)
-              "
-            />
-          </div>
+            @click="save({ packageManager: pm })"
+          >
+            {{ pm }}
+          </UButton>
         </div>
       </div>
-    </div>
 
-    <!-- Serve: mode (static vs command) + serve script (command mode) + port -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showServe = !showServe"
-      >
-        <UIcon
-          :name="showServe ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.frontendConfig.directory')
+        }}</label>
+        <UInput
+          :model-value="config.directory ?? ''"
+          size="xs"
+          class="font-mono"
+          maxlength="400"
+          placeholder="frontend/"
+          @blur="(e: FocusEvent) => saveText('directory', (e.target as HTMLInputElement).value)"
+          @keydown.enter="
+            (e: KeyboardEvent) => saveText('directory', (e.target as HTMLInputElement).value)
+          "
         />
-        {{ t('inspector.frontendConfig.groups.serve') }}
-      </button>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.frontendConfig.directoryHint') }}
+        </p>
+      </div>
 
-      <div v-if="showServe" class="mt-2 space-y-3">
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.frontendConfig.installCommand')
+        }}</label>
+        <UInput
+          :model-value="config.installCommand ?? ''"
+          size="xs"
+          class="font-mono"
+          maxlength="400"
+          placeholder="pnpm install --frozen-lockfile"
+          @blur="
+            (e: FocusEvent) => saveText('installCommand', (e.target as HTMLInputElement).value)
+          "
+          @keydown.enter="
+            (e: KeyboardEvent) => saveText('installCommand', (e.target as HTMLInputElement).value)
+          "
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
         <div class="space-y-1">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.frontendConfig.serveMode')
-          }}</span>
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              :color="serveMode === 'static' ? 'primary' : 'neutral'"
-              :variant="serveMode === 'static' ? 'soft' : 'ghost'"
-              size="xs"
-              @click="save({ serveMode: 'static' })"
-            >
-              {{ t('inspector.frontendConfig.serveStatic') }}
-            </UButton>
-            <UButton
-              :color="serveMode === 'command' ? 'primary' : 'neutral'"
-              :variant="serveMode === 'command' ? 'soft' : 'ghost'"
-              size="xs"
-              @click="save({ serveMode: 'command' })"
-            >
-              {{ t('inspector.frontendConfig.serveCommand') }}
-            </UButton>
-          </div>
-          <!-- Explain each mode, and disambiguate from the separate envInjection axis. -->
-          <p class="text-[11px] leading-snug text-slate-500">
-            <span class="text-slate-400">{{ t('inspector.frontendConfig.serveStatic') }}:</span>
-            {{ t('inspector.frontendConfig.serveStaticDesc') }}
-          </p>
-          <p class="text-[11px] leading-snug text-slate-500">
-            <span class="text-slate-400">{{ t('inspector.frontendConfig.serveCommand') }}:</span>
-            {{ t('inspector.frontendConfig.serveCommandDesc') }}
-          </p>
-          <p class="text-[11px] leading-snug text-slate-500/80">
-            {{ t('inspector.frontendConfig.serveEnvAxisNote') }}
-          </p>
-        </div>
-
-        <div v-if="serveMode === 'command'" class="space-y-1">
           <label class="text-[11px] text-slate-400">{{
-            t('inspector.frontendConfig.serveScript')
+            t('inspector.frontendConfig.buildScript')
           }}</label>
           <UInput
-            :model-value="config.serveScript ?? ''"
+            :model-value="config.buildScript ?? ''"
             size="xs"
             class="font-mono"
             maxlength="200"
-            placeholder="preview"
-            @blur="(e: FocusEvent) => saveText('serveScript', (e.target as HTMLInputElement).value)"
+            placeholder="build"
+            @blur="(e: FocusEvent) => saveText('buildScript', (e.target as HTMLInputElement).value)"
             @keydown.enter="
-              (e: KeyboardEvent) => saveText('serveScript', (e.target as HTMLInputElement).value)
+              (e: KeyboardEvent) => saveText('buildScript', (e.target as HTMLInputElement).value)
             "
           />
         </div>
-
         <div class="space-y-1">
           <label class="text-[11px] text-slate-400">{{
-            t('inspector.frontendConfig.servePort')
+            t('inspector.frontendConfig.outputDir')
           }}</label>
           <UInput
-            :model-value="config.servePort != null ? String(config.servePort) : ''"
-            type="number"
-            min="1"
-            max="65535"
-            step="1"
+            :model-value="config.outputDir ?? ''"
             size="xs"
             class="font-mono"
-            placeholder="4173"
-            @blur="(e: FocusEvent) => saveServePort((e.target as HTMLInputElement).value)"
+            maxlength="400"
+            placeholder="dist"
+            @blur="(e: FocusEvent) => saveText('outputDir', (e.target as HTMLInputElement).value)"
+            @keydown.enter="
+              (e: KeyboardEvent) => saveText('outputDir', (e.target as HTMLInputElement).value)
+            "
           />
         </div>
       </div>
-    </div>
+    </InspectorSection>
+
+    <!-- Serve: mode (static vs command) + serve script (command mode) + port -->
+    <InspectorSection v-model:open="showServe" :title="t('inspector.frontendConfig.groups.serve')">
+      <div class="space-y-1">
+        <span class="text-[11px] text-slate-400">{{
+          t('inspector.frontendConfig.serveMode')
+        }}</span>
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            :color="serveMode === 'static' ? 'primary' : 'neutral'"
+            :variant="serveMode === 'static' ? 'soft' : 'ghost'"
+            size="xs"
+            @click="save({ serveMode: 'static' })"
+          >
+            {{ t('inspector.frontendConfig.serveStatic') }}
+          </UButton>
+          <UButton
+            :color="serveMode === 'command' ? 'primary' : 'neutral'"
+            :variant="serveMode === 'command' ? 'soft' : 'ghost'"
+            size="xs"
+            @click="save({ serveMode: 'command' })"
+          >
+            {{ t('inspector.frontendConfig.serveCommand') }}
+          </UButton>
+        </div>
+        <!-- Explain each mode, and disambiguate from the separate envInjection axis. -->
+        <p class="text-[11px] leading-snug text-slate-500">
+          <span class="text-slate-400">{{ t('inspector.frontendConfig.serveStatic') }}:</span>
+          {{ t('inspector.frontendConfig.serveStaticDesc') }}
+        </p>
+        <p class="text-[11px] leading-snug text-slate-500">
+          <span class="text-slate-400">{{ t('inspector.frontendConfig.serveCommand') }}:</span>
+          {{ t('inspector.frontendConfig.serveCommandDesc') }}
+        </p>
+        <p class="text-[11px] leading-snug text-slate-500/80">
+          {{ t('inspector.frontendConfig.serveEnvAxisNote') }}
+        </p>
+      </div>
+
+      <div v-if="serveMode === 'command'" class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.frontendConfig.serveScript')
+        }}</label>
+        <UInput
+          :model-value="config.serveScript ?? ''"
+          size="xs"
+          class="font-mono"
+          maxlength="200"
+          placeholder="preview"
+          @blur="(e: FocusEvent) => saveText('serveScript', (e.target as HTMLInputElement).value)"
+          @keydown.enter="
+            (e: KeyboardEvent) => saveText('serveScript', (e.target as HTMLInputElement).value)
+          "
+        />
+      </div>
+
+      <div class="space-y-1">
+        <label class="text-[11px] text-slate-400">{{
+          t('inspector.frontendConfig.servePort')
+        }}</label>
+        <UInput
+          :model-value="config.servePort != null ? String(config.servePort) : ''"
+          type="number"
+          min="1"
+          max="65535"
+          step="1"
+          size="xs"
+          class="font-mono"
+          placeholder="4173"
+          @blur="(e: FocusEvent) => saveServePort((e.target as HTMLInputElement).value)"
+        />
+      </div>
+    </InspectorSection>
 
     <!-- Mocking: WireMock mappings dir -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showMocking = !showMocking"
-      >
-        <UIcon
-          :name="showMocking ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
-        />
-        {{ t('inspector.frontendConfig.groups.mocking') }}
-      </button>
-
-      <div v-if="showMocking" class="mt-2 space-y-1">
+    <InspectorSection
+      v-model:open="showMocking"
+      :title="t('inspector.frontendConfig.groups.mocking')"
+    >
+      <div class="space-y-1">
         <label class="text-[11px] text-slate-400">{{
           t('inspector.frontendConfig.mockMappingsPath')
         }}</label>
@@ -521,23 +481,14 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           {{ t('inspector.frontendConfig.mockMappingsHint') }}
         </p>
       </div>
-    </div>
+    </InspectorSection>
 
     <!-- Env injection: build-time env vars vs a runtime window.env shim -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showEnv = !showEnv"
-      >
-        <UIcon
-          :name="showEnv ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
-        />
-        {{ t('inspector.frontendConfig.groups.envInjection') }}
-      </button>
-
-      <div v-if="showEnv" class="mt-2 space-y-1">
+    <InspectorSection
+      v-model:open="showEnv"
+      :title="t('inspector.frontendConfig.groups.envInjection')"
+    >
+      <div class="space-y-1">
         <div class="flex flex-wrap gap-1">
           <UButton
             :color="envInjection === 'build' ? 'primary' : 'neutral'"
@@ -560,39 +511,25 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           {{ t('inspector.frontendConfig.envInjectionHint') }}
         </p>
       </div>
-    </div>
+    </InspectorSection>
 
     <!-- Backend bindings: env var → upstream. These double as the board's frontend→service links. -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showBindings = !showBindings"
-      >
-        <UIcon
-          :name="showBindings ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
+    <InspectorSection
+      v-model:open="showBindings"
+      :title="t('inspector.frontendConfig.groups.bindings')"
+      :hint="t('inspector.frontendConfig.bindings.hint')"
+      :count="bindings.length"
+    >
+      <template #actions>
+        <UButton
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-plus"
+          @click="addBinding"
         />
-        {{ t('inspector.frontendConfig.groups.bindings') }}
-        <span v-if="bindings.length" class="font-normal normal-case text-slate-600"
-          >({{ bindings.length }})</span
-        >
-      </button>
-
-      <div v-if="showBindings" class="mt-2 space-y-2">
-        <div class="flex items-center justify-between">
-          <p class="text-[11px] leading-snug text-slate-500">
-            {{ t('inspector.frontendConfig.bindings.hint') }}
-          </p>
-          <UButton
-            size="xs"
-            variant="ghost"
-            color="neutral"
-            icon="i-lucide-plus"
-            @click="addBinding"
-          />
-        </div>
-
+      </template>
+      <div class="space-y-2">
         <div v-if="bindings.length" class="space-y-1.5">
           <div v-for="(b, i) in bindings" :key="i" class="flex items-center gap-1">
             <UInput
@@ -634,23 +571,14 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           <FrontendBindingsResolved :config="config" />
         </div>
       </div>
-    </div>
+    </InspectorSection>
 
     <!-- Browsable preview (local/node only; the Worker reports it unsupported). -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showPreview = !showPreview"
-      >
-        <UIcon
-          :name="showPreview ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
-        />
-        {{ t('inspector.frontendConfig.groups.preview') }}
-      </button>
-
-      <div v-if="showPreview" class="mt-2">
+    <InspectorSection
+      v-model:open="showPreview"
+      :title="t('inspector.frontendConfig.groups.preview')"
+    >
+      <div>
         <UCheckbox
           :model-value="previewSupported && config.previewEnabled === true"
           :label="t('inspector.frontendConfig.previewEnabled')"
@@ -744,6 +672,6 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           </p>
         </div>
       </div>
-    </div>
-  </div>
+    </InspectorSection>
+  </InspectorSection>
 </template>

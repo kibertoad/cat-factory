@@ -478,15 +478,17 @@ const showOriginalDescription = ref(false)
       <!-- service (frame): post-release-health monitor/SLO mapping -->
       <ServiceReleaseHealthConfig v-if="isFrame" :block="block" />
 
-      <!-- task: dependencies, structure, agent config, run settings, execution -->
+      <!-- task: the live execution surface first (open by default), then the estimate,
+           then the collapsed configuration sections (dependencies, run settings, agent
+           config, structure) so a running task reads top-down without scrolling. -->
       <template v-else-if="isTask">
         <RecurringScheduleSettings :block="block" />
-        <TaskDependencies :block="block" />
-        <TaskStructure :block="block" />
-        <TaskAgentConfig :block="block" />
-        <TaskEstimateBadge :block="block" />
-        <TaskRunSettings :block="block" />
         <TaskExecution :block="block" />
+        <TaskEstimateBadge :block="block" />
+        <TaskDependencies :block="block" />
+        <TaskRunSettings :block="block" />
+        <TaskAgentConfig :block="block" />
+        <TaskStructure :block="block" />
       </template>
 
       <!-- epic: the full tree of member tasks, grouped by service → module -->

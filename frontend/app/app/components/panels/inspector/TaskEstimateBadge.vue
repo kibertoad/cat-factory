@@ -4,6 +4,7 @@
 // used to gate consensus steps. Hidden when no estimate exists.
 import { computed } from 'vue'
 import type { Block } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 const { t, n } = useI18n()
@@ -28,13 +29,13 @@ function barClass(n: number): string {
 </script>
 
 <template>
-  <section v-if="estimate" class="space-y-2">
-    <div
-      class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400"
-    >
-      <UIcon name="i-lucide-gauge" class="h-3.5 w-3.5" />
-      {{ t('inspector.estimate.title') }}
-    </div>
+  <InspectorSection
+    v-if="estimate"
+    :title="t('inspector.estimate.title')"
+    :hint="t('inspector.estimate.hint')"
+    icon="i-lucide-gauge"
+    default-open
+  >
     <div class="space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/40 p-2.5">
       <div v-for="axis in AXES" :key="axis.key" class="flex items-center gap-2">
         <span class="w-20 shrink-0 text-xs text-slate-400">{{ axis.label }}</span>
@@ -53,5 +54,5 @@ function barClass(n: number): string {
         {{ estimate.rationale }}
       </p>
     </div>
-  </section>
+  </InspectorSection>
 </template>

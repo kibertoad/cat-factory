@@ -364,8 +364,9 @@ function done() {
             <ServiceTestConfig
               :block="configuredBlock"
               :repo="{ githubId: selectedRepoId!, directory: configuredDirectory }"
+              default-open
             />
-            <ServiceFragments :block="configuredBlock" />
+            <ServiceFragments :block="configuredBlock" default-open />
           </div>
 
           <div class="flex flex-wrap items-center gap-2">

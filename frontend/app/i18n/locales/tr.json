@@ -387,6 +387,8 @@
   },
   "inspector": {
     "container": {
+      "title": "İçerik",
+      "hint": "Bu bloğun içindeki modüller ve görevler. Bir öğeye tıklayarak panoda seçin.",
       "modules": "Modüller ({count})",
       "taskCount": "{count} görev | {count} görev",
       "allTasks": "Tüm görevler ({count})",
@@ -397,6 +399,7 @@
     },
     "epicChildren": {
       "title": "Epic görevleri",
+      "hint": "Bu epic'e atanan tüm görevler, bulundukları servis ve modüle göre gruplanır. Epic yalnızca görevleri gruplar; kendisi hiçbir şey çalıştırmaz.",
       "doneCount": "{done}/{total} tamamlandı",
       "empty": "Bu epic'e henüz hiçbir görev ait değil. Bir epic'in alt görevlerini içe aktarın veya bir görevin epic'ini ayarlayın.",
       "unassigned": "Atanmamış"
@@ -435,6 +438,7 @@
     },
     "fragments": {
       "serviceTitle": "Servis en iyi uygulamaları",
+      "serviceHint": "Tüm servis için programlama standartları. Seçilen her parçanın içeriği, bu servisin görevlerinde çalışan kod farkında her ajanın prompt'una eklenir.",
       "serviceEmpty": "Yok. Bu servisteki kod farkında ajanlar varsayılan yönergelerini izler.",
       "manageBoard": "Bu pano'nun fragman kütüphanesini yönet…",
       "manageAccount": "Hesap fragmanlarını yönet…"
@@ -519,6 +523,7 @@
     },
     "releaseHealth": {
       "title": "Sürüm sonrası sağlık",
+      "sectionHint": "Bu servisin değişiklikleri birleştirilip yayınlandıktan sonra bir gate, eşlenen monitörleri ve SLO'ları bir süre izler. Bir gerileme olursa incelemek üzere bir nöbetçi ajan başlatır; hiçbir şey otomatik geri alınmaz.",
       "clear": "Temizle",
       "connectPrompt": "Bu servisi sürümlerden sonra izlemek için bir gözlemlenebilirlik entegrasyonu bağlayın.",
       "connectFirst": "Önce bir gözlemlenebilirlik entegrasyonu bağlayın",
@@ -535,6 +540,7 @@
     },
     "testConfig": {
       "title": "Test altyapısı",
+      "hint": "Bir pipeline bu servisi çalıştırmak istediğinde test ortamının nasıl kurulacağı: altyapısız, bir Docker Compose dosyası, Kubernetes manifestoları veya özel bir manifest türü.",
       "provisionType": "Sağlama türü",
       "provisionTypeHint": "Bu hizmetin Tester için ortamını nasıl ayağa kaldırdığı. Her türün nasıl ele alınacağını (motor + bağlantı) çalışma alanı yapılandırır.",
       "provisionTypes": {
@@ -618,11 +624,13 @@
     },
     "agentConfig": {
       "title": "Ajan yapılandırması",
+      "hint": "Bu görevin pipeline'ındaki ajanların sunduğu seçenekler. Her seçenek, ajanı başlayana kadar düzenlenebilir; sonra o çalıştırma için kilitlenir.",
       "inherited": "hizmetten devralındı",
       "frozen": "Donduruldu: ajan başladı"
     },
     "dependencies": {
       "title": "Şuna bağlı",
+      "hint": "Bu görev çalışmadan önce birleştirilmesi gereken görevler. Tüm bağımlılıklar tamamlanana kadar Çalıştır kontrolü kilitli kalır.",
       "merged": "Birleştirildi",
       "notMerged": "Henüz birleştirilmedi",
       "empty": "Bağımlılık yok. İstediğiniz zaman çalıştırılabilir.",
@@ -634,11 +642,14 @@
     },
     "estimate": {
       "title": "Tahmin",
+      "hint": "Görev tahmin ajanı tarafından üretilir: bu görevin ne kadar karmaşık, riskli ve etkili göründüğü. Konsensüs (çoklu çalıştırma) adımlarının değip değmeyeceğine karar vermek için kullanılır.",
       "complexity": "Karmaşıklık",
       "risk": "Risk",
       "impact": "Etki"
     },
     "execution": {
+      "title": "Yürütme",
+      "hint": "Bu görevin pipeline'ının canlı yürütmesi: her ajan adımı, ilerlemesi ve ortaya çıkan pull request.",
       "stage": {
         "incorporating": "Dahil ediliyor…",
         "reviewing": "Yeniden inceleniyor…",
@@ -692,12 +703,18 @@
       }
     },
     "structure": {
+      "title": "Yapı",
+      "hint": "Bu görevin servisi içinde nerede bulunduğu ve ajanlarının hangi kod standartlarını izlediği.",
       "module": "Modül",
       "modulePlaceholder": "örn. Sessions (yeniyse uygulama sırasında oluşturulur)",
+      "moduleHint": "Bu görevin ait olduğu servis modülü. Bir ad yazın; henüz var olmayan bir modül, görev uygulanırken oluşturulur.",
       "bestPractices": "En iyi uygulamalar",
-      "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler."
+      "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler.",
+      "bestPracticesHint": "Servis düzeyindeki standartlara ek olarak bu görevin ajanlarının prompt'larına eklenen en iyi uygulama parçaları."
     },
     "runSettings": {
+      "title": "Çalıştırma ayarları",
+      "hint": "Bu görevin pipeline'ının nasıl çalıştığı: hangi pipeline'ın başladığı, hangi birleştirme ve model politikalarının uygulandığı ve çalıştırmanın çevresinde neler olduğu.",
       "unassigned": "Atanmamış",
       "workspaceDefault": "Çalışma alanı varsayılanı",
       "workspaceDefaultParen": "(çalışma alanı varsayılanı)",
@@ -716,10 +733,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "Varsayılan yok. Bu görevi çalıştırırken bir pipeline seçin.",
+      "pipelineHint": "Çalıştır düğmesinin varsayılan olarak başlattığı pipeline: bu görev için yürütülen ajan adımları dizisi (örneğin spesifikasyon, kod, test, birleştirme).",
       "mergePolicy": "Birleştirme politikası",
       "mergePresetDetail": "{name}: karmaşıklık ≤ {complexity}, risk ≤ {risk}, etki ≤ {impact} olduğunda otomatik birleştir; en fazla {attempts} CI düzeltme denemesi.",
       "mergePresetEmpty": "Yapılandırılmış ön ayar yok. Birleştirici her PR için bir inceleme bildirimi oluşturur.",
+      "mergePolicyHint": "Tamamlanan bir pull request'in insan incelemesi beklemeden ne zaman otomatik birleştirileceğini ve bir çalıştırmanın kaç CI düzeltme denemesi alacağını belirler.",
       "modelPreset": "Model ön ayarı",
+      "modelPresetHint": "Her ajan adımının hangi yapay zeka modelinde çalışacağını belirler.",
       "modelPresetBase": "temel {model}",
       "modelPresetOverrides": ", {count} geçersiz kılma | , {count} geçersiz kılma",
       "modelPresetEmpty": "Yapılandırılmış ön ayar yok. Ajanlar dağıtımın varsayılan yönlendirmesiyle çalışır.",
@@ -2615,6 +2635,7 @@
     },
     "taskDocs": {
       "heading": "Bağlam belgeleri",
+      "hint": "Bu göreve bağlam olarak eklenen belgeler. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
       "attach": "Ekle",
       "importPage": "Bir sayfa içe aktar…",
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
@@ -2635,6 +2656,7 @@
     },
     "contextIssues": {
       "title": "Bağlam sorunları",
+      "hint": "Bu göreve bağlam olarak eklenen tracker sorunları. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
       "attach": "Ekle",
       "attached": "Sorun eklendi",
       "attachFailed": "Eklenemedi",

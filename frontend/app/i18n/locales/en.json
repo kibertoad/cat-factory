@@ -430,6 +430,8 @@
   },
   "inspector": {
     "container": {
+      "title": "Contents",
+      "hint": "The modules and tasks inside this block. Click an entry to select it on the board.",
       "modules": "Modules ({count})",
       "taskCount": "{count} task | {count} tasks",
       "allTasks": "All tasks ({count})",
@@ -440,6 +442,7 @@
     },
     "epicChildren": {
       "title": "Epic tasks",
+      "hint": "All tasks assigned to this epic, grouped by the service and module they live in. An epic only groups tasks; it does not run anything itself.",
       "doneCount": "{done}/{total} done",
       "empty": "No tasks belong to this epic yet. Import an epic's children, or set a task's epic.",
       "unassigned": "Unassigned"
@@ -478,6 +481,7 @@
     },
     "fragments": {
       "serviceTitle": "Service best practices",
+      "serviceHint": "Programming standards for the whole service. The content of each selected fragment is added to the prompt of every code-aware agent working on tasks under this service.",
       "serviceEmpty": "None. Code-aware agents on this service follow their default guidance.",
       "manageBoard": "Manage this board's fragment library…",
       "manageAccount": "Manage account fragments…"
@@ -562,6 +566,7 @@
     },
     "releaseHealth": {
       "title": "Post-release health",
+      "sectionHint": "After this service's changes merge and ship, a gate watches the mapped monitors and SLOs for a while. On a regression it starts an on-call agent to investigate; nothing is reverted automatically.",
       "clear": "Clear",
       "connectPrompt": "Connect an observability integration to watch this service after releases.",
       "connectFirst": "Connect an observability integration first",
@@ -578,6 +583,7 @@
     },
     "testConfig": {
       "title": "Test infrastructure",
+      "hint": "How a test environment is stood up for this service when a pipeline needs to run it: no infrastructure, a Docker Compose file, Kubernetes manifests, or a custom manifest type.",
       "provisionType": "Provision type",
       "provisionTypeHint": "How this service stands up its environment for the Tester. The workspace configures how each type is handled (the engine + connection).",
       "provisionTypes": {
@@ -661,11 +667,13 @@
     },
     "agentConfig": {
       "title": "Agent configuration",
+      "hint": "Options contributed by the agents in this task's pipeline. Each option stays editable until its agent starts, then it is locked for that run.",
       "inherited": "inherited from service",
       "frozen": "Frozen: the agent has started"
     },
     "dependencies": {
       "title": "Depends on",
+      "hint": "Tasks that must merge before this one can run. The Run control stays locked until every dependency is done.",
       "merged": "Merged",
       "notMerged": "Not merged yet",
       "empty": "No dependencies. Can run any time.",
@@ -677,11 +685,14 @@
     },
     "estimate": {
       "title": "Estimate",
+      "hint": "Produced by the task estimator agent: how complex, risky, and impactful this task looks. Used to decide whether consensus (multi-run) steps are worth running.",
       "complexity": "Complexity",
       "risk": "Risk",
       "impact": "Impact"
     },
     "execution": {
+      "title": "Execution",
+      "hint": "The live run of this task's pipeline: each agent step, its progress, and the resulting pull request.",
       "stage": {
         "incorporating": "Incorporating…",
         "reviewing": "Re-reviewing…",
@@ -735,12 +746,18 @@
       "mergePr": "Merge PR"
     },
     "structure": {
+      "title": "Structure",
+      "hint": "Where this task lives in its service and which coding standards its agents follow.",
       "module": "Module",
       "modulePlaceholder": "e.g. Sessions (created on implement if new)",
+      "moduleHint": "The service module this task belongs to. Type a name; a module that does not exist yet is created when the task is implemented.",
       "bestPractices": "Best practices",
-      "bestPracticesEmpty": "None. Agents follow their default guidance."
+      "bestPracticesEmpty": "None. Agents follow their default guidance.",
+      "bestPracticesHint": "Best-practice fragments folded into the prompts of this task's agents, on top of the service-level standards."
     },
     "runSettings": {
+      "title": "Run settings",
+      "hint": "How this task's pipeline runs: which pipeline starts, which merge and model policies apply, and what happens around the run.",
       "unassigned": "Unassigned",
       "workspaceDefault": "Workspace default",
       "workspaceDefaultParen": "(workspace default)",
@@ -759,10 +776,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "No default. Pick a pipeline when you run this task.",
+      "pipelineHint": "The pipeline the Run button starts by default: the sequence of agent steps (for example spec, code, test, merge) executed for this task.",
       "mergePolicy": "Merge policy",
       "mergePresetDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
       "mergePresetEmpty": "No preset configured. The merger raises a review notification for every PR.",
+      "mergePolicyHint": "Decides when a finished pull request merges automatically instead of waiting for a human review, and how many CI-fix attempts a run gets.",
       "modelPreset": "Model preset",
+      "modelPresetHint": "Decides which AI model each agent step runs on.",
       "modelPresetBase": "base {model}",
       "modelPresetOverrides": ", {count} override | , {count} overrides",
       "modelPresetEmpty": "No preset configured. Agents run on the deployment's default routing.",
@@ -2676,6 +2696,7 @@
     },
     "taskDocs": {
       "heading": "Context documents",
+      "hint": "Documents attached to this task as context. Their content is given to the agents that work on the task.",
       "attach": "Attach",
       "importPage": "Import a page…",
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
@@ -2696,6 +2717,7 @@
     },
     "contextIssues": {
       "title": "Context issues",
+      "hint": "Tracker issues attached to this task as context. Their content is given to the agents that work on the task.",
       "attach": "Attach",
       "attached": "Issue attached",
       "attachFailed": "Could not attach",

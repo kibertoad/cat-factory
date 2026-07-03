@@ -17,6 +17,7 @@ import type {
   ProvisioningServiceDirCandidate,
 } from '@cat-factory/contracts'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Service-level (frame) configuration: the service-owned PROVISIONING — the provision
 // TYPE this service produces (`infraless` / `docker-compose` / `kubernetes` / `custom`)
@@ -30,6 +31,9 @@ const props = defineProps<{
   // Repo backing this service, supplied by the add-service modal when the block is
   // too fresh to be resolvable from the stores yet. Otherwise resolved below.
   repo?: { githubId: number; directory?: string | null }
+  // Expands the section on surfaces that embed this as the primary content (the
+  // add-service modal); the inspector leaves it collapsed.
+  defaultOpen?: boolean
 }>()
 
 const board = useBoardStore()
@@ -403,11 +407,11 @@ function setSize(value: InstanceSize) {
 </script>
 
 <template>
-  <div class="space-y-3">
-    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-      {{ t('inspector.testConfig.title') }}
-    </div>
-
+  <InspectorSection
+    :title="t('inspector.testConfig.title')"
+    :hint="t('inspector.testConfig.hint')"
+    :default-open="props.defaultOpen"
+  >
     <div class="space-y-1">
       <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.provisionType') }}</span>
       <div class="flex flex-wrap gap-1">
@@ -839,60 +843,44 @@ function setSize(value: InstanceSize) {
 
     <!-- Provisioning hints: advisory inputs to the ephemeral-environment provisioner.
          Collapsed by default — most services never tune them. -->
-    <div class="border-t border-slate-800 pt-2">
-      <button
-        type="button"
-        class="flex w-full items-center gap-1.5 text-start text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-300"
-        @click="showProvisioning = !showProvisioning"
-      >
-        <UIcon
-          :name="showProvisioning ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-          class="h-3.5 w-3.5"
-        />
-        {{ t('inspector.testConfig.provisioningTitle') }}
-      </button>
-
-      <div v-if="showProvisioning" class="mt-2 space-y-3">
-        <p class="text-[11px] leading-snug text-slate-500">
-          {{ t('inspector.testConfig.provisioningHint') }}
-        </p>
-
-        <div class="space-y-1">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.testConfig.cloudProvider')
-          }}</span>
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="p in PROVIDERS"
-              :key="p.value"
-              :color="effectiveProvider === p.value ? 'primary' : 'neutral'"
-              :variant="effectiveProvider === p.value ? 'soft' : 'ghost'"
-              size="xs"
-              @click="setProvider(p.value)"
-            >
-              {{ p.label }}
-            </UButton>
-          </div>
-        </div>
-
-        <div class="space-y-1">
-          <span class="text-[11px] text-slate-400">{{
-            t('inspector.testConfig.instanceSize')
-          }}</span>
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="s in SIZES"
-              :key="s.value"
-              :color="(block.instanceSize ?? 'medium') === s.value ? 'primary' : 'neutral'"
-              :variant="(block.instanceSize ?? 'medium') === s.value ? 'soft' : 'ghost'"
-              size="xs"
-              @click="setSize(s.value)"
-            >
-              {{ s.label }}
-            </UButton>
-          </div>
+    <InspectorSection
+      v-model:open="showProvisioning"
+      :title="t('inspector.testConfig.provisioningTitle')"
+      :hint="t('inspector.testConfig.provisioningHint')"
+    >
+      <div class="space-y-1">
+        <span class="text-[11px] text-slate-400">{{
+          t('inspector.testConfig.cloudProvider')
+        }}</span>
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            v-for="p in PROVIDERS"
+            :key="p.value"
+            :color="effectiveProvider === p.value ? 'primary' : 'neutral'"
+            :variant="effectiveProvider === p.value ? 'soft' : 'ghost'"
+            size="xs"
+            @click="setProvider(p.value)"
+          >
+            {{ p.label }}
+          </UButton>
         </div>
       </div>
-    </div>
-  </div>
+
+      <div class="space-y-1">
+        <span class="text-[11px] text-slate-400">{{ t('inspector.testConfig.instanceSize') }}</span>
+        <div class="flex flex-wrap gap-1">
+          <UButton
+            v-for="s in SIZES"
+            :key="s.value"
+            :color="(block.instanceSize ?? 'medium') === s.value ? 'primary' : 'neutral'"
+            :variant="(block.instanceSize ?? 'medium') === s.value ? 'soft' : 'ghost'"
+            size="xs"
+            @click="setSize(s.value)"
+          >
+            {{ s.label }}
+          </UButton>
+        </div>
+      </div>
+    </InspectorSection>
+  </InspectorSection>
 </template>
