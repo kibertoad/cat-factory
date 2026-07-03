@@ -28,6 +28,22 @@ class MemoryEnvRepo implements EnvironmentRegistryRepository {
       .sort((a, b) => b.createdAt - a.createdAt)
     return live[0] ?? null
   }
+  async getByBlockAndFrame(
+    ws: string,
+    blockId: string,
+    frameId: string,
+  ): Promise<EnvironmentRecord | null> {
+    const live = [...this.rows.values()]
+      .filter(
+        (r) =>
+          r.workspaceId === ws &&
+          r.blockId === blockId &&
+          r.frameId === frameId &&
+          r.deletedAt === null,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+    return live[0] ?? null
+  }
   async listByWorkspace(ws: string): Promise<EnvironmentRecord[]> {
     return [...this.rows.values()].filter((r) => r.workspaceId === ws && r.deletedAt === null)
   }

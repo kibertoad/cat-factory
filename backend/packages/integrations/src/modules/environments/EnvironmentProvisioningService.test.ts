@@ -58,6 +58,11 @@ function fakeRegistry(): EnvironmentRegistryRepository & { records: EnvironmentR
     async getByBlock(_workspaceId, blockId) {
       return records.find((r) => r.blockId === blockId && !r.deletedAt) ?? null
     },
+    async getByBlockAndFrame(_workspaceId, blockId, frameId) {
+      return (
+        records.find((r) => r.blockId === blockId && r.frameId === frameId && !r.deletedAt) ?? null
+      )
+    },
     async listByWorkspace() {
       return records
     },

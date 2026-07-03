@@ -26,6 +26,7 @@ import {
   resolveFrontendBindings,
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
+import { connectionDescription, connectionNeighborIds } from '@cat-factory/contracts'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -192,9 +193,10 @@ export class AgentContextBuilder {
       description,
       { includeLinked: !reworked },
     )
-    const environment = await this.resolveEnvironment(workspaceId, block.id)
+    const environment = await this.resolveEnvironment(workspaceId, block)
     const service = await this.resolveServiceConfig(workspaceId, block)
     const frontend = await this.resolveFrontendConfig(workspaceId, block)
+    const involvedServices = await this.resolveInvolvedServices(workspaceId, block)
     const agentConfig = block.agentConfig
     // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
     // replace the description) as a synthetic prior output so the architect and downstream
@@ -268,6 +270,7 @@ export class AgentContextBuilder {
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
+      ...(involvedServices?.length ? { involvedServices } : {}),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -652,10 +655,72 @@ export class AgentContextBuilder {
    * wired (the provisioning service is an optional dependency), so the engine
    * stays unchanged when it is off.
    */
-  private async resolveEnvironment(workspaceId: string, blockId: string) {
+  private async resolveEnvironment(workspaceId: string, block: Block) {
     if (!this.deps.environmentProvisioning) return null
-    return this.deps.environmentProvisioning.resolveForBlock(workspaceId, blockId)
+    // Resolve the OWN service frame's env specifically: a task can provision several envs (its own
+    // frame's plus each involved-service frame's), all under this block, so a plain block read
+    // could surface a peer's. The own env is the one the running task's agent/tester targets.
+    const frameId = (await this.resolveServiceFrameId(workspaceId, block.id)) ?? undefined
+    return this.deps.environmentProvisioning.resolveForBlock(workspaceId, block.id, frameId)
   }
+
+  /**
+   * Resolve the connected services "directly involved" in a task beyond its own (the connections
+   * initiative) into the agent-context shape: title + the connection `description` prose + the
+   * peer's LIVE ephemeral env URL when one is up this run. Read-time STALE FILTER — a
+   * `involvedServiceIds` entry that is no longer a connection neighbour or no longer resolves to a
+   * `service` frame is dropped (inert, never a run failure). Only tasks carry involved services
+   * (reviews/deploys are task-scoped), so frames/modules resolve nothing. The peers' live env URLs
+   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by frame id
+   * (the same newest-wins helper the frontend bindings use) — a single query regardless of count.
+   */
+  private async resolveInvolvedServices(
+    workspaceId: string,
+    block: Block,
+  ): Promise<AgentRunContext['involvedServices'] | undefined> {
+    if (block.level !== 'task') return undefined
+    const ids = block.involvedServiceIds ?? []
+    if (ids.length === 0) return undefined
+    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+    const ownFrameId = frameOfBlocks(blocks, block.id)?.id
+    if (!ownFrameId) return undefined
+    const neighbors = connectionNeighborIds(blocks, ownFrameId)
+    const byId = new Map(blocks.map((b) => [b.id, b]))
+    const valid = ids
+      .filter((id, i) => id !== ownFrameId && neighbors.has(id) && ids.indexOf(id) === i)
+      .map((id) => byId.get(id))
+      .filter((b): b is Block => !!b && b.level === 'frame' && b.type === 'service')
+    if (valid.length === 0) return undefined
+    const frameIds = new Set(valid.map((b) => b.id))
+    const liveEnvUrls =
+      this.deps.environmentProvisioning && frameIds.size > 0
+        ? indexLiveServiceEnvUrls(
+            await this.deps.environmentProvisioning.listHandles(workspaceId),
+            frameIds,
+          )
+        : new Map<string, string>()
+    return valid.map((frame) => {
+      const description = connectionDescription(blocks, ownFrameId, frame.id)
+      const envUrl = liveEnvUrls.get(frame.id)
+      return {
+        frameId: frame.id,
+        title: frame.title,
+        ...(description ? { description } : {}),
+        ...(envUrl ? { envUrl } : {}),
+      }
+    })
+  }
+}
+
+/** The service-frame block enclosing a block, resolved from an already-loaded block list. */
+function frameOfBlocks(blocks: readonly Block[], blockId: string): Block | null {
+  const byId = new Map(blocks.map((b) => [b.id, b]))
+  let cursor = byId.get(blockId) ?? null
+  for (let i = 0; cursor && i < 8; i++) {
+    if (cursor.level === 'frame' || !cursor.parentId) return cursor
+    cursor = byId.get(cursor.parentId) ?? null
+  }
+  return cursor
 }
 
 /** Map a document record to the agent-context doc shape (summary index + materialisable body). */

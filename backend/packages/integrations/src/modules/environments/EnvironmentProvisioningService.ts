@@ -425,10 +425,14 @@ export class EnvironmentProvisioningService {
     Object.assign(inputs, contextInputs(args.context))
     Object.assign(inputs, args.inputs)
     // A native adapter (the Kubernetes backend) reads manifests from the run repo (co-located)
-    // or a separate repo; resolve both seams when available.
+    // or a separate repo; resolve both seams when available. Resolve by the SERVICE FRAME being
+    // provisioned (`frameId`), not the task `blockId` — so an involved-service frame's env clones
+    // that peer's repo, not the task's own (the own frame resolves the same repo either way, since
+    // repos are linked at the frame level and the ancestry walk from the task reaches it).
+    const repoBlockId = args.frameId ?? args.blockId
     const runRepo =
-      args.blockId && this.deps.resolveRunRepoContext
-        ? await this.deps.resolveRunRepoContext(workspaceId, args.blockId)
+      repoBlockId && this.deps.resolveRunRepoContext
+        ? await this.deps.resolveRunRepoContext(workspaceId, repoBlockId)
         : null
     return {
       manifest,
@@ -460,10 +464,15 @@ export class EnvironmentProvisioningService {
     args: ProvisionArgs,
     ref: RunnerJobRef,
   ): Promise<DeployProvisionInputs | undefined> {
-    if (!this.deps.resolveDeployCloneTarget || !args.blockId) return undefined
+    // Clone the SERVICE FRAME's repo (`frameId`) — an involved-service frame provisions from that
+    // peer's repo, the own frame from its own. The ref is the task's PR branch when the context
+    // carries one (the own frame's deploy targets the PR); an involved frame passes no branch, so
+    // the clone target falls back to that repo's default branch.
+    const repoBlockId = args.frameId ?? args.blockId
+    if (!this.deps.resolveDeployCloneTarget || !repoBlockId) return undefined
     const clone = await this.deps.resolveDeployCloneTarget(
       args.workspaceId,
-      args.blockId,
+      repoBlockId,
       args.context?.branch,
     )
     if (!clone) return undefined
@@ -546,8 +555,8 @@ export class EnvironmentProvisioningService {
     engine: InfraEngine | null,
   ): Promise<EnvironmentHandle> {
     const { workspaceId } = args
-    // A block holds at most one live environment: supersede any prior one.
-    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
+    // A (block, frame) pair holds at most one live environment: supersede any prior one.
+    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null, args.frameId ?? null)
 
     const now = this.deps.clock.now()
     const record = this.buildEnvironmentRecord({
@@ -605,8 +614,11 @@ export class EnvironmentProvisioningService {
     manifest: EnvironmentManifest,
     resolveSecret: SecretResolver,
   ): Promise<void> {
-    if (!provider.validateRepo || !this.deps.resolveRunRepoContext || !args.blockId) return
-    const bound = await this.deps.resolveRunRepoContext(args.workspaceId, args.blockId)
+    // Validate against the SERVICE FRAME's repo (`frameId`) — a peer frame's provision preflights
+    // that peer's repo, not the task's own (see resolveDeployInputs / buildProvisionRequest).
+    const repoBlockId = args.frameId ?? args.blockId
+    if (!provider.validateRepo || !this.deps.resolveRunRepoContext || !repoBlockId) return
+    const bound = await this.deps.resolveRunRepoContext(args.workspaceId, repoBlockId)
     if (!bound) return
     const gitRef = args.context?.branch ?? bound.baseBranch
     const config = stringifyProviderConfig(manifest.providerConfig)
@@ -746,8 +758,20 @@ export class EnvironmentProvisioningService {
    * The live environment provisioned for a block, with decrypted access — the
    * discovery entry point the execution engine calls to enrich tester context.
    */
-  async resolveForBlock(workspaceId: string, blockId: string): Promise<ResolvedEnvironment | null> {
-    const record = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+  async resolveForBlock(
+    workspaceId: string,
+    blockId: string,
+    frameId?: string,
+  ): Promise<ResolvedEnvironment | null> {
+    // Resolve the specific service frame's env when known (a task may provision several — its
+    // own frame's plus involved-service frames'); fall back to the block's newest otherwise.
+    const record = frameId
+      ? await this.deps.environmentRegistryRepository.getByBlockAndFrame(
+          workspaceId,
+          blockId,
+          frameId,
+        )
+      : await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
     // A browsable-preview row is not a provisioned environment — never resolve it as a block's
     // live env (e.g. for tester context enrichment); it is owned solely by the PreviewService.
     if (!record || record.provisionType === PREVIEW_PROVISION_TYPE) return null
@@ -765,8 +789,18 @@ export class EnvironmentProvisioningService {
    * lifecycle state + the exact error next to a consuming step (tester/coder).
    * Unlike {@link resolveForBlock} (which strips `id`/`lastError` for agent context).
    */
-  async getHandleForBlock(workspaceId: string, blockId: string): Promise<EnvironmentHandle | null> {
-    const record = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+  async getHandleForBlock(
+    workspaceId: string,
+    blockId: string,
+    frameId?: string,
+  ): Promise<EnvironmentHandle | null> {
+    const record = frameId
+      ? await this.deps.environmentRegistryRepository.getByBlockAndFrame(
+          workspaceId,
+          blockId,
+          frameId,
+        )
+      : await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
     // Exclude a browsable-preview row (see resolveForBlock) — it is not a provisioned env.
     return record && record.provisionType !== PREVIEW_PROVISION_TYPE ? recordToHandle(record) : null
   }
@@ -778,8 +812,12 @@ export class EnvironmentProvisioningService {
    * registry projection only — real provider teardown is the teardown service's job (same as
    * the re-provision path, which also only supersedes the prior record here).
    */
-  async supersedeForBlock(workspaceId: string, blockId: string | null): Promise<void> {
-    await this.supersedePriorEnvironment(workspaceId, blockId)
+  async supersedeForBlock(
+    workspaceId: string,
+    blockId: string | null,
+    frameId: string | null = null,
+  ): Promise<void> {
+    await this.supersedePriorEnvironment(workspaceId, blockId, frameId)
   }
 
   private resolveExpiry(
@@ -809,13 +847,27 @@ export class EnvironmentProvisioningService {
     return { id: this.deps.idGenerator.next('env'), deletedAt: null, ...fields }
   }
 
-  /** A block holds at most one live environment: tombstone any prior one. No-op block-less. */
+  /**
+   * A (block, service frame) pair holds at most one live environment: tombstone any prior one.
+   * Keyed per `(blockId, frameId)` — NOT per block alone — because a single task can provision
+   * several environments (its own service frame's plus one per involved-service frame, the
+   * connections initiative), all sharing the task `blockId`; superseding by block alone would
+   * clobber a sibling frame's live env. Falls back to per-block when the frame is unknown (a
+   * manual / frame-less provision). No-op block-less.
+   */
   private async supersedePriorEnvironment(
     workspaceId: string,
     blockId: string | null,
+    frameId: string | null,
   ): Promise<void> {
     if (!blockId) return
-    const prior = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    const prior = frameId
+      ? await this.deps.environmentRegistryRepository.getByBlockAndFrame(
+          workspaceId,
+          blockId,
+          frameId,
+        )
+      : await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
     if (prior) {
       await this.deps.environmentRegistryRepository.softDelete(
         workspaceId,
@@ -843,7 +895,7 @@ export class EnvironmentProvisioningService {
     engine: InfraEngine | null,
   ): Promise<void> {
     try {
-      await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
+      await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null, args.frameId ?? null)
       const record = this.buildEnvironmentRecord({
         workspaceId,
         blockId: args.blockId ?? null,

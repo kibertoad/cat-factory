@@ -1080,6 +1080,27 @@ export const runContainerSchema = v.object({
 })
 export type RunContainer = v.InferOutput<typeof runContainerSchema>
 
+/**
+ * The TERMINAL per-frame outcome of one environment a `deployer` step provisioned during a
+ * multi-env fan-out (the task's own service frame + every involved-service frame): `ready`
+ * (a live env, `url` set), `failed` (the provision broke, `error` carries the cause), or
+ * `skipped` (the frame is `infraless`, nothing stood up). The IN-FLIGHT frame is not recorded
+ * here — it lives on `step.jobId`/`step.deployFrameId` until it settles. See
+ * {@link pipelineStepSchema.entries.deployEnvs}.
+ */
+export const deployEnvStateSchema = v.object({
+  status: v.picklist(['ready', 'failed', 'skipped']),
+  /** The provisioned URL for a `ready` env (absent for `failed`/`skipped`). */
+  url: v.optional(v.nullable(v.string())),
+  /** The verbatim provider error for a `failed` env. */
+  error: v.optional(v.nullable(v.string())),
+})
+export type DeployEnvState = v.InferOutput<typeof deployEnvStateSchema>
+
+/** Per-frame deploy outcomes keyed by service-frame block id; see {@link deployEnvStateSchema}. */
+export const deployEnvsSchema = v.record(v.string(), deployEnvStateSchema)
+export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
+
 export const humanTestEnvironmentSchema = v.object({
   /** The `environments` row id, so the window can fetch access creds / re-poll status. */
   id: v.string(),
@@ -1533,6 +1554,22 @@ export const pipelineStepSchema = v.object({
    * legacy single-connection path (re-resolution is harmless there). See {@link serviceProvisioningSchema}.
    */
   deployProvisioning: v.optional(serviceProvisioningSchema),
+  /**
+   * A `deployer` step fanning out over several service frames (the task's own frame + each
+   * involved-service frame; see the connections initiative) records each frame's TERMINAL
+   * outcome here, keyed by frame block id — so a durable replay knows which frames are already
+   * provisioned and only the remaining ones are dispatched. The in-flight frame is tracked by
+   * {@link deployFrameId} + {@link jobId} until it settles into this map. Absent for a
+   * single-frame deploy that never fanned out. See {@link deployEnvsSchema}.
+   */
+  deployEnvs: v.optional(deployEnvsSchema),
+  /**
+   * The service FRAME the deployer step's currently in-flight deploy job ({@link jobId}) is
+   * provisioning, during a multi-env fan-out — so the poll/finalize maps the settled job onto the
+   * right frame's {@link deployEnvs} entry. Cleared once that frame settles; absent when no deploy
+   * job is in flight or the step never fanned out.
+   */
+  deployFrameId: v.optional(v.string()),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 

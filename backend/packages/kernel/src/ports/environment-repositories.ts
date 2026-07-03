@@ -204,6 +204,19 @@ export interface EnvironmentRegistryRepository {
   get(workspaceId: string, id: string): Promise<EnvironmentRecord | null>
   /** The live environment provisioned for a board block — the discovery key. */
   getByBlock(workspaceId: string, blockId: string): Promise<EnvironmentRecord | null>
+  /**
+   * The live environment provisioned for a (block, service frame) PAIR. A single task can
+   * provision several environments — its own service frame's plus one per involved-service frame
+   * (the connections initiative) — all sharing the task `block_id` but keyed by distinct
+   * `frame_id`. This is the per-frame discovery key that keeps those N envs from clobbering one
+   * another (supersede) and lets the engine resolve a specific frame's env unambiguously (where
+   * {@link getByBlock} would return an arbitrary newest among them).
+   */
+  getByBlockAndFrame(
+    workspaceId: string,
+    blockId: string,
+    frameId: string,
+  ): Promise<EnvironmentRecord | null>
   /** Every live environment in the workspace. */
   listByWorkspace(workspaceId: string): Promise<EnvironmentRecord[]>
   /** Live environments whose TTL has elapsed (all workspaces), for the cron sweep. */

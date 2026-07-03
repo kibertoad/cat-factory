@@ -5092,6 +5092,110 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
       )
 
       it.skipIf(harness.name === 'mothership')(
+        'fans a deployer out over the task own + involved-service frames, keying each env by frame',
+        async () => {
+          // Service-connections Phase 2 (multi-env provisioning): a task that names an involved
+          // connected service provisions an ephemeral env for BOTH its own service frame AND the
+          // involved one, all under the task `block_id` but keyed by distinct `frame_id`. This
+          // asserts the cross-runtime facts a facade could diverge on:
+          //   (1) TWO env records are persisted for one task, keyed by their service FRAME — the
+          //       per-`(block_id, frame_id)` supersede that stops the fan-out clobbering itself
+          //       (a facade keying by block alone would end with ONE), and
+          //   (2) both round-trip the `frame_id` column through each store's registry repo
+          //       (D1 ⇄ Drizzle), so a downstream tester's peer-env resolution (which indexes live
+          //       handles by frame id) can reach each.
+          let provisioned = 0
+          const provider = {
+            provision: async () => {
+              provisioned += 1
+              return {
+                externalId: `env-${provisioned}`,
+                status: 'ready',
+                url: `https://env-${provisioned}.example`,
+                expiresAt: null,
+                access: null,
+                fields: {},
+              }
+            },
+            status: async () => ({ status: 'ready' }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // One workspace-wide connection gives the legacy single-connection provision path its
+          // manifest, so every frame's deployer reaches the injected provider.
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: { method: 'POST', pathTemplate: '/environments' },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // A second service frame (the involved peer), connected to the seeded `blk_auth`.
+          const peer = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+            type: 'service',
+            position: { x: 900, y: 900 },
+          })
+          const peerId = peer.body.id
+          const connected = await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+            serviceConnections: [{ serviceBlockId: peerId, description: 'sends its mail via it' }],
+          })
+          expect(connected.status).toBe(200)
+          // The task under `blk_auth` marks the peer as directly involved.
+          const involved = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+            involvedServiceIds: [peerId],
+          })
+          expect(involved.body.involvedServiceIds).toEqual([peerId])
+
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy',
+            agentKinds: ['deployer'],
+          })
+          const started = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: deployPipeline.body.id },
+          )
+          expect(started.status).toBe(201)
+          const runs = await app.drive(wsId)
+          const run = runs.find((r) => r.blockId === 'task_login')!
+          expect(run.status).toBe('done')
+
+          // BOTH frames were provisioned, keyed by distinct frame ids under the one task block.
+          const envs = await app.call<
+            {
+              blockId: string | null
+              frameId?: string | null
+              status: string
+              url: string | null
+            }[]
+          >('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(2)
+          const byFrame = new Map(envs.body.map((e) => [e.frameId, e]))
+          expect(new Set(byFrame.keys())).toEqual(new Set(['blk_auth', peerId]))
+          for (const env of envs.body) {
+            expect(env.blockId).toBe('task_login')
+            expect(env.status).toBe('ready')
+            expect(env.url).toMatch(/^https:\/\/env-\d\.example$/)
+          }
+          // The two envs carry DISTINCT urls (each frame got its own provision), so a peer-env
+          // resolution keyed by frame id resolves the right one.
+          expect(byFrame.get('blk_auth')!.url).not.toBe(byFrame.get(peerId)!.url)
+        },
+      )
+
+      it.skipIf(harness.name === 'mothership')(
         'injects the derived frontend origins into the deployer provision and stamps run-start notes',
         async () => {
           // Slice 6b (frontend-preview-ui-testing): the REVERSE of a frontend's backend bindings —
