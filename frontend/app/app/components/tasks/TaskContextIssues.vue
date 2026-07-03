@@ -6,6 +6,7 @@
 // the structured nature of an issue is visible at a glance.
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block, TaskSourceKind } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -53,17 +54,19 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
 </script>
 
 <template>
-  <div v-if="tasks.available" class="space-y-2">
-    <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('tasks.contextIssues.title') }}
-      </span>
+  <InspectorSection
+    v-if="tasks.available"
+    :title="t('tasks.contextIssues.title')"
+    :hint="t('tasks.contextIssues.hint')"
+    :count="linked.length"
+  >
+    <template #actions>
       <UDropdownMenu :items="attachMenu" :content="{ side: 'bottom', align: 'end' }">
         <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">{{
           t('tasks.contextIssues.attach')
         }}</UButton>
       </UDropdownMenu>
-    </div>
+    </template>
 
     <div v-if="linked.length" class="space-y-1">
       <a
@@ -87,5 +90,5 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
     <p v-else class="text-[11px] text-slate-500">
       {{ t('tasks.contextIssues.emptyHint') }}
     </p>
-  </div>
+  </InspectorSection>
 </template>

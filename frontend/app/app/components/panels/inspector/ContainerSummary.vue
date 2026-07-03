@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -20,7 +21,12 @@ function addTask() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <InspectorSection
+    :title="t('inspector.container.title')"
+    :hint="t('inspector.container.hint')"
+    :count="tasks.length"
+    default-open
+  >
     <!-- modules (services only) -->
     <div v-if="modules.length">
       <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -81,5 +87,5 @@ function addTask() {
     <p v-if="isFrame" class="text-[11px] text-slate-500">
       {{ t('inspector.container.servicesHint') }}
     </p>
-  </div>
+  </InspectorSection>
 </template>
