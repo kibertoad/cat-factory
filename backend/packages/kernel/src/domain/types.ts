@@ -386,4 +386,7 @@ export type {
   InitiativeVersion,
   CreateInitiativeInput,
   AnswerInitiativeQuestionInput,
+  PromoteInitiativeFollowUpInput,
+  UpdateInitiativeItemInput,
+  UpdateInitiativePolicyInput,
 } from '@cat-factory/contracts'

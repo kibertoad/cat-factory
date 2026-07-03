@@ -20,6 +20,7 @@ import {
   isInitiativeAgentKind,
 } from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
+import { type InitiativeRunHarvest, extractRunHarvest } from '../initiative/initiative.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
 import type { AdvanceResult } from './advance.js'
@@ -84,9 +85,15 @@ export interface RunStateMachineDeps {
   /**
    * Best-effort poke of the initiative execution loop (slice 3): called when a spawned child
    * run reaches a terminal state so its owning initiative reconciles immediately instead of
-   * waiting for the next cron sweep. Fire-and-forget; a no-op when initiatives are unwired.
+   * waiting for the next cron sweep. The optional `harvest` (slice 4) carries the settling run's
+   * forward-looking follow-ups + failure cause, folded onto the tracker before the reconcile.
+   * Fire-and-forget; a no-op when initiatives are unwired.
    */
-  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
 }
 
 /**
@@ -116,7 +123,11 @@ export class RunStateMachine {
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly llmObservability?: LlmObservabilityService
-  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  private readonly pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
 
   constructor(deps: RunStateMachineDeps) {
     this.executionRepository = deps.executionRepository
@@ -214,7 +225,9 @@ export class RunStateMachine {
     // it reconciles the item (and spawns the next wave) immediately, not on the next cron sweep.
     // Fire-and-forget — the poke swallows its own errors and the sweep is the backstop.
     if (block?.initiativeId && (instance.status === 'done' || instance.status === 'failed')) {
-      this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
+      // Harvest the settling run's forward-looking follow-ups + failure cause from the instance
+      // already in hand (no extra read) so the loop folds them onto the tracker before reconciling.
+      this.pokeInitiativeLoop?.(workspaceId, block.initiativeId, extractRunHarvest(instance))
     }
     if (
       this.subscriptionActivations &&

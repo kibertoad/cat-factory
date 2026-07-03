@@ -18,9 +18,11 @@ import type { ExecutionService } from '../execution/ExecutionService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { InitiativeService } from './InitiativeService.js'
 import {
+  type InitiativeRunHarvest,
   activeItemCount,
   allItemsSettled,
   applyRevertClaim,
+  applyRunHarvest,
   applySpawnClaim,
   deriveCurrentPhase,
   effectiveMaxConcurrent,
@@ -112,9 +114,23 @@ export class InitiativeLoopService {
    * Best-effort single tick for one initiative, triggered when a spawned child run settles (a
    * terminal run / a merge). Fire-and-forget from the caller; swallow errors (the sweep is the
    * backstop). `initiativeBlockId` is the block the settled child carries in its `initiativeId`.
+   *
+   * When a `harvest` payload is supplied (the settling run's forward-looking follow-ups + failure
+   * cause, extracted at the terminal emit), it is folded onto the entity FIRST — via the same CAS
+   * `update`, idempotent by stable follow-up id — so the ensuing reconcile records a blocked
+   * item's deviation with the real cause and the re-committed tracker carries the new follow-ups.
    */
-  async pokeForInitiativeBlock(workspaceId: string, initiativeBlockId: string): Promise<void> {
+  async pokeForInitiativeBlock(
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ): Promise<void> {
     try {
+      if (harvest && (harvest.followUps.length > 0 || harvest.failure)) {
+        await this.deps.initiativeService.update(workspaceId, initiativeBlockId, (current) =>
+          applyRunHarvest(current, harvest, this.deps.clock.now()),
+        )
+      }
       const initiative = await this.deps.initiativeRepository.getByBlock(
         workspaceId,
         initiativeBlockId,
@@ -206,11 +222,16 @@ export class InitiativeLoopService {
           const after = items[i]!
           if (after.status === 'blocked' && before.status !== 'blocked') {
             newlyBlocked = true
+            // Prefer the harvested failure cause (stamped onto the item's `note` at the terminal
+            // emit) over the generic message, so the deviation records WHY the task blocked.
+            const cause = after.note?.trim()
             deviations.push({
               id: this.deps.idGenerator.next('idev'),
               at: this.deps.clock.now(),
               itemId: after.id,
-              description: `Task for "${after.title}" was blocked; the phase is halted until it is retried or skipped.`,
+              description: cause
+                ? `Task for "${after.title}" was blocked: ${cause}`
+                : `Task for "${after.title}" was blocked; the phase is halted until it is retried or skipped.`,
             })
           }
         }

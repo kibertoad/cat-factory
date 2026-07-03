@@ -87,7 +87,10 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
-import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
+import {
+  type InitiativeRunHarvest,
+  assertInitiativeShapeAllowed,
+} from '../initiative/initiative.logic.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
@@ -330,9 +333,14 @@ export interface ExecutionServiceDependencies {
    * Best-effort poke of the initiative execution loop (slice 3): called after a spawned task's
    * PR merges (`finalizeMerge`), so its owning initiative reconciles + advances immediately
    * rather than on the next cron sweep. Threaded through to the {@link RunStateMachine} for the
-   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired.
+   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired. The
+   * optional `harvest` (slice 4) carries the settling run's follow-ups + failure cause.
    */
-  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
   /**
    * Optional: raises human-actionable notifications (a PR needs a merge decision,
    * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
@@ -491,7 +499,11 @@ export class ExecutionService {
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
-  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  private readonly pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
