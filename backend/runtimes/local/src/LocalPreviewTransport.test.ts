@@ -93,6 +93,23 @@ describe('LocalPreviewTransport', () => {
     expect(runs[0]!.publishPorts).toEqual([{ container: 4173, host: 4173 }])
   })
 
+  it('translates a pinned host-port collision into an actionable error naming the serve port', async () => {
+    // Pinning host = serve port can collide with another preview or a local dev server (4173 is
+    // `vite preview`'s default), which the old ephemeral mapping never hit. The raw daemon stderr
+    // is turned into a message naming the port rather than surfacing the low-level `-p` failure.
+    const { adapter } = fakeAdapter({
+      async run() {
+        throw new Error(
+          '`docker run` failed: Bind for 127.0.0.1:4173 failed: port is already allocated',
+        )
+      },
+    })
+    const transport = makeTransport(adapter, okFetch())
+    await expect(transport.start(ref, { jobId: 'preview', mode: 'preview' }, 4173)).rejects.toThrow(
+      /host port 4173 is already in use/,
+    )
+  })
+
   it('reports the deterministic localhost URL from the pinned serve port once serving', async () => {
     const { adapter } = fakeAdapter()
     const transport = makeTransport(adapter, okFetch('done'))

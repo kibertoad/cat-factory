@@ -60,6 +60,19 @@ function previewRunId(frameId: string): string {
   return `preview-${frameId}`
 }
 
+/**
+ * Whether a container-runtime error is a host-port bind collision (Docker/Podman phrase it a
+ * few ways). Used to translate a pinned-preview `-p` failure into an actionable message.
+ */
+function isHostPortInUseError(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return (
+    message.includes('port is already allocated') ||
+    message.includes('address already in use') ||
+    message.includes('ports are not available')
+  )
+}
+
 function defaultExec(binary: string): ContainerExec {
   return async (args) => {
     try {
@@ -111,24 +124,38 @@ export class LocalPreviewTransport implements PreviewTransport {
     const runId = previewRunId(ref.frameId)
     // Fresh container each start (a re-start replaces any prior preview for the frame).
     await this.adapter.removeRun(this.exec, runId)
-    const containerId = await this.adapter.run(this.exec, {
-      runId,
-      image: this.image,
-      sharedSecret: this.sharedSecret,
-      // A preview only builds + serves a static app (no Docker-in-Docker), so never privileged.
-      privileged: false,
-      network: this.network,
-      env: this.extraEnv,
-      // On a localhost-publishing runtime (Docker family) PIN the host port to the serve port so
-      // the browsable origin is `http://localhost:<servePort>` — deterministic and knowable ahead
-      // of provision, matching the CORS origin a deployer injects (`frontendOriginsForService`).
-      // Apple ignores publishPorts (reached by container IP), so the pin is a harmless no-op there.
-      publishPorts: [
-        this.adapter.publishesToLocalhost
-          ? { container: servePort, host: servePort }
-          : { container: servePort },
-      ],
-    })
+    // On a localhost-publishing runtime (Docker family) PIN the host port to the serve port so
+    // the browsable origin is `http://localhost:<servePort>` — deterministic and knowable ahead
+    // of provision, matching the CORS origin a deployer injects (`frontendOriginsForService`).
+    // Apple ignores publishPorts (reached by container IP), so the pin is a harmless no-op there.
+    const pinsHostPort = this.adapter.publishesToLocalhost
+    let containerId: string
+    try {
+      containerId = await this.adapter.run(this.exec, {
+        runId,
+        image: this.image,
+        sharedSecret: this.sharedSecret,
+        // A preview only builds + serves a static app (no Docker-in-Docker), so never privileged.
+        privileged: false,
+        network: this.network,
+        env: this.extraEnv,
+        publishPorts: [
+          pinsHostPort ? { container: servePort, host: servePort } : { container: servePort },
+        ],
+      })
+    } catch (err) {
+      // Pinning the host port trades ephemeral-port collision-freedom for a deterministic origin,
+      // so a serve port already bound on the host (another preview, or a local dev server —
+      // 4173 is `vite preview`'s default) now fails the `-p` bind. Turn the raw daemon stderr
+      // into an actionable message naming the port; only reachable on the pinned path.
+      if (pinsHostPort && isHostPortInUseError(err)) {
+        throw new Error(
+          `The browsable preview can't start: host port ${servePort} is already in use. ` +
+            `Free it (stop another running preview or a local dev server listening on :${servePort}) and try again.`,
+        )
+      }
+      throw err
+    }
     const endpoint = await this.waitForEndpoint(containerId)
     await this.waitForHealth(endpoint, containerId)
     this.cache.set(ref.frameId, { containerId, servePort })

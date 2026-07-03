@@ -482,9 +482,17 @@ ResolvedFrontendBinding[]` ride in `agent_runs.detail` (like `failureHistory`), 
     (`PreviewView.url`) BOTH use `localhost` so a developer's `Origin` header matches. This is why the
     transport hardcodes `http://localhost:<servePort>` for the pinned case rather than echoing back
     `docker port` (which is `127.0.0.1`).
+  - **Pinning trades ephemeral collision-freedom for a deterministic origin.** The old `-p
+127.0.0.1:0:<port>` mapping could never collide; pinning host = serve port can, when the port is
+    already bound on the host (a second frontend frame's preview defaulting to the same `servePort`,
+    or a local dev server — 4173 is `vite preview`'s default). `LocalPreviewTransport.start` catches
+    the `-p` bind failure (only reachable on the pinned/localhost path) and rethrows an actionable
+    "host port `<servePort>` is already in use" message instead of the raw daemon stderr. There is
+    deliberately NO ephemeral fallback: an ephemeral host port would break the CORS-origin match that
+    is the whole point of the slice.
   - **Runtime symmetry:** the preview transport is a genuine local/node differentiator (only a runtime
     with a host-port-publish primitive wires it; the Worker never does — `frontendPreview.supported:
-    false`), so pinning it needs no Worker change. `frontendOriginsForService` lives in
+false`), so pinning it needs no Worker change. `frontendOriginsForService` lives in
     `@cat-factory/contracts` and is consumed by the shared `RunDispatcher`, so the CORS injection works
     on every runtime that runs a deployer. No harness change (no image bump): pinning is a
     transport/adapter concern; the app still serves on the serve port inside the container regardless.
