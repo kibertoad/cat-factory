@@ -188,8 +188,19 @@ export class WorkspaceService {
       this.workspaceMountRepository && this.serviceRepository
         ? await this.workspaceMountRepository.listByWorkspace(id)
         : []
-    const blocks = await this.composeBoard(localBlocks, mounts)
-    const executions = await this.composeExecutions(localExecutions, mounts)
+    // Exclude HEADLESS internal blocks (public-API "initiative" runs) from the board projection —
+    // they exist only to anchor an external run and must never render in the UI. Filtered here, at
+    // the single SPA-facing snapshot read, not in the repository (the engine still sees them). See
+    // BoardService.createInternalTask. Their executions are dropped from `executions` too, so the
+    // external run's brief + LLM output never reach the SPA (the block filter alone would leave an
+    // orphan execution referencing a hidden block). The durable driver never uses the snapshot —
+    // production drives by run id, and the conformance/test harness now enumerates runs via
+    // `executionRepository.listByWorkspace`, not this projection.
+    const internalBlockIds = new Set(localBlocks.filter((b) => b.internal).map((b) => b.id))
+    const visibleBlocks = localBlocks.filter((b) => !internalBlockIds.has(b.id))
+    const visibleExecutions = localExecutions.filter((e) => !internalBlockIds.has(e.blockId))
+    const blocks = await this.composeBoard(visibleBlocks, mounts)
+    const executions = await this.composeExecutions(visibleExecutions, mounts)
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
     // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).
     const pipelineCatalogVersions = Object.fromEntries(

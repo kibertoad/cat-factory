@@ -123,7 +123,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     deleteExpired: 'sweeper',
   },
   emailConnectionRepository: { getByAccount: 'pending', upsert: 'pending', softDelete: 'pending' },
-  blockRepository: { listByService: 'pending' },
+  // `countActiveInternal` (the public API's initiative-start concurrency backstop, a
+  // workspace-scoped SQL COUNT) is org/durable and REMOTE-eligible, but proxying the public-API
+  // path is a later mothership slice, so it stays pending until then, like `listByService`.
+  blockRepository: { listByService: 'pending', countActiveInternal: 'pending' },
   pipelineRepository: {},
   executionRepository: { listByService: 'pending', listStale: 'sweeper' },
   // `getRef` is allow-listed (the board's retry/stop run-control entry point). `listStale`/
@@ -244,10 +247,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The whole reference-architecture library is now remote (the bootstrap modal's CRUD + the
   // retry re-resolve): get/listByWorkspace/insert/update/softDelete.
   referenceArchitectureRepository: {},
+  // `getByWorkspace` is now allow-listed: `resolveRepoTarget` reads it FIRST on every
+  // container-agent dispatch (installation → then the `github_repos` projection), so the
+  // run path needs it alongside `repoProjectionRepository.list`. The installationId-keyed
+  // reads, the sync/token writes, the webhook fan-out, and the cron `listActive` stay off
+  // (a later GitHub sync + repo-write slice — the mothership owns App + webhooks).
   githubInstallationRepository: {
     getByInstallationId: 'pending',
     listByInstallationIds: 'pending',
-    getByWorkspace: 'pending',
     listWorkspacesForInstallation: 'pending',
     listActive: 'sweeper',
     upsert: 'pending',
@@ -334,9 +341,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'pending',
     remove: 'pending',
   },
+  // `list` is now allow-listed (the SPA's repos panel + the run-path `resolveRepoTarget` walk of
+  // the `github_repos` projection). The board-linkage writes (`linkBlock`/`setMonorepo`), the
+  // sync ingest (`upsertMany`/`tombstoneMissing`), the installationId-keyed cursors, the fan-out
+  // `linkedWorkspaces`, and the single-repo `get` (repo-write facade only) stay off the SPA path
+  // — a later GitHub sync + repo-write slice; `listStale` is the reconcile sweeper's read.
   repoProjectionRepository: {
     upsertMany: 'pending',
-    list: 'pending',
     get: 'pending',
     linkedWorkspaces: 'pending',
     tombstoneMissing: 'pending',
@@ -346,18 +357,20 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     getCursor: 'pending',
     setCursor: 'pending',
   },
-  branchProjectionRepository: { upsertMany: 'pending', listByRepo: 'pending' },
+  // The projection READS the SPA's VCS board panels display are now allow-listed
+  // (`branchProjectionRepository.listByRepo`, `pullRequest`/`issueProjectionRepository`
+  // `.listByWorkspace`). The `upsertMany` sync ingest + the per-repo `listByRepo` variants the
+  // panels don't drive stay off — the mothership owns GitHub sync (a later sync-write slice).
+  branchProjectionRepository: { upsertMany: 'pending' },
   pullRequestProjectionRepository: {
     upsertMany: 'pending',
     rowToPr: 'helper',
     listByRepo: 'pending',
-    listByWorkspace: 'pending',
   },
   issueProjectionRepository: {
     upsertMany: 'pending',
     rowToIssue: 'helper',
     listByRepo: 'pending',
-    listByWorkspace: 'pending',
   },
   commitProjectionRepository: {
     upsertMany: 'pending',

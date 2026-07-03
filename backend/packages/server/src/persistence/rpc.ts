@@ -585,6 +585,50 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- VCS / GitHub projection READ surface ---------------------------------------
+  // The GitHub read models the SPA's VCS board panels display (repos / branches / PRs /
+  // issues), served straight from the local projections by `GitHubService` (`container.github`)
+  // — fast, rate-limit-free, and NO GitHub API call, so they run unchanged in mothership mode
+  // over the remote-sourced projection repos. Each takes the workspaceId as arg0 (the
+  // `workspace` rule); reads only.
+  //
+  // These same reads are ALSO the run path: `resolveRepoTarget` (which runs on EVERY
+  // container-agent dispatch to find a block's repo) reads `githubInstallationRepository.
+  // getByWorkspace` FIRST and returns null if there's no installation, THEN walks the
+  // `github_repos` projection via `repoProjectionRepository.list` and the block ancestry via
+  // `blockRepository.get` / `serviceRepository.getByFrameBlock` (both already remote). So
+  // closing the run-path gap for real (non-fake-executor) runs needs BOTH the installation
+  // read and `list` — allow-listing `list` alone left the resolver failing one call earlier on
+  // the un-remoted installation read. `getByWorkspace` is a member-level read (its own binding
+  // or the account-shared one), workspace-scoped on arg0.
+  //
+  // Deliberately EXCLUDED (a later "GitHub sync + repo-write" slice): the projection WRITE
+  // surface — `upsertMany` (the sync/webhook ingest; the mothership owns GitHub sync, since the
+  // App + webhooks live there), the board-linkage writes `repoProjectionRepository.linkBlock` /
+  // `setMonorepo`, the sync cursors (`getCursor`/`setCursor`, keyed on installationId not
+  // workspaceId), and `tombstoneMissing`. `repoProjectionRepository.get` stays off too: it backs
+  // only `GitHubService.resolve` for the repo-WRITE endpoints (create-branch / open-PR /
+  // merge / comment), and exposing it alone would let create-branch/open-PR perform the real
+  // GitHub write and THEN fail on the un-remoted `upsertMany` projection refresh — a worse
+  // failure than today's clean pre-write refusal. It comes back with the repo-write slice. The
+  // rest of `githubInstallationRepository` (installationId-keyed reads, sync/token writes, the
+  // fan-out, the cron `listActive`) also stays off — only the workspace-scoped `getByWorkspace`
+  // the run path needs is opened here.
+  githubInstallationRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  repoProjectionRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  branchProjectionRepository: {
+    listByRepo: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  pullRequestProjectionRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  issueProjectionRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
 }
 
 // ---------------------------------------------------------------------------

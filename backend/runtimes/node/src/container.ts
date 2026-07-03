@@ -22,6 +22,7 @@ import {
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
+  PublicApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
@@ -176,6 +177,7 @@ import {
 } from './repositories/github.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
+import { DrizzlePublicApiKeyRepository } from './repositories/publicApiKey.js'
 import {
   DrizzlePersonalSubscriptionRepository,
   DrizzleSubscriptionActivationRepository,
@@ -1071,6 +1073,28 @@ function buildNodeApiKeyService(
 }
 
 /**
+ * Build the INBOUND public-API key store for the Node/local facade (Postgres-backed), or
+ * undefined when the shared ENCRYPTION_KEY is absent. Uses ENCRYPTION_KEY as the HMAC pepper for
+ * the one-way secret hash (a public-API key is verified, never decrypted). Mirrors the Worker's
+ * buildPublicApiKeyService.
+ */
+function buildNodePublicApiKeyService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb | undefined,
+  idGenerator: CoreDependencies['idGenerator'],
+  clock: Clock,
+): PublicApiKeyService | undefined {
+  const pepper = env.ENCRYPTION_KEY?.trim()
+  if (!pepper || !db) return undefined
+  return new PublicApiKeyService({
+    repository: new DrizzlePublicApiKeyRepository(db),
+    pepper,
+    idGenerator,
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude) for the Node/local
  * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
  * Double-encrypts the credential (password layer inside the system layer). Mirrors the
@@ -1385,6 +1409,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     options.providerApiKeyRepository,
   )
+  // The inbound public-API key store — drives the public `/api/v1` surface's authentication.
+  const publicApiKeys = buildNodePublicApiKeyService(env, db, idGenerator, clock)
   // The per-user locally-run model endpoints store (Ollama / LM Studio / …), shared by
   // the local-runner controller, the per-user model catalog, the inline model provider,
   // and the LLM proxy.
@@ -2421,6 +2447,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a

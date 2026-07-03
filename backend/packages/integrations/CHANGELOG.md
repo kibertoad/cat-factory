@@ -1,5 +1,37 @@
 # @cat-factory/integrations
 
+## 0.58.0
+
+### Minor Changes
+
+- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
+  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
+  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
+  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
+  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
+
+  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
+    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
+    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
+    key is shown once on create.
+  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
+    external runs never appear in the UI.
+  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+
+## 0.57.2
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+
 ## 0.57.1
 
 ### Patch Changes
