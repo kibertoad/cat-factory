@@ -1,5 +1,12 @@
 # @cat-factory/sandbox
 
+## 0.8.91
+
+### Patch Changes
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+
 ## 0.8.90
 
 ### Patch Changes
