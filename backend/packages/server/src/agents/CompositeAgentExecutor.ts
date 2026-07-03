@@ -88,6 +88,11 @@ const CONTAINER_KINDS = new Set([
   // like `ci` it is a non-agent engine gate that *dispatches* an `on-call` job; only
   // the on-call agent reaches this executor.)
   'on-call',
+  // The initiative planner explores the repository (read-only) to ground its
+  // multi-phase plan in the actual codebase, so it needs a real checkout. It makes
+  // no edits and returns the plan as structured JSON. (The `initiative-committer`
+  // step is NOT here: it is a non-LLM engine step handled entirely in the engine.)
+  'initiative-planner',
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {

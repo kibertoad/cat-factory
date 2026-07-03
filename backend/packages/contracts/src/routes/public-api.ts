@@ -4,7 +4,11 @@ import {
   createdPublicApiKeySchema,
   publicApiKeyListResultSchema,
 } from '../public-api-keys.js'
-import { createInitiativeSchema, initiativeAcceptedSchema, publicJobSchema } from '../public-api.js'
+import {
+  createInitiativeJobSchema,
+  initiativeAcceptedSchema,
+  publicJobSchema,
+} from '../public-api.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -45,10 +49,10 @@ export const revokePublicApiKeyContract = defineApiContract({
 
 // ---- the external `/api/v1` surface (absolute paths, key-authenticated) ----
 
-export const createInitiativeContract = defineApiContract({
+export const createInitiativeJobContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/api/v1/initiatives',
-  requestBodySchema: createInitiativeSchema,
+  requestBodySchema: createInitiativeJobSchema,
   responsesByStatusCode: { 202: initiativeAcceptedSchema, ...errorResponses },
 })
 

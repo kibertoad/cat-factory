@@ -216,6 +216,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   consensusSessionRepository: {},
   clarityReviewRepository: {},
   brainstormSessionRepository: {},
+  // The workspace-scoped CRUD + rev-CAS surface is allow-listed; only the cross-workspace
+  // cron sweeper read stays mothership-internal.
+  initiativeRepository: { listExecuting: 'sweeper' },
   // `get`/`remove` are now allow-listed (the preset-library management surface); `list`/`getDefault`/
   // `upsert` were already remotely callable — so the whole merge-preset repo is remote.
   mergePresetRepository: {},

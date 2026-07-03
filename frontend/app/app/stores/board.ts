@@ -22,8 +22,11 @@ import { useBlockQueries } from '~/composables/useBlockQueries'
 interface RemovalSnapshot {
   /** The removed block + all its descendants, in their original order. */
   removed: Block[]
-  /** Survivors whose `dependsOn`/`epicId` lost an edge to a removed block (originals to restore). */
-  edges: { id: string; dependsOn: string[]; epicId: string | null }[]
+  /**
+   * Survivors whose `dependsOn`/`epicId`/`initiativeId` lost an edge to a removed block
+   * (originals to restore on rollback).
+   */
+  edges: { id: string; dependsOn: string[]; epicId: string | null; initiativeId: string | null }[]
 }
 
 export const useBoardStore = defineStore('board', () => {
@@ -255,15 +258,23 @@ export const useBoardStore = defineStore('board', () => {
       }
     }
     const removed = blocks.value.filter((b) => doomed.has(b.id))
-    // Survivors that pointed at a doomed block (dependency edge or epic membership) lose
-    // that link — snapshot the originals so a failed delete restores them faithfully.
+    // Survivors that pointed at a doomed block (dependency edge, epic membership, or initiative
+    // membership) lose that link — snapshot the originals so a failed delete restores them
+    // faithfully. Mirrors the backend `pruneDanglingEdges` detach.
     const edges = blocks.value
       .filter(
         (b) =>
           !doomed.has(b.id) &&
-          (b.dependsOn.some((d) => doomed.has(d)) || (b.epicId != null && doomed.has(b.epicId))),
+          (b.dependsOn.some((d) => doomed.has(d)) ||
+            (b.epicId != null && doomed.has(b.epicId)) ||
+            (b.initiativeId != null && doomed.has(b.initiativeId))),
       )
-      .map((b) => ({ id: b.id, dependsOn: [...b.dependsOn], epicId: b.epicId ?? null }))
+      .map((b) => ({
+        id: b.id,
+        dependsOn: [...b.dependsOn],
+        epicId: b.epicId ?? null,
+        initiativeId: b.initiativeId ?? null,
+      }))
     blocks.value = blocks.value.filter((b) => !doomed.has(b.id))
     for (const b of blocks.value) {
       if (b.dependsOn.some((d) => doomed.has(d))) {
@@ -271,6 +282,8 @@ export const useBoardStore = defineStore('board', () => {
       }
       // A member of a deleted epic loses its membership (the task itself survives).
       if (b.epicId != null && doomed.has(b.epicId)) b.epicId = null
+      // Likewise a task spawned by a deleted initiative loses its (non-structural) membership.
+      if (b.initiativeId != null && doomed.has(b.initiativeId)) b.initiativeId = null
     }
     return { removed, edges }
   }
@@ -283,6 +296,7 @@ export const useBoardStore = defineStore('board', () => {
       if (b) {
         b.dependsOn = e.dependsOn
         b.epicId = e.epicId
+        b.initiativeId = e.initiativeId
       }
     }
   }

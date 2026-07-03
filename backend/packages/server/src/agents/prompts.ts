@@ -114,6 +114,43 @@ export const SPEC_SHAPE_HINT =
   'technical task with no business requirements, the document is instead just ' +
   '{"noBusinessSpecs": true}.'
 
+/** Role prompt the initiative-planner step's agent runs under (returns the plan as JSON). */
+export const INITIATIVE_PLANNER_SYSTEM_PROMPT =
+  'You are a staff engineer planning a LONG-RUNNING INITIATIVE — a body of work too ' +
+  'large for one task (a cross-cutting refactor, a migration, a strangler conversion). ' +
+  'Explore the repository first and ground every part of the plan in the actual code. ' +
+  'Decompose the initiative into SEQUENTIAL PHASES, each holding concrete work ITEMS: ' +
+  'an item must be a self-sufficient task one coding agent can complete in a single PR, ' +
+  'with a description that stands alone (name the files/modules it touches). Give every ' +
+  'item an estimate — complexity, risk and impact, each 0..1 — and declare `dependsOn` ' +
+  '(item ids) only where an item genuinely needs another item merged first; independent ' +
+  'items in a phase may run in parallel. Choose an execution policy: `maxConcurrent` ' +
+  '(how many items may run at once — 1 for delicate serialized work) and ordered ' +
+  '`rules` mapping estimates to pipelines (an item matches a rule when ANY axis meets ' +
+  'its `min*` threshold; first match wins; no match falls back to `defaultPipelineId`). ' +
+  'Available pipelines: `pl_quick` (small, low-risk change), `pl_simple` (standard ' +
+  'change, lighter review), `pl_full` (full spec/review/test rigor), `pl_bugfix` (bug ' +
+  'remediation). Record the decisions you made and any known caveats. ' +
+  'Respond with ONLY a JSON object of shape {"goal","constraints":[],"nonGoals":[],' +
+  '"analysisSummary","phases":[{"id","title","goal","maxConcurrent"?}],' +
+  '"items":[{"id","phaseId","title","description","dependsOn":[],' +
+  '"estimate":{"complexity","risk","impact","rationale"},"pipelineId"?}],' +
+  '"policy":{"maxConcurrent","rules":[{"pipelineId","minComplexity"?,"minRisk"?,' +
+  '"minImpact"?}],"defaultPipelineId"},"decisions":[{"title","detail"}],"caveats":[]} ' +
+  '— no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
+
+/** Compact shape hint fed to the structured-output repair call for the initiative plan. */
+export const INITIATIVE_PLAN_SHAPE_HINT =
+  'Expected an initiative plan: {"goal": string, "constraints": string[], "nonGoals": ' +
+  'string[], "analysisSummary": string, "phases": [{"id": string, "title": string, ' +
+  '"goal": string}], "items": [{"id": string, "phaseId": string, "title": string, ' +
+  '"description": string, "dependsOn": string[], "estimate": {"complexity": number 0..1, ' +
+  '"risk": number 0..1, "impact": number 0..1, "rationale": string}}], "policy": ' +
+  '{"maxConcurrent": number, "rules": [{"pipelineId": string, "minComplexity"?: number, ' +
+  '"minRisk"?: number, "minImpact"?: number}], "defaultPipelineId": string}, ' +
+  '"decisions": [{"title": string, "detail": string}], "caveats": string[]}.'
+
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 export const MERGE_ASSESSMENT_SHAPE_HINT =
   'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
@@ -165,6 +202,29 @@ export function blueprintUserPrompt(): string {
       'scratch. Return the COMPLETE tree (not a diff).',
     '',
     'Respond with ONLY the JSON object for the service tree — no prose, no code fences.',
+  ].join('\n')
+}
+
+/**
+ * The initiative-planner's task prompt: the human's rough goal statement (the
+ * initiative block's title + description) plus the exploration/plan instructions.
+ * The agent reads the codebase from its own read-only checkout; the backend
+ * ingests the returned plan into the `initiatives` entity, and the committer
+ * step renders + commits the in-repo tracker after the human approves the plan.
+ */
+export function initiativePlannerUserPrompt(context: AgentRunContext): string {
+  const block = context.block
+  const description = block.description?.trim()
+  return [
+    `Plan the initiative: ${block.title || '(untitled initiative)'}`,
+    ...(description ? ['', description] : []),
+    '',
+    'Explore this repository to ground the plan in the real code, then produce the ' +
+      'complete multi-phase plan: sequential phases, self-sufficient items with ' +
+      'estimates and dependencies, and the execution policy (concurrency + ' +
+      'estimate→pipeline rules).',
+    '',
+    'Respond with ONLY the JSON object for the plan — no prose, no code fences.',
   ].join('\n')
 }
 

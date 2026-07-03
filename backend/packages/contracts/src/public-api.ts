@@ -11,7 +11,7 @@ import * as v from 'valibot'
 // ---------------------------------------------------------------------------
 
 /** Start an initiative run. */
-export const createInitiativeSchema = v.object({
+export const createInitiativeJobSchema = v.object({
   /** Id of a PUBLIC, inline pipeline (e.g. `pl_initiative_breakdown`). */
   pipelineId: v.pipe(v.string(), v.trim(), v.minLength(1)),
   /** The initiative brief — becomes the run's task description. */
@@ -19,7 +19,7 @@ export const createInitiativeSchema = v.object({
   /** Optional human-readable title for the run; defaults to a truncated `input`. */
   title: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
 })
-export type CreateInitiativeInput = v.InferOutput<typeof createInitiativeSchema>
+export type CreateInitiativeJobInput = v.InferOutput<typeof createInitiativeJobSchema>
 
 /**
  * The coarse public job status, mapped from the internal execution status:

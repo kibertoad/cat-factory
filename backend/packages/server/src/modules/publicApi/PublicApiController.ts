@@ -1,5 +1,5 @@
 import {
-  createInitiativeContract,
+  createInitiativeJobContract,
   getPublicJobContract,
   type ExecutionInstance,
   type ExecutionStatus,
@@ -174,7 +174,7 @@ export function publicApiController(): Hono<AppEnv> {
 
   // Start an initiative run: validate the pipeline is public + inline, create a headless internal
   // block to anchor the run, and start it. Returns 202 with the job id + follow-up links.
-  buildHonoRoute(app, createInitiativeContract, async (c) => {
+  buildHonoRoute(app, createInitiativeJobContract, async (c) => {
     const gate = await resolveKey(c)
     if ('fail' in gate) {
       return c.json(

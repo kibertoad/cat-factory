@@ -245,7 +245,8 @@
       "dragService": "Servisi sürükle",
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
-      "addFirstTask": "İlk görevi ekle"
+      "addFirstTask": "İlk görevi ekle",
+      "createInitiativeTitle": "Girisim olustur"
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -3964,6 +3965,71 @@
       "toast": {
         "reseedFailed": "Birleştirme ön ayarı yeniden tohumlanamadı"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Girisim olustur",
+      "inFrame": "{frame} icinde yeni girisim",
+      "titleField": "Baslik",
+      "titlePlaceholder": "orn. API'yi yeni kimlik dogrulama modeline tasi",
+      "goalField": "Hedef",
+      "goalPlaceholder": "Hedefi, kisitlari ve yaklasik kapsami aciklayin. Planlayici bunu cok asamali bir plana donusturur.",
+      "hint": "Henuz hicbir sey calismiyor: olusturduktan sonra blok uzerinde Girisim Planlama hattini calistirin. Kod tabanini analiz eder ve onayiniz icin cok asamali plani taslak olarak hazirlar.",
+      "submit": "Girisim olustur",
+      "failedTitle": "Girisim olusturulamadi"
+    },
+    "status": {
+      "planning": "Planlaniyor",
+      "awaiting_approval": "Onay bekliyor",
+      "executing": "Yurutuluyor",
+      "paused": "Duraklatildi",
+      "done": "Tamamlandi",
+      "cancelled": "Iptal edildi"
+    },
+    "itemStatus": {
+      "pending": "Beklemede",
+      "in_progress": "Devam ediyor",
+      "pr_open": "PR acik",
+      "done": "Tamamlandi",
+      "blocked": "Engellendi",
+      "skipped": "Atlandi"
+    },
+    "card": {
+      "kind": "Girisim",
+      "progress": "{done}/{total} oge tamamlandi",
+      "openTracker": "Izleyiciyi ac"
+    },
+    "tracker": {
+      "title": "Girisim izleyici",
+      "subtitle": "Bu girisimin asamalari, is ogeleri, kararlari ve ilerlemesi",
+      "empty": "Bu blok icin girisim bulunamadi.",
+      "goal": "Hedef",
+      "constraints": "Kisitlar",
+      "nonGoals": "Kapsam disi",
+      "analysis": "Kod tabani analizi",
+      "noPlan": "Henuz plan yok. Cok asamali plani taslak olarak hazirlamak icin Girisim Planlama hattini calistirin.",
+      "phase": "Asama: {title}",
+      "colItem": "Oge",
+      "colStatus": "Durum",
+      "colPr": "PR",
+      "dependsOn": "Sunlara bagli: {items}",
+      "prLink": "PR",
+      "policy": "Yurutme politikasi",
+      "maxConcurrent": "En fazla es zamanli gorev: {count}",
+      "defaultPipeline": "Varsayilan hat:",
+      "axisComplexity": "karmasiklik >= {value}",
+      "axisRisk": "risk >= {value}",
+      "axisImpact": "etki >= {value}",
+      "axisNever": "hicbir zaman eslesmez (esik yok)",
+      "decisions": "Kararlar",
+      "deviations": "Sapmalar",
+      "followUps": "Takip isleri",
+      "caveats": "Bilinen uyarilar"
+    },
+    "inspector": {
+      "runPlanning": "Planlamayi calistir",
+      "hint": "Planlama hatti kod tabanini inceler, onay icin cok asamali plani hazirlar ve ardindan izleyici belgesini depoya kaydeder."
     }
   }
 }

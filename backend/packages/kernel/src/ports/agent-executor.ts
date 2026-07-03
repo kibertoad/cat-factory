@@ -336,6 +336,15 @@ export interface AgentRunResult {
    */
   onCallAssessment?: unknown
   /**
+   * The multi-phase initiative plan draft an `initiative-planner` step produced
+   * (phases, items with estimates + dependencies, the execution policy). The engine
+   * strictly validates it and ingests it into the block's `initiatives` entity;
+   * the committer step later renders + commits the in-repo tracker from that
+   * entity. Carried as `unknown` so the port stays free of the contracts schema;
+   * the engine parses it before use.
+   */
+  initiativePlan?: unknown
+  /**
    * A generic, manifest-driven `agent` step's structured output (the parsed JSON object
    * a `container-explore` structured agent returned). Carried as `unknown` so the port
    * stays free of any schema; the kind's post-op coerces/validates + renders artifact

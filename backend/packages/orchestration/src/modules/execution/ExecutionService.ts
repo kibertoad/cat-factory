@@ -84,6 +84,8 @@ import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { InitiativeService } from '../initiative/InitiativeService.js'
+import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
@@ -300,6 +302,14 @@ export interface ExecutionServiceDependencies {
    */
   blueprintReconciler?: BlueprintReconciler
   /**
+   * Optional: when the initiatives module is wired, the `initiative-planner` step's
+   * plan draft is ingested into the block's initiative entity through this, and the
+   * `initiative-committer` step flips it to `executing` + mirrors the in-repo
+   * tracker. Absent → the initiative steps fail loudly (an initiative pipeline is
+   * meaningless without the module) while every other pipeline runs unchanged.
+   */
+  initiativeService?: InitiativeService
+  /**
    * Optional: raises human-actionable notifications (a PR needs a merge decision,
    * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
    * transition the block but no notification surfaces (tests).
@@ -514,6 +524,7 @@ export class ExecutionService {
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
+    initiativeService,
     notificationService,
     resolveBinaryArtifactStore,
     workspaceSettingsService,
@@ -708,6 +719,7 @@ export class ExecutionService {
       issueWriteback,
       notificationService,
       blueprintReconciler,
+      initiativeService,
       resolveRunRepoContext,
       resolveProviderCapabilities,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
@@ -1122,6 +1134,11 @@ export class ExecutionService {
     // preceding task-estimator). The builder also rejects these at save, but a pipeline can
     // become invalid out of band.
     validatePipelineShape(shape)
+
+    // The Initiative Planning kinds run ONLY on an `initiative`-level block, and an
+    // initiative block accepts ONLY such a chain — bidirectional, and here in the shared
+    // guard so start/retry/restart can't drift on it.
+    assertInitiativeShapeAllowed(block, shape.agentKinds)
 
     // A chain with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
     // it can only run on a `frontend` frame or a frame a frontend links to — else a `tester-ui`

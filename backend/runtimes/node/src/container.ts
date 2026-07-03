@@ -2129,6 +2129,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
     clarityReviewRepository: repos.clarityReviewRepository,
     brainstormSessionRepository: repos.brainstormSessionRepository,
+    // Initiatives (the long-running multi-task work container). Wired unconditionally,
+    // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
+    // planning pipeline's ingest/committer steps work identically on both runtimes.
+    initiativeRepository: repos.initiativeRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
