@@ -97,8 +97,7 @@ function setBindingSource(index: number, value: string) {
 }
 
 function addBinding() {
-  // The "+" lives in the (possibly collapsed) group header — open the group so the new row shows.
-  showBindings.value = true
+  // InspectorSection expands its group when a header action is clicked, so the new row is visible.
   save({ backendBindings: [...bindings.value, { envVar: '', source: { kind: 'mock' } }] })
 }
 

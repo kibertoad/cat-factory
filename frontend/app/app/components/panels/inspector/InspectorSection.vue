@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Shared collapsible section shell for the inspector panel: a chevron header with an
 // optional count, warning flag, and header-actions slot (kept OUTSIDE the toggle button
-// so clicking a "+" / menu never collapses the section), plus an optional explanatory
-// hint rendered at the top of the body — what the section means and what it is used for.
+// so clicking a "+" / menu never collapses the section — it only ever expands it, so a
+// row added via the header control is never dropped into a hidden body), plus an optional
+// explanatory hint rendered at the top of the body — what the section means and what it
+// is used for.
 //
 // Open state is a `defineModel` so a parent that needs programmatic control (e.g.
 // FrontendConfig opening its Build group after a detect run) can bind `v-model:open`;
@@ -44,7 +46,11 @@ if (props.defaultOpen) open.value = true
           class="h-3.5 w-3.5 shrink-0 text-amber-400"
         />
       </button>
-      <slot name="actions" />
+      <!-- An action ("+", attach, menu) mutates the body list, so expand (never collapse)
+           on interaction — otherwise the new row lands inside the collapsed body. -->
+      <div v-if="$slots.actions" class="contents" @click="open = true">
+        <slot name="actions" />
+      </div>
     </div>
     <div v-if="open" class="mt-2 space-y-3">
       <p v-if="hint" class="text-[11px] leading-snug text-slate-500">{{ hint }}</p>
