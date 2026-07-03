@@ -63,6 +63,13 @@ function fakeRegistry(): EnvironmentRegistryRepository & { records: EnvironmentR
         records.find((r) => r.blockId === blockId && r.frameId === frameId && !r.deletedAt) ?? null
       )
     },
+    async getFramelessByBlock(_workspaceId, blockId) {
+      return (
+        [...records]
+          .reverse()
+          .find((r) => r.blockId === blockId && r.frameId == null && !r.deletedAt) ?? null
+      )
+    },
     async listByWorkspace() {
       return records
     },
@@ -303,6 +310,34 @@ describe('EnvironmentProvisioningService — frame-keyed reads with manual-env f
     expect(await service.getHandleForBlock('ws1', 'blk1', 'frame_own')).toBeNull()
     // The peer's own frame still resolves it.
     expect((await service.resolveForBlock('ws1', 'blk1', 'frame_peer'))?.url).toBe(READY.url)
+  })
+
+  it('resolves the FRAME-LESS manual env even when a NEWER sibling-frame env exists', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    // The manual/human-test env (frame_id = NULL) is provisioned FIRST, then a fan-out peer env
+    // under the same block but a different frame is provisioned LATER (so it is the newest row).
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame_peer' })
+    // Resolving the OWN frame's env must still surface the manual env: the fallback reads the
+    // frame-less row directly, so the newer sibling can't shadow it (a plain block newest-wins read
+    // would have returned the sibling and dropped the manual env entirely).
+    expect((await service.resolveForBlock('ws1', 'blk1', 'frame_own'))?.url).toBe(READY.url)
+    expect(
+      (await service.getHandleForBlock('ws1', 'blk1', 'frame_own'))?.frameId ?? null,
+    ).toBeNull()
+  })
+
+  it('a manual re-provision supersedes the frame-less env, NOT a newer sibling frame’s env', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' }) // frame-less manual
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame_peer' }) // sibling
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' }) // manual re-provision
+    // Only the prior FRAME-LESS row is tombstoned; the sibling frame's env stays live.
+    const live = registry.records.filter((r) => !r.deletedAt)
+    expect(live.filter((r) => r.frameId === null)).toHaveLength(1)
+    expect(live.filter((r) => r.frameId === 'frame_peer')).toHaveLength(1)
   })
 })
 

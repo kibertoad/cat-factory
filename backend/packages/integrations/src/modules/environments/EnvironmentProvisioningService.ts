@@ -794,10 +794,12 @@ export class EnvironmentProvisioningService {
   /**
    * The registry record for a block, resolving the specific service frame's env when a `frameId`
    * is known (a task may provision several — its own frame's plus each involved-service frame's).
-   * A frame-keyed read that misses falls back to a FRAME-LESS (manual / human-test) env on the
-   * block — those are written with `frame_id = NULL`, so the exact-frame read wouldn't see one —
-   * but NOT to a sibling frame's env (a non-null `frame_id` other than the one asked for is not
-   * this frame's env). No `frameId` ⇒ the block's newest, as before.
+   * A frame-keyed read that misses falls back to the block's FRAME-LESS (manual / human-test) env —
+   * those are written with `frame_id = NULL`, so the exact-frame read wouldn't see one — but NOT to
+   * a sibling frame's env. The fallback reads the frame-less row DIRECTLY (`getFramelessByBlock`),
+   * not via {@link EnvironmentRegistryRepository.getByBlock}: the latter returns the newest across
+   * ALL frames, so a NEWER fan-out peer env under the same `block_id` would shadow the frame-less
+   * manual env and the fallback would miss it. No `frameId` ⇒ the block's newest, as before.
    */
   private async readRegistryRecord(
     workspaceId: string,
@@ -810,9 +812,9 @@ export class EnvironmentProvisioningService {
       blockId,
       frameId,
     )
-    if (framed) return framed
-    const frameless = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
-    return frameless && frameless.frameId == null ? frameless : null
+    return (
+      framed ?? this.deps.environmentRegistryRepository.getFramelessByBlock(workspaceId, blockId)
+    )
   }
 
   /**
@@ -862,8 +864,10 @@ export class EnvironmentProvisioningService {
    * Keyed per `(blockId, frameId)` — NOT per block alone — because a single task can provision
    * several environments (its own service frame's plus one per involved-service frame, the
    * connections initiative), all sharing the task `blockId`; superseding by block alone would
-   * clobber a sibling frame's live env. Falls back to per-block when the frame is unknown (a
-   * manual / frame-less provision). No-op block-less.
+   * clobber a sibling frame's live env. When the frame is unknown (a manual / frame-less
+   * provision) it supersedes the block's FRAME-LESS env specifically (`getFramelessByBlock`), NOT
+   * the block's newest across all frames — else a manual re-provision would clobber a newer
+   * fan-out peer env sharing the `blockId`. No-op block-less.
    */
   private async supersedePriorEnvironment(
     workspaceId: string,
@@ -877,7 +881,7 @@ export class EnvironmentProvisioningService {
           blockId,
           frameId,
         )
-      : await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+      : await this.deps.environmentRegistryRepository.getFramelessByBlock(workspaceId, blockId)
     if (prior) {
       await this.deps.environmentRegistryRepository.softDelete(
         workspaceId,

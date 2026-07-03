@@ -151,6 +151,21 @@ export class D1EnvironmentRegistryRepository implements EnvironmentRegistryRepos
     return row ? rowToRecord(row) : null
   }
 
+  async getFramelessByBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<EnvironmentRecord | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM environments
+         WHERE workspace_id = ? AND block_id = ? AND frame_id IS NULL AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(workspaceId, blockId)
+      .first<EnvironmentRow>()
+    return row ? rowToRecord(row) : null
+  }
+
   async listByWorkspace(workspaceId: string): Promise<EnvironmentRecord[]> {
     const { results } = await this.db
       .prepare(

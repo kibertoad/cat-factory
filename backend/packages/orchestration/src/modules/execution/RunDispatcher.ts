@@ -54,7 +54,6 @@ import {
   sameSubtasks,
 } from '@cat-factory/kernel'
 import {
-  connectionNeighborIds,
   frontendOriginsForService,
   parseBlueprintService,
   parseSpecDoc,
@@ -63,6 +62,7 @@ import {
   blueprintPostOp,
   isCompanionKind,
   isContainerBackedCompanion,
+  moduleSlug,
   registeredAgentStep,
   registeredPostOps,
   registeredPreOps,
@@ -79,7 +79,7 @@ import type {
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
-import { frameOf } from './frame.logic.js'
+import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
@@ -193,17 +193,6 @@ interface DeployTarget {
   frame: Block
 }
 
-/** A URL-safe slug of a service title, for a `slug=url` peer-env entry. */
-function slugifyServiceName(title: string): string {
-  return (
-    title
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'service'
-  )
-}
-
 /**
  * The `peerEnvUrls` provision input for the frame about to be provisioned: a comma-joined set of
  * `slug=url` pairs for every target frame whose env is ALREADY ready this run — so a later
@@ -223,7 +212,7 @@ function buildPeerEnvUrls(
     if (env?.status !== 'ready' || !env.url) continue
     // Two ready providers can slugify to the same name; suffix the collision with an ordinal so a
     // second provider's URL isn't silently dropped (or its entry made ambiguous) in the joined set.
-    const base = slugifyServiceName(target.frame.title)
+    const base = moduleSlug(target.frame.title)
     const count = seen.get(base) ?? 0
     seen.set(base, count + 1)
     const slug = count === 0 ? base : `${base}-${count + 1}`
@@ -1375,7 +1364,11 @@ export class RunDispatcher {
     // each still-valid involved-service frame (the connections initiative), ordered provider-
     // before-consumer. Resolve the target set ONCE here (one workspace block-list read); the
     // synchronous/infraless recursion threads it rather than re-reading per frame.
-    const targets = await this.resolveDeployTargets(workspaceId, block)
+    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
+    // Pin the primary (own) frame once, so every later re-entry/replay classifies it identically
+    // regardless of a mid-flight reparent (see {@link resolveDeployTargets}). Persisted with the
+    // first synchronous-settle / async-park upsert below.
+    step.deployPrimaryFrameId ??= targets.find((t) => t.isPrimary)?.frameId
     return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
   }
 
@@ -1408,6 +1401,11 @@ export class RunDispatcher {
     if (next.provisioning?.type === 'infraless') {
       await this.environmentProvisioning?.supersedeForBlock(workspaceId, block.id, next.frameId)
       step.deployEnvs = { ...done, [next.frameId]: { status: 'skipped' } }
+      // Persist this frame's TERMINAL outcome BEFORE processing the next frame, so a crash/replay
+      // mid-fan-out resumes at the first un-settled frame rather than re-doing an already-settled
+      // one (which, on the synchronous REST path, would re-hit the provider — no idempotency guard
+      // there, unlike the deterministic async job ref).
+      await this.executionRepository.upsert(workspaceId, instance)
       return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
     }
     // Start provisioning the next frame: a raw-manifest config provisions SYNCHRONOUSLY over REST
@@ -1476,11 +1474,24 @@ export class RunDispatcher {
    * PROVIDER-before-CONSUMER over the connection edges among the targets (see
    * {@link orderProvisionTargets}) so a later provision can receive its ready peers' URLs. One
    * workspace block-list read; no per-frame point read.
+   *
+   * `pinnedPrimaryFrameId` (from {@link PipelineStep.deployPrimaryFrameId}, set on the first
+   * resolution) keeps the OWN/primary frame STABLE across re-entries: once the fan-out has started,
+   * a mid-flight reparent must not re-classify which frame is primary — that would flip an
+   * own-frame failure from terminal to a non-terminal peer failure. Prefer the pinned frame when it
+   * still resolves; fall back to a fresh `frameOf` walk otherwise.
    */
-  private async resolveDeployTargets(workspaceId: string, block: Block): Promise<DeployTarget[]> {
+  private async resolveDeployTargets(
+    workspaceId: string,
+    block: Block,
+    pinnedPrimaryFrameId?: string,
+  ): Promise<DeployTarget[]> {
     const blocks = await this.blockRepository.listByWorkspace(workspaceId)
     const byId = new Map(blocks.map((b) => [b.id, b]))
-    const ownFrame = frameOf(byId, block.id) ?? block
+    const ownFrame =
+      (pinnedPrimaryFrameId ? byId.get(pinnedPrimaryFrameId) : undefined) ??
+      frameOf(byId, block.id) ??
+      block
     const targets: DeployTarget[] = [
       {
         frameId: ownFrame.id,
@@ -1489,25 +1500,19 @@ export class RunDispatcher {
         frame: ownFrame,
       },
     ]
-    if (block.level === 'task' && (block.involvedServiceIds?.length ?? 0) > 0) {
-      const neighbors = connectionNeighborIds(blocks, ownFrame.id)
-      for (const id of block.involvedServiceIds ?? []) {
-        // Read-time stale filter: keep only ids that are STILL a connection neighbour and resolve
-        // to a `service` frame (a removed connection makes a stale id inert, never a run failure).
-        if (id === ownFrame.id || !neighbors.has(id)) continue
-        if (targets.some((t) => t.frameId === id)) continue
-        const frame = byId.get(id)
-        if (!frame || frame.level !== 'frame' || frame.type !== 'service') continue
-        // Include the frame regardless of declared provisioning — like the OWN frame, an undeclared
-        // service falls through to the legacy single-connection compat bridge, and an `infraless`
-        // one is skipped by the dispatch loop. Only the dispatch decides what actually stands up.
-        targets.push({
-          frameId: frame.id,
-          isPrimary: false,
-          provisioning: frame.provisioning,
-          frame,
-        })
-      }
+    // The connected involved-service frames, read-time stale-filtered by the shared helper (kept in
+    // sync with `AgentContextBuilder.resolveInvolvedServices`). Include each regardless of declared
+    // provisioning — like the OWN frame, an undeclared service falls through to the legacy
+    // single-connection compat bridge, and an `infraless` one is skipped by the dispatch loop. Only
+    // the dispatch decides what actually stands up.
+    for (const frame of validInvolvedServiceFrames(blocks, block, ownFrame.id)) {
+      if (targets.some((t) => t.frameId === frame.id)) continue
+      targets.push({
+        frameId: frame.id,
+        isPrimary: false,
+        provisioning: frame.provisioning,
+        frame,
+      })
     }
     const targetIds = new Set(targets.map((t) => t.frameId))
     const providersOf = new Map<string, Set<string>>()
@@ -1560,8 +1565,30 @@ export class RunDispatcher {
         handle.lastError ?? 'Provisioning failed.',
       )
     }
+    if (handle.status !== 'ready' && !target.isPrimary) {
+      // A PEER env that isn't `ready` (`provisioning`, `expired`, `tearing_down`, …) is not usable
+      // context: `deployEnvs` can only record `ready`/`failed`/`skipped`, and recording it `ready`
+      // would BOTH advertise it "Provisioned involved-service environment …" AND inject its not-live
+      // URL into a consumer's `peerEnvUrls`. Drop it as a non-terminal peer failure instead. (The
+      // OWN frame keeps the historical behaviour — its env is the deploy's product; its live status
+      // is surfaced via the Environment projection, and the run proceeds as before.)
+      return this.settleDeployerFailure(
+        workspaceId,
+        instance,
+        step,
+        block,
+        isFinalStep,
+        targets,
+        target,
+        handle.url,
+        `Environment not ready (status: ${handle.status}).`,
+      )
+    }
     const done = step.deployEnvs ?? {}
     step.deployEnvs = { ...done, [target.frameId]: { status: 'ready', url: handle.url } }
+    // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
+    // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
+    await this.executionRepository.upsert(workspaceId, instance)
     return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
   }
 
@@ -1589,6 +1616,9 @@ export class RunDispatcher {
     if (target.isPrimary) {
       return this.failDeployerStep(workspaceId, instance, step, target.frameId, error)
     }
+    // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
+    // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
+    await this.executionRepository.upsert(workspaceId, instance)
     return this.advanceDeployerFrames(workspaceId, instance, step, block, isFinalStep, targets)
   }
 
@@ -1652,15 +1682,18 @@ export class RunDispatcher {
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
-    const ownFrameId =
-      (await this.contextBuilder.resolveServiceFrameId(workspaceId, block.id)) ?? block.id
-    const frameId = inFlightFrameId ?? ownFrameId
     // Resolve the full target set once (also drives the remaining-frames fan-out after this one
-    // settles). Recover the in-flight frame's real service-frame block from it so finalize provisions
-    // with the FRAME's identity/inputs (a peer's env must not reuse the task block's — see
-    // {@link deployerProvisionArgs}); fall back to a point-read (then the task block) if a connection
-    // was removed mid-flight so the frame is no longer a target.
-    const targets = await this.resolveDeployTargets(workspaceId, block)
+    // settles), honouring the pinned primary frame. Derive the own/primary frame id from that set
+    // rather than a SECOND `resolveServiceFrameId` point-read walk — the primary target's frame id
+    // is the own frame (pinned, so a mid-flight reparent can't flip an own failure to a peer one).
+    const targets = await this.resolveDeployTargets(workspaceId, block, step.deployPrimaryFrameId)
+    const ownFrameId =
+      step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId ?? block.id
+    const frameId = inFlightFrameId ?? ownFrameId
+    // Recover the in-flight frame's real service-frame block from the target set so finalize
+    // provisions with the FRAME's identity/inputs (a peer's env must not reuse the task block's —
+    // see {@link deployerProvisionArgs}); fall back to a point-read (then the task block) if a
+    // connection was removed mid-flight so the frame is no longer a target.
     const known = targets.find((t) => t.frameId === frameId)
     const frame = known?.frame ?? (await this.blockRepository.get(workspaceId, frameId)) ?? block
     // Map the job against the provisioning config the container was BUILT from (pinned at
@@ -1805,13 +1838,23 @@ export class RunDispatcher {
     isFinalStep: boolean,
     targets: readonly DeployTarget[],
   ): Promise<AdvanceResult> {
+    const byFrame = new Map(targets.map((t) => [t.frameId, t]))
+    const primaryFrameId = step.deployPrimaryFrameId ?? targets.find((t) => t.isPrimary)?.frameId
     // Re-project the now-final OWN environment (ready/expired + URL) so the deployer step's
-    // Environment panel + the downstream tester see the task's own service env, not a peer's or
-    // the dispatch-time `provisioning` snapshot the async poll last wrote.
-    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step)
+    // Environment panel + the downstream tester see the task's own service env, not a peer's or the
+    // dispatch-time `provisioning` snapshot the async poll last wrote. Pass the pinned primary frame
+    // so it needn't re-walk the tree to find the own frame.
+    await this.attachEnvironmentProjection(workspaceId, instance.blockId, step, primaryFrameId)
+    // Summarise from the recorded per-frame OUTCOMES (`deployEnvs`), NOT the current `targets`: a
+    // mid-flight involved-services / connection edit can drop a frame from `targets` while its env
+    // is still recorded and live, so iterating outcomes keeps that env visible (never silently
+    // orphaned). Titles come from the target set when the frame is still resolvable, else the id.
     const done = step.deployEnvs ?? {}
-    const ready = targets.filter((t) => done[t.frameId]?.status === 'ready')
-    if (ready.length === 0) {
+    const titleOf = (frameId: string): string => byFrame.get(frameId)?.frame.title ?? frameId
+    const isPrimaryFrame = (frameId: string): boolean =>
+      byFrame.get(frameId)?.isPrimary ?? frameId === primaryFrameId
+    const readyEntries = Object.entries(done).filter(([, env]) => env.status === 'ready')
+    if (readyEntries.length === 0) {
       // Every target was `infraless`/skipped — nothing stood up (the single-service infraless case
       // plus the all-infraless fan-out).
       return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
@@ -1821,26 +1864,29 @@ export class RunDispatcher {
     }
     const own = step.environment
     const lines: string[] = []
-    for (const target of ready) {
-      const url = done[target.frameId]?.url ?? '(pending)'
+    for (const [frameId, env] of readyEntries) {
+      const url = env.url ?? '(pending)'
       lines.push(
-        target.isPrimary
-          ? `Provisioned ephemeral environment for '${target.frame.title}': ${url}`
-          : `Provisioned involved-service environment for '${target.frame.title}': ${url}`,
+        isPrimaryFrame(frameId)
+          ? `Provisioned ephemeral environment for '${titleOf(frameId)}': ${url}`
+          : `Provisioned involved-service environment for '${titleOf(frameId)}': ${url}`,
       )
     }
     // A PEER frame that failed is non-terminal (the own deploy proceeded); note it so the failure
-    // is visible rather than silently absent from the fan-out summary.
-    for (const target of targets) {
-      if (target.isPrimary || done[target.frameId]?.status !== 'failed') continue
-      const error = done[target.frameId]?.error ?? 'unknown error'
-      lines.push(`Involved-service environment for '${target.frame.title}' failed: ${error}`)
+    // is visible rather than silently absent from the fan-out summary. (A primary failure never
+    // reaches here — it fails the step in `settleDeployerFailure`.)
+    for (const [frameId, env] of Object.entries(done)) {
+      if (env.status !== 'failed' || isPrimaryFrame(frameId)) continue
+      lines.push(
+        `Involved-service environment for '${titleOf(frameId)}' failed: ${env.error ?? 'unknown error'}`,
+      )
     }
+    if (own?.expiresAt) lines.push(`Expires: ${new Date(own.expiresAt).toISOString()}`)
     if (own?.provisionType) lines.push(`Provision type: ${own.provisionType}`)
     if (own?.engine) lines.push(`Engine: ${own.engine}`)
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
       output: lines.join('\n'),
-      model: `environment:${ready.length > 1 ? 'multi' : (own?.engine ?? 'single')}`,
+      model: `environment:${readyEntries.length > 1 ? 'multi' : (own?.engine ?? 'single')}`,
     })
   }
 

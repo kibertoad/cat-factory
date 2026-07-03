@@ -26,8 +26,8 @@ import {
   resolveFrontendBindings,
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
-import { connectionDescription, connectionNeighborIds } from '@cat-factory/contracts'
-import { frameOf } from './frame.logic.js'
+import { connectionDescription } from '@cat-factory/contracts'
+import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -680,17 +680,12 @@ export class AgentContextBuilder {
     block: Block,
   ): Promise<AgentRunContext['involvedServices'] | undefined> {
     if (block.level !== 'task') return undefined
-    const ids = block.involvedServiceIds ?? []
-    if (ids.length === 0) return undefined
+    if ((block.involvedServiceIds?.length ?? 0) === 0) return undefined
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     const byId = new Map(blocks.map((b) => [b.id, b]))
     const ownFrameId = frameOf(byId, block.id)?.id
     if (!ownFrameId) return undefined
-    const neighbors = connectionNeighborIds(blocks, ownFrameId)
-    const valid = ids
-      .filter((id, i) => id !== ownFrameId && neighbors.has(id) && ids.indexOf(id) === i)
-      .map((id) => byId.get(id))
-      .filter((b): b is Block => !!b && b.level === 'frame' && b.type === 'service')
+    const valid = validInvolvedServiceFrames(blocks, block, ownFrameId)
     if (valid.length === 0) return undefined
     const frameIds = new Set(valid.map((b) => b.id))
     const liveEnvUrls =

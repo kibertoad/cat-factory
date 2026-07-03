@@ -1570,6 +1570,15 @@ export const pipelineStepSchema = v.object({
    * job is in flight or the step never fanned out.
    */
   deployFrameId: v.optional(v.string()),
+  /**
+   * The task's OWN (primary) service frame, pinned on the FIRST target resolution of a `deployer`
+   * fan-out and reused on every re-entry/replay. Keeps the primary classification STABLE against a
+   * mid-flight reparent (which would otherwise re-derive a different own frame and flip an
+   * own-service provisioning failure from terminal to a non-terminal peer failure — completing the
+   * run `done` despite a failed deploy). Absent until the first resolution / for a step that never
+   * fanned out.
+   */
+  deployPrimaryFrameId: v.optional(v.string()),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
