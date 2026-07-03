@@ -292,6 +292,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       binary: 'container',
       hostAlias: '192.168.64.1',
       capabilities: { localDind: false, pooling: false },
+      publishesToLocalhost: false,
       run: vi.fn(async (_exec: ContainerExec, _spec: RunContainerSpec) => 'c-apple'),
       find: vi.fn(async () => undefined),
       endpoint: vi.fn(async () => ({ host: '127.0.0.1', port: 51111 })),

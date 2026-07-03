@@ -119,7 +119,15 @@ export class LocalPreviewTransport implements PreviewTransport {
       privileged: false,
       network: this.network,
       env: this.extraEnv,
-      publishPorts: [servePort],
+      // On a localhost-publishing runtime (Docker family) PIN the host port to the serve port so
+      // the browsable origin is `http://localhost:<servePort>` — deterministic and knowable ahead
+      // of provision, matching the CORS origin a deployer injects (`frontendOriginsForService`).
+      // Apple ignores publishPorts (reached by container IP), so the pin is a harmless no-op there.
+      publishPorts: [
+        this.adapter.publishesToLocalhost
+          ? { container: servePort, host: servePort }
+          : { container: servePort },
+      ],
     })
     const endpoint = await this.waitForEndpoint(containerId)
     await this.waitForHealth(endpoint, containerId)
@@ -169,11 +177,18 @@ export class LocalPreviewTransport implements PreviewTransport {
       }
     }
     if (view.state === 'done') {
-      // The build finished and the app is served — resolve the HOST-published serve port and form
-      // the browsable URL from it. Without a known serve port (a poll after a process restart) we
-      // report `starting` rather than a wrong URL; the service persists the URL on the first hit.
+      // The build finished and the app is served — form the browsable HOST URL from the serve
+      // port. Without a known serve port (a poll after a process restart) we report `starting`
+      // rather than a wrong URL; the service persists the URL on the first hit.
       const servePort = entry?.servePort
       if (servePort === undefined) return { state: 'starting' }
+      // A localhost-publishing runtime pinned the host port to the serve port, so the origin is
+      // deterministic — no `docker port` readback (which would report `127.0.0.1`, a DIFFERENT
+      // origin from the injected `localhost` CORS entry). Apple has no published port, so read the
+      // container's own IP and reach the serve port there.
+      if (this.adapter.publishesToLocalhost) {
+        return { state: 'running', url: `http://localhost:${servePort}` }
+      }
       const serveEndpoint = await this.adapter.endpoint(this.exec, containerId, servePort)
       if (!serveEndpoint) return { state: 'starting' }
       return { state: 'running', url: harnessUrl(serveEndpoint, '') }

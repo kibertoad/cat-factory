@@ -81,13 +81,16 @@ export interface RunContainerSpec {
    */
   pool?: boolean
   /**
-   * Extra in-container ports to publish to an ephemeral HOST port ALONGSIDE the harness
-   * `:8080` (read back via {@link ContainerRuntimeAdapter.endpoint} with the port argument).
-   * Used by the browsable-preview transport to reach the served app's port (e.g. 4173). The
-   * Docker family publishes each with `-p 127.0.0.1:0:<port>`; Apple `container` (per-container
-   * IP, no published-port model) ignores it — the port is reachable at the container's own IP.
+   * Extra in-container ports to publish to a HOST port ALONGSIDE the harness `:8080` (read back
+   * via {@link ContainerRuntimeAdapter.endpoint} with the port argument). Used by the
+   * browsable-preview transport to reach the served app's port (e.g. 4173). Each entry names the
+   * in-`container` port and, optionally, the `host` port to pin it to: an explicit `host` gives a
+   * DETERMINISTIC host port knowable ahead of provision (the Docker family publishes it with `-p
+   * 127.0.0.1:<host>:<container>`), while an absent `host` takes an ephemeral one (`-p
+   * 127.0.0.1:0:<container>`). Apple `container` (per-container IP, no published-port model)
+   * ignores this entirely — the port is reachable at the container's own IP.
    */
-  publishPorts?: number[]
+  publishPorts?: Array<{ container: number; host?: number }>
 }
 
 /**
@@ -102,6 +105,17 @@ export interface ContainerRuntimeAdapter {
   readonly capabilities: RuntimeCapabilities
   /** The hostname the harness uses to reach the orchestrator's LLM proxy (for PUBLIC_URL). */
   readonly hostAlias: string
+  /**
+   * Whether this runtime publishes a container port to the host LOOPBACK (`127.0.0.1`/`localhost`)
+   * via a `-p` mapping (the Docker family: Docker/Podman/OrbStack/Colima) rather than reaching the
+   * port at the container's own IP (Apple `container`, one VM per container). The browsable-preview
+   * transport keys off this: a localhost runtime pins the served-app host port to the serve port and
+   * forms a DETERMINISTIC `http://localhost:<servePort>` origin — knowable ahead of provision, so a
+   * deployer can fold it into the bound backend's CORS allow-list (see `frontendOriginsForService`).
+   * A per-container-IP runtime instead reads the assigned IP after the container is up
+   * (`http://<ip>:<servePort>`), which is NOT pre-knowable and so is never injected.
+   */
+  readonly publishesToLocalhost: boolean
 
   /** Start a per-run container detached; resolves to its container id/name. */
   run(exec: ContainerExec, spec: RunContainerSpec): Promise<string>
