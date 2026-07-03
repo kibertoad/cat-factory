@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Block, ModelRef } from '@cat-factory/kernel'
+import type { Block, ExecutionInstance, ModelRef, ProviderCapabilities } from '@cat-factory/kernel'
 import { KaizenService, type KaizenServiceDependencies } from './KaizenService.js'
 
 // Regression coverage for the Kaizen grader's model resolution. The grader is "just another
@@ -83,5 +83,65 @@ describe('KaizenService model resolution', () => {
   it('is disabled (undefined) when no routing default is wired', async () => {
     const ref = await makeService({ modelRef: undefined })
     expect(ref).toBeUndefined()
+  })
+})
+
+// The grader is an inline LLM call, so a Kaizen model that resolves to a subscription-only
+// model this deployment can't run inline (or nothing configured) can't grade at all. Rather
+// than degrade to the routing default and flood the table with `failed` rows, `scheduleForRun`
+// must SKIP the run entirely so the SPA can steer the user to a compatible model.
+describe('KaizenService.scheduleForRun model-fitness skip', () => {
+  const CAPS: ProviderCapabilities = {
+    directProviders: new Set(),
+    subscriptionVendors: new Set(['claude']), // a connected Claude subscription…
+    cloudflareEnabled: true, // …and Cloudflare AI enabled
+  }
+
+  function makeSchedulerService(over: Partial<KaizenServiceDependencies>) {
+    const kaizenGradingRepository = {
+      getByStep: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    }
+    const kaizenVerifiedComboRepository = { getByKey: vi.fn().mockResolvedValue(null) }
+    const deps = {
+      kaizenGradingRepository,
+      kaizenVerifiedComboRepository,
+      blockRepository: { get: vi.fn().mockResolvedValue({ id: 'task_login' } as Block) },
+      idGenerator: { next: (p: string) => `${p}_1` },
+      clock: { now: () => 1_000 },
+      // The grader itself is "enabled" (provider + routing default present).
+      modelProvider: { resolve: vi.fn() },
+      modelRef: QWEN,
+      resolveBlockModel: (id: string | undefined) => (id ? CATALOG[id] : undefined),
+      resolveProviderCapabilities: vi.fn().mockResolvedValue(CAPS),
+      ...over,
+    } as unknown as KaizenServiceDependencies
+    return { service: new KaizenService(deps), kaizenGradingRepository }
+  }
+
+  const instance = {
+    id: 'exe_1',
+    blockId: 'task_login',
+    initiatedBy: 'usr_1',
+    steps: [{ agentKind: 'coder', state: 'done', skipped: false, model: 'cloudflare-llama' }],
+  } as unknown as ExecutionInstance
+
+  it('skips scheduling when the Kaizen model is subscription-only (cannot run inline)', async () => {
+    // The workspace's `kaizen` default resolves to a subscription-only individual model. It's
+    // `available` (Claude is connected) but not inline-usable, so nothing must be scheduled.
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveWorkspaceModelDefault: vi.fn().mockResolvedValue('claude-sonnet'),
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('schedules when the Kaizen model can drive the inline grader', async () => {
+    // A Cloudflare-backed model is inline-usable, so the completed step is scheduled as normal.
+    const { service, kaizenGradingRepository } = makeSchedulerService({
+      resolveWorkspaceModelDefault: vi.fn().mockResolvedValue('cloudflare-llama'),
+    })
+    await service.scheduleForRun('ws', instance)
+    expect(kaizenGradingRepository.upsert).toHaveBeenCalledTimes(1)
   })
 })

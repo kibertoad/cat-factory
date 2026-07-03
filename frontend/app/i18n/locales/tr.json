@@ -1522,6 +1522,11 @@
       "deselect": "Seçimi kaldır / denetçiyi kapat",
       "deleteBlock": "Seçili bloğu sil",
       "help": "Bu kısayol listesini göster"
+    },
+    "kaizenModelBanner": {
+      "title": "Kaizen mevcut modeliyle değerlendirme yapamıyor",
+      "body": "Kaizen aracısı açık, ancak değerlendirme yapacağı model satır içi değerlendiriciyi çalıştıramıyor (satır içi donanımı olmayan yalnızca abonelikle kullanılabilen bir model ya da yapılandırılmamış bir model). Kaizen'i uyumlu, sağlayıcı destekli bir modele yönlendirene kadar değerlendirme atlanır.",
+      "action": "Kaizen modelini ayarla"
     }
   },
   "settings": {
@@ -1556,7 +1561,8 @@
         "filterPlaceholder": "Ajanları filtrele…",
         "noAgentsMatch": "\"{filter}\" ile eşleşen ajan yok.",
         "saveChanges": "Değişiklikleri kaydet",
-        "createPreset": "Hazır ayar oluştur"
+        "createPreset": "Hazır ayar oluştur",
+        "kaizenIndividualWarning": "Kaizen {model} olarak ayarlı; bu model yalnızca bireysel abonelikle kullanılabilir. Kaizen değerlendiricisi bir satır içi çağrıdır ve bunu kullanamaz, bu nedenle değerlendirme atlanır. Kaizen'e sağlayıcı destekli bir model atayın (doğrudan anahtar, OpenRouter veya Cloudflare AI)."
       },
       "toast": {
         "setDefaultFailed": "Varsayılan hazır ayar ayarlanamadı",

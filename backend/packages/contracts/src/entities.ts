@@ -395,6 +395,15 @@ export const modelOptionSchema = v.object({
    */
   quotaBased: v.optional(v.boolean()),
   /**
+   * Whether this model can drive an INLINE LLM step (the requirements/clarity reviewers,
+   * brainstorm, the task estimator, and the Kaizen grader) under the current configuration —
+   * i.e. it has a usable provider-backed flavour, OR a subscription harness this deployment
+   * can run inline (local ambient CLI). A subscription-only model with no inline harness is
+   * `available` (container agents can use it) but NOT `inlineUsable`. Only set on the
+   * per-workspace catalog; absent on the deployment-level catalog.
+   */
+  inlineUsable: v.optional(v.boolean()),
+  /**
    * An alternative subscription flavour for a model that ALSO has a Cloudflare /
    * direct base (e.g. GLM-5.2, Kimi). The frontend renders ONLY this flavour when
    * the workspace has a token for `vendor` (hiding the base), and the executor

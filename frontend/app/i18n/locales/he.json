@@ -1522,6 +1522,11 @@
       "deselect": "בטל בחירה / סגור את המפקח",
       "deleteBlock": "מחק את הבלוק הנבחר",
       "help": "הצג את דף העזר הזה"
+    },
+    "kaizenModelBanner": {
+      "title": "Kaizen לא יכול לדרג עם המודל הנוכחי",
+      "body": "סוכן Kaizen מופעל, אך המודל שבו הוא ידרג אינו יכול להריץ את מדרג ה-inline (מודל שזמין רק במנוי ללא רתמת inline, או מודל שאינו מוגדר). הדירוג מדולג עד שתפנו את Kaizen למודל תואם הנתמך על ידי ספק.",
+      "action": "הגדר מודל ל-Kaizen"
     }
   },
   "settings": {
@@ -1556,7 +1561,8 @@
         "filterPlaceholder": "סינון סוכנים…",
         "noAgentsMatch": "אין סוכנים התואמים ל\"{filter}\".",
         "saveChanges": "שמירת שינויים",
-        "createPreset": "יצירת תצורה"
+        "createPreset": "יצירת תצורה",
+        "kaizenIndividualWarning": "Kaizen מוגדר ל-{model}, שזמין רק דרך מנוי אישי. מדרג Kaizen הוא קריאת inline ואינו יכול להשתמש בו, ולכן הדירוג ידולג. הקצו ל-Kaizen מודל הנתמך על ידי ספק (מפתח ישיר, OpenRouter או Cloudflare AI)."
       },
       "toast": {
         "setDefaultFailed": "לא ניתן היה להגדיר את תצורת ברירת המחדל",

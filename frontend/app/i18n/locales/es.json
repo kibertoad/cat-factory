@@ -1522,6 +1522,11 @@
       "deselect": "Deseleccionar / cerrar el inspector",
       "deleteBlock": "Eliminar el bloque seleccionado",
       "help": "Mostrar esta ayuda"
+    },
+    "kaizenModelBanner": {
+      "title": "Kaizen no puede evaluar con su modelo actual",
+      "body": "El agente Kaizen está activado, pero el modelo con el que evaluaría no puede ejecutar el evaluador en línea (un modelo solo de suscripción sin arnés en línea, o uno que no está configurado). La evaluación se omite hasta que asignes a Kaizen un modelo compatible respaldado por un proveedor.",
+      "action": "Configurar modelo de Kaizen"
     }
   },
   "settings": {
@@ -1556,7 +1561,8 @@
         "filterPlaceholder": "Filtrar agentes…",
         "noAgentsMatch": "Ningún agente coincide con \"{filter}\".",
         "saveChanges": "Guardar cambios",
-        "createPreset": "Crear ajuste"
+        "createPreset": "Crear ajuste",
+        "kaizenIndividualWarning": "Kaizen está configurado con {model}, que solo está disponible mediante una suscripción individual. El evaluador de Kaizen es una llamada en línea y no puede usarlo, por lo que se omitirá la evaluación. Asigna a Kaizen un modelo respaldado por un proveedor (una clave directa, OpenRouter o Cloudflare AI)."
       },
       "toast": {
         "setDefaultFailed": "No se pudo establecer el ajuste predeterminado",

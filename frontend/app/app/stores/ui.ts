@@ -192,6 +192,9 @@ export const useUiStore = defineStore('ui', () => {
   const aiPresetMismatchOpen = ref(false)
   const aiSetupDismissed = ref(false)
   const aiPresetDismissed = ref(false)
+  // The "Kaizen is on but its model can't run the grader" banner. Per-session dismissal,
+  // cleared on workspace switch alongside the AI-onboarding flags.
+  const kaizenModelDismissed = ref(false)
 
   // Infra-setup banner: per-SESSION dismissals, one flag per area, cleared on workspace switch
   // exactly like the AI-onboarding flags (a dismissal in one workspace must not suppress the
@@ -691,6 +694,9 @@ export const useUiStore = defineStore('ui', () => {
     aiPresetMismatchOpen.value = false
     aiPresetDismissed.value = true
   }
+  function dismissKaizenModel() {
+    kaizenModelDismissed.value = true
+  }
   // Clear the per-session AI-onboarding state (open dialogs + dismissed flags). Called on
   // workspace switch: dismissals are per-session-per-workspace, so a prompt dismissed in one
   // workspace must not suppress the (independent) prompt for another workspace that also
@@ -700,6 +706,7 @@ export const useUiStore = defineStore('ui', () => {
     aiPresetMismatchOpen.value = false
     aiSetupDismissed.value = false
     aiPresetDismissed.value = false
+    kaizenModelDismissed.value = false
   }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
@@ -815,6 +822,8 @@ export const useUiStore = defineStore('ui', () => {
     aiProviderSetupOpen,
     aiPresetMismatchOpen,
     aiSetupDismissed,
+    kaizenModelDismissed,
+    dismissKaizenModel,
     aiPresetDismissed,
     infraSetupSessionDismissed,
     dismissInfraSetupForSession,

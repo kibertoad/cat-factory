@@ -1356,6 +1356,11 @@
         "action": "Review preset"
       }
     },
+    "kaizenModelBanner": {
+      "title": "Kaizen can't grade with its current model",
+      "body": "The Kaizen agent is on, but the model it would grade with can't run the inline grader (a subscription-only model with no inline harness, or one that isn't configured). Grading is skipped until you point Kaizen at a compatible provider-backed model.",
+      "action": "Set Kaizen model"
+    },
     "githubPatBanner": {
       "title": "GitHub PAT not configured",
       "body": "Local mode reaches GitHub with a personal access token. Without one, agent steps that clone, push, open PRs, gate on CI or merge will fail.",
@@ -1603,6 +1608,7 @@
         "baseModelLabel": "Base model (applied to every agent)",
         "makeDefault": "Make this the workspace default",
         "perAgentOverrides": "Per-agent overrides",
+        "kaizenIndividualWarning": "Kaizen is set to {model}, which is only available via an individual subscription. The Kaizen grader is an inline call and can't use it, so grading will be skipped. Assign Kaizen a provider-backed model (a direct key, OpenRouter, or Cloudflare AI).",
         "filterPlaceholder": "Filter agents…",
         "noAgentsMatch": "No agents match \"{filter}\".",
         "saveChanges": "Save changes",

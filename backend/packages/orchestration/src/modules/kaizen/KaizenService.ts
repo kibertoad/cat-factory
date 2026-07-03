@@ -15,11 +15,13 @@ import type {
   ModelProviderResolver,
   ModelRef,
   PipelineStep,
+  ProviderCapabilities,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import {
   DEFAULT_WORKSPACE_SETTINGS,
   extractJson,
+  isModelUsableInline,
   resolveScopedModelProvider,
 } from '@cat-factory/kernel'
 import { generateText } from 'ai'
@@ -70,6 +72,17 @@ export interface KaizenServiceDependencies {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  /**
+   * Resolve what a workspace + run-initiator have configured (direct keys / subscriptions /
+   * Cloudflare AI / local runners). Used to check that the grader's resolved model can
+   * actually run the INLINE grading call before scheduling — a subscription-only model (or an
+   * unconfigured one) would otherwise degrade to the routing default and fail. Absent → the
+   * fitness check is skipped (tests / unconfigured facades) and grading is scheduled as before.
+   */
+  resolveProviderCapabilities?: (
+    workspaceId: string,
+    initiatedBy?: string | null,
+  ) => Promise<ProviderCapabilities>
 }
 
 /**
@@ -103,6 +116,12 @@ export class KaizenService {
     // flood the table (and the run-window event stream) with rows for a disabled grader.
     if (!this.enabled) return
     if (!(await this.kaizenEnabled(workspaceId))) return
+    // The grader is an inline LLM call. When the workspace's Kaizen model resolves to a
+    // subscription-only model this deployment can't run inline (or to nothing configured at
+    // all), the call would degrade to the routing default and fail — historically flooding the
+    // table with `failed` rows blaming an unconfigured `qwen`. Skip the run entirely instead;
+    // the SPA surfaces a banner asking the user to point Kaizen at a compatible model.
+    if (!(await this.isModelReady(workspaceId, instance.blockId, instance.initiatedBy))) return
     for (let stepIndex = 0; stepIndex < instance.steps.length; stepIndex++) {
       const step = instance.steps[stepIndex]
       if (!step || !this.isGradeable(step) || !step.model) continue
@@ -182,6 +201,18 @@ export class KaizenService {
 
     if (!this.enabled) {
       await this.fail(workspaceId, running, 'No model is configured for the Kaizen agent')
+      return
+    }
+
+    // Safety net for a row scheduled while the model WAS fit but whose config changed since
+    // (or a row left by an older build): refuse to run rather than degrade to an unconfigured
+    // routing default and surface a confusing provider error.
+    if (!(await this.isModelReady(workspaceId, grading.blockId))) {
+      await this.fail(
+        workspaceId,
+        running,
+        'No compatible model is configured for the Kaizen agent. Point Kaizen at a provider-backed model in Model Configuration.',
+      )
       return
     }
 
@@ -321,6 +352,34 @@ export class KaizenService {
         workspaceId,
       },
     )
+  }
+
+  /**
+   * Whether a FITTING model is configured for the inline Kaizen grader in this workspace.
+   * Resolves the grader's model id the same way {@link modelFor} resolves its ref — block pin >
+   * workspace per-kind default for the `kaizen` kind — then checks it with
+   * {@link isModelUsableInline}: a subscription-only model with no inline harness (or a model
+   * with no usable provider at all) is NOT fit, because the inline `generateText` call can't
+   * drive it. Returns `true` when no capability resolver is wired (tests / unconfigured facades)
+   * so grading behaviour there is unchanged.
+   */
+  private async isModelReady(
+    workspaceId: string,
+    blockId: string,
+    initiatedBy?: string | null,
+  ): Promise<boolean> {
+    if (!this.deps.resolveProviderCapabilities) return true
+    const caps = await this.deps.resolveProviderCapabilities(workspaceId, initiatedBy)
+    const block = await this.deps.blockRepository.get(workspaceId, blockId)
+    let id = block?.modelId
+    if (!id && this.deps.resolveWorkspaceModelDefault) {
+      id = await this.deps.resolveWorkspaceModelDefault(
+        workspaceId,
+        KAIZEN_AGENT_KIND,
+        block?.modelPresetId,
+      )
+    }
+    return isModelUsableInline(id, caps, this.deps.runsInline)
   }
 
   private async updateCombo(
