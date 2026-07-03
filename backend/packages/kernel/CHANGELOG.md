@@ -1,5 +1,91 @@
 # @cat-factory/kernel
 
+## 0.73.0
+
+### Minor Changes
+
+- 7fd6a19: Import-from-repo picker: find and link accessible repos in realtime instead of enumerating the whole installation and filtering in memory. The old path listed every installation repo (capped at a bounded page count) then substring-filtered client-of-the-cap — so on a wide App install a repo beyond that window returned "no matches" for a repo you actually had access to, and every keystroke re-fetched all pages. Two new `GitHubClient` primitives fix it end to end: `searchInstallationRepos` issues one bounded, account-scoped GitHub search per query, and `getRepoById` point-reads the picked repo by id when linking it (so a repo surfaced by search from beyond the enumeration cap links instead of spuriously 409-ing). Blank-query browse-all is unchanged; PAT (local) and GitLab connections filter their bounded token listing. When an installation has no resolvable account to scope the GitHub search to, the App adapter filters its own bounded listing rather than running an unscoped global search (which would surface arbitrary, unlinkable public repos).
+
+## 0.72.0
+
+### Minor Changes
+
+- 0ac0dc4: Surface per-iteration fixing instructions in polling-gate run details. A `ci` /
+  `conflicts` gate's helper attempt now records the instructions it was handed (the
+  failing-check summary + structured red checks for CI, the conflict/review detail for the
+  others) alongside the helper's own report, so the gate window shows WHAT each round set out
+  to fix — bringing the gate attempt timeline to parity with the Tester's fixer timeline
+  (`concerns` + `summary`). Adds `instructions` / `failingChecks` to `gateAttemptSchema` and a
+  transient `lastDispatchedInstructions` stash on `gateStepStateSchema` (schemaless step JSON,
+  no migration).
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+
+## 0.71.0
+
+### Minor Changes
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- 36f4cf6: Frontend UI-test bindings: surface how each backend binding resolves + a non-fatal run-start note.
+
+  - **Shared resolution helpers moved to `@cat-factory/contracts`** (next to `frontendOriginsForService`)
+    so the SPA and the backend share ONE source of truth: `resolveFrontendBindings`,
+    `indexLiveServiceEnvUrls`, `boundServiceFrameIds`, the `ResolvedFrontendBinding`/`LiveEnvHandle`
+    types, and a new pure `buildFrontendRunNotes`. Orchestration re-exports them, so existing importers
+    are unchanged.
+  - **Inspector resolved-binding visibility**: `FrontendConfig.vue` now shows, live, how each backend
+    binding resolves — `envVar → a bound service's live ephemeral URL | mocked (WireMock)` — mirroring
+    what a UI-test run resolves, plus a warning for duplicate env vars. Backed by a new lightweight
+    `environments` store over `GET /workspaces/:ws/environments`.
+  - **Run/step detail projection + run-start note**: the engine stamps BOTH the resolved bindings
+    (`ExecutionInstance.frontendBindings`) and the non-fatal advisories (`ExecutionInstance.notes`:
+    duplicate env vars, or a partial-live set where some bound services fall back to WireMock) on the
+    run ONCE at start — the SPA-visible mirror of the harness's own `buildInfraNotes`. A `tester-ui`
+    step's detail projects the FROZEN start-time bindings (so a finished run shows what it actually
+    drove against, not a live re-resolution that could disagree with the co-located note after the
+    envs are torn down); the run-start note shows on any step detail of a frontend-frame run. Both
+    ride in the run's `detail` JSON (no migration) and round-trip identically on D1 ⇄ Postgres.
+
+  No wire/behaviour break: the notes field is optional, the moved helpers are re-exported, and a
+  non-frontend run is unaffected.
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+
 ## 0.70.2
 
 ### Patch Changes

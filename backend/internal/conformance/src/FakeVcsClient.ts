@@ -194,6 +194,9 @@ export class FakeVcsClient implements VcsClient {
   async getFileContent(): Promise<RepoFileContent | null> {
     return null
   }
+  async latestCommitSha(): Promise<string | null> {
+    return this.o.headSha
+  }
   async listPullRequests(): Promise<Paged<GitHubPullRequest>> {
     return emptyPaged()
   }

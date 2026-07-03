@@ -171,6 +171,24 @@ class PatGitHubClient extends FetchGitHubClient {
     }
     return { items }
   }
+
+  // A PAT can't scope `/search/repositories` to "my accessible repos" (it searches all
+  // of GitHub), so the realtime picker search reuses the PAT's own `/user/repos`
+  // enumeration and filters `owner/name` in memory — bounded to a developer's repo set,
+  // which is exactly why the App-installation truncation this override fixes elsewhere
+  // doesn't bite here. The account-scope opts are irrelevant (the enumeration is already
+  // scoped to the PAT's affiliations).
+  override async searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts: { limit?: number } = {},
+  ): Promise<GitHubRepo[]> {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const { items } = await this.listInstallationRepos(installationId)
+    const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    return matched.slice(0, Math.min(Math.max(opts.limit ?? 50, 1), 100))
+  }
 }
 
 /**

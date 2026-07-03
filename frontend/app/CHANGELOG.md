@@ -1,5 +1,117 @@
 # @cat-factory/app
 
+## 0.79.2
+
+### Patch Changes
+
+- b4c4130: Board: a newly added service frame is placed clear of existing board nodes and the camera centres on it.
+
+  Adding a frame no longer drops it on top of a neighbour or leaves it off-screen. A new pure
+  helper (`findFreeFramePosition` in `utils/framePlacement.ts`) picks the nearest non-overlapping
+  top-left for a frame of a given size, and the `useFramePlacement` composable wires it to the live
+  board + Vue Flow camera (`focusFrame` pans, gently zooming in only if the board is zoomed far out).
+  The clearance considers every top-level board node — both service frames and epic grouping cards —
+  so a new frame never lands on top of an epic either.
+  Wired into all three add-a-frame paths:
+
+  - **Palette drop** (`BoardCanvas`): the frame lands where you drop it, nudged off any frame it
+    would overlap, then centred.
+  - **Import from repo** (`AddServiceFromRepoModal`): the client now sends a computed free position
+    instead of relying on the backend's fixed diagonal stagger, then centres on the import.
+  - **Bootstrap** (`BootstrapModal`): the provisional frame is re-homed to free space (the backend
+    stagger can land on top of a large existing service) and centred.
+
+## 0.79.1
+
+### Patch Changes
+
+- bf4c029: Infrastructure attempts window (run details) now live-tracks every container spin-up /
+  tear-down as it happens: while the run is active it silently re-polls so each attempt
+  appears with its timestamp, and it does one final poll on the terminal transition to catch
+  the last tear-down row. Background polls are silent, so the "refreshing" spinner no longer
+  flickers; once the run is terminal the auto-poll stops, while the manual refresh control
+  stays available so a missed or not-yet-persisted tear-down row can always be refetched.
+
+## 0.79.0
+
+### Minor Changes
+
+- 0ac0dc4: Surface per-iteration fixing instructions in polling-gate run details. A `ci` /
+  `conflicts` gate's helper attempt now records the instructions it was handed (the
+  failing-check summary + structured red checks for CI, the conflict/review detail for the
+  others) alongside the helper's own report, so the gate window shows WHAT each round set out
+  to fix — bringing the gate attempt timeline to parity with the Tester's fixer timeline
+  (`concerns` + `summary`). Adds `instructions` / `failingChecks` to `gateAttemptSchema` and a
+  transient `lastDispatchedInstructions` stash on `gateStepStateSchema` (schemaless step JSON,
+  no migration).
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+
+## 0.78.0
+
+### Minor Changes
+
+- 36f4cf6: Frontend UI-test bindings: surface how each backend binding resolves + a non-fatal run-start note.
+
+  - **Shared resolution helpers moved to `@cat-factory/contracts`** (next to `frontendOriginsForService`)
+    so the SPA and the backend share ONE source of truth: `resolveFrontendBindings`,
+    `indexLiveServiceEnvUrls`, `boundServiceFrameIds`, the `ResolvedFrontendBinding`/`LiveEnvHandle`
+    types, and a new pure `buildFrontendRunNotes`. Orchestration re-exports them, so existing importers
+    are unchanged.
+  - **Inspector resolved-binding visibility**: `FrontendConfig.vue` now shows, live, how each backend
+    binding resolves — `envVar → a bound service's live ephemeral URL | mocked (WireMock)` — mirroring
+    what a UI-test run resolves, plus a warning for duplicate env vars. Backed by a new lightweight
+    `environments` store over `GET /workspaces/:ws/environments`.
+  - **Run/step detail projection + run-start note**: the engine stamps BOTH the resolved bindings
+    (`ExecutionInstance.frontendBindings`) and the non-fatal advisories (`ExecutionInstance.notes`:
+    duplicate env vars, or a partial-live set where some bound services fall back to WireMock) on the
+    run ONCE at start — the SPA-visible mirror of the harness's own `buildInfraNotes`. A `tester-ui`
+    step's detail projects the FROZEN start-time bindings (so a finished run shows what it actually
+    drove against, not a live re-resolution that could disagree with the co-located note after the
+    envs are torn down); the run-start note shows on any step detail of a frontend-frame run. Both
+    ride in the run's `detail` JSON (no migration) and round-trip identically on D1 ⇄ Postgres.
+
+  No wire/behaviour break: the notes field is optional, the moved helpers are re-exported, and a
+  non-frontend run is unaffected.
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+
 ## 0.77.0
 
 ### Minor Changes

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block, DocumentSourceKind } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Documents (from any source) attached to a task as agent context, shown inside
 // the InspectorPanel. Linked docs are fed to agents during execution (see the
@@ -51,17 +52,19 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
 </script>
 
 <template>
-  <div v-if="documents.available" class="space-y-2">
-    <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('documents.taskDocs.heading') }}
-      </span>
+  <InspectorSection
+    v-if="documents.available"
+    :title="t('documents.taskDocs.heading')"
+    :hint="t('documents.taskDocs.hint')"
+    :count="linked.length"
+  >
+    <template #actions>
       <UDropdownMenu :items="attachMenu" :content="{ side: 'bottom', align: 'end' }">
         <UButton color="neutral" variant="soft" size="xs" icon="i-lucide-plus">{{
           t('documents.taskDocs.attach')
         }}</UButton>
       </UDropdownMenu>
-    </div>
+    </template>
 
     <div v-if="linked.length" class="space-y-1">
       <a
@@ -82,5 +85,5 @@ const attachMenu = computed<DropdownMenuItem[][]>(() => {
     <p v-else class="text-[11px] text-slate-500">
       {{ t('documents.taskDocs.empty') }}
     </p>
-  </div>
+  </InspectorSection>
 </template>

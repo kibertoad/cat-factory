@@ -388,6 +388,8 @@
   },
   "inspector": {
     "container": {
+      "title": "Contenu",
+      "hint": "Les modules et les tâches contenus dans ce bloc. Cliquez sur une entrée pour la sélectionner sur le tableau.",
       "modules": "Modules ({count})",
       "taskCount": "{count} tâche | {count} tâches",
       "allTasks": "Toutes les tâches ({count})",
@@ -398,6 +400,7 @@
     },
     "epicChildren": {
       "title": "Tâches de l'epic",
+      "hint": "Toutes les tâches assignées à cet epic, regroupées par service et module. Un epic ne fait que regrouper des tâches ; il n'exécute rien lui-même.",
       "doneCount": "{done}/{total} terminées",
       "empty": "Aucune tâche n'appartient encore à cet epic. Importez les enfants d'un epic, ou définissez l'epic d'une tâche.",
       "unassigned": "Non assigné"
@@ -436,6 +439,7 @@
     },
     "fragments": {
       "serviceTitle": "Bonnes pratiques du service",
+      "serviceHint": "Normes de programmation pour tout le service. Le contenu de chaque fragment sélectionné est ajouté au prompt de chaque agent conscient du code travaillant sur les tâches de ce service.",
       "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut.",
       "manageBoard": "Gérer la bibliothèque de fragments de ce tableau…",
       "manageAccount": "Gérer les fragments du compte…"
@@ -502,6 +506,12 @@
           "failed": "Échec",
           "stopped": "Non démarré"
         }
+      },
+      "resolved": {
+        "title": "Résolution actuelle",
+        "duplicateWarning": "Utilisé sur plusieurs liaisons, seule la dernière s'applique : {vars}.",
+        "serviceOffline": "{service} : aucun environnement actif (simulé)",
+        "mock": "Mock (WireMock)"
       }
     },
     "serviceConnections": {
@@ -514,6 +524,7 @@
     },
     "releaseHealth": {
       "title": "Santé post-déploiement",
+      "sectionHint": "Une fois les changements de ce service fusionnés et déployés, une gate surveille pendant un temps les monitors et SLO configurés. En cas de régression, elle lance un agent d'astreinte pour enquêter ; rien n'est annulé automatiquement.",
       "clear": "Effacer",
       "connectPrompt": "Connectez une intégration d'observabilité pour surveiller ce service après les déploiements.",
       "connectFirst": "Connectez d'abord une intégration d'observabilité",
@@ -530,6 +541,7 @@
     },
     "testConfig": {
       "title": "Infrastructure de test",
+      "hint": "Comment un environnement de test est mis en place pour ce service quand un pipeline doit l'exécuter : sans infrastructure, un fichier Docker Compose, des manifestes Kubernetes ou un type de manifeste personnalisé.",
       "provisionType": "Type de provisionnement",
       "provisionTypeHint": "Comment ce service met en place son environnement pour le Tester. L'espace de travail configure la gestion de chaque type (le moteur + la connexion).",
       "provisionTypes": {
@@ -613,11 +625,13 @@
     },
     "agentConfig": {
       "title": "Configuration de l'agent",
+      "hint": "Options apportées par les agents du pipeline de cette tâche. Chaque option reste modifiable jusqu'au démarrage de son agent, puis elle est verrouillée pour cette exécution.",
       "inherited": "hérité du service",
       "frozen": "Figé : l'agent a démarré"
     },
     "dependencies": {
       "title": "Dépend de",
+      "hint": "Tâches qui doivent être fusionnées avant que celle-ci puisse s'exécuter. Le contrôle Exécuter reste verrouillé tant que toutes les dépendances ne sont pas terminées.",
       "merged": "Fusionné",
       "notMerged": "Pas encore fusionné",
       "empty": "Aucune dépendance. Peut s'exécuter à tout moment.",
@@ -629,11 +643,14 @@
     },
     "estimate": {
       "title": "Estimation",
+      "hint": "Produite par l'agent estimateur de tâches : la complexité, le risque et l'impact estimés de cette tâche. Sert à décider si les étapes de consensus (multi-exécutions) en valent la peine.",
       "complexity": "Complexité",
       "risk": "Risque",
       "impact": "Impact"
     },
     "execution": {
+      "title": "Exécution",
+      "hint": "L'exécution en direct du pipeline de cette tâche : chaque étape d'agent, sa progression et la pull request obtenue.",
       "stage": {
         "incorporating": "Intégration en cours…",
         "reviewing": "Nouvelle revue en cours…",
@@ -687,12 +704,18 @@
       }
     },
     "structure": {
+      "title": "Structure",
+      "hint": "Où vit cette tâche dans son service et quelles normes de code ses agents suivent.",
       "module": "Module",
       "modulePlaceholder": "ex. Sessions (créé lors de l'implémentation s'il est nouveau)",
+      "moduleHint": "Le module du service auquel cette tâche appartient. Saisissez un nom ; un module qui n'existe pas encore est créé lors de l'implémentation de la tâche.",
       "bestPractices": "Bonnes pratiques",
-      "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut."
+      "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut.",
+      "bestPracticesHint": "Fragments de bonnes pratiques ajoutés aux prompts des agents de cette tâche, en plus des normes au niveau du service."
     },
     "runSettings": {
+      "title": "Paramètres d'exécution",
+      "hint": "Comment le pipeline de cette tâche s'exécute : quel pipeline démarre, quelles politiques de fusion et de modèle s'appliquent et ce qui se passe autour de l'exécution.",
       "unassigned": "Non assigné",
       "workspaceDefault": "Valeur par défaut de l'espace de travail",
       "workspaceDefaultParen": "(valeur par défaut de l'espace de travail)",
@@ -711,10 +734,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "Aucune valeur par défaut. Choisissez un pipeline lorsque vous exécutez cette tâche.",
+      "pipelineHint": "Le pipeline que le bouton Exécuter démarre par défaut : la séquence d'étapes d'agent (par exemple spécification, code, test, fusion) exécutée pour cette tâche.",
       "mergePolicy": "Politique de fusion",
       "mergePresetDetail": "{name} : fusion automatique lorsque la complexité ≤ {complexity}, le risque ≤ {risk}, l'impact ≤ {impact} ; jusqu'à {attempts} tentatives de correction CI.",
       "mergePresetEmpty": "Aucun preset configuré. Le fusionneur déclenche une notification de revue pour chaque PR.",
+      "mergePolicyHint": "Décide quand une pull request terminée est fusionnée automatiquement au lieu d'attendre une revue humaine, et combien de tentatives de correction de CI une exécution obtient.",
       "modelPreset": "Preset de modèle",
+      "modelPresetHint": "Décide avec quel modèle d'IA chaque étape d'agent s'exécute.",
       "modelPresetBase": "base {model}",
       "modelPresetOverrides": ", {count} remplacement | , {count} remplacements",
       "modelPresetEmpty": "Aucun preset configuré. Les agents s'exécutent avec le routage par défaut du déploiement.",
@@ -1439,6 +1465,7 @@
         "documents": "Documents",
         "taskTrackers": "Outils de suivi des tâches",
         "observability": "Observabilité",
+        "development": "Développement",
         "personal": "Personnel (vous uniquement)"
       },
       "items": {
@@ -1475,6 +1502,10 @@
         "observability": {
           "label": "Santé après publication",
           "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Registres de paquets privés",
+          "description": "Jetons npm et GitHub Packages que les agents utilisent pour installer les dépendances privées."
         },
         "githubPat": {
           "label": "Mon jeton GitHub",
@@ -1854,6 +1885,31 @@
       },
       "connectionNoun": "la connexion d’observabilité",
       "incidentNoun": "le fournisseur d’incidents"
+    },
+    "packageRegistries": {
+      "title": "Registres de paquets privés",
+      "intro": "Connectez les registres privés depuis lesquels vos dépôts installent leurs dépendances. Les agents les reçoivent lors du checkout d'un dépôt, afin que les dépendances privées se résolvent pendant l'installation. Les jetons sont en écriture seule : pour en changer un, supprimez l'entrée puis ajoutez-la de nouveau.",
+      "entryNoun": "entrée de registre",
+      "list": {
+        "heading": "Registres connectés",
+        "tokenTail": "jeton …{tail}",
+        "remove": "Supprimer l'entrée"
+      },
+      "add": {
+        "heading": "Ajouter un registre",
+        "vendor": "Registre",
+        "host": "Le jeton n'est envoyé qu'à {host}.",
+        "scopes": "Portées de paquets",
+        "scopesHelp": "Portées npm séparées par des virgules",
+        "token": "Jeton d'accès",
+        "save": "Ajouter le registre"
+      },
+      "toast": {
+        "loadFailed": "Impossible de charger les registres de paquets",
+        "added": "Registre ajouté",
+        "addFailed": "Impossible d'ajouter le registre",
+        "removeFailed": "Impossible de supprimer l'entrée du registre"
+      }
     },
     "localMode": {
       "title": "Mode local",
@@ -2567,6 +2623,7 @@
     },
     "taskDocs": {
       "heading": "Documents de contexte",
+      "hint": "Documents joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
       "attach": "Joindre",
       "importPage": "Importer une page…",
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
@@ -2587,6 +2644,7 @@
     },
     "contextIssues": {
       "title": "Tickets de contexte",
+      "hint": "Tickets du tracker joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
       "attach": "Joindre",
       "attached": "Ticket joint",
       "attachFailed": "Impossible de joindre",
@@ -2850,6 +2908,8 @@
     },
     "attemptsHeading": "Tentatives du {helper}",
     "attempt": "Tentative {number}",
+    "attemptInstructions": "Transmis à {helper}",
+    "attemptReport": "Rapport de {helper}",
     "outcome": {
       "completed": "terminée",
       "failed": "échouée"
@@ -3630,7 +3690,7 @@
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",
       "metaNever": "jamais synchronisé · ref {ref}",
-      "changes": "{count} changement | {count} changements",
+      "changes": "Changements",
       "empty": "Aucun dépôt de consignes lié. Liez-en un ci-dessous pour importer ses fichiers Markdown comme fragments.",
       "linkTitle": "Lier un dépôt de consignes",
       "ownerPlaceholder": "propriétaire",
@@ -3655,7 +3715,7 @@
       "linkSourceFailed": "Impossible de lier la source",
       "synced": "Synchronisé : {updated} mis à jour, {removed} supprimés",
       "syncFailed": "Impossible de synchroniser la source",
-      "changesAvailable": "{count} changement disponible | {count} changements disponibles",
+      "changesAvailable": "Changements disponibles",
       "upToDate": "À jour",
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",

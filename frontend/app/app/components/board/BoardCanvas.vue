@@ -10,6 +10,7 @@ import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
+import { useFramePlacement } from '~/composables/useFramePlacement'
 import { useViewport } from '~/composables/useViewport'
 import { boardPanMode } from '~/utils/boardPanMode'
 
@@ -24,6 +25,7 @@ const { t } = useI18n()
 const { onNodeDragStop, onViewportChange, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
 const { draggingId } = useBlockDrag()
 const { hoveredFrameId } = useFrameStacking()
+const { freeFramePosition, focusFrame } = useFramePlacement()
 // Touch drives the canvas gestures: a touch-capable surface needs one-finger pan.
 // We gate on `hasTouch` (any-pointer: coarse), not `isTouch` (the *primary* pointer),
 // so a touchscreen laptop / 2-in-1 — whose primary pointer is the trackpad — still
@@ -121,10 +123,14 @@ async function onDrop(event: DragEvent) {
   if (!payload) return
 
   if (payload.kind === 'block') {
-    const position = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+    // Drop where the cursor is, but nudge off any existing frame it lands on so a new
+    // frame never overlaps a neighbour; then centre the camera on it.
+    const dropped = screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+    const position = freeFramePosition({ near: dropped })
     try {
       const block = await board.addBlock(payload.blockType, position)
       ui.select(block.id)
+      await focusFrame(block.id)
     } catch {
       toast.add({
         title: t('board.canvas.addBlockFailedTitle'),

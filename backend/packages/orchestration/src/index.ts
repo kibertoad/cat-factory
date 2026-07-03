@@ -90,6 +90,7 @@ export {
 } from './modules/execution/release.logic.js'
 export {
   resolveFrontendBindings,
+  buildFrontendRunNotes,
   hasLiveServiceBinding,
   hasServiceBinding,
   boundServiceFrameIds,
@@ -148,6 +149,13 @@ export {
   ReleaseHealthService,
   type ReleaseHealthServiceDependencies,
 } from './modules/releaseHealth/ReleaseHealthService.js'
+export {
+  PackageRegistryService,
+  PACKAGE_REGISTRY_CIPHER_INFO,
+  resolvePackageRegistriesForDispatch,
+  type PackageRegistryServiceDependencies,
+  type DispatchPackageRegistry,
+} from './modules/packageRegistries/PackageRegistryService.js'
 export {
   PreviewService,
   type PreviewServiceDependencies,
@@ -246,6 +254,7 @@ export {
   type BrainstormModule,
   type NotificationsModule,
   type ReleaseHealthModule,
+  type PackageRegistriesModule,
   type PreviewModule,
   type IncidentEnrichmentModule,
   type SlackModule,

@@ -77,6 +77,8 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
+  PACKAGE_REGISTRY_CIPHER_INFO,
+  resolvePackageRegistriesForDispatch,
   type HarnessCallsRecordInput,
   LlmObservabilityService,
   makeHarnessCallRecorder,
@@ -85,6 +87,7 @@ import {
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
+  type JobPackageRegistrySpec,
   type MintInstallationToken,
   type ResolveRepoOrigin,
   type ResolveRepoTarget,
@@ -770,6 +773,7 @@ function buildNodeContainerExecutor(
   agentContextObservability?: AgentContextObservabilityService,
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
   resolveRepoOrigin?: ResolveRepoOrigin,
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
@@ -869,6 +873,9 @@ function buildNodeContainerExecutor(
     // the sandbox), but only for a run whose account has keys (resolved per run — see the
     // call site), so the tool is never advertised to a run where it would just fail.
     ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    // Decrypt the workspace's private-registry entries onto the job body (rendered by
+    // the harness into ~/.npmrc), so private dependencies resolve on install.
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
     // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒
@@ -904,6 +911,7 @@ function selectNodeRepoBootstrapper(deps: {
   repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
   githubClient: GitHubClient | undefined
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
 }): ContainerRepoBootstrapper | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
@@ -927,6 +935,11 @@ function selectNodeRepoBootstrapper(deps: {
     model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     githubApiBase: deps.config.github.apiBase,
+    // The scaffolder installs dependencies too — forward the workspace's
+    // private-registry entries exactly as the implementation executor does.
+    ...(deps.resolvePackageRegistries
+      ? { resolvePackageRegistries: deps.resolvePackageRegistries }
+      : {}),
   })
 }
 
@@ -1584,6 +1597,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
       }
     : undefined
+  // Private package registries (npm private orgs, GitHub Packages): sealed per-workspace
+  // entries decrypted only at container dispatch, rendered by the harness into ~/.npmrc.
+  // The cipher is shared by the dispatch resolver here and the management service below.
+  const packageRegistryEncryptionKey = env.ENCRYPTION_KEY?.trim()
+  const packageRegistrySecretCipher = packageRegistryEncryptionKey
+    ? new WebCryptoSecretCipher({
+        masterKeyBase64: packageRegistryEncryptionKey,
+        info: PACKAGE_REGISTRY_CIPHER_INFO,
+      })
+    : undefined
+  const resolvePackageRegistries = packageRegistrySecretCipher
+    ? (workspaceId: string) =>
+        resolvePackageRegistriesForDispatch(
+          repos.packageRegistryConnectionRepository,
+          packageRegistrySecretCipher,
+          workspaceId,
+        )
+    : undefined
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -1599,6 +1630,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentContextObservability,
     resolveWebSearchEnabled,
     options.resolveRepoOrigin,
+    resolvePackageRegistries,
     recordHarnessCalls,
   )
 
@@ -1854,6 +1886,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repoRepository: repoProjectionRepository,
     githubClient,
     mintInstallationToken: bootstrapMintInstallationToken,
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
   })
 
   // Real-time push + notification delivery. When a realtime hub is wired (start()), the
@@ -1930,6 +1963,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // env into a sealed per-workspace row, resolved + decrypted at enrichment time. Wired
   // whenever the shared ENCRYPTION_KEY is present (independent of the release-health gate).
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  // Per-workspace private package registries (npm private orgs, GitHub Packages): the
+  // management API over the same repo + cipher the dispatch resolver above rides.
+  const packageRegistryDeps: Partial<CoreDependencies> = packageRegistrySecretCipher
+    ? {
+        packageRegistryConnectionRepository: repos.packageRegistryConnectionRepository,
+        packageRegistrySecretCipher,
+      }
+    : {}
   const incidentEnrichmentDeps: Partial<CoreDependencies> = {}
   if (encryptionKey) {
     const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
@@ -1997,6 +2038,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
+    ...packageRegistryDeps,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,

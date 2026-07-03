@@ -57,4 +57,30 @@ describe('recordGateAttempt', () => {
     expect(attempt.attempt).toBe(1)
     expect(attempt.headSha).toBeNull()
   })
+
+  it('captures the fixing instructions handed to the helper this round', () => {
+    const attempt = recordGateAttempt(
+      gate({ lastDispatchedInstructions: '2 check(s) failing: build, lint.' }),
+      { state: 'done', output: 'pushed a fix' },
+      6_000,
+    )
+    expect(attempt.instructions).toBe('2 check(s) failing: build, lint.')
+  })
+
+  it('captures the structured failing checks handed to a CI-gate helper round', () => {
+    const failingChecks = [{ name: 'build', conclusion: 'failure', url: null }]
+    const attempt = recordGateAttempt(
+      gate({ lastDispatchedInstructions: '1 check failing: build.', failingChecks }),
+      { state: 'done', output: null },
+      7_000,
+    )
+    expect(attempt.failingChecks).toEqual(failingChecks)
+    expect(attempt.instructions).toBe('1 check failing: build.')
+  })
+
+  it('omits instructions / failingChecks when the gate handed the helper none (conflicts gate)', () => {
+    const attempt = recordGateAttempt(gate(), { state: 'done', output: 'resolved' }, 8_000)
+    expect(attempt).not.toHaveProperty('instructions')
+    expect(attempt).not.toHaveProperty('failingChecks')
+  })
 })

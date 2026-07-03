@@ -39,6 +39,8 @@ import type {
   ObservabilityConnectionRecord,
   ObservabilityConnectionRepository,
   ObservabilityProviderKind,
+  PackageRegistryConnectionRecord,
+  PackageRegistryConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
   ModelPreset,
@@ -165,6 +167,7 @@ import {
   consensusSessions,
   incidentEnrichmentConnections,
   observabilityConnections,
+  packageRegistryConnections,
   emailConnections,
   llmCallMetrics,
   provisioningLog,
@@ -3896,6 +3899,60 @@ export class DrizzleObservabilityConnectionRepository implements ObservabilityCo
 }
 
 /**
+ * A workspace's private package-registry connection over Postgres (the Drizzle mirror
+ * of the Worker's `D1PackageRegistryConnectionRepository`, migration 0034). One row per
+ * workspace; the registry entries are stored as ONE sealed JSON array (encrypted by the
+ * caller), with a non-secret `summary` blob for display.
+ */
+export class DrizzlePackageRegistryConnectionRepository implements PackageRegistryConnectionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<PackageRegistryConnectionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(packageRegistryConnections)
+      .where(eq(packageRegistryConnections.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      entries: row.entries,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async upsert(record: PackageRegistryConnectionRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      entries: record.entries,
+      summary: record.summary,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(packageRegistryConnections)
+      .values(values)
+      .onConflictDoUpdate({
+        target: packageRegistryConnections.workspace_id,
+        set: {
+          entries: values.entries,
+          summary: values.summary,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string): Promise<void> {
+    await this.db
+      .delete(packageRegistryConnections)
+      .where(eq(packageRegistryConnections.workspace_id, workspaceId))
+  }
+}
+
+/**
  * A workspace's incident-enrichment connection over Postgres (the Drizzle mirror of the
  * Worker's `D1IncidentEnrichmentConnectionRepository`, migration 0013). One row per
  * workspace; both PagerDuty + incident.io credentials live in ONE sealed JSON blob
@@ -4174,6 +4231,7 @@ export interface CoreRepositories {
   mergePresetRepository: MergePresetRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
+  packageRegistryConnectionRepository: PackageRegistryConnectionRepository
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
@@ -4214,6 +4272,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
+    packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),

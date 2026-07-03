@@ -89,6 +89,7 @@ import type {
   ResolveBinaryArtifactStore,
   ObservabilityConnectionRepository,
   IncidentEnrichmentConnectionRepository,
+  PackageRegistryConnectionRepository,
   ReleaseHealthConfigRepository,
   TicketTrackerProvider,
   IssueWritebackProvider,
@@ -176,6 +177,7 @@ import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
+import { PackageRegistryService } from './modules/packageRegistries/PackageRegistryService.js'
 import { PreviewService, type BuildPreviewJob } from './modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
 import type { AccountSettingsService } from '@cat-factory/integrations'
@@ -709,6 +711,10 @@ export interface CoreDependencies {
   incidentEnrichmentConnectionRepository?: IncidentEnrichmentConnectionRepository
   /** Seals incident-enrichment creds at rest (domain tag 'cat-factory:incident-enrichment'). */
   incidentEnrichmentSecretCipher?: SecretCipher
+  /** Stores a workspace's private package-registry entries (sealed npm/GitHub Packages tokens). */
+  packageRegistryConnectionRepository?: PackageRegistryConnectionRepository
+  /** Seals registry tokens at rest (domain tag 'cat-factory:package-registries'). */
+  packageRegistrySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
@@ -897,6 +903,11 @@ export interface ReleaseHealthModule {
   service: ReleaseHealthService
 }
 
+/** The private package-registry settings service, present only when wired. */
+export interface PackageRegistriesModule {
+  service: PackageRegistryService
+}
+
 /** The browsable-frontend-preview service, present only when a preview transport is wired. */
 export interface PreviewModule {
   service: PreviewService
@@ -1029,6 +1040,8 @@ export interface Core {
   notifications?: NotificationsModule
   /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
   releaseHealth?: ReleaseHealthModule
+  /** Present only when the package-registry connection repo + cipher are wired. */
+  packageRegistries?: PackageRegistriesModule
   /** Present only when a preview transport + job builder are wired (local/node — see CoreDependencies). */
   preview?: PreviewModule
   /** Present only when the incident-enrichment connection repo + cipher are wired. */
@@ -1958,6 +1971,24 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
   return { service }
 }
 
+/** Assemble the package-registries module when its repo + cipher are present. */
+function createPackageRegistriesModule(
+  deps: CoreDependencies,
+): PackageRegistriesModule | undefined {
+  const { packageRegistryConnectionRepository, packageRegistrySecretCipher } = deps
+  if (!packageRegistryConnectionRepository || !packageRegistrySecretCipher) {
+    return undefined
+  }
+  const service = new PackageRegistryService({
+    packageRegistryConnectionRepository,
+    packageRegistrySecretCipher,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+    idGenerator: deps.idGenerator,
+  })
+  return { service }
+}
+
 /**
  * Assemble the browsable-frontend-preview module when its per-runtime transport + the facade's
  * job builder + the env registry are all wired (local/node with a host-port-publish runtime).
@@ -2169,6 +2200,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
+  const packageRegistries = createPackageRegistriesModule(dependencies)
   const preview = createPreviewModule(dependencies)
   const incidentEnrichmentSettings = createIncidentEnrichmentModule(dependencies)
   const modelPresets = createModelPresetsModule(dependencies)
@@ -2302,6 +2334,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
+    ...(packageRegistries ? { packageRegistries } : {}),
     ...(preview ? { preview } : {}),
     ...(incidentEnrichmentSettings ? { incidentEnrichmentSettings } : {}),
     ...(dependencies.accountSettings

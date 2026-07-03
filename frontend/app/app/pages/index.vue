@@ -85,6 +85,9 @@ const AccountSettingsPanel = defineAsyncComponent(
 const ObservabilityConnectionPanel = defineAsyncComponent(
   () => import('~/components/settings/ObservabilityConnectionPanel.vue'),
 )
+const PackageRegistriesPanel = defineAsyncComponent(
+  () => import('~/components/settings/PackageRegistriesPanel.vue'),
+)
 const InfrastructureWindow = defineAsyncComponent(
   () => import('~/components/settings/InfrastructureWindow.vue'),
 )
@@ -357,6 +360,7 @@ watch(
       <WorkspaceSettingsPanel v-if="ui.workspaceSettingsOpen" />
       <AccountSettingsPanel v-if="ui.accountSettingsOpen" />
       <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
+      <PackageRegistriesPanel v-if="ui.packageRegistriesOpen" />
       <InfrastructureWindow v-if="ui.infrastructureOpen" />
       <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
       <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />

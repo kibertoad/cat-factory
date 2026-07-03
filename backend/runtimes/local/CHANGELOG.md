@@ -1,5 +1,93 @@
 # @cat-factory/local-server
 
+## 0.40.0
+
+### Minor Changes
+
+- 7fd6a19: Import-from-repo picker: find and link accessible repos in realtime instead of enumerating the whole installation and filtering in memory. The old path listed every installation repo (capped at a bounded page count) then substring-filtered client-of-the-cap — so on a wide App install a repo beyond that window returned "no matches" for a repo you actually had access to, and every keystroke re-fetched all pages. Two new `GitHubClient` primitives fix it end to end: `searchInstallationRepos` issues one bounded, account-scoped GitHub search per query, and `getRepoById` point-reads the picked repo by id when linking it (so a repo surfaced by search from beyond the enumeration cap links instead of spuriously 409-ing). Blank-query browse-all is unchanged; PAT (local) and GitLab connections filter their bounded token listing. When an installation has no resolvable account to scope the GitHub search to, the App adapter filters its own bounded listing rather than running an unscoped global search (which would surface arbitrary, unlinkable public repos).
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+  - @cat-factory/server@0.70.0
+  - @cat-factory/integrations@0.57.0
+  - @cat-factory/gitlab@0.5.0
+  - @cat-factory/agents@0.26.18
+  - @cat-factory/orchestration@0.60.2
+  - @cat-factory/node-server@0.61.2
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.39.2
+
+### Patch Changes
+
+- Updated dependencies [96cff56]
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.39.1
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/orchestration@0.60.1
+  - @cat-factory/agents@0.26.17
+  - @cat-factory/gitlab@0.4.45
+  - @cat-factory/integrations@0.56.5
+  - @cat-factory/server@0.69.1
+  - @cat-factory/node-server@0.61.1
+  - @cat-factory/executor-harness@1.34.0
+
+## 0.39.0
+
+### Minor Changes
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/orchestration@0.60.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/server@0.69.0
+  - @cat-factory/executor-harness@1.34.0
+  - @cat-factory/node-server@0.61.0
+  - @cat-factory/agents@0.26.16
+  - @cat-factory/gitlab@0.4.44
+  - @cat-factory/integrations@0.56.4
+
 ## 0.38.12
 
 ### Patch Changes

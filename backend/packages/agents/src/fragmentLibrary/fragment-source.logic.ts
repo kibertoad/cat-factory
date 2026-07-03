@@ -3,8 +3,9 @@ import type { FragmentAppliesTo } from '@cat-factory/kernel'
 
 // Pure logic for repo-sourced fragments (ADR 0006 §4): parse one Markdown file
 // with YAML frontmatter into a fragment, plus the small helpers the sync flow
-// needs (slugging an id from a path, digesting a directory listing for the
-// cheap "changed?" check). No I/O lives here so it is unit-testable.
+// needs (slugging an id from a path, recognising Markdown files). No I/O lives here
+// so it is unit-testable. Staleness is a commit-sha probe (see FragmentSourceService),
+// so no directory-digest helper lives here any more.
 
 const BLOCK_TYPES: readonly string[] = [
   'frontend',
@@ -43,25 +44,6 @@ export function slugFromPath(path: string): string {
 /** Whether a listing entry is a Markdown file we should parse. */
 export function isMarkdownFile(name: string): boolean {
   return /\.md$/i.test(name)
-}
-
-/**
- * Stable digest of a source's file listing — sorted `path:sha` pairs hashed with
- * FNV-1a. Stored as the source's `lastSyncedSha`; comparing it against a fresh
- * listing is the cheap change check the resync badge uses, no per-file reads.
- */
-export function digestListing(entries: { path: string; sha: string }[]): string {
-  const joined = entries
-    .map((e) => `${e.path}:${e.sha}`)
-    .sort()
-    .join('\n')
-  // FNV-1a (32-bit), hex. Sufficient for change detection (not cryptographic).
-  let hash = 0x811c9dc5
-  for (let i = 0; i < joined.length; i++) {
-    hash ^= joined.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 /**

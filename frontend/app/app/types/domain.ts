@@ -33,6 +33,8 @@ export type {
   FrontendConfig,
   FrontendBackendBinding,
   FrontendBackendSource,
+  ResolvedFrontendBinding,
+  EnvironmentHandle,
   ServiceConnection,
   FrontendBranch,
   FrontendPackageManager,

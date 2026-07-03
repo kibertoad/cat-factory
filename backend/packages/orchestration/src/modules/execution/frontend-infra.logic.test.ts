@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FrontendConfig } from '@cat-factory/kernel'
 import { duplicateBindingEnvVars } from '@cat-factory/contracts'
 import {
+  buildFrontendRunNotes,
   hasLiveServiceBinding,
   hasServiceBinding,
   resolveFrontendBindings,
@@ -150,5 +151,66 @@ describe('hasServiceBinding', () => {
 
   it('is false for an empty binding list', () => {
     expect(hasServiceBinding(config([]))).toBe(false)
+  })
+})
+
+describe('buildFrontendRunNotes', () => {
+  it('is empty when every binding resolves cleanly (all live / all mock, no duplicates)', () => {
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+      { envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } },
+    ])
+    const live = new Map([['blk_api', 'https://api.ephemeral.example']])
+    expect(buildFrontendRunNotes(cfg, live)).toEqual([])
+  })
+
+  it('flags a duplicate env var (only the last binding takes effect)', () => {
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+      { envVar: 'PUB_API_URL', source: { kind: 'mock' } },
+    ])
+    const notes = buildFrontendRunNotes(cfg, new Map([['blk_api', 'https://api.example']]))
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toContain('PUB_API_URL')
+    expect(notes[0]).toContain('only the last binding')
+  })
+
+  it('flags a partial-live set (one bound service live, another mocked)', () => {
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+      { envVar: 'PUB_BILLING_URL', source: { kind: 'service', serviceBlockId: 'blk_billing' } },
+    ])
+    const live = new Map([['blk_api', 'https://api.ephemeral.example']])
+    const notes = buildFrontendRunNotes(cfg, live)
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toContain('PUB_BILLING_URL')
+    expect(notes[0]).toContain('WireMock')
+    expect(notes[0]).not.toContain('PUB_API_URL')
+  })
+
+  it('does NOT flag partial-live when NO bound service is live (that run is refused at the gate)', () => {
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+    ])
+    // No live env at all ⇒ the start gate refuses the run, so there is no partial-live note here.
+    expect(buildFrontendRunNotes(cfg, new Map())).toEqual([])
+  })
+
+  it('does NOT flag a mock-only frontend (nothing was expected to be live)', () => {
+    const cfg = config([{ envVar: 'PUB_OTHER_URL', source: { kind: 'mock' } }])
+    expect(buildFrontendRunNotes(cfg, new Map())).toEqual([])
+  })
+
+  it('emits both a duplicate note and a partial-live note when both hold', () => {
+    const cfg = config([
+      { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+      { envVar: 'PUB_BILLING_URL', source: { kind: 'service', serviceBlockId: 'blk_billing' } },
+      { envVar: 'PUB_BILLING_URL', source: { kind: 'mock' } },
+    ])
+    const live = new Map([['blk_api', 'https://api.ephemeral.example']])
+    const notes = buildFrontendRunNotes(cfg, live)
+    expect(notes).toHaveLength(2)
+    expect(notes[0]).toContain('only the last binding') // duplicate note first
+    expect(notes[1]).toContain('WireMock') // partial-live note second
   })
 })

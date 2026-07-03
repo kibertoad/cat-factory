@@ -5,6 +5,7 @@ import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
 import { pipelineAllowedForFrame } from '~/utils/pipeline'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -256,7 +257,10 @@ const technicalLabel = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <InspectorSection
+    :title="t('inspector.runSettings.title')"
+    :hint="t('inspector.runSettings.hint')"
+  >
     <!-- pipeline -->
     <div>
       <div class="mb-1 flex items-center justify-between">
@@ -287,6 +291,9 @@ const technicalLabel = computed(() => {
       <div v-else class="text-[11px] text-slate-500">
         {{ t('inspector.runSettings.pipelineEmpty') }}
       </div>
+      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+        {{ t('inspector.runSettings.pipelineHint') }}
+      </p>
     </div>
 
     <!-- merge policy preset -->
@@ -322,6 +329,9 @@ const technicalLabel = computed(() => {
       <div v-else class="text-[11px] text-slate-500">
         {{ t('inspector.runSettings.mergePresetEmpty') }}
       </div>
+      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+        {{ t('inspector.runSettings.mergePolicyHint') }}
+      </p>
     </div>
 
     <!-- model preset -->
@@ -393,6 +403,7 @@ const technicalLabel = computed(() => {
         </div>
       </div>
       <p class="mt-1 text-[11px] text-slate-500">
+        {{ t('inspector.runSettings.modelPresetHint') }}
         {{ t('inspector.runSettings.modelPresetChangeHint') }}
       </p>
     </div>
@@ -558,5 +569,5 @@ const technicalLabel = computed(() => {
         {{ t('inspector.runSettings.autoStartHint') }}
       </div>
     </div>
-  </div>
+  </InspectorSection>
 </template>

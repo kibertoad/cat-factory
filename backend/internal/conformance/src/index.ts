@@ -8,6 +8,7 @@ export {
   type ConformanceAppOptions,
   type ConformanceHarness,
   type LocalModelEndpointsProbe,
+  type PackageRegistriesProbe,
   type UserSecretsProbe,
   RecordingEventPublisher,
   type TestResponse,

@@ -2503,6 +2503,12 @@ export class RunDispatcher {
       attempts: (step.gate?.attempts ?? 0) + 1,
       maxAttempts: step.gate?.maxAttempts ?? DEFAULT_MERGE_PRESET.ciMaxAttempts,
       headSha: step.gate?.headSha ?? null,
+      // Stash the instructions this helper was handed (the failing-check summary / conflict
+      // reason / human fix prompt) so the attempt recorded at its completion can show WHAT
+      // this round set out to fix — the gate analogue of the Tester attempt's `concerns`.
+      // Covers every dispatch path (the failed-precheck `probe.failureSummary` and the human
+      // `pendingFix.instructions`), which both arrive here as `failureSummary`.
+      lastDispatchedInstructions: failureSummary ?? step.gate?.lastDispatchedInstructions ?? null,
     }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)

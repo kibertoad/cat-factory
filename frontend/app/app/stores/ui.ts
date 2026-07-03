@@ -157,6 +157,9 @@ export const useUiStore = defineStore('ui', () => {
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
   const observabilityConnectionOpen = ref(false)
+  // Private package registries: the workspace's npm/GitHub-Packages entries agent
+  // containers install with. Opened from the Integrations hub.
+  const packageRegistriesOpen = ref(false)
   // The single tabbed Infrastructure window — a TOP-LEVEL navbar destination (no longer
   // reached via the Integrations hub). Two topical tabs: "Agent containers" (the execution
   // backend + self-hosted runner pool, plus the local-mode warm pool/checkout) and "Test
@@ -571,6 +574,13 @@ export const useUiStore = defineStore('ui', () => {
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
   }
+  function openPackageRegistries() {
+    resetHubReturn()
+    packageRegistriesOpen.value = true
+  }
+  function closePackageRegistries() {
+    packageRegistriesOpen.value = false
+  }
   // Top-level navbar entry into the Infrastructure window. No hub-return marker (it isn't
   // reached from the Integrations hub), so the window shows no "Back to Integrations" control.
   function openInfrastructure(tab: 'environment' | 'runner-pool' = 'runner-pool') {
@@ -806,6 +816,7 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsTab,
     accountSettingsScrollTarget,
     observabilityConnectionOpen,
+    packageRegistriesOpen,
     infrastructureOpen,
     infrastructureTab,
     openInfrastructure,
@@ -897,6 +908,8 @@ export const useUiStore = defineStore('ui', () => {
     setAccountSettingsTab,
     openObservabilityConnection,
     closeObservabilityConnection,
+    openPackageRegistries,
+    closePackageRegistries,
     openProviderConnection,
     closeProviderConnection,
     k3sSetupPrefill,

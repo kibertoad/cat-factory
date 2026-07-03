@@ -388,6 +388,8 @@
   },
   "inspector": {
     "container": {
+      "title": "Zawartość",
+      "hint": "Moduły i zadania wewnątrz tego bloku. Kliknij pozycję, aby zaznaczyć ją na tablicy.",
       "modules": "Moduły ({count})",
       "taskCount": "{count} zadanie | {count} zadania | {count} zadań",
       "allTasks": "Wszystkie zadania ({count})",
@@ -398,6 +400,7 @@
     },
     "epicChildren": {
       "title": "Zadania epiku",
+      "hint": "Wszystkie zadania przypisane do tego epiku, pogrupowane według usługi i modułu, w których się znajdują. Epik tylko grupuje zadania; sam niczego nie uruchamia.",
       "doneCount": "{done}/{total} ukończono",
       "empty": "Do tego epiku nie należą jeszcze żadne zadania. Zaimportuj zadania podrzędne epiku lub przypisz epik do zadania.",
       "unassigned": "Nieprzypisane"
@@ -436,6 +439,7 @@
     },
     "fragments": {
       "serviceTitle": "Dobre praktyki usługi",
+      "serviceHint": "Standardy programowania dla całej usługi. Treść każdego wybranego fragmentu jest dodawana do promptu każdego agenta świadomego kodu pracującego nad zadaniami tej usługi.",
       "serviceEmpty": "Brak. Agenci świadomi kodu w tej usłudze stosują swoje domyślne wytyczne.",
       "manageBoard": "Zarządzaj biblioteką fragmentów tej tablicy…",
       "manageAccount": "Zarządzaj fragmentami konta…"
@@ -502,6 +506,12 @@
           "failed": "Błąd",
           "stopped": "Nie uruchomiono"
         }
+      },
+      "resolved": {
+        "title": "Rozwiązuje się na",
+        "duplicateWarning": "Użyte w więcej niż jednym powiązaniu, więc obowiązuje tylko ostatnie: {vars}.",
+        "serviceOffline": "{service}: brak działającego środowiska (zamockowane)",
+        "mock": "Mock (WireMock)"
       }
     },
     "serviceConnections": {
@@ -514,6 +524,7 @@
     },
     "releaseHealth": {
       "title": "Kondycja po wydaniu",
+      "sectionHint": "Gdy zmiany tej usługi zostaną scalone i wydane, bramka przez pewien czas obserwuje przypisane monitory i SLO. Przy regresji uruchamia agenta dyżurnego do zbadania sprawy; nic nie jest wycofywane automatycznie.",
       "clear": "Wyczyść",
       "connectPrompt": "Połącz integrację obserwowalności, aby monitorować tę usługę po wydaniach.",
       "connectFirst": "Najpierw połącz integrację obserwowalności",
@@ -530,6 +541,7 @@
     },
     "testConfig": {
       "title": "Infrastruktura testowa",
+      "hint": "Jak stawiane jest środowisko testowe dla tej usługi, gdy potok musi ją uruchomić: bez infrastruktury, plik Docker Compose, manifesty Kubernetes lub niestandardowy typ manifestu.",
       "provisionType": "Typ provisioningu",
       "provisionTypeHint": "Jak ta usługa uruchamia swoje środowisko dla Testera. Obszar roboczy konfiguruje sposób obsługi każdego typu (silnik + połączenie).",
       "provisionTypes": {
@@ -613,11 +625,13 @@
     },
     "agentConfig": {
       "title": "Konfiguracja agenta",
+      "hint": "Opcje wnoszone przez agentów potoku tego zadania. Każdą opcję można edytować, dopóki jej agent nie wystartuje; potem jest zablokowana na czas tego uruchomienia.",
       "inherited": "odziedziczone z usługi",
       "frozen": "Zamrożone: agent został uruchomiony"
     },
     "dependencies": {
       "title": "Zależy od",
+      "hint": "Zadania, które muszą zostać scalone, zanim to będzie mogło się uruchomić. Przycisk uruchamiania pozostaje zablokowany, dopóki wszystkie zależności nie będą gotowe.",
       "merged": "Scalone",
       "notMerged": "Jeszcze nie scalone",
       "empty": "Brak zależności. Można uruchomić w dowolnym momencie.",
@@ -629,11 +643,14 @@
     },
     "estimate": {
       "title": "Szacunek",
+      "hint": "Wynik pracy agenta szacującego zadania: jak złożone, ryzykowne i istotne wygląda to zadanie. Służy do decyzji, czy kroki konsensusu (wielokrotne uruchomienia) są opłacalne.",
       "complexity": "Złożoność",
       "risk": "Ryzyko",
       "impact": "Wpływ"
     },
     "execution": {
+      "title": "Wykonanie",
+      "hint": "Trwające wykonanie potoku tego zadania: każdy krok agenta, jego postęp i powstały pull request.",
       "stage": {
         "incorporating": "Włączanie…",
         "reviewing": "Ponowna recenzja…",
@@ -687,12 +704,18 @@
       }
     },
     "structure": {
+      "title": "Struktura",
+      "hint": "Gdzie w usłudze znajduje się to zadanie i jakich standardów kodu przestrzegają jego agenci.",
       "module": "Moduł",
       "modulePlaceholder": "np. Sesje (tworzone przy implementacji, jeśli nowy)",
+      "moduleHint": "Moduł usługi, do którego należy to zadanie. Wpisz nazwę; moduł, który jeszcze nie istnieje, zostanie utworzony przy implementacji zadania.",
       "bestPractices": "Dobre praktyki",
-      "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne."
+      "bestPracticesEmpty": "Brak. Agenci stosują swoje domyślne wytyczne.",
+      "bestPracticesHint": "Fragmenty dobrych praktyk dołączane do promptów agentów tego zadania, oprócz standardów na poziomie usługi."
     },
     "runSettings": {
+      "title": "Ustawienia uruchamiania",
+      "hint": "Jak działa potok tego zadania: który potok startuje, jakie polityki scalania i modeli obowiązują oraz co dzieje się wokół uruchomienia.",
       "unassigned": "Nieprzypisane",
       "workspaceDefault": "Domyślne obszaru roboczego",
       "workspaceDefaultParen": "(domyślne obszaru roboczego)",
@@ -711,10 +734,13 @@
       },
       "pipeline": "Potok",
       "pipelineEmpty": "Brak domyślnego. Wybierz potok przy uruchamianiu tego zadania.",
+      "pipelineHint": "Potok uruchamiany domyślnie przyciskiem uruchamiania: sekwencja kroków agentów (np. specyfikacja, kod, testy, scalenie) wykonywana dla tego zadania.",
       "mergePolicy": "Polityka scalania",
       "mergePresetDetail": "{name}: automatyczne scalanie, gdy złożoność ≤ {complexity}, ryzyko ≤ {risk}, wpływ ≤ {impact}; do {attempts} prób naprawy CI.",
       "mergePresetEmpty": "Brak skonfigurowanego presetu. Element scalający zgłasza powiadomienie o recenzji dla każdego PR.",
+      "mergePolicyHint": "Decyduje, kiedy ukończony pull request jest scalany automatycznie zamiast czekać na ludzką recenzję, oraz ile prób naprawy CI otrzymuje uruchomienie.",
       "modelPreset": "Preset modelu",
+      "modelPresetHint": "Decyduje, na jakim modelu AI działa każdy krok agenta.",
       "modelPresetBase": "bazowy {model}",
       "modelPresetOverrides": ", {count} nadpisanie | , {count} nadpisania | , {count} nadpisań",
       "modelPresetEmpty": "Brak skonfigurowanego presetu. Agenci działają na domyślnym routingu wdrożenia.",
@@ -1439,6 +1465,7 @@
         "documents": "Dokumenty",
         "taskTrackers": "Narzędzia do śledzenia zadań",
         "observability": "Obserwowalność",
+        "development": "Programowanie",
         "personal": "Osobiste (tylko Ty)"
       },
       "items": {
@@ -1475,6 +1502,10 @@
         "observability": {
           "label": "Kondycja po wydaniu",
           "description": "Obserwuj monitory i SLO po wdrożeniu wydania (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Prywatne rejestry pakietów",
+          "description": "Tokeny npm i GitHub Packages, których agenci używają do instalowania prywatnych zależności."
         },
         "githubPat": {
           "label": "Mój token GitHub",
@@ -1854,6 +1885,31 @@
       },
       "connectionNoun": "połączenie obserwowalności",
       "incidentNoun": "dostawcę incydentów"
+    },
+    "packageRegistries": {
+      "title": "Prywatne rejestry pakietów",
+      "intro": "Połącz prywatne rejestry, z których instalują Twoje repozytoria. Agenci otrzymują je przy pobieraniu repozytorium, dzięki czemu prywatne zależności rozwiązują się podczas instalacji. Tokeny są tylko do zapisu: aby zmienić token, usuń wpis i dodaj go ponownie.",
+      "entryNoun": "wpis rejestru",
+      "list": {
+        "heading": "Połączone rejestry",
+        "tokenTail": "token …{tail}",
+        "remove": "Usuń wpis"
+      },
+      "add": {
+        "heading": "Dodaj rejestr",
+        "vendor": "Rejestr",
+        "host": "Token jest wysyłany tylko do {host}.",
+        "scopes": "Zakresy pakietów",
+        "scopesHelp": "Zakresy npm oddzielone przecinkami",
+        "token": "Token dostępu",
+        "save": "Dodaj rejestr"
+      },
+      "toast": {
+        "loadFailed": "Nie udało się wczytać rejestrów pakietów",
+        "added": "Rejestr dodany",
+        "addFailed": "Nie udało się dodać rejestru",
+        "removeFailed": "Nie udało się usunąć wpisu rejestru"
+      }
     },
     "localMode": {
       "title": "Tryb lokalny",
@@ -2567,6 +2623,7 @@
     },
     "taskDocs": {
       "heading": "Dokumenty kontekstowe",
+      "hint": "Dokumenty dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
       "attach": "Dołącz",
       "importPage": "Importuj stronę…",
       "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
@@ -2587,6 +2644,7 @@
     },
     "contextIssues": {
       "title": "Zgłoszenia kontekstowe",
+      "hint": "Zgłoszenia z trackera dołączone do tego zadania jako kontekst. Ich treść trafia do agentów pracujących nad zadaniem.",
       "attach": "Dołącz",
       "attached": "Dołączono zgłoszenie",
       "attachFailed": "Nie można dołączyć",
@@ -2850,6 +2908,8 @@
     },
     "attemptsHeading": "Próby: {helper}",
     "attempt": "Próba {number}",
+    "attemptInstructions": "Przekazano do: {helper}",
+    "attemptReport": "Raport: {helper}",
     "outcome": {
       "completed": "ukończono",
       "failed": "niepowodzenie"
@@ -3630,7 +3690,7 @@
     "sources": {
       "metaSynced": "zsynchronizowano · ref {ref}",
       "metaNever": "nigdy nie zsynchronizowano · ref {ref}",
-      "changes": "{count} zmiana | {count} zmiany | {count} zmian",
+      "changes": "Zmiany",
       "empty": "Brak połączonych repozytoriów wytycznych. Połącz jedno poniżej, aby zaimportować jego pliki Markdown jako fragmenty.",
       "linkTitle": "Połącz repozytorium wytycznych",
       "ownerPlaceholder": "właściciel",
@@ -3655,7 +3715,7 @@
       "linkSourceFailed": "Nie udało się połączyć źródła",
       "synced": "Zsynchronizowano: {updated} zaktualizowano, {removed} usunięto",
       "syncFailed": "Nie udało się zsynchronizować źródła",
-      "changesAvailable": "Dostępna {count} zmiana | Dostępne {count} zmiany | Dostępnych {count} zmian",
+      "changesAvailable": "Dostępne zmiany",
       "upToDate": "Aktualne",
       "checkSourceFailed": "Nie udało się sprawdzić źródła",
       "sourceUnlinked": "Odłączono źródło",

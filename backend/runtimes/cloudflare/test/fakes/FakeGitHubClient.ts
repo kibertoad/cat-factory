@@ -62,10 +62,33 @@ export class FakeGitHubClient implements GitHubClient {
     return { items: this.repos }
   }
 
+  /** Records each (installationId, query, opts) searchInstallationRepos was called with. */
+  readonly searchReposCalls: {
+    installationId: number
+    query: string
+    opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number }
+  }[] = []
+
+  async searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
+  ): Promise<GitHubRepo[]> {
+    this.searchReposCalls.push({ installationId, query, opts })
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const matched = this.repos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+  }
+
   async getRepo(_installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo> {
     const found = this.repos.find((r) => r.owner === ref.owner && r.name === ref.repo)
     if (!found) throw new Error(`FakeGitHubClient: no repo ${ref.owner}/${ref.repo}`)
     return found
+  }
+
+  async getRepoById(_installationId: number, repoGithubId: number): Promise<GitHubRepo | null> {
+    return this.repos.find((r) => r.githubId === repoGithubId) ?? null
   }
 
   /** Push (write) access per `owner/repo`; defaults to true unless overridden. */
@@ -122,6 +145,33 @@ export class FakeGitHubClient implements GitHubClient {
     _gitRef?: string,
   ): Promise<RepoFileContent | null> {
     return this.files[path] ?? null
+  }
+
+  /**
+   * Pseudo head-commit sha for the dir, derived from its files' blob shas: any change
+   * to a file under the dir (edit/add/remove/rename) yields a new value, mirroring what
+   * the real commits API reports after a commit touches the directory. Null for an empty
+   * dir (no commit to pin against).
+   */
+  async latestCommitSha(
+    _installationId: number,
+    _ref: GitHubRepoRef,
+    path: string,
+    _gitRef?: string,
+  ): Promise<string | null> {
+    const prefix = path ? `${path.replace(/\/+$/, '')}/` : ''
+    const parts = Object.entries(this.files)
+      .filter(([p]) => (prefix ? p.startsWith(prefix) : !p.includes('/')))
+      .map(([p, f]) => `${p}:${f.sha}`)
+      .sort()
+    if (!parts.length) return null
+    const joined = parts.join('\n')
+    let hash = 0x811c9dc5
+    for (let i = 0; i < joined.length; i++) {
+      hash ^= joined.charCodeAt(i)
+      hash = Math.imul(hash, 0x01000193)
+    }
+    return `commit-${(hash >>> 0).toString(16).padStart(8, '0')}`
   }
 
   async listPullRequests(): Promise<Paged<GitHubPullRequest>> {

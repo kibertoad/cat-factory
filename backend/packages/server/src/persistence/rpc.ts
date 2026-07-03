@@ -547,6 +547,15 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The private package-registry connection (sealed npm/GitHub-Packages entries): the
+  // settings panel's list/add/remove and the container dispatch's decrypt-time read all
+  // ride get/upsert/delete, workspace-scoped like the observability connection above
+  // (same sealed-blob-over-the-machine-API precedent).
+  packageRegistryConnectionRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
 }
 
 // ---------------------------------------------------------------------------
