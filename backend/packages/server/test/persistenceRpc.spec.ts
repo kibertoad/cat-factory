@@ -282,6 +282,11 @@ function makeRegistry(): {
     // The VCS/GitHub projection READ surface the SPA's board panels display (repos/branches/
     // PRs/issues). Each echoes its workspaceId (arg0); `list` is also on the run-path repo
     // resolution. The projection WRITES + per-repo `listByRepo` variants stay off (a later slice).
+    // `githubInstallationRepository.getByWorkspace` is the run path's FIRST read (before `list`);
+    // it echoes the workspaceId as a single record. The rest of the installation repo stays off.
+    githubInstallationRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+    },
     repoProjectionRepository: {
       list: async (ws: string) => [{ ws }],
     },
@@ -1321,8 +1326,11 @@ describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
   // straight from the local projections by `GitHubService` — no GitHub API call, so they run
   // unchanged over the remote-sourced projection repos. Each takes the workspaceId as arg0 (the
   // `workspace` rule); `args` are the trailing arguments after it (a `listByRepo` also carries the
-  // repoGithubId, which the scope check ignores — only the workspace binds).
+  // repoGithubId, which the scope check ignores — only the workspace binds). The installation
+  // `getByWorkspace` is the run path's FIRST read (`resolveRepoTarget` resolves the installation
+  // before walking the `github_repos` projection), also workspace-scoped on arg0.
   const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'githubInstallationRepository', method: 'getByWorkspace', args: [] },
     { repo: 'repoProjectionRepository', method: 'list', args: [] },
     { repo: 'branchProjectionRepository', method: 'listByRepo', args: [42] },
     { repo: 'pullRequestProjectionRepository', method: 'listByWorkspace', args: [] },
@@ -1355,5 +1363,11 @@ describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
     await expect(repos.repoProjectionRepository!.setMonorepo!('ws_in', 42, true)).rejects.toThrow(
       /not callable/,
     )
+    // Only `getByWorkspace` on the installation repo is opened — its installationId-keyed reads,
+    // token/sync writes, the webhook fan-out, and the cron `listActive` stay off the SPA path.
+    await expect(repos.githubInstallationRepository!.getByInstallationId!(42)).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(repos.githubInstallationRepository!.listActive!()).rejects.toThrow(/not callable/)
   })
 })

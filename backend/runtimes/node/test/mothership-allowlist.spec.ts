@@ -241,10 +241,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The whole reference-architecture library is now remote (the bootstrap modal's CRUD + the
   // retry re-resolve): get/listByWorkspace/insert/update/softDelete.
   referenceArchitectureRepository: {},
+  // `getByWorkspace` is now allow-listed: `resolveRepoTarget` reads it FIRST on every
+  // container-agent dispatch (installation → then the `github_repos` projection), so the
+  // run path needs it alongside `repoProjectionRepository.list`. The installationId-keyed
+  // reads, the sync/token writes, the webhook fan-out, and the cron `listActive` stay off
+  // (a later GitHub sync + repo-write slice — the mothership owns App + webhooks).
   githubInstallationRepository: {
     getByInstallationId: 'pending',
     listByInstallationIds: 'pending',
-    getByWorkspace: 'pending',
     listWorkspacesForInstallation: 'pending',
     listActive: 'sweeper',
     upsert: 'pending',

@@ -35,15 +35,20 @@
   NO GitHub API call). Previously every one came back `unknown_method`. Newly allow-listed, each
   workspace-scoped on arg0 (the existing `workspace` rule — no new scope machinery):
   `repoProjectionRepository.list`, `branchProjectionRepository.listByRepo`,
-  `pullRequestProjectionRepository.listByWorkspace`, `issueProjectionRepository.listByWorkspace`.
+  `pullRequestProjectionRepository.listByWorkspace`, `issueProjectionRepository.listByWorkspace`,
+  plus `githubInstallationRepository.getByWorkspace` for the run path (below).
   Reads only, member-level (the GitHub read endpoints mount under `/workspaces/:workspaceId`, not
-  admin-gated). `repoProjectionRepository.list` is ALSO on the run path — `resolveRepoTarget` walks
-  the `github_repos` projection to find a block's repo on EVERY container-agent dispatch — so this
-  closes a latent mothership-mode gap for real (non-fake-executor) runs, not just the board panel
-  (the merge-gate integration test used the `FakeAgentExecutor`, which bypasses repo resolution, so
-  the gap didn't surface there). The five projection repos are already routed through the
-  `pickRepoSource`/`sourced` seam (slice 3), so a mothership-mode node already SOURCES them from the
-  full-surface remote registry — no routing change, just the allow-list. **Deliberately still off
+  admin-gated). These same reads are ALSO the run path — `resolveRepoTarget` runs on EVERY
+  container-agent dispatch to find a block's repo — but it reads `githubInstallationRepository.
+getByWorkspace` FIRST (null when GitHub isn't connected) and only THEN walks the `github_repos`
+  projection via `repoProjectionRepository.list` (the block-ancestry deps `blockRepository.get` /
+  `serviceRepository.getByFrameBlock` were already remote). So closing the run-path gap for real
+  (non-fake-executor) runs needs BOTH the installation read and `list` — allow-listing `list`
+  alone left the resolver failing one call earlier on the un-remoted installation read (the
+  merge-gate integration test used the `FakeAgentExecutor`, which bypasses repo resolution, so the
+  gap didn't surface there). The projection repos + the installation repo are already routed through
+  the `pickRepoSource`/`sourced` seam (slice 3), so a mothership-mode node already SOURCES them from
+  the full-surface remote registry — no routing change, just the allow-list. **Deliberately still off
   (a later GitHub sync + repo-write slice):** the projection WRITE surface — `upsertMany` (the
   sync/webhook ingest; the mothership owns GitHub sync, since the App + webhooks live there), the
   board-linkage writes `repoProjectionRepository.linkBlock` / `setMonorepo`, the installationId-keyed
@@ -52,10 +57,13 @@
   repo-WRITE endpoints (create-branch / open-PR / merge / comment), and exposing it alone would let
   create-branch/open-PR do the real GitHub write and THEN fail on the un-remoted `upsertMany`
   projection refresh — a worse failure than today's clean pre-write refusal, so it returns with the
-  repo-write slice. Server-only allow-list change, symmetric by construction (the dispatcher
-  reflects over each facade's registry). Round-trip + cross-account-scope + still-refused-write unit
-  tests for every new method are in `packages/server/test/persistenceRpc.spec.ts`; the static drift
-  guard (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
+  repo-write slice. On the installation repo only the workspace-scoped `getByWorkspace` is opened —
+  the installationId-keyed reads, the token/sync writes, the webhook fan-out, and the cron
+  `listActive` stay off (same later slice). Server-only allow-list change, symmetric by construction
+  (the dispatcher reflects over each facade's registry). Round-trip + cross-account-scope +
+  still-refused-write unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
 - **Phase 3 follow-up (Kaizen grading read surface)** — the Kaizen SCREEN
   (`KaizenController` → `KaizenService.getOverview` / `listForExecution`) is now functional in
   mothership mode: a mothership-mode SPA can display the grading history, the verified-combo
@@ -435,53 +443,53 @@ Every persistence port, and where it lives in mothership mode. `remote` = mother
 `local-sqlite` = local `node:sqlite` store; `telemetry` = local-first + batched up; `excluded` =
 never remotely invocable (mothership-internal cron).
 
-| Port                                                        | Bucket                                               | Status  | PR                              |
-| ----------------------------------------------------------- | ---------------------------------------------------- | ------- | ------------------------------- |
-| `workspaceRepository`                                       | remote                                               | ✅ done | PR 1                            |
-| `blockRepository`                                           | remote                                               | ✅ done | PR 1                            |
-| `executionRepository` (CAS/rev)                             | remote                                               | ✅ done | PR 1                            |
-| `accountRepository`                                         | remote                                               | ✅ done | PR 1                            |
-| `membershipRepository`                                      | remote                                               | ✅ done | PR 1                            |
-| `pipelineRepository`                                        | remote                                               | ✅ done | PR 1                            |
-| `userRepository`                                            | remote                                               | ⬜ todo | PR 3                            |
-| `invitationRepository`                                      | remote                                               | ⬜ todo | PR 3                            |
-| `passwordResetTokenRepository`                              | remote                                               | ⬜ todo | PR 3                            |
-| `emailConnectionRepository`                                 | remote (delivery delegated)                          | ⬜ todo | PR 4                            |
-| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)            | ✅ done | PR 3 (retry/stop surface)       |
-| `modelPresetRepository`                                     | remote                                               | ✅ done | PR 3 (settings writes)          |
-| `serviceFragmentDefaultsRepository`                         | remote                                               | ✅ done | PR 3 (settings writes)          |
-| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)               | ◑ part  | PR 3 (settings writes)          |
-| `trackerSettingsRepository`                                 | remote                                               | ✅ done | PR 3 (settings writes)          |
-| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)       | ◑ part  | PR 3 (mount management)         |
-| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)           | ◑ part  | PR 3 (mount management)         |
-| `requirementReviewRepository`                               | remote                                               | ✅ done | PR 3 (advanced-review surface)  |
-| `kaizenGradingRepository`                                   | remote (run-path + screen reads; `get`/sweep off)    | ◑ part  | PR 3 (kaizen read surface)      |
-| `kaizenVerifiedComboRepository`                             | remote (`getByKey`/`listByWorkspace`; `upsert` off)  | ◑ part  | PR 3 (kaizen read surface)      |
-| `consensusSessionRepository`                                | remote                                               | ✅ done | PR 3 (advanced-review surface)  |
-| `clarityReviewRepository`                                   | remote                                               | ✅ done | PR 3 (advanced-review surface)  |
-| `brainstormSessionRepository`                               | remote                                               | ✅ done | PR 3 (advanced-review surface)  |
-| `mergePresetRepository`                                     | remote                                               | ✅ done | PR 3 (settings writes)          |
-| `workspaceSettingsRepository`                               | remote                                               | ✅ done | PR 3 (settings writes)          |
-| `observabilityConnectionRepository`                         | remote                                               | ✅ done | PR 3 (release-health settings)  |
-| `incidentEnrichmentConnectionRepository`                    | remote                                               | ✅ done | PR 3 (release-health settings)  |
-| `accountSettingsRepository`                                 | remote                                               | ⬜ todo | PR 3                            |
-| `releaseHealthConfigRepository`                             | remote                                               | ✅ done | PR 3 (release-health settings)  |
-| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership)     | ⬜ todo | PR 3                            |
-| `githubInstallationRepository`                              | remote                                               | ⬜ todo | PR 3                            |
-| `runnerPoolConnectionRepository`                            | remote                                               | ⬜ todo | PR 3                            |
-| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote (board-panel reads; sync/repo-writes pending) | ◑ part  | PR 3 (VCS projection reads)     |
-| `providerApiKeyRepository`                                  | local-sqlite                                         | ✅ done | PR 1 (store)                    |
-| `localModelEndpointRepository`                              | local-sqlite                                         | ✅ done | PR 1 (store)                    |
-| `providerSubscriptionTokenRepository`                       | local-sqlite                                         | ⬜ todo | PR 3                            |
-| `personalSubscriptionRepository`                            | local-sqlite                                         | ⬜ todo | PR 3                            |
-| `subscriptionActivationRepository`                          | local-sqlite                                         | ⬜ todo | PR 3                            |
-| `localSettingsRepository`                                   | local-sqlite                                         | ⬜ todo | PR 3                            |
-| durable execution work queue                                | local-sqlite (replaces pg-boss)                      | ✅ done | PR 1 (in-proc) → PR 2 (durable) |
-| cached mothership machine token                             | local-sqlite                                         | ✅ done | PR 3                            |
-| `llmCallMetricRepository`                                   | telemetry                                            | ⬜ todo | PR 5                            |
-| `agentContextSnapshotRepository`                            | telemetry                                            | ⬜ todo | PR 5                            |
-| `tokenUsageRepository`                                      | telemetry                                            | ⬜ todo | PR 5                            |
-| `provisioningLogRepository`                                 | telemetry                                            | ⬜ todo | PR 5                            |
+| Port                                                        | Bucket                                                | Status  | PR                              |
+| ----------------------------------------------------------- | ----------------------------------------------------- | ------- | ------------------------------- |
+| `workspaceRepository`                                       | remote                                                | ✅ done | PR 1                            |
+| `blockRepository`                                           | remote                                                | ✅ done | PR 1                            |
+| `executionRepository` (CAS/rev)                             | remote                                                | ✅ done | PR 1                            |
+| `accountRepository`                                         | remote                                                | ✅ done | PR 1                            |
+| `membershipRepository`                                      | remote                                                | ✅ done | PR 1                            |
+| `pipelineRepository`                                        | remote                                                | ✅ done | PR 1                            |
+| `userRepository`                                            | remote                                                | ⬜ todo | PR 3                            |
+| `invitationRepository`                                      | remote                                                | ⬜ todo | PR 3                            |
+| `passwordResetTokenRepository`                              | remote                                                | ⬜ todo | PR 3                            |
+| `emailConnectionRepository`                                 | remote (delivery delegated)                           | ⬜ todo | PR 4                            |
+| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)             | ✅ done | PR 3 (retry/stop surface)       |
+| `modelPresetRepository`                                     | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `serviceFragmentDefaultsRepository`                         | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)                | ◑ part  | PR 3 (settings writes)          |
+| `trackerSettingsRepository`                                 | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)        | ◑ part  | PR 3 (mount management)         |
+| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)            | ◑ part  | PR 3 (mount management)         |
+| `requirementReviewRepository`                               | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `kaizenGradingRepository`                                   | remote (run-path + screen reads; `get`/sweep off)     | ◑ part  | PR 3 (kaizen read surface)      |
+| `kaizenVerifiedComboRepository`                             | remote (`getByKey`/`listByWorkspace`; `upsert` off)   | ◑ part  | PR 3 (kaizen read surface)      |
+| `consensusSessionRepository`                                | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `clarityReviewRepository`                                   | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `brainstormSessionRepository`                               | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `mergePresetRepository`                                     | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `workspaceSettingsRepository`                               | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `observabilityConnectionRepository`                         | remote                                                | ✅ done | PR 3 (release-health settings)  |
+| `incidentEnrichmentConnectionRepository`                    | remote                                                | ✅ done | PR 3 (release-health settings)  |
+| `accountSettingsRepository`                                 | remote                                                | ⬜ todo | PR 3                            |
+| `releaseHealthConfigRepository`                             | remote                                                | ✅ done | PR 3 (release-health settings)  |
+| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership)      | ⬜ todo | PR 3                            |
+| `githubInstallationRepository`                              | remote (`getByWorkspace` run-path read; rest pending) | ◑ part  | PR 3 (VCS projection reads)     |
+| `runnerPoolConnectionRepository`                            | remote                                                | ⬜ todo | PR 3                            |
+| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote (board-panel reads; sync/repo-writes pending)  | ◑ part  | PR 3 (VCS projection reads)     |
+| `providerApiKeyRepository`                                  | local-sqlite                                          | ✅ done | PR 1 (store)                    |
+| `localModelEndpointRepository`                              | local-sqlite                                          | ✅ done | PR 1 (store)                    |
+| `providerSubscriptionTokenRepository`                       | local-sqlite                                          | ⬜ todo | PR 3                            |
+| `personalSubscriptionRepository`                            | local-sqlite                                          | ⬜ todo | PR 3                            |
+| `subscriptionActivationRepository`                          | local-sqlite                                          | ⬜ todo | PR 3                            |
+| `localSettingsRepository`                                   | local-sqlite                                          | ⬜ todo | PR 3                            |
+| durable execution work queue                                | local-sqlite (replaces pg-boss)                       | ✅ done | PR 1 (in-proc) → PR 2 (durable) |
+| cached mothership machine token                             | local-sqlite                                          | ✅ done | PR 3                            |
+| `llmCallMetricRepository`                                   | telemetry                                             | ⬜ todo | PR 5                            |
+| `agentContextSnapshotRepository`                            | telemetry                                             | ⬜ todo | PR 5                            |
+| `tokenUsageRepository`                                      | telemetry                                             | ⬜ todo | PR 5                            |
+| `provisioningLogRepository`                                 | telemetry                                             | ⬜ todo | PR 5                            |
 
 ## Cross-cutting delegation (not per-call repo proxies)
 
