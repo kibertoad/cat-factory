@@ -114,15 +114,18 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
   // beside the own-service PR. Lifted onto `AgentRunResult.peerPullRequests` for the engine
   // to record on the block; absent for a single-repo run.
   const peerPullRequests = mapPeerPullRequests(result.peerPullRequests)
+  // The peer PRs a multi-repo run opened, rendered for the human-readable output. Shared by
+  // BOTH the own-PR branch and the no-own-PR branch below, so a run whose own service was a
+  // no-op but a peer changed still lists the peer PR(s) instead of reading "No changes …".
+  const peerNote = peerPullRequests?.length
+    ? `\n${peerPullRequests.map((p) => `PR (${p.repo}): ${p.ref.url}`).join('\n')}`
+    : ''
   // A coding job that opened a PR (the coder + any PR-opening coding agent): surface the PR
   // STRUCTURALLY so the engine records it on the block and the board links to it. Checked
   // BEFORE `pushed` — a coding run reports BOTH `pushed:true` AND `prUrl`, so the PR must win
   // over the in-place-fixer text below or it would be silently dropped.
   if (result.prUrl) {
     const summary = result.summary?.trim() || 'Implementation complete.'
-    const peerNote = peerPullRequests?.length
-      ? `\n${peerPullRequests.map((p) => `PR (${p.repo}): ${p.ref.url}`).join('\n')}`
-      : ''
     return {
       output: `${summary}\n\nPR: ${result.prUrl}${peerNote}`,
       pullRequest: {
@@ -139,12 +142,18 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
   // onto the existing branch (or was a clean no-op). The engine's CI / conflicts gate
   // re-checks the real signal regardless; map to a sensible output. The agent's own summary
   // is used when present (e.g. the conflict-resolver's "Resolved merge conflicts …"). A
-  // multi-repo run whose OWN service was a no-op but a peer changed still surfaces the peer PRs.
+  // multi-repo run whose OWN service was a no-op but a peer changed still surfaces the peer PRs
+  // (both structurally and in the rendered output via `peerNote`).
   if (result.pushed !== undefined) {
+    const base =
+      result.summary?.trim() ||
+      (result.pushed
+        ? 'Pushed changes to the branch.'
+        : peerPullRequests?.length
+          ? 'No changes in the primary repository.'
+          : 'No changes were produced.')
     return {
-      output:
-        result.summary?.trim() ||
-        (result.pushed ? 'Pushed changes to the branch.' : 'No changes were produced.'),
+      output: `${base}${peerNote}`,
       ...(peerPullRequests?.length ? { peerPullRequests } : {}),
     }
   }

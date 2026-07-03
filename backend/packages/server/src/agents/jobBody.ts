@@ -256,9 +256,12 @@ export function buildRegisteredAgentBody(
         ...(onPr ? { noChangesIsError: false } : { pr }),
         ...(peerRepos ? { peerRepos } : {}),
         ...(step.clone?.full ? { full: true } : {}),
-        // The Coder (follow-up companion enabled) streams forward-looking items out via
-        // the sentinel file; tell the harness to tail it. Only on the implementer path.
-        ...(context.followUpCompanion && !onPr ? { streamFollowUps: true } : {}),
+        // The Coder (follow-up companion enabled) streams forward-looking items out via the
+        // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
+        // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
+        // sentinel, so advertising it there would spend prompt tokens on items that are silently
+        // discarded. The co-located-only case has no `peerRepos`, so it keeps follow-ups on.
+        ...(context.followUpCompanion && !onPr && !peerRepos ? { streamFollowUps: true } : {}),
         ...webTools,
       },
     }
@@ -301,15 +304,39 @@ export function buildRegisteredAgentBody(
   }
 }
 
+/** Sanitise an owner/name segment for a sibling checkout directory. MUST match the harness's
+ * `safeDirSegment` (executor-harness `coding-agent.ts`) — see {@link siblingCheckoutDir}. */
+function safeDirSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
+}
+
+/**
+ * The sibling checkout directory the harness creates for a repo under the multi-repo workspace
+ * root. MUST stay byte-identical to the harness's `siblingDir` (`owner__name`, computed in
+ * executor-harness `coding-agent.ts`): the two are independent, so a divergent rule would name a
+ * directory in the agent's prompt that does not exist on disk (the agent would edit the wrong
+ * repo). GitHub owners contain no `_`, so `owner__name` is collision-free across the deduped set.
+ */
+function siblingCheckoutDir(owner: string, name: string): string {
+  return `${safeDirSegment(owner)}__${safeDirSegment(name)}`
+}
+
 /**
  * Render the "Multi-repo workspace" system-prompt section for a multi-service coding run
  * (service-connections phase 3). Names the primary repo (the task's own service) and, for
  * every involved connected service, WHICH repo + subdirectory it lives in and its role (the
  * connection `description`, carried on `involvedServices`). Two involved services sharing a
  * monorepo appear under the one repo with their distinct subdirectories; a service co-located
- * in the primary's own repo is noted under the primary (no separate checkout). The agent's cwd
- * is the workspace root, so it can edit across every checkout — the harness's own AGENTS.md
- * note explains the sibling layout; this section supplies the concrete repos + roles.
+ * in the primary's own repo is noted under the primary.
+ *
+ * Two shapes, because the runtime layout genuinely differs:
+ *  - **Distinct peers** (≥1 non-primary checkout): the harness (`runMultiRepoCoding`) clones each
+ *    repo as a SIBLING under the workspace root (the cwd), so the section names each repo's sibling
+ *    directory (matching the harness's `siblingDir`) and tells the agent to commit inside each.
+ *  - **Co-located only** (all involved services live in the primary's own repo): there is a SINGLE
+ *    checkout (the harness takes the ordinary single-repo path with cwd at the repo root), so the
+ *    section must NOT claim sibling directories — it describes the shared repo's subdirectories and
+ *    a single PR instead.
  */
 export function renderMultiRepoWorkspaceSection(
   checkouts: RepoCheckout[],
@@ -317,25 +344,10 @@ export function renderMultiRepoWorkspaceSection(
 ): string {
   const roleByFrame = new Map(involvedServices.map((s) => [s.frameId, s]))
   const primary = checkouts.find((c) => c.primary)
-  const lines = [
-    '## Multi-repo workspace',
-    '',
-    'This task spans MORE THAN ONE service. Every involved repository is checked out as a',
-    'sibling directory under your working directory (the workspace root). Make the',
-    'cross-service change coherently across the repositories that need it — each repository',
-    'you actually change is committed on its own branch and opened as a SEPARATE pull request.',
-    'Leave a repository untouched if the task does not require changing it.',
-    '',
-    'Repositories:',
-  ]
-  const describe = (checkout: RepoCheckout): string => {
-    const { owner, name } = checkout.target
-    const dir = `\`${name}/\``
-    const own =
-      checkout.primary && checkout.target.serviceDirectory
-        ? ` (this service lives in \`${checkout.target.serviceDirectory}/\`)`
-        : ''
-    const coLocated = checkout.involved
+  const hasPeers = checkouts.some((c) => !c.primary)
+
+  const involvedLines = (checkout: RepoCheckout): string =>
+    checkout.involved
       .map((inv) => {
         const role = roleByFrame.get(inv.frameId)
         const title = role?.title ?? inv.frameId
@@ -344,6 +356,53 @@ export function renderMultiRepoWorkspaceSection(
         return `    - involved: ${title}${where}${why}`
       })
       .join('\n')
+
+  // Co-located-only: one repo, many services in subdirectories. No sibling checkouts, one PR.
+  if (!hasPeers) {
+    const lines = [
+      '## Multi-service repository',
+      '',
+      'This task spans MORE THAN ONE service, but they all live in the SAME repository. Your',
+      'working directory is that repository root. Make the cross-service change coherently across',
+      'the subdirectories below and commit it yourself (stage any new files too — anything left',
+      'untracked is lost); it ships as a SINGLE pull request.',
+      '',
+      'Services in this repository:',
+    ]
+    if (primary) {
+      const { owner, name } = primary.target
+      const own = primary.target.serviceDirectory
+        ? ` — the task's own service lives in \`${primary.target.serviceDirectory}/\``
+        : ''
+      lines.push(`- \`${owner}/${name}\`${own}`)
+      const involved = involvedLines(primary)
+      if (involved) lines.push(involved)
+    }
+    return lines.join('\n')
+  }
+
+  const lines = [
+    '## Multi-repo workspace',
+    '',
+    'This task spans MORE THAN ONE repository. Each repository below is checked out as a SIBLING',
+    'directory under your working directory (the workspace root); the root itself is NOT a git',
+    'repository. Make the cross-service change coherently across the repositories that need it.',
+    "Commit your own changes INSIDE each repository's directory (stage new files too — the",
+    'platform will not add untracked files for you, so anything left untracked is lost), and run',
+    "each repository's own build/test commands inside that repository's directory. Each repository",
+    'you change is opened as a SEPARATE pull request; leave a repository untouched if the task does',
+    'not require changing it.',
+    '',
+    'Repositories:',
+  ]
+  const describe = (checkout: RepoCheckout): string => {
+    const { owner, name } = checkout.target
+    const dir = `\`${siblingCheckoutDir(owner, name)}/\``
+    const own =
+      checkout.primary && checkout.target.serviceDirectory
+        ? ` (this service lives in \`${checkout.target.serviceDirectory}/\` within it)`
+        : ''
+    const coLocated = involvedLines(checkout)
     const head = `- \`${owner}/${name}\` → ${dir}${
       checkout.primary ? " (PRIMARY — the task's own service)" : ''
     }${own}`

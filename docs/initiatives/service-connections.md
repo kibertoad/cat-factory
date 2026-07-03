@@ -138,3 +138,32 @@ harness path via a widened `peerRepos` job body — no runner-image bump. `step.
     RECORDING + round-trip (the fake reports peer PRs); the resolve→peerRepos dispatch path is
     unit-tested in `resolveRepoTarget.spec.ts` + the server job-body specs (the fake never runs
     the harness). Phase 4's CI/merge-all reads `allPullRequests(block)`.
+- **Phase 3 review-fix follow-ups (PR #752 review; the coordination + prompt fixes LANDED,
+  the items below are the deliberately-deferred remainder):**
+  - **Landed** (see the review-fixes commit): the sibling checkout dir is now deterministic
+    (`owner__name`) and computed identically in the harness (`siblingDir`, `coding-agent.ts`)
+    and the backend prompt (`siblingCheckoutDir`, `jobBody.ts`) so the prompt never names a
+    directory that doesn't exist; `renderMultiRepoWorkspaceSection` renders a distinct
+    "multi-service repository" (single-repo, one PR) shape when there are no peer checkouts
+    instead of falsely claiming siblings; the multi-repo prompt tells the agent to commit
+    INSIDE each repo dir (the workspace root is not a git repo — untracked files are lost);
+    `streamFollowUps` is no longer advertised on the multi-repo path (which never tails the
+    sentinel); resumed multi-repo legs refresh from base like the single-repo path; a run
+    whose own service was a no-op but a peer changed surfaces the peer PRs in its output; and
+    the multi-repo dispatch reuses the already-resolved primary `RepoTarget` (no second
+    installation read / ancestry walk).
+  - **Deferred — all-frame peer-PR attribution.** A shared-monorepo peer checkout can carry
+    `>1` involved frame (`RepoCheckout.involved[]`), but the peer PR is attributed to only
+    `involved[0].frameId` end-to-end (`PeerRepoSpec.frameId`, `peerPullRequestSchema.frameId`,
+    the gate `conflictTarget`, `mergeOrder`). Phase 4 keys its gates + merge-order off the
+    SINGULAR `frameId`, so widening the whole chain to `frameIds[]` (contracts → kernel →
+    harness → server → gates → mergeOrder + tests) is its own isolated change, not a rider on
+    the review fixes. Until then a monorepo hosting several involved services links its single
+    PR to just the first frame.
+  - **Deferred — `runMultiRepoCoding` ⇄ `runCodingAgent` duplication.** The multi-repo flow
+    re-implements the no-op-result object, the `hasWork`/resumed-branch detection, and the
+    involved-frame level resolution rather than sharing helpers with the single-repo path /
+    `walkToRepo`. Extract shared `noChangesResult` / `computeHasWork` / `resolveLevel` helpers
+    when Phase 4 next touches these flows. Multi-repo clone + push/PR are also still sequential
+    per repo (could be `Promise.all`), and it still lacks mid-run checkpoint pushing (the
+    documented first-cut simplification) — an evicted large multi-repo run re-runs from scratch.

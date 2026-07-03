@@ -407,21 +407,17 @@ export function safeDirSegment(value: string): string {
 }
 
 /**
- * A stateful sibling-directory allocator: returns a unique directory name per repo
- * (owner-prefixed on a name collision, then a numeric suffix as a last resort), so two repos
- * named the same never clobber each other. Shared by the coding + read-only explore multi-repo
- * fan-outs so the claim scheme can't drift between them.
+ * A sibling-directory allocator for a multi-repo run: returns the checkout directory name for a
+ * repo under the workspace root. Deterministic (`owner__name`) and collision-free by construction
+ * — the checkout set is deduped by `owner/name` upstream and GitHub owners contain no `_`, so the
+ * `owner__name` join is unique per repo without a stateful collision dance. Kept as a factory so
+ * the coding + read-only explore fan-outs share ONE scheme, and it MUST stay byte-identical to the
+ * backend's `siblingCheckoutDir` / `renderMultiRepoWorkspaceSection` in `@cat-factory/server`
+ * (jobBody.ts), which names this exact directory in the agent's prompt — the two are computed
+ * independently, so a divergent rule would point the agent at a directory that does not exist.
  */
 export function makeDirClaimer(): (repo: Pick<RepoSpec, 'name' | 'owner'>) => string {
-  const usedDirs = new Set<string>()
-  return (repo) => {
-    let seg = safeDirSegment(repo.name)
-    if (usedDirs.has(seg)) seg = safeDirSegment(`${repo.owner}-${repo.name}`)
-    let unique = seg
-    for (let i = 2; usedDirs.has(unique); i++) unique = `${seg}-${i}`
-    usedDirs.add(unique)
-    return unique
-  }
+  return (repo) => `${safeDirSegment(repo.owner)}__${safeDirSegment(repo.name)}`
 }
 
 /** One repository participating in a multi-repo run: where to clone it + what to do after. */
@@ -467,8 +463,8 @@ export async function runMultiRepoCoding(
   const peers: PeerRepoSpec[] = job.peerRepos ?? []
   const primaryWorkBranch = job.pushBranch ?? job.newBranch ?? job.branch
 
-  // Assign a unique sibling directory per repo so two repos named the same never clobber
-  // each other (shared allocator with the read-only explore fan-out).
+  // Assign the sibling directory per repo via the shared deterministic allocator (`owner__name`,
+  // matching the backend prompt's `siblingCheckoutDir`), shared with the read-only explore fan-out.
   const claimDir = makeDirClaimer()
   const legs: RepoLeg[] = [
     {
@@ -533,7 +529,29 @@ export async function runMultiRepoCoding(
         await createBranch(dir, leg.workBranch, signal)
       }
       leg.dir = dir
+      // The branch tip before the agent runs. Captured BEFORE the resume base refresh below so
+      // that refresh's merge commit counts as advancement and is pushed (as in the single-repo
+      // path). A fresh leg produced work iff its branch advances past this; a resumed leg already
+      // carries prior work.
       leg.baseSha = await headCommit(dir, signal)
+      // A resumed branch was cut from an OLDER base; merge the latest base in when the two merge
+      // cleanly so the agent works against current base and the peer/own PRs stay current. On a
+      // conflict this is a best-effort no-op (the merge gate handles a conflicting PR downstream),
+      // mirroring the single-repo {@link runCodingAgent} resume refresh.
+      if (leg.resumed) {
+        const refreshed = await refreshFromBaseIfClean(
+          dir,
+          leg.cloneBranch,
+          leg.ghToken,
+          signal,
+        ).catch(() => false)
+        if (!refreshed) {
+          logger.info('multi-repo: resume base refresh skipped (conflict or error)', {
+            repo: leg.dirName,
+            base: leg.cloneBranch,
+          })
+        }
+      }
     }
 
     // Run the agent ONCE with its cwd at the workspace root, so it sees every sibling checkout

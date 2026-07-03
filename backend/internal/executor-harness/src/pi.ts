@@ -178,13 +178,18 @@ const MULTI_REPO_GUIDANCE = `
 ## Multi-repo workspace (work across sibling checkouts)
 
 This task spans MORE THAN ONE repository. Your working directory is the WORKSPACE ROOT, and
-each involved repository is checked out as a sibling directory directly under it. The system
+each involved repository is checked out as a sibling directory directly under it. The workspace
+root itself is NOT a git repository — run git INSIDE each repository's directory. The system
 prompt above lists which repository is which and each one's role. Make the cross-service
 change coherently across every repository the task requires — a provider's API and its
 consumer's call site belong in the SAME piece of work. Run each repository's own build/test
-commands inside that repository's directory. Every repository you change is committed and
-opened as a SEPARATE pull request; leave a repository untouched if the task does not require
-changing it.`
+commands inside that repository's directory.
+
+Commit your own work inside each repository you change (\`cd\` into it, stage the files that
+belong — INCLUDING any new files you added — and commit). The platform will NOT add untracked
+files for you, so anything you leave uncommitted and untracked is lost. Each repository you
+change is opened as a SEPARATE pull request; leave a repository untouched if the task does not
+require changing it.`
 
 /** Directory in the checkout where linked-context files are materialised (see CONTEXT_DIR in agents). */
 export const CONTEXT_DIR = '.cat-context'

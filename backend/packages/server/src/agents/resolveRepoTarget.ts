@@ -157,6 +157,14 @@ export type ResolveRepoTargets = (
   workspaceId: string,
   primaryBlockId: string,
   involvedFrameIds: string[],
+  /**
+   * The task's OWN-service {@link RepoTarget}, when the caller already resolved it via the
+   * singular {@link ResolveRepoTarget} (the container executor does, to mint the push token).
+   * Passing it lets this resolver SKIP re-reading the installation and re-walking the primary
+   * block's ancestry — it reuses this as the primary checkout and only resolves the peers on
+   * top. Omit it and the primary is resolved from scratch (the ancestry walk), as before.
+   */
+  primaryTarget?: RepoTarget,
 ) => Promise<ResolvedRepoTargets>
 
 export interface ResolveRepoTargetsDependencies extends ResolveRepoTargetDependencies {
@@ -185,33 +193,46 @@ export interface ResolveRepoTargetsDependencies extends ResolveRepoTargetDepende
  */
 export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): ResolveRepoTargets {
   const { installationRepository, repoProjectionRepository, serviceRepository } = deps
-  return async (workspaceId, primaryBlockId, involvedFrameIds) => {
-    const installation = await installationRepository.getByWorkspace(workspaceId)
-    if (!installation) {
-      throw new ValidationError(
-        `Workspace '${workspaceId}' has no GitHub installation, so a multi-repo run cannot ` +
-          `resolve its repositories.`,
-      )
+  return async (workspaceId, primaryBlockId, involvedFrameIds, primaryTarget) => {
+    // The installation id: reuse the pre-resolved primary target's when provided (skips a second
+    // installation read), else read it here.
+    let installationId: number
+    if (primaryTarget) {
+      installationId = primaryTarget.installationId
+    } else {
+      const installation = await installationRepository.getByWorkspace(workspaceId)
+      if (!installation) {
+        throw new ValidationError(
+          `Workspace '${workspaceId}' has no GitHub installation, so a multi-repo run cannot ` +
+            `resolve its repositories.`,
+        )
+      }
+      installationId = installation.installationId
     }
     const repos = await repoProjectionRepository.list(workspaceId)
     const index = indexRepos(repos)
-    const installationId = installation.installationId
 
-    const primary = repos.length
-      ? await walkToRepo(deps, workspaceId, primaryBlockId, index)
-      : undefined
-    if (!primary) {
-      throw new ValidationError(
-        `Block '${primaryBlockId}' is not under a service linked to a GitHub repository ` +
-          `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
-          `targets the right repository instead of guessing one.`,
-      )
-    }
-
-    const primaryCheckout: RepoCheckout = {
-      target: toRepoTarget(installationId, primary),
-      primary: true,
-      involved: [],
+    // The primary checkout: reuse the caller's already-resolved target when given (no ancestry
+    // walk), else walk the primary block's ancestry from scratch.
+    let primaryCheckout: RepoCheckout
+    if (primaryTarget) {
+      primaryCheckout = { target: primaryTarget, primary: true, involved: [] }
+    } else {
+      const primary = repos.length
+        ? await walkToRepo(deps, workspaceId, primaryBlockId, index)
+        : undefined
+      if (!primary) {
+        throw new ValidationError(
+          `Block '${primaryBlockId}' is not under a service linked to a GitHub repository ` +
+            `(workspace '${workspaceId}'). Link the service frame to its repo so execution ` +
+            `targets the right repository instead of guessing one.`,
+        )
+      }
+      primaryCheckout = {
+        target: toRepoTarget(installationId, primary),
+        primary: true,
+        involved: [],
+      }
     }
     const checkouts: RepoCheckout[] = [primaryCheckout]
     const key = (t: Pick<RepoTarget, 'owner' | 'name'>): string => `${t.owner}/${t.name}`

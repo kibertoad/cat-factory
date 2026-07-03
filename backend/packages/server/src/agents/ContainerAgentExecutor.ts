@@ -1033,10 +1033,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
       this.agentKindRegistry.fansOutMultiRepo(context.agentKind)
     if (fansOutMultiRepo && involvedServices.length > 0 && this.deps.resolveRepoTargets) {
+      // Reuse the primary repo already resolved above (line ~889) so the plural resolver skips
+      // re-reading the installation and re-walking the primary block's ancestry — it only needs
+      // to resolve + dedupe the involved peers on top of it.
       const { checkouts } = await this.deps.resolveRepoTargets(
         workspaceId,
         blockId,
         involvedServices.map((s) => s.frameId),
+        repo,
       )
       const primaryCheckout = checkouts.find((c) => c.primary)
       const peerCheckouts = checkouts.filter((c) => !c.primary)
