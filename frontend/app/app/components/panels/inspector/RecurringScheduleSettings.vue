@@ -150,8 +150,18 @@ function fmtTime(ms: number) {
         <UIcon name="i-lucide-repeat" class="h-3.5 w-3.5" />
         {{ t('inspector.recurring.title') }}
       </span>
-      <UBadge :color="schedule.enabled ? 'primary' : 'neutral'" variant="subtle" size="xs">
-        {{ schedule.enabled ? t('inspector.recurring.active') : t('inspector.recurring.paused') }}
+      <UBadge
+        :color="schedule.onDemand ? 'primary' : schedule.enabled ? 'primary' : 'neutral'"
+        variant="subtle"
+        size="xs"
+      >
+        {{
+          schedule.onDemand
+            ? t('inspector.recurring.onDemand')
+            : schedule.enabled
+              ? t('inspector.recurring.active')
+              : t('inspector.recurring.paused')
+        }}
       </UBadge>
     </div>
 
@@ -159,7 +169,17 @@ function fmtTime(ms: number) {
       <span class="text-slate-300">{{ pipelineName }}</span>
     </p>
 
-    <template v-if="!editing">
+    <!-- On-demand: no cadence, no pause/resume — it fires only when a person triggers it. -->
+    <template v-if="schedule.onDemand">
+      <p class="text-[11px] text-slate-500">{{ t('inspector.recurring.onDemandHint') }}</p>
+      <div class="flex flex-wrap gap-1.5 pt-1">
+        <UButton size="xs" variant="soft" icon="i-lucide-play" :loading="busy" @click="runNow">
+          {{ t('inspector.recurring.runNow') }}
+        </UButton>
+      </div>
+    </template>
+
+    <template v-else-if="!editing">
       <p class="text-[11px] text-slate-400">{{ describeCadence(schedule.recurrence) }}</p>
       <p class="text-[11px] text-slate-500">
         {{ t('inspector.recurring.nextRun', { time: fmtTime(schedule.nextRunAt) }) }}

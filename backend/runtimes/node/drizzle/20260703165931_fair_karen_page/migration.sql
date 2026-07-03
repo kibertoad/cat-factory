@@ -1,0 +1,1 @@
+ALTER TABLE "pipeline_schedules" ADD COLUMN "on_demand" integer DEFAULT 0 NOT NULL;

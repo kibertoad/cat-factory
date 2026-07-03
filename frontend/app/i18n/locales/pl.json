@@ -196,7 +196,9 @@
       "linearTeamId": "ID zespołu Linear",
       "footerHint": "W usłudze dodawane jest jedno cykliczne zadanie; każde uruchomienie zastępuje poprzednie. Jego historia uruchomień jest widoczna w inspektorze.",
       "submit": "Dodaj cykliczny pipeline",
-      "addFailedTitle": "Nie udało się dodać cyklicznego pipeline’u"
+      "addFailedTitle": "Nie udało się dodać cyklicznego pipeline’u",
+      "onDemand": "Na żądanie (tylko ręcznie)",
+      "onDemandHint": "Uruchamia się tylko po ręcznym wyzwoleniu, bez harmonogramu. Ponieważ za każdym razem jesteś obecny, jego zadanie może korzystać z modelu subskrypcji do użytku indywidualnego."
     },
     "failure": {
       "containerFailedToStart": "Nie udało się uruchomić kontenera",
@@ -438,7 +440,9 @@
         "skipped": "Pominięto"
       },
       "updateFailed": "Nie udało się zaktualizować harmonogramu",
-      "runNowFailed": "Nie udało się uruchomić teraz"
+      "runNowFailed": "Nie udało się uruchomić teraz",
+      "onDemand": "Na żądanie",
+      "onDemandHint": "Tylko ręcznie. Uruchamia się po wyzwoleniu i może korzystać z modelu subskrypcji do użytku indywidualnego."
     },
     "fragments": {
       "serviceTitle": "Dobre praktyki usługi",

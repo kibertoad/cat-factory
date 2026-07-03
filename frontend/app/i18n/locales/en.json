@@ -217,7 +217,9 @@
       "linearTeamId": "Linear team id",
       "footerHint": "A single recurring task is added inside the service; each run replaces the last. Its run history is visible in the inspector.",
       "submit": "Add recurring pipeline",
-      "addFailedTitle": "Could not add recurring pipeline"
+      "addFailedTitle": "Could not add recurring pipeline",
+      "onDemand": "On-demand (manual only)",
+      "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model."
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",
@@ -481,7 +483,9 @@
         "skipped": "Skipped"
       },
       "updateFailed": "Could not update schedule",
-      "runNowFailed": "Could not run now"
+      "runNowFailed": "Could not run now",
+      "onDemand": "On-demand",
+      "onDemandHint": "Manual only. Runs when you trigger it, and may use an individual-usage subscription model."
     },
     "fragments": {
       "serviceTitle": "Service best practices",

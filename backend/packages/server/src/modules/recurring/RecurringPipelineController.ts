@@ -12,6 +12,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
 
 /** Resolve the recurring-pipeline module or send a 503, returning null when unconfigured. */
 function requireRecurring<E extends AppEnv>(c: Context<E>): RecurringModule | null {
@@ -71,11 +72,29 @@ export function recurringPipelineController(): Hono<AppEnv> {
   buildHonoRoute(app, runScheduleNowContract, async (c) => {
     const recurring = requireRecurring(c)
     if (!recurring) return unavailable(c)
-    const schedule = await recurring.service.runNow(
-      param(c, 'workspaceId'),
-      c.req.valid('param').scheduleId,
+    const container = c.get('container')
+    const workspaceId = param(c, 'workspaceId')
+    const scheduleId = c.req.valid('param').scheduleId
+
+    // A human is present for run-now, so an on-demand schedule MAY target an individual-usage
+    // model. Resolve the initiator + the per-run activation closure the same way a manual
+    // start does (throws 428 when a password is needed). A cadence schedule never reaches an
+    // individual model (the engine refuses it at create/fire), so its gate is always a no-op —
+    // but running it through the same gate keeps the initiator recorded on the run.
+    const schedule = await recurring.service.get(workspaceId, scheduleId)
+    const { initiatedBy, activate } = await personalGateForBlock(
+      container,
+      workspaceId,
+      schedule.blockId,
+      schedule.pipelineId,
+      c.get('user'),
+      readPersonalPassword(c),
     )
-    return c.json(schedule, 200)
+    const updated = await recurring.service.runNow(workspaceId, scheduleId, {
+      initiatedBy,
+      activate,
+    })
+    return c.json(updated, 200)
   })
 
   return app

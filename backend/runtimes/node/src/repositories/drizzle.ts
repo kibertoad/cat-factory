@@ -1912,6 +1912,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
     template: row.template as ScheduleTemplate,
     name: row.name,
     recurrence,
+    onDemand: row.on_demand === 1,
     enabled: row.enabled === 1,
     lastRunAt: row.last_run_at,
     nextRunAt: row.next_run_at,
@@ -1960,6 +1961,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
       window_end_hour: r.windowEndHour,
       timezone: r.timezone,
       enabled: schedule.enabled ? 1 : 0,
+      on_demand: schedule.onDemand ? 1 : 0,
       last_run_at: schedule.lastRunAt,
       next_run_at: schedule.nextRunAt,
       created_at: schedule.createdAt,
@@ -2024,7 +2026,13 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     const rows = await this.db
       .select()
       .from(pipelineSchedules)
-      .where(and(eq(pipelineSchedules.enabled, 1), lt(pipelineSchedules.next_run_at, asOf + 1)))
+      .where(
+        and(
+          eq(pipelineSchedules.enabled, 1),
+          eq(pipelineSchedules.on_demand, 0),
+          lt(pipelineSchedules.next_run_at, asOf + 1),
+        ),
+      )
       .orderBy(pipelineSchedules.next_run_at)
     return rows.map((row) => ({ workspaceId: row.workspace_id, schedule: rowToSchedule(row) }))
   }
@@ -2049,6 +2057,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
           window_end_hour: values.window_end_hour,
           timezone: values.timezone,
           enabled: values.enabled,
+          on_demand: values.on_demand,
           last_run_at: values.last_run_at,
           next_run_at: values.next_run_at,
         },
