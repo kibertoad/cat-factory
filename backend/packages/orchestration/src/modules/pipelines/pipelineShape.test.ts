@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
 import {
+  assertPipelineLaunchable,
   assertValidCompanionPlacement,
   assertValidGating,
   assertValidTesterQualityGating,
@@ -129,5 +130,38 @@ describe('validatePipelineShape', () => {
         ]),
       ).not.toThrow()
     })
+  })
+})
+
+describe('assertPipelineLaunchable', () => {
+  it('requires a recurring pipeline for a bug-intake step (unset ⇒ both ⇒ rejected)', () => {
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], 'recurring')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], 'both')).toThrow()
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], 'one-off')).toThrow()
+    // Absent availability means 'both' → a bug-intake pipeline is still rejected.
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], undefined)).toThrow()
+    // No bug-intake step → any availability is fine.
+    expect(() => assertPipelineLaunchable(['coder'], undefined)).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring')).not.toThrow()
+  })
+
+  it('gates the launch origin against the pipeline availability', () => {
+    // A manual start of a recurring-only pipeline is refused; a scheduled fire of it is fine.
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring', 'manual')).toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring', 'recurring')).not.toThrow()
+    // A scheduled fire of a one-off-only pipeline is refused; a manual start of it is fine.
+    expect(() => assertPipelineLaunchable(['coder'], 'one-off', 'recurring')).toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'one-off', 'manual')).not.toThrow()
+    // 'both' / unset runs either way.
+    expect(() => assertPipelineLaunchable(['coder'], 'both', 'manual')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'both', 'recurring')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], undefined, 'manual')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], undefined, 'recurring')).not.toThrow()
+  })
+
+  it('skips the origin gate when no origin is supplied (retry/restart re-drive)', () => {
+    // A retry re-drives stored steps with no origin — the launch gate must not fire.
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'one-off')).not.toThrow()
   })
 })

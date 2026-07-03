@@ -257,6 +257,13 @@ export const createPipelineSchema = v.object({
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   /** Free-form organizational labels for the library. Optional. */
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  /**
+   * How the pipeline may be launched: `'one-off'` / `'recurring'` / `'both'`. Omitted ⇒
+   * `'both'` (unrestricted). A pipeline carrying a `bug-intake` step must be `'recurring'`.
+   */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -276,6 +283,10 @@ export const updatePipelineSchema = v.object({
   followUps: v.optional(v.array(v.nullable(v.boolean()))),
   testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  /** Change how the pipeline may be launched (see {@link createPipelineSchema}). Optional. */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
 

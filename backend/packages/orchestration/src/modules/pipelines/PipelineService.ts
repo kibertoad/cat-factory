@@ -18,7 +18,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import { validatePipelineShape } from './pipelineShape.js'
+import { assertPipelineLaunchable, validatePipelineShape } from './pipelineShape.js'
 
 /**
  * The post-release-health gate watches a released PR's observability signals, so it is
@@ -99,6 +99,9 @@ export class PipelineService {
       gating: input.gating,
       testerQuality: input.testerQuality,
     })
+    // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
+    // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted).
+    assertPipelineLaunchable(input.agentKinds, input.availability)
     await this.assertObservabilityGatedStepAllowed(workspaceId, input.agentKinds, input.enabled)
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
@@ -112,6 +115,7 @@ export class PipelineService {
       ...alignedFollowUps(input.agentKinds, input.followUps),
       ...alignedTesterQuality(input.agentKinds, input.testerQuality),
       ...normalizedLabels(input.labels),
+      ...(input.availability ? { availability: input.availability } : {}),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -150,6 +154,10 @@ export class PipelineService {
       ...(source.followUps ? { followUps: [...source.followUps] } : {}),
       ...(source.testerQuality ? { testerQuality: [...source.testerQuality] } : {}),
       ...(source.labels ? { labels: [...source.labels] } : {}),
+      // Preserve the launch constraint: cloning the recurring-only bug-triage built-in keeps the
+      // copy recurring-only (else a manual start of the copy — bug-intake step and all — would slip
+      // the gate). A `'both'`/unset source clones to unrestricted.
+      ...(source.availability ? { availability: source.availability } : {}),
       // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
@@ -178,6 +186,7 @@ export class PipelineService {
     const followUps = input.followUps ?? existing.followUps
     const testerQuality = input.testerQuality ?? existing.testerQuality
     const labels = input.labels ?? existing.labels
+    const availability = input.availability ?? existing.availability
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
     // while leaving its companion on would orphan the companion, and adding gating (step or
@@ -186,6 +195,11 @@ export class PipelineService {
     if (input.agentKinds || input.enabled || input.gating || input.testerQuality) {
       validatePipelineShape({ agentKinds, enabled, gating, testerQuality })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
+    }
+    // Re-check the launch constraint when either the chain or the availability changes — e.g.
+    // adding a `bug-intake` step, or relaxing a recurring pipeline that carries one to `'both'`.
+    if (input.agentKinds || input.availability !== undefined) {
+      assertPipelineLaunchable(agentKinds, availability)
     }
     const pipeline: Pipeline = {
       id: existing.id,
@@ -199,6 +213,7 @@ export class PipelineService {
       ...alignedFollowUps(agentKinds, followUps),
       ...alignedTesterQuality(agentKinds, testerQuality),
       ...normalizedLabels(labels),
+      ...(availability ? { availability } : {}),
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
     }

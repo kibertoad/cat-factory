@@ -4,7 +4,7 @@ import { connectionNeighborIds } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import type { WritebackOverride } from '~/types/tracker'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
-import { pipelineAllowedForFrame } from '~/utils/pipeline'
+import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
@@ -132,11 +132,14 @@ function setModelPreset(id: string) {
 const selectedPipeline = computed(() =>
   props.block.pipelineId ? pipelines.getPipeline(props.block.pipelineId) : undefined,
 )
-// Hide UI-testing pipelines when this task's frame has no UI to exercise — they'd be refused at
-// run start (see utils/pipeline + the backend gate).
+// Hide UI-testing pipelines when this task's frame has no UI to exercise, and `'recurring'`-only
+// pipelines (the task's manual Run control can't start one) — they'd be refused at run start
+// (see utils/pipeline + the backend gate).
 const taskFrame = computed(() => board.serviceOf(props.block))
 const selectablePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => pipelineAllowedForFrame(p, taskFrame.value, board.blocks)),
+  pipelines.pipelines.filter((p) =>
+    pipelineAllowedForManualStart(p, taskFrame.value, board.blocks),
+  ),
 )
 const pipelineMenu = computed(() => [
   [

@@ -61,22 +61,41 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 
 | Item                                                                                        | Status |
 | ------------------------------------------------------------------------------------------- | ------ |
-| Contracts: `availability?: 'one-off'\|'recurring'\|'both'` on `pipelineSchema`              | todo   |
-| `ExecutionService.start` `origin` option + `assertRunnable` enforcement                     | todo   |
-| `RecurringPipelineService.create/update` reject `'one-off'`-only pipelines                  | todo   |
-| `validatePipelineShape`: field validation + `bug-intake` requires `recurring`               | todo   |
-| SPA pickers: `AddTaskModal.vue` / `RecurringPipelineModal.vue` filters + i18n (all locales) | todo   |
+| Contracts: `availability?: 'one-off'\|'recurring'\|'both'` on `pipelineSchema`              | done   |
+| `ExecutionService.start` `origin` option + `assertRunnable` enforcement                     | done   |
+| `RecurringPipelineService.create/update` reject `'one-off'`-only pipelines                  | done   |
+| `validatePipelineShape`: field validation + `bug-intake` requires `recurring`               | done   |
+| SPA pickers: `AddTaskModal.vue` / `RecurringPipelineModal.vue` filters + i18n (all locales) | done   |
+
+Implemented on branch `claude/bug-triage-phase-2-5n1wu5`. Notes for later phases:
+
+- The launch gate is a single pure function, `assertPipelineLaunchable(agentKinds, availability,
+origin?)` in `orchestration/modules/pipelines/pipelineShape.ts` — NOT folded into the shared
+  `validatePipelineShape`/`assertRunnable` path. That path is re-run on retry/restart over stored
+  steps (which carry no `availability` and no `origin`), so putting the `bug-intake`-requires-
+  `recurring` check there would falsely fail a legitimate recurring retry. Instead the gate is
+  called at the three LAUNCH boundaries only: `PipelineService.create/update/clone` (save; no
+  origin), `ExecutionService.start` (with the new `origin`), and — for the schedule-attach dual —
+  `RecurringPipelineService.create/update` via `assertSchedulable`.
+- `availability` is a first-class editable/clonable pipeline field: `create`/`update` accept it and
+  `clone` preserves it (so cloning the future recurring-only `pl_bug_triage` stays recurring-only).
+- `bug-intake` is referenced as a bare string literal (`BUG_INTAKE_AGENT_KIND` in `pipelineShape.ts`)
+  — the kind itself is registered in Phase E; the structural guard only needs the identifier.
+- SPA filters added `pipelineAllowedForManualStart` / `pipelineAllowedForSchedule` to
+  `utils/pipeline.ts` and applied them to ALL manual-start surfaces (add-task modal, board +
+  inspector Run menus, task run-settings default) and the recurring modal respectively. No new
+  user-facing strings, so no locale-catalog changes were needed this phase.
 
 ### Phase B — multi-repo coding (= service-connections Phase 3; update that tracker too)
 
-| Item                                                                                                     | Status                 |
-| -------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | in-progress (PR #752)  |
-| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | in-progress (PR #752)  |
-| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | in-progress (PR #752)  |
-| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | in-progress (PR #752)  |
-| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | in-progress (PR #752)  |
-| Conformance: two-repo coding run records both PRs on both runtimes                                       | in-progress (PR #752)  |
+| Item                                                                                                     | Status                |
+| -------------------------------------------------------------------------------------------------------- | --------------------- |
+| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | in-progress (PR #752) |
+| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | in-progress (PR #752) |
+| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | in-progress (PR #752) |
+| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | in-progress (PR #752) |
+| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | in-progress (PR #752) |
+| Conformance: two-repo coding run records both PRs on both runtimes                                       | in-progress (PR #752) |
 
 All six items are implemented in [PR #752](https://github.com/kibertoad/cat-factory/pull/752)
 (`resolveRepoTargets` in `backend/packages/server/src/agents/resolveRepoTarget.ts`,
@@ -87,7 +106,7 @@ merges — don't mark done off code sitting on an open branch. Two things to rec
 merge time: the harness image was actually bumped to **`1.34.5`**, not the `1.34.4` the PR
 description states — verify the real pin in `deploy/backend/package.json` /
 `wrangler.toml` / `runtimes/local/src/harnessImage.ts` rather than trusting the
-description text; and the PR's own conformance case only asserts the *recording* path
+description text; and the PR's own conformance case only asserts the _recording_ path
 (`peerPullRequests` round-trips through the fake executor), not a real harness dispatch
 through `runMultiRepoCoding` — that path is covered only by
 `executor-harness/test/agent.test.ts` + `resolveRepoTarget.spec.ts`, not conformance.

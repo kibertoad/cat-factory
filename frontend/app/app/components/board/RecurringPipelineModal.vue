@@ -6,7 +6,7 @@
 // pipeline is picked, the workspace issue-tracker choice is surfaced inline (it is
 // where that pipeline files its ticket) and saved alongside.
 import type { Recurrence, ScheduleTemplate } from '~/types/recurring'
-import { pipelineAllowedForFrame } from '~/utils/pipeline'
+import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -49,8 +49,9 @@ function defaultRecurrence(): Recurrence {
 }
 
 // Hide UI-testing pipelines when the frame has no UI to exercise — they'd be refused at run start.
+// Also hide `'one-off'`-only pipelines: attaching one to a schedule is refused server-side.
 const selectablePipelines = computed(() =>
-  pipelines.pipelines.filter((p) => pipelineAllowedForFrame(p, frame.value, board.blocks)),
+  pipelines.pipelines.filter((p) => pipelineAllowedForSchedule(p, frame.value, board.blocks)),
 )
 const pipelineMenu = computed(() => [
   selectablePipelines.value.map((p) => ({

@@ -28,7 +28,12 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
-import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
+import {
+  assertPipelineLaunchable,
+  validatePipelineShape,
+  type PipelineShape,
+  type RunOrigin,
+} from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
@@ -1269,6 +1274,14 @@ export class ExecutionService {
      * outside the domain Core); absent for non-individual runs.
      */
     activate?: (executionId: string) => Promise<void>,
+    /**
+     * How this run is being launched: a `'manual'` one-off task (default) or a `'recurring'`
+     * schedule fire ({@link RecurringPipelineService.fire}). Gates the pipeline's declared
+     * `availability` — a `'recurring'`-only pipeline can't be started manually and vice versa
+     * (see {@link assertPipelineLaunchable}). A retry/restart re-drives an already-validated
+     * run, so it never re-checks this.
+     */
+    origin: RunOrigin = 'manual',
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
@@ -1277,6 +1290,11 @@ export class ExecutionService {
       'Pipeline',
       pipelineId,
     )
+
+    // Launch-constraint gate (start-only, NOT part of the shared retry re-validation): reject a
+    // manual start of a recurring-only pipeline (or a scheduled fire of a one-off-only one), and
+    // a bug-intake pipeline that isn't recurring. Before any side effects.
+    assertPipelineLaunchable(pipeline.agentKinds, pipeline.availability, origin)
 
     // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
     // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry

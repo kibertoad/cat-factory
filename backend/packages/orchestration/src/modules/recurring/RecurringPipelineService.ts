@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
+  Pipeline,
   PipelineRepository,
   PipelineSchedule,
   PipelineScheduleRepository,
@@ -37,6 +38,20 @@ export interface RecurringPipelineServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+}
+
+/**
+ * A schedule can only carry a pipeline that is launchable on a recurring cadence: a
+ * `'one-off'`-only pipeline (design §2) has no schedule semantics, so reject attaching it. A
+ * `'recurring'` or `'both'` (or unset) pipeline is fine. This is the schedule-attach dual of the
+ * `origin` gate {@link ExecutionService.start} applies at fire time.
+ */
+function assertSchedulable(pipeline: Pipeline): void {
+  if (pipeline.availability === 'one-off') {
+    throw new ConflictError(
+      `Pipeline '${pipeline.name}' can only run as a one-off task; it cannot be attached to a recurring schedule.`,
+    )
+  }
 }
 
 /** Default seed descriptions for the canned recurring templates. */
@@ -129,11 +144,12 @@ export class RecurringPipelineService {
     if (frame.type === 'document') {
       throw new ConflictError('A document repository cannot host a recurring pipeline.')
     }
-    assertFound(
+    const pipeline = assertFound(
       await this.pipelineRepository.get(workspaceId, input.pipelineId),
       'Pipeline',
       input.pipelineId,
     )
+    assertSchedulable(pipeline)
 
     // The owning service (in-org sharing): the schedule + its reused block belong to the
     // frame's service, so they render on — and are listed by — every workspace that mounts it.
@@ -189,11 +205,12 @@ export class RecurringPipelineService {
     await this.requireWorkspace(workspaceId)
     const existing = assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
     if (patch.pipelineId !== undefined) {
-      assertFound(
+      const pipeline = assertFound(
         await this.pipelineRepository.get(workspaceId, patch.pipelineId),
         'Pipeline',
         patch.pipelineId,
       )
+      assertSchedulable(pipeline)
     }
     const recurrence = patch.recurrence ?? existing.recurrence
     const updated: PipelineSchedule = {
@@ -337,6 +354,12 @@ export class RecurringPipelineService {
         workspaceId,
         schedule.blockId,
         schedule.pipelineId,
+        // System-initiated: no initiator (individual-usage models are refused above) and no
+        // per-run activation. `origin: 'recurring'` gates the pipeline's launch availability —
+        // a one-off-only pipeline can never be fired from a schedule.
+        null,
+        undefined,
+        'recurring',
       )
       executionId = instance.id
     } catch (error) {

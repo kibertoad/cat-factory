@@ -2,7 +2,7 @@
 import { onKeyStroke } from '@vueuse/core'
 import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
-import { pipelineAllowedForFrame } from '~/utils/pipeline'
+import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
 
 const board = useBoardStore()
@@ -27,11 +27,12 @@ const deps = computed(() =>
   (block.value?.dependsOn ?? []).map((id) => board.getBlock(id)).filter((b): b is Block => !!b),
 )
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise (see the backend gate).
+// Hide UI-testing pipelines when this block's frame has no UI to exercise, and `'recurring'`-only
+// pipelines (a manual run of one is refused server-side) — see the backend gate.
 const runMenu = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines
-    .filter((p) => pipelineAllowedForFrame(p, frame, board.blocks))
+    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks))
     .map((p) => ({
       label: p.name,
       icon: 'i-lucide-play',
