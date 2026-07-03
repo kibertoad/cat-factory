@@ -3,6 +3,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
 import {
   EMPTY_FRAME_SIZE,
+  EPIC_NODE_SIZE,
   findFreeFramePosition,
   type Point,
   type FrameRect,
@@ -28,14 +29,22 @@ export function useFramePlacement() {
   const board = useBoardStore()
   const { viewport, setCenter, screenToFlowCoordinate } = useVueFlow(BOARD_FLOW_ID)
 
-  /** Every existing frame's rect in flow-space (its stored position + rendered size). */
-  function existingFrameRects(exclude?: string): FrameRect[] {
-    return board.frames
+  /**
+   * Every existing top-level board node's rect in flow-space — both service frames
+   * (stored position + rendered size) and epic grouping cards — so a placed frame
+   * clears epics as well as frames (both are drawn as Vue Flow nodes; see `BoardCanvas`).
+   */
+  function existingNodeRects(exclude?: string): FrameRect[] {
+    const frames = board.frames
       .filter((f) => f.id !== exclude)
       .map((f) => {
         const s = board.containerSize(f.id)
         return { x: f.position.x, y: f.position.y, w: s.w, h: s.h }
       })
+    const epics = board.epics
+      .filter((e) => e.id !== exclude)
+      .map((e) => ({ x: e.position.x, y: e.position.y, w: EPIC_NODE_SIZE.w, h: EPIC_NODE_SIZE.h }))
+    return [...frames, ...epics]
   }
 
   /**
@@ -61,7 +70,7 @@ export function useFramePlacement() {
   }): Point {
     const size = opts?.size ?? EMPTY_FRAME_SIZE
     const desired = opts?.near ?? viewportCenteredAnchor(size)
-    return findFreeFramePosition(existingFrameRects(opts?.exclude), size, desired)
+    return findFreeFramePosition(existingNodeRects(opts?.exclude), size, desired)
   }
 
   /** Pan (and, if zoomed far out, gently zoom in) the camera to centre on a frame. */

@@ -30,6 +30,14 @@ export const FRAME_GAP = 48
 export const EMPTY_FRAME_SIZE = { w: 360, h: 220 }
 
 /**
+ * Footprint of an epic grouping node in flow-space. Epics are top-level board nodes
+ * drawn alongside frames (see `BoardCanvas`), so a placed frame must clear them too.
+ * Mirrors the compact `EpicNode` card (`w-56` = 224px, ~96px tall); a slight
+ * over-estimate is harmless — it only widens the clearance around an epic.
+ */
+export const EPIC_NODE_SIZE = { w: 224, h: 96 }
+
+/**
  * Do rects `a` and `b` come within `gap` px of each other — i.e. fail to clear? Two
  * rects clear when a full `gap`-wide channel separates them on any axis; if none does,
  * they collide.
