@@ -1,5 +1,45 @@
 # @cat-factory/node-server
 
+## 0.62.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/agents@0.27.0
+  - @cat-factory/server@0.71.0
+  - @cat-factory/gitlab@0.6.0
+  - @cat-factory/consensus@0.8.20
+  - @cat-factory/gates@0.2.76
+  - @cat-factory/integrations@0.57.1
+  - @cat-factory/observability-langfuse@0.7.119
+  - @cat-factory/orchestration@0.60.3
+  - @cat-factory/provider-bedrock@0.7.125
+  - @cat-factory/provider-cloudflare@0.7.125
+  - @cat-factory/provider-s3@0.2.69
+  - @cat-factory/spend@0.10.80
+  - @cat-factory/prompt-fragments@0.9.46
+
 ## 0.61.2
 
 ### Patch Changes
