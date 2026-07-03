@@ -1,5 +1,41 @@
 # @cat-factory/orchestration
 
+## 0.66.0
+
+### Minor Changes
+
+- 1d738f7: feat(recurring): on-demand (manual-only) recurring tasks that can use individual-usage subscriptions
+
+  A recurring pipeline can now be flagged **on-demand**: it has no cadence and is never
+  fired by the sweeper — it runs ONLY when a person triggers it via "run now". Because a
+  human is present at every fire, an on-demand schedule's block MAY target an individual-usage
+  subscription model (Claude / Codex / GLM), unlocked per run-now with the initiator's personal
+  password exactly like a manual task start. A cadence schedule still refuses individual-usage
+  models (no one is present to unlock them unattended).
+
+  - New `onDemand` flag on `PipelineSchedule` + `createScheduleSchema` (recurrence is now
+    optional — an on-demand schedule needs none). Persisted as an `on_demand` column on both
+    runtimes (D1 migration `0037` ⇄ Drizzle), with `listDue` filtering `on_demand = 0` so the
+    sweeper skips them. Cross-runtime conformance asserts the flag round-trips and run-now fires.
+  - `RecurringPipelineService.fire` exempts on-demand schedules from the individual-usage
+    refusal and threads the run-now initiator + credential-activation closure into the run;
+    the run-now controller resolves the personal-credential gate (428 when a password is needed).
+  - Frontend: an "on-demand" toggle in the add-recurring modal (hides the cadence editor), an
+    on-demand inspector view (no cadence/pause, just run-now), and run-now now rides the cached
+    personal password through the credential modal. i18n in all 8 locales.
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/prompt-fragments@0.9.52
+  - @cat-factory/sandbox@0.8.97
+  - @cat-factory/spend@0.10.86
+  - @cat-factory/workspaces@0.11.4
+
 ## 0.65.0
 
 ### Minor Changes
