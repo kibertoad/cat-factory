@@ -17,7 +17,12 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
-import { assertFound, ConflictError, requireWorkspace } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  CredentialRequiredError,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import { computeNextRun } from './schedule.logic.js'
 
@@ -147,6 +152,12 @@ export class RecurringPipelineService {
       'Pipeline',
       input.pipelineId,
     )
+    // A CADENCE schedule is defined by its cadence: reject a missing one (before any block is
+    // materialised) rather than silently inventing a hidden every-24h/UTC schedule that fires
+    // at a time the user never chose. Only an on-demand schedule may omit a recurrence.
+    if (!input.onDemand && !input.recurrence) {
+      throw new ConflictError('A cadence (non-on-demand) recurring pipeline requires a recurrence.')
+    }
 
     // The owning service (in-org sharing): the schedule + its reused block belong to the
     // frame's service, so they render on — and are listed by — every workspace that mounts it.
@@ -398,6 +409,12 @@ export class RecurringPipelineService {
       )
       executionId = instance.id
     } catch (error) {
+      // A credential-required error (wrong/expired/missing personal password) is a re-promptable
+      // gate condition, NOT a failed run: let it propagate so the run-now controller returns 428
+      // and the client re-prompts + retries, exactly like a manual start. Swallowing it into a
+      // failed history row would make run-now report 200 while nothing ran. Only reachable on the
+      // run-now (`activate`) path — the sweeper supplies no `activate`, so it can't hit this.
+      if (error instanceof CredentialRequiredError) throw error
       // Record the failed fire so the history shows it, then advance the cadence.
       await this.schedules.insertRun(workspaceId, {
         id: this.idGenerator.next('schr'),
