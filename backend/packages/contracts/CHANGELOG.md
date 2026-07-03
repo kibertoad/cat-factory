@@ -1,5 +1,18 @@
 # @cat-factory/contracts
 
+## 0.90.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
 ## 0.89.0
 
 ### Minor Changes
