@@ -11,6 +11,7 @@ import type {
   ServiceInfraSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { configurePackageRegistries } from './package-registries.js'
 import { captureRedactedOutput, redactSecrets } from './redact.js'
 import {
   cloneRepo,
@@ -263,6 +264,11 @@ async function cloneServiceCheckout(
 
 /** Run one generic agent job end to end, dispatching on `mode`. */
 export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise<AgentResult> {
+  // Private-registry auth first, before any mode runs: every mode with a checkout may
+  // install dependencies (the agent's own shell and the frontend-infra stand-up both
+  // inherit `HOME`, so they all read the written ~/.npmrc). A job with no entries
+  // clears any stale ~/.npmrc from a prior job on a reused (warm-pool) container.
+  await configurePackageRegistries(job.packageRegistries)
   if (job.mode === 'preview') return runPreviewMode(job, opts)
   return job.mode === 'coding' ? runCodingMode(job, opts) : runExploreMode(job, opts)
 }

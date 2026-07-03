@@ -201,6 +201,21 @@ export interface ConformanceApp {
    * wire the store (no ENCRYPTION_KEY / API-key pool).
    */
   openRouterCatalog?(): OpenRouterCatalogProbe | undefined
+  /**
+   * The facade's per-workspace private package-registry service over its real store. The
+   * CRUD is workspace-scoped and asserted over the HTTP `call` path; this probe covers the
+   * DISPATCH half — the decrypt that puts host+token on a container job body — which no
+   * HTTP route exposes (tokens are write-only on the wire). Undefined when the facade did
+   * not wire the store (no ENCRYPTION_KEY).
+   */
+  packageRegistries?(): PackageRegistriesProbe | undefined
+}
+
+/** The dispatch-side subset of the package-registry service the conformance suite drives. */
+export interface PackageRegistriesProbe {
+  resolveForDispatch(
+    workspaceId: string,
+  ): Promise<{ ecosystem: string; host: string; scopes: string[]; token: string }[]>
 }
 
 /** One OpenRouter model's cached metadata, as stored in the dynamic catalog. */

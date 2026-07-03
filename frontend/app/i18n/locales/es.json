@@ -1438,6 +1438,7 @@
         "documents": "Documentos",
         "taskTrackers": "Rastreadores de tareas",
         "observability": "Observabilidad",
+        "development": "Desarrollo",
         "personal": "Personal (solo tú)"
       },
       "items": {
@@ -1474,6 +1475,10 @@
         "observability": {
           "label": "Salud posterior al lanzamiento",
           "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Registros privados de paquetes",
+          "description": "Tokens de npm y GitHub Packages que los agentes usan para instalar dependencias privadas."
         },
         "githubPat": {
           "label": "Mi token de GitHub",
@@ -1853,6 +1858,31 @@
       },
       "connectionNoun": "la conexión de observabilidad",
       "incidentNoun": "el proveedor de incidencias"
+    },
+    "packageRegistries": {
+      "title": "Registros privados de paquetes",
+      "intro": "Conecta los registros privados desde los que instalan tus repositorios. Los agentes los reciben al hacer checkout de un repositorio, de modo que las dependencias privadas se resuelven durante la instalación. Los tokens son de solo escritura: para cambiar uno, elimina la entrada y vuelve a agregarla.",
+      "entryNoun": "entrada de registro",
+      "list": {
+        "heading": "Registros conectados",
+        "tokenTail": "token …{tail}",
+        "remove": "Eliminar entrada"
+      },
+      "add": {
+        "heading": "Agregar un registro",
+        "vendor": "Registro",
+        "host": "El token solo se envía a {host}.",
+        "scopes": "Ámbitos de paquetes",
+        "scopesHelp": "Ámbitos de npm separados por comas",
+        "token": "Token de acceso",
+        "save": "Agregar registro"
+      },
+      "toast": {
+        "loadFailed": "No se pudieron cargar los registros de paquetes",
+        "added": "Registro agregado",
+        "addFailed": "No se pudo agregar el registro",
+        "removeFailed": "No se pudo eliminar la entrada del registro"
+      }
     },
     "localMode": {
       "title": "Modo local",

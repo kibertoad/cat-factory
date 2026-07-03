@@ -1438,6 +1438,7 @@
         "documents": "ドキュメント",
         "taskTrackers": "タスクトラッカー",
         "observability": "オブザーバビリティ",
+        "development": "開発",
         "personal": "個人（あなたのみ）"
       },
       "items": {
@@ -1474,6 +1475,10 @@
         "observability": {
           "label": "リリース後のヘルス",
           "description": "リリース後にモニターと SLO を監視します (Datadog)。"
+        },
+        "packageRegistries": {
+          "label": "プライベートパッケージレジストリ",
+          "description": "エージェントがプライベート依存関係のインストールに使う npm と GitHub Packages のトークン。"
         },
         "githubPat": {
           "label": "マイ GitHub トークン",
@@ -1975,6 +1980,31 @@
       },
       "connectionNoun": "オブザーバビリティ接続",
       "incidentNoun": "インシデントプロバイダー"
+    },
+    "packageRegistries": {
+      "title": "プライベートパッケージレジストリ",
+      "intro": "リポジトリが依存関係をインストールするプライベートレジストリを接続します。エージェントはリポジトリのチェックアウト時にこれらを受け取り、インストール時にプライベート依存関係を解決できます。トークンは書き込み専用です。変更するにはエントリを削除してから追加し直してください。",
+      "entryNoun": "レジストリエントリ",
+      "list": {
+        "heading": "接続済みのレジストリ",
+        "tokenTail": "トークン …{tail}",
+        "remove": "エントリを削除"
+      },
+      "add": {
+        "heading": "レジストリを追加",
+        "vendor": "レジストリ",
+        "host": "トークンは {host} にのみ送信されます。",
+        "scopes": "パッケージスコープ",
+        "scopesHelp": "カンマ区切りの npm スコープ",
+        "token": "アクセストークン",
+        "save": "レジストリを追加"
+      },
+      "toast": {
+        "loadFailed": "パッケージレジストリを読み込めませんでした",
+        "added": "レジストリを追加しました",
+        "addFailed": "レジストリを追加できませんでした",
+        "removeFailed": "レジストリエントリを削除できませんでした"
+      }
     },
     "localMode": {
       "title": "ローカルモード",

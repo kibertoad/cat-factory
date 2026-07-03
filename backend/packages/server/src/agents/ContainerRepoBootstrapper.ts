@@ -14,6 +14,7 @@ import type {
 } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
+import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
 
@@ -43,6 +44,13 @@ export interface ContainerRepoBootstrapperDependencies {
   githubApiBase?: string
   /** Web base for building the created repo's URL (defaults to github.com). */
   webBaseUrl?: string
+  /**
+   * Resolve the workspace's private package-registry entries for the bootstrap
+   * container (the scaffolder installs dependencies too). Same seam as
+   * `ContainerAgentExecutorDependencies.resolvePackageRegistries`; a resolution
+   * failure propagates. Absent ⇒ no registry auth is forwarded.
+   */
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
 }
 
 /** The role prompt when adapting a cloned reference architecture. */
@@ -170,6 +178,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     }
 
     const ghToken = await this.deps.mintInstallationToken(installation.installationId)
+    // Private-registry auth for the scaffolder's installs, exactly as the
+    // implementation executor forwards it.
+    const packageRegistries =
+      (await this.deps.resolvePackageRegistries?.(request.workspaceId)) ?? []
     const sessionToken = await this.deps.sessionService.mint({
       workspaceId: request.workspaceId,
       executionId: request.jobId,
@@ -227,6 +239,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       proxyBaseUrl: this.deps.proxyBaseUrl,
       sessionToken,
       ghToken,
+      ...(packageRegistries.length ? { packageRegistries } : {}),
       repo: repoSpec,
       branch: repoSpec.baseBranch,
       // Bootstrap always resets history to a single commit and force-pushes (the fresh

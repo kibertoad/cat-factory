@@ -3181,6 +3181,101 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
       })
     })
 
+    describe('private package registries (per-workspace npm/GitHub-Packages auth)', () => {
+      it('adds, lists redacted, resolves decrypted for dispatch, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        const probe = app.packageRegistries?.()
+        if (!probe) return
+        const { workspace } = await app.createWorkspace()
+        const base = `/workspaces/${workspace.id}/package-registries`
+
+        const empty = await app.call<{ entries: unknown[] }>('GET', base)
+        expect(empty.status).toBe(200)
+        expect(empty.body.entries).toEqual([])
+
+        // Add one entry per vendor. The list view is REDACTED: vendor + scopes + token
+        // tail only — the raw token must never appear on the wire.
+        const added = await app.call<{
+          entries: { id: string; vendor: string; scopes: string[]; tokenTail: string }[]
+        }>('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme'],
+          token: 'npm_secret_token_1234',
+        })
+        expect(added.status).toBe(200)
+        const listed = await app.call<{
+          entries: { id: string; vendor: string; scopes: string[]; tokenTail: string }[]
+        }>('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'github-packages',
+          scopes: ['@acme-internal', '@acme-tools'],
+          token: 'ghp_registry_secret_5678',
+        })
+        expect(listed.status).toBe(200)
+        expect(listed.body.entries).toHaveLength(2)
+        const [npmjs, ghp] = listed.body.entries
+        expect(npmjs?.vendor).toBe('npmjs')
+        expect(npmjs?.scopes).toEqual(['@acme'])
+        expect(npmjs?.tokenTail).toBe('1234')
+        expect(ghp?.vendor).toBe('github-packages')
+        expect(JSON.stringify(listed.body)).not.toContain('npm_secret_token_1234')
+        expect(JSON.stringify(listed.body)).not.toContain('ghp_registry_secret_5678')
+
+        // A second entry for an already-configured vendor is a 409: the harness renders one
+        // host-keyed `_authToken` per registry, so a duplicate would be silently dropped.
+        const dup = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme-extra'],
+          token: 'npm_second_token_9999',
+        })
+        expect(dup.status).toBe(409)
+
+        // A malformed scope is rejected at the write boundary.
+        const bad = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['not-a-scope!'],
+          token: 'x_token_x',
+        })
+        expect(bad.status).toBeGreaterThanOrEqual(400)
+
+        // The dispatch path decrypts the sealed entries and derives the vendor host —
+        // this is what rides the container job body as `packageRegistries`.
+        const dispatch = await probe.resolveForDispatch(workspace.id)
+        expect(dispatch).toEqual([
+          {
+            ecosystem: 'npm',
+            host: 'registry.npmjs.org',
+            scopes: ['@acme'],
+            token: 'npm_secret_token_1234',
+          },
+          {
+            ecosystem: 'npm',
+            host: 'npm.pkg.github.com',
+            scopes: ['@acme-internal', '@acme-tools'],
+            token: 'ghp_registry_secret_5678',
+          },
+        ])
+        // A workspace with no connection dispatches nothing (no error).
+        const other = await app.createWorkspace()
+        expect(await probe.resolveForDispatch(other.workspace.id)).toEqual([])
+
+        // Remove both entries; the second removal deletes the row outright.
+        const firstId = listed.body.entries[0]?.id as string
+        const secondId = listed.body.entries[1]?.id as string
+        expect((await app.call('DELETE', `${base}/${firstId}`)).status).toBe(204)
+        // Removing an unknown entry 404s rather than silently succeeding.
+        expect((await app.call('DELETE', `${base}/${firstId}`)).status).toBe(404)
+        expect((await app.call('DELETE', `${base}/${secondId}`)).status).toBe(204)
+        const cleared = await app.call<{ entries: unknown[] }>('GET', base)
+        expect(cleared.body.entries).toEqual([])
+        expect(await probe.resolveForDispatch(workspace.id)).toEqual([])
+      })
+    })
+
     describe('repo bootstrap', () => {
       it('round-trips reference architectures', async () => {
         const { call, createWorkspace } = harness.makeApp()

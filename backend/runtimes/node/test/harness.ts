@@ -354,5 +354,12 @@ export function makeConformanceApp(
         describe: (kind) => svc.describe(kind as UserSecretKind),
       }
     },
+    packageRegistries: () => {
+      const svc = container.packageRegistries?.service
+      if (!svc) return undefined
+      return {
+        resolveForDispatch: (workspaceId: string) => svc.resolveForDispatch(workspaceId),
+      }
+    },
   }
 }
