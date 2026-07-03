@@ -484,12 +484,15 @@ export function selectInitiativePipeline(
  * Reconcile ONE item from its spawned block's current state. Only actively-spawned items
  * (`in_progress`/`pr_open`) are touched — a settled/blocked/un-spawned item is left alone,
  * which is what makes reconcile idempotent across durable-driver replays (the first pass
- * already moved a finished item out of the active set). A missing block (claimed but not
- * yet inserted, or since removed) leaves the item untouched.
+ * already moved a finished item out of the active set). An active item whose block is GONE is
+ * an orphaned claim (a prior tick crashed between the CAS claim and the block insert, or the
+ * block was deleted out from under us): it is reverted to `pending` with its dead link dropped,
+ * so the next spawn re-materialises it. Leaving it `in_progress` would hold a concurrency slot
+ * forever and the phase/initiative could never complete.
  */
 export function reconcileItem(item: InitiativeItem, block: Block | undefined): InitiativeItem {
   if (!INITIATIVE_ITEM_ACTIVE_STATUSES.has(item.status)) return item
-  if (!block) return item
+  if (!block) return { ...item, status: 'pending', blockId: null }
   const pr = block.pullRequest
     ? {
         url: block.pullRequest.url,

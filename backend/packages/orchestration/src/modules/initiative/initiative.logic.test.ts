@@ -546,11 +546,14 @@ describe('reconcileItem', () => {
     expect(out.note).toBeTruthy()
   })
 
-  it('leaves a settled item and a missing block untouched (replay-safe)', () => {
+  it('leaves a settled item untouched but reverts an orphaned active item to pending', () => {
+    // A settled/non-active item is never touched, even with no block (replay-safe).
     expect(reconcileItem(item({ id: 'a', status: 'done' }), undefined)).toMatchObject({
       status: 'done',
     })
-    expect(reconcileItem(spawned, undefined)).toBe(spawned)
+    // An ACTIVE item whose block vanished (crash between claim and insert, or a deleted block)
+    // reverts to `pending` so the next spawn re-materialises it — it must not hold a slot forever.
+    expect(reconcileItem(spawned, undefined)).toMatchObject({ status: 'pending', blockId: null })
   })
 })
 

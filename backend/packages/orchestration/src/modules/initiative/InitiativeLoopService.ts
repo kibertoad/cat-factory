@@ -64,8 +64,9 @@ type SpawnOutcome =
  * pokes {@link pokeForInitiativeBlock} so the loop advances immediately instead of waiting for
  * the next sweep. Each per-initiative {@link tick}:
  *
- *   1. RECONCILE — reads the spawned task blocks (one list read, indexed — no N+1) and folds
- *      each block's status back onto its item (done + PR link / pr_open / blocked + deviation).
+ *   1. RECONCILE — batch-reads ONLY the spawned task blocks (one chunked `findByIds`, indexed —
+ *      no N+1, no full-workspace scan) and folds each block's status back onto its item (done +
+ *      PR link / pr_open / blocked + deviation).
  *   2. COMPLETE — when every item is settled, flip the initiative + its anchor block `done`,
  *      re-commit the tracker, and notify.
  *   3. SPAWN — creates task blocks for the eligible `pending` items (current phase, deps met,
@@ -132,11 +133,11 @@ export class InitiativeLoopService {
       // Re-read the freshest entity (the seed may be stale — from listExecuting or a poke).
       let initiative = await this.deps.initiativeRepository.getByBlock(workspaceId, seed.blockId)
       if (!initiative || initiative.status !== 'executing') return { spawned: 0, completed: false }
+      const startRev = initiative.rev
 
-      // 1. Reconcile spawned tasks from their blocks (one list read, indexed — no N+1).
-      const blocksById = new Map(
-        (await this.deps.blockRepository.listByWorkspace(workspaceId)).map((b) => [b.id, b]),
-      )
+      // 1. Reconcile spawned tasks from their blocks — a single batched point-read of ONLY the
+      //    spawned task blocks (chunked `IN` via `findByIds`, not a full-workspace scan), indexed.
+      const blocksById = await this.readSpawnedBlocks(workspaceId, initiative)
       initiative = (await this.reconcile(workspaceId, initiative, blocksById)) ?? initiative
 
       // 2. Complete when every item is settled.
@@ -148,13 +149,34 @@ export class InitiativeLoopService {
       // 3. Spawn eligible items up to the effective concurrency cap.
       const spawned = await this.spawn(workspaceId, initiative)
 
-      // 4. Best-effort mirror the tracker (never before a DB CAS wins; hash-short-circuited).
-      await this.recommitTracker(workspaceId, initiative.blockId).catch(() => {})
+      // 4. Best-effort mirror the tracker — ONLY when this tick actually mutated the entity (a
+      //    reconcile folded a status, or a spawn/claim/block landed → the persisted `rev` moved).
+      //    An idle tick (spawned tasks still running, nothing to fold) skips it entirely, so an
+      //    executing initiative waiting on in-flight PRs doesn't hit GitHub every sweep. Never
+      //    before a DB CAS wins; hash-short-circuited even when it does run.
+      await this.recommitTracker(workspaceId, initiative.blockId, startRev).catch(() => {})
 
       return { spawned, completed: false }
     } finally {
       this.ticking.delete(key)
     }
+  }
+
+  /**
+   * Batch-read ONLY the blocks the initiative's items were spawned as (a single chunked `IN`
+   * via {@link BlockRepository.findByIds}), indexed by id for the reconcile lookup — never a
+   * full-workspace block scan. Empty when no item carries a block link yet.
+   */
+  private async readSpawnedBlocks(
+    workspaceId: string,
+    initiative: Initiative,
+  ): Promise<Map<string, Block>> {
+    const ids = (initiative.items ?? []).map((i) => i.blockId).filter((id): id is string => !!id)
+    if (ids.length === 0) return new Map()
+    const found = await this.deps.blockRepository.findByIds(ids)
+    return new Map(
+      found.filter((r) => r.workspaceId === workspaceId).map((r) => [r.block.id, r.block]),
+    )
   }
 
   // ---- Reconcile ----------------------------------------------------------
@@ -327,7 +349,6 @@ export class InitiativeLoopService {
         entity.blockId,
         item.id,
         `Could not start the task: ${message}`,
-        spawnedBlockId,
       )
       return { outcome: 'skipped', entity: blocked ?? claimed }
     }
@@ -371,7 +392,6 @@ export class InitiativeLoopService {
     initiativeBlockId: string,
     itemId: string,
     note: string,
-    ownedBlockId?: string,
   ): Promise<Initiative | null> {
     const updated = await this.deps.initiativeService.update(
       workspaceId,
@@ -392,20 +412,25 @@ export class InitiativeLoopService {
         return { ...current, items, deviations }
       },
     )
-    void ownedBlockId
     if (updated) await this.notify(workspaceId, updated, 'item_blocked')
     return updated
   }
 
   // ---- Tracker mirror + notifications -------------------------------------
 
-  private async recommitTracker(workspaceId: string, initiativeBlockId: string): Promise<void> {
+  private async recommitTracker(
+    workspaceId: string,
+    initiativeBlockId: string,
+    sinceRev?: number,
+  ): Promise<void> {
     if (!this.deps.resolveRunRepoContext) return
     const initiative = await this.deps.initiativeRepository.getByBlock(
       workspaceId,
       initiativeBlockId,
     )
     if (!initiative) return
+    // Nothing changed this tick (the persisted rev never moved) ⇒ skip the repo round-trip.
+    if (sinceRev !== undefined && initiative.rev === sinceRev) return
     const runRepo = await this.deps.resolveRunRepoContext(workspaceId, initiativeBlockId)
     if (!runRepo) return
     const doc = await commitInitiativeTracker(
