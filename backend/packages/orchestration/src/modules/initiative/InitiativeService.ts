@@ -13,7 +13,15 @@ import { ConflictError, ValidationError, assertFound, requireWorkspace } from '@
 import { parseInitiativePlanDraft } from '@cat-factory/contracts'
 import { initiativeContentView } from '@cat-factory/agents'
 import { gridSlot } from '../board/board.logic.js'
-import { applyPlanDraft, initiativeSlug, validatePlanDraft } from './initiative.logic.js'
+import {
+  applyAnalysis,
+  applyInterviewAnswer,
+  applyInterviewOutcome,
+  applyInterviewQuestions,
+  applyPlanDraft,
+  initiativeSlug,
+  validatePlanDraft,
+} from './initiative.logic.js'
 
 export interface InitiativeServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -167,6 +175,53 @@ export class InitiativeService {
           : current.status,
       ...(doc ? { doc: { ...doc, committedAt: this.deps.clock.now() } } : {}),
     }))
+  }
+
+  // ---- Interactive planning interview (slice 2) ---------------------------
+  // Each write goes through the CAS `mutate` (single-writer, replay-safe) and emits the
+  // live `initiative` event so an open planning window refreshes. The interviewer LLM +
+  // the park/resume orchestration live in InitiativeInterviewService / the controller;
+  // these are the entity writes they drive.
+
+  /** Append a fresh round of pending interview questions (parks the interview `awaiting`). */
+  async recordInterviewQuestions(
+    workspaceId: string,
+    blockId: string,
+    questions: string[],
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      applyInterviewQuestions(current, questions, () => this.deps.idGenerator.next('iqa')),
+    )
+  }
+
+  /** Record the human's answer to one pending question (no run resume; the controller does that). */
+  async recordInterviewAnswer(
+    workspaceId: string,
+    blockId: string,
+    questionId: string,
+    answer: string,
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      applyInterviewAnswer(current, questionId, answer),
+    )
+  }
+
+  /** Converge the interview: fold the synthesized goal/constraints/non-goals brief onto the entity. */
+  async recordInterviewOutcome(
+    workspaceId: string,
+    blockId: string,
+    outcome: { goal: string; constraints: string[]; nonGoals: string[] },
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) => applyInterviewOutcome(current, outcome))
+  }
+
+  /** Fold the analyst step's codebase-analysis prose onto the entity. */
+  async recordAnalysis(
+    workspaceId: string,
+    blockId: string,
+    summary: string,
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) => applyAnalysis(current, summary))
   }
 
   /**

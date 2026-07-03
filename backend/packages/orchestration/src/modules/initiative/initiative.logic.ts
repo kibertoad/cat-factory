@@ -4,9 +4,14 @@ import type {
   InitiativeItem,
   InitiativePhase,
   InitiativePlanDraft,
+  InitiativeQa,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
-import { INITIATIVE_ITEM_TERMINAL_STATUSES } from '@cat-factory/contracts'
+import {
+  INITIATIVE_ITEM_TERMINAL_STATUSES,
+  INITIATIVE_PROSE_MAX,
+  INITIATIVE_SHORT_MAX,
+} from '@cat-factory/contracts'
 
 // Pure initiative computations — no IO, no ports — reused by the InitiativeService,
 // the execution engine's runnable guard, and (later slices) the execution loop.
@@ -227,4 +232,136 @@ export function initiativeProgress(initiative: Initiative): { done: number; tota
     done: items.filter((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status)).length,
     total: items.length,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive planning interview (slice 2) — pure state transitions over the entity's
+// `qa` + `interview` fields. The interviewer LLM (InitiativeInterviewService) decides WHAT
+// to ask / synthesize; these apply the decision to the entity, and the InitiativeService
+// wraps each in a CAS `mutate` so answering/continuing is a single-writer, replay-safe write.
+// ---------------------------------------------------------------------------
+
+/** How many interviewer passes may run before the loop is force-converged. */
+export const INITIATIVE_MAX_INTERVIEW_ROUNDS = 4
+/** Upper bound on questions the interviewer may ask in one round (keeps the gate answerable). */
+export const INITIATIVE_MAX_INTERVIEW_QUESTIONS = 8
+
+const clampShort = (s: string): string => s.trim().slice(0, INITIATIVE_SHORT_MAX)
+
+/** The interviewer LLM's decision: ask more questions, or converge with a synthesized brief. */
+export type InterviewOutput =
+  | { kind: 'questions'; questions: string[] }
+  | { kind: 'done'; goal: string; constraints: string[]; nonGoals: string[] }
+
+/**
+ * Leniently coerce the interviewer's JSON into an {@link InterviewOutput}. `finalize` forces
+ * convergence (the human proceeded, or the round cap was hit) regardless of what the model
+ * returned. Empty/absent questions also mean convergence — nothing left to ask.
+ */
+export function coerceInterviewOutput(parsed: unknown, opts: { finalize: boolean }): InterviewOutput {
+  const obj = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<
+    string,
+    unknown
+  >
+  const questions = Array.isArray(obj.questions)
+    ? obj.questions
+        .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+        .map(clampShort)
+        .slice(0, INITIATIVE_MAX_INTERVIEW_QUESTIONS)
+    : []
+  const strList = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map(clampShort)
+      : []
+  const done = opts.finalize || obj.done === true || questions.length === 0
+  if (done) {
+    return {
+      kind: 'done',
+      goal: typeof obj.goal === 'string' ? clampShort(obj.goal) : '',
+      constraints: strList(obj.constraints),
+      nonGoals: strList(obj.nonGoals),
+    }
+  }
+  return { kind: 'questions', questions }
+}
+
+/** Only the answered exchanges — the digest that survives onto the tracker. */
+function answeredQa(initiative: Initiative): InitiativeQa[] {
+  return (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
+}
+
+/**
+ * Append a fresh round of pending questions: keep the answered digest, drop any prior-round
+ * questions the human skipped, and add the new ones with stable ids. Bumps the interview
+ * round and parks it `awaiting`.
+ */
+export function applyInterviewQuestions(
+  initiative: Initiative,
+  questions: string[],
+  nextId: () => string,
+): Initiative {
+  const pending: InitiativeQa[] = questions.map((question) => ({
+    id: nextId(),
+    question: clampShort(question),
+    answer: '',
+  }))
+  return {
+    ...initiative,
+    qa: [...answeredQa(initiative), ...pending],
+    interview: {
+      round: (initiative.interview?.round ?? 0) + 1,
+      maxRounds: initiative.interview?.maxRounds ?? INITIATIVE_MAX_INTERVIEW_ROUNDS,
+      status: 'awaiting',
+    },
+  }
+}
+
+/** Record the human's answer to one pending question (matched by id). No-op if unknown. */
+export function applyInterviewAnswer(
+  initiative: Initiative,
+  questionId: string,
+  answer: string,
+): Initiative {
+  return {
+    ...initiative,
+    qa: (initiative.qa ?? []).map((q) =>
+      q.id === questionId ? { ...q, answer: clampShort(answer) } : q,
+    ),
+  }
+}
+
+/**
+ * Converge the interview: keep only the answered digest, fold the synthesized brief onto the
+ * entity (goal/constraints/nonGoals — a blank synthesized goal keeps the existing one), and
+ * mark the interview `done`. The initiative's own `status` stays `planning` (the planner
+ * ingest flips it to `awaiting_approval` later).
+ */
+export function applyInterviewOutcome(
+  initiative: Initiative,
+  outcome: { goal: string; constraints: string[]; nonGoals: string[] },
+): Initiative {
+  return {
+    ...initiative,
+    qa: answeredQa(initiative),
+    goal: outcome.goal.trim() || initiative.goal || '',
+    constraints: outcome.constraints,
+    nonGoals: outcome.nonGoals,
+    interview: {
+      round: initiative.interview?.round ?? 1,
+      maxRounds: initiative.interview?.maxRounds ?? INITIATIVE_MAX_INTERVIEW_ROUNDS,
+      status: 'done',
+    },
+  }
+}
+
+/** Whether the interviewer must force-converge on the next pass (the round cap was reached). */
+export function interviewAtCap(initiative: Initiative): boolean {
+  const state = initiative.interview
+  if (!state) return false
+  return state.round >= state.maxRounds
+}
+
+/** Fold the analyst's codebase-analysis prose onto the entity. */
+export function applyAnalysis(initiative: Initiative, summary: string): Initiative {
+  return { ...initiative, analysisSummary: summary.trim().slice(0, INITIATIVE_PROSE_MAX) }
 }

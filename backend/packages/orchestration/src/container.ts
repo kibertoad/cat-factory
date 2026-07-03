@@ -189,6 +189,7 @@ import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefault
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
 import { InitiativeService } from './modules/initiative/InitiativeService.js'
+import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
@@ -2219,6 +2220,27 @@ export function createCore(dependencies: CoreDependencies): Core {
         }),
       }
     : undefined
+  // The interactive-planning interviewer's inline LLM (slice 2). Resolves its model exactly
+  // like the requirements reviewer — the routing default, honouring a block pin and the
+  // workspace's model preset for the `initiative-interviewer` kind — so it needs no dedicated
+  // facade wiring. `enabled` gates it: with no model provider the interviewer gate passes
+  // through and planning runs off the raw block description.
+  const initiativeInterviewService = new InitiativeInterviewService({
+    modelProviderResolver: dependencies.modelProviderResolver,
+    modelProvider: dependencies.modelProvider,
+    modelRef: dependencies.requirementReviewModel ?? dependencies.documentPlannerModel,
+    resolveBlockModel: dependencies.requirementReviewResolveModel,
+    ...(dependencies.inlineHarnessRef ? { runsInline: dependencies.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            dependencies.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
   const requirements = createRequirementsModule(
@@ -2269,6 +2291,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
     initiativeService: initiatives?.service,
+    initiativeInterviewService,
     notificationService: notifications?.service,
     workspaceSettingsService: settings?.service,
     llmObservability,

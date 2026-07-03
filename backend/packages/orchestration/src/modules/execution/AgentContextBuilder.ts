@@ -11,6 +11,7 @@ import type {
   DocumentSourceKind,
   ExecutionInstance,
   FrontendConfig,
+  InitiativeRepository,
   PipelineStep,
   RequirementReviewRepository,
   TaskRecord,
@@ -126,6 +127,13 @@ export interface AgentContextBuilderDeps {
   requirementReviews?: RequirementReviewRepository
   clarityReviews?: ClarityReviewRepository
   brainstormSessions?: BrainstormSessionRepository
+  /**
+   * Optional: the initiative store. When wired, an `initiative`-level run's context carries the
+   * planning entity (the interviewer's synthesized goal/constraints + Q&A digest and the
+   * analyst's codebase analysis), so the analyst and planner prompts are grounded in the prior
+   * steps' findings. Absent → the initiative steps run off the raw block description alone.
+   */
+  initiatives?: InitiativeRepository
   environmentProvisioning?: EnvironmentProvisioningService
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
@@ -195,6 +203,9 @@ export class AgentContextBuilder {
     const environment = await this.resolveEnvironment(workspaceId, block.id)
     const service = await this.resolveServiceConfig(workspaceId, block)
     const frontend = await this.resolveFrontendConfig(workspaceId, block)
+    // An initiative-level run (the planning pipeline) carries the interview + analysis
+    // context so the analyst/planner prompts fold in the human's intent and prior findings.
+    const initiative = await this.resolveInitiativeContext(workspaceId, block)
     const agentConfig = block.agentConfig
     // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
     // replace the description) as a synthetic prior output so the architect and downstream
@@ -268,6 +279,7 @@ export class AgentContextBuilder {
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
+      ...(initiative ? { initiative } : {}),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -282,6 +294,31 @@ export class AgentContextBuilder {
       // human's gate feedback share one revision shape; the companion path takes
       // precedence when both are present.
       ...buildRevisionContext(step),
+    }
+  }
+
+  /**
+   * The planning context for an `initiative`-level run: the interviewer's synthesized
+   * goal / constraints / non-goals + the answered Q&A digest, and the analyst's codebase
+   * analysis. Returns undefined for non-initiative blocks, when no initiative store is wired,
+   * or when the block has no initiative entity yet.
+   */
+  private async resolveInitiativeContext(
+    workspaceId: string,
+    block: Block,
+  ): Promise<AgentRunContext['initiative']> {
+    if (block.level !== 'initiative' || !this.deps.initiatives) return undefined
+    const initiative = await this.deps.initiatives.getByBlock(workspaceId, block.id)
+    if (!initiative) return undefined
+    const qa = (initiative.qa ?? [])
+      .filter((q) => q.answer?.trim())
+      .map((q) => ({ question: q.question, answer: q.answer }))
+    return {
+      ...(initiative.goal ? { goal: initiative.goal } : {}),
+      ...(initiative.constraints?.length ? { constraints: initiative.constraints } : {}),
+      ...(initiative.nonGoals?.length ? { nonGoals: initiative.nonGoals } : {}),
+      ...(qa.length ? { qa } : {}),
+      ...(initiative.analysisSummary ? { analysisSummary: initiative.analysisSummary } : {}),
     }
   }
 

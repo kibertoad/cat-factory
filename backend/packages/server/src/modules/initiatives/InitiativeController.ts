@@ -1,8 +1,11 @@
 import {
+  answerInitiativeQuestionContract,
+  continueInitiativePlanningContract,
   createInitiativeContract,
   getInitiativeByBlockContract,
   getInitiativeContract,
   listInitiativesContract,
+  proceedInitiativePlanningContract,
 } from '@cat-factory/contracts'
 import type { InitiativesModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -55,6 +58,36 @@ export function initiativeController(): Hono<AppEnv> {
     if (!initiatives) return unavailable(c)
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.getByBlock(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  // ---- Interactive planning (slice 2) --------------------------------------
+  // Drive the parked interviewer gate from the planning Q&A window. `answer` records one
+  // answer (no run resume); `continue`/`proceed` resume the parked run, running the (slow)
+  // interviewer LLM in the durable driver. All go through `executionService.initiativeInterview`
+  // (undefined when no initiative store is wired → 503), and return the updated initiative.
+  const requirePlanning = <E extends AppEnv>(c: Context<E>) =>
+    c.get('container').executionService.initiativeInterview ?? null
+
+  buildHonoRoute(app, answerInitiativeQuestionContract, async (c) => {
+    const planning = requirePlanning(c)
+    if (!planning) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    const { questionId, answer } = c.req.valid('json')
+    return c.json(await planning.answer(param(c, 'workspaceId'), blockId, questionId, answer), 200)
+  })
+
+  buildHonoRoute(app, continueInitiativePlanningContract, async (c) => {
+    const planning = requirePlanning(c)
+    if (!planning) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    return c.json(await planning.continue(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  buildHonoRoute(app, proceedInitiativePlanningContract, async (c) => {
+    const planning = requirePlanning(c)
+    if (!planning) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    return c.json(await planning.proceed(param(c, 'workspaceId'), blockId), 200)
   })
 
   return app
