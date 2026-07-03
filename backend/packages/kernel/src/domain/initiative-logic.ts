@@ -3,6 +3,17 @@
 // and the facades — mirroring `gate-logic.ts` so no package has to depend on
 // another just for the kind strings.
 
+/**
+ * The interactive-planning INTERVIEWER — an inline LLM (no container) that interviews
+ * the human on goals/scope/constraints and parks the run on a durable decision-wait until
+ * they answer. Runs FIRST in the planning pipeline, before the codebase analyst.
+ */
+export const INITIATIVE_INTERVIEWER_AGENT_KIND = 'initiative-interviewer'
+/**
+ * The codebase ANALYST — a container-explore agent that reads the repo and returns a prose
+ * analysis grounding the plan. Runs after the interviewer, before the planner.
+ */
+export const INITIATIVE_ANALYST_AGENT_KIND = 'initiative-analyst'
 /** The Initiative Planning pipeline's plan-authoring container agent. */
 export const INITIATIVE_PLANNER_AGENT_KIND = 'initiative-planner'
 /** The LLM-less step that persists the approved plan + commits the tracker. */
@@ -10,6 +21,8 @@ export const INITIATIVE_COMMITTER_AGENT_KIND = 'initiative-committer'
 
 /** Every agent kind that may ONLY run against an `initiative`-level block. */
 export const INITIATIVE_AGENT_KINDS: ReadonlySet<string> = new Set([
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+  INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
 ])

@@ -79,6 +79,8 @@ export {
 // Pure initiative vocabulary (agent-kind constants + pipeline-shape predicates),
 // shared by the agents package and the execution engine's runnable guard.
 export {
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+  INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
   INITIATIVE_AGENT_KINDS,

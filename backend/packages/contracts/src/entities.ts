@@ -1436,6 +1436,15 @@ export const pipelineStepSchema = v.object({
     v.nullable(v.object({ itemIds: v.array(v.string()), note: v.optional(v.string()) })),
   ),
   /**
+   * Transient interview intent carried on a parked `initiative-interviewer` gate step. Set
+   * when the human has answered the planning questions and asked to continue (or proceed):
+   * the run is signalled to wake and the durable driver, on re-entering the gate, runs the
+   * interviewer LLM again against the answers — asking follow-ups (re-park) or synthesizing
+   * the goal/constraints brief and advancing. `proceed` skips any remaining questions.
+   * Cleared once that async re-entry completes. Absent when no continuation is pending.
+   */
+  pendingInterview: v.optional(v.nullable(v.object({ proceed: v.optional(v.boolean()) }))),
+  /**
    * Consensus configuration for this step, copied from the pipeline's `consensus`
    * array at run start. Present (with `enabled: true`) when this step should run
    * through the multi-model consensus mechanism; read by the consensus executor
