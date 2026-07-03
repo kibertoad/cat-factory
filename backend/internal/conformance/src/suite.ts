@@ -1146,7 +1146,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         ])
         expect(allPullRequests(task)).toEqual([
           { ref: task.pullRequest },
-          { repo: 'acme/email', frameId: 'blk_email', ref: task.peerPullRequests![0].ref },
+          { repo: 'acme/email', frameId: 'blk_email', ref: task.peerPullRequests![0]!.ref },
         ])
       })
 

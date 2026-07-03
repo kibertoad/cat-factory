@@ -6,6 +6,7 @@ export {
   type ContainerAgentExecutorDependencies,
   type RepoTarget,
   type ResolveRepoTarget,
+  type ResolveRepoTargets,
   type MintInstallationToken,
   type ResolveRunnerTransport,
 } from '@cat-factory/server'
