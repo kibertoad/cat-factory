@@ -438,4 +438,50 @@ describe('board store deferred delete + undo', () => {
     expect(store.getBlock('t1')?.id).toBe('t1')
     expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
   })
+
+  it('does not reattach a failed deferred delete onto a different workspace', async () => {
+    const { store } = setup(() => Promise.reject(new Error('boom')))
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('f1')
+    // The user switches workspace during the undo window; when the delete then fails, the
+    // ws1 subtree must NOT be injected onto the ws2 board now on screen.
+    useWorkspaceStore().workspaceId = 'ws2'
+    await vi.runAllTimersAsync()
+    expect(store.getBlock('f1')).toBeUndefined()
+    expect(store.getBlock('t1')).toBeUndefined()
+  })
+
+  it('runs onCommit with the captured workspace only when the window elapses', async () => {
+    const { store } = setup(async () => {})
+    const onCommit = vi.fn(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1', { onCommit })
+    await vi.runAllTimersAsync()
+    expect(onCommit).toHaveBeenCalledWith('ws1')
+  })
+
+  it('skips onCommit (the irreversible side effect) when the delete is undone', async () => {
+    const { store, actions } = setup(async () => {})
+    const onCommit = vi.fn(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1', { onCommit })
+    actions[0]!.onClick() // undo before the window elapses
+    await vi.runAllTimersAsync()
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('undo re-adds pruned edges without clobbering ones gained during the window', () => {
+    const { store, actions } = setup(async () => {})
+    store.hydrate([
+      frame('f1'),
+      task('t1', 'f1'),
+      task('t2', 'f1', { dependsOn: ['t1'] }),
+      task('t3', 'f1'),
+    ])
+    store.removeBlock('t1')
+    // A live event adds a new dependency to the survivor mid-window (t1's edge was pruned).
+    store.upsert(task('t2', 'f1', { dependsOn: ['t3'] }))
+    actions[0]!.onClick() // undo restores t1 and its edge, keeping the newly-added t3 edge
+    expect(store.getBlock('t2')?.dependsOn.slice().sort()).toEqual(['t1', 't3'])
+  })
 })

@@ -304,10 +304,14 @@ export const useExecutionStore = defineStore('execution', () => {
     }
   }
 
-  /** Cancel the execution running against a block and reset it to planned. */
-  async function cancel(blockId: string) {
+  /**
+   * Cancel the execution running against a block and reset it to planned. `workspaceId`
+   * defaults to the current workspace but can be pinned by callers that cancel a run for a
+   * board the user may have since navigated away from (e.g. a deferred delete's commit).
+   */
+  async function cancel(blockId: string, workspaceId?: string) {
     const ws = useWorkspaceStore()
-    await api.cancelExecution(ws.requireId(), blockId)
+    await api.cancelExecution(workspaceId ?? ws.requireId(), blockId)
     instances.value = instances.value.filter((e) => e.blockId !== blockId)
     await ws.refresh()
   }

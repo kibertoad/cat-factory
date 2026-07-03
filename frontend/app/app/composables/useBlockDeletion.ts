@@ -67,8 +67,11 @@ export function useBlockDeletion() {
       void recurring.remove(schedule.id)
       return true
     }
-    execution.cancel(block.id)
-    void board.removeBlock(block.id)
+    // Cancelling the run is irreversible, so defer it into the delete's commit: it fires only
+    // once the (deferred) delete actually lands, so an undo within the window leaves a running
+    // pipeline intact rather than restoring a block whose run was already torn down. Target the
+    // workspace the block was deleted from in case the user switched mid-window.
+    void board.removeBlock(block.id, { onCommit: (wsId) => execution.cancel(block.id, wsId) })
     return true
   }
 

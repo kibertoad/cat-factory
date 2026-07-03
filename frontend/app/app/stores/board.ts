@@ -361,11 +361,18 @@ export const useBoardStore = defineStore('board', () => {
   /** Re-insert a detached subtree and restore its broken edges (delete rollback). */
   function reattach(snap: RemovalSnapshot) {
     for (const b of snap.removed) if (!getBlock(b.id)) blocks.value.push(b)
+    const restored = new Set(snap.removed.map((b) => b.id))
     for (const e of snap.edges) {
       const b = getBlock(e.id)
-      if (b) {
-        b.dependsOn = e.dependsOn
-        b.epicId = e.epicId
+      if (!b) continue
+      // Re-establish only the links that pointed at a now-restored block, merged with
+      // whatever the survivor gained meanwhile — so a delayed undo (the delete is deferred by
+      // a window during which a live event may add edges) doesn't clobber a newer dependency /
+      // epic / initiative link with the stale detach-time snapshot.
+      const readd = e.dependsOn.filter((d) => restored.has(d) && !b.dependsOn.includes(d))
+      if (readd.length) b.dependsOn = [...b.dependsOn, ...readd]
+      if (b.epicId == null && e.epicId != null && restored.has(e.epicId)) b.epicId = e.epicId
+      if (b.initiativeId == null && e.initiativeId != null && restored.has(e.initiativeId)) {
         b.initiativeId = e.initiativeId
       }
     }
@@ -379,7 +386,10 @@ export const useBoardStore = defineStore('board', () => {
    * hydrate/upsert in the meantime (see {@link applyPendingRemovals}). If the deferred
    * call ultimately fails we put the subtree back and surface an error toast.
    */
-  function removeBlock(id: string) {
+  function removeBlock(
+    id: string,
+    opts: { onCommit?: (wsId: string) => void | Promise<void> } = {},
+  ) {
     const block = getBlock(id)
     const snap = detach(id)
     if (!block || !snap) return
@@ -392,11 +402,21 @@ export const useBoardStore = defineStore('board', () => {
       const pending = pendingRemovals.get(id)
       if (!pending) return
       pendingRemovals.delete(id)
-      for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
       try {
-        await api.removeBlock(wsId, id)
+        // Any irreversible side effect the delete implies (e.g. cancelling the block's run)
+        // is deferred to here so it fires only once the delete truly commits — undo within
+        // the window then leaves the run untouched instead of restoring an already-cancelled one.
+        await opts.onCommit?.(pending.wsId)
+        await api.removeBlock(pending.wsId, id)
+        // Stop filtering the subtree only after the server has actually dropped it, so a
+        // snapshot that raced the in-flight delete can't briefly resurrect it.
+        for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
       } catch (e) {
-        reattach(pending.snap)
+        for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
+        // Only restore into the board the block was deleted from; a mid-window workspace
+        // switch must not inject the old subtree onto the workspace now on screen (it
+        // re-hydrates from the server there on the next refresh anyway).
+        if (useWorkspaceStore().workspaceId === pending.wsId) reattach(pending.snap)
         toast.add({
           title: tr('board.toast.deleteFailed'),
           description: e instanceof Error ? e.message : String(e),
