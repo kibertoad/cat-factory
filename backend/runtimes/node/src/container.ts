@@ -2375,9 +2375,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
   // The sub-helpers above (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly
   // over the absent `db`, so re-source the context-builder run-path repos from the remote registry —
-  // the connection/provider surfaces they also build stay db-direct (off the run path; a later
-  // integration slice remotes them). Routing is orthogonal to the allow-list: an un-allow-listed
-  // remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
+  // plus (below) the environment CONNECTION management surface. The document/task connection/provider
+  // surfaces they also build stay db-direct (a later integration slice remotes them — their
+  // credential rows would ship DECRYPTED over the RPC, an open secrets design point, unlike the
+  // sealed-blob environment connection here). Routing is orthogonal to the allow-list: an
+  // un-allow-listed remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
   if (remoteRepos) {
     dependencies.documentRepository =
       remoteRepos.documentRepository as CoreDependencies['documentRepository']
@@ -2393,6 +2395,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
     dependencies.environmentConnectionRepository =
       remoteRepos.environmentConnectionRepository as CoreDependencies['environmentConnectionRepository']
+    // The environments management panel also reads/edits the workspace's custom-manifest-type
+    // catalog (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`), built directly
+    // over the absent `db` by `selectNodeEnvironmentsDeps`. Route it from the remote registry too so
+    // the connection + infra-handler management surface is functional (no secrets — just manifest
+    // metadata; the RPC allow-list gates its CRUD). Provisioning WRITES stay db-direct/off (a later
+    // secrets-delegation slice), like the environment registry above.
+    dependencies.customManifestTypeRepository =
+      remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
   }
 
   return {
