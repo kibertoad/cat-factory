@@ -4157,6 +4157,26 @@
       "hint": "Continue lets the planner ask follow-ups; Proceed plans with the answers so far.",
       "proceed": "Proceed to plan",
       "continue": "Continue"
+    },
+    "followUpStatus": {
+      "open": "Open",
+      "promoted": "Promoted",
+      "dismissed": "Dismissed"
+    },
+    "curation": {
+      "promote": "Promote to item",
+      "promoteConfirm": "Create item",
+      "dismiss": "Dismiss",
+      "retry": "Retry",
+      "skip": "Skip",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "phaseField": "Phase",
+      "itemTitlePlaceholder": "Item title (defaults to the follow-up's)",
+      "maxConcurrentField": "Max concurrent tasks",
+      "defaultPipelineField": "Default pipeline",
+      "failed": "Could not update the initiative"
     }
   }
 }

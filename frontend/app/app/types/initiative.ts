@@ -15,4 +15,7 @@ export type {
   InitiativePipelineRule,
   InitiativeQa,
   InitiativeStatus,
+  PromoteInitiativeFollowUpInput,
+  UpdateInitiativeItemInput,
+  UpdateInitiativePolicyInput,
 } from '@cat-factory/contracts'
