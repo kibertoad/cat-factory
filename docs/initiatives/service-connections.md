@@ -44,12 +44,12 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
 
 | Item                                                                                                 | Status |
 | ---------------------------------------------------------------------------------------------------- | ------ |
-| `supersedePriorEnvironment` keyed per `(blockId, frameId)` (BLOCKER for fan-out)                     | todo   |
-| `runDeployerStep` fan-out: one deploy job per involved frame, provider-first, per-frame step state   | todo   |
-| `deployerProvisionArgs` gains `peerEnvUrls` inputs (beside `frontendOrigins`)                        | todo   |
-| `AgentContextBuilder` resolves `involvedServices` (title/description/envUrl), read-time stale filter | todo   |
-| `testerInfraSpec` gains `peerEnvironments` map; harness `AgentInfraSpec` extension (image bump)      | todo   |
-| Conformance: multi-env provisioning + peer-URL resolution on both runtimes                           | todo   |
+| `supersedePriorEnvironment` keyed per `(blockId, frameId)` (BLOCKER for fan-out)                     | done   |
+| `runDeployerStep` fan-out: one deploy job per involved frame, provider-first, per-frame step state   | done   |
+| `deployerProvisionArgs` gains `peerEnvUrls` inputs (beside `frontendOrigins`)                        | done   |
+| `AgentContextBuilder` resolves `involvedServices` (title/description/envUrl), read-time stale filter | done   |
+| `testerInfraSpec` gains `peerEnvironments` map; harness `AgentInfraSpec` extension (image bump)      | done   |
+| Conformance: multi-env provisioning + peer-URL resolution on both runtimes                           | done   |
 
 ### Phase 3 — multi-repo coding (design in the doc, §Phase 3)
 

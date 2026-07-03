@@ -21,6 +21,7 @@ import { roleSystemPrompt } from './prompts/roles.js'
 import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
 import {
   environmentSection,
+  involvedServicesSection,
   linkedContextSection,
   phaseForKind,
   renderStandardUserPrompt,
@@ -185,6 +186,8 @@ function buildBaseUserPrompt(
   if (linked) lines.push(linked)
   const envSection = environmentSection(context)
   if (envSection) lines.push(envSection)
+  const involvedSection = involvedServicesSection(context)
+  if (involvedSection) lines.push(involvedSection)
   const approachSection = testApproachSection(context)
   if (approachSection) lines.push(approachSection)
   const targetSection = e2eTargetSection(context)

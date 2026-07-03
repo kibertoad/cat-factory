@@ -229,6 +229,22 @@ export interface AgentRunContext {
     bindings: { envVar: string; serviceUrl?: string }[]
   }
   /**
+   * The connected services "directly involved" in this task beyond its own (see the service
+   * connections initiative) — resolved by the engine from the task's `involvedServiceIds`,
+   * read-time stale-filtered to ids that still resolve to a connected service frame. Each carries
+   * the frame's title, the connection `description` prose (folded into the agent prompt to explain
+   * the relationship), and — when the involved service has a LIVE ephemeral env provisioned in
+   * this run — its URL. The Tester turns these into its `peerEnvironments` infra map so a
+   * cross-service integration test can reach the peer's real environment. Absent when the task
+   * names no (still-valid) involved services.
+   */
+  involvedServices?: {
+    frameId: string
+    title: string
+    description?: string
+    envUrl?: string
+  }[]
+  /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.
    */

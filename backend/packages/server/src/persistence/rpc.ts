@@ -331,6 +331,15 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // (and decrypting a remotely-sealed env cipher, which needs the mothership's key) is a later slice.
   environmentRegistryRepository: {
     getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    // The per-`(block, service frame)` discovery read. `AgentContextBuilder.resolveEnvironment`
+    // (and `RunDispatcher.attachEnvironmentProjection`) resolve the OWN service frame's env by
+    // frame on EVERY container-agent dispatch, so this is on the run path exactly like `getByBlock`
+    // — omit it and every such build throws `unknown_method`.
+    getByBlockAndFrame: { scope: { kind: 'workspace', arg: 0 } },
+    // The frame-less (manual / human-test) fallback behind `readRegistryRecord` — on the same
+    // container-agent run path as `getByBlockAndFrame` (the own-frame env resolution falls back to
+    // it), so omit it and every such build throws `unknown_method`.
+    getFramelessByBlock: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     // The workspace-scoped batch read behind `EnvironmentProvisioningService.listHandles`
     // (the environments list endpoint + the frontend UI-test gate's single indexed env read,

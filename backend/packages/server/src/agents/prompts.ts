@@ -464,6 +464,21 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
   const provisioning = context.service?.provisioning
   const type = provisioning?.type
   const envUrl = context.environment?.url
+  // The involved connected services with a LIVE ephemeral env this run (title → URL), so a
+  // cross-service integration test can reach a peer's real environment. Keyed by title (the
+  // human-facing service name the test refers to). Two involved services can share a title, so a
+  // collision is disambiguated with the frame id rather than silently dropping a peer's URL.
+  // Absent when no involved peer is live.
+  const peerEnvironments: Record<string, string> = {}
+  for (const involved of context.involvedServices ?? []) {
+    if (!involved.envUrl) continue
+    const key =
+      peerEnvironments[involved.title] !== undefined
+        ? `${involved.title} (${involved.frameId})`
+        : involved.title
+    peerEnvironments[key] = involved.envUrl
+  }
+  const peers = Object.keys(peerEnvironments).length ? { peerEnvironments } : {}
   // Prefer a provisioned environment whenever one exists: a `kubernetes`/`custom` service is
   // provisioned by a workspace handler, and a `deployer` step can provision an env for any
   // service. Either way the Tester targets that URL rather than standing nothing up locally.
@@ -471,6 +486,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     return {
       environment: 'ephemeral',
       ...(envUrl ? { environmentUrl: envUrl } : {}),
+      ...peers,
     }
   }
   return {
@@ -479,6 +495,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     ...(type === 'docker-compose' && provisioning?.composePath
       ? { composePath: provisioning.composePath }
       : {}),
+    ...peers,
   }
 }
 

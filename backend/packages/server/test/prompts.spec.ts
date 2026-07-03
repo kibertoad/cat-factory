@@ -153,6 +153,42 @@ describe('testerInfraSpec', () => {
     expect(spec).toEqual({ environment: 'ephemeral', environmentUrl: 'https://env-1.example' })
   })
 
+  it('maps involved peers with a live env into `peerEnvironments` keyed by title', () => {
+    const spec = testerInfraSpec(
+      context({
+        service: { provisioning: { type: 'kubernetes' } },
+        environment: { url: 'https://env.example' },
+        involvedServices: [
+          { frameId: 'f_email', title: 'Email', envUrl: 'https://email.env' },
+          // A peer with no live env this run contributes nothing.
+          { frameId: 'f_db', title: 'DB' },
+        ],
+      } as Record<string, unknown>),
+    )
+    expect(spec).toEqual({
+      environment: 'ephemeral',
+      environmentUrl: 'https://env.example',
+      peerEnvironments: { Email: 'https://email.env' },
+    })
+  })
+
+  it('disambiguates two involved peers that share a title instead of dropping one', () => {
+    const spec = testerInfraSpec(
+      context({
+        environment: { url: 'https://env.example' },
+        involvedServices: [
+          { frameId: 'f_a', title: 'Email', envUrl: 'https://a.env' },
+          { frameId: 'f_b', title: 'Email', envUrl: 'https://b.env' },
+        ],
+      } as Record<string, unknown>),
+    )
+    // Both URLs survive — the collision is disambiguated with the frame id, not silently overwritten.
+    expect(spec.peerEnvironments).toEqual({
+      Email: 'https://a.env',
+      'Email (f_b)': 'https://b.env',
+    })
+  })
+
   it('builds the frontend infra spec when the frame is a frontend (service under test + mocks)', () => {
     const spec = testerInfraSpec(
       context({

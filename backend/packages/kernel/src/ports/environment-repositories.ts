@@ -204,6 +204,27 @@ export interface EnvironmentRegistryRepository {
   get(workspaceId: string, id: string): Promise<EnvironmentRecord | null>
   /** The live environment provisioned for a board block — the discovery key. */
   getByBlock(workspaceId: string, blockId: string): Promise<EnvironmentRecord | null>
+  /**
+   * The live environment provisioned for a (block, service frame) PAIR. A single task can
+   * provision several environments — its own service frame's plus one per involved-service frame
+   * (the connections initiative) — all sharing the task `block_id` but keyed by distinct
+   * `frame_id`. This is the per-frame discovery key that keeps those N envs from clobbering one
+   * another (supersede) and lets the engine resolve a specific frame's env unambiguously (where
+   * {@link getByBlock} would return an arbitrary newest among them).
+   */
+  getByBlockAndFrame(
+    workspaceId: string,
+    blockId: string,
+    frameId: string,
+  ): Promise<EnvironmentRecord | null>
+  /**
+   * The live FRAME-LESS environment on a block — the newest row with `frame_id IS NULL` (a manual /
+   * human-test provision carries no service frame). The per-frame supersede/read fallback needs
+   * this specifically: {@link getByBlock} returns the newest across ALL frames, so a newer
+   * fan-out peer env under the same task `block_id` would otherwise shadow (read) or clobber
+   * (supersede) the block's frame-less manual env.
+   */
+  getFramelessByBlock(workspaceId: string, blockId: string): Promise<EnvironmentRecord | null>
   /** Every live environment in the workspace. */
   listByWorkspace(workspaceId: string): Promise<EnvironmentRecord[]>
   /** Live environments whose TTL has elapsed (all workspaces), for the cron sweep. */

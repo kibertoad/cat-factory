@@ -363,6 +363,13 @@ export interface ServiceInfraSpec {
   composePath?: string
   /** Ephemeral mode: the provisioned environment URL (echoed for context only). */
   environmentUrl?: string
+  /**
+   * The connected services "directly involved" in this task that have a LIVE ephemeral env this
+   * run (service title → URL), so a cross-service integration test can reach a peer's real
+   * environment. Echoed for context only (surfaced in the agent's prompt); the harness stands
+   * nothing up for it. Absent when no involved peer is live.
+   */
+  peerEnvironments?: Record<string, string>
 }
 
 /**
@@ -698,7 +705,21 @@ function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
     ...(typeof o.environmentUrl === 'string' && o.environmentUrl
       ? { environmentUrl: o.environmentUrl }
       : {}),
+    ...(() => {
+      const peers = parseStringMap(o.peerEnvironments)
+      return peers ? { peerEnvironments: peers } : {}
+    })(),
   }
+}
+
+/** Parse a `Record<string, string>` from untrusted input, keeping only string→non-empty-string. */
+function parseStringMap(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const out: Record<string, string> = {}
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof val === 'string' && val) out[key] = val
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 /**
