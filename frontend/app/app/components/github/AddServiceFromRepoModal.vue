@@ -28,6 +28,7 @@ const ui = useUiStore()
 const github = useGitHubStore()
 const board = useBoardStore()
 const toast = useToast()
+const { freeFramePosition, focusFrame } = useFramePlacement()
 
 const open = computed({
   get: () => ui.addServiceOpen,
@@ -218,9 +219,14 @@ async function add() {
       directory: isMonorepo.value ? selectedDirectory.value : undefined,
       isMonorepo: isMonorepo.value,
       type: selectedType.value,
+      // Place the imported frame in free space (centred in view) instead of the
+      // backend's default stagger, so it never overlaps an existing service.
+      position: freeFramePosition(),
     })
     // Refresh the projection so the new repo↔block link is reflected locally.
     await github.load()
+    // Centre the camera on the newly imported service.
+    await focusFrame(block.id)
     configuredBlockId.value = block.id
     configuredDirectory.value = isMonorepo.value ? selectedDirectory.value : undefined
     toast.add({

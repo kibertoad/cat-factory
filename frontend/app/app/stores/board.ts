@@ -90,13 +90,19 @@ export const useBoardStore = defineStore('board', () => {
    */
   async function addServiceFromRepo(
     repoGithubId: number,
-    opts?: { directory?: string; isMonorepo?: boolean; type?: FrameRepoType },
+    opts?: {
+      directory?: string
+      isMonorepo?: boolean
+      type?: FrameRepoType
+      position?: { x: number; y: number }
+    },
   ): Promise<Block> {
     const block = await api.addServiceFromRepo(useWorkspaceStore().requireId(), {
       repoGithubId,
       ...(opts?.directory ? { directory: opts.directory } : {}),
       ...(opts?.isMonorepo !== undefined ? { isMonorepo: opts.isMonorepo } : {}),
       ...(opts?.type ? { type: opts.type } : {}),
+      ...(opts?.position ? { position: opts.position } : {}),
     })
     upsert(block)
     return block

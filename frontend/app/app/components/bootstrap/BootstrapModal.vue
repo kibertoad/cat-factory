@@ -13,7 +13,9 @@ const ui = useUiStore()
 const bootstrap = useBootstrapStore()
 const agentRuns = useAgentRunsStore()
 const github = useGitHubStore()
+const board = useBoardStore()
 const toast = useToast()
+const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
@@ -242,6 +244,16 @@ async function launch() {
       instructions.value = ''
       // Reset the repo role too, so a later bootstrap doesn't silently inherit this one's type.
       selectedType.value = 'service'
+      // The provisional frame arrived (bootstrap() refreshed the board). Re-home it to
+      // free space so it never overlaps an existing service — the backend places it on a
+      // fixed diagonal stagger that can land on top of a large neighbour — then centre the
+      // camera on it. Best-effort: a placement hiccup must not derail the launch.
+      if (job.blockId && board.getBlock(job.blockId)) {
+        const id = job.blockId
+        const position = freeFramePosition({ size: board.containerSize(id), exclude: id })
+        await board.moveBlock(id, position)
+        await focusFrame(id)
+      }
       // The run is now tracked on the board, so get out of the way: close the
       // dialog as soon as bootstrapping has actually started.
       ui.closeBootstrap()
