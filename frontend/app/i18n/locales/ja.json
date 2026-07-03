@@ -196,7 +196,9 @@
       "linearTeamId": "Linear チーム ID",
       "footerHint": "サービス内に繰り返しタスクが 1 つ追加され、各実行が前回を置き換えます。実行履歴はインスペクターで確認できます。",
       "submit": "繰り返しパイプラインを追加",
-      "addFailedTitle": "繰り返しパイプラインを追加できませんでした"
+      "addFailedTitle": "繰り返しパイプラインを追加できませんでした",
+      "onDemand": "オンデマンド（手動のみ）",
+      "onDemandHint": "スケジュールはなく、手動で実行したときのみ動作します。毎回ユーザーが立ち会うため、タスクは個人利用のサブスクリプションモデルを使用できます。"
     },
     "failure": {
       "containerFailedToStart": "コンテナの起動に失敗しました",
@@ -438,7 +440,9 @@
         "skipped": "スキップ"
       },
       "updateFailed": "スケジュールを更新できませんでした",
-      "runNowFailed": "今すぐ実行できませんでした"
+      "runNowFailed": "今すぐ実行できませんでした",
+      "onDemand": "オンデマンド",
+      "onDemandHint": "手動のみ。実行したときに動作し、個人利用のサブスクリプションモデルを使用できます。"
     },
     "fragments": {
       "serviceTitle": "サービスのベストプラクティス",

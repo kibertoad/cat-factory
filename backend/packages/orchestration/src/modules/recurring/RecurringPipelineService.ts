@@ -8,6 +8,7 @@ import type {
   PipelineRepository,
   PipelineSchedule,
   PipelineScheduleRepository,
+  Recurrence,
   ScheduleRun,
   ScheduleTemplate,
   ServiceRepository,
@@ -16,7 +17,12 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
-import { assertFound, ConflictError, requireWorkspace } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  CredentialRequiredError,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import { computeNextRun } from './schedule.logic.js'
 
@@ -37,6 +43,18 @@ export interface RecurringPipelineServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+}
+
+/**
+ * The nominal recurrence stored for an on-demand schedule (it never drives a fire, but the
+ * `recurrence` column is non-null). Also the fallback when a scheduled-create omits one.
+ */
+const DEFAULT_RECURRENCE: Recurrence = {
+  intervalHours: 24,
+  weekdays: [],
+  windowStartHour: null,
+  windowEndHour: null,
+  timezone: 'UTC',
 }
 
 /** Default seed descriptions for the canned recurring templates. */
@@ -134,6 +152,12 @@ export class RecurringPipelineService {
       'Pipeline',
       input.pipelineId,
     )
+    // A CADENCE schedule is defined by its cadence: reject a missing one (before any block is
+    // materialised) rather than silently inventing a hidden every-24h/UTC schedule that fires
+    // at a time the user never chose. Only an on-demand schedule may omit a recurrence.
+    if (!input.onDemand && !input.recurrence) {
+      throw new ConflictError('A cadence (non-on-demand) recurring pipeline requires a recurrence.')
+    }
 
     // The owning service (in-org sharing): the schedule + its reused block belong to the
     // frame's service, so they render on — and are listed by — every workspace that mounts it.
@@ -162,6 +186,9 @@ export class RecurringPipelineService {
     }
     await this.blockRepository.insert(workspaceId, block, serviceId)
 
+    // An on-demand schedule carries a nominal (ignored) recurrence — it never auto-fires — so
+    // the client need not send one. A scheduled one falls back to the same default if omitted.
+    const recurrence = input.recurrence ?? DEFAULT_RECURRENCE
     const schedule: PipelineSchedule = {
       id: this.idGenerator.next('sch'),
       serviceId,
@@ -170,15 +197,23 @@ export class RecurringPipelineService {
       pipelineId: input.pipelineId,
       template: input.template,
       name: input.name,
-      recurrence: input.recurrence,
+      recurrence,
+      onDemand: input.onDemand,
       enabled: input.enabled,
       lastRunAt: null,
-      // First fire is one interval out, rolled into the allowed window.
-      nextRunAt: computeNextRun(now, input.recurrence),
+      // First fire is one interval out, rolled into the allowed window. Stored even for an
+      // on-demand schedule (the `onDemand` flag, not this value, keeps it out of `listDue`).
+      nextRunAt: computeNextRun(now, recurrence),
       createdAt: now,
     }
     await this.schedules.upsert(workspaceId, schedule)
     return schedule
+  }
+
+  /** A single schedule by id (or throw NotFound). Used by the controller's run-now gate. */
+  async get(workspaceId: string, id: string): Promise<PipelineSchedule> {
+    await this.requireWorkspace(workspaceId)
+    return assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
   }
 
   async update(
@@ -239,11 +274,26 @@ export class RecurringPipelineService {
     )
   }
 
-  /** Fire a schedule immediately (ignoring its cadence), if its block is free. */
-  async runNow(workspaceId: string, id: string): Promise<PipelineSchedule> {
+  /**
+   * Fire a schedule immediately (ignoring its cadence), if its block is free. A human is
+   * present, so `initiatedBy` + `activate` (the server-supplied personal-credential gate)
+   * are threaded into the run — letting an on-demand schedule use an individual-usage model.
+   */
+  async runNow(
+    workspaceId: string,
+    id: string,
+    gate: {
+      initiatedBy?: string | null
+      activate?: (executionId: string) => Promise<void>
+    } = {},
+  ): Promise<PipelineSchedule> {
     await this.requireWorkspace(workspaceId)
     const schedule = assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
-    await this.fire(workspaceId, schedule, { force: true })
+    await this.fire(workspaceId, schedule, {
+      force: true,
+      initiatedBy: gate.initiatedBy,
+      activate: gate.activate,
+    })
     return assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
   }
 
@@ -273,45 +323,59 @@ export class RecurringPipelineService {
   private async fire(
     workspaceId: string,
     schedule: PipelineSchedule,
-    opts: { now?: number; force?: boolean } = {},
+    opts: {
+      now?: number
+      force?: boolean
+      initiatedBy?: string | null
+      activate?: (executionId: string) => Promise<void>
+    } = {},
   ): Promise<boolean> {
     const now = opts.now ?? this.clock.now()
 
+    // An on-demand schedule never fires unattended — only via `runNow` (force). Guard the
+    // sweeper path defensively (it already skips them via `listDue`), so an on-demand
+    // schedule can never be auto-started without an initiator present to unlock it.
+    if (schedule.onDemand && !opts.force) return false
+
     // Individual-usage subscriptions (Claude) require their owner to be present to unlock
-    // them per run, so they can never run on an unattended schedule. Refuse to fire and
-    // record a clear failure (the user must switch the block to an API-key or pooled
-    // coding-plan model) rather than starting a run that would fault at dispatch. Resolve
-    // the vendor set with the SAME precedence dispatch uses (block pin → workspace per-kind
+    // them per run, so they can never run on an unattended (cadence) schedule. Refuse to fire
+    // and record a clear failure (the user must switch the block to an API-key or pooled
+    // coding-plan model) rather than starting a run that would fault at dispatch. Resolve the
+    // vendor set with the SAME precedence dispatch uses (block pin → workspace per-kind
     // default), via the engine, so a block with no pin but an individual-usage workspace
-    // default is caught here too — not just an explicitly pinned one.
-    const scheduledBlock = await this.blockRepository.get(workspaceId, schedule.blockId)
-    const individualVendor = scheduledBlock
-      ? ((
-          await this.executionService.individualVendorsForBlock(
-            workspaceId,
-            schedule.blockId,
-            schedule.pipelineId,
+    // default is caught here too — not just an explicitly pinned one. An ON-DEMAND schedule is
+    // exempt: a human triggers it, so the run-now controller unlocks the credential per run
+    // (its `activate` closure) exactly like a manual start.
+    if (!schedule.onDemand) {
+      const scheduledBlock = await this.blockRepository.get(workspaceId, schedule.blockId)
+      const individualVendor = scheduledBlock
+        ? ((
+            await this.executionService.individualVendorsForBlock(
+              workspaceId,
+              schedule.blockId,
+              schedule.pipelineId,
+            )
+          )[0] ?? null)
+        : null
+      if (individualVendor) {
+        if (opts.force) {
+          throw new ConflictError(
+            `This recurring pipeline targets an individual-usage ${individualVendor} model, which ` +
+              `cannot run on a cadence schedule. Make it on-demand, or pick an API-key or coding-plan model.`,
           )
-        )[0] ?? null)
-      : null
-    if (individualVendor) {
-      if (opts.force) {
-        throw new ConflictError(
-          `This recurring pipeline targets an individual-usage ${individualVendor} model, which ` +
-            `cannot run on a schedule. Pick an API-key or coding-plan model.`,
-        )
+        }
+        await this.schedules.insertRun(workspaceId, {
+          id: this.idGenerator.next('schr'),
+          scheduleId: schedule.id,
+          executionId: null,
+          status: 'failed',
+          startedAt: now,
+          finishedAt: now,
+          outcome: `Individual-usage ${individualVendor} models cannot run on a recurring schedule.`,
+        })
+        await this.advanceCadence(workspaceId, schedule, now)
+        return false
       }
-      await this.schedules.insertRun(workspaceId, {
-        id: this.idGenerator.next('schr'),
-        scheduleId: schedule.id,
-        executionId: null,
-        status: 'failed',
-        startedAt: now,
-        finishedAt: now,
-        outcome: `Individual-usage ${individualVendor} models cannot run on a recurring schedule.`,
-      })
-      await this.advanceCadence(workspaceId, schedule, now)
-      return false
     }
 
     const prior = await this.executionRepository.getByBlock(workspaceId, schedule.blockId)
@@ -337,9 +401,20 @@ export class RecurringPipelineService {
         workspaceId,
         schedule.blockId,
         schedule.pipelineId,
+        // Present for a run-now (the acting user); null for a sweeper fire. Records the
+        // initiator + mints the per-run personal-credential activation for an on-demand
+        // schedule's individual-usage model.
+        opts.initiatedBy,
+        opts.activate,
       )
       executionId = instance.id
     } catch (error) {
+      // A credential-required error (wrong/expired/missing personal password) is a re-promptable
+      // gate condition, NOT a failed run: let it propagate so the run-now controller returns 428
+      // and the client re-prompts + retries, exactly like a manual start. Swallowing it into a
+      // failed history row would make run-now report 200 while nothing ran. Only reachable on the
+      // run-now (`activate`) path — the sweeper supplies no `activate`, so it can't hit this.
+      if (error instanceof CredentialRequiredError) throw error
       // Record the failed fire so the history shows it, then advance the cadence.
       await this.schedules.insertRun(workspaceId, {
         id: this.idGenerator.next('schr'),

@@ -69,14 +69,14 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 
 ### Phase B — multi-repo coding (= service-connections Phase 3; update that tracker too)
 
-| Item                                                                                                     | Status                 |
-| -------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | in-progress (PR #752)  |
-| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | in-progress (PR #752)  |
-| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | in-progress (PR #752)  |
-| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | in-progress (PR #752)  |
-| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | in-progress (PR #752)  |
-| Conformance: two-repo coding run records both PRs on both runtimes                                       | in-progress (PR #752)  |
+| Item                                                                                                     | Status                |
+| -------------------------------------------------------------------------------------------------------- | --------------------- |
+| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | in-progress (PR #752) |
+| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | in-progress (PR #752) |
+| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | in-progress (PR #752) |
+| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | in-progress (PR #752) |
+| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | in-progress (PR #752) |
+| Conformance: two-repo coding run records both PRs on both runtimes                                       | in-progress (PR #752) |
 
 All six items are implemented in [PR #752](https://github.com/kibertoad/cat-factory/pull/752)
 (`resolveRepoTargets` in `backend/packages/server/src/agents/resolveRepoTarget.ts`,
@@ -87,7 +87,7 @@ merges — don't mark done off code sitting on an open branch. Two things to rec
 merge time: the harness image was actually bumped to **`1.34.5`**, not the `1.34.4` the PR
 description states — verify the real pin in `deploy/backend/package.json` /
 `wrangler.toml` / `runtimes/local/src/harnessImage.ts` rather than trusting the
-description text; and the PR's own conformance case only asserts the *recording* path
+description text; and the PR's own conformance case only asserts the _recording_ path
 (`peerPullRequests` round-trips through the fake executor), not a real harness dispatch
 through `runMultiRepoCoding` — that path is covered only by
 `executor-harness/test/agent.test.ts` + `resolveRepoTarget.spec.ts`, not conformance.

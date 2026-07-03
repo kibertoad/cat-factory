@@ -196,7 +196,9 @@
       "linearTeamId": "ID del equipo de Linear",
       "footerHint": "Se añade una única tarea recurrente dentro del servicio; cada ejecución reemplaza a la anterior. Su historial de ejecuciones es visible en el inspector.",
       "submit": "Añadir pipeline recurrente",
-      "addFailedTitle": "No se pudo añadir la pipeline recurrente"
+      "addFailedTitle": "No se pudo añadir la pipeline recurrente",
+      "onDemand": "Bajo demanda (solo manual)",
+      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual."
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
@@ -438,7 +440,9 @@
         "skipped": "Omitida"
       },
       "updateFailed": "No se pudo actualizar la programación",
-      "runNowFailed": "No se pudo ejecutar ahora"
+      "runNowFailed": "No se pudo ejecutar ahora",
+      "onDemand": "Bajo demanda",
+      "onDemandHint": "Solo manual. Se ejecuta cuando lo activas y puede usar un modelo de suscripción de uso individual."
     },
     "fragments": {
       "serviceTitle": "Buenas prácticas del servicio",
