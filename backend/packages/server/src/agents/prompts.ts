@@ -206,11 +206,78 @@ export function blueprintUserPrompt(): string {
 }
 
 /**
+ * Render the planning context an initiative-level run carries (slice 2): the interviewer's
+ * synthesized goal / constraints / non-goals + the Q&A digest, and the analyst's codebase
+ * analysis. Folded into the analyst and planner prompts so each is grounded in the human's
+ * intent and the prior step's findings. Returns [] when no initiative context is present
+ * (e.g. the interviewer/analyst passed through with no model wired).
+ */
+function initiativeContextLines(
+  context: AgentRunContext,
+  opts: { includeAnalysis: boolean },
+): string[] {
+  const init = context.initiative
+  if (!init) return []
+  const lines: string[] = []
+  if (init.goal?.trim()) lines.push('', '## Agreed goal', '', init.goal.trim())
+  if (init.constraints?.length) {
+    lines.push('', '## Constraints', '', ...init.constraints.map((c) => `- ${c}`))
+  }
+  if (init.nonGoals?.length) {
+    lines.push('', '## Non-goals', '', ...init.nonGoals.map((c) => `- ${c}`))
+  }
+  const qa = (init.qa ?? []).filter((q) => q.answer?.trim())
+  if (qa.length) {
+    lines.push('', '## Planning interview', '')
+    for (const { question, answer } of qa) lines.push(`- Q: ${question}`, `  A: ${answer}`)
+  }
+  if (opts.includeAnalysis && init.analysisSummary?.trim()) {
+    lines.push('', '## Codebase analysis', '', init.analysisSummary.trim())
+  }
+  return lines
+}
+
+/** Role prompt the initiative-analyst step runs under (returns a prose codebase analysis). */
+export const INITIATIVE_ANALYST_SYSTEM_PROMPT =
+  'You are a staff engineer performing a CODEBASE ANALYSIS to ground the planning of a ' +
+  'long-running initiative (a cross-cutting refactor, a migration, a strangler conversion). ' +
+  'Explore the repository and produce a concise, concrete analysis a planner will use to ' +
+  'decompose the work: the relevant architecture and module boundaries, the files/areas the ' +
+  'initiative will most likely touch, existing patterns to follow, cross-cutting concerns, ' +
+  'risks and likely sequencing constraints. Ground every claim in real file/directory ' +
+  'references; do NOT propose the plan itself (no phases/items) and do NOT modify anything. ' +
+  'Respond with a clear Markdown analysis. ' +
+  FINAL_ANSWER_IN_REPLY
+
+/**
+ * The initiative-analyst's task prompt: the agreed goal / constraints from the interview
+ * plus the instruction to analyse the repo. The backend's analyst post-completion resolver
+ * folds the returned prose onto the `initiatives` entity (`analysisSummary`), which the
+ * planner then consumes.
+ */
+export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
+  const block = context.block
+  const description = block.description?.trim()
+  return [
+    `Analyse this codebase to ground planning of the initiative: ${
+      block.title || '(untitled initiative)'
+    }`,
+    ...(description ? ['', description] : []),
+    ...initiativeContextLines(context, { includeAnalysis: false }),
+    '',
+    'Explore the repository and produce the analysis described in your instructions — ' +
+      'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
+      'Respond with a clear Markdown analysis.',
+  ].join('\n')
+}
+
+/**
  * The initiative-planner's task prompt: the human's rough goal statement (the
- * initiative block's title + description) plus the exploration/plan instructions.
- * The agent reads the codebase from its own read-only checkout; the backend
- * ingests the returned plan into the `initiatives` entity, and the committer
- * step renders + commits the in-repo tracker after the human approves the plan.
+ * initiative block's title + description), the interview + codebase-analysis context the
+ * interviewer/analyst steps produced (slice 2), plus the exploration/plan instructions.
+ * The agent reads the codebase from its own read-only checkout; the backend ingests the
+ * returned plan into the `initiatives` entity, and the committer step renders + commits the
+ * in-repo tracker after the human approves the plan.
  */
 export function initiativePlannerUserPrompt(context: AgentRunContext): string {
   const block = context.block
@@ -218,8 +285,10 @@ export function initiativePlannerUserPrompt(context: AgentRunContext): string {
   return [
     `Plan the initiative: ${block.title || '(untitled initiative)'}`,
     ...(description ? ['', description] : []),
+    ...initiativeContextLines(context, { includeAnalysis: true }),
     '',
-    'Explore this repository to ground the plan in the real code, then produce the ' +
+    'Explore this repository to ground the plan in the real code (building on the codebase ' +
+      'analysis above), honour the agreed goal / constraints / non-goals, then produce the ' +
       'complete multi-phase plan: sequential phases, self-sufficient items with ' +
       'estimates and dependencies, and the execution policy (concurrency + ' +
       'estimate→pipeline rules).',

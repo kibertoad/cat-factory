@@ -4033,7 +4033,19 @@
     },
     "inspector": {
       "runPlanning": "Planlamayi calistir",
+      "answerPlanning": "Planlama sorularini yanitla",
       "hint": "Planlama hatti kod tabanini inceler, onay icin cok asamali plani hazirlar ve ardindan izleyici belgesini depoya kaydeder."
+    },
+    "planning": {
+      "title": "Girisimi planla",
+      "subtitle": "Girisimi kapsamlandirmak icin planlayicinin sorularini yanitlayin",
+      "intro": "Planlayici bu girisimi kapsamlandiriyor. Hedefi ve kisitlari sekillendirmek icin sorularini yanitlayin, ardindan devam edin veya elindekiyle planlamaya gecin.",
+      "empty": "Bu blok icin girisim bulunamadi.",
+      "converged": "Bekleyen soru yok. Planlayici ihtiyaci olani aldi ve plani hazirliyor.",
+      "answerPlaceholder": "Yanitiniz",
+      "hint": "Devam et, planlayicinin ek sorular sormasini saglar; Planlamaya gec, mevcut yanitlarla planlar.",
+      "proceed": "Planlamaya gec",
+      "continue": "Devam et"
     }
   }
 }

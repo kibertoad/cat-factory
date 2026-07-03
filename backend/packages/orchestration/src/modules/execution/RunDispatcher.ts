@@ -44,7 +44,9 @@ import {
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
   getProvider,
+  INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
   INITIATIVE_PLANNER_AGENT_KIND,
   isAsyncAgentExecutor,
   NotFoundError,
@@ -117,6 +119,7 @@ import { CompanionController } from './CompanionController.js'
 import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
+import type { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
@@ -209,6 +212,8 @@ export interface RunDispatcherDeps {
   clarityKind: ReviewKind<ClarityReview>
   requirementsBrainstormKind: ReviewKind<BrainstormSession>
   architectureBrainstormKind: ReviewKind<BrainstormSession>
+  /** The interactive-planning interviewer gate (slice 2); absent → the step passes through. */
+  initiativeInterviewController?: InitiativeInterviewController
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
@@ -265,6 +270,7 @@ export class RunDispatcher {
   private readonly clarityKind: ReviewKind<ClarityReview>
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
+  private readonly initiativeInterviewController?: InitiativeInterviewController
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -314,6 +320,7 @@ export class RunDispatcher {
     this.clarityKind = deps.clarityKind
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
     this.architectureBrainstormKind = deps.architectureBrainstormKind
+    this.initiativeInterviewController = deps.initiativeInterviewController
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
@@ -1965,6 +1972,29 @@ export class RunDispatcher {
           return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
         },
       },
+      // The `initiative-interviewer` step interviews the human on goals/constraints — an
+      // inline LLM gate that PARKS the planning run on a decision-wait while they answer
+      // through the planning window, then synthesizes the brief onto the entity and advances
+      // (see {@link InitiativeInterviewController}). Pass-through when the interviewer isn't
+      // wired (no model / no initiative store), so pipelines + conformance run unchanged.
+      {
+        kind: INITIATIVE_INTERVIEWER_AGENT_KIND,
+        order: 113,
+        canHandle: ({ step }) => step.agentKind === INITIATIVE_INTERVIEWER_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.initiativeInterviewController
+            ? this.initiativeInterviewController.evaluate(
+                workspaceId,
+                instance,
+                step,
+                block,
+                isFinalStep,
+              )
+            : // No initiative store wired: record an empty pass-through result so the step
+              // advances rather than wedging (an initiative pipeline can't meaningfully run
+              // without the store, but never leave the run stuck).
+              this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
+      },
       // The `initiative-committer` step persists an APPROVED initiative plan: it runs
       // strictly after the planner's human gate, flips the entity to `executing`, and
       // mirrors the tracker into the repo (`docs/initiatives/<slug>/`) when GitHub is
@@ -2233,6 +2263,19 @@ export class RunDispatcher {
           if (result.blueprintService !== undefined) {
             await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
           }
+        },
+      },
+      // An initiative-analyst step produced a prose codebase analysis. Fold it onto the
+      // block's `initiatives` entity (`analysisSummary`) so the planner's prompt is grounded
+      // in it. Best-effort: an empty analysis or an unwired store simply leaves the summary
+      // unchanged (the planner still runs); never fail the run on a missing analysis.
+      {
+        kind: INITIATIVE_ANALYST_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, instance, result }) => {
+          const summary = result.output?.trim()
+          if (!this.initiativeService || !summary) return
+          await this.initiativeService.recordAnalysis(workspaceId, instance.blockId, summary)
         },
       },
       // An initiative-planner step produced a plan draft. Ingest it into the block's

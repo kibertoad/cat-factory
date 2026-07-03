@@ -247,6 +247,20 @@ export interface AgentRunContext {
     feedback: string
     comments?: { quotedSource?: string; body: string }[]
   }
+  /**
+   * The planning context an initiative-level run carries, resolved by the engine from the
+   * block's `initiatives` entity (slice 2). The interviewer's synthesized goal / constraints /
+   * non-goals and the Q&A digest, plus the analyst's codebase analysis — so the analyst and
+   * planner prompts are grounded in the human's intent and the prior step's findings. Absent
+   * on non-initiative runs (and when no initiative entity is wired).
+   */
+  initiative?: {
+    goal?: string
+    constraints?: string[]
+    nonGoals?: string[]
+    qa?: { question: string; answer: string }[]
+    analysisSummary?: string
+  }
 }
 
 /** A point at which the agent needs a human to choose before continuing. */

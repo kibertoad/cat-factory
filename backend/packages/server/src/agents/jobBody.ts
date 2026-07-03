@@ -19,11 +19,13 @@ import {
   TESTER_AGENT_KIND,
   UI_TESTER_AGENT_KIND,
 } from '@cat-factory/orchestration'
-import { INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
+import { INITIATIVE_ANALYST_AGENT_KIND, INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
 import {
   BLUEPRINT_SHAPE_HINT,
   BLUEPRINT_SYSTEM_PROMPT,
   blueprintUserPrompt,
+  INITIATIVE_ANALYST_SYSTEM_PROMPT,
+  initiativeAnalystUserPrompt,
   INITIATIVE_PLAN_SHAPE_HINT,
   INITIATIVE_PLANNER_SYSTEM_PROMPT,
   initiativePlannerUserPrompt,
@@ -323,6 +325,20 @@ export function buildMigratedBuiltInBody(
         },
         SPEC_WRITER_SYSTEM_PROMPT,
         specWriterUserPrompt(context),
+      )
+    // The initiative analyst explores the repository (read-only, base branch — an
+    // initiative block has no PR) and returns a PROSE codebase-analysis report grounding
+    // the plan (structure, hot spots, risks, likely touch points). Its output is folded
+    // onto the `initiatives` entity by the engine's analyst post-completion resolver and
+    // then into the planner's prompt. No structured output — it makes no commit and opens
+    // no PR (an edit-free run is the expected outcome, exactly like the architect/analysis).
+    case INITIATIVE_ANALYST_AGENT_KIND:
+      return buildRegisteredAgentBody(
+        context,
+        parts,
+        { surface: 'container-explore', clone: { branch: 'base' } },
+        INITIATIVE_ANALYST_SYSTEM_PROMPT,
+        initiativeAnalystUserPrompt(context),
       )
     // The initiative planner explores the repository (read-only, base branch — an
     // initiative block has no PR) to ground its multi-phase plan in the actual code,

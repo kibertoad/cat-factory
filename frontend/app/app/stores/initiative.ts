@@ -90,9 +90,66 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     }
   }
 
+  /** True while a planning-window action (continue/proceed) is resuming the run. */
+  const resuming = ref(false)
+
+  /** Record the human's answer to one pending interview question (no run resume). */
+  async function answerQuestion(blockId: string, questionId: string, answer: string) {
+    if (!workspace.workspaceId) throw new Error('No active workspace')
+    const updated = await api.answerInitiativeQuestion(
+      workspace.workspaceId,
+      blockId,
+      questionId,
+      answer,
+    )
+    upsert(updated)
+    return updated
+  }
+
+  /** Submit the answers and resume the interview (the interviewer re-runs, may ask more). */
+  async function continuePlanning(blockId: string) {
+    if (!workspace.workspaceId) throw new Error('No active workspace')
+    resuming.value = true
+    try {
+      const updated = await api.continueInitiativePlanning(workspace.workspaceId, blockId)
+      upsert(updated)
+      return updated
+    } finally {
+      resuming.value = false
+    }
+  }
+
+  /** Skip remaining questions: the interviewer converges and the run advances. */
+  async function proceedPlanning(blockId: string) {
+    if (!workspace.workspaceId) throw new Error('No active workspace')
+    resuming.value = true
+    try {
+      const updated = await api.proceedInitiativePlanning(workspace.workspaceId, blockId)
+      upsert(updated)
+      return updated
+    } finally {
+      resuming.value = false
+    }
+  }
+
   function reset() {
     byBlock.value = {}
   }
 
-  return { available, byBlock, all, creating, forBlock, hydrate, upsert, create, load, reset }
+  return {
+    available,
+    byBlock,
+    all,
+    creating,
+    resuming,
+    forBlock,
+    hydrate,
+    upsert,
+    create,
+    load,
+    answerQuestion,
+    continuePlanning,
+    proceedPlanning,
+    reset,
+  }
 })

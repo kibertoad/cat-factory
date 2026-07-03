@@ -4020,7 +4020,19 @@
     },
     "inspector": {
       "runPlanning": "Lancer la planification",
+      "answerPlanning": "Repondre aux questions de planification",
       "hint": "Le pipeline de planification explore le code, redige le plan multiphase pour approbation, puis valide le document de suivi dans le depot."
+    },
+    "planning": {
+      "title": "Planifier l'initiative",
+      "subtitle": "Repondez aux questions du planificateur pour cadrer l'initiative",
+      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis continuez, ou procedez a la planification avec ce qu'il a.",
+      "empty": "Aucune initiative trouvee pour ce bloc.",
+      "converged": "Aucune question en attente. Le planificateur dispose de ce qu'il faut et redige le plan.",
+      "answerPlaceholder": "Votre reponse",
+      "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
+      "proceed": "Proceder a la planification",
+      "continue": "Continuer"
     }
   }
 }

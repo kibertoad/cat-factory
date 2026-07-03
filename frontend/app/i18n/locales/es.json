@@ -4020,7 +4020,19 @@
     },
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
+      "answerPlanning": "Responder preguntas de planificacion",
       "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
+    },
+    "planning": {
+      "title": "Planificar la iniciativa",
+      "subtitle": "Responde las preguntas del planificador para acotar la iniciativa",
+      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, luego continua, o procede a planificar con lo que tiene.",
+      "empty": "No se encontro ninguna iniciativa para este bloque.",
+      "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
+      "answerPlaceholder": "Tu respuesta",
+      "hint": "Continuar permite al planificador hacer mas preguntas; Proceder planifica con las respuestas actuales.",
+      "proceed": "Proceder a planificar",
+      "continue": "Continuar"
     }
   }
 }

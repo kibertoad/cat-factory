@@ -380,8 +380,10 @@ export type {
   InitiativeDeviation,
   InitiativeFollowUp,
   InitiativeQa,
+  InitiativeInterviewState,
   InitiativePlanDraft,
   InitiativeDraftItem,
   InitiativeVersion,
   CreateInitiativeInput,
+  AnswerInitiativeQuestionInput,
 } from '@cat-factory/contracts'

@@ -181,12 +181,33 @@ export const initiativeFollowUpSchema = v.object({
 })
 export type InitiativeFollowUp = v.InferOutput<typeof initiativeFollowUpSchema>
 
-/** A single planning-interview exchange, kept as a bounded digest on the tracker. */
+/**
+ * A single planning-interview exchange, kept as a bounded digest on the tracker AND the
+ * live state of the interactive interview: the interviewer appends a question with an empty
+ * `answer` (a PENDING question the human must answer) and the human fills it in. A stable
+ * `id` addresses the answer write; it is optional only so hand-authored/fixture Q&A without
+ * one still parses (the interviewer always sets it).
+ */
 export const initiativeQaSchema = v.object({
+  id: v.optional(idField),
   question: shortProseField,
-  answer: shortProseField,
+  answer: v.optional(shortProseField, ''),
 })
 export type InitiativeQa = v.InferOutput<typeof initiativeQaSchema>
+
+/**
+ * Live state of the interactive planning interview (slice 2). Absent until the interviewer
+ * runs. `round` counts reviewer passes (the interviewer may ask follow-ups after seeing
+ * answers, up to `maxRounds`); `status` is `awaiting` while the run is parked for the human
+ * and `done` once the interview converged (or the human proceeded) and the goal/constraints
+ * brief was synthesized onto the entity.
+ */
+export const initiativeInterviewStateSchema = v.object({
+  round: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  maxRounds: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  status: v.picklist(['awaiting', 'done']),
+})
+export type InitiativeInterviewState = v.InferOutput<typeof initiativeInterviewStateSchema>
 
 /**
  * The persisted initiative entity — the DB source of truth the loop mutates and
@@ -206,8 +227,10 @@ export const initiativeSchema = v.object({
   goal: v.optional(proseField, ''),
   constraints: v.optional(v.array(shortProseField), []),
   nonGoals: v.optional(v.array(shortProseField), []),
-  /** Bounded digest of the planning interview. */
+  /** Bounded digest of the planning interview (and the live pending questions while it runs). */
   qa: v.optional(v.array(initiativeQaSchema), []),
+  /** Live state of the interactive planning interview; absent until the interviewer runs. */
+  interview: v.optional(v.nullable(initiativeInterviewStateSchema)),
   /** Bounded summary of the codebase analysis that informed the plan. */
   analysisSummary: v.optional(proseField, ''),
   phases: v.optional(v.array(initiativePhaseSchema), []),
@@ -286,6 +309,13 @@ export const createInitiativeSchema = v.object({
   description: v.optional(proseField, ''),
 })
 export type CreateInitiativeInput = v.InferOutput<typeof createInitiativeSchema>
+
+/** Record the human's answer to one pending planning-interview question. */
+export const answerInitiativeQuestionSchema = v.object({
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  answer: shortProseField,
+})
+export type AnswerInitiativeQuestionInput = v.InferOutput<typeof answerInitiativeQuestionSchema>
 
 // ---- In-repo tracker artifact ----------------------------------------------
 // The loop mirrors the entity into the target repo so the plan travels with the

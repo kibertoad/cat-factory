@@ -4020,7 +4020,19 @@
     },
     "inspector": {
       "runPlanning": "Uruchom planowanie",
+      "answerPlanning": "Odpowiedz na pytania planowania",
       "hint": "Pipeline planowania bada kod, przygotowuje wielofazowy plan do zatwierdzenia, a nastepnie zapisuje dokument trackera w repozytorium."
+    },
+    "planning": {
+      "title": "Zaplanuj inicjatywe",
+      "subtitle": "Odpowiedz na pytania planisty, aby okreslic zakres inicjatywy",
+      "intro": "Planista okresla zakres tej inicjatywy. Odpowiedz na pytania, aby uksztaltowac cel i ograniczenia, a nastepnie kontynuuj lub przejdz do planowania z tym, co ma.",
+      "empty": "Nie znaleziono inicjatywy dla tego bloku.",
+      "converged": "Brak oczekujacych pytan. Planista ma to, czego potrzebuje, i tworzy plan.",
+      "answerPlaceholder": "Twoja odpowiedz",
+      "hint": "Kontynuuj pozwala planiscie zadac kolejne pytania; Przejdz do planowania planuje na podstawie dotychczasowych odpowiedzi.",
+      "proceed": "Przejdz do planowania",
+      "continue": "Kontynuuj"
     }
   }
 }

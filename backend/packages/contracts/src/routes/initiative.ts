@@ -1,7 +1,11 @@
-import { defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
-import { createInitiativeSchema, initiativeSchema } from '../initiative.js'
+import {
+  answerInitiativeQuestionSchema,
+  createInitiativeSchema,
+  initiativeSchema,
+} from '../initiative.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -47,4 +51,36 @@ export const getInitiativeByBlockContract = defineApiContract({
   requestPathParamsSchema: blockIdParams,
   pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative`,
   responsesByStatusCode: { 200: v.nullable(initiativeSchema), ...errorResponses },
+})
+
+// ---- Interactive planning (slice 2) ----------------------------------------
+// The interviewer parks the planning run on a decision-wait; these drive it from the
+// planning Q&A window. All return the updated initiative so the SPA patches its cache
+// (the live `initiative` event carries the same entity, so no separate refetch is needed).
+
+/** Record the human's answer to one pending planning-interview question (no run resume). */
+export const answerInitiativeQuestionContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative-planning/answer`,
+  requestBodySchema: answerInitiativeQuestionSchema,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Submit the answered questions and resume the interview (the interviewer re-runs). */
+export const continueInitiativePlanningContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative-planning/continue`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Skip any remaining questions: synthesize the brief from what's answered and advance. */
+export const proceedInitiativePlanningContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative-planning/proceed`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
 })

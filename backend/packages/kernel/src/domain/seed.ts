@@ -512,16 +512,26 @@ export function seedPipelines(): Pipeline[] {
     {
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
-      // engine's runnable guard). The planner analyses the codebase and emits the
-      // multi-phase plan as structured output; the HUMAN GATE after it holds the
-      // run until the plan is approved; the committer then persists the plan (the
-      // `initiatives` entity + the in-repo tracker under `docs/initiatives/<slug>/`)
-      // and arms the execution loop. The interviewer/analyst steps land in a later
-      // slice (see docs/initiatives/initiatives-feature.md).
+      // engine's runnable guard). The INTERVIEWER interviews the human on goals /
+      // constraints (an inline park/answer/resume gate driven by its own controller,
+      // NOT a `gates[]` human gate — hence `false` at its index); the ANALYST reads
+      // the repo and writes a codebase analysis; the PLANNER — grounded in both —
+      // emits the multi-phase plan as structured output; the HUMAN GATE after it
+      // (index 2) holds the run until the plan is approved; the committer then persists
+      // the plan (the `initiatives` entity + the in-repo tracker under
+      // `docs/initiatives/<slug>/`) and arms the execution loop.
       id: 'pl_initiative',
       name: 'Plan initiative',
-      agentKinds: ['initiative-planner', 'initiative-committer'],
-      gates: [true, false],
+      agentKinds: [
+        'initiative-interviewer',
+        'initiative-analyst',
+        'initiative-planner',
+        'initiative-committer',
+      ],
+      gates: [false, false, true, false],
+      // Slice 2 added the interviewer + analyst in front of the planner; bump the
+      // catalog version so workspaces on the v1 shape get the reseed offer.
+      version: 2,
     },
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.

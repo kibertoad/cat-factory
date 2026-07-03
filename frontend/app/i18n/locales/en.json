@@ -4139,7 +4139,19 @@
     },
     "inspector": {
       "runPlanning": "Run planning",
+      "answerPlanning": "Answer planning questions",
       "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
+    },
+    "planning": {
+      "title": "Plan the initiative",
+      "subtitle": "Answer the planner's questions so it can scope the initiative",
+      "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then continue — or proceed to plan with what it has.",
+      "empty": "No initiative found for this block.",
+      "converged": "No questions are pending. The planner has what it needs and is drafting the plan.",
+      "answerPlaceholder": "Your answer",
+      "hint": "Continue lets the planner ask follow-ups; Proceed plans with the answers so far.",
+      "proceed": "Proceed to plan",
+      "continue": "Continue"
     }
   }
 }
