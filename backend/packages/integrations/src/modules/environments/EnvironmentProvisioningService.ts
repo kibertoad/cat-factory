@@ -763,15 +763,7 @@ export class EnvironmentProvisioningService {
     blockId: string,
     frameId?: string,
   ): Promise<ResolvedEnvironment | null> {
-    // Resolve the specific service frame's env when known (a task may provision several — its
-    // own frame's plus involved-service frames'); fall back to the block's newest otherwise.
-    const record = frameId
-      ? await this.deps.environmentRegistryRepository.getByBlockAndFrame(
-          workspaceId,
-          blockId,
-          frameId,
-        )
-      : await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    const record = await this.readRegistryRecord(workspaceId, blockId, frameId)
     // A browsable-preview row is not a provisioned environment — never resolve it as a block's
     // live env (e.g. for tester context enrichment); it is owned solely by the PreviewService.
     if (!record || record.provisionType === PREVIEW_PROVISION_TYPE) return null
@@ -794,15 +786,33 @@ export class EnvironmentProvisioningService {
     blockId: string,
     frameId?: string,
   ): Promise<EnvironmentHandle | null> {
-    const record = frameId
-      ? await this.deps.environmentRegistryRepository.getByBlockAndFrame(
-          workspaceId,
-          blockId,
-          frameId,
-        )
-      : await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    const record = await this.readRegistryRecord(workspaceId, blockId, frameId)
     // Exclude a browsable-preview row (see resolveForBlock) — it is not a provisioned env.
     return record && record.provisionType !== PREVIEW_PROVISION_TYPE ? recordToHandle(record) : null
+  }
+
+  /**
+   * The registry record for a block, resolving the specific service frame's env when a `frameId`
+   * is known (a task may provision several — its own frame's plus each involved-service frame's).
+   * A frame-keyed read that misses falls back to a FRAME-LESS (manual / human-test) env on the
+   * block — those are written with `frame_id = NULL`, so the exact-frame read wouldn't see one —
+   * but NOT to a sibling frame's env (a non-null `frame_id` other than the one asked for is not
+   * this frame's env). No `frameId` ⇒ the block's newest, as before.
+   */
+  private async readRegistryRecord(
+    workspaceId: string,
+    blockId: string,
+    frameId?: string,
+  ): Promise<EnvironmentRecord | null> {
+    if (!frameId) return this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    const framed = await this.deps.environmentRegistryRepository.getByBlockAndFrame(
+      workspaceId,
+      blockId,
+      frameId,
+    )
+    if (framed) return framed
+    const frameless = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    return frameless && frameless.frameId == null ? frameless : null
   }
 
   /**

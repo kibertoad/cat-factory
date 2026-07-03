@@ -277,6 +277,35 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
   })
 })
 
+describe('EnvironmentProvisioningService — frame-keyed reads with manual-env fallback', () => {
+  it('a frame-keyed read falls back to a FRAME-LESS (manual) env on the block', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    // A manual / human-test provision carries no frameId, so it is stored with frame_id = NULL.
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
+    expect(registry.records[0]!.frameId).toBeNull()
+    // A later frame-keyed read (the agent-context path always resolves the own frame) must still
+    // surface that manual env rather than missing it because of the exact-frame match.
+    const resolved = await service.resolveForBlock('ws1', 'blk1', 'frame_own')
+    expect(resolved?.url).toBe(READY.url)
+    const handle = await service.getHandleForBlock('ws1', 'blk1', 'frame_own')
+    expect(handle?.url).toBe(READY.url)
+  })
+
+  it('a frame-keyed read does NOT leak a SIBLING frame’s env as the asked-for frame’s', async () => {
+    const registry = fakeRegistry()
+    const service = makeService(recordingProvider(READY), registry)
+    // Only a sibling frame's env exists (a peer provisioned under the same block, different frame).
+    await service.provision({ workspaceId: 'ws1', blockId: 'blk1', frameId: 'frame_peer' })
+    // Resolving a DIFFERENT frame's env returns nothing — the sibling is not this frame's, and the
+    // manual-env fallback only accepts a frame-less row (this one has a non-null frame_id).
+    expect(await service.resolveForBlock('ws1', 'blk1', 'frame_own')).toBeNull()
+    expect(await service.getHandleForBlock('ws1', 'blk1', 'frame_own')).toBeNull()
+    // The peer's own frame still resolves it.
+    expect((await service.resolveForBlock('ws1', 'blk1', 'frame_peer'))?.url).toBe(READY.url)
+  })
+})
+
 describe('EnvironmentProvisioningService — failed provisioning is stored', () => {
   it('persists a `failed` record carrying the provider error when the provider throws', async () => {
     const provider: EnvironmentProvider = {

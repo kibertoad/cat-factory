@@ -337,10 +337,17 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
   const envUrl = context.environment?.url
   // The involved connected services with a LIVE ephemeral env this run (title → URL), so a
   // cross-service integration test can reach a peer's real environment. Keyed by title (the
-  // human-facing service name the test refers to). Absent when no involved peer is live.
+  // human-facing service name the test refers to). Two involved services can share a title, so a
+  // collision is disambiguated with the frame id rather than silently dropping a peer's URL.
+  // Absent when no involved peer is live.
   const peerEnvironments: Record<string, string> = {}
   for (const involved of context.involvedServices ?? []) {
-    if (involved.envUrl) peerEnvironments[involved.title] = involved.envUrl
+    if (!involved.envUrl) continue
+    const key =
+      peerEnvironments[involved.title] !== undefined
+        ? `${involved.title} (${involved.frameId})`
+        : involved.title
+    peerEnvironments[key] = involved.envUrl
   }
   const peers = Object.keys(peerEnvironments).length ? { peerEnvironments } : {}
   // Prefer a provisioned environment whenever one exists: a `kubernetes`/`custom` service is

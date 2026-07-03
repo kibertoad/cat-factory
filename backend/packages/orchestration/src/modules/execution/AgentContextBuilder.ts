@@ -27,6 +27,7 @@ import {
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { connectionDescription, connectionNeighborIds } from '@cat-factory/contracts'
+import { frameOf } from './frame.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -682,10 +683,10 @@ export class AgentContextBuilder {
     const ids = block.involvedServiceIds ?? []
     if (ids.length === 0) return undefined
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
-    const ownFrameId = frameOfBlocks(blocks, block.id)?.id
+    const byId = new Map(blocks.map((b) => [b.id, b]))
+    const ownFrameId = frameOf(byId, block.id)?.id
     if (!ownFrameId) return undefined
     const neighbors = connectionNeighborIds(blocks, ownFrameId)
-    const byId = new Map(blocks.map((b) => [b.id, b]))
     const valid = ids
       .filter((id, i) => id !== ownFrameId && neighbors.has(id) && ids.indexOf(id) === i)
       .map((id) => byId.get(id))
@@ -710,17 +711,6 @@ export class AgentContextBuilder {
       }
     })
   }
-}
-
-/** The service-frame block enclosing a block, resolved from an already-loaded block list. */
-function frameOfBlocks(blocks: readonly Block[], blockId: string): Block | null {
-  const byId = new Map(blocks.map((b) => [b.id, b]))
-  let cursor = byId.get(blockId) ?? null
-  for (let i = 0; cursor && i < 8; i++) {
-    if (cursor.level === 'frame' || !cursor.parentId) return cursor
-    cursor = byId.get(cursor.parentId) ?? null
-  }
-  return cursor
 }
 
 /** Map a document record to the agent-context doc shape (summary index + materialisable body). */
