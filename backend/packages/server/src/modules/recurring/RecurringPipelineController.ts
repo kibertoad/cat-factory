@@ -76,20 +76,30 @@ export function recurringPipelineController(): Hono<AppEnv> {
     const workspaceId = param(c, 'workspaceId')
     const scheduleId = c.req.valid('param').scheduleId
 
-    // A human is present for run-now, so an on-demand schedule MAY target an individual-usage
-    // model. Resolve the initiator + the per-run activation closure the same way a manual
-    // start does (throws 428 when a password is needed). A cadence schedule never reaches an
-    // individual model (the engine refuses it at create/fire), so its gate is always a no-op —
-    // but running it through the same gate keeps the initiator recorded on the run.
+    const user = c.get('user')
     const schedule = await recurring.service.get(workspaceId, scheduleId)
-    const { initiatedBy, activate } = await personalGateForBlock(
-      container,
-      workspaceId,
-      schedule.blockId,
-      schedule.pipelineId,
-      c.get('user'),
-      readPersonalPassword(c),
-    )
+
+    // A human is present for run-now, so an ON-DEMAND schedule MAY target an individual-usage
+    // model: resolve the initiator + the per-run activation closure the same way a manual start
+    // does (throws 428 when a password is needed). A CADENCE schedule is NOT gated here — its
+    // block never legitimately holds an individual model, and skipping the gate lets the engine
+    // surface its clear "make it on-demand / pick an API-key model" refusal instead of a
+    // spurious password prompt. Either way the acting user is recorded as the run's initiator.
+    let initiatedBy: string | null = user?.id ?? null
+    let activate: ((executionId: string) => Promise<void>) | undefined
+    if (schedule.onDemand) {
+      const gate = await personalGateForBlock(
+        container,
+        workspaceId,
+        schedule.blockId,
+        schedule.pipelineId,
+        user,
+        readPersonalPassword(c),
+      )
+      initiatedBy = gate.initiatedBy
+      activate = gate.activate
+    }
+
     const updated = await recurring.service.runNow(workspaceId, scheduleId, {
       initiatedBy,
       activate,
