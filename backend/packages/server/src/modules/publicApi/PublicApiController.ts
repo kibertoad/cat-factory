@@ -150,6 +150,25 @@ async function loadPublicJob<E extends AppEnv>(
   return anchor ? execution : null
 }
 
+/**
+ * Best-effort, event-free rollback of a headless initiative run: drop the persisted run (the
+ * execution + its live-run row, via `deleteByBlock`) THEN the anchor block. Used when a start fails
+ * partway or is rolled back over the cap, so nothing survives for the stale-run sweeper to re-drive
+ * against a since-deleted block. `deleteByBlock` is the same primitive `ExecutionService.cancel`
+ * uses, so it clears whatever `start()` had already committed regardless of how far it got. No board
+ * event is emitted (the anchor never renders anyway), so a burst of rollbacks can't fan spurious
+ * refreshes out to every workspace client.
+ */
+async function rollbackInitiativeRun<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  blockId: string,
+): Promise<void> {
+  const container = c.get('container')
+  await container.executionRepository.deleteByBlock(workspaceId, blockId).catch(() => {})
+  await container.boardService.deleteInternalTask(workspaceId, blockId).catch(() => {})
+}
+
 export function publicApiController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
@@ -206,10 +225,13 @@ export function publicApiController(): Hono<AppEnv> {
       description: input,
     })
     // Headless / system-initiated: no `usr_*` initiator (an inline public run never leases a
-    // personal credential), so pass null rather than a synthetic user id. If start fails (the
-    // anchor is already inserted), roll the anchor back so a failed dispatch never leaves an
-    // orphan `internal` block — it renders nowhere and, being `planned`, escapes the cap, so it
-    // would otherwise just accumulate on every failed/retried start.
+    // personal credential), so pass null rather than a synthetic user id. If start fails, roll the
+    // whole run back: `ExecutionService.start` persists the execution + live-run row and flips the
+    // block to `in_progress` BEFORE its throwing dispatch (`workRunner.startRun`), so deleting only
+    // the anchor block would orphan a `running` execution the stale-run sweeper then re-drives
+    // forever against a since-deleted block. `rollbackInitiativeRun` drops the execution first, then
+    // the block, so a failed dispatch leaves nothing behind (whether it threw before or after the
+    // rows were written).
     let execution: ExecutionInstance
     try {
       execution = await container.executionService.start(
@@ -219,8 +241,28 @@ export function publicApiController(): Hono<AppEnv> {
         null,
       )
     } catch (err) {
-      await container.boardService.deleteInternalTask(auth.workspaceId, block.id).catch(() => {})
+      await rollbackInitiativeRun(c, auth.workspaceId, block.id)
       throw err
+    }
+
+    // Close the check-then-act race on the cap. The pre-check above is a fast path, but it can let
+    // several concurrent requests through before any of their anchors flips to `in_progress` (the
+    // count only sees `in_progress` internal blocks). Re-count now that THIS run is in flight; if
+    // concurrent starts pushed the workspace past the cap, roll this one back and 429, so the
+    // backstop holds under a parallel burst and not merely sequentially. Strict `>` keeps the
+    // sequential case exact (the Nth start that lands on the cap boundary still succeeds).
+    const activeNow = await container.boardService.countActiveInternalTasks(auth.workspaceId)
+    if (activeNow > MAX_ACTIVE_INITIATIVE_RUNS) {
+      await rollbackInitiativeRun(c, auth.workspaceId, block.id)
+      return c.json(
+        {
+          error: {
+            code: 'too_many_active_runs',
+            message: `This workspace already has ${MAX_ACTIVE_INITIATIVE_RUNS} initiative runs in flight; wait for one to finish`,
+          },
+        },
+        429,
+      )
     }
     return c.json(
       {

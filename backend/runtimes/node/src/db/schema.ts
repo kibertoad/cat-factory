@@ -385,7 +385,7 @@ export const pipelines = pgTable(
     // custom/cloned pipelines and on legacy rows. Lets a workspace's persisted copy be compared
     // against the current `seedPipelines()` catalog and offered a reseed when it moves ahead.
     version: integer('version'),
-    // `public = 1` marks a pipeline callable via the public API (mirror of D1 migration 0033);
+    // `public = 1` marks a pipeline callable via the public API (mirror of D1 migration 0034);
     // NULL/absent ⇒ not exposed. Only inline pipelines are honored by the public surface.
     public: integer('public'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
@@ -1472,7 +1472,7 @@ export const providerApiKeys = pgTable(
 )
 
 // Inbound public-API keys: the credentials external systems present to `/api/v1` (mirror of D1
-// migration 0033). The secret is stored ONLY as a one-way peppered hash — never plaintext, never
+// migration 0034). The secret is stored ONLY as a one-way peppered hash — never plaintext, never
 // recoverable — the opposite of the provider keys above (which are decryptable for outbound use).
 export const publicApiKeys = pgTable(
   'public_api_keys',
