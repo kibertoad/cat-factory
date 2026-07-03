@@ -19,6 +19,7 @@ import type {
 import type { BlockRepository } from '@cat-factory/kernel'
 import { assertFound, ConflictError, requireWorkspace } from '@cat-factory/kernel'
 import type { ExecutionService } from '../execution/ExecutionService.js'
+import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import { computeNextRun } from './schedule.logic.js'
 
 export interface RecurringPipelineServiceDependencies {
@@ -44,14 +45,17 @@ export interface RecurringPipelineServiceDependencies {
  * A schedule can only carry a pipeline that is launchable on a recurring cadence: a
  * `'one-off'`-only pipeline (design §2) has no schedule semantics, so reject attaching it. A
  * `'recurring'` or `'both'` (or unset) pipeline is fine. This is the schedule-attach dual of the
- * `origin` gate {@link ExecutionService.start} applies at fire time.
+ * `origin` gate {@link ExecutionService.start} applies at fire time — so it delegates to the SAME
+ * {@link assertPipelineLaunchable} gate with `origin: 'recurring'`, keeping one rule and one error
+ * type (`ValidationError`) across both boundaries instead of a divergent copy.
  */
 function assertSchedulable(pipeline: Pipeline): void {
-  if (pipeline.availability === 'one-off') {
-    throw new ConflictError(
-      `Pipeline '${pipeline.name}' can only run as a one-off task; it cannot be attached to a recurring schedule.`,
-    )
-  }
+  assertPipelineLaunchable(
+    pipeline.agentKinds,
+    pipeline.availability,
+    'recurring',
+    pipeline.enabled,
+  )
 }
 
 /** Default seed descriptions for the canned recurring templates. */

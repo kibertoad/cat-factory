@@ -1294,7 +1294,7 @@ export class ExecutionService {
     // Launch-constraint gate (start-only, NOT part of the shared retry re-validation): reject a
     // manual start of a recurring-only pipeline (or a scheduled fire of a one-off-only one), and
     // a bug-intake pipeline that isn't recurring. Before any side effects.
-    assertPipelineLaunchable(pipeline.agentKinds, pipeline.availability, origin)
+    assertPipelineLaunchable(pipeline.agentKinds, pipeline.availability, origin, pipeline.enabled)
 
     // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
     // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry

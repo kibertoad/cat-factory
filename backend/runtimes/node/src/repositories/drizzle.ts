@@ -455,6 +455,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
       builtin: pipeline.builtin ? 1 : null,
       version: pipeline.version ?? null,
       public: pipeline.public ? 1 : null,
+      availability: pipeline.availability ?? null,
     })
   }
 
@@ -478,6 +479,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,
         public: pipeline.public ? 1 : null,
+        availability: pipeline.availability ?? null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }

@@ -6805,6 +6805,57 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(archivedBuiltin.body.builtin).toBe(true)
       })
 
+      it('round-trips pipeline launch availability through create, update, and clone', async () => {
+        // `availability` gates HOW a pipeline may be launched (one-off / recurring / both). It is
+        // a plain persisted column on BOTH stores — a facade that forgot to map it would silently
+        // drop the field on save (the exact gap this asserts against), leaving the launch gate
+        // inert after a DB round-trip.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Recurring only',
+          agentKinds: ['coder'],
+          availability: 'recurring',
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.availability).toBe('recurring')
+
+        // Re-read from the store (not the create echo) — this is where a dropped column shows up.
+        const afterCreate = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterCreate.body.find((p) => p.id === created.body.id)?.availability).toBe(
+          'recurring',
+        )
+
+        const updated = await app.call<Pipeline>(
+          'PATCH',
+          `/workspaces/${wsId}/pipelines/${created.body.id}`,
+          { availability: 'both' },
+        )
+        expect(updated.status).toBe(200)
+        expect(updated.body.availability).toBe('both')
+        const afterUpdate = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterUpdate.body.find((p) => p.id === created.body.id)?.availability).toBe('both')
+
+        // A clone preserves the source's availability.
+        const source = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'One-off only',
+          agentKinds: ['coder'],
+          availability: 'one-off',
+        })
+        expect(source.status).toBe(201)
+        const cloned = await app.call<Pipeline>(
+          'POST',
+          `/workspaces/${wsId}/pipelines/${source.body.id}/clone`,
+          {},
+        )
+        expect(cloned.status).toBe(201)
+        expect(cloned.body.availability).toBe('one-off')
+        const afterClone = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterClone.body.find((p) => p.id === cloned.body.id)?.availability).toBe('one-off')
+      })
+
       it('reviews the spec-writer with its companion and reworks it without a human gate', async () => {
         // The Spec Writer is no longer human-gated by default: its `spec-companion`
         // (Spec Reviewer) rates the spec, and below threshold loops the spec-writer

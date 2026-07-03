@@ -184,14 +184,21 @@ export function assertValidTesterQualityGating(
  * shared retry/restart re-validation: those re-drive stored steps of an already-validated run,
  * so they pass no `origin` and skip the check entirely (an unset `availability` on the pipeline
  * definition is still meaningful at start, but a retry never reaches here).
+ *
+ * The `bug-intake` requirement is evaluated over the ENABLED subset (like every other check in
+ * this file): a DISABLED `bug-intake` step never runs, so it imposes no recurring requirement.
  */
 export function assertPipelineLaunchable(
   agentKinds: string[],
   availability: PipelineAvailability | undefined,
   origin?: RunOrigin,
+  enabled?: boolean[],
 ): void {
   const effective: PipelineAvailability = availability ?? 'both'
-  if (agentKinds.includes(BUG_INTAKE_AGENT_KIND) && effective !== 'recurring') {
+  const hasEnabledBugIntake = agentKinds.some(
+    (kind, i) => kind === BUG_INTAKE_AGENT_KIND && enabled?.[i] !== false,
+  )
+  if (hasEnabledBugIntake && effective !== 'recurring') {
     throw new ValidationError(
       `A pipeline with a '${BUG_INTAKE_AGENT_KIND}' step must be recurring — it pulls its work from a schedule's tracker board, so it cannot run as a one-off.`,
     )

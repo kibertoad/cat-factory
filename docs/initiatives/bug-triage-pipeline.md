@@ -66,17 +66,34 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 | `RecurringPipelineService.create/update` reject `'one-off'`-only pipelines                  | done   |
 | `validatePipelineShape`: field validation + `bug-intake` requires `recurring`               | done   |
 | SPA pickers: `AddTaskModal.vue` / `RecurringPipelineModal.vue` filters + i18n (all locales) | done   |
+| Persistence: `pipelines.availability` column on BOTH runtimes (D1 0037 ⇄ Drizzle) + mapper  | done   |
 
 Implemented on branch `claude/bug-triage-phase-2-5n1wu5`. Notes for later phases:
+
+- **`availability` is a persisted column, not a JSON-blob field.** Pipelines are stored
+  column-per-field, so the new field needed a `pipelines.availability` column on BOTH runtimes —
+  D1 migration `0037_pipeline_availability.sql` ⇄ Drizzle `schema.ts` + generated migration —
+  written/read by the shared `rowToPipeline` mapper (`@cat-factory/server`) and both repos. The
+  cross-runtime round-trip (create/update/clone) is pinned by a conformance assertion so a facade
+  can't silently drop it again. (An earlier revision of this phase set the field on the domain
+  entity only, so it was dropped on save and the whole gate was inert after a DB round-trip.)
 
 - The launch gate is a single pure function, `assertPipelineLaunchable(agentKinds, availability,
 origin?)` in `orchestration/modules/pipelines/pipelineShape.ts` — NOT folded into the shared
   `validatePipelineShape`/`assertRunnable` path. That path is re-run on retry/restart over stored
   steps (which carry no `availability` and no `origin`), so putting the `bug-intake`-requires-
   `recurring` check there would falsely fail a legitimate recurring retry. Instead the gate is
-  called at the three LAUNCH boundaries only: `PipelineService.create/update/clone` (save; no
-  origin), `ExecutionService.start` (with the new `origin`), and — for the schedule-attach dual —
-  `RecurringPipelineService.create/update` via `assertSchedulable`.
+  called at the LAUNCH boundaries only: `PipelineService.create/update/clone` (save; no origin),
+  `ExecutionService.start` (with the new `origin`), and — for the schedule-attach dual —
+  `RecurringPipelineService.create/update` via `assertSchedulable`, which now DELEGATES to the same
+  `assertPipelineLaunchable(..., 'recurring', ...)` gate so there is one rule and one error type
+  (`ValidationError`) across both boundaries.
+- The `bug-intake`-requires-`recurring` check is evaluated over the ENABLED subset (an `enabled?:
+boolean[]` arg), matching every other check in `pipelineShape.ts` — a disabled `bug-intake` step
+  imposes no requirement.
+- Editing a pipeline to `'one-off'` while a schedule still references it is rejected up-front
+  (`ConflictError`, via an optional `pipelineScheduleRepository` on `PipelineService`) instead of
+  letting every future fire silently fail the origin gate.
 - `availability` is a first-class editable/clonable pipeline field: `create`/`update` accept it and
   `clone` preserves it (so cloning the future recurring-only `pl_bug_triage` stays recurring-only).
 - `bug-intake` is referenced as a bare string literal (`BUG_INTAKE_AGENT_KIND` in `pipelineShape.ts`)

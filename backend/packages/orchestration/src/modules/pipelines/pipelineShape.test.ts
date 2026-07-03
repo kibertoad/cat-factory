@@ -164,4 +164,26 @@ describe('assertPipelineLaunchable', () => {
     expect(() => assertPipelineLaunchable(['coder'], 'recurring')).not.toThrow()
     expect(() => assertPipelineLaunchable(['coder'], 'one-off')).not.toThrow()
   })
+
+  it('evaluates the bug-intake requirement over the enabled subset', () => {
+    // A DISABLED bug-intake step never runs, so it imposes no recurring requirement — the
+    // pipeline may be saved as 'both'/'one-off' (parity with every other check in this file).
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'both', undefined, [false, true]),
+    ).not.toThrow()
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'one-off', 'manual', [false, true]),
+    ).not.toThrow()
+    // An ENABLED bug-intake step (explicit true, or default when the mask omits it) still requires
+    // recurring.
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'both', undefined, [true, true]),
+    ).toThrow()
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'both', undefined, [
+        undefined as never,
+        true,
+      ]),
+    ).toThrow()
+  })
 })

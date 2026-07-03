@@ -392,6 +392,9 @@ export const pipelines = pgTable(
     // `public = 1` marks a pipeline callable via the public API (mirror of D1 migration 0034);
     // NULL/absent ⇒ not exposed. Only inline pipelines are honored by the public surface.
     public: integer('public'),
+    // How the pipeline may be LAUNCHED: `'one-off'` / `'recurring'` / `'both'` (mirror of D1
+    // migration 0037); NULL/absent ⇒ unrestricted (`'both'`).
+    availability: text('availability'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
