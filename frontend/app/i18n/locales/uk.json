@@ -2849,6 +2849,8 @@
     },
     "attemptsHeading": "Спроби: {helper}",
     "attempt": "Спроба {number}",
+    "attemptInstructions": "Передано виправлячу",
+    "attemptReport": "Звіт виправляча",
     "outcome": {
       "completed": "завершено",
       "failed": "помилка"

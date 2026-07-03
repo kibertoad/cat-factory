@@ -762,6 +762,23 @@ export const gateAttemptSchema = v.object({
   outcome: v.picklist(['completed', 'failed']),
   /** The PR head commit the helper worked against, when known. */
   headSha: v.optional(v.nullable(v.string())),
+  /**
+   * The fixing instructions handed to the helper for this round — the failing-check
+   * summary the CI gate fed the `ci-fixer`, the conflict reason / human-review comments
+   * the other gates fed their fixer. Stashed at dispatch and recorded with the attempt so
+   * the run-detail UI can show WHAT each round was asked to fix (not only that a round
+   * happened) — the gate analogue of the Tester attempt's `concerns`. Null when the gate
+   * hands its fixer no textual instructions (the conflicts gate: GitHub reports mergeability
+   * as a single bit and the harness leaves the conflict markers for the resolver).
+   */
+  instructions: v.optional(v.nullable(v.string())),
+  /**
+   * Structured failing checks handed to this attempt's helper (the CI gate's red check runs
+   * behind {@link instructions}), snapshotted at dispatch so each attempt shows the checks it
+   * set out to fix. Absent for the conflicts gate (no file-level detail) and when the round
+   * carried no structured checks.
+   */
+  failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
   /** The helper's own summary (or the failure reason), naming what it did / what remains. */
   summary: v.optional(v.nullable(v.string())),
 })
@@ -793,6 +810,14 @@ export const gateStepStateSchema = v.object({
    * gate (GitHub reports no file-level detail) and when the last probe passed.
    */
   failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
+  /**
+   * The fixing instructions handed to the most-recently dispatched helper (the failing-check
+   * summary / conflict reason / human fix prompt), stashed at dispatch so the attempt recorded
+   * when that helper's job settles can carry WHAT the round was asked to fix onto its
+   * {@link gateAttemptSchema} entry. Transient bookkeeping — the durable per-round history lives
+   * on {@link attemptLog}. Null when the gate hands its fixer no textual instructions.
+   */
+  lastDispatchedInstructions: v.optional(v.nullable(v.string())),
   /**
    * Epoch ms of the release marker for a time-windowed gate (post-release-health) — the
    * moment it began watching the deployed release. The gate keeps polling `pending`

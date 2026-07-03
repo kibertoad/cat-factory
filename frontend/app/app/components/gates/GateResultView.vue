@@ -403,12 +403,45 @@ const conflictVerdict = computed(() => {
                         formatClock(a.at)
                       }}</span>
                     </div>
-                    <p
-                      v-if="a.summary"
-                      class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
+                    <!-- What this round was asked to fix: the instructions the gate handed the
+                         helper (the failing-check summary / conflict reason / review comments),
+                         plus the structured red checks for the CI gate. -->
+                    <div
+                      v-if="a.instructions || (a.failingChecks && a.failingChecks.length)"
+                      class="mt-1.5"
                     >
-                      {{ a.summary }}
-                    </p>
+                      <p class="text-[11px] text-slate-500">{{ t('gates.attemptInstructions') }}</p>
+                      <ul v-if="a.failingChecks && a.failingChecks.length" class="mt-1 space-y-0.5">
+                        <li
+                          v-for="(c, ci) in a.failingChecks"
+                          :key="`a${a.attempt}-c${ci}`"
+                          class="flex items-center gap-1.5 text-[12px] text-slate-300"
+                        >
+                          <UIcon name="i-lucide-circle-x" class="h-3 w-3 shrink-0 text-rose-400" />
+                          <span class="min-w-0 flex-1 truncate">{{ c.name }}</span>
+                          <span class="shrink-0 text-[10px] uppercase text-rose-300">{{
+                            c.conclusion ?? t('gates.ci.conclusionFallback')
+                          }}</span>
+                        </li>
+                      </ul>
+                      <p
+                        v-else-if="a.instructions"
+                        class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300"
+                      >
+                        {{ a.instructions }}
+                      </p>
+                    </div>
+                    <!-- The helper's own report of what it did / what remains. -->
+                    <template v-if="a.summary">
+                      <p class="mt-1.5 text-[11px] text-slate-500">
+                        {{ t('gates.attemptReport') }}
+                      </p>
+                      <p
+                        class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
+                      >
+                        {{ a.summary }}
+                      </p>
+                    </template>
                   </li>
                 </ol>
               </section>

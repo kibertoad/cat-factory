@@ -2945,6 +2945,8 @@
     },
     "attemptsHeading": "{helper} attempts",
     "attempt": "Attempt {number}",
+    "attemptInstructions": "Handed to the fixer",
+    "attemptReport": "Fixer report",
     "outcome": {
       "completed": "completed",
       "failed": "failed"
