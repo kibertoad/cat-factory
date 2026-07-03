@@ -61,6 +61,25 @@ export interface PrSpec {
   body: string
 }
 
+/**
+ * A connected service's repo to check out as a SIBLING alongside the primary during a
+ * multi-repo coding run (service-connections phase 3). The agent clones every peer repo
+ * into a sibling directory under the workspace root, makes the coherent cross-service
+ * change, and the harness opens ONE PR per peer repo it actually changed. The clone URL is
+ * host-allowlisted exactly like the primary `repo.cloneUrl`.
+ */
+export interface PeerRepoSpec {
+  repo: RepoSpec
+  /** The involved service frame this repo resolved from, echoed back on the peer PR. */
+  frameId?: string
+  /** The work branch to create off the peer's base and push (the shared `cat-factory/<block>`). */
+  newBranch: string
+  /** Open a PR/MR in this peer when set AND the run changed the peer (skipped for a clean repo). */
+  pr?: PrSpec
+  /** Per-repo GitHub token; defaults to the job's `ghToken` (one installation per workspace today). */
+  ghToken?: string
+}
+
 function str(value: unknown, path: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Invalid job: '${path}' must be a non-empty string`)
@@ -177,6 +196,36 @@ function parseRepoSpec(repo: Record<string, unknown>): RepoSpec {
   const dir = sanitizeServiceDirectory(repo.serviceDirectory)
   if (dir) spec.serviceDirectory = dir
   return spec
+}
+
+/**
+ * Parse the optional multi-repo peer list (service-connections phase 3). Each entry carries a
+ * full {@link RepoSpec} (validated + sanitised like the primary), the work branch to push, and
+ * an optional PR + per-repo token. A malformed list throws; an absent one yields `[]`.
+ */
+function parsePeerRepos(value: unknown): PeerRepoSpec[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error("Invalid job: 'peerRepos' must be an array")
+  return value.map((entry, i) => {
+    if (typeof entry !== 'object' || entry === null) {
+      throw new Error(`Invalid job: 'peerRepos[${i}]' must be an object`)
+    }
+    const e = entry as Record<string, unknown>
+    const spec: PeerRepoSpec = {
+      repo: parseRepoSpec((e.repo ?? {}) as Record<string, unknown>),
+      newBranch: str(e.newBranch, `peerRepos[${i}].newBranch`),
+    }
+    if (typeof e.frameId === 'string' && e.frameId) spec.frameId = e.frameId
+    if (typeof e.ghToken === 'string' && e.ghToken) spec.ghToken = e.ghToken
+    if (typeof e.pr === 'object' && e.pr !== null) {
+      const p = e.pr as Record<string, unknown>
+      spec.pr = {
+        title: str(p.title, `peerRepos[${i}].pr.title`),
+        body: typeof p.body === 'string' ? p.body : '',
+      }
+    }
+    return spec
+  })
 }
 
 /** Parse the optional `repo.provider` discriminator (defaults to undefined ⇒ host inference). */
@@ -530,6 +579,13 @@ export interface AgentJob extends HarnessAuthFields {
   /** Coding mode: open this PR when the run pushed changes. Absent ⇒ push only, no PR. */
   pr?: PrSpec
   /**
+   * Coding mode (implementer): connected services' repos to clone as SIBLINGS for a MULTI-REPO
+   * change (service-connections phase 3). When present, the agent works with its cwd at the
+   * workspace ROOT (all repos are sibling checkouts under it), and the harness opens one PR per
+   * peer repo it actually changed — in addition to the primary. Absent ⇒ single-repo run.
+   */
+  peerRepos?: PeerRepoSpec[]
+  /**
    * Coding mode: whether a no-op run (nothing changed) is a failure. The implementer
    * fails on a no-op; the in-place fixers (ci-fix / fix-tests) treat it as a non-fatal
    * no-op. Default true.
@@ -617,6 +673,13 @@ export interface AgentResult {
   pushed?: boolean
   prUrl?: string
   branch?: string
+  /**
+   * Coding mode (multi-repo): the PRs opened in the connected services' PEER repos, one per
+   * repo the run actually changed (service-connections phase 3). Beside the own-service
+   * `prUrl`/`branch`; the backend lifts these onto the block's `peerPullRequests`. Absent for
+   * a single-repo run.
+   */
+  peerPullRequests?: { repo: string; frameId?: string; prUrl: string; branch: string }[]
   /** Coding mode (bootstrap): the default branch the bootstrapped contents were pushed to. */
   defaultBranch?: string
   error?: string
@@ -856,6 +919,7 @@ export function parseAgentJob(input: unknown): AgentJob {
         })()
       : undefined
   const infra = parseAgentInfraSpec(o.infra)
+  const peerRepos = parsePeerRepos(o.peerRepos)
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
@@ -886,6 +950,7 @@ export function parseAgentJob(input: unknown): AgentJob {
       ? { commitMessage: o.commitMessage }
       : {}),
     ...(pr ? { pr } : {}),
+    ...(peerRepos.length ? { peerRepos } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
@@ -896,5 +961,11 @@ export function parseAgentJob(input: unknown): AgentJob {
   // Bootstrap pushes the result to a SEPARATE target repo, so its clone URL must be an
   // allowed GitHub host too (the installation token is sent to it on the force-push).
   if (job.bootstrap) assertAllowedHost(job.bootstrap.target.cloneUrl, 'bootstrap.target.cloneUrl')
+  // Each peer repo's clone URL receives the installation token on clone/push, so it must be
+  // an allowed GitHub host too — a body-supplied peer pointing at an attacker host would
+  // exfiltrate the token exactly like a rogue primary clone URL.
+  for (const [i, peer] of (job.peerRepos ?? []).entries()) {
+    assertAllowedHost(peer.repo.cloneUrl, `peerRepos[${i}].repo.cloneUrl`)
+  }
   return job
 }

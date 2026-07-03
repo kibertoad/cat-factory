@@ -1178,24 +1178,29 @@ export class RunDispatcher {
 
     // A repo-operating step (the container "implementer" agent) opened a PR for
     // its work. Record it on the block so the board can surface and link to it,
-    // regardless of whether this is the final step.
-    if (result.pullRequest) {
+    // regardless of whether this is the final step. A multi-repo run
+    // (service-connections phase 3) additionally reports the PRs it opened in the
+    // connected involved-service repos; record them beside the own-service PR (they may
+    // even arrive when the own service was a no-op and only a peer changed).
+    if (result.pullRequest || result.peerPullRequests?.length) {
       // Read the block before the update so we can tell whether this PR is newly
       // opened (vs. the same PR re-reported by a re-run/retry of the coder step).
       const priorBlock = this.issueWriteback
         ? await this.blockRepository.get(workspaceId, instance.blockId)
         : null
       await this.blockRepository.update(workspaceId, instance.blockId, {
-        pullRequest: result.pullRequest,
+        ...(result.pullRequest ? { pullRequest: result.pullRequest } : {}),
+        ...(result.peerPullRequests?.length ? { peerPullRequests: result.peerPullRequests } : {}),
       })
       // Best-effort writeback: comment on the task's linked tracker issue(s) that a
-      // PR opened. Only when the PR is newly recorded — a retry that re-reports the
-      // same PR must not re-comment (the tracker comment is not idempotent). Gated
-      // inside the provider by the workspace setting + per-task override;
-      // fire-and-forget so a tracker outage never fails the run.
+      // PR opened. Only for the OWN-service PR, and only when it is newly recorded — a
+      // retry that re-reports the same PR must not re-comment (the tracker comment is not
+      // idempotent). Gated inside the provider by the workspace setting + per-task
+      // override; fire-and-forget so a tracker outage never fails the run.
       if (
         this.issueWriteback &&
         priorBlock &&
+        result.pullRequest &&
         priorBlock.pullRequest?.url !== result.pullRequest.url
       ) {
         await this.issueWriteback

@@ -44,6 +44,7 @@ import {
   UI_TEST_REPORT_SHAPE_HINT,
 } from './prompts.js'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
+import type { RepoCheckout } from './resolveRepoTarget.js'
 
 /**
  * The pieces a per-kind job body is assembled from, computed once per dispatch in
@@ -62,6 +63,20 @@ export interface KindBodyParts {
   repo: RepoTarget
   workBranch: string
   workBranchReady: boolean
+  /**
+   * Peer repos to clone as siblings and open a PR in during a MULTI-REPO run
+   * (service-connections phase 3) — each an origin-resolved harness `RepoSpec` plus the
+   * involved service frame it belongs to. The coding body adds the shared work branch + the
+   * same PR shape as the primary. Present only for the implementer on a task whose involved
+   * connected services resolve to DISTINCT repos; the harness ignores it for other kinds.
+   */
+  peerRepos?: { repo: Record<string, unknown>; frameId?: string }[]
+  /**
+   * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
+   * where each involved service lives, how the checkouts are laid out). Appended to the coding
+   * implementer's system prompt in a multi-service run; absent otherwise.
+   */
+  multiRepoSection?: string
 }
 
 /**
@@ -203,24 +218,37 @@ export function buildRegisteredAgentBody(
   if (step.surface === 'container-coding') {
     // `pr` clone ⇒ work in place on the PR branch and push back (fixer-like, no new PR);
     // otherwise branch off base onto the work branch, push it and open a PR (coder-like).
+    const pr = {
+      title: `${context.block.title} (${context.pipelineName})`,
+      body: prBody(context),
+    }
+    // Multi-repo fan-out (service-connections phase 3): only on the implementer path (`!onPr`),
+    // clone each connected involved-service repo as a sibling and open the SAME work branch +
+    // an equivalent PR in it. The fixers (`onPr`) stay single-repo (phase 4 generalizes them).
+    const peerRepos =
+      !onPr && parts.peerRepos?.length
+        ? parts.peerRepos.map((p) => ({
+            repo: p.repo,
+            ...(p.frameId ? { frameId: p.frameId } : {}),
+            newBranch: workBranch,
+            pr,
+          }))
+        : undefined
     return {
       kind: 'agent',
       body: {
         ...common,
         mode: 'coding',
-        systemPrompt: roleSystemPrompt,
+        systemPrompt:
+          !onPr && parts.multiRepoSection
+            ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
+            : roleSystemPrompt,
         userPrompt,
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
         ...(onPr ? {} : { newBranch: workBranch }),
         pushBranch: onPr ? (prBranch ?? workBranch) : workBranch,
-        ...(onPr
-          ? { noChangesIsError: false }
-          : {
-              pr: {
-                title: `${context.block.title} (${context.pipelineName})`,
-                body: prBody(context),
-              },
-            }),
+        ...(onPr ? { noChangesIsError: false } : { pr }),
+        ...(peerRepos ? { peerRepos } : {}),
         ...(step.clone?.full ? { full: true } : {}),
         // The Coder (follow-up companion enabled) streams forward-looking items out via
         // the sentinel file; tell the harness to tail it. Only on the implementer path.
@@ -253,6 +281,62 @@ export function buildRegisteredAgentBody(
       ...webTools,
     },
   }
+}
+
+/**
+ * Render the "Multi-repo workspace" system-prompt section for a multi-service coding run
+ * (service-connections phase 3). Names the primary repo (the task's own service) and, for
+ * every involved connected service, WHICH repo + subdirectory it lives in and its role (the
+ * connection `description`, carried on `involvedServices`). Two involved services sharing a
+ * monorepo appear under the one repo with their distinct subdirectories; a service co-located
+ * in the primary's own repo is noted under the primary (no separate checkout). The agent's cwd
+ * is the workspace root, so it can edit across every checkout — the harness's own AGENTS.md
+ * note explains the sibling layout; this section supplies the concrete repos + roles.
+ */
+export function renderMultiRepoWorkspaceSection(
+  checkouts: RepoCheckout[],
+  involvedServices: NonNullable<AgentRunContext['involvedServices']>,
+): string {
+  const roleByFrame = new Map(involvedServices.map((s) => [s.frameId, s]))
+  const primary = checkouts.find((c) => c.primary)
+  const lines = [
+    '## Multi-repo workspace',
+    '',
+    'This task spans MORE THAN ONE service. Every involved repository is checked out as a',
+    'sibling directory under your working directory (the workspace root). Make the',
+    'cross-service change coherently across the repositories that need it — each repository',
+    'you actually change is committed on its own branch and opened as a SEPARATE pull request.',
+    'Leave a repository untouched if the task does not require changing it.',
+    '',
+    'Repositories:',
+  ]
+  const describe = (checkout: RepoCheckout): string => {
+    const { owner, name } = checkout.target
+    const dir = `\`${name}/\``
+    const own =
+      checkout.primary && checkout.target.serviceDirectory
+        ? ` (this service lives in \`${checkout.target.serviceDirectory}/\`)`
+        : ''
+    const coLocated = checkout.involved
+      .map((inv) => {
+        const role = roleByFrame.get(inv.frameId)
+        const title = role?.title ?? inv.frameId
+        const where = inv.serviceDirectory ? ` in \`${inv.serviceDirectory}/\`` : ''
+        const why = role?.description ? ` — ${role.description}` : ''
+        return `    - involved: ${title}${where}${why}`
+      })
+      .join('\n')
+    const head = `- \`${owner}/${name}\` → ${dir}${
+      checkout.primary ? " (PRIMARY — the task's own service)" : ''
+    }${own}`
+    return coLocated ? `${head}\n${coLocated}` : head
+  }
+  if (primary) lines.push(describe(primary))
+  for (const checkout of checkouts) {
+    if (checkout.primary) continue
+    lines.push(describe(checkout))
+  }
+  return lines.join('\n')
 }
 
 /**

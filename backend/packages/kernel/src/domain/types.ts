@@ -26,6 +26,7 @@ export type {
   Position,
   PromptFragment,
   PullRequestRef,
+  PeerPullRequest,
   SpendStatus,
   StepApproval,
   StepReviewComment,

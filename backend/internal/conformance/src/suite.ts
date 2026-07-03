@@ -20,6 +20,7 @@ import {
   type Workspace,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import { allPullRequests } from '@cat-factory/contracts'
 import {
   clearRegisteredPromptFragments,
   registerPromptFragment,
@@ -1070,6 +1071,83 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           involvedServiceIds: ['blk_db'],
         })
         expect(unconnected.status).toBe(422)
+      })
+
+      it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
+        // Service-connections phase 3: a coder run over a task with a connected involved service
+        // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`
+        // beside the own-service PR; the engine records BOTH on the block. This asserts the
+        // full recording + JSON-column round-trip on D1 and Postgres (the fake stands in for
+        // the container — the resolveRepoTargets/peerRepos dispatch path is unit-tested in the
+        // server package). `allPullRequests` then sees the own PR first, then the peer.
+        const app = harness.makeApp({
+          asyncKinds: ['coder'],
+          asyncPolls: 1,
+          pullRequest: {
+            url: 'https://gh/acme/auth/pull/1',
+            number: 1,
+            branch: 'cat-factory/task_login',
+          },
+          peerPullRequests: [
+            {
+              repo: 'acme/email',
+              frameId: 'blk_email',
+              ref: {
+                url: 'https://gh/acme/email/pull/7',
+                number: 7,
+                branch: 'cat-factory/task_login',
+              },
+            },
+          ],
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Connect blk_auth → a provider frame and mark it involved in the task (realistic setup;
+        // the recording itself is driven by what the fake reports, not the resolution).
+        const provider = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 900, y: 900 },
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceConnections: [
+            { serviceBlockId: provider.body.id, description: 'sends mail via it' },
+          ],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          involvedServiceIds: [provider.body.id],
+        })
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Implement',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        await app.drive(wsId)
+
+        const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const task = snap.body.blocks.find((b) => b.id === 'task_login')!
+        expect(task.pullRequest?.url).toBe('https://gh/acme/auth/pull/1')
+        expect(task.peerPullRequests).toEqual([
+          {
+            repo: 'acme/email',
+            frameId: 'blk_email',
+            ref: {
+              url: 'https://gh/acme/email/pull/7',
+              number: 7,
+              branch: 'cat-factory/task_login',
+            },
+          },
+        ])
+        expect(allPullRequests(task)).toEqual([
+          { ref: task.pullRequest },
+          { repo: 'acme/email', frameId: 'blk_email', ref: task.peerPullRequests![0].ref },
+        ])
       })
 
       it('rejects a dependency edge that would create a cycle', async () => {

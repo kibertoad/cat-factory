@@ -34,10 +34,11 @@ import {
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
 import { toRunResult } from './containerAgentResult.js'
-import { buildKindBody } from './jobBody.js'
+import { buildKindBody, renderMultiRepoWorkspaceSection } from './jobBody.js'
 import { UI_TESTER_AGENT_KIND, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
+import type { RepoCheckout, ResolveRepoTargets } from './resolveRepoTarget.js'
 
 // Re-exported for the composition root + tests that wire this executor by name.
 export type { ResolveRunnerTransport }
@@ -316,6 +317,14 @@ function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
   }
 }
 
+/**
+ * The built-in implementer ("Coder") kind. The multi-repo coding fan-out
+ * (service-connections phase 3) applies ONLY to this kind: it is the step that makes the
+ * cross-service change. The in-place fixers / conflict-resolver stay single-repo (phase 4
+ * generalizes the gates + merger); read-only and structured kinds never fan out.
+ */
+const IMPLEMENTER_AGENT_KIND = 'coder'
+
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
 function contextFileName(base: string, used: Set<string>): string {
   const slug =
@@ -393,6 +402,13 @@ export interface ContainerAgentExecutorDependencies {
   ) => Promise<string | undefined>
   /** Resolve which repo (and installation) a run targets. */
   resolveRepoTarget: ResolveRepoTarget
+  /**
+   * Resolve every repo a MULTI-REPO run touches — the task's own service plus each connected
+   * involved service's repo, deduped (service-connections phase 3). Optional: absent ⇒ every
+   * run is single-repo (the involved-services coding fan-out is off), the prior behaviour. Used
+   * only when the block names involved services and the step is the coding implementer.
+   */
+  resolveRepoTargets?: ResolveRepoTargets
   /**
    * Resolve a workspace's owning account id, signed into the proxy session token so the
    * proxy can lease an account-scoped API key from the merged pool. Optional; absent ⇒
@@ -967,12 +983,62 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(webSearchEnabled ? { webSearch: true } : {}),
     }
 
+    // Multi-repo coding (service-connections phase 3): when the IMPLEMENTER runs on a task
+    // with connected involved services, resolve every involved repo and fan the coding out —
+    // peer repos as sibling checkouts (one PR each) plus a prompt section naming the layout.
+    // A service co-located in the primary's own repo (same monorepo) has no separate checkout;
+    // it rides the own-service PR and is named in the section so the agent edits its subtree.
+    // Any involved service present ⇒ the coder works at the repo ROOT (not just its own
+    // service subdir) so it can reach every involved subtree; `commonForKind` swaps `repo`.
+    let peerRepos: { repo: Record<string, unknown>; frameId?: string }[] | undefined
+    let multiRepoSection: string | undefined
+    let commonForKind = common
+    const involvedServices = context.involvedServices ?? []
+    if (
+      context.agentKind === IMPLEMENTER_AGENT_KIND &&
+      involvedServices.length > 0 &&
+      this.deps.resolveRepoTargets
+    ) {
+      const { checkouts } = await this.deps.resolveRepoTargets(
+        workspaceId,
+        blockId,
+        involvedServices.map((s) => s.frameId),
+      )
+      const primaryCheckout = checkouts.find((c) => c.primary)
+      const peerCheckouts = checkouts.filter((c) => !c.primary)
+      // Multi-service iff there is a distinct peer repo OR an involved service co-located in
+      // the primary's monorepo (both need the root-cwd + the prompt section).
+      const coLocated = primaryCheckout?.involved ?? []
+      if (peerCheckouts.length > 0 || coLocated.length > 0) {
+        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
+        if (peerCheckouts.length > 0) {
+          peerRepos = peerCheckouts.map((c: RepoCheckout) => ({
+            repo: buildRepoSpec(c.target, origin(c.target)),
+            ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
+          }))
+        }
+        multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
+        // Work at the repo ROOT: drop the primary's own-service subdir scoping so the agent
+        // can edit every involved subtree in the (mono)repo. The layout section names which
+        // subdirectory each service lives in.
+        if (primaryCheckout) {
+          const { serviceDirectory: _drop, ...rootTarget } = primaryCheckout.target
+          commonForKind = {
+            ...common,
+            repo: buildRepoSpec(rootTarget, origin(rootTarget)),
+          }
+        }
+      }
+    }
+
     const { body, kind } = buildKindBody(promptContext, {
-      common,
+      common: commonForKind,
       webTools,
       repo,
       workBranch,
       workBranchReady,
+      ...(peerRepos ? { peerRepos } : {}),
+      ...(multiRepoSection ? { multiRepoSection } : {}),
     })
     return {
       subscriptionTokenId,

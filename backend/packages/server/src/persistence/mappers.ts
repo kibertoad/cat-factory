@@ -468,6 +468,27 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
       }
     },
   },
+  // The PRs a multi-repo run opened in connected services' repos (engine-written beside the
+  // own-service `pullRequest`). Patch treats an empty array as "clear them", mirroring the
+  // other JSON-array block columns.
+  {
+    read: (row, out) => {
+      if (row.peer_pull_requests != null)
+        out.peerPullRequests = JSON.parse(row.peer_pull_requests as string)
+    },
+    insert: (b, out) => {
+      out.peer_pull_requests = b.peerPullRequests?.length
+        ? JSON.stringify(b.peerPullRequests)
+        : null
+    },
+    patch: (p, out) => {
+      if (p.peerPullRequests !== undefined) {
+        out.peer_pull_requests = p.peerPullRequests?.length
+          ? JSON.stringify(p.peerPullRequests)
+          : null
+      }
+    },
+  },
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
   // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
   legacyUserIdField('createdBy'),

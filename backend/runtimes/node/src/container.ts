@@ -92,6 +92,7 @@ import {
   type MintInstallationToken,
   type ResolveRepoOrigin,
   type ResolveRepoTarget,
+  type ResolveRepoTargets,
   type ResolveRunnerTransport,
   type ServerContainer,
   CompositeAgentExecutor,
@@ -119,6 +120,7 @@ import {
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
   buildResolveRepoTarget,
+  buildResolveRepoTargets,
   makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -761,6 +763,7 @@ function buildNodeContainerExecutor(
   config: AppConfig,
   appRegistry: GitHubAppRegistry | undefined,
   resolveRepoTarget: ResolveRepoTarget,
+  resolveRepoTargets: ResolveRepoTargets,
   resolveTransport: ResolveRunnerTransport | null,
   resolveWorkspaceModelDefault: (
     workspaceId: string,
@@ -808,6 +811,9 @@ function buildNodeContainerExecutor(
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
     resolveRepoTarget,
+    // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
+    // change out across the task's own repo + each connected involved-service repo.
+    resolveRepoTargets,
     ...(resolveAccountId ? { resolveAccountId } : {}),
     mintInstallationToken,
     // Ensure the shared per-task work branch up front so every agent (including the
@@ -1499,6 +1505,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     serviceRepository: repos.serviceRepository,
   })
 
+  // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
+  // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
+  // resolves the involved frames in one query). Fed to the container executor so the
+  // implementer can fan a cross-service change out across sibling checkouts.
+  const resolveRepoTargets = buildResolveRepoTargets({
+    installationRepository: githubInstallationRepository,
+    repoProjectionRepository,
+    blockRepository: repos.blockRepository,
+    serviceRepository: repos.serviceRepository,
+  })
+
   // Best-effort recorder for the provisioning event log (its own Postgres schema).
   // Shared by the env services (via createCore) and the runner/container transport
   // decorator below, so every spin-up/down attempt is logged.
@@ -1646,6 +1663,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     config,
     appRegistry,
     resolveRepoTarget,
+    resolveRepoTargets,
     resolveTransport,
     resolveWorkspaceModelDefault,
     options.mintInstallationToken,

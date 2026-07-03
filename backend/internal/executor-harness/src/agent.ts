@@ -27,7 +27,7 @@ import {
   unmergedPaths,
 } from './git.js'
 import type { PiRunStats } from './pi.js'
-import { noChangesReason, runCodingAgent } from './coding-agent.js'
+import { noChangesReason, runCodingAgent, runMultiRepoCoding } from './coding-agent.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -586,6 +586,11 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
   // clone full, merge the base in to surface the conflicts, then complete the merge
   // commit + push (no PR). Keyed off job DATA (`mergeBase`), not the agent kind.
   if (job.mergeBase) return runConflictResolution(job, opts)
+  // Multi-repo coding (service-connections phase 3): clone every connected peer repo as a
+  // sibling, run the agent once across all of them, and open one PR per changed repo. Keyed
+  // off job DATA (`peerRepos`), not the agent kind — the implementer sets it when the task
+  // has involved services in distinct repos.
+  if (job.peerRepos?.length) return runMultiRepoCoding(job, opts)
 
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
   const { summary, stats, stderrTail, pushed, usage, callMetrics } = await runCodingAgent(

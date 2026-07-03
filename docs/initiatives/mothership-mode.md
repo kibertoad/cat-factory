@@ -113,8 +113,8 @@
   the whole `referenceArchitecture` repo, `envConfigRepairJob` `get`/`update`/`insert` (record-based
   `insert`s via `workspaceField`). Completes the `AgentRunController` retry/stop surface for those kinds.
 - **Kaizen grading reads** — the Kaizen SCREEN reads: `kaizenGrading.listByWorkspace`/`listByExecution`
-  + `kaizenVerifiedCombo.listByWorkspace`. The combo `upsert` + background-sweep methods stay off
-  (grading itself is best-effort until Phase 5).
+  - `kaizenVerifiedCombo.listByWorkspace`. The combo `upsert` + background-sweep methods stay off
+    (grading itself is best-effort until Phase 5).
 - **VCS / GitHub projection reads** — the SPA's VCS board panels: `repoProjection.list`,
   `branchProjection.listByRepo`, `pullRequestProjection.listByWorkspace`,
   `issueProjection.listByWorkspace`, plus `githubInstallation.getByWorkspace` (also the run-path

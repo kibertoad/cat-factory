@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { HarnessAuthFields, RepoSpec } from './job.js'
+import type { AgentJob, AgentResult, HarnessAuthFields, PeerRepoSpec, RepoSpec } from './job.js'
 import {
   branchAheadOfBase,
   branchHasCommitsSince,
@@ -11,6 +11,7 @@ import {
   excludeFromGit,
   headCommit,
   listUntrackedFiles,
+  openPullRequest,
   prepareExistingCheckout,
   pushBranch,
   refreshFromBaseIfClean,
@@ -23,6 +24,7 @@ import {
   agentNeverActed,
   agentOutputTail,
   runAgentInWorkspace,
+  withWorkspace,
 } from './pi-workspace.js'
 import type { ProgressGuardLimits } from './pi.js'
 import type { RunOptions } from './runner.js'
@@ -397,6 +399,262 @@ export async function runCodingAgent(
       return outcome
     },
   )
+}
+
+/** Sanitise an owner/name into a safe single path segment for a sibling checkout directory. */
+function safeDirSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
+}
+
+/** One repository participating in a multi-repo run: where to clone it + what to do after. */
+interface RepoLeg {
+  repo: RepoSpec
+  /** Sibling directory name under the workspace root. */
+  dirName: string
+  /** Absolute checkout directory (filled during the clone phase). */
+  dir: string
+  /** Branch to clone (the repo's base). */
+  cloneBranch: string
+  /** Branch to create off the clone and push the work to (the shared `cat-factory/<block>`). */
+  workBranch: string
+  ghToken: string
+  pr?: { title: string; body: string }
+  frameId?: string
+  primary: boolean
+  /** The branch tip before the run — work iff the branch advances past it. */
+  baseSha: string
+  /** Whether an existing remote work branch was resumed (already carries prior work). */
+  resumed: boolean
+}
+
+/**
+ * Multi-repo coding (service-connections phase 3): clone the primary repo AND every connected
+ * peer repo as SIBLING checkouts under one workspace root, run the agent ONCE with its cwd at
+ * that root (so it makes the cross-service change coherently across all of them), then commit +
+ * push each repo that actually changed and open one PR per dirty repo. The task's own-service PR
+ * is reported as `prUrl`/`branch`; the peer PRs as `peerPullRequests`.
+ *
+ * Deliberately simpler than the single-repo {@link runCodingAgent} for the first cut: NO mid-run
+ * checkpoint pushes (an evicted multi-repo run re-clones on retry — the deterministic work branch
+ * still lets it resume any commits it managed to push at the end), NO warm-pool persistent
+ * checkout (always ephemeral), and NO follow-up sentinel streaming. It reuses the SAME dir-scoped
+ * git helpers, so the per-repo clone/commit/push/PR mechanics match the single-repo path exactly.
+ */
+export async function runMultiRepoCoding(
+  job: AgentJob,
+  opts: RunOptions = {},
+): Promise<AgentResult> {
+  const { signal } = opts
+  const logger = (opts.log ?? log).child({ kind: 'multi-repo', jobId: job.jobId })
+  const peers: PeerRepoSpec[] = job.peerRepos ?? []
+  const primaryWorkBranch = job.pushBranch ?? job.newBranch ?? job.branch
+
+  // Assign a unique sibling directory per repo (owner-prefixed on a name collision, then a
+  // numeric suffix as a last resort) so two repos named the same never clobber each other.
+  const usedDirs = new Set<string>()
+  const claimDir = (repo: RepoSpec): string => {
+    let seg = safeDirSegment(repo.name)
+    if (usedDirs.has(seg)) seg = safeDirSegment(`${repo.owner}-${repo.name}`)
+    let unique = seg
+    for (let i = 2; usedDirs.has(unique); i++) unique = `${seg}-${i}`
+    usedDirs.add(unique)
+    return unique
+  }
+  const legs: RepoLeg[] = [
+    {
+      repo: job.repo,
+      dirName: claimDir(job.repo),
+      dir: '',
+      cloneBranch: job.branch,
+      workBranch: primaryWorkBranch,
+      ghToken: job.ghToken,
+      ...(job.pr ? { pr: job.pr } : {}),
+      primary: true,
+      baseSha: '',
+      resumed: false,
+    },
+    ...peers.map(
+      (peer): RepoLeg => ({
+        repo: peer.repo,
+        dirName: claimDir(peer.repo),
+        dir: '',
+        cloneBranch: peer.repo.baseBranch,
+        workBranch: peer.newBranch,
+        ghToken: peer.ghToken ?? job.ghToken,
+        ...(peer.pr ? { pr: peer.pr } : {}),
+        ...(peer.frameId ? { frameId: peer.frameId } : {}),
+        primary: false,
+        baseSha: '',
+        resumed: false,
+      }),
+    ),
+  ]
+
+  return withWorkspace('multi', async (root) => {
+    // Clone phase: every repo into its sibling dir under the workspace root. Resume an
+    // existing remote work branch (an evicted retry) rather than branching off base again.
+    opts.onPhase?.('clone')
+    for (const leg of legs) {
+      const dir = join(root, leg.dirName)
+      await mkdir(dir, { recursive: true })
+      leg.resumed = await remoteBranchExists(leg.repo.cloneUrl, leg.workBranch, leg.ghToken, signal)
+      if (leg.resumed) {
+        logger.info('multi-repo: resuming existing branch', {
+          repo: leg.dirName,
+          branch: leg.workBranch,
+        })
+        await cloneExistingBranch({
+          cloneUrl: leg.repo.cloneUrl,
+          branch: leg.workBranch,
+          ghToken: leg.ghToken,
+          dir,
+          signal,
+        })
+      } else {
+        logger.info('multi-repo: cloning', { repo: leg.dirName, cloneBranch: leg.cloneBranch })
+        await cloneRepo({
+          repo: { ...leg.repo, baseBranch: leg.cloneBranch },
+          ghToken: leg.ghToken,
+          dir,
+          signal,
+        })
+        await createBranch(dir, leg.workBranch, signal)
+      }
+      leg.dir = dir
+      leg.baseSha = await headCommit(dir, signal)
+    }
+
+    // Run the agent ONCE with its cwd at the workspace root, so it sees every sibling checkout
+    // and can change them coherently. No monorepo/service-directory scoping — the multi-repo
+    // note + the backend system-prompt section explain the layout.
+    opts.onPhase?.('agent')
+    logger.info('multi-repo: running agent', { repos: legs.map((l) => l.dirName) })
+    const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
+      {
+        dir: root,
+        systemPrompt: job.systemPrompt,
+        userPrompt: job.userPrompt,
+        model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
+        ambientAuth: job.ambientAuth,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        webToolsGuidance: job.webToolsGuidance,
+        webSearchProxy: job.webSearch,
+        guardLimits: job.guardLimits,
+        ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
+        multiRepo: true,
+      },
+      opts,
+    )
+
+    // Push phase: commit forgotten tracked edits, then push + open a PR for each repo the run
+    // actually changed. A repo the agent left untouched is skipped (no branch, no PR).
+    opts.onPhase?.('push')
+    let primaryPushed = false
+    let primaryPrUrl: string | undefined
+    const peerPullRequests: NonNullable<AgentResult['peerPullRequests']> = []
+    for (const leg of legs) {
+      await commitTrackedEdits(
+        leg.dir,
+        job.commitMessage ?? leg.pr?.title ?? 'Agent changes',
+        signal,
+      )
+      const advanced = await branchHasCommitsSince(leg.dir, leg.baseSha, signal)
+      let hasWork = advanced || leg.resumed
+      if (leg.resumed && !advanced) {
+        const ahead = await branchAheadOfBase(leg.dir, leg.repo.baseBranch, leg.ghToken, signal)
+        if (ahead === false) hasWork = false
+      }
+      const leftover = await listUntrackedFiles(leg.dir, signal)
+      if (leftover.length > 0) {
+        logger.warn('multi-repo: uncommitted new files left behind (not pushed)', {
+          repo: leg.dirName,
+          count: leftover.length,
+          files: leftover.slice(0, 20),
+        })
+      }
+      if (!hasWork) {
+        logger.info('multi-repo: no changes for repo', { repo: leg.dirName })
+        continue
+      }
+      await pushBranch(leg.dir, leg.workBranch, leg.ghToken, signal)
+      let prUrl: string | null = null
+      if (leg.pr) {
+        prUrl = await openPullRequest({
+          owner: leg.repo.owner,
+          name: leg.repo.name,
+          ghToken: leg.ghToken,
+          head: leg.workBranch,
+          base: leg.repo.baseBranch,
+          pr: leg.pr,
+          apiBase: job.githubApiBase,
+          cloneUrl: leg.repo.cloneUrl,
+          ...(leg.repo.provider ? { provider: leg.repo.provider } : {}),
+          signal,
+        })
+      }
+      if (leg.primary) {
+        primaryPushed = true
+        if (prUrl) primaryPrUrl = prUrl
+      } else if (prUrl) {
+        peerPullRequests.push({
+          repo: `${leg.repo.owner}/${leg.repo.name}`,
+          ...(leg.frameId ? { frameId: leg.frameId } : {}),
+          prUrl,
+          branch: leg.workBranch,
+        })
+      }
+    }
+
+    const anyWork = primaryPushed || peerPullRequests.length > 0
+    if (!anyWork) {
+      // Nothing changed in ANY repo. For the implementer this is a failure (as in the
+      // single-repo path); a caller that tolerates a no-op (never the implementer today)
+      // gets a clean non-event.
+      if (job.noChangesIsError === false) {
+        return {
+          pushed: false,
+          branch: primaryWorkBranch,
+          summary,
+          stats,
+          ...(usage ? { usage } : {}),
+          ...(callMetrics ? { callMetrics } : {}),
+        }
+      }
+      return {
+        pushed: false,
+        branch: primaryWorkBranch,
+        summary,
+        stats,
+        error: noChangesReason(
+          'the agent produced no file changes in any repository',
+          stats,
+          stderrTail,
+        ),
+        failureCause: 'no-changes',
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      }
+    }
+    logger.info('multi-repo: complete', {
+      primaryPushed,
+      primaryPrUrl: primaryPrUrl ?? null,
+      peers: peerPullRequests.length,
+    })
+    return {
+      pushed: primaryPushed,
+      ...(primaryPrUrl ? { prUrl: primaryPrUrl } : {}),
+      branch: primaryWorkBranch,
+      ...(peerPullRequests.length ? { peerPullRequests } : {}),
+      summary,
+      stats,
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+    }
+  })
 }
 
 /**

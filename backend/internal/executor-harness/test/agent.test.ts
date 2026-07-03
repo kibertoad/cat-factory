@@ -51,6 +51,68 @@ describe('parseAgentJob', () => {
     ).toThrow(/repo\.provider/)
   })
 
+  // Multi-repo coding (service-connections phase 3): the peer-repo list is validated + its
+  // clone URLs host-allowlisted exactly like the primary repo.
+  it('parses peerRepos (validated + host-allowlisted like the primary)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'email',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/email.git',
+          },
+          frameId: 'frame-email',
+          newBranch: 'cat-factory/blk',
+          pr: { title: 'Wire email', body: 'body' },
+        },
+      ],
+    })
+    expect(job.peerRepos).toHaveLength(1)
+    expect(job.peerRepos?.[0]).toMatchObject({
+      frameId: 'frame-email',
+      newBranch: 'cat-factory/blk',
+      repo: { owner: 'acme', name: 'email' },
+      pr: { title: 'Wire email' },
+    })
+  })
+
+  it('rejects a peer repo whose clone URL host is not allow-listed (token-exfil guard)', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        peerRepos: [
+          {
+            repo: {
+              owner: 'evil',
+              name: 'x',
+              baseBranch: 'main',
+              cloneUrl: 'https://evil.example.com/evil/x.git',
+            },
+            newBranch: 'cat-factory/blk',
+          },
+        ],
+      }),
+    ).toThrow(/peerRepos\[0\]\.repo\.cloneUrl/)
+  })
+
+  it('requires a newBranch on each peer repo', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        peerRepos: [
+          { repo: { ...base.repo, name: 'email', cloneUrl: 'https://github.com/acme/email.git' } },
+        ],
+      }),
+    ).toThrow(/peerRepos\[0\]\.newBranch/)
+  })
+
   it('accepts a structured explore job', () => {
     const job = parseAgentJob({
       ...base,

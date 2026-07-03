@@ -6,6 +6,7 @@ import type {
   AgentRunResult,
   AsyncAgentExecutor,
   PullRequestRef,
+  PeerPullRequest,
   TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
@@ -61,6 +62,12 @@ export interface FakeAgentOptions {
   echoFragments?: boolean
   /** A PR the (container-flavoured) agent reports opening, so persistence can be exercised. */
   pullRequest?: PullRequestRef
+  /**
+   * PRs the (container-flavoured) agent reports opening in CONNECTED services' repos during a
+   * multi-repo run (service-connections phase 3), so the engine's `peerPullRequests` recording +
+   * persistence round-trip can be exercised without a real container. Beside {@link pullRequest}.
+   */
+  peerPullRequests?: PeerPullRequest[]
   /**
    * A blueprint tree the `blueprints` step reports, so the engine's ingest +
    * board reconcile can be exercised without a real container.
@@ -367,6 +374,10 @@ export class FakeAgentExecutor implements AgentExecutor {
       usage: this.options.usage,
       // Mimic the container "implementer" agent opening a PR for repo-operating work.
       ...(this.options.pullRequest ? { pullRequest: this.options.pullRequest } : {}),
+      // ...and, for a multi-repo run, the PRs it opened in the connected services' repos.
+      ...(this.options.peerPullRequests?.length
+        ? { peerPullRequests: this.options.peerPullRequests }
+        : {}),
     }
   }
 }

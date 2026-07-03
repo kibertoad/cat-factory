@@ -81,6 +81,7 @@ import {
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  buildResolveRepoTargets as buildSharedResolveRepoTargets,
   ContainerEnvConfigRepairer,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -119,6 +120,7 @@ import { WorkersAiLlmUpstream } from './ai/WorkersAiLlmUpstream'
 import {
   ContainerAgentExecutor,
   type ResolveRepoTarget,
+  type ResolveRepoTargets,
   type ResolveRunnerTransport,
 } from './ai/ContainerAgentExecutor'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
@@ -575,6 +577,22 @@ function buildAppRegistry(
  */
 function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
   return buildSharedResolveRepoTarget({
+    installationRepository: new D1GitHubInstallationRepository({ db }),
+    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
+  })
+}
+
+/**
+ * The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
+ * connected involved-service repo, deduped. Wired from the SAME D1 repos as the singular
+ * resolver (the D1 service repo's batched `listByFrameBlocks` resolves the involved frames'
+ * repos in one query). Fed to the container executor so the implementer can fan a
+ * cross-service change out across sibling checkouts.
+ */
+function buildResolveRepoTargets(db: D1Database): ResolveRepoTargets {
+  return buildSharedResolveRepoTargets({
     installationRepository: new D1GitHubInstallationRepository({ db }),
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
@@ -1361,6 +1379,9 @@ function buildContainerExecutor(
     // (block-pinned > workspace per-kind default > env routing > env default).
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     resolveRepoTarget,
+    // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
+    // change out across the task's own repo + each connected involved-service repo.
+    resolveRepoTargets: buildResolveRepoTargets(db),
     // Resolve the workspace's owning account so the proxy can lease account-scoped keys.
     resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
     mintInstallationToken,

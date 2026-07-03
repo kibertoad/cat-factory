@@ -55,12 +55,12 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
 
 | Item                                                                                                     | Status |
 | -------------------------------------------------------------------------------------------------------- | ------ |
-| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | todo   |
-| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | todo   |
-| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | todo   |
-| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | todo   |
-| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | todo   |
-| Conformance: two-repo coding run records both PRs on both runtimes                                       | todo   |
+| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | done   |
+| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | done   |
+| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | done   |
+| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | done   |
+| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | done   |
+| Conformance: two-repo coding run records both PRs on both runtimes                                       | done   |
 
 ### Phase 4 — gates + merger generalization (design in the doc, §Phase 4)
 
@@ -96,3 +96,25 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
   the asymmetry is deliberate.
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
   with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
+- **Phase 3 carried-forward notes:**
+  - `resolveRepoTargets` (`@cat-factory/server`, beside the singular resolver) shares the same
+    store deps, hoists the installation + projection reads ONCE and batches involved frames via
+    `serviceRepository.listByFrameBlocks` — do NOT loop the singular resolver per frame (N+1).
+    It returns `RepoCheckout[]` (primary first) deduped by `owner/name`; each carries the
+    involved frames co-located in it (`involved[]`) so a monorepo hosting several involved
+    services is ONE checkout with all their subdirs noted for the prompt.
+  - The fan-out is gated to the `coder` implementer (`IMPLEMENTER_AGENT_KIND` in
+    `ContainerAgentExecutor`) and only when `context.involvedServices` is non-empty. In
+    multi-service mode the primary's `serviceDirectory` scoping is DROPPED so the agent works at
+    the repo root and can reach every involved subtree (co-located monorepo services included);
+    the "Multi-repo workspace" prompt section (`renderMultiRepoWorkspaceSection`) names where
+    each service lives. Phase 4 must extend this to the gate helpers (`ci-fixer` etc.) which are
+    still single-repo (they take the `onPr` path, which does NOT emit `peerRepos`).
+  - The harness multi-repo flow (`runMultiRepoCoding`) is deliberately simpler than the
+    single-repo `runCodingAgent`: NO mid-run checkpoint pushes, NO warm-pool persistent checkout,
+    NO follow-up streaming. If phase 4 needs any of those across repos, generalize there.
+  - `peerPullRequests` is engine-written (RunDispatcher), NOT in `updateBlockSchema`; the JSON
+    column uses the empty-array-clears mapper pattern. The conformance test exercises the
+    RECORDING + round-trip (the fake reports peer PRs); the resolve→peerRepos dispatch path is
+    unit-tested in `resolveRepoTarget.spec.ts` + the server job-body specs (the fake never runs
+    the harness). Phase 4's CI/merge-all reads `allPullRequests(block)`.

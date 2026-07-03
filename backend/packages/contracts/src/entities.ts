@@ -52,6 +52,24 @@ export const pullRequestRefSchema = v.object({
 export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
 
 /**
+ * A pull request the container "implementer" agent opened in a CONNECTED service's repo
+ * during a multi-repo run (the service-connections initiative, phase 3): the coding agent
+ * clones every involved service's repo as a sibling checkout and opens one PR per repo it
+ * actually changed. The task's OWN-service PR stays on {@link blockSchema.pullRequest}
+ * (singular); this array carries the PRs opened in the PEER repos, each attributed to the
+ * repo (`owner/name`) and the involved service frame it belongs to.
+ */
+export const peerPullRequestSchema = v.object({
+  /** The peer repo the PR was opened in, `owner/name`. */
+  repo: v.string(),
+  /** The involved service frame's block id this repo resolved from, when known. */
+  frameId: v.optional(v.string()),
+  /** The PR link itself, same shape as the own-service {@link pullRequestRefSchema}. */
+  ref: pullRequestRefSchema,
+})
+export type PeerPullRequest = v.InferOutput<typeof peerPullRequestSchema>
+
+/**
  * Per-task override for an issue-tracker writeback action (see the workspace-level
  * `writebackCommentOnPrOpen` / `writebackResolveOnMerge` in tracker settings).
  * `on`/`off` force the behaviour for this task; absent ⇒ inherit the workspace setting.
@@ -222,6 +240,14 @@ export const blockSchema = v.object({
    */
   pullRequest: v.optional(pullRequestRefSchema),
   /**
+   * PRs the implementer opened in CONNECTED services' repos during a multi-repo run
+   * (service-connections phase 3), one per involved-service repo it actually changed.
+   * The own-service PR stays on {@link pullRequest}; this is engine-written (never
+   * client-patchable) beside it, so single-repo readers stay untouched and only the
+   * multi-repo-aware paths read {@link allPullRequests}. Absent for a single-repo task.
+   */
+  peerPullRequests: v.optional(v.array(peerPullRequestSchema)),
+  /**
    * Id of the merge threshold preset selected for this task (see
    * {@link mergeThresholdPresetSchema}). Drives the `merger` step's auto-merge
    * decision and the CI-fixer attempt budget. Absent means "use the workspace's
@@ -277,6 +303,24 @@ export const blockSchema = v.object({
   internal: v.optional(v.boolean()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
+
+/**
+ * Every pull request a block's implementation opened, own-service first then any peer
+ * repos (service-connections phase 3). The single source of truth for callers that must
+ * act across ALL of a multi-repo task's PRs (phase-4 CI aggregation / merge-all); every
+ * single-repo reader keeps reading {@link Block.pullRequest} directly. The own-service
+ * entry carries no `repo`/`frameId` (its repo is the task's own service); peers carry both.
+ */
+export function allPullRequests(
+  block: Pick<Block, 'pullRequest' | 'peerPullRequests'>,
+): { repo?: string; frameId?: string; ref: PullRequestRef }[] {
+  const out: { repo?: string; frameId?: string; ref: PullRequestRef }[] = []
+  if (block.pullRequest) out.push({ ref: block.pullRequest })
+  for (const peer of block.peerPullRequests ?? []) {
+    out.push({ repo: peer.repo, ...(peer.frameId ? { frameId: peer.frameId } : {}), ref: peer.ref })
+  }
+  return out
+}
 
 /**
  * A curated best-practice "prompt fragment" (e.g. Node performance, React state

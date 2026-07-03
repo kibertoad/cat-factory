@@ -242,6 +242,9 @@ export const blocks = pgTable(
     service_fragment_ids: text('service_fragment_ids'),
     model_id: text('model_id'),
     pull_request: text('pull_request'),
+    // Task-level: PRs a multi-repo run opened in connected services' repos beside the
+    // own-service `pull_request` — serialized JSON array of { repo, frameId?, ref }.
+    peer_pull_requests: text('peer_pull_requests'),
     merge_preset_id: text('merge_preset_id'),
     model_preset_id: text('model_preset_id'),
     pipeline_id: text('pipeline_id'),
