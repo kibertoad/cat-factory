@@ -6193,6 +6193,130 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(decision.thresholds?.presetName).toBeTruthy()
       })
 
+      it('never auto-merges a task pinned to a "human review only" preset, even on a credible within-threshold assessment', async () => {
+        // The "Manual review only" built-in preset (`autoMergeEnabled: false`) is the
+        // human-review-only policy: a task pinned to it must ALWAYS route its PR to a human,
+        // regardless of how low the assessment scores are. This drives the full task-threshold
+        // wiring end-to-end — `block.mergePresetId` → `resolveMergePreset` repository lookup →
+        // `MergeResolver` — which the resolver unit test can't (it injects the preset directly).
+        // A maximally-mergeable assessment (0/0/0 + a real rationale) would auto-merge under the
+        // default preset; here it must NOT, proving the pinned preset — not the default — governs.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0,
+            risk: 0,
+            impact: 0,
+            rationale: 'Trivial, well-tested change.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        // Listing the catalog lazily seeds the built-ins so `mp_manual_review` is a real row the
+        // task can pin (the resolver reads it back via the repository, which does not self-seed).
+        const presets = await app.call<MergeThresholdPreset[]>(
+          'GET',
+          `/workspaces/${wsId}/merge-presets`,
+        )
+        expect(presets.body.some((p) => p.id === 'mp_manual_review')).toBe(true)
+        // Pin the human-review-only preset on the task.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          mergePresetId: 'mp_manual_review',
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        // Human review only: the PR is left open for a human — never auto-merged.
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
+        // The recorded decision names the pinned preset and the disabled-auto-merge reason so the
+        // SPA banner is precise (distinct from an over-threshold `exceeded_thresholds`).
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          thresholds?: { presetName?: string; autoMergeEnabled?: boolean }
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('auto_merge_disabled')
+        expect(decision.thresholds?.presetName).toBe('Manual review only')
+        expect(decision.thresholds?.autoMergeEnabled).toBe(false)
+      })
+
+      it('routes to human review when a task pinned to a strict preset gets an over-threshold assessment', async () => {
+        // The auto-merge ceilings a task's PICKED preset carries must actually gate the merge —
+        // not just the workspace default. Pin a custom strict preset (low ceilings) and return an
+        // assessment that clears the default's ceilings but exceeds the strict one's: the merge
+        // must be blocked, proving the pinned preset's thresholds — resolved via the repository —
+        // are the ones compared, and the exceeded axes are reported precisely.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0.45,
+            risk: 0.1,
+            impact: 0.45,
+            rationale: 'Touches several modules with moderate coupling.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const strict = await app.call<MergeThresholdPreset>(
+          'POST',
+          `/workspaces/${wsId}/merge-presets`,
+          {
+            name: 'Strict',
+            maxComplexity: 0.3,
+            maxRisk: 0.3,
+            maxImpact: 0.3,
+            ciMaxAttempts: 10,
+            maxRequirementIterations: 6,
+            maxRequirementConcernAllowed: 'none',
+          },
+        )
+        expect(strict.status).toBe(201)
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          mergePresetId: strict.body.id,
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          exceededAxes?: string[]
+          thresholds?: { presetName?: string }
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('exceeded_thresholds')
+        // complexity (0.45) and impact (0.45) clear the default (0.5) but exceed the strict 0.3;
+        // risk (0.1) is within — so only the two breaching axes are reported.
+        expect(decision.exceededAxes?.sort()).toEqual(['complexity', 'impact'])
+        expect(decision.thresholds?.presetName).toBe('Strict')
+      })
+
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {
         // Below the threshold the companion loops the producer back for automatic rework;
         // once the budget is spent the run no longer fails — it PARKS on the shared
