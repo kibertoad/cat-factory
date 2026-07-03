@@ -2982,6 +2982,9 @@
       "findings": "Observations",
       "open": "Ouvertes",
       "answered": "Répondues",
+      "recommendations": "Recommandations",
+      "recsGenerating": "En cours",
+      "recsToReview": "À examiner",
       "model": "Modèle"
     },
     "actions": {

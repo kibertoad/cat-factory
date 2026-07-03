@@ -2993,6 +2993,9 @@
       "findings": "ממצאים",
       "open": "פתוחים",
       "answered": "נענו",
+      "recommendations": "המלצות",
+      "recsGenerating": "בתהליך יצירה",
+      "recsToReview": "לבדיקה",
       "model": "מודל"
     },
     "actions": {

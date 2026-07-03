@@ -2995,6 +2995,9 @@
       "findings": "所見",
       "open": "未対応",
       "answered": "回答済み",
+      "recommendations": "推奨事項",
+      "recsGenerating": "生成中",
+      "recsToReview": "確認待ち",
       "model": "モデル"
     },
     "actions": {

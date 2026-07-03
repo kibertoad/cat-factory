@@ -2982,6 +2982,9 @@
       "findings": "Hallazgos",
       "open": "Abiertos",
       "answered": "Respondidos",
+      "recommendations": "Recomendaciones",
+      "recsGenerating": "Generando",
+      "recsToReview": "Por revisar",
       "model": "Modelo"
     },
     "actions": {

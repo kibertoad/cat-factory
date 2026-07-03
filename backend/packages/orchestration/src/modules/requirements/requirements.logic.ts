@@ -332,6 +332,54 @@ export function coerceRecommendations(
 }
 
 /**
+ * Coerce the Writer's JSON for a MULTI-finding chunk into a map keyed by FINDING id. Prefers the
+ * echoed `itemId` to route each suggestion to its finding (so two findings that share an identical
+ * title+detail stay distinct), then falls back to POSITIONAL order for any finding the ids didn't
+ * cover: models frequently omit or garble the echoed id, and {@link coerceRecommendations} alone
+ * would then drop a perfectly usable batched response and force-reopen every finding in the chunk.
+ * Entries not consumed by an id match are handed to the still-unanswered findings in prompt order —
+ * the order {@link buildRecommendationPrompt} lists them and asks the Writer to answer them in — so
+ * a response that echoes no ids still routes correctly as long as it preserves that order.
+ */
+export function coerceChunkRecommendations(
+  raw: unknown,
+  findings: RequirementReviewItem[],
+): Map<string, { recommendation: string; fromStandard: string | null }> {
+  const list = Array.isArray((raw as { recommendations?: unknown })?.recommendations)
+    ? ((raw as { recommendations: unknown[] }).recommendations as unknown[])
+    : Array.isArray(raw)
+      ? (raw as unknown[])
+      : []
+  const entries = list
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+    .map((obj) => ({
+      itemId: asString(obj.itemId),
+      recommendation: asString(obj.recommendation),
+      fromStandard: asString(obj.fromStandard) || null,
+    }))
+    .filter((e) => e.recommendation)
+  const out = new Map<string, { recommendation: string; fromStandard: string | null }>()
+  const findingIds = new Set(findings.map((f) => f.id))
+  const consumed = new Set<number>()
+  // Pass 1: route each entry whose echoed itemId names a finding in this chunk.
+  entries.forEach((e, idx) => {
+    if (e.itemId && findingIds.has(e.itemId) && !out.has(e.itemId)) {
+      out.set(e.itemId, { recommendation: e.recommendation, fromStandard: e.fromStandard })
+      consumed.add(idx)
+    }
+  })
+  // Pass 2: fill any finding the ids didn't cover from the leftover entries, in prompt order.
+  const leftover = entries.filter((_, idx) => !consumed.has(idx))
+  let li = 0
+  for (const f of findings) {
+    if (out.has(f.id) || li >= leftover.length) continue
+    const e = leftover[li++]!
+    out.set(f.id, { recommendation: e.recommendation, fromStandard: e.fromStandard })
+  }
+  return out
+}
+
+/**
  * Coerce the Writer's JSON for a SINGLE-finding call. The per-finding recommendation flow
  * prompts the Writer with exactly one finding, so it must tolerate a missing/garbled `itemId`:
  * single-item prompts frequently omit the echoed id, and {@link coerceRecommendations} drops

@@ -2995,6 +2995,9 @@
       "findings": "Bulgular",
       "open": "Açık",
       "answered": "Yanıtlanan",
+      "recommendations": "Öneriler",
+      "recsGenerating": "Oluşturuluyor",
+      "recsToReview": "İncelenecek",
       "model": "Model"
     },
     "actions": {

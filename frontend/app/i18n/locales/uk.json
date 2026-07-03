@@ -2982,6 +2982,9 @@
       "findings": "Зауваження",
       "open": "Відкриті",
       "answered": "З відповіддю",
+      "recommendations": "Рекомендації",
+      "recsGenerating": "Створення",
+      "recsToReview": "На перегляд",
       "model": "Модель"
     },
     "actions": {
