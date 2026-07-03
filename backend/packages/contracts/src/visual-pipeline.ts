@@ -75,12 +75,18 @@ export function frameAllowsVisualPipeline(
  *
  * Only a binding with a NON-EMPTY `envVar` counts: an empty-`envVar` row is filtered out of the
  * injected env (the frontend never receives that backend's URL, so its browser never calls it,
- * so no cross-origin request to allow). Each contributing frontend emits its tester origin
- * `http://localhost:<servePort>` — the port the app is ACTUALLY served on
- * (`resolveFrontendServePort`, which sanitizes a reserved-port collision to the default), so the
- * injected CORS origin can't drift from the served port. Deduped + sorted for a stable comma-join.
- * (The browsable-preview origin is a local-mode differentiator added once the preview host port is
- * pinned — see the frontend-preview initiative.)
+ * so no cross-origin request to allow). Each contributing frontend emits `http://localhost:<servePort>`
+ * — the port the app is ACTUALLY served on (`resolveFrontendServePort`, which sanitizes a
+ * reserved-port collision to the default), so the injected CORS origin can't drift from the served
+ * port. Deduped + sorted for a stable comma-join.
+ *
+ * This one origin covers BOTH self-contained UI-test paths a frontend can drive against the service:
+ *   - the `tester-ui` container, whose in-container browser serves the app at `localhost:<servePort>`, and
+ *   - the browsable PREVIEW (local Docker family), whose host port is now PINNED to the serve port
+ *     (`LocalPreviewTransport`), so a developer's browser reaches it at the same `localhost:<servePort>`.
+ * They share the origin, so a `previewEnabled` frontend needs no extra CORS entry. (Apple `container`
+ * reaches the preview at the VM's own IP — `http://<containerIP>:<servePort>` — which is not knowable
+ * ahead of provision, so that origin is never injected; only the localhost-pinnable Docker family is.)
  */
 export function frontendOriginsForService(
   serviceFrameId: string,

@@ -53,7 +53,7 @@ build on. Link the merged pilot PR here once it lands.
 | 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector                     | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
 | 6a  | Reverse CORS origin injection (`{{input.frontendOrigins}}`) + binding dedup correctness           | done   | this PR                                                   |
 | 6b  | Inspector resolved-binding visibility (envVar → service → live URL/mock) + run-detail + soft note | done   | this PR                                                   |
-| 6c  | Pin local preview host port (deterministic preview origin) + fold into `frontendOrigins`          | todo   | (its own PR)                                              |
+| 6c  | Pin local preview host port (deterministic preview origin) + fold into `frontendOrigins`          | done   | this PR                                                   |
 
 ## Conventions & gotchas carried between iterations
 
@@ -450,3 +450,51 @@ ResolvedFrontendBinding[]` ride in `agent_runs.detail` (like `failureHistory`), 
     Skipped on `mothership` (its env connect/provision write surface is unproxied), like the sibling 4b test.
   - **6c is unaffected.** The local-preview host-port pinning + folding the preview origin into
     `frontendOriginsForService` remains the last open slice; nothing here touches the preview transport.
+- Slice 6c conventions & gotchas (pin the local preview host port → deterministic preview origin):
+  - **The preview host port is PINNED to the serve port, and that resolves the whole slice** — the
+    browsable preview origin becomes `http://localhost:<servePort>`, the SAME string
+    `frontendOriginsForService` already injects for the in-container `tester-ui`. So the "fold the
+    preview into `frontendOrigins`" work was NOT a new emission: `frontendOriginsForService` needed
+    only a doc update. Before 6c the preview served on an EPHEMERAL host port and the transport formed
+    its URL via `docker port` (→ `http://127.0.0.1:<random>`), a DIFFERENT origin from the injected
+    `http://localhost:<servePort>` CORS entry — so a developer browsing the preview got CORS-blocked
+    when the app called the live backend. 6c aligns the two by pinning host = serve port. Do NOT
+    introduce a separate "preview port" config field or a distinct preview origin — the coincidence
+    with the tester origin is the point (one CORS entry covers both paths).
+  - **`RunContainerSpec.publishPorts` widened from `number[]` to `Array<{ container; host? }>`.** An
+    explicit `host` pins the mapping (Docker `-p 127.0.0.1:<host>:<container>` — deterministic,
+    pre-knowable); an absent `host` keeps the old ephemeral behaviour (`-p 127.0.0.1:0:<container>`).
+    Only the preview transport sets `publishPorts` (the runner transport never publishes extra ports),
+    so the blast radius is `LocalPreviewTransport` + the two adapters + their unit tests.
+  - **`ContainerRuntimeAdapter.publishesToLocalhost` is the runtime asymmetry, a top-level adapter
+    flag (not a `RuntimeCapabilities` field).** Docker/Podman/OrbStack/Colima publish to the host
+    loopback ⇒ `true` (a class-constant on `DockerRuntimeAdapter`, since it's family-constant, NOT
+    threaded through `RuntimeProfile`/constructor options); Apple `container` (one VM per container,
+    reached by IP) ⇒ `false`. The transport keys off it: `true` ⇒ pin host = serve port and form
+    `http://localhost:<servePort>` WITHOUT a `docker port` readback (which would report `127.0.0.1`, a
+    different origin from the injected `localhost`); `false` ⇒ read the container IP after start and
+    form `http://<containerIP>:<servePort>`. Apple's origin is NOT pre-knowable (the VM IP is assigned
+    at runtime), so it is never folded into `frontendOriginsForService` — only the Docker family yields
+    a pinnable localhost origin. Adding the field touched the two real adapters + the two fake adapters
+    in the local-runtime unit tests.
+  - **`localhost` vs `127.0.0.1` is a real CORS distinction** — browsers treat them as separate
+    origins. The injected CORS entry (`frontendOriginsForService`) and the browsable URL the SPA shows
+    (`PreviewView.url`) BOTH use `localhost` so a developer's `Origin` header matches. This is why the
+    transport hardcodes `http://localhost:<servePort>` for the pinned case rather than echoing back
+    `docker port` (which is `127.0.0.1`).
+  - **Pinning trades ephemeral collision-freedom for a deterministic origin.** The old `-p
+127.0.0.1:0:<port>` mapping could never collide; pinning host = serve port can, when the port is
+    already bound on the host (a second frontend frame's preview defaulting to the same `servePort`,
+    or a local dev server — 4173 is `vite preview`'s default). `LocalPreviewTransport.start` catches
+    the `-p` bind failure (only reachable on the pinned/localhost path) and rethrows an actionable
+    "host port `<servePort>` is already in use" message instead of the raw daemon stderr. There is
+    deliberately NO ephemeral fallback: an ephemeral host port would break the CORS-origin match that
+    is the whole point of the slice.
+  - **Runtime symmetry:** the preview transport is a genuine local/node differentiator (only a runtime
+    with a host-port-publish primitive wires it; the Worker never does — `frontendPreview.supported:
+false`), so pinning it needs no Worker change. `frontendOriginsForService` lives in
+    `@cat-factory/contracts` and is consumed by the shared `RunDispatcher`, so the CORS injection works
+    on every runtime that runs a deployer. No harness change (no image bump): pinning is a
+    transport/adapter concern; the app still serves on the serve port inside the container regardless.
+  - **The initiative's runtime-neutral self-contained UI-test path is complete; the browsable preview
+    (a local/node differentiator) is complete through 6c.** No open slices remain in this tracker.
