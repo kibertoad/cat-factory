@@ -114,6 +114,14 @@ export function statusForPersistenceError(code: PersistenceErrorCode): number {
  *                       directly. A non-object arg, a missing/non-string `workspaceId`/`serviceId`,
  *                       an out-of-scope workspace, or a service whose account differs from the
  *                       workspace's (incl. a missing service) is refused as 404.
+ *   - `owner`         — `args[kindArg]`/`args[idArg]` are a tenant-library `(ownerKind, ownerId)`
+ *                       PAIR (the prompt-fragment library, `ownerKind` ∈ `workspace` | `account`):
+ *                       `workspace` → resolve the workspace's owning account (like `workspace`);
+ *                       `account` → the ownerId IS an accountId (like `account`). Any other kind, a
+ *                       non-string ownerId, or an unresolvable / out-of-scope owner fails closed (404).
+ *   - `ownerField`    — `args[arg]` is a library record whose `(ownerKind, ownerId)` are FIELDS (an
+ *                       `upsert(record)` whose owner is a property, not positional args). Binds on
+ *                       those fields exactly like `owner`; a non-object arg / missing fields fail closed.
  */
 export type ScopeRule =
   | { kind: 'workspace'; arg: number }
@@ -127,6 +135,8 @@ export type ScopeRule =
   | { kind: 'serviceList'; arg: number }
   | { kind: 'service'; arg: number }
   | { kind: 'serviceMount'; arg: number }
+  | { kind: 'owner'; kindArg: number; idArg: number }
+  | { kind: 'ownerField'; arg: number }
 
 export interface MethodSpec {
   scope: ScopeRule
@@ -728,6 +738,56 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- Prompt-fragment library management surface ---------------------------------
+  // The tenant-scoped prompt-fragment library (ADR 0006) a mothership-mode SPA curates
+  // (`FragmentLibraryController` → `FragmentLibraryService`): list / create / update / delete
+  // hand-authored fragments at either tier. The library module assembles from
+  // `promptFragmentRepository` ALONE (no connection/secret repo — unlike the document/task
+  // integrations, whose modules require a decrypt-inside connection repo and so stay off), and its
+  // rows carry NO secrets, so the whole management surface is remote. Every method is keyed by an
+  // `(ownerKind, ownerId)` PAIR (`ownerKind` ∈ `workspace` | `account`), bound by the `owner` scope
+  // rule (positional pair) / `ownerField` rule (the record's fields on `upsert`): a `workspace`
+  // owner resolves its account like the `workspace` rule, an `account` owner IS the accountId — so a
+  // machine token scoped to one account can never read/write another tenant's fragments. Both tiers'
+  // endpoints are member-level (account-tier routes guard on `requireMember`, NOT `requireAdmin`), so
+  // this follows the same member-level policy as the other settings/library panels above.
+  //
+  // The `sourceId`-keyed `listBySource` stays off — it is the repo-sync fan-out read (the mothership
+  // owns GitHub sync; the source service is gated on a GitHub client absent on a mothership node), so
+  // it is not on the SPA library-management path here.
+  promptFragmentRepository: {
+    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    get: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+    softDelete: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+  },
+  // The fragment-source (repo-linkage) library the SPA lists + links (`FragmentSourceService`), owner
+  // scoped exactly like the fragments above. `listByOwner` (the sources list) is bound by the `owner`
+  // rule; the record-based `upsert(record)` by `ownerField`. The `sourceId`-keyed reads/writes
+  // (`get`/`updateSyncState`/`softDelete`) stay off — they back the repo-SYNC management the
+  // mothership owns (the source service needs a GitHub client, which a mothership node does not have),
+  // so a later GitHub-sync-in-mothership slice opens them with a source→owner resolver.
+  fragmentSourceRepository: {
+    listByOwner: { scope: { kind: 'owner', kindArg: 0, idArg: 1 } },
+    upsert: { scope: { kind: 'ownerField', arg: 0 } },
+  },
+  // --- Account onboarding read surface --------------------------------------------
+  // The two account-scoped READS a mothership-mode SPA's account/members + email-settings panels
+  // drive, both member-level (`AccountController` guards them with `requireMember`, NOT
+  // `requireAdmin`). arg0 is an accountId → the `account` rule (reject out-of-scope as 404). The
+  // account-lifecycle WRITES stay off: `invitationRepository.create`/`setStatus` (inviting/revoking
+  // members is admin-gated), its pre-auth `findByTokenHash`/`get` (the unauthenticated accept-invite
+  // lookup — never a scoped-token call), and `emailConnectionRepository.upsert`/`softDelete`
+  // (connect/disconnect are admin-gated). The email connection `getByAccount` returns the record with
+  // its provider key as a SEALED `apiKeyCipher` blob (the repo does NOT decrypt — sealing/decryption
+  // live in the email service; delivery is delegated to the mothership), so no plaintext credential
+  // crosses the machine API — the same sealed-blob precedent as the observability/runner connections.
+  invitationRepository: {
+    listByAccount: { scope: { kind: 'account', arg: 0 } },
+  },
+  emailConnectionRepository: {
+    getByAccount: { scope: { kind: 'account', arg: 0 } },
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -933,6 +993,46 @@ export async function dispatchPersistenceCall(
       // service in scope — a legacy/NULL-account service (never present under a scoped token)
       // won't equal the string account, so it fails closed too.
       if (typeof serviceAccount !== 'string' || serviceAccount !== workspaceAccount) return denied
+      break
+    }
+    case 'owner': {
+      // A tenant-library row keyed by an (ownerKind, ownerId) PAIR. Resolve the owning account
+      // server-side and reject anything outside the token scope (404, no existence leak):
+      //   - 'workspace' → the ownerId is a workspaceId; resolve its owning account (like `workspace`).
+      //   - 'account'   → the ownerId IS an accountId (like `account`).
+      // Any other kind, a non-string ownerId, or an unresolvable/out-of-scope owner fails closed.
+      const ownerKind = args[rule.kindArg]
+      const ownerId = args[rule.idArg]
+      if (typeof ownerId !== 'string') return denied
+      if (ownerKind === 'workspace') {
+        if (!inScope(await opts.resolveAccountId(ownerId))) return denied
+      } else if (ownerKind === 'account') {
+        if (!inScope(ownerId)) return denied
+      } else {
+        return denied
+      }
+      break
+    }
+    case 'ownerField': {
+      // The record-based library `upsert(record)` whose (ownerKind, ownerId) are FIELDS of the
+      // record, not positional args. Bind on those fields exactly like `owner` — a non-object arg,
+      // a missing/non-string field, or an unresolvable/out-of-scope owner is refused as 404, so the
+      // row can only ever be persisted under the caller's own in-scope owner.
+      const record = args[rule.arg]
+      const ownerKind =
+        record && typeof record === 'object'
+          ? (record as { ownerKind?: unknown }).ownerKind
+          : undefined
+      const ownerId =
+        record && typeof record === 'object' ? (record as { ownerId?: unknown }).ownerId : undefined
+      if (typeof ownerId !== 'string') return denied
+      if (ownerKind === 'workspace') {
+        if (!inScope(await opts.resolveAccountId(ownerId))) return denied
+      } else if (ownerKind === 'account') {
+        if (!inScope(ownerId)) return denied
+      } else {
+        return denied
+      }
       break
     }
     case 'visibility': {

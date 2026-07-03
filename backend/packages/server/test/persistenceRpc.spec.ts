@@ -356,6 +356,37 @@ function makeRegistry(): {
       delete: async () => undefined,
       listOlderThan: async () => [],
     },
+    // The prompt-fragment library management surface, keyed by an (ownerKind, ownerId) PAIR. Each
+    // read echoes the pair so the round-trip can assert the whole bound owner reached the repo;
+    // the void writes resolve. `listBySource` is wired but sourceId-keyed (absent from the allow-list).
+    promptFragmentRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      get: async (ownerKind: string, ownerId: string, fragmentId: string) => ({
+        ownerKind,
+        ownerId,
+        fragmentId,
+      }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      listBySource: async () => [],
+    },
+    // The fragment-source library: owner-keyed list + record-based upsert. `get` is wired but
+    // sourceId-keyed (absent from the allow-list — the repo-sync management the mothership owns).
+    fragmentSourceRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      upsert: async () => undefined,
+      get: async (id: string) => ({ id }),
+    },
+    // The account onboarding reads: each echoes the accountId (arg0) so the round-trip can assert
+    // the call reached the bound account. `create` is wired but admin-gated (absent from the allow-list).
+    invitationRepository: {
+      listByAccount: async (accountId: string) => [{ accountId }],
+      create: async () => undefined,
+    },
+    emailConnectionRepository: {
+      getByAccount: async (accountId: string) => ({ accountId }),
+      upsert: async () => undefined,
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -1712,5 +1743,169 @@ describe('service board-composition read surface (blockList-scoped)', () => {
 
   it('allows listByFrameBlocks with an empty list (no block to scope)', async () => {
     await expect(remoteRegistry().serviceRepository!.listByFrameBlocks!([])).resolves.toBeDefined()
+  })
+})
+
+describe('prompt-fragment library management surface (owner-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The owner-keyed reads bind on an (ownerKind, ownerId) PAIR (the `owner` rule): `workspace`
+  // resolves the workspace's account, `account` IS the accountId. `args` are the trailing arguments
+  // after the pair. Each is exercised with BOTH owner kinds, in and out of scope.
+  const OWNER_READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'promptFragmentRepository', method: 'listByOwner', args: [] },
+    { repo: 'promptFragmentRepository', method: 'get', args: ['frag_1'] },
+    { repo: 'fragmentSourceRepository', method: 'listByOwner', args: [] },
+  ]
+
+  for (const { repo, method, args } of OWNER_READS) {
+    it(`forwards ${repo}.${method} for a workspace owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('workspace', 'ws_in', ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'workspace', ownerId: 'ws_in' })
+    })
+
+    it(`forwards ${repo}.${method} for an account owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('account', ACCOUNT, ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'account', ownerId: ACCOUNT })
+    })
+
+    it(`rejects ${repo}.${method} for a workspace owner out of scope (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(
+        remoteRegistry()[repo]![method]!('workspace', 'ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an account owner out of scope (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('account', OTHER_ACCOUNT, ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an unknown owner kind (fails closed)`, async () => {
+      // A kind the rule doesn't recognise can't be scope-bound, so it is refused (never reaches the repo).
+      await expect(
+        remoteRegistry()[repo]![method]!('user', 'usr_x', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // The `softDelete` (void owner-keyed write): forwards in scope, rejected out of scope.
+  it('forwards promptFragmentRepository.softDelete for an in-scope owner', async () => {
+    await expect(
+      remoteRegistry().promptFragmentRepository!.softDelete!('account', ACCOUNT, 'frag_1', 0),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects promptFragmentRepository.softDelete for an out-of-scope owner (404)', async () => {
+    await expect(
+      remoteRegistry().promptFragmentRepository!.softDelete!('workspace', 'ws_out', 'frag_1', 0),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The record-based `upsert(record)` binds on the record's `(ownerKind, ownerId)` FIELDS (the
+  // `ownerField` rule): a fragment/source row can only ever land under an in-scope owner.
+  const UPSERTS = ['promptFragmentRepository', 'fragmentSourceRepository']
+
+  for (const repo of UPSERTS) {
+    it(`forwards ${repo}.upsert when the record targets an in-scope workspace owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'workspace', ownerId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`forwards ${repo}.upsert when the record targets an in-scope account owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'account', ownerId: ACCOUNT }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.upsert when the record targets an out-of-scope owner (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'workspace', ownerId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has no owner fields (404, fail-closed)`, async () => {
+      await expect(remoteRegistry()[repo]!.upsert!({})).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has an unknown owner kind (404, fail-closed)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'user', ownerId: 'usr_x' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  it('still refuses the sourceId-keyed sync reads (off the allow-list)', async () => {
+    // `promptFragmentRepository.listBySource` + `fragmentSourceRepository.get` are the repo-sync
+    // reads the mothership owns — never remotely callable from a mothership node.
+    await expect(remoteRegistry().promptFragmentRepository!.listBySource!('src_1')).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(remoteRegistry().fragmentSourceRepository!.get!('src_1')).rejects.toThrow(
+      /not callable/,
+    )
+  })
+})
+
+describe('account onboarding read surface (account-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The two member-level account reads the SPA's account/members + email-settings panels drive.
+  // arg0 is an accountId → the `account` rule (reject out-of-scope as 404). Each stub echoes the
+  // accountId, proving the call reached the bound account.
+  const READS: Array<{ repo: string; method: string }> = [
+    { repo: 'invitationRepository', method: 'listByAccount' },
+    { repo: 'emailConnectionRepository', method: 'getByAccount' },
+  ]
+
+  for (const { repo, method } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope account`, async () => {
+      const result = await remoteRegistry()[repo]![method]!(ACCOUNT)
+      expect(Array.isArray(result) ? result[0] : result).toMatchObject({ accountId: ACCOUNT })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope account (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(OTHER_ACCOUNT)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  it('still refuses the admin-gated account writes (invite create / email connect off the allow-list)', async () => {
+    // `invitationRepository.create` (inviting members) and `emailConnectionRepository.upsert`
+    // (connecting a provider) are admin-gated in the service layer; the RPC bypasses `requireAdmin`
+    // and the token scopes accounts not roles, so they MUST stay off — never remotely callable.
+    await expect(
+      remoteRegistry().invitationRepository!.create!({ accountId: ACCOUNT }),
+    ).rejects.toThrow(/not callable/)
+    await expect(
+      remoteRegistry().emailConnectionRepository!.upsert!({ accountId: ACCOUNT }),
+    ).rejects.toThrow(/not callable/)
   })
 })
