@@ -1776,7 +1776,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const step = exec.steps.find((s) => s.agentKind === 'ci')!
         expect(step.state).toBe('done')
         expect(step.gate?.attempts).toBe(1)
-        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
+        const attempt = step.gate?.attemptLog?.[0]
+        expect(attempt?.outcome).toBe('completed')
+        // The round records WHAT it was handed to fix (the failing-check summary + the
+        // structured red checks), not only that a round happened — the gate analogue of the
+        // Tester attempt's concerns, surfaced per-runtime.
+        expect(attempt?.instructions).toBeTruthy()
+        expect(attempt?.failingChecks?.map((c) => c.name)).toEqual(['build'])
       })
     })
 

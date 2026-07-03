@@ -2885,6 +2885,8 @@
     },
     "attemptsHeading": "Próby: {helper}",
     "attempt": "Próba {number}",
+    "attemptInstructions": "Przekazano do: {helper}",
+    "attemptReport": "Raport: {helper}",
     "outcome": {
       "completed": "ukończono",
       "failed": "niepowodzenie"

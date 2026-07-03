@@ -2885,6 +2885,8 @@
     },
     "attemptsHeading": "Intentos de {helper}",
     "attempt": "Intento {number}",
+    "attemptInstructions": "Entregado a {helper}",
+    "attemptReport": "Informe de {helper}",
     "outcome": {
       "completed": "completado",
       "failed": "fallido"

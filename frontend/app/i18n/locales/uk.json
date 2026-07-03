@@ -2885,6 +2885,8 @@
     },
     "attemptsHeading": "Спроби: {helper}",
     "attempt": "Спроба {number}",
+    "attemptInstructions": "Передано: {helper}",
+    "attemptReport": "Звіт: {helper}",
     "outcome": {
       "completed": "завершено",
       "failed": "помилка"

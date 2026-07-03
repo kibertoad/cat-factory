@@ -2896,6 +2896,8 @@
     },
     "attemptsHeading": "ניסיונות {helper}",
     "attempt": "ניסיון {number}",
+    "attemptInstructions": "נמסר ל־{helper}",
+    "attemptReport": "דוח {helper}",
     "outcome": {
       "completed": "הושלם",
       "failed": "נכשל"

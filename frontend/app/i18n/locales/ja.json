@@ -2898,6 +2898,8 @@
     },
     "attemptsHeading": "{helper} の試行",
     "attempt": "試行 {number}",
+    "attemptInstructions": "{helper} への指示",
+    "attemptReport": "{helper} のレポート",
     "outcome": {
       "completed": "完了",
       "failed": "失敗"

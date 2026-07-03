@@ -10,10 +10,12 @@ import { agentKindMeta } from '~/utils/catalog'
 import type { GateAttempt, GateStepState } from '~/types/execution'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
+import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
+import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
-const { t, d } = useI18n()
+const { t } = useI18n()
 
 // Synchronous window: it reads its state straight off the execution step, so there's
 // nothing to fetch on open (no `onOpen` loader).
@@ -74,10 +76,6 @@ const OUTCOME_LABELS = computed<Record<GateAttempt['outcome'], string>>(() => ({
   completed: t('gates.outcome.completed'),
   failed: t('gates.outcome.failed'),
 }))
-
-function formatClock(ms?: number | null): string | null {
-  return ms ? d(new Date(ms), 'long') : null
-}
 
 /**
  * The display status — a roll-up of the persisted gate state + the run's status, so the
@@ -308,35 +306,7 @@ const conflictVerdict = computed(() => {
                 <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   {{ t('gates.ci.failingChecks') }}
                 </h3>
-                <ul v-if="failingChecks.length" class="space-y-1">
-                  <li
-                    v-for="(c, i) in failingChecks"
-                    :key="`${c.name}-${i}`"
-                    class="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5"
-                  >
-                    <UIcon name="i-lucide-circle-x" class="h-3.5 w-3.5 shrink-0 text-rose-400" />
-                    <a
-                      v-if="c.url"
-                      :href="c.url"
-                      target="_blank"
-                      rel="noopener"
-                      class="group min-w-0 flex-1 truncate text-[13px] text-sky-300 hover:text-sky-200 hover:underline"
-                      :title="t('gates.ci.openOnGithub', { name: c.name })"
-                    >
-                      {{ c.name }}
-                      <UIcon
-                        name="i-lucide-external-link"
-                        class="ms-0.5 inline h-3 w-3 opacity-60 group-hover:opacity-100"
-                      />
-                    </a>
-                    <span v-else class="min-w-0 flex-1 truncate text-[13px] text-slate-200">{{
-                      c.name
-                    }}</span>
-                    <span class="shrink-0 text-[11px] uppercase text-rose-300">
-                      {{ c.conclusion ?? t('gates.ci.conclusionFallback') }}
-                    </span>
-                  </li>
-                </ul>
+                <GateFailingCheckList v-if="failingChecks.length" :checks="failingChecks" />
                 <p v-else class="text-[13px] leading-relaxed text-slate-300">
                   {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
                 </p>
@@ -389,26 +359,47 @@ const conflictVerdict = computed(() => {
                     :key="a.attempt"
                     class="rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
                   >
-                    <div class="flex items-center gap-2">
-                      <span class="text-[12px] font-semibold text-slate-200">{{
-                        t('gates.attempt', { number: a.attempt })
-                      }}</span>
-                      <UBadge
-                        :color="a.outcome === 'failed' ? 'error' : 'neutral'"
-                        variant="subtle"
-                        size="sm"
-                        >{{ OUTCOME_LABELS[a.outcome] }}</UBadge
-                      >
-                      <span v-if="formatClock(a.at)" class="ms-auto text-[11px] text-slate-500">{{
-                        formatClock(a.at)
-                      }}</span>
-                    </div>
-                    <p
-                      v-if="a.summary"
-                      class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
+                    <AttemptEntryHeader
+                      :label="t('gates.attempt', { number: a.attempt })"
+                      :outcome="a.outcome"
+                      :outcome-label="OUTCOME_LABELS[a.outcome]"
+                      :at="a.at"
+                      date-format="long"
+                    />
+                    <!-- What this round was asked to fix: the instructions the gate handed the
+                         helper (the failing-check summary / conflict reason / review comments),
+                         plus the structured red checks for the CI gate. -->
+                    <div
+                      v-if="a.instructions || (a.failingChecks && a.failingChecks.length)"
+                      class="mt-1.5"
                     >
-                      {{ a.summary }}
-                    </p>
+                      <p class="text-[11px] text-slate-500">
+                        {{ t('gates.attemptInstructions', { helper: helperMeta.label }) }}
+                      </p>
+                      <GateFailingCheckList
+                        v-if="a.failingChecks && a.failingChecks.length"
+                        class="mt-1"
+                        :checks="a.failingChecks"
+                        dense
+                      />
+                      <p
+                        v-else-if="a.instructions"
+                        class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-300"
+                      >
+                        {{ a.instructions }}
+                      </p>
+                    </div>
+                    <!-- The helper's own report of what it did / what remains. -->
+                    <template v-if="a.summary">
+                      <p class="mt-1.5 text-[11px] text-slate-500">
+                        {{ t('gates.attemptReport', { helper: helperMeta.label }) }}
+                      </p>
+                      <p
+                        class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-400"
+                      >
+                        {{ a.summary }}
+                      </p>
+                    </template>
                   </li>
                 </ol>
               </section>
