@@ -239,6 +239,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // blueprint reconcile). arg0 is a frame BLOCK id, so the `block` rule resolves it to its
     // home workspace's account server-side.
     getByFrameBlock: { scope: { kind: 'block', arg: 0 } },
+    // The batched form of `getByFrameBlock` — the board-composition read that resolves every
+    // frame's service in ONE query (the duplicate-service check when linking a monorepo, and the
+    // frame-subtree deletion cleanup in `BoardService`). arg0 is a `frameBlockIds[]` array, so the
+    // `blockList` rule resolves each frame block's home workspace's account server-side and fails
+    // closed on any missing/out-of-scope id (empty input → empty). The remaining service CRUD +
+    // `getByRepo` (the GitHub-sync repo→service link) stay off the SPA path — a later slice.
+    listByFrameBlocks: { scope: { kind: 'blockList', arg: 0 } },
     // The org-catalog mount flow reads a single service by id before mounting it onto a board
     // (`ServiceMountService.mount` — the cross-org guard that a service is mounted only within
     // its own account). arg0 is a serviceId with no workspace arg, so the `service` rule resolves
@@ -677,6 +684,49 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   issueProjectionRepository: {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // --- Self-hosted runner-backend connection surface ------------------------------
+  // The workspace's binding to an "agent runner backend" (the manifest HTTP pool / native
+  // Kubernetes runner / …) the runner-pool settings panel manages (`RunnerPoolController` →
+  // `RunnerPoolConnectionService`: connect / rotate secrets / disconnect / describe / test).
+  // The controller mounts under `/workspaces/:workspaceId` and is member-level (not admin-gated),
+  // so it follows the same policy as the observability / environment connection panels above.
+  // `getByWorkspace`/`softDelete` take the workspaceId as arg0 (the `workspace` rule); the
+  // record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the `workspaceField`
+  // rule — the id is a property, not a positional arg). Exposing these makes the runner-backend
+  // connection panel functional (persist + read back the safe metadata) in mothership mode.
+  //
+  // Safe to expose like the observability / environment connections: the record carries the
+  // backend credentials as a SEALED blob (`secretsCipher`) — the repo returns it verbatim (it
+  // does NOT decrypt); sealing/decryption live in `RunnerPoolConnectionService` under the LOCAL
+  // key, so no plaintext credential crosses the machine API and the mothership only ever stores
+  // ciphertext (the "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). The
+  // `workspaceField` rule binds only the record's top-level `workspaceId`, so a connection row can
+  // only ever land in the caller's own in-scope workspace.
+  runnerPoolConnectionRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // --- Binary-artifact metadata surface (visual-confirmation gate) -----------------
+  // The metadata rows for stored binary blobs (UI screenshots + the reference design images they
+  // are reviewed against) the visual-confirmation gate + the artifact controllers read/write
+  // (`ArtifactController` / `HarnessArtifactController`, mounted under `/workspaces/:workspaceId`,
+  // member-level). Only the METADATA lives in the relational store (D1 ⇄ Postgres) and is proxied
+  // here; the BYTES live in the per-account blob backend (R2 / S3 / fs / …), resolved locally, so
+  // they never cross this API. Point reads/deletes take the workspaceId as arg0 (the `workspace`
+  // rule); the record-based `insert(record)` binds on the record's `workspaceId` FIELD (the
+  // `workspaceField` rule). Every read already filters by the (authenticated) workspaceId, so a
+  // row's non-authoritative `executionId`/`blockId` need no separate scope check. The retention
+  // sweep (`listOlderThan`/`deleteOlderThan`) stays mothership-internal (the mothership owns
+  // durable-state retention), like the other global sweeper methods.
+  binaryArtifactMetadataStore: {
+    insert: { scope: { kind: 'workspaceField', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    listByExecution: { scope: { kind: 'workspace', arg: 0 } },
+    countByExecution: { scope: { kind: 'workspace', arg: 0 } },
+    listByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
   },
 }
 

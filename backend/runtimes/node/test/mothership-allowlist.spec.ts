@@ -149,13 +149,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listByExecution: 'pending',
     deleteOlderThan: 'sweeper',
   },
+  // The visual-confirmation gate's artifact METADATA surface is now allow-listed (insert/get/
+  // listByExecution/countByExecution/listByBlock/delete — the controllers + gate reads/writes);
+  // only the retention sweep stays mothership-internal (the mothership owns durable-state
+  // retention). The blob BYTES never cross the machine API — they live in the per-account backend.
   binaryArtifactMetadataStore: {
-    insert: 'pending',
-    get: 'pending',
-    listByExecution: 'pending',
-    countByExecution: 'pending',
-    listByBlock: 'pending',
-    delete: 'pending',
     listOlderThan: 'sweeper',
     deleteOlderThan: 'sweeper',
   },
@@ -176,10 +174,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `put` is now allow-listed (the tracker-settings editor); `get` was already remote.
   trackerSettingsRepository: {},
   serviceRepository: {
-    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock` are allow-listed (the org-catalog mount
-    // flow + board composition + run-path frame resolution). The remaining CRUD + `getByRepo`
-    // (the GitHub-sync repo→service link) stay off the SPA path — a later slice.
-    listByFrameBlocks: 'pending',
+    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock`/`listByFrameBlocks` are allow-listed (the
+    // org-catalog mount flow + board composition + run-path frame resolution + the batched
+    // duplicate-service / frame-deletion read). The remaining CRUD + `getByRepo` (the GitHub-sync
+    // repo→service link) stay off the SPA path — a later slice.
     getByRepo: 'pending',
     insert: 'pending',
     update: 'pending',
@@ -262,11 +260,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     softDelete: 'pending',
   },
   serviceFrameRepository: { getByFrameBlock: 'pending' },
-  runnerPoolConnectionRepository: {
-    getByWorkspace: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
-  },
+  // The whole self-hosted runner-backend connection surface is now remote (the runner-pool
+  // settings panel's connect/rotate/disconnect): getByWorkspace/softDelete via the `workspace`
+  // rule, the record-based `upsert` via the `workspaceField` rule. Its credentials ride a SEALED
+  // `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key), so no plaintext
+  // crosses the machine API — the same precedent as the observability / environment connections.
+  runnerPoolConnectionRepository: {},
   documentRepository: { upsert: 'pending', listByWorkspace: 'pending', linkBlock: 'pending' },
   documentConnectionRepository: {
     decodeCredentials: 'helper',
