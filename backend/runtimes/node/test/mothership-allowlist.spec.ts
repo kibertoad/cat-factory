@@ -195,14 +195,18 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // The whole requirement-review repo is now remote (getByBlock/get/upsert were exposed earlier;
   // deleteByBlock — the pre-review-run drop — completes it with the advanced-review slice).
   requirementReviewRepository: {},
+  // `listByWorkspace`/`listByExecution` are now allow-listed (the Kaizen screen's grading-history
+  // + per-run status reads); `getByStep`/`upsert` were already remote (the run-path grade). The
+  // single-grade `get` is internal-only (no SPA path); `listPending`/`claim` are the sweep's reads.
   kaizenGradingRepository: {
     get: 'pending',
-    listByExecution: 'pending',
-    listByWorkspace: 'pending',
     listPending: 'sweeper',
     claim: 'sweeper',
   },
-  kaizenVerifiedComboRepository: { upsert: 'pending', listByWorkspace: 'pending' },
+  // `listByWorkspace` is now allow-listed (the Kaizen screen's verified-combo library); `getByKey`
+  // was already remote. `upsert` is the background sweep's streak write — best-effort in mothership
+  // mode until Phase 5.
+  kaizenVerifiedComboRepository: { upsert: 'pending' },
   // The advanced review / structured-dialogue session surfaces are now fully remote (run + re-read
   // + persist/replace as the window iterates) — get/getByStep/getByBlock/upsert for consensus,
   // get/upsert/deleteBy* for clarity + brainstorm (getByBlock/getByBlockStage were already exposed).

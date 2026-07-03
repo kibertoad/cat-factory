@@ -269,6 +269,16 @@ function makeRegistry(): {
       upsert: async () => undefined,
       delete: async () => undefined,
     },
+    // The Kaizen screen read surface: grading history + per-run status + the verified-combo
+    // library. Each echoes its workspaceId (arg0); the run-path `getByStep`/`upsert` +
+    // combo `getByKey` were exposed earlier.
+    kaizenGradingRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+      listByExecution: async (ws: string, executionId: string) => [{ ws, executionId }],
+    },
+    kaizenVerifiedComboRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -686,6 +696,43 @@ describe('agent-context run-path + lazy-seed surface (workspace-scoped)', () => 
       await expect(remoteRegistry()[repo]![method]!('ws_out', { id: 'p_1' })).rejects.toMatchObject(
         { code: 'not_found' },
       )
+    })
+  }
+})
+
+describe('kaizen grading read surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The reads the Kaizen screen drives (`KaizenService.getOverview` / `listForExecution`): the
+  // grading history + verified-combo library + a run's per-step gradings. Each takes the
+  // workspaceId as arg0 (the `workspace` rule); `args` are the trailing arguments after it.
+  const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'kaizenGradingRepository', method: 'listByWorkspace', args: [200] },
+    { repo: 'kaizenGradingRepository', method: 'listByExecution', args: ['ex_1'] },
+    { repo: 'kaizenVerifiedComboRepository', method: 'listByWorkspace', args: [] },
+  ]
+
+  for (const { repo, method, args } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      expect(Array.isArray(result) ? result[0] : result).toMatchObject({ ws: 'ws_in' })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
     })
   }
 })
