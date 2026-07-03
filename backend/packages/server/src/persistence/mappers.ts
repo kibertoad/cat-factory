@@ -534,7 +534,7 @@ export interface PipelineRow {
   archived?: number | boolean | null
   /** Monotonic seed version for a built-in pipeline (migration 0017); null on custom/legacy rows. */
   version?: number | null
-  /** Truthy (1) when the pipeline is callable via the public API (migration 0033). */
+  /** Truthy (1) when the pipeline is callable via the public API (migration 0034). */
   public?: number | boolean | null
 }
 

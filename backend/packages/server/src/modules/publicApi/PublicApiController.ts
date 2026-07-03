@@ -73,10 +73,18 @@ function mapStatus(status: ExecutionStatus): PublicJobStatus {
 /** Project a persisted execution onto the external job resource (no block/board internals). */
 export function toPublicJob(execution: ExecutionInstance): PublicJob {
   const status = mapStatus(execution.status)
-  const terminal = execution.steps[execution.steps.length - 1]
+  // The deliverable is the LAST step that actually produced output — normally the terminal step,
+  // but scanning from the end keeps the result meaningful for a multi-step public pipeline whose
+  // final step is a side-effect-only tail that emits nothing (the built-in initiative pipeline is
+  // single-step, so this simply picks that step). Fall back to the terminal step so a `succeeded`
+  // run always carries a (possibly empty) result rather than null.
+  const withOutput = [...execution.steps]
+    .reverse()
+    .find((s) => (s.output ?? '') !== '' || s.custom != null)
+  const deliverable = withOutput ?? execution.steps[execution.steps.length - 1]
   const result =
-    status === 'succeeded' && terminal
-      ? { output: terminal.output ?? '', data: terminal.custom ?? null }
+    status === 'succeeded' && deliverable
+      ? { output: deliverable.output ?? '', data: deliverable.custom ?? null }
       : null
   const error =
     status === 'failed'
@@ -191,13 +199,22 @@ export function publicApiController(): Hono<AppEnv> {
       description: input,
     })
     // Headless / system-initiated: no `usr_*` initiator (an inline public run never leases a
-    // personal credential), so pass null rather than a synthetic user id.
-    const execution = await container.executionService.start(
-      auth.workspaceId,
-      block.id,
-      pipelineId,
-      null,
-    )
+    // personal credential), so pass null rather than a synthetic user id. If start fails (the
+    // anchor is already inserted), roll the anchor back so a failed dispatch never leaves an
+    // orphan `internal` block — it renders nowhere and, being `planned`, escapes the cap, so it
+    // would otherwise just accumulate on every failed/retried start.
+    let execution: ExecutionInstance
+    try {
+      execution = await container.executionService.start(
+        auth.workspaceId,
+        block.id,
+        pipelineId,
+        null,
+      )
+    } catch (err) {
+      await container.boardService.deleteInternalTask(auth.workspaceId, block.id).catch(() => {})
+      throw err
+    }
     return c.json(
       {
         jobId: execution.id,
@@ -276,7 +293,16 @@ export function publicApiController(): Hono<AppEnv> {
           })
           last = data
         }
-        if (execution.status !== 'running') break
+        if (execution.status !== 'running') {
+          // The run has stopped. When it ended in a terminal public status (succeeded/failed) the
+          // event above already carried `done`/`error`. But a raw status that maps to `running`
+          // (e.g. blocked/paused — admission rules this out for the built-in pipeline, but a custom
+          // public pipeline could reach it) would otherwise close the stream after a `progress`
+          // frame, leaving the client unable to tell "terminal" from "connection dropped". Emit an
+          // explicit terminal `stopped` frame so every close is unambiguous.
+          if (job.status === 'running') await stream.writeSSE({ event: 'stopped', data })
+          break
+        }
         if (Date.now() - startedAt > SSE_MAX_MS) {
           // Bound the connection; the client can reconnect to keep watching.
           await stream.writeSSE({ event: 'timeout', data: '{}' })

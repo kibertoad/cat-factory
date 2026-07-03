@@ -22,6 +22,13 @@ const RAW_KEY_PREFIX = 'cf_live_'
 const SECRET_BYTES = 32
 /** Upper bound on live keys per workspace, to bound accidental/abusive growth. */
 const MAX_KEYS_PER_WORKSPACE = 50
+/**
+ * Coarsen the `lastUsedAt` stamp: only re-write it when the prior stamp is older than this. A
+ * polling client (e.g. `GET /jobs/:id` every second, or reconnecting SSE streams) would otherwise
+ * drive one UPDATE per authenticated request; a minute's granularity is plenty for "last used" and
+ * collapses that write amplification.
+ */
+const LAST_USED_STAMP_THROTTLE_MS = 60_000
 
 export interface PublicApiKeyServiceDependencies {
   repository: PublicApiKeyRepository
@@ -105,7 +112,12 @@ export class PublicApiKeyService {
     if (!record || record.revokedAt !== null) return null
     const presented = await this.hash(parsed.secret)
     if (!timingSafeEqualHex(presented, record.secretHash)) return null
-    await this.deps.repository.markUsed(record.id, this.deps.clock.now())
+    // Stamp `lastUsedAt`, but throttled: skip the write when the existing stamp is recent enough,
+    // so a frequently-polling caller doesn't drive one UPDATE per request (see the throttle const).
+    const now = this.deps.clock.now()
+    if (record.lastUsedAt === null || now - record.lastUsedAt >= LAST_USED_STAMP_THROTTLE_MS) {
+      await this.deps.repository.markUsed(record.id, now)
+    }
     return { keyId: record.id, accountId: record.accountId, workspaceId: record.workspaceId }
   }
 

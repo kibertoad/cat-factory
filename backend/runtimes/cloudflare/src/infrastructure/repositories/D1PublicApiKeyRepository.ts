@@ -25,7 +25,7 @@ function rowToRecord(row: PublicApiKeyRow): PublicApiKeyRecord {
   }
 }
 
-/** D1-backed store of the inbound public-API keys (migration 0033). */
+/** D1-backed store of the inbound public-API keys (migration 0034). */
 export class D1PublicApiKeyRepository implements PublicApiKeyRepository {
   private readonly db: D1Database
 

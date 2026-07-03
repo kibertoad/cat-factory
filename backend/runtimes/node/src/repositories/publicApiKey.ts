@@ -3,7 +3,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { publicApiKeys } from '../db/schema.js'
 
-// Postgres-backed store of the inbound public-API keys (mirror of D1 migration 0033 /
+// Postgres-backed store of the inbound public-API keys (mirror of D1 migration 0034 /
 // D1PublicApiKeyRepository, column-for-column). The secret is stored ONLY as a one-way peppered
 // hash — this repo never sees the raw key.
 

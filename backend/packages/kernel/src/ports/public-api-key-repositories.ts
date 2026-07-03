@@ -12,7 +12,7 @@
 
 /** One public-API key row. `secretHash` is the peppered HMAC digest, never the raw key. */
 export interface PublicApiKeyRecord {
-  /** `pak_*` — also the non-secret lookup id embedded in the raw `cf_live_<id>_<secret>`. */
+  /** `pak_*` — also the non-secret lookup id embedded in the raw `cf_live_<id>.<secret>`. */
   id: string
   accountId: string
   workspaceId: string
@@ -35,7 +35,12 @@ export interface PublicApiKeyRepository {
    * compare), so a caller can distinguish revoked from unknown. `null` when no such id.
    */
   getById(id: string): Promise<PublicApiKeyRecord | null>
-  /** All live (non-revoked) keys for a workspace, newest first — the management list. */
+  /**
+   * All live (non-revoked) keys for a workspace, newest first — the management list. Revoked keys
+   * are intentionally excluded (not merely a UI choice): `PublicApiKeyService.issue` enforces its
+   * per-workspace cap off this count, so revoking a key MUST free a slot — including tombstones
+   * here would let a workspace that churned keys hit the cap permanently.
+   */
   listByWorkspace(workspaceId: string): Promise<PublicApiKeyRecord[]>
   /** Stamp `lastUsedAt` on a key after it authenticates a call. Keyed by id alone. */
   markUsed(id: string, at: number): Promise<void>

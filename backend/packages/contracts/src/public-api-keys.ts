@@ -39,7 +39,7 @@ export const createPublicApiKeySchema = v.object({
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
 
 /**
- * The create response: the key metadata PLUS the raw secret (`cf_live_<id>_<secret>`),
+ * The create response: the key metadata PLUS the raw secret (`cf_live_<id>.<secret>`),
  * returned exactly once and never again — the caller must store it now.
  */
 export const createdPublicApiKeySchema = v.object({

@@ -18,7 +18,9 @@ class FakeRepo implements PublicApiKeyRepository {
       [...this.rows.values()].filter((r) => r.workspaceId === workspaceId && r.revokedAt === null),
     )
   }
+  markUsedCalls = 0
   markUsed(id: string, at: number) {
+    this.markUsedCalls++
     const r = this.rows.get(id)
     if (r) r.lastUsedAt = at
     return Promise.resolve()
@@ -85,6 +87,27 @@ describe('PublicApiKeyService', () => {
     expect(await service.authenticate(secret)).toBeNull()
     // A revoked key drops out of the management list.
     expect(await service.list('w')).toHaveLength(0)
+  })
+
+  it('throttles the lastUsedAt write so a polling caller does not drive one UPDATE per call', async () => {
+    const { service, repo, now } = makeService()
+    const { secret } = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k')
+
+    // First auth stamps (was never used).
+    expect(await service.authenticate(secret)).not.toBeNull()
+    expect(repo.markUsedCalls).toBe(1)
+
+    // A burst of auths within the throttle window writes nothing further.
+    now.t += 1000
+    expect(await service.authenticate(secret)).not.toBeNull()
+    now.t += 1000
+    expect(await service.authenticate(secret)).not.toBeNull()
+    expect(repo.markUsedCalls).toBe(1)
+
+    // Past the throttle window, the stamp refreshes exactly once more.
+    now.t += 60_000
+    expect(await service.authenticate(secret)).not.toBeNull()
+    expect(repo.markUsedCalls).toBe(2)
   })
 
   it('isActive reflects existence + revocation (the cheap re-check for live streams)', async () => {
