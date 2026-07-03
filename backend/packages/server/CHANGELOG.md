@@ -1,5 +1,13 @@
 # @cat-factory/server
 
+## 0.71.2
+
+### Patch Changes
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+  - @cat-factory/orchestration@0.60.4
+
 ## 0.71.1
 
 ### Patch Changes
