@@ -2291,6 +2291,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
     initiativeService: initiatives?.service,
+    initiativeRepository: dependencies.initiativeRepository,
     initiativeInterviewService,
     notificationService: notifications?.service,
     workspaceSettingsService: settings?.service,

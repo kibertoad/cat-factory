@@ -6,7 +6,12 @@ import type {
   ModelProviderResolver,
   ModelRef,
 } from '@cat-factory/kernel'
-import { inlineModelRef, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
+import {
+  INITIATIVE_INTERVIEWER_AGENT_KIND,
+  inlineModelRef,
+  resolveScopedModelProvider,
+  ValidationError,
+} from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
 import { extractJson } from '../requirements/requirements.logic.js'
 import { coerceInterviewOutput, type InterviewOutput } from './initiative.logic.js'
@@ -25,8 +30,6 @@ import { coerceInterviewOutput, type InterviewOutput } from './initiative.logic.
 // an INLINE call with no container harness). The provider is reached through the
 // runtime-neutral ModelProvider port, so this never imports a provider SDK or a key.
 // ---------------------------------------------------------------------------
-
-const INITIATIVE_INTERVIEWER_AGENT_KIND = 'initiative-interviewer'
 
 /** Role prompt the interviewer runs under. Returns ONLY a JSON decision object. */
 export const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
