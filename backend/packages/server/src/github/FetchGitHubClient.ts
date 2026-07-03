@@ -228,11 +228,58 @@ export class FetchGitHubClient implements GitHubClient {
     return { items }
   }
 
+  async searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number } = {},
+  ): Promise<GitHubRepo[]> {
+    const trimmed = query.trim()
+    if (!trimmed) return []
+    const syncedAt = this.deps.clock.now()
+    const per = Math.min(Math.max(opts.limit ?? 50, 1), 100)
+    // Without an account to scope it to, `/search/repositories` would run UNSCOPED across
+    // all of GitHub and return arbitrary public repos this installation can't link (each
+    // would then 404 on `getRepoById`). Never do that: fall back to filtering the
+    // installation's own bounded repo listing, so a missing account can't leak the search.
+    if (!opts.owner) {
+      const q = trimmed.toLowerCase()
+      const { items } = await this.listInstallationRepos(installationId)
+      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)).slice(0, per)
+    }
+    // Match the typed text against the repo NAME (accepting an `owner/name` paste by
+    // matching only the name segment), scoped to the installation's account so results stay
+    // within what it manages. GitHub matches names by token/prefix (NOT arbitrary
+    // substring), and a public org repo the App wasn't granted may still surface — linking
+    // one point-reads it via `getRepoById`, which returns null (a clean "grant access"
+    // signal) when the installation genuinely can't access it.
+    const nameTerm = trimmed.slice(trimmed.lastIndexOf('/') + 1).trim() || trimmed
+    const scope = ` ${opts.ownerType === 'Organization' ? 'org' : 'user'}:${opts.owner}`
+    const q = encodeURIComponent(`${nameTerm} in:name fork:true${scope}`)
+    const { json } = await this.request(`/search/repositories?q=${q}&per_page=${per}`, {
+      installationId,
+    })
+    const items = (json as { items?: gp.GhRepoPayload[] } | null)?.items ?? []
+    return items.map((r) => gp.toRepoProjection(r, installationId, syncedAt))
+  }
+
   // ---- reads --------------------------------------------------------------
 
   async getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo> {
     const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
     return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
+  }
+
+  async getRepoById(installationId: number, repoGithubId: number): Promise<GitHubRepo | null> {
+    // `/repositories/{id}` resolves a repo by its numeric id in one request. A 404/403 means
+    // the installation can't access it (or it's gone) — surface that as null, exactly the
+    // "not accessible" signal linking checks for.
+    try {
+      const { json } = await this.request(`/repositories/${repoGithubId}`, { installationId })
+      return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
+    } catch (err) {
+      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return null
+      throw err
+    }
   }
 
   async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {

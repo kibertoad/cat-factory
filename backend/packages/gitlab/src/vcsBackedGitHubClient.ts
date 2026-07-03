@@ -67,9 +67,25 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     getInstallation: () => unsupported('getInstallation'),
     listInstallations: () => unsupported('listInstallations'),
     listInstallationRepos: (installationId) => vcs.listRepos(conn(installationId)),
+    // A single-token GitLab connection lists a bounded set of projects, so the realtime
+    // picker search reuses that listing and filters `owner/name` in memory — the account
+    // scope opts are moot (the token already scopes the listing).
+    searchInstallationRepos: async (installationId, query, opts) => {
+      const q = query.trim().toLowerCase()
+      if (!q) return []
+      const { items } = await vcs.listRepos(conn(installationId))
+      const matched = items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+      return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+    },
 
     // ---- reads ------------------------------------------------------------
     getRepo: (i, ref) => vcs.getRepo(conn(i), toRepoRef(ref)),
+    getRepoById: async (i, repoGithubId) => {
+      // A single-token GitLab connection lists a bounded project set, so resolve the id
+      // against that listing (no per-installation enumeration cap to worry about here).
+      const { items } = await vcs.listRepos(conn(i))
+      return items.find((r) => r.githubId === repoGithubId) ?? null
+    },
     canPush: (i, ref) => vcs.canPush(conn(i), toRepoRef(ref)),
     listBranches: (i, ref, etag) => vcs.listBranches(conn(i), toRepoRef(ref), etag),
     branchHeadSha: (i, ref, branch) => vcs.branchHeadSha(conn(i), toRepoRef(ref), branch),

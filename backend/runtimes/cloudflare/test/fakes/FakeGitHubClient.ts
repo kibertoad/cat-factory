@@ -62,10 +62,33 @@ export class FakeGitHubClient implements GitHubClient {
     return { items: this.repos }
   }
 
+  /** Records each (installationId, query, opts) searchInstallationRepos was called with. */
+  readonly searchReposCalls: {
+    installationId: number
+    query: string
+    opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number }
+  }[] = []
+
+  async searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
+  ): Promise<GitHubRepo[]> {
+    this.searchReposCalls.push({ installationId, query, opts })
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const matched = this.repos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+    return matched.slice(0, Math.min(Math.max(opts?.limit ?? 50, 1), 100))
+  }
+
   async getRepo(_installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo> {
     const found = this.repos.find((r) => r.owner === ref.owner && r.name === ref.repo)
     if (!found) throw new Error(`FakeGitHubClient: no repo ${ref.owner}/${ref.repo}`)
     return found
+  }
+
+  async getRepoById(_installationId: number, repoGithubId: number): Promise<GitHubRepo | null> {
+    return this.repos.find((r) => r.githubId === repoGithubId) ?? null
   }
 
   /** Push (write) access per `owner/repo`; defaults to true unless overridden. */
