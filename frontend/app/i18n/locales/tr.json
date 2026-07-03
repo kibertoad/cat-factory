@@ -2862,8 +2862,8 @@
     },
     "attemptsHeading": "{helper} denemeleri",
     "attempt": "Deneme {number}",
-    "attemptInstructions": "Düzelticiye iletildi",
-    "attemptReport": "Düzeltici raporu",
+    "attemptInstructions": "{helper}'a iletildi",
+    "attemptReport": "{helper} raporu",
     "outcome": {
       "completed": "tamamlandı",
       "failed": "başarısız oldu"

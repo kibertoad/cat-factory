@@ -2849,8 +2849,8 @@
     },
     "attemptsHeading": "Tentatives du {helper}",
     "attempt": "Tentative {number}",
-    "attemptInstructions": "Transmis au correcteur",
-    "attemptReport": "Rapport du correcteur",
+    "attemptInstructions": "Transmis à {helper}",
+    "attemptReport": "Rapport de {helper}",
     "outcome": {
       "completed": "terminée",
       "failed": "échouée"
