@@ -482,6 +482,10 @@ export class BoardService {
     const block: Block = {
       id: this.idGenerator.next('task'),
       title: input.title.trim() || 'Initiative',
+      // `type` is the service/repo CLASSIFICATION (frontend/service/library/…), orthogonal to the
+      // `level` hierarchy; there is no task-specific BlockType. This anchor is a standalone,
+      // never-rendered, repo-less `level:'task'` block, so `type` is irrelevant to it — 'service'
+      // is just the neutral default (a normal task inherits its parent service's type instead).
       type: 'service',
       description: input.description ?? '',
       position: { x: 0, y: 0 },

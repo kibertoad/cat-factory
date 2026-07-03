@@ -171,7 +171,15 @@ export class RunStateMachine {
       this.attachStepMetrics(workspaceId, instance),
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
-    await this.events.executionChanged(workspaceId, instance, block)
+    // A HEADLESS internal anchor block (a public-API "initiative" run) must NEVER reach the SPA:
+    // the snapshot read filters it, but the live push path would otherwise broadcast the external
+    // run's brief (block.description) + LLM output (instance.steps[].output) — and the hidden block
+    // itself — to every connected client. The engine/durable driver never consume this event (they
+    // drive by run id) and the public API polls the repository directly, so suppressing the push for
+    // an internal run is safe. Terminal-state cleanup below still runs (activation delete / Kaizen).
+    if (!block?.internal) {
+      await this.events.executionChanged(workspaceId, instance, block)
+    }
     // When a run reaches a terminal state, schedule a post-run Kaizen grading for each
     // completed agent step (the scheduler skips verified combos + already-graded steps).
     // Best-effort + idempotent: a failure here must never derail the emit, and a re-emit

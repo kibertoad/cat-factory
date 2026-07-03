@@ -7,8 +7,10 @@ import {
   type PublicJobStatus,
 } from '@cat-factory/contracts'
 import {
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   isInlineModelStep,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
@@ -38,11 +40,16 @@ const MAX_ACTIVE_INITIATIVE_RUNS = 5
 
 /**
  * Inline agent kinds that PARK a run on a human/gate decision. A public run is headless (no human
- * to answer), so a pipeline containing one would hang until it times out — refuse it at admission.
+ * to answer), so a pipeline containing one would hang forever (its anchor stays `in_progress`,
+ * permanently consuming a concurrency slot) — refuse it at admission. This MUST list every
+ * inline-and-parking kind: the two review gates AND the two brainstorm dialogues (all four set the
+ * run `blocked` awaiting a human, see ExecutionService.evaluateReview / the brainstorm gate).
  */
 const PARKING_INLINE_KINDS = new Set<string>([
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
 ])
 
 type KeyResult =
@@ -293,13 +300,16 @@ export function publicApiController(): Hono<AppEnv> {
           })
           last = data
         }
-        if (execution.status !== 'running') {
+        // A `paused` run is NOT terminal — the spend gate pauses a run when the workspace budget
+        // is exhausted and RESUMES it once budget frees up (ExecutionService.evaluateStep), so keep
+        // polling (bounded by SSE_MAX_MS below) rather than signalling a false terminal stop.
+        if (execution.status !== 'running' && execution.status !== 'paused') {
           // The run has stopped. When it ended in a terminal public status (succeeded/failed) the
           // event above already carried `done`/`error`. But a raw status that maps to `running`
-          // (e.g. blocked/paused — admission rules this out for the built-in pipeline, but a custom
-          // public pipeline could reach it) would otherwise close the stream after a `progress`
-          // frame, leaving the client unable to tell "terminal" from "connection dropped". Emit an
-          // explicit terminal `stopped` frame so every close is unambiguous.
+          // (e.g. `blocked` — a run parked awaiting a human, which a headless run can never resolve;
+          // admission rules this out for the built-in pipeline) would otherwise close the stream
+          // after a `progress` frame, leaving the client unable to tell "terminal" from "connection
+          // dropped". Emit an explicit terminal `stopped` frame so every close is unambiguous.
           if (job.status === 'running') await stream.writeSSE({ event: 'stopped', data })
           break
         }
