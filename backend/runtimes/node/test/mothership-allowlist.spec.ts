@@ -331,9 +331,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'pending',
     remove: 'pending',
   },
+  // `list` is now allow-listed (the SPA's repos panel + the run-path `resolveRepoTarget` walk of
+  // the `github_repos` projection). The board-linkage writes (`linkBlock`/`setMonorepo`), the
+  // sync ingest (`upsertMany`/`tombstoneMissing`), the installationId-keyed cursors, the fan-out
+  // `linkedWorkspaces`, and the single-repo `get` (repo-write facade only) stay off the SPA path
+  // — a later GitHub sync + repo-write slice; `listStale` is the reconcile sweeper's read.
   repoProjectionRepository: {
     upsertMany: 'pending',
-    list: 'pending',
     get: 'pending',
     linkedWorkspaces: 'pending',
     tombstoneMissing: 'pending',
@@ -343,18 +347,20 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     getCursor: 'pending',
     setCursor: 'pending',
   },
-  branchProjectionRepository: { upsertMany: 'pending', listByRepo: 'pending' },
+  // The projection READS the SPA's VCS board panels display are now allow-listed
+  // (`branchProjectionRepository.listByRepo`, `pullRequest`/`issueProjectionRepository`
+  // `.listByWorkspace`). The `upsertMany` sync ingest + the per-repo `listByRepo` variants the
+  // panels don't drive stay off — the mothership owns GitHub sync (a later sync-write slice).
+  branchProjectionRepository: { upsertMany: 'pending' },
   pullRequestProjectionRepository: {
     upsertMany: 'pending',
     rowToPr: 'helper',
     listByRepo: 'pending',
-    listByWorkspace: 'pending',
   },
   issueProjectionRepository: {
     upsertMany: 'pending',
     rowToIssue: 'helper',
     listByRepo: 'pending',
-    listByWorkspace: 'pending',
   },
   commitProjectionRepository: {
     upsertMany: 'pending',

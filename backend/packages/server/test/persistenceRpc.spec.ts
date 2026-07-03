@@ -279,6 +279,21 @@ function makeRegistry(): {
     kaizenVerifiedComboRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
     },
+    // The VCS/GitHub projection READ surface the SPA's board panels display (repos/branches/
+    // PRs/issues). Each echoes its workspaceId (arg0); `list` is also on the run-path repo
+    // resolution. The projection WRITES + per-repo `listByRepo` variants stay off (a later slice).
+    repoProjectionRepository: {
+      list: async (ws: string) => [{ ws }],
+    },
+    branchProjectionRepository: {
+      listByRepo: async (ws: string) => [{ ws }],
+    },
+    pullRequestProjectionRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+    },
+    issueProjectionRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -1285,5 +1300,60 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.listByService!('svc_in'),
     ).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The projection READS the SPA's VCS board panels display (repos/branches/PRs/issues), served
+  // straight from the local projections by `GitHubService` — no GitHub API call, so they run
+  // unchanged over the remote-sourced projection repos. Each takes the workspaceId as arg0 (the
+  // `workspace` rule); `args` are the trailing arguments after it (a `listByRepo` also carries the
+  // repoGithubId, which the scope check ignores — only the workspace binds).
+  const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'repoProjectionRepository', method: 'list', args: [] },
+    { repo: 'branchProjectionRepository', method: 'listByRepo', args: [42] },
+    { repo: 'pullRequestProjectionRepository', method: 'listByWorkspace', args: [] },
+    { repo: 'issueProjectionRepository', method: 'listByWorkspace', args: [] },
+  ]
+
+  for (const { repo, method, args } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      // Each stub echoes the workspaceId, proving the call reached the bound workspace.
+      expect(Array.isArray(result) ? result[0] : result).toMatchObject({ ws: 'ws_in' })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  it('still refuses the projection WRITE surface (sync ingest / board-linkage stay off)', async () => {
+    // `upsertMany` (sync ingest), `linkBlock`/`setMonorepo` (board-linkage), and the single-repo
+    // `get` (repo-write facade) are NOT allow-listed — the mothership owns GitHub sync + writes.
+    const repos = remoteRegistry()
+    await expect(repos.repoProjectionRepository!.upsertMany!('ws_in', [])).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(repos.repoProjectionRepository!.get!('ws_in', 42)).rejects.toThrow(/not callable/)
+    await expect(repos.repoProjectionRepository!.setMonorepo!('ws_in', 42, true)).rejects.toThrow(
+      /not callable/,
+    )
   })
 })
