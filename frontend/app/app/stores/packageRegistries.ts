@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { AddPackageRegistryInput, PackageRegistryEntryView } from '~/types/packageRegistries'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { apiErrorStatus } from '~/composables/api/errors'
 
 /**
  * The workspace's private package-registry entries (npm private orgs, GitHub
@@ -27,10 +28,16 @@ export const usePackageRegistriesStore = defineStore('packageRegistries', () => 
     try {
       entries.value = (await api.listPackageRegistries(ws.requireId())).entries
       available.value = true
-    } catch {
-      // 503 (package registries unconfigured) or any error → hide the UI entry points.
-      available.value = false
-      entries.value = []
+    } catch (err) {
+      if (apiErrorStatus(err) === 503) {
+        // A definitive 503 means the integration is unconfigured (no encryption key on
+        // the backend): hide the UI entry points and stop probing.
+        available.value = false
+        entries.value = []
+      }
+      // Any other failure (transient 5xx / network) is left untouched: it must not hide
+      // an already-available panel nor cache a false "unavailable". `available` stays
+      // `null` when never probed, so `ensureLoaded` remains retryable on the next open.
     } finally {
       loading.value = false
     }

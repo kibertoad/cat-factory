@@ -20,7 +20,12 @@ checkout.
   scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
 - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
   (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
-  write-only — the list view never returns them; edit = delete + re-add.
+  write-only — the list view never returns them; edit = delete + re-add. Only one
+  entry per vendor is allowed (a 409 otherwise): the harness renders a single
+  host-keyed `_authToken` per registry, so a duplicate token would be silently
+  dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+  single opaque printable-ASCII string (no spaces/control characters) so a token can't
+  inject extra `~/.npmrc` lines.
 - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
   `resolvePackageRegistries` seam (wired in both facades from the same store) and
   forward the decrypted entries as a `packageRegistries` field on every container job

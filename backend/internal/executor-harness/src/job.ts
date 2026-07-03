@@ -265,6 +265,12 @@ export function allowedNpmRegistryHosts(env: NodeJS.ProcessEnv = process.env): S
 /** An npm scope (`@org`) — same shape the backend validates at the write boundary. */
 const NPM_SCOPE_PATTERN = /^@[a-z0-9~-][a-z0-9._~-]*$/i
 
+// A registry token is a single opaque string. Reject any whitespace / control
+// character: a newline in the token would inject arbitrary lines into the rendered
+// `~/.npmrc` (a second, forged registry/_authToken line). Mirrors the backend's
+// write-boundary constraint so a drifted body can't slip a multiline token past.
+const NPM_TOKEN_PATTERN = /^[\x21-\x7e]+$/
+
 /** Validate the optional `packageRegistries` list (see {@link PackageRegistrySpec}). */
 export function parsePackageRegistries(
   value: unknown,
@@ -298,12 +304,13 @@ export function parsePackageRegistries(
       }
       return s
     })
-    entries.push({
-      ecosystem: 'npm',
-      host,
-      scopes,
-      token: str(entry.token, `packageRegistries[${i}].token`),
-    })
+    const token = str(entry.token, `packageRegistries[${i}].token`)
+    if (!NPM_TOKEN_PATTERN.test(token)) {
+      throw new Error(
+        `Invalid job: 'packageRegistries[${i}].token' must not contain spaces or control characters`,
+      )
+    }
+    entries.push({ ecosystem: 'npm', host, scopes, token })
   }
   return entries
 }

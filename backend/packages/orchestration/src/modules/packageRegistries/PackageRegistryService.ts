@@ -5,7 +5,7 @@ import type {
   SecretCipher,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { NotFoundError, requireWorkspace } from '@cat-factory/kernel'
+import { ConflictError, NotFoundError, requireWorkspace } from '@cat-factory/kernel'
 import type {
   AddPackageRegistryInput,
   PackageRegistryEntry,
@@ -76,6 +76,16 @@ export class PackageRegistryService {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const existing = await this.connections.get(workspaceId)
     const entries = existing ? await this.decryptEntries(existing.entries) : []
+    // One entry per vendor: the harness renders a single host-keyed `_authToken` line
+    // per registry host (which derives from the vendor), so a second entry for the same
+    // vendor would have its token silently dropped (last-write-wins) and leave one org's
+    // installs unauthenticated. Reject it and steer the user to edit (delete + re-add
+    // with all scopes) the existing entry instead.
+    if (entries.some((entry) => entry.vendor === input.vendor)) {
+      throw new ConflictError(
+        `A ${input.vendor} registry entry already exists; remove it and re-add with all scopes.`,
+      )
+    }
     entries.push({
       id: this.idGenerator.next('pkgreg'),
       ecosystem: input.ecosystem,

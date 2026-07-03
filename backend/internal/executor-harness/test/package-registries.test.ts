@@ -88,6 +88,17 @@ describe('parsePackageRegistries', () => {
     expect(() => parsePackageRegistries([{ ...npmjsEntry, scopes: [] }])).toThrow(/non-empty array/)
     expect(() => parsePackageRegistries([{ ...npmjsEntry, token: '' }])).toThrow(/token/)
   })
+
+  it('rejects a token with a newline / control char (npmrc line injection)', () => {
+    // A newline in the token would render a second, forged registry/_authToken line
+    // into ~/.npmrc — reject it at the parse boundary.
+    expect(() =>
+      parsePackageRegistries([{ ...npmjsEntry, token: 'good\n//evil.example/:_authToken=stolen' }]),
+    ).toThrow(/spaces or control characters/)
+    expect(() => parsePackageRegistries([{ ...npmjsEntry, token: 'has a space' }])).toThrow(
+      /spaces or control characters/,
+    )
+  })
 })
 
 describe('renderNpmrc', () => {

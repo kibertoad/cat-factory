@@ -50,12 +50,30 @@ export const npmScopeSchema = v.pipe(
   ),
 )
 
+/**
+ * A registry auth token. Constrained to printable ASCII with no whitespace: a
+ * registry credential is a single opaque string, and rejecting control characters
+ * (newline/CR/tab) at the write boundary stops a token from injecting extra lines
+ * into the `~/.npmrc` the harness renders it into. The min length keeps the
+ * non-secret `tokenTail` (last 4 chars) from ever revealing the whole token.
+ */
+export const packageRegistryTokenSchema = v.pipe(
+  v.string(),
+  v.trim(),
+  v.minLength(8),
+  v.maxLength(4096),
+  v.regex(
+    /^[\x21-\x7e]+$/,
+    'token must be a single opaque string with no spaces or control characters',
+  ),
+)
+
 /** Add one registry entry to the workspace (token write-only, never read back). */
 export const addPackageRegistrySchema = v.object({
   ecosystem: packageEcosystemSchema,
   vendor: packageRegistryVendorSchema,
   scopes: v.pipe(v.array(npmScopeSchema), v.minLength(1), v.maxLength(50)),
-  token: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(4096)),
+  token: packageRegistryTokenSchema,
 })
 export type AddPackageRegistryInput = v.InferOutput<typeof addPackageRegistrySchema>
 

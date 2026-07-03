@@ -3223,6 +3223,16 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(JSON.stringify(listed.body)).not.toContain('npm_secret_token_1234')
         expect(JSON.stringify(listed.body)).not.toContain('ghp_registry_secret_5678')
 
+        // A second entry for an already-configured vendor is a 409: the harness renders one
+        // host-keyed `_authToken` per registry, so a duplicate would be silently dropped.
+        const dup = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme-extra'],
+          token: 'npm_second_token_9999',
+        })
+        expect(dup.status).toBe(409)
+
         // A malformed scope is rejected at the write boundary.
         const bad = await app.call('POST', base, {
           ecosystem: 'npm',
