@@ -28,10 +28,23 @@ export function useBlockDeletion() {
         : block.level === 'module'
           ? 'module'
           : 'service'
-    return {
-      title: t(`panels.inspector.confirmDelete.${kind}.title`),
-      body: t(`panels.inspector.confirmDelete.${kind}.body`, { name: block.title }),
+    const title = t(`panels.inspector.confirmDelete.${kind}.title`)
+    // For a container (service/module) state the exact cascade size so the blast radius is
+    // explicit — "and everything inside it" hides how many tasks/modules go with it.
+    if (kind === 'module' || kind === 'service') {
+      const count = board.descendantsOf(block.id).length
+      if (count > 0) {
+        return {
+          title,
+          body: t(
+            'panels.inspector.confirmDelete.containerBodyWithCount',
+            { name: block.title, count },
+            count,
+          ),
+        }
+      }
     }
+    return { title, body: t(`panels.inspector.confirmDelete.${kind}.body`, { name: block.title }) }
   }
 
   async function deleteBlock(block: Block | undefined | null): Promise<boolean> {

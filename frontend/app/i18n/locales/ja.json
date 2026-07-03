@@ -50,7 +50,8 @@
       "revoked": "{name} を取り消しました",
       "cleared": "{name} をクリアしました",
       "destroyed": "{name} を破棄しました"
-    }
+    },
+    "undo": "元に戻す"
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -80,7 +81,9 @@
       "moveFailed": "移動できませんでした",
       "deleteFailed": "削除できませんでした",
       "linkFailed": "タスクをリンクできませんでした",
-      "recurringDeleteFailed": "定期パイプラインを削除できませんでした"
+      "recurringDeleteFailed": "定期パイプラインを削除できませんでした",
+      "deleted": "\"{name}\" を削除しました",
+      "moved": "\"{name}\" を移動しました"
     },
     "repoTypes": {
       "service": "サービス",
@@ -960,7 +963,8 @@
         "recurring": {
           "title": "この定期パイプラインを削除しますか？",
           "body": "「{name}」、そのスケジュール、実行履歴が削除されます。この操作は取り消せません。"
-        }
+        },
+        "containerBodyWithCount": "「{name}」とその中の {count} 件の項目が削除されます。この操作は取り消せません。 | 「{name}」とその中の {count} 件の項目が削除されます。この操作は取り消せません。"
       }
     }
   },

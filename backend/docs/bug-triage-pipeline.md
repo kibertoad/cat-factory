@@ -12,7 +12,7 @@ This document is the full design. Implementation is tracked in
 [`docs/initiatives/bug-triage-pipeline.md`](../../docs/initiatives/bug-triage-pipeline.md).
 
 Multi-repo investigation and fixing rides on the **service-connections** design — this
-initiative *executes* [`service-connections.md`](./service-connections.md) Phases 3–4
+initiative _executes_ [`service-connections.md`](./service-connections.md) Phases 3–4
 (multi-repo coding, multi-PR gates + merge-all) rather than re-designing them. Do not
 re-derive that work here; the service-connections doc is the source of truth for it.
 
@@ -90,7 +90,7 @@ step), dispatched through `step-handler-registry.ts`. No container, no model cal
 
 ### Configuration — on the schedule, not the pipeline
 
-The pipeline stays generic; *which tracker board and which predicates* are per-schedule.
+The pipeline stays generic; _which tracker board and which predicates_ are per-schedule.
 `PipelineSchedule` (contracts `src/recurring.ts` + the `pipeline_schedules` persistence,
 D1 ⇄ Drizzle with a fresh migration each) gains:
 
@@ -139,13 +139,13 @@ Only **open** issues, oldest-first (deterministic pickup order). Vendor mapping,
 into the vendor query wherever expressible (never fetch-all-then-filter):
 
 - **Jira** (`jira.logic.ts`): JQL — `project = <key> AND statusCategory != Done AND
-  issuetype = "<type>" AND labels = "<label>" AND summary ~ "<fragment>" ORDER BY created ASC`.
+issuetype = "<type>" AND labels = "<label>" AND summary ~ "<fragment>" ORDER BY created ASC`.
 - **GitHub Issues** (`github-issues.logic.ts`): search qualifiers —
   `repo:<owner/name> is:issue is:open label:"<label>" in:title <fragment>
-  sort:created-asc`; `issueType` maps to the org issue-type filter where available, else
+sort:created-asc`; `issueType` maps to the org issue-type filter where available, else
   to a `type:<x>`/label convention (documented in the provider).
 - **Linear** (`linear.logic.ts`): GraphQL `issues(filter: { team, state.type != completed/
-  canceled, labels, title contains })`, oldest-first.
+canceled, labels, title contains })`, oldest-first.
 
 ### Selection — exactly one, deduped
 
@@ -246,7 +246,7 @@ extensions:
   `clarity === 'clear'` — the requirements-review auto-pass pattern.
 - **Tracker echo**: on parking, best-effort post the open questions as a comment on the
   linked tracker issue via a new `IssueWritebackProvider.postQuestions(workspaceId,
-  blockId, questions)` — so the reporter sees the ask where they filed the bug. Answers
+blockId, questions)` — so the reporter sees the ask where they filed the bug. Answers
   still arrive **in-app** (the existing clarity window; the incorporated brief substitutes
   the block description downstream). Tracker-side reply polling is explicitly out of
   scope.
@@ -271,7 +271,7 @@ A new registered kind, `agent: { surface: 'container-coding', clone: { branch: '
 committing step of the run. Multi-repo capable: the tests land in whichever involved repo
 owns the behaviour (the sibling-checkout layout from Phase 3).
 
-- **Mission**: write one or more tests that fail *for the reported reason* — run them and
+- **Mission**: write one or more tests that fail _for the reported reason_ — run them and
   capture the failure output as proof, then commit + push. Tests are committed active
   (not skipped): the intent is that CI is red until the coder's fix turns them green, and
   the tail CI gate is the enforcement.

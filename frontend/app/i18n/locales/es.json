@@ -50,7 +50,8 @@
       "revoked": "{name} revocado",
       "cleared": "{name} borrado",
       "destroyed": "{name} destruido"
-    }
+    },
+    "undo": "Deshacer"
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -80,7 +81,9 @@
       "moveFailed": "No se pudo mover",
       "deleteFailed": "No se pudo eliminar",
       "linkFailed": "No se pudieron vincular las tareas",
-      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente"
+      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente",
+      "deleted": "\"{name}\" eliminado",
+      "moved": "\"{name}\" movido"
     },
     "repoTypes": {
       "service": "Servicio",
@@ -960,7 +963,8 @@
         "recurring": {
           "title": "¿Eliminar este pipeline recurrente?",
           "body": "Se eliminarán \"{name}\", su programación y su historial de ejecución. Esta acción no se puede deshacer."
-        }
+        },
+        "containerBodyWithCount": "Se eliminará \"{name}\" y el {count} elemento que contiene. Esta acción no se puede deshacer. | Se eliminará \"{name}\" y los {count} elementos que contiene. Esta acción no se puede deshacer."
       }
     }
   },
