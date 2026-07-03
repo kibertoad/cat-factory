@@ -53,11 +53,12 @@ export class GitHubSyncService {
    * this workspace currently links each one. Repos are linked *explicitly* per
    * workspace, so the connect UI lists these and the user picks a subset.
    *
-   * An optional `q` applies a case-insensitive `owner/name` substring filter so the
-   * add-service picker can search server-side rather than prefetching the whole
-   * installation and filtering in the browser — a wide install/PAT can expose hundreds
-   * of repos. A blank/whitespace query returns every accessible repo (the repo-link
-   * panel's browse-all), so this stays backwards-compatible for existing callers.
+   * An optional `q` is matched server-side in REALTIME via `searchInstallationRepos`
+   * (one bounded request per query) so the add-service picker never prefetches the whole
+   * installation — a wide install/PAT can expose thousands of repos, and enumerating +
+   * filtering in memory both truncates at the enumeration cap (dropping matches beyond it)
+   * and re-fetches every page on each keystroke. A blank/whitespace query returns every
+   * accessible repo (the repo-link panel's browse-all), so existing callers are unchanged.
    */
   async listAvailableRepos(
     workspaceId: string,
@@ -65,17 +66,22 @@ export class GitHubSyncService {
   ): Promise<GitHubAvailableRepo[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
-    const { items } = await this.deps.githubClient.listInstallationRepos(
-      installation.installationId,
-    )
     const tracked = new Map(
       (await this.deps.repoProjectionRepository.list(workspaceId)).map((r) => [r.githubId, r]),
     )
-    const query = opts.q?.trim().toLowerCase()
-    const matched = query
-      ? items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(query))
-      : items
-    return matched.map((r) => ({
+    const query = opts.q?.trim()
+    // With a query, search server-side in REALTIME (one bounded request) instead of
+    // enumerating the whole installation and filtering in memory: a wide install can
+    // expose far more repos than the enumeration cap, so a match beyond it would be
+    // silently dropped — the exact "no results for a repo I have access to" bug. Without
+    // a query, browse the whole accessible set (the repo-link panel's browse-all).
+    const items = query
+      ? await this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
+          owner: installation.accountLogin || undefined,
+          ownerType: installation.targetType,
+        })
+      : (await this.deps.githubClient.listInstallationRepos(installation.installationId)).items
+    return items.map((r) => ({
       githubId: r.githubId,
       owner: r.owner,
       name: r.name,
@@ -159,8 +165,11 @@ export class GitHubSyncService {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return null
     const installationId = installation.installationId
-    const { items } = await this.deps.githubClient.listInstallationRepos(installationId)
-    const match = items.find((r) => r.githubId === repoGithubId)
+    // Point-read the single repo by id rather than enumerating the whole installation and
+    // scanning it: the enumeration caps at a bounded page count, so a repo the picker's
+    // realtime search surfaced from beyond that window would be unlinkable (returned null →
+    // a spurious "grant the App access" 409) even though the App can access it.
+    const match = await this.deps.githubClient.getRepoById(installationId, repoGithubId)
     if (!match) return null
     const repo: GitHubRepo = { ...match, installationId, syncedAt: this.deps.clock.now() }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])

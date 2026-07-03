@@ -238,9 +238,34 @@ export interface GitHubClient {
   listInstallations(): Promise<InstallationSummary[]>
   /** List every repository the installation can access (for backfill/reconcile). */
   listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>>
+  /**
+   * Search the installation's accessible repositories by an `owner/name` query,
+   * server-side and in **realtime** — one bounded request per query, for the
+   * add-service picker's typeahead. Unlike {@link listInstallationRepos} (which
+   * enumerates the WHOLE installation, capped at a bounded page count so a wide
+   * install silently truncates and a repo beyond the window can't be found), this
+   * asks GitHub to match, so a match anywhere in the installation is returned.
+   * `opts.owner`/`opts.ownerType` scope the search to the installation's account
+   * and `opts.limit` caps the result count (defaults applied by the adapter). An
+   * empty/whitespace query returns `[]`.
+   */
+  searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
+  ): Promise<GitHubRepo[]>
 
   // ---- reads --------------------------------------------------------------
   getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo>
+  /**
+   * Point-read a single accessible repository by its numeric id, or `null` when the
+   * installation can't access it. This is the id-keyed counterpart of {@link getRepo}
+   * (which needs `owner/name`): the picker's realtime search returns ids, and linking one
+   * must resolve it WITHOUT enumerating the whole installation — {@link
+   * listInstallationRepos} caps at a bounded page count, so a repo beyond that window
+   * would be unlinkable even though search surfaced it.
+   */
+  getRepoById(installationId: number, repoGithubId: number): Promise<GitHubRepo | null>
   /**
    * Whether the installation actually has **push (write)** access to a repo. GitHub
    * returns the token's *effective* `permissions` on the repo payload, so a public
