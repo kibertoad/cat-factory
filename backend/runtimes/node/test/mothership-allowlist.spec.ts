@@ -279,12 +279,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `get`/`insert`/`update` are now allow-listed (the repair retry/stop run-control surface);
   // `listByWorkspace` was already remote (the run-path list). The whole repo is now remote.
   envConfigRepairJobRepository: {},
-  environmentConnectionRepository: {
-    listByWorkspace: 'pending',
-    getByWorkspaceAndType: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
-  },
+  // The whole environment-connection management surface is now remote (the connection +
+  // per-type infra-handler settings panels: list/connect/disconnect/register-handler). Its
+  // secrets ride a SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL
+  // key), so no plaintext credential crosses the machine API. Provisioning WRITES
+  // (`environmentRegistryRepository.insert`/`update`) stay off — the later secrets-delegation slice.
+  environmentConnectionRepository: {},
   environmentRegistryRepository: {
     insert: 'pending',
     update: 'pending',
@@ -336,11 +336,9 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     get: 'pending',
     upsert: 'pending',
   },
-  customManifestTypeRepository: {
-    listByWorkspace: 'pending',
-    upsert: 'pending',
-    remove: 'pending',
-  },
+  // The whole custom-manifest-type catalog is now remote (the environments management panel's
+  // infra-configurator reads/edits it — no secrets, just manifest metadata).
+  customManifestTypeRepository: {},
   // `list` is now allow-listed (the SPA's repos panel + the run-path `resolveRepoTarget` walk of
   // the `github_repos` projection). The board-linkage writes (`linkBlock`/`setMonorepo`), the
   // sync ingest (`upsertMany`/`tombstoneMissing`), the installationId-keyed cursors, the fan-out

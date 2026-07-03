@@ -337,6 +337,46 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // `AgentContextBuilder.resolveFrontendConfig` — a batch read, not a per-binding point read).
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- Ephemeral-environment backend connection management surface ----------------
+  // The environment provider-connection + per-type infra-handler management panels a mothership-mode
+  // SPA drives (`EnvironmentController` → `EnvironmentConnectionService`: connect / list / disconnect
+  // a backend, and register / test / re-secret / unregister a per-type engine handler). Its
+  // controller mounts under `/workspaces/:workspaceId` and is member-level (not admin-gated), so it
+  // follows the same policy as the observability / other settings panels above. Reads/deletes take
+  // the workspaceId as arg0 (the `workspace` rule); the record-based `upsert(record)` binds on the
+  // record's `workspaceId` FIELD (the `workspaceField` rule — the id is a property, not a positional
+  // arg). Exposing these makes the environment-connection settings panels functional (persist +
+  // read back the redacted summary) in mothership mode.
+  //
+  // Safe to expose like the observability connection above: the connection record carries the
+  // handler secrets as a SEALED blob (`secretsCipher`) — the repo returns it verbatim (it does NOT
+  // decrypt); sealing/decryption live in `EnvironmentConnectionService` under the LOCAL key, so no
+  // plaintext credential crosses the machine API and the mothership only ever stores ciphertext (the
+  // initiative's "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). What this
+  // does NOT yet unlock: actually PROVISIONING an environment in mothership mode — the registry
+  // WRITE path (`environmentRegistryRepository.insert`/`update`) + decrypting a remotely-sealed
+  // access cipher stay off, the later secrets-delegation slice, exactly like the observability gate
+  // probe. The `workspaceField` rule binds only the record's top-level `workspaceId` (see its note
+  // above), so a connection row can only ever land in the caller's own in-scope workspace.
+  environmentConnectionRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    getByWorkspaceAndType: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The workspace-defined custom-manifest-type catalog the infra configurator reads + edits
+  // (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`/`removeCustomType`, merged
+  // with the deployment's registered code types for display). Rows carry NO secrets — just manifest
+  // metadata — so the whole CRUD surface is remote. `listByWorkspace`/`remove` take the workspaceId
+  // as arg0 (the `workspace` rule); the record-based `upsert(record)` binds on the record's
+  // `workspaceId` FIELD (the `workspaceField` rule). Member-level, workspace-scoped — the same policy
+  // as the connection surface above, and it completes the environments management panel (the
+  // `listHandlers` bundle loads both the connection handlers AND this catalog).
+  customManifestTypeRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   serviceFragmentDefaultsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     // The service-fragment-defaults editor saves the workspace's default fragment set. Member-level,

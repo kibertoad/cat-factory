@@ -28,6 +28,37 @@
 
 ### Landed so far
 
+- **Phase 3 follow-up (ephemeral-environment connection management surface)** — the environment
+  provider-connection + per-type infra-handler settings panels (`EnvironmentController` →
+  `EnvironmentConnectionService`: connect / list / disconnect a backend, register / test / re-secret
+  / unregister a per-type engine handler) are now functional in mothership mode, alongside the
+  workspace-defined custom-manifest-type catalog the infra configurator reads + edits. Previously
+  none of these was remotely callable, so every call came back `unknown_method` (or a `db`-undefined
+  `TypeError`). Newly allow-listed: the whole `environmentConnectionRepository`
+  (`listByWorkspace`/`getByWorkspaceAndType`/`softDelete` via the `workspace` rule, the record-based
+  `upsert` via the `workspaceField` rule) and the whole `customManifestTypeRepository`
+  (`listByWorkspace`/`remove` via `workspace`, `upsert` via `workspaceField`). Each is member-level
+  (the environment endpoints mount under `/workspaces/:workspaceId`, none is admin-gated) and
+  workspace-scoped, matching the observability / other settings panels. **Safe to expose like the
+  observability connection:** the connection record carries its handler secrets as a **SEALED**
+  `secretsCipher` blob — the repo returns it verbatim (it does NOT decrypt); sealing/decryption live
+  in `EnvironmentConnectionService` under the **local** key, so no plaintext credential crosses the
+  machine API and the mothership only ever stores ciphertext (the "mothership `ENCRYPTION_KEY` never
+  reaches the laptop" split holds). This differs from the document/task connection repos, which
+  decrypt INSIDE the repo and would ship plaintext over the RPC — deliberately still off (an open
+  secrets design point for a later integration slice). Custom-manifest-type rows carry no secrets at
+  all. **Routing:** `environmentConnectionRepository` was already re-sourced from the remote registry
+  when `db` is undefined (slice 4); `customManifestTypeRepository` (built directly over `db` by
+  `selectNodeEnvironmentsDeps`) is now routed through the same `if (remoteRepos)` seam in
+  `buildNodeContainer`. **Explicitly NOT in this slice:** actually PROVISIONING an environment — the
+  registry WRITE path (`environmentRegistryRepository.insert`/`update`) + decrypting a
+  remotely-sealed provisioned-env access cipher stay off, the later secrets-delegation slice (exactly
+  like the observability gate probe). Server-only allow-list change + one routing line, symmetric by
+  construction (the dispatcher reflects over each facade's registry). Round-trip, cross-account-scope
+  and missing-field fail-closed unit tests for every new method are in
+  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
+  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
+  `environmentConnection` + `customManifestType` repos are now remote).
 - **Phase 3 follow-up (VCS / GitHub projection read surface)** — the GitHub read models the SPA's
   VCS board panels display are now remotely callable, so a mothership-mode SPA can list a
   workspace's repos, a repo's branches, and the workspace's pull requests + issues, served straight
