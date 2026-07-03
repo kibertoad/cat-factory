@@ -447,9 +447,20 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // Kaizen grading (the merge lifecycle's quality step) reads its prior grade for a step before
   // (re-)grading and writes the result. Both are workspace-scoped on arg0; the sweeper methods
   // (`listPending`/`claim`) stay mothership-internal.
+  //
+  // The Kaizen SCREEN read surface is exposed too, so a mothership-mode SPA can display the
+  // grading history + per-run grading status (`KaizenController` → `KaizenService.getOverview` /
+  // `listForExecution`, both member-level, read-only, mounted under `/workspaces/:workspaceId`):
+  // `listByWorkspace(workspaceId, limit?)` (the screen's bounded history) and
+  // `listByExecution(workspaceId, executionId)` (the run-window per-step status). Both take the
+  // workspaceId as arg0 (the `workspace` rule). The internal-only single-grade `get(workspaceId,
+  // id)` is not on any SPA path (the service never calls it), and `listPending`/`claim` are the
+  // background sweep's kind-spanning reads — all stay mothership-internal.
   kaizenGradingRepository: {
     getByStep: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    listByExecution: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Mixed (workspaceId + blockId/stage): the workspace arg stays the scope key.
   requirementReviewRepository: {
@@ -465,9 +476,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
   // The merge lifecycle's kaizen step reads any prior verified model/prompt combo
-  // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0.
+  // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0. The Kaizen
+  // screen also lists the whole verified-combo library (`listByWorkspace`, part of the same
+  // `getOverview` read) — workspace-scoped, read-only, member-level. The sweep's `upsert` (the
+  // streak/verified write) stays off the SPA path — kaizen grading is best-effort in mothership
+  // mode until the Phase 5 telemetry/local-first sync lands.
   kaizenVerifiedComboRepository: {
     getByKey: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
   // Env-config-repair (a Tester sub-flow) lists a workspace's repair jobs on the run path
   // (`listByWorkspace`), and the board's run controls retry / stop a failed or running repair run:
