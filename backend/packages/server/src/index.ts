@@ -106,7 +106,12 @@ export { InAppNotificationChannel } from './events/InAppNotificationChannel.js'
 export { mountAuthGate } from './http/authGate.js'
 export { param } from './http/params.js'
 export { handleError } from './http/errorHandler.js'
-export { CORS_ALLOWED_HEADERS, parseAllowedOrigins, resolveCorsOrigin } from './http/cors.js'
+export {
+  CORS_ALLOWED_HEADERS,
+  corsReflectsWhenUnset,
+  parseAllowedOrigins,
+  resolveCorsOrigin,
+} from './http/cors.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
 // Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
 // shared by both facades so the Node service can mint installation tokens and

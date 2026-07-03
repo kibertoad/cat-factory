@@ -35,4 +35,26 @@ describe('[local] applyLocalDefaults secrets', () => {
       /AUTH_SESSION_SECRET is required/,
     )
   })
+
+  it('rejects a too-short AUTH_SESSION_SECRET (local mode defaults the gate open)', () => {
+    expect(() => applyLocalDefaults({ ...SECRETS, AUTH_SESSION_SECRET: 'short' })).toThrow(
+      /at least 32 characters/,
+    )
+    // Exactly 32 is accepted.
+    expect(() =>
+      applyLocalDefaults({ ...SECRETS, AUTH_SESSION_SECRET: 'a'.repeat(32) }),
+    ).not.toThrow()
+  })
+
+  it('rejects an ENCRYPTION_KEY that decodes to fewer than 32 bytes', () => {
+    expect(() =>
+      applyLocalDefaults({ ...SECRETS, ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') }),
+    ).toThrow(/at least 32 bytes/)
+  })
+
+  it('rejects an ENCRYPTION_KEY that is not valid base64', () => {
+    expect(() => applyLocalDefaults({ ...SECRETS, ENCRYPTION_KEY: '%%%not-base64%%%' })).toThrow(
+      /valid base64/,
+    )
+  })
 })

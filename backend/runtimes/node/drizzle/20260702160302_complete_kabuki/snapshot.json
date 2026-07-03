@@ -1,10 +1,10 @@
 {
-  "version": "8",
   "dialect": "postgres",
-  "id": "2e590faa-1589-4449-876f-10e6e507cefc",
+  "id": "1633b0ae-1f76-4aa9-9a7b-221538b9dfba",
   "prevIds": [
-    "6a061720-13ad-4adf-8ea5-37507b729150"
+    "99ec2192-970a-464a-85e1-3aa98779ab0a"
   ],
+  "version": "8",
   "ddl": [
     {
       "name": "provisioning",
@@ -1686,6 +1686,32 @@
       "generated": null,
       "identity": null,
       "name": "frontend_config",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "service_connections",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "involved_service_ids",
       "entityType": "columns",
       "schema": "public",
       "table": "blocks"

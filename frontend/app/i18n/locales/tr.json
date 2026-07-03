@@ -503,6 +503,14 @@
         }
       }
     },
+    "serviceConnections": {
+      "title": "Servis bağlantıları",
+      "hint": "Bu servisin kullandığı diğer servisler, örn. e-postalarını gönderen bir servis. Bağlantılar panoda kenar olarak çizilir ve görevler bağlı bir servisi doğrudan dahil olarak işaretleyebilir.",
+      "descriptionPlaceholder": "Bu servis onu nasıl kullanıyor, örn. e-postaları onun üzerinden gönderir",
+      "remove": "Bağlantıyı kaldır",
+      "empty": "Bağlantı yok. Bu servisi kullandığı başka bir servise bağlamak için bir bağlantı ekleyin.",
+      "usedBy": "Kullananlar"
+    },
     "releaseHealth": {
       "title": "Sürüm sonrası sağlık",
       "clear": "Temizle",
@@ -726,7 +734,11 @@
       "responsibleProduct": "Sorumlu ürün",
       "responsibleEmpty": "Atanmamış. Gereksinim incelemesi bu görevi işaretlediğinde bildirim almak için bir ürün sahibi belirleyin.",
       "autoStartDependents": "Bağımlıları otomatik başlat",
-      "autoStartHint": "Bu görev birleştirildiğinde, ona bağlı görevleri otomatik olarak başlat (diğer bağımlılıkları da tamamlandığında)."
+      "autoStartHint": "Bu görev birleştirildiğinde, ona bağlı görevleri otomatik olarak başlat (diğer bağımlılıkları da tamamlandığında).",
+      "involvedServices": "Dahil olan servisler",
+      "involvedServicesHint": "Bu göreve doğrudan dahil olan bağlı servisler: her biri görevin kendi servisiyle birlikte geçici bir ortam olarak ayağa kaldırılır ve kodlama ajanı onların depolarında da değişiklik yapabilir.",
+      "involvedServicesEmpty": "Bağlı servis yok. Burada seçebilmek için servis çerçevesinde servisleri bağlayın.",
+      "involvedServiceStale": "Artık bu görevin servisine bağlı değil; bir sonraki değişiklikte kaldırılacak."
     }
   },
   "panels": {

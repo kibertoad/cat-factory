@@ -199,6 +199,7 @@ export {
   isCloudMetadataHost,
   isBlockedPrivateHost,
 } from './shared/ip-host.logic.js'
+export { redactSecrets } from './shared/redact-secrets.logic.js'
 
 export { requireWorkspace } from './workspace-guard.js'
 

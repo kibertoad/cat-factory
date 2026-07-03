@@ -15,6 +15,7 @@ import type {
 } from '@cat-factory/kernel'
 import { STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
 import * as environmentsLogic from '../environments/environments.logic.js'
+import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
 import * as runnersLogic from './runners.logic.js'
 
 // The single generic adapter that interprets ANY runner-pool manifest. There are
@@ -36,6 +37,8 @@ import * as runnersLogic from './runners.logic.js'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const MAX_RESPONSE_CHARS = 200_000
+/** Hard cap on the bytes read off any response body (mirrors MAX_RESPONSE_CHARS). */
+const MAX_RESPONSE_BYTES = MAX_RESPONSE_CHARS
 const USER_AGENT = 'cat-factory'
 
 /** Carries the HTTP status so callers can surface a meaningful (redacted) error. */
@@ -48,6 +51,10 @@ export class RunnerPoolApiError extends Error {
     this.name = 'RunnerPoolApiError'
   }
 }
+
+/** Redirect/size failures from the shared SSRF-safe fetch surface as this provider's error. */
+const makeRunnerError: MakeHttpError = (status, message) =>
+  new RunnerPoolApiError(status, `Runner pool ${message.toLowerCase()}`)
 
 export interface HttpRunnerPoolProviderOptions {
   defaultTimeoutMs?: number
@@ -161,7 +168,6 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     resolveSecret: SecretResolver,
   ): Promise<unknown> {
     const url = this.buildUrl(manifest.baseUrl, template, scope)
-    environmentsLogic.assertSafeEnvironmentUrl(url, 'request URL', this.urlPolicy)
 
     const headers: Record<string, string> = {
       accept: 'application/json',
@@ -178,23 +184,32 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       if (!headers['content-type']) headers['content-type'] = 'application/json'
     }
 
-    const res = await fetch(url, {
-      method: template.method,
-      headers,
-      body,
-      signal: AbortSignal.timeout(template.timeoutMs ?? this.defaultTimeoutMs),
-    })
+    // The dispatch body carries the per-run GitHub + LLM-proxy tokens (and, for a
+    // subscription harness, a raw personal credential), so a redirect MUST be re-guarded:
+    // follow by hand and re-run the SSRF check on every hop so a permitted scheduler host
+    // can't 302 the request — and its body — to an internal / metadata target.
+    const res = await safeFetch(
+      url,
+      {
+        method: template.method,
+        headers,
+        body,
+        signal: AbortSignal.timeout(template.timeoutMs ?? this.defaultTimeoutMs),
+      },
+      (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'request URL', this.urlPolicy),
+      makeRunnerError,
+    )
 
-    const text = await res.text().catch(() => '')
     if (!res.ok) {
+      const errText = await readCappedText(res, MAX_RESPONSE_BYTES, makeRunnerError, false).catch(
+        () => '',
+      )
       throw new RunnerPoolApiError(
         res.status,
-        `Runner pool ${template.method} → ${res.status}: ${text.slice(0, 300)}`,
+        `Runner pool ${template.method} → ${res.status}: ${errText.slice(0, 300)}`,
       )
     }
-    if (text.length > MAX_RESPONSE_CHARS) {
-      throw new RunnerPoolApiError(502, 'Runner pool response too large')
-    }
+    const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeRunnerError)
     if (!text) return {}
     try {
       return JSON.parse(text)
@@ -264,7 +279,6 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     const cached = this.oauthCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now() + 5_000) return cached.token
 
-    environmentsLogic.assertSafeEnvironmentUrl(auth.tokenUrl, 'OAuth token URL', this.urlPolicy)
     const form = new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: clientId,
@@ -273,27 +287,40 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     if (auth.scope) form.set('scope', auth.scope)
     if (auth.audience) form.set('audience', auth.audience)
 
-    const res = await fetch(auth.tokenUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'application/json',
-        'user-agent': USER_AGENT,
+    // The client-credentials POST body carries `client_secret`, so — as with `execute` —
+    // re-guard every redirect hop rather than letting the runtime chase the secret off-host.
+    const res = await safeFetch(
+      auth.tokenUrl,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json',
+          'user-agent': USER_AGENT,
+        },
+        body: form.toString(),
+        signal: AbortSignal.timeout(this.defaultTimeoutMs),
       },
-      body: form.toString(),
-      signal: AbortSignal.timeout(this.defaultTimeoutMs),
-    })
+      (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'OAuth token URL', this.urlPolicy),
+      makeRunnerError,
+    )
     if (!res.ok) {
-      const text = await res.text().catch(() => '')
+      const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeRunnerError, false).catch(
+        () => '',
+      )
       throw new RunnerPoolApiError(
         res.status,
         `OAuth token request → ${res.status}: ${text.slice(0, 200)}`,
       )
     }
-    const json = (await res.json().catch(() => null)) as {
-      access_token?: string
-      expires_in?: number
-    } | null
+    const tokenText = await readCappedText(res, MAX_RESPONSE_BYTES, makeRunnerError)
+    const json = (() => {
+      try {
+        return JSON.parse(tokenText) as { access_token?: string; expires_in?: number }
+      } catch {
+        return null
+      }
+    })()
     if (!json?.access_token) {
       throw new RunnerPoolApiError(502, 'OAuth token response missing access_token')
     }

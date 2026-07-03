@@ -5,6 +5,7 @@ import { testerQualityConfigSchema, writebackOverrideSchema } from './entities.j
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
   blockTypeSchema,
@@ -171,6 +172,13 @@ export const updateBlockSchema = v.partial(
     // for a self-contained UI test + its backend bindings (which double as board links).
     // See docs/initiatives/frontend-preview-ui-testing.md.
     frontendConfig: frontendConfigSchema,
+    // Service-level (frame, `type: 'service'`): the service's directed connections to the
+    // other services it uses (consumer→provider edges); an empty array clears them.
+    serviceConnections: serviceConnectionsSchema,
+    // Task-level: the connected service frames directly involved in this task beyond its
+    // own service; an empty array clears the selection. Capped like `serviceConnections`
+    // so the write-gate's per-id cross-home resolve stays a bounded loop, not data-sized.
+    involvedServiceIds: v.pipe(v.array(v.pipe(v.string(), v.maxLength(120))), v.maxLength(50)),
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),

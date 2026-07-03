@@ -79,6 +79,9 @@ import {
   createCore,
   PACKAGE_REGISTRY_CIPHER_INFO,
   resolvePackageRegistriesForDispatch,
+  type HarnessCallsRecordInput,
+  LlmObservabilityService,
+  makeHarnessCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
@@ -771,6 +774,7 @@ function buildNodeContainerExecutor(
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
   resolveRepoOrigin?: ResolveRepoOrigin,
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
+  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -831,6 +835,9 @@ function buildNodeContainerExecutor(
             subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
+    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
+    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
+    ...(recordHarnessCalls ? { recordHarnessCalls } : {}),
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions
@@ -1558,6 +1565,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     recordPrompts: config.observability.recordPrompts,
   })
+  // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
+  // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
+  // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
+  const recordHarnessCalls = makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: repos.llmCallMetricRepository,
+      idGenerator,
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+    }),
+  )
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
@@ -1613,6 +1631,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveWebSearchEnabled,
     options.resolveRepoOrigin,
     resolvePackageRegistries,
+    recordHarnessCalls,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds

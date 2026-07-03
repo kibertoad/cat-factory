@@ -1,9 +1,16 @@
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
+import {
+  type Clock,
+  type IdGenerator,
+  DEFAULT_WORKSPACE_SETTINGS,
+  redactSecrets,
+} from '@cat-factory/kernel'
 import type {
+  HarnessCallMetric,
   LlmCallMetric,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
   LlmTraceSink,
+  WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import type { LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
@@ -14,10 +21,11 @@ export interface LlmObservabilityServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
   /**
-   * Whether to persist the full prompt body with each metric. Defaults to true. When
+   * Whether to persist the full text bodies with each metric. Defaults to true. When
    * false, every numeric field (tokens, timing, finish reason, message/tool counts)
-   * is still recorded but the prompt is stored empty — for deployments that must not
-   * retain the complete prompts sent to the model. Governed by `LLM_RECORD_PROMPTS`.
+   * is still recorded but the prompt AND the response/reasoning bodies are stored empty
+   * — for deployments that must not retain the model content (prompts sent or replies
+   * received). Governed by `LLM_RECORD_PROMPTS`.
    */
   recordPrompts?: boolean
   /**
@@ -27,6 +35,14 @@ export interface LlmObservabilityServiceDependencies {
    * Fan-out is best-effort and never blocks or breaks the local recording.
    */
   traceSink?: LlmTraceSink
+  /**
+   * Optional per-workspace settings source. When wired, prompt/response BODY capture is
+   * ALSO gated on the workspace's `storeAgentContext` toggle (mirroring the agent-context
+   * snapshot path), so a workspace that opted out doesn't retain prompt bodies here even
+   * when prompt recording is on deployment-wide. Numeric telemetry is always recorded.
+   * Absent ⇒ gate only on {@link recordPrompts} (existing behaviour).
+   */
+  workspaceSettingsRepository?: WorkspaceSettingsRepository
 }
 
 /**
@@ -105,6 +121,7 @@ export class LlmObservabilityService {
   private readonly clock: Clock
   private readonly recordPrompts: boolean
   private readonly traceSink?: LlmTraceSink
+  private readonly workspaceSettings?: WorkspaceSettingsRepository
 
   constructor({
     llmCallMetricRepository,
@@ -112,12 +129,14 @@ export class LlmObservabilityService {
     clock,
     recordPrompts = true,
     traceSink,
+    workspaceSettingsRepository,
   }: LlmObservabilityServiceDependencies) {
     this.repository = llmCallMetricRepository
     this.idGenerator = idGenerator
     this.clock = clock
     this.recordPrompts = recordPrompts
     this.traceSink = traceSink
+    this.workspaceSettings = workspaceSettingsRepository
   }
 
   /**
@@ -132,9 +151,32 @@ export class LlmObservabilityService {
    * stored empty and the chain-tip read is skipped entirely — the numeric telemetry is
    * still recorded.
    */
-  async record(input: RecordLlmCallInput): Promise<void> {
+  async record(rawInput: RecordLlmCallInput): Promise<void> {
+    // Unlike the agent-context snapshot (a structural allow-list), the prompt/response
+    // bodies captured here are free text that can contain a credential the agent read or
+    // echoed. Scrub known secret shapes BEFORE anything is stored, delta-chained, or
+    // fanned out to the external trace sink — the redacted text is what every downstream
+    // consumer sees. Done up front so the delta chain stays consistent (each tip is
+    // already redacted) and Langfuse never receives a raw secret.
+    const input: RecordLlmCallInput = {
+      ...rawInput,
+      promptText: redactSecrets(rawInput.promptText) ?? '',
+      responseText: redactSecrets(rawInput.responseText) ?? '',
+      reasoningText: redactSecrets(rawInput.reasoningText) ?? '',
+      // errorMessage is a free-text upstream/proxy error string that is kept as diagnostic
+      // metadata even when bodies are dropped (like httpStatus/finishReason) AND fanned out
+      // to the trace sink — so it too must be scrubbed. An upstream 4xx/5xx message can
+      // echo an `Authorization` header or a signed URL; redacting here keeps the one
+      // exchange field that isn't gated on `recordBodies` from leaking a secret shape.
+      errorMessage: redactSecrets(rawInput.errorMessage),
+    }
     const overheadMs = Math.max(0, input.totalMs - input.upstreamMs)
-    const stored = this.recordPrompts
+    // Prompt/response BODIES are kept only when recording is on deployment-wide AND (when a
+    // settings source is wired) the workspace hasn't opted out via `storeAgentContext` —
+    // the same double gate the agent-context snapshot path uses. Numeric telemetry is
+    // always recorded regardless.
+    const recordBodies = this.recordPrompts && (await this.bodiesEnabled(input.workspaceId))
+    const stored = recordBodies
       ? await this.computeStoredPromptForChain(input)
       : EMPTY_STORED_PROMPT
     const metric: LlmCallMetric = {
@@ -148,8 +190,11 @@ export class LlmObservabilityService {
       promptText: clampBody(stored.promptText),
       promptPrefixCount: stored.promptPrefixCount,
       promptHash: stored.promptHash,
-      responseText: clampBody(input.responseText),
-      reasoningText: clampBody(input.reasoningText),
+      // Response + reasoning are bodies too: drop them (not just the prompt) when body
+      // recording is off, so an opted-out workspace / prompts-off deployment retains none
+      // of the model exchange, only the numeric telemetry.
+      responseText: recordBodies ? clampBody(input.responseText) : '',
+      reasoningText: recordBodies ? clampBody(input.reasoningText) : '',
     }
     await this.repository.record(metric)
     // Fan out to the external trace sink (Langfuse), if wired. We send the FULL prompt
@@ -176,16 +221,27 @@ export class LlmObservabilityService {
             finishReason: input.finishReason,
             ok: input.ok,
             errorMessage: input.errorMessage,
-            input: this.recordPrompts ? input.promptText : '',
+            input: recordBodies ? input.promptText : '',
             // Fall back to the reasoning trace when the turn produced no response text
             // (a thinking model that spent its budget reasoning) so the trace isn't blank.
-            output: this.recordPrompts ? input.responseText || input.reasoningText : '',
+            output: recordBodies ? input.responseText || input.reasoningText : '',
           }),
         ).catch(() => {})
       } catch {
         // Swallowed: the sink itself logs; observability never breaks the proxy.
       }
     }
+  }
+
+  /**
+   * Whether prompt/response bodies may be stored for this workspace. True when no settings
+   * source is wired (defer to the deployment switch); otherwise the workspace's
+   * `storeAgentContext` toggle (defaulting on for a workspace with no saved settings).
+   */
+  private async bodiesEnabled(workspaceId: string): Promise<boolean> {
+    if (!this.workspaceSettings) return true
+    const settings = (await this.workspaceSettings.get(workspaceId)) ?? DEFAULT_WORKSPACE_SETTINGS
+    return settings.storeAgentContext
   }
 
   /**
@@ -230,5 +286,71 @@ export class LlmObservabilityService {
   async exportForExecution(workspaceId: string, executionId: string): Promise<LlmMetricsExport> {
     const calls = await this.listByExecution(workspaceId, executionId)
     return buildLlmMetricsExport(executionId, calls, this.clock.now())
+  }
+}
+
+/** The per-job payload the container executor hands a subscription-harness telemetry recorder. */
+export interface HarnessCallsRecordInput {
+  workspaceId: string
+  executionId: string | null
+  agentKind: string
+  /** The subscription vendor (claude/codex/glm/kimi/deepseek). */
+  provider: string
+  /** The dispatch model (`provider:model`); each call's own `model` wins when present. */
+  model: string
+  /**
+   * The dispatch job id (per-step, deterministic across a durable driver's replays).
+   * When present, each call's row is minted a deterministic id off it, so a replay that
+   * re-runs the recorder inserts the SAME ids — a duplicate insert is rejected by the
+   * store, leaving the run idempotent (no double rows, no mangled delta chain) even when
+   * the executor's in-memory replay guard didn't survive an isolate eviction. Absent ⇒
+   * the service mints a random id (fine for one-shot callers/tests).
+   */
+  jobId?: string
+  calls: HarnessCallMetric[]
+}
+
+/**
+ * Build the executor's `recordHarnessCalls` dependency: map a subscription harness's
+ * per-call metrics (lifted from its CLI stream, bypassing the LLM proxy) onto the SAME
+ * {@link LlmObservabilityService} the proxy feeds, so Claude Code / Codex calls land in
+ * `llm_call_metrics` exactly like Pi's proxied calls. Records SEQUENTIALLY so the
+ * prompt-delta chain (which reads the previous row's tip) stays ordered. The CLIs expose
+ * no per-HTTP timing, so `totalMs`/`upstreamMs` are 0 (overhead derives 0); tool counts
+ * aren't surfaced per call, so `toolCount` is 0. When a `jobId` is supplied each row is
+ * minted a deterministic id (`<jobId>-hc-<index>`) so a durable-driver replay re-records
+ * idempotently (duplicate ids are rejected by the store) rather than duplicating rows.
+ */
+export function makeHarnessCallRecorder(
+  service: LlmObservabilityService,
+): (input: HarnessCallsRecordInput) => Promise<void> {
+  return async ({ workspaceId, executionId, agentKind, provider, model, jobId, calls }) => {
+    for (const [index, call] of calls.entries()) {
+      await service.record({
+        ...(jobId ? { id: `${jobId}-hc-${index}` } : {}),
+        workspaceId,
+        executionId,
+        agentKind,
+        provider,
+        model: call.model ?? model,
+        streaming: true,
+        messageCount: call.messageCount,
+        toolCount: 0,
+        requestMaxTokens: null,
+        promptTokens: call.inputTokens,
+        cachedPromptTokens: call.cachedInputTokens,
+        completionTokens: call.outputTokens,
+        totalTokens: call.inputTokens + call.outputTokens,
+        finishReason: call.finishReason,
+        totalMs: 0,
+        upstreamMs: 0,
+        ok: true,
+        httpStatus: null,
+        errorMessage: null,
+        promptText: call.promptText,
+        responseText: call.responseText,
+        reasoningText: call.reasoningText,
+      })
+    }
   }
 }

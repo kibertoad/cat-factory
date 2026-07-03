@@ -16,6 +16,9 @@ export class WebCryptoWebhookVerifier implements WebhookVerifier {
   constructor(private readonly secret: string) {}
 
   async verify(rawBody: ArrayBuffer, signatureHeader: string | null): Promise<boolean> {
+    // Fail closed on an unconfigured secret: an empty HMAC key would let an attacker
+    // forge a signature over their own body (matches the GitLab verifier's guard).
+    if (!this.secret) return false
     if (!signatureHeader || !signatureHeader.startsWith(PREFIX)) return false
     const provided = hexToBytes(signatureHeader.slice(PREFIX.length))
     if (!provided) return false

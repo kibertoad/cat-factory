@@ -11,28 +11,42 @@
 // supported by design.
 // ---------------------------------------------------------------------------
 
-const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+import { decodeIpv4, isCloudMetadataHost, isPrivateV4 } from '@cat-factory/kernel'
 
 /** Whether a hostname (no port) is a loopback or RFC1918/ULA private host we forward to. */
 function isLoopbackOrPrivateHost(host: string): boolean {
   const h = host.toLowerCase().replace(/^\[/, '').replace(/\]$/, '')
+  if (h === '') return false
+  // Cloud-metadata / link-local endpoints (169.254.0.0/16, metadata.google.internal,
+  // fd00:ec2::254, …) are the primary SSRF target. Deny them FIRST — some (the whole
+  // 169.254/16 range) would otherwise look "private" — across every obfuscated encoding.
+  if (isCloudMetadataHost(h)) return false
+
   if (h === 'localhost' || h.endsWith('.localhost')) return true
   // mDNS `.local` names resolve only on the LAN — acceptable for a same-network runner.
   if (h.endsWith('.local')) return true
-  const v4 = IPV4.exec(h)
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])]
-    if ([a, b, Number(v4[3]), Number(v4[4])].some((n) => n > 255)) return false
-    if (a === 127) return true // loopback 127.0.0.0/8
-    if (a === 10) return true // private 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return true // private 172.16.0.0/12
-    if (a === 192 && b === 168) return true // private 192.168.0.0/16
-    return false // public, 0.0.0.0, and link-local 169.254.0.0/16 (metadata) → denied
+
+  // IPv6 literals (URL.hostname keeps them bracketless here → they contain a colon).
+  // Gating the ULA prefix test behind this colon check is what stops a registrable DNS
+  // name like `fc2.com` / `fd-x.evil.com` from masquerading as a private fc00::/7 host.
+  if (h.includes(':')) {
+    if (h === '::1') return true // loopback
+    if (h.startsWith('fc') || h.startsWith('fd')) return true // ULA fc00::/7
+    // IPv4-mapped IPv6 (e.g. `::ffff:10.0.0.1`) → classify by the embedded IPv4.
+    const mapped = decodeIpv4(h)
+    if (mapped) return mapped[0] !== 0 && isPrivateV4(mapped)
+    // fe80::/10 (link-local), :: (unspecified), and global addresses → denied.
+    return false
   }
-  // IPv6 literals (URL.hostname strips the brackets).
-  if (h === '::1') return true // loopback
-  if (h.startsWith('fc') || h.startsWith('fd')) return true // ULA fc00::/7
-  // fe80::/10 (link-local), :: (unspecified), and global addresses → denied.
+
+  // IPv4 in any form the WHATWG URL parser may leave us (it canonicalises hex/octal/
+  // integer hosts to dotted-decimal before we see them; `decodeIpv4` covers the rest
+  // defensively). `isPrivateV4` accepts 127/8, 10/8, 172.16/12, 192.168/16 — plus 0.*
+  // and 169.254.* which we exclude (0.0.0.0/8 unspecified; metadata handled above).
+  const v4 = decodeIpv4(h)
+  if (v4) return v4[0] !== 0 && isPrivateV4(v4)
+
+  // Public hostname / anything unrecognised → denied.
   return false
 }
 

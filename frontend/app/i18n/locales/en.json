@@ -546,6 +546,14 @@
         }
       }
     },
+    "serviceConnections": {
+      "title": "Service connections",
+      "hint": "The other services this one uses, e.g. a service that sends its emails. Connections draw edges on the board, and tasks can mark a connected service as directly involved.",
+      "descriptionPlaceholder": "How this service uses it, e.g. sends emails via it",
+      "remove": "Remove connection",
+      "empty": "No connections. Add one to link this service to another service it uses.",
+      "usedBy": "Used by"
+    },
     "releaseHealth": {
       "title": "Post-release health",
       "clear": "Clear",
@@ -769,7 +777,11 @@
       "responsibleProduct": "Responsible product",
       "responsibleEmpty": "Unassigned. Set a product owner to notify them when requirement review flags this task.",
       "autoStartDependents": "Auto-start dependents",
-      "autoStartHint": "When this task merges, automatically start the tasks that depend on it (once their other dependencies are also done)."
+      "autoStartHint": "When this task merges, automatically start the tasks that depend on it (once their other dependencies are also done).",
+      "involvedServices": "Involved services",
+      "involvedServicesHint": "Connected services directly involved in this task: each spins up as an ephemeral environment alongside this task's own service, and the coding agent may change their repositories too.",
+      "involvedServicesEmpty": "No connected services. Connect services on the service frame to select them here.",
+      "involvedServiceStale": "No longer connected to this task's service; it is dropped on the next change."
     }
   },
   "panels": {

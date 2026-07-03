@@ -21,6 +21,9 @@ const memberSegments = ref<MemberSeg[]>([])
 // Frontend frame → bound service frame links (from a frontend's backend bindings).
 type FrontendSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
 const frontendSegments = ref<FrontendSeg[]>([])
+// Service frame → connected provider service frame links (from serviceConnections).
+type ConnectionSeg = { id: string; x1: number; y1: number; x2: number; y2: number }
+const connectionSegments = ref<ConnectionSeg[]>([])
 
 // task → its dependencies, both ends being tasks
 const taskDeps = computed(() => {
@@ -61,6 +64,24 @@ const frontendLinks = computed(() => {
       seen.add(serviceId)
       if (board.getBlock(serviceId))
         out.push({ id: `${f.id}__fe__${serviceId}`, source: f.id, target: serviceId })
+    }
+  }
+  return out
+})
+
+// consumer service frame → each provider service it connects to (a serviceConnections
+// entry, stored on the consumer end). Deduped; a target deleted out of band draws nothing.
+const connectionLinks = computed(() => {
+  const out: { id: string; source: string; target: string }[] = []
+  for (const f of board.frames) {
+    if (f.type !== 'service') continue
+    const seen = new Set<string>()
+    for (const connection of f.serviceConnections ?? []) {
+      const providerId = connection.serviceBlockId
+      if (seen.has(providerId)) continue
+      seen.add(providerId)
+      if (board.getBlock(providerId))
+        out.push({ id: `${f.id}__conn__${providerId}`, source: f.id, target: providerId })
     }
   }
   return out
@@ -152,6 +173,23 @@ function recompute() {
     fes.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
   }
   frontendSegments.value = fes
+
+  const conns: ConnectionSeg[] = []
+  for (const link of connectionLinks.value) {
+    const a = anchorEl(link.source)
+    const b = anchorEl(link.target)
+    if (!a || !b || a === b) continue
+    const ra = a.getBoundingClientRect()
+    const rb = b.getBoundingClientRect()
+    const ax = ra.left + ra.width / 2 - origin.left
+    const ay = ra.top + ra.height / 2 - origin.top
+    const bx = rb.left + rb.width / 2 - origin.left
+    const by = rb.top + rb.height / 2 - origin.top
+    const start = border(ax, ay, ra.width / 2, ra.height / 2, bx, by)
+    const end = border(bx, by, rb.width / 2, rb.height / 2, ax, ay)
+    conns.push({ id: link.id, x1: start.x, y1: start.y, x2: end.x, y2: end.y })
+  }
+  connectionSegments.value = conns
 }
 
 const { pause, resume } = useRafFn(recompute, { immediate: false })
@@ -195,7 +233,33 @@ onBeforeUnmount(pause)
       >
         <path d="M0,0 L10,5 L0,10 z" fill="#22d3ee" />
       </marker>
+      <marker
+        id="service-connection-arrow"
+        viewBox="0 0 10 10"
+        refX="8"
+        refY="5"
+        markerWidth="6"
+        markerHeight="6"
+        orient="auto-start-reverse"
+      >
+        <path d="M0,0 L10,5 L0,10 z" fill="#34d399" />
+      </marker>
     </defs>
+
+    <!-- consumer service → provider service connection links (emerald, arrow toward the provider) -->
+    <line
+      v-for="s in connectionSegments"
+      :key="s.id"
+      :x1="s.x1"
+      :y1="s.y1"
+      :x2="s.x2"
+      :y2="s.y2"
+      stroke="#34d399"
+      :stroke-width="1.5"
+      stroke-dasharray="3 4"
+      :stroke-opacity="0.55"
+      marker-end="url(#service-connection-arrow)"
+    />
 
     <!-- frontend frame → bound service frame links (cyan, arrow toward the service under test) -->
     <line

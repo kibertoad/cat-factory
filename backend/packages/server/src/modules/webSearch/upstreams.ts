@@ -1,4 +1,24 @@
+import { environmentsLogic, readCappedText, safeFetch } from '@cat-factory/integrations'
 import type { WebSearchResponse, WebSearchUpstream } from '../../runtime/gateways.js'
+
+// SearXNG is reached at an account-configured URL, so — unlike the hardcoded Brave
+// endpoint — it MUST be SSRF-guarded: block private/internal/metadata hosts (the SSRF
+// target) while still allowing a public self-hosted instance over http or https. The
+// same policy guards the write boundary (AccountSettingsService), so a bad URL is
+// rejected when saved AND re-checked (with per-hop redirect revalidation) when fetched.
+export const WEB_SEARCH_URL_SAFETY_POLICY = { schemes: ['http', 'https'], allowHosts: [] } as const
+
+/** Assert an account-supplied web-search URL is not an SSRF vector. Throws on a bad host. */
+export function assertSafeWebSearchUrl(url: string): void {
+  environmentsLogic.assertSafeEnvironmentUrl(url, 'SearXNG URL', WEB_SEARCH_URL_SAFETY_POLICY)
+}
+
+/** Redirect/size failures from the shared SSRF-safe fetch surface as a plain search error. */
+const makeSearchError = (status: number, message: string) =>
+  new Error(`Web search ${message.toLowerCase()} (HTTP ${status})`)
+
+/** Hard cap on the bytes read off a search response body. */
+const MAX_SEARCH_RESPONSE_BYTES = 2_000_000
 
 // Runtime-neutral web-search upstreams for the container search proxy. Each performs
 // the actual search server-side (under the deployment's own provider key) and maps the
@@ -88,17 +108,26 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
     const url = new URL(`${this.base}/search`)
     url.searchParams.set('q', query)
     url.searchParams.set('format', 'json')
-    const res = await fetch(url, {
-      headers: {
-        accept: 'application/json',
-        ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
+    // Re-validate the (account-configured) host on every redirect hop so a permitted
+    // base can't 302 the request — with the optional bearer attached — to an internal
+    // or metadata host.
+    const res = await safeFetch(
+      url.toString(),
+      {
+        headers: {
+          accept: 'application/json',
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {}),
+        },
+        ...(opts.signal ? { signal: opts.signal } : {}),
       },
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    })
+      assertSafeWebSearchUrl,
+      makeSearchError,
+    )
     if (!res.ok) {
       throw new Error(`SearXNG search failed (HTTP ${res.status})`)
     }
-    const json = (await res.json()) as SearxngSearchResponse
+    const text = await readCappedText(res, MAX_SEARCH_RESPONSE_BYTES, makeSearchError)
+    const json = JSON.parse(text) as SearxngSearchResponse
     const limit = clampCount(opts.count)
     const results = (json.results ?? [])
       .filter((r): r is { url: string; title?: string; content?: string } => {

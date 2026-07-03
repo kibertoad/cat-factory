@@ -503,6 +503,14 @@
         }
       }
     },
+    "serviceConnections": {
+      "title": "Connexions de services",
+      "hint": "Les autres services que celui-ci utilise, p. ex. un service qui envoie ses e-mails. Les connexions tracent des liens sur le tableau, et les tâches peuvent marquer un service connecté comme directement impliqué.",
+      "descriptionPlaceholder": "Comment ce service l'utilise, p. ex. envoie des e-mails via lui",
+      "remove": "Supprimer la connexion",
+      "empty": "Aucune connexion. Ajoutez-en une pour relier ce service à un autre service qu'il utilise.",
+      "usedBy": "Utilisé par"
+    },
     "releaseHealth": {
       "title": "Santé post-déploiement",
       "clear": "Effacer",
@@ -726,7 +734,11 @@
       "responsibleProduct": "Produit responsable",
       "responsibleEmpty": "Non assigné. Définissez un responsable produit pour le notifier lorsque la revue d'exigences signale cette tâche.",
       "autoStartDependents": "Démarrer automatiquement les dépendants",
-      "autoStartHint": "Lorsque cette tâche est fusionnée, démarrer automatiquement les tâches qui en dépendent (une fois que leurs autres dépendances sont également terminées)."
+      "autoStartHint": "Lorsque cette tâche est fusionnée, démarrer automatiquement les tâches qui en dépendent (une fois que leurs autres dépendances sont également terminées).",
+      "involvedServices": "Services impliqués",
+      "involvedServicesHint": "Services connectés directement impliqués dans cette tâche : chacun démarre comme environnement éphémère aux côtés du service propre de la tâche, et l'agent de code peut aussi modifier leurs dépôts.",
+      "involvedServicesEmpty": "Aucun service connecté. Connectez des services sur le cadre du service pour les sélectionner ici.",
+      "involvedServiceStale": "N'est plus connecté au service de cette tâche ; il sera retiré au prochain changement."
     }
   },
   "panels": {
