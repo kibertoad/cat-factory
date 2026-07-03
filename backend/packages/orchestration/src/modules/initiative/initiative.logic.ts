@@ -258,7 +258,10 @@ export type InterviewOutput =
  * convergence (the human proceeded, or the round cap was hit) regardless of what the model
  * returned. Empty/absent questions also mean convergence — nothing left to ask.
  */
-export function coerceInterviewOutput(parsed: unknown, opts: { finalize: boolean }): InterviewOutput {
+export function coerceInterviewOutput(
+  parsed: unknown,
+  opts: { finalize: boolean },
+): InterviewOutput {
   const obj = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<
     string,
     unknown

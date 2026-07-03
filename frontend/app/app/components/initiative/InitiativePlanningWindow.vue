@@ -62,8 +62,7 @@ async function flushThen(action: (id: string) => Promise<unknown>) {
   await action(blockId.value)
 }
 
-const onContinue = () =>
-  flushThen((id) => initiatives.continuePlanning(id))
+const onContinue = () => flushThen((id) => initiatives.continuePlanning(id))
 const onProceed = () => flushThen((id) => initiatives.proceedPlanning(id))
 </script>
 

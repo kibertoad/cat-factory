@@ -1,11 +1,17 @@
 import type { Block, Initiative, InitiativePlanDraft } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
+  applyAnalysis,
+  applyInterviewAnswer,
+  applyInterviewOutcome,
+  applyInterviewQuestions,
   applyPlanDraft,
   assertInitiativeShapeAllowed,
+  coerceInterviewOutput,
   deriveCurrentPhase,
   initiativeProgress,
   initiativeSlug,
+  interviewAtCap,
   validatePlanDraft,
 } from './initiative.logic.js'
 
@@ -255,5 +261,108 @@ describe('derivations', () => {
   it('slugifies titles safely', () => {
     expect(initiativeSlug('Migrate the API — v2!')).toBe('migrate-the-api-v2')
     expect(initiativeSlug('***')).toBe('initiative')
+  })
+})
+
+describe('coerceInterviewOutput', () => {
+  it('parses a questions round (done false, non-empty questions)', () => {
+    const out = coerceInterviewOutput(
+      { done: false, questions: ['What is the scope?', '  ', 'Any deadline?'] },
+      { finalize: false },
+    )
+    expect(out).toEqual({ kind: 'questions', questions: ['What is the scope?', 'Any deadline?'] })
+  })
+
+  it('converges when done is true, carrying the synthesized brief', () => {
+    const out = coerceInterviewOutput(
+      {
+        done: true,
+        questions: [],
+        goal: 'Migrate auth',
+        constraints: ['no downtime'],
+        nonGoals: ['x'],
+      },
+      { finalize: false },
+    )
+    expect(out).toEqual({
+      kind: 'done',
+      goal: 'Migrate auth',
+      constraints: ['no downtime'],
+      nonGoals: ['x'],
+    })
+  })
+
+  it('converges when there are no questions even if done is absent', () => {
+    expect(coerceInterviewOutput({ questions: [] }, { finalize: false }).kind).toBe('done')
+  })
+
+  it('finalize forces convergence regardless of returned questions', () => {
+    const out = coerceInterviewOutput(
+      { done: false, questions: ['still asking?'], goal: 'G' },
+      { finalize: true },
+    )
+    expect(out).toEqual({ kind: 'done', goal: 'G', constraints: [], nonGoals: [] })
+  })
+})
+
+describe('interview state transitions', () => {
+  it('appends a round of pending questions and bumps the round', () => {
+    let id = 0
+    const next = applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++id}`)
+    expect(next.qa).toEqual([
+      { id: 'iqa-1', question: 'Q1', answer: '' },
+      { id: 'iqa-2', question: 'Q2', answer: '' },
+    ])
+    expect(next.interview).toEqual({ round: 1, maxRounds: 4, status: 'awaiting' })
+  })
+
+  it('records an answer by question id', () => {
+    let id = 0
+    const asked = applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++id}`)
+    const answered = applyInterviewAnswer(asked, 'iqa-1', 'Because reasons')
+    expect(answered.qa?.find((q) => q.id === 'iqa-1')?.answer).toBe('Because reasons')
+    expect(answered.qa?.find((q) => q.id === 'iqa-2')?.answer).toBe('')
+  })
+
+  it('a follow-up round keeps answered questions and drops skipped ones', () => {
+    let id = 0
+    const gen = () => `iqa-${++id}`
+    const asked = applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], gen)
+    const answered = applyInterviewAnswer(asked, 'iqa-1', 'A1') // Q2 left unanswered (skipped)
+    const round2 = applyInterviewQuestions(answered, ['Q3'], gen)
+    expect(round2.qa?.map((q) => q.question)).toEqual(['Q1', 'Q3'])
+    expect(round2.interview?.round).toBe(2)
+  })
+
+  it('outcome folds the brief, keeps only answered Q&A, and marks the interview done', () => {
+    let id = 0
+    const asked = applyInterviewQuestions(emptyEntity(), ['Q1', 'Q2'], () => `iqa-${++id}`)
+    const answered = applyInterviewAnswer(asked, 'iqa-1', 'A1')
+    const done = applyInterviewOutcome(answered, {
+      goal: 'Ship it',
+      constraints: ['keep runtimes symmetric'],
+      nonGoals: ['backwards compat'],
+    })
+    expect(done.goal).toBe('Ship it')
+    expect(done.constraints).toEqual(['keep runtimes symmetric'])
+    expect(done.qa).toEqual([{ id: 'iqa-1', question: 'Q1', answer: 'A1' }])
+    expect(done.interview?.status).toBe('done')
+  })
+
+  it('interviewAtCap is true once the round reaches maxRounds', () => {
+    const base = emptyEntity()
+    expect(interviewAtCap(base)).toBe(false)
+    expect(
+      interviewAtCap({ ...base, interview: { round: 3, maxRounds: 4, status: 'awaiting' } }),
+    ).toBe(false)
+    expect(
+      interviewAtCap({ ...base, interview: { round: 4, maxRounds: 4, status: 'awaiting' } }),
+    ).toBe(true)
+  })
+
+  it('applyAnalysis folds the analyst prose onto the entity', () => {
+    expect(applyAnalysis(emptyEntity(), '  The codebase is layered.  ').analysisSummary).toBe(
+      'The codebase is layered.',
+    )
   })
 })

@@ -66,7 +66,7 @@ Locked product decisions:
 | Slice                                                                                                                                                                                                                                                                             | Scope                                                        | Status  | PR        |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------- | --------- |
 | 1. Foundation: contracts + persistence + block level + planning-pipeline skeleton (`planner` → gate → `committer`) + Create Initiative button + read-only tracker window                                                                                                          | contracts/kernel/agents/orchestration/server/worker/node/app | ✅ done | (this PR) |
-| 2. Interactive planning: `initiative-interviewer` park/answer/resume loop (model: `ReviewGateController`), `initiative-analyst`, planning window Q&A UI, statuses `planning → awaiting_approval → executing`                                                                      | engine + server + app                                        | ⬜ todo | —         |
+| 2. Interactive planning: `initiative-interviewer` park/answer/resume loop (model: `ReviewGateController`), `initiative-analyst`, planning window Q&A UI, statuses `planning → awaiting_approval → executing`                                                                      | engine + server + app                                        | ✅ done | (this PR) |
 | 3. Execution loop: `InitiativeLoopService` (tick + `runDue` in BOTH cron seams + terminal pokes in `RunStateMachine.emitInstance` / `mergePr`), JIT spawning with estimate→pipeline rules, reconcile + PR links + tracker re-commit, pause/cancel, `initiative` notification type | engine + both runtimes + app                                 | ⬜ todo | —         |
 | 4. Follow-ups & polish: harvest child-run follow-ups + failure deviations into the tracker, promote-to-item, policy/item editing in the inspector, docs                                                                                                                           | engine + app                                                 | ⬜ todo | —         |
 
@@ -102,7 +102,31 @@ Locked product decisions:
   (the loop owns sequencing); validate `defaultPipelineId` at ingest and record a
   deviation + notification (never throw inside the sweep) for a deleted pipeline.
 - **Slice-2 extends `pl_initiative`'s `agentKinds` in place** (pre-1.0: no compat shim;
-  bump the pipeline's catalog `version` so workspaces get the reseed offer).
+  bump the pipeline's catalog `version` so workspaces get the reseed offer). Done: the shape is
+  now `[initiative-interviewer, initiative-analyst, initiative-planner, initiative-committer]`,
+  gates `[false, false, true, false]` (the interviewer parks via its OWN controller, NOT a
+  `gates[]` human gate — hence `false` at its index; the approval gate stays after the planner).
+- **The slice-2 interviewer is ENTITY-NATIVE, not a `ReviewKind`.** It reuses `RunStateMachine`'s
+  park/signal spine (`parkStepOnDecision` / `advancePastResolvedGate` / the `pendingInterview`
+  step re-entry field + `signalDecision`) exactly like `ReviewGateController`, but stores its
+  questions / answers / synthesized brief directly on the `initiatives` entity (`qa` +
+  `interview` + `goal`/`constraints`/`nonGoals`) via `InitiativeService`'s CAS `mutate` — NOT in
+  a parallel review table. Rationale: honours "the DB row is the source of truth", keeps interview
+  semantics honest (no severity/dismiss/document-replaces-description), and avoids a heavy
+  parallel table + repo + conformance. `InitiativeInterviewController` owns the orchestration;
+  `InitiativeInterviewService` owns the inline LLM. Revisit only if a second interview-style gate
+  appears.
+- **No facade wiring was needed for the interviewer.** It resolves its inline model exactly like
+  the requirements reviewer (routing default + block pin + workspace preset for the
+  `initiative-interviewer` kind), so it is built inside `orchestration/container.ts` from the
+  `requirementReviewModel`/`requirementReviewResolveModel` deps both runtimes already set — no
+  Cloudflare/Node container edits, symmetric by construction. Same for the analyst (a stock
+  container-explore kind reusing the existing harness surface — no image bump).
+- **The analyst writes back via a post-completion resolver** (`RunDispatcher`, keyed on
+  `INITIATIVE_ANALYST_AGENT_KIND`) that folds its prose `output` onto the entity's
+  `analysisSummary` — best-effort (never fails the run). The interviewer/analyst/planner prompts
+  read the entity through the agent context (`AgentContextBuilder.resolveInitiativeContext`, wired
+  with the initiative repo), so each step is grounded in the prior steps' findings.
 
 ## Out of scope
 

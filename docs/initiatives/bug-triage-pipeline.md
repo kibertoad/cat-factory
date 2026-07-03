@@ -16,7 +16,7 @@ writeback closes the issue.
 Full design (the source of truth — do not re-derive):
 [`backend/docs/bug-triage-pipeline.md`](../../backend/docs/bug-triage-pipeline.md).
 
-Multi-repo investigation/fixing is **not designed here**: this initiative *executes*
+Multi-repo investigation/fixing is **not designed here**: this initiative _executes_
 Phases 3–4 of [`backend/docs/service-connections.md`](../../backend/docs/service-connections.md)
 (tracked in [`service-connections.md`](./service-connections.md) — keep BOTH trackers'
 rows in sync when those phases land).
@@ -43,36 +43,36 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 
 ### Phase 0 — design doc + tracker
 
-| Item                                                              | Status |
-| ----------------------------------------------------------------- | ------ |
-| `backend/docs/bug-triage-pipeline.md` (full design)               | done   |
-| This tracker                                                      | done   |
+| Item                                                | Status |
+| --------------------------------------------------- | ------ |
+| `backend/docs/bug-triage-pipeline.md` (full design) | done   |
+| This tracker                                        | done   |
 
 ### Phase A — pipeline `availability` attribute (design §2)
 
-| Item                                                                                             | Status |
-| ------------------------------------------------------------------------------------------------ | ------ |
-| Contracts: `availability?: 'one-off'\|'recurring'\|'both'` on `pipelineSchema`                   | todo   |
-| `ExecutionService.start` `origin` option + `assertRunnable` enforcement                          | todo   |
-| `RecurringPipelineService.create/update` reject `'one-off'`-only pipelines                       | todo   |
-| `validatePipelineShape`: field validation + `bug-intake` requires `recurring`                    | todo   |
-| SPA pickers: `AddTaskModal.vue` / `RecurringPipelineModal.vue` filters + i18n (all locales)      | todo   |
+| Item                                                                                        | Status |
+| ------------------------------------------------------------------------------------------- | ------ |
+| Contracts: `availability?: 'one-off'\|'recurring'\|'both'` on `pipelineSchema`              | todo   |
+| `ExecutionService.start` `origin` option + `assertRunnable` enforcement                     | todo   |
+| `RecurringPipelineService.create/update` reject `'one-off'`-only pipelines                  | todo   |
+| `validatePipelineShape`: field validation + `bug-intake` requires `recurring`               | todo   |
+| SPA pickers: `AddTaskModal.vue` / `RecurringPipelineModal.vue` filters + i18n (all locales) | todo   |
 
 ### Phase B — multi-repo coding (= service-connections Phase 3; update that tracker too)
 
-| Item                                                                                                      | Status |
-| ---------------------------------------------------------------------------------------------------------- | ------ |
-| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s  | todo   |
-| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                      | todo   |
-| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                    | todo   |
-| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper            | todo   |
-| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                    | todo   |
-| Conformance: two-repo coding run records both PRs on both runtimes                                        | todo   |
+| Item                                                                                                     | Status |
+| -------------------------------------------------------------------------------------------------------- | ------ |
+| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | todo   |
+| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | todo   |
+| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | todo   |
+| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | todo   |
+| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | todo   |
+| Conformance: two-repo coding run records both PRs on both runtimes                                       | todo   |
 
 ### Phase C — multi-PR gates + merger (= service-connections Phase 4; update that tracker too)
 
-| Item                                                                                                    | Status |
-| --------------------------------------------------------------------------------------------------------- | ------ |
+| Item                                                                                                   | Status |
+| ------------------------------------------------------------------------------------------------------ | ------ |
 | CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | todo   |
 | Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | todo   |
 | Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | todo   |
@@ -82,7 +82,7 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 ### Phase D — issue-intake foundations (design §3, ports + persistence)
 
 | Item                                                                                                        | Status |
-| ------------------------------------------------------------------------------------------------------------ | ------ |
+| ----------------------------------------------------------------------------------------------------------- | ------ |
 | `TaskSourceProvider.searchIssues` + `IssueIntakeQuery`; Jira JQL / GitHub qualifiers / Linear filter impls  | todo   |
 | `PipelineSchedule.issueIntake` config: contracts + `pipeline_schedules` column, D1 ⇄ Drizzle migrations     | todo   |
 | `IssueWritebackProvider.onIssuePickedUp` (comment + in-progress transition, 3 vendors, best-effort)         | todo   |
@@ -91,19 +91,19 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 
 ### Phase E — `bug-intake` step (design §3, engine + SPA)
 
-| Item                                                                                              | Status |
-| --------------------------------------------------------------------------------------------------- | ------ |
-| Step handler: predicate search + batched projection dedupe + oldest-first pick                    | todo   |
-| Pickup: import → replace-link → rewrite block title/description → `onIssuePickedUp`               | todo   |
-| No-match: skip all remaining steps, run completes successfully, no notification                   | todo   |
-| Schedule validation: `issueIntake` required + source connected when pipeline has `bug-intake`     | todo   |
-| SPA: intake config section in `RecurringPipelineModal.vue` + i18n (all locales)                   | todo   |
-| Conformance: intake pickup + no-match no-op on both runtimes (fake task source)                   | todo   |
+| Item                                                                                          | Status |
+| --------------------------------------------------------------------------------------------- | ------ |
+| Step handler: predicate search + batched projection dedupe + oldest-first pick                | todo   |
+| Pickup: import → replace-link → rewrite block title/description → `onIssuePickedUp`           | todo   |
+| No-match: skip all remaining steps, run completes successfully, no notification               | todo   |
+| Schedule validation: `issueIntake` required + source connected when pipeline has `bug-intake` | todo   |
+| SPA: intake config section in `RecurringPipelineModal.vue` + i18n (all locales)               | todo   |
+| Conformance: intake pickup + no-match no-op on both runtimes (fake task source)               | todo   |
 
 ### Phase F — investigation + clarification (design §4–5)
 
 | Item                                                                                                     | Status |
-| ---------------------------------------------------------------------------------------------------------- | ------ |
+| -------------------------------------------------------------------------------------------------------- | ------ |
 | `bug-investigator` → structured `container-explore` kind (same id) + valibot schema + peerRepos checkout | todo   |
 | Post-completion resolver: prose digest → `step.output`, structured → `step.custom`                       | todo   |
 | `clarity-review` seeding from investigator `questions` + auto-pass on `clarity === 'clear'`              | todo   |
@@ -112,22 +112,22 @@ Each phase ≈ one PR. Update the status column (+ PR link) at the end of every 
 
 ### Phase G — `repro-test` agent (design §7–8)
 
-| Item                                                                                        | Status |
-| --------------------------------------------------------------------------------------------- | ------ |
+| Item                                                                                       | Status |
+| ------------------------------------------------------------------------------------------ | ------ |
 | `repro-test` registered kind (`container-coding`, work branch) + structured outcome schema | todo   |
-| Concede resolver: `not_reproducible` recorded, run advances (never fails)                   | todo   |
-| `BUG_FIX_GUIDANCE` coder prompt fragment (applied when a prior `repro-test` output exists)  | todo   |
-| Conformance: reproduced and conceded paths both reach the coder on both runtimes            | todo   |
+| Concede resolver: `not_reproducible` recorded, run advances (never fails)                  | todo   |
+| `BUG_FIX_GUIDANCE` coder prompt fragment (applied when a prior `repro-test` output exists) | todo   |
+| Conformance: reproduced and conceded paths both reach the coder on both runtimes           | todo   |
 
 ### Phase H — the pipeline itself + end-to-end (design §1, §6, §9–10)
 
-| Item                                                                                                | Status |
-| ----------------------------------------------------------------------------------------------------- | ------ |
+| Item                                                                                                    | Status |
+| ------------------------------------------------------------------------------------------------------- | ------ |
 | `pl_bug_triage` seed (`availability: 'recurring'`) + `BUG_TRIAGE_PIPELINE_ID` + `'bug-triage'` template | todo   |
-| `task-estimator` placement + gating validation over the new shape (`pipelineShape.ts`)             | todo   |
-| End-to-end conformance: schedule fire → intake → investigate → clarity → repro → fix → merge (fakes) | todo   |
-| e2e spec (live pushed UI updates for the recurring run; `data-testid`s as needed)                   | todo   |
-| Docs: glossary entries (`bug-intake`, `repro-test`), CLAUDE.md flow note if warranted               | todo   |
+| `task-estimator` placement + gating validation over the new shape (`pipelineShape.ts`)                  | todo   |
+| End-to-end conformance: schedule fire → intake → investigate → clarity → repro → fix → merge (fakes)    | todo   |
+| e2e spec (live pushed UI updates for the recurring run; `data-testid`s as needed)                       | todo   |
+| Docs: glossary entries (`bug-intake`, `repro-test`), CLAUDE.md flow note if warranted                   | todo   |
 
 ## Conventions & gotchas carried between iterations
 

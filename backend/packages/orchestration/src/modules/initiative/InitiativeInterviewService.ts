@@ -109,9 +109,7 @@ export class InitiativeInterviewService {
 
   /** Assemble the interviewer prompt: the brief + the answered digest + the round intent. */
   private buildPrompt(block: Block, initiative: Initiative, finalize: boolean): string {
-    const lines: string[] = [
-      `Initiative: ${block.title || '(untitled initiative)'}`,
-    ]
+    const lines: string[] = [`Initiative: ${block.title || '(untitled initiative)'}`]
     const brief = block.description?.trim()
     if (brief) lines.push('', 'Brief:', brief)
     const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
