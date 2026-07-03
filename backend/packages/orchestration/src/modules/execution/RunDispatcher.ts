@@ -1651,21 +1651,28 @@ export class RunDispatcher {
       }
     }
 
-    // Flip the entity to `executing` FIRST, then render the tracker from the flipped
-    // entity — the committed mirror (and its content hash) must record the REAL
-    // `executing` status. Committing the pre-flip entity would bake a stale
-    // `awaiting_approval` status into `initiative.json`/`tracker.md` that nothing
-    // re-commits in this slice, AND would break replay-safety: a durable-driver replay
-    // re-reads the now-`executing` entity, whose hash no longer matches the committed
-    // `version.json`, so the no-change short-circuit would miss and re-commit. Ordering
-    // status-write before the git side effect also means a `markExecuting` CAS conflict
-    // aborts before any commit lands (no orphaned tracker commit).
+    // Resolve the run repo BEFORE flipping status. `resolveRunRepo` returns null only when
+    // GitHub is entirely unwired (skip the mirror gracefully — the DB entity stays the source
+    // of truth), but it THROWS for a GitHub-connected workspace whose frame isn't linked to a
+    // repo (`resolveRepoTarget` fails loudly rather than guessing one). Doing it first means
+    // such a misconfiguration aborts the committer with the entity still truthfully
+    // `awaiting_approval` — instead of flipping to `executing` and THEN throwing, which would
+    // fail the run while leaving a committed status whose plan never got mirrored (a lie).
+    const runRepo = await this.resolveRunRepo(workspaceId, block.id)
+
+    // Now flip to `executing` and render the tracker from the flipped entity — the committed
+    // mirror (and its content hash) must record the REAL `executing` status. Committing the
+    // pre-flip entity would bake a stale `awaiting_approval` status into
+    // `initiative.json`/`tracker.md` that nothing re-commits in this slice, AND would break
+    // replay-safety: a durable-driver replay re-reads the now-`executing` entity, whose hash
+    // no longer matches the committed `version.json`, so the no-change short-circuit would miss
+    // and re-commit. `markExecuting` is a committed CAS write that still runs before the git
+    // side effect, so a CAS conflict aborts before any commit lands (no orphaned tracker commit).
     const executing =
       (await this.initiativeService.markExecuting(workspaceId, block.id, null)) ?? initiative
 
     let doc: { version: number; hash: string } | null = null
     let mirror = 'Repo tracker mirror skipped (GitHub not connected).'
-    const runRepo = await this.resolveRunRepo(workspaceId, block.id)
     if (runRepo) {
       doc = await commitInitiativeTracker(
         runRepo.repo,

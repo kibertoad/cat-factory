@@ -142,7 +142,7 @@ describe('applyPlanDraft', () => {
     expect(next.decisions![0]).toMatchObject({ title: 'A decision', at: 100, source: 'planning' })
   })
 
-  it('preserves runtime state on a re-apply (replay/idempotent) and drops absent items', () => {
+  it('preserves runtime state on a re-apply (replay/idempotent)', () => {
     const first = applyPlanDraft(emptyEntity(), draft(), 100)
     const executing: Initiative = {
       ...first,
@@ -164,16 +164,46 @@ describe('applyPlanDraft', () => {
     expect(replayed.decisions![0]!.at).toBe(100)
     // …and must not regress an executing initiative back to awaiting_approval.
     expect(replayed.status).toBe('executing')
+  })
 
-    // A REVISED draft replaces the plan content: an item absent from it is dropped.
-    const revised = applyPlanDraft(
+  it('re-plan drops an omitted PENDING item but carries over a MATERIALISED one', () => {
+    const first = applyPlanDraft(emptyEntity(), draft(), 100)
+    const executing: Initiative = {
+      ...first,
+      status: 'executing',
+      // 'a' is materialised (spawned + merged); 'b' is still pending/unspawned.
+      items: first.items!.map((i) =>
+        i.id === 'a'
+          ? { ...i, status: 'done' as const, blockId: 'task-1', pr: { url: 'u', number: 1 } }
+          : i,
+      ),
+    }
+
+    // A re-plan that OMITS the still-pending 'b' genuinely drops it (kept only 'a').
+    const dropsPending = applyPlanDraft(
+      executing,
+      draft({
+        items: [{ id: 'a', phaseId: 'p1', title: 'Item A', description: '', dependsOn: [] }],
+      }),
+      300,
+    )
+    expect(dropsPending.items!.map((i) => i.id)).toEqual(['a'])
+
+    // A re-plan that OMITS the materialised 'a' carries it over unchanged, so the spawned
+    // task isn't orphaned and the merged PR/history survives.
+    const keepsMaterialised = applyPlanDraft(
       executing,
       draft({
         items: [{ id: 'b', phaseId: 'p1', title: 'Item B', description: '', dependsOn: [] }],
       }),
       300,
     )
-    expect(revised.items!.map((i) => i.id)).toEqual(['b'])
+    expect(keepsMaterialised.items!.map((i) => i.id).sort()).toEqual(['a', 'b'])
+    expect(keepsMaterialised.items!.find((i) => i.id === 'a')).toMatchObject({
+      status: 'done',
+      blockId: 'task-1',
+      pr: { url: 'u', number: 1 },
+    })
   })
 
   it('assigns deterministic slug ids when the draft omits them', () => {

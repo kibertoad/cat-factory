@@ -214,7 +214,6 @@ export {
   canonicalInitiativeJson,
   hashInitiative,
   initiativeContentView,
-  nextInitiativeVersion,
   renderInitiativeFiles,
   renderInitiativeTrackerMarkdown,
   parseInitiativeVersionFile,

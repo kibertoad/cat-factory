@@ -18,11 +18,21 @@ import * as v from 'valibot'
 // initiative's ordered pipeline rules (OR across axes — `StepGating` semantics).
 // ---------------------------------------------------------------------------
 
+// Field length/value bounds, exported as named constants so the lenient coercion in
+// `@cat-factory/agents` (`coerceInitiativePlan`) clamps to the SAME limits this strict schema
+// enforces — a single source of truth, so bumping a bound here can't leave the coercion
+// silently truncating to a stale value (or emitting a plan the parser then rejects).
+export const INITIATIVE_ID_MAX = 80
+export const INITIATIVE_TITLE_MAX = 200
+export const INITIATIVE_PROSE_MAX = 8000
+export const INITIATIVE_SHORT_MAX = 2000
+export const INITIATIVE_MAX_CONCURRENT = 20
+
 const score = v.pipe(v.number(), v.minValue(0), v.maxValue(1))
-const idField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80))
-const titleField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
-const proseField = v.pipe(v.string(), v.maxLength(8000))
-const shortProseField = v.pipe(v.string(), v.maxLength(2000))
+const idField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX))
+const titleField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_TITLE_MAX))
+const proseField = v.pipe(v.string(), v.maxLength(INITIATIVE_PROSE_MAX))
+const shortProseField = v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX))
 
 /** Lifecycle of a single tracker item (one unit of work → one spawned task). */
 export const initiativeItemStatusSchema = v.picklist([
@@ -80,7 +90,12 @@ export type InitiativePipelineRule = v.InferOutput<typeof initiativePipelineRule
  */
 export const initiativeExecutionPolicySchema = v.object({
   /** Max concurrently-running spawned tasks across the whole initiative. */
-  maxConcurrent: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20)),
+  maxConcurrent: v.pipe(
+    v.number(),
+    v.integer(),
+    v.minValue(1),
+    v.maxValue(INITIATIVE_MAX_CONCURRENT),
+  ),
   /** Ordered estimate→pipeline rules; first match wins. */
   rules: v.optional(v.array(initiativePipelineRuleSchema), []),
   /** Pipeline used when no rule matches (or the item carries no estimate). */
@@ -101,7 +116,9 @@ export const initiativePhaseSchema = v.object({
   /** What this phase achieves — shown on the tracker, not fed to agents. */
   goal: v.optional(shortProseField, ''),
   /** Optional tighter concurrency cap for this phase alone. */
-  maxConcurrent: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))),
+  maxConcurrent: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(INITIATIVE_MAX_CONCURRENT)),
+  ),
 })
 export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
 
@@ -245,7 +262,9 @@ export const initiativePlanDraftSchema = v.object({
       id: v.optional(idField),
       title: titleField,
       goal: v.optional(shortProseField, ''),
-      maxConcurrent: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(20))),
+      maxConcurrent: v.optional(
+        v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(INITIATIVE_MAX_CONCURRENT)),
+      ),
     }),
   ),
   items: v.array(initiativeDraftItemSchema),
@@ -280,7 +299,14 @@ export const INITIATIVE_DOC_DIR = 'docs/initiatives'
 export function initiativeDocDir(slug: string): string {
   return `${INITIATIVE_DOC_DIR}/${slug}`
 }
-/** Canonical machine-readable tracker file (the Initiative entity, runtime fields included). */
+/**
+ * Canonical machine-readable tracker file. This is a CONTENT PROJECTION of the entity, NOT a
+ * full `Initiative`: the volatile bookkeeping (`rev`, `updatedAt`, `doc`) is deliberately
+ * excluded so its content hash stays stable across no-op DB writes (see
+ * `initiativeContentView`/`canonicalInitiativeJson` in `@cat-factory/agents`). Do NOT feed it
+ * back through `parseInitiative` — those required fields are absent by design; the DB row, not
+ * this file, is the source of truth for the runtime state.
+ */
 export function initiativeJsonPath(slug: string): string {
   return `${initiativeDocDir(slug)}/initiative.json`
 }

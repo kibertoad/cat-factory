@@ -32,12 +32,22 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     return byBlock.value[blockId] ?? null
   }
 
-  /** Replace the cache from a snapshot (the hydrate fan-out). */
+  /**
+   * Rebuild the cache from a snapshot (the hydrate fan-out). The snapshot is authoritative
+   * for EXISTENCE (entities it omits are dropped — they were deleted), but NOT for freshness:
+   * a stale snapshot captured before a live `initiative` event must not regress a newer entity
+   * already patched into the store. So for a blockId present in both, keep whichever `rev` is
+   * higher — the same live-event-vs-resync race guard `upsert` applies, mirroring the fix the
+   * repo's flake note describes for `agentRuns.hydrate`.
+   */
   function hydrate(next: Initiative[] | undefined) {
     if (next === undefined) return
     available.value = true
     const map: Record<string, Initiative> = {}
-    for (const initiative of next) map[initiative.blockId] = initiative
+    for (const initiative of next) {
+      const existing = byBlock.value[initiative.blockId]
+      map[initiative.blockId] = existing && existing.rev > initiative.rev ? existing : initiative
+    }
     byBlock.value = map
   }
 

@@ -7,12 +7,17 @@ import {
   type InitiativePipelineRule,
   type InitiativePlanDraft,
   type InitiativeVersion,
+  INITIATIVE_ID_MAX,
+  INITIATIVE_MAX_CONCURRENT,
+  INITIATIVE_PROSE_MAX,
+  INITIATIVE_SHORT_MAX,
+  INITIATIVE_TITLE_MAX,
   initiativeJsonPath,
   initiativeTrackerPath,
   initiativeVersionPath,
 } from '@cat-factory/contracts'
 import type { RepoFiles } from '@cat-factory/kernel'
-import { type RenderedFile, moduleSlug } from './render.js'
+import { type RenderedFile, asString, moduleSlug, sha256Hex } from './render.js'
 
 // Deterministic rendering + lenient coercion of the in-repo initiative tracker
 // (`docs/initiatives/<slug>/`) — the initiative sibling of the blueprint artifact
@@ -25,19 +30,17 @@ import { type RenderedFile, moduleSlug } from './render.js'
 // `updatedAt`, `doc`) — hashing those would make every DB write look like a
 // content change and defeat the no-change commit short-circuit.
 
-// Coercion limits, mirroring the contracts schema bounds so a coerced plan can
-// never balloon past what `parseInitiativePlanDraft` accepts.
+// Per-field length/value clamps come STRAIGHT from the contract bounds (imported above), so a
+// coerced plan can never exceed what `parseInitiativePlanDraft` accepts and a bump to a contract
+// bound updates the coercion in lockstep. The count caps below have no contract analogue (the
+// draft's phases/items arrays are unbounded in the schema) — they are coercion-only sanity limits.
 const MAX_PHASES = 12
 const MAX_ITEMS = 100
 const MAX_LIST_ENTRIES = 40
-const MAX_TITLE = 200
-const MAX_SHORT = 2000
-const MAX_PROSE = 8000
-const MAX_CONCURRENT = 20
-
-function asString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
-}
+const MAX_TITLE = INITIATIVE_TITLE_MAX
+const MAX_SHORT = INITIATIVE_SHORT_MAX
+const MAX_PROSE = INITIATIVE_PROSE_MAX
+const MAX_CONCURRENT = INITIATIVE_MAX_CONCURRENT
 
 function clamp01(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
@@ -87,7 +90,7 @@ function coerceRules(value: unknown): InitiativePipelineRule[] {
     const minRisk = clamp01(obj.minRisk)
     const minImpact = clamp01(obj.minImpact)
     rules.push({
-      pipelineId: pipelineId.slice(0, 80),
+      pipelineId: pipelineId.slice(0, INITIATIVE_ID_MAX),
       ...(minComplexity !== null ? { minComplexity } : {}),
       ...(minRisk !== null ? { minRisk } : {}),
       ...(minImpact !== null ? { minImpact } : {}),
@@ -107,7 +110,7 @@ function coercePolicy(value: unknown): InitiativeExecutionPolicy {
   return {
     maxConcurrent: clampConcurrency(obj.maxConcurrent) ?? 1,
     rules: coerceRules(obj.rules),
-    defaultPipelineId: (asString(obj.defaultPipelineId) ?? 'pl_full').slice(0, 80),
+    defaultPipelineId: (asString(obj.defaultPipelineId) ?? 'pl_full').slice(0, INITIATIVE_ID_MAX),
     onMissingEstimate: obj.onMissingEstimate === 'strongest' ? 'strongest' : 'default',
   }
 }
@@ -188,7 +191,7 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
         description: (asString(it.description) ?? '').slice(0, MAX_PROSE),
         dependsOn: [],
         ...(estimate ? { estimate } : {}),
-        ...(pipelineId ? { pipelineId: pipelineId.slice(0, 80) } : {}),
+        ...(pipelineId ? { pipelineId: pipelineId.slice(0, INITIATIVE_ID_MAX) } : {}),
       },
       rawDeps: Array.isArray(it.dependsOn)
         ? it.dependsOn.filter((d): d is string => typeof d === 'string')
@@ -235,14 +238,9 @@ export function coerceInitiativePlan(parsed: unknown): InitiativePlanDraft | nul
 }
 
 // ---------------------------------------------------------------------------
-// Rendering (entity → committed tracker files)
+// Rendering (entity → committed tracker files). `sha256Hex`/`asString` are shared with
+// the blueprint renderer (`render.ts`) so the digest + coercion primitives live once.
 // ---------------------------------------------------------------------------
-
-/** SHA-256 hex digest — Web Crypto, runs on both runtimes. */
-async function sha256Hex(input: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
 
 /**
  * The CONTENT view of an initiative — the entity minus the volatile bookkeeping
@@ -263,22 +261,6 @@ export function canonicalInitiativeJson(initiative: Initiative): string {
 /** A stable content hash of the initiative's plan content (bookkeeping excluded). */
 export function hashInitiative(initiative: Initiative): Promise<string> {
   return sha256Hex(canonicalInitiativeJson(initiative))
-}
-
-/**
- * Decide the version manifest for a freshly rendered tracker: byte-identical
- * content keeps the previous version + timestamp (no diff, no commit); a change
- * bumps the counter and refreshes the timestamp.
- */
-export async function nextInitiativeVersion(
-  initiative: Initiative,
-  previous: InitiativeVersion | null,
-  now: Date,
-): Promise<{ version: number; generatedAt: string }> {
-  if (previous && previous.hash === (await hashInitiative(initiative))) {
-    return { version: previous.version, generatedAt: previous.generatedAt }
-  }
-  return { version: (previous?.version ?? 0) + 1, generatedAt: now.toISOString() }
 }
 
 /** Render the lightweight `version.json` manifest. */
@@ -479,35 +461,20 @@ export async function commitInitiativeTracker(
   const previous = parseInitiativeVersionFile(
     (await repo.getFile(initiativeVersionPath(initiative.slug), branch))?.content,
   )
-  // Serialise + hash the entity ONCE, then thread both through the rendered files.
-  // (`canonicalInitiativeJson` IS the `initiative.json` body and the hash preimage, so
-  // recomputing them per file — as the generic `renderInitiativeFiles`/
-  // `nextInitiativeVersion` helpers do — is pure waste on the commit path.)
-  const canonical = canonicalInitiativeJson(initiative)
-  const hash = await sha256Hex(canonical)
+  const hash = await hashInitiative(initiative)
   if (previous && previous.hash === hash) return null
 
+  // Build the committed bytes through the SAME `renderInitiativeFiles` the golden unit test
+  // exercises, so the shipped artifact can never silently diverge from the tested renderer
+  // (add/rename a tracker file in one place → both change). This is the cold committer path
+  // (once per approved plan), so the handful of extra small serialisations vs. hand-inlining
+  // the file list is immaterial next to the drift safety it buys.
   const version = (previous?.version ?? 0) + 1
-  const manifest: InitiativeVersion = {
-    version,
-    generatedAt: now.toISOString(),
-    hash,
-    items: initiative.items?.length ?? 0,
-  }
+  const files = await renderInitiativeFiles(initiative, { version, generatedAt: now.toISOString() })
   await repo.commitFiles({
     branch,
     message: `Update initiative tracker: ${initiative.title}`,
-    files: [
-      { path: initiativeJsonPath(initiative.slug), content: canonical },
-      {
-        path: initiativeTrackerPath(initiative.slug),
-        content: renderInitiativeTrackerMarkdown(initiative),
-      },
-      {
-        path: initiativeVersionPath(initiative.slug),
-        content: `${JSON.stringify(manifest, null, 2)}\n`,
-      },
-    ],
+    files,
   })
   return { version, hash }
 }

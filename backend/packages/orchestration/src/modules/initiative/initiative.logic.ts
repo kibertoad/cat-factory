@@ -107,8 +107,11 @@ function uniqueSlugId(base: string, taken: Set<string>): string {
  * an item whose id already exists keeps its `status`/`blockId`/`pr`/`note` (so a
  * durable-driver replay of the ingest — or a later re-plan — never resets settled
  * work), while its plan content (title/description/estimate/deps/phase) follows
- * the draft. Items absent from the draft are dropped; new items start `pending`.
- * Draft phases/items missing an id get a deterministic slug-derived one, and
+ * the draft. An item OMITTED from the draft is dropped ONLY when it is still
+ * un-materialised (`pending`, no spawned block); a re-plan that omits an item the
+ * loop already spawned or settled carries it over untouched, so a mid-flight
+ * re-plan never orphans a spawned task or erases completed work. New items start
+ * `pending`. Draft phases/items missing an id get a deterministic slug-derived one, and
  * decisions merge by slug id keeping their original timestamps — so re-applying
  * the same draft is byte-identical (the ingest idempotency check relies on it).
  * Does NOT bump `rev`/`updatedAt` — the CAS writer owns those.
@@ -154,6 +157,18 @@ export function applyPlanDraft(
     }
   })
 
+  // A re-plan that OMITS a previously-MATERIALISED item (the loop already spawned a task
+  // for it, or it already settled) must not silently drop it: that would orphan the spawned
+  // block — which still carries this initiative's `initiativeId` — and erase completed work
+  // from the tracker + progress rollup. Carry those items over unchanged; a still-`pending`,
+  // unspawned item omitted from the re-plan is genuinely removed. On a REPLAY of the SAME
+  // draft every prior item reappears by id, so `preserved` is empty and the ingest stays
+  // byte-identical (the idempotency check relies on it).
+  const draftItemIds = new Set(items.map((i) => i.id))
+  const preserved = (initiative.items ?? []).filter(
+    (i) => !draftItemIds.has(i.id) && (i.blockId != null || i.status !== 'pending'),
+  )
+
   const existingDecisions = new Map((initiative.decisions ?? []).map((d) => [d.id, d]))
   const decisionIds = new Set<string>()
   const decisions = (draft.decisions ?? []).map((d) => {
@@ -175,7 +190,7 @@ export function applyPlanDraft(
     nonGoals: draft.nonGoals ?? [],
     analysisSummary: draft.analysisSummary ?? '',
     phases,
-    items,
+    items: [...items, ...preserved],
     policy: draft.policy,
     decisions,
     caveats: draft.caveats ?? [],
