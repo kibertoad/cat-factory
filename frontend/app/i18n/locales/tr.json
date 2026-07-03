@@ -501,6 +501,12 @@
           "failed": "Başarısız",
           "stopped": "Başlatılmadı"
         }
+      },
+      "resolved": {
+        "title": "Şu anda çözümleniyor",
+        "duplicateWarning": "Birden fazla bağlamada kullanılıyor, bu yüzden yalnızca sonuncusu geçerli: {vars}.",
+        "serviceOffline": "{service}: çalışan ortam yok (taklit ediliyor)",
+        "mock": "Mock (WireMock)"
       }
     },
     "serviceConnections": {

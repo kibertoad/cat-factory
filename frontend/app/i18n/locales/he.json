@@ -501,6 +501,12 @@
           "failed": "נכשל",
           "stopped": "לא פועל"
         }
+      },
+      "resolved": {
+        "title": "מתפרש כעת אל",
+        "duplicateWarning": "בשימוש ביותר מקישור אחד, ולכן רק האחרון חל: {vars}.",
+        "serviceOffline": "{service}: אין סביבה פעילה (מדומה)",
+        "mock": "Mock (WireMock)"
       }
     },
     "serviceConnections": {

@@ -13,7 +13,7 @@ import {
   serviceProvisioningSchema,
 } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
-import { frontendConfigSchema } from './frontend.js'
+import { frontendConfigSchema, resolvedFrontendBindingSchema } from './frontend.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
@@ -1536,6 +1536,25 @@ export const executionInstanceSchema = v.object({
    * Absent/empty for a run that has never been failed-then-retried.
    */
   failureHistory: v.optional(v.array(agentFailureSchema)),
+  /**
+   * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
+   * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live
+   * set of bound services where some fall back to WireMock). Mirrors the harness's own
+   * `buildInfraNotes` but surfaced on the RUN so the SPA renders it in the run/step detail
+   * (distinct from a `failure`, which aborts the run). Absent/empty when there is nothing to
+   * flag. Rides in the `detail` JSON column (no dedicated column), reflecting the start-time
+   * state even after the underlying envs change.
+   */
+  notes: v.optional(v.array(v.string())),
+  /**
+   * The frontend UI-test flow's backend bindings RESOLVED once at run start (env var → the bound
+   * service's live ephemeral URL, or absent ⇒ mocked; see {@link resolveFrontendBindings}). Stamped
+   * on the run so the SPA's run/step detail projects what the run ACTUALLY drove against — a frozen
+   * snapshot that stays truthful after the underlying envs are torn down, rather than re-resolving
+   * against current live state (which for a finished run could disagree with the co-located
+   * start-time {@link notes}). Rides in the `detail` JSON column; absent for a non-frontend run.
+   */
+  frontendBindings: v.optional(v.array(resolvedFrontendBindingSchema)),
   /**
    * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
    * so the individual-usage restricted mode can use the initiator's OWN personal

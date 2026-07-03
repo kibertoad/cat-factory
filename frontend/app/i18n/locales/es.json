@@ -501,6 +501,12 @@
           "failed": "Error",
           "stopped": "No iniciada"
         }
+      },
+      "resolved": {
+        "title": "Se resuelve a",
+        "duplicateWarning": "Usado en más de un binding, por lo que solo se aplica el último: {vars}.",
+        "serviceOffline": "{service}: sin entorno activo (simulado)",
+        "mock": "Mock (WireMock)"
       }
     },
     "serviceConnections": {

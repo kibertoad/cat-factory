@@ -501,6 +501,12 @@
           "failed": "失敗",
           "stopped": "停止中"
         }
+      },
+      "resolved": {
+        "title": "現在の解決先",
+        "duplicateWarning": "複数のバインディングで使用されているため、最後のもののみが適用されます: {vars}。",
+        "serviceOffline": "{service}: 稼働環境なし（モック）",
+        "mock": "モック (WireMock)"
       }
     },
     "serviceConnections": {

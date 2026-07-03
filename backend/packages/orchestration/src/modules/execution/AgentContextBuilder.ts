@@ -10,6 +10,7 @@ import type {
   DocumentRepository,
   DocumentSourceKind,
   ExecutionInstance,
+  FrontendConfig,
   PipelineStep,
   RequirementReviewRepository,
   TaskRecord,
@@ -20,8 +21,10 @@ import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
 import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
 import {
   boundServiceFrameIds,
+  buildFrontendRunNotes,
   indexLiveServiceEnvUrls,
   resolveFrontendBindings,
+  type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
@@ -351,6 +354,47 @@ export class AgentContextBuilder {
     workspaceId: string,
     block: Block,
   ): Promise<AgentRunContext['frontend'] | undefined> {
+    const resolution = await this.resolveFrontendResolution(workspaceId, block)
+    if (!resolution) return undefined
+    const { config, liveServiceEnvUrls } = resolution
+    return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
+  }
+
+  /**
+   * The run-start binding snapshot + soft notes for a frontend UI-test / preview run: the
+   * resolved bindings (env-var → live URL | mocked) plus the non-fatal advisories
+   * ({@link buildFrontendRunNotes}). Shares the SAME single-read resolution as
+   * {@link resolveFrontendConfig}. The engine stamps BOTH results on the run (`frontendBindings`
+   * + `notes`) at start, so the SPA's run/step detail projects the frozen start-time resolution
+   * with no extra live-env read at view time (and it stays truthful after the envs are torn down).
+   * Returns undefined for a non-frontend frame (nothing to project), exactly like
+   * {@link resolveFrontendConfig}.
+   */
+  async resolveFrontendRunInfo(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{ bindings: ResolvedFrontendBinding[]; notes: string[] } | undefined> {
+    const resolution = await this.resolveFrontendResolution(workspaceId, block)
+    if (!resolution) return undefined
+    const { config, liveServiceEnvUrls } = resolution
+    return {
+      bindings: resolveFrontendBindings(config, liveServiceEnvUrls),
+      notes: buildFrontendRunNotes(config, liveServiceEnvUrls),
+    }
+  }
+
+  /**
+   * Resolve a frontend frame's config plus the live env URLs of the services it binds — the one
+   * IO step ({@link EnvironmentProvisioningService.listHandles}) shared by both the agent-context
+   * resolution and the run-info projection. Only a `type: 'frontend'` frame carrying a
+   * `frontendConfig` yields a result; every other frame returns undefined. The live env URLs are
+   * read ONCE and indexed by the service-frame id (no per-binding point read), so this is a single
+   * query regardless of binding count.
+   */
+  private async resolveFrontendResolution(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{ config: FrontendConfig; liveServiceEnvUrls: Map<string, string> } | undefined> {
     const frame =
       block.level === 'frame' ? block : await this.resolveServiceFrame(workspaceId, block.id)
     if (!frame || frame.type !== 'frontend' || !frame.frontendConfig) return undefined
@@ -367,7 +411,7 @@ export class AgentContextBuilder {
             serviceFrameIds,
           )
         : new Map<string, string>()
-    return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
+    return { config, liveServiceEnvUrls }
   }
 
   /**
