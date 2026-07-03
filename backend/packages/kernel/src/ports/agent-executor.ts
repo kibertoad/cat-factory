@@ -263,6 +263,20 @@ export interface AgentRunContext {
     feedback: string
     comments?: { quotedSource?: string; body: string }[]
   }
+  /**
+   * The planning context an initiative-level run carries, resolved by the engine from the
+   * block's `initiatives` entity (slice 2). The interviewer's synthesized goal / constraints /
+   * non-goals and the Q&A digest, plus the analyst's codebase analysis — so the analyst and
+   * planner prompts are grounded in the human's intent and the prior step's findings. Absent
+   * on non-initiative runs (and when no initiative entity is wired).
+   */
+  initiative?: {
+    goal?: string
+    constraints?: string[]
+    nonGoals?: string[]
+    qa?: { question: string; answer: string }[]
+    analysisSummary?: string
+  }
 }
 
 /** A point at which the agent needs a human to choose before continuing. */
@@ -351,6 +365,15 @@ export interface AgentRunResult {
    * `unknown` so the port stays free of the contracts schema; the engine parses it.
    */
   onCallAssessment?: unknown
+  /**
+   * The multi-phase initiative plan draft an `initiative-planner` step produced
+   * (phases, items with estimates + dependencies, the execution policy). The engine
+   * strictly validates it and ingests it into the block's `initiatives` entity;
+   * the committer step later renders + commits the in-repo tracker from that
+   * entity. Carried as `unknown` so the port stays free of the contracts schema;
+   * the engine parses it before use.
+   */
+  initiativePlan?: unknown
   /**
    * A generic, manifest-driven `agent` step's structured output (the parsed JSON object
    * a `container-explore` structured agent returned). Carried as `unknown` so the port

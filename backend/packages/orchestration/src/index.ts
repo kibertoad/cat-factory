@@ -107,6 +107,11 @@ export {
   type RecurringPipelineServiceDependencies,
 } from './modules/recurring/RecurringPipelineService.js'
 export {
+  InitiativeService,
+  type InitiativeServiceDependencies,
+} from './modules/initiative/InitiativeService.js'
+export * as initiativeLogic from './modules/initiative/initiative.logic.js'
+export {
   TrackerSettingsService,
   type TrackerSettingsServiceDependencies,
 } from './modules/recurring/TrackerSettingsService.js'
@@ -259,6 +264,7 @@ export {
   type ModelPresetsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
+  type InitiativesModule,
   type RecurringModule,
   type TrackerModule,
   type ServicesModule,

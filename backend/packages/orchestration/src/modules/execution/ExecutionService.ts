@@ -84,6 +84,10 @@ import type { TesterQualityReviewer } from './TesterQualityReviewService.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { InitiativeService } from '../initiative/InitiativeService.js'
+import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
+import { InitiativeInterviewController } from './InitiativeInterviewController.js'
+import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
@@ -111,7 +115,7 @@ import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
-import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { InitiativeRepository, RequirementReviewRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import type {
@@ -300,6 +304,29 @@ export interface ExecutionServiceDependencies {
    */
   blueprintReconciler?: BlueprintReconciler
   /**
+   * Optional: when the initiatives module is wired, the `initiative-planner` step's
+   * plan draft is ingested into the block's initiative entity through this, and the
+   * `initiative-committer` step flips it to `executing` + mirrors the in-repo
+   * tracker. Absent → the initiative steps fail loudly (an initiative pipeline is
+   * meaningless without the module) while every other pipeline runs unchanged.
+   */
+  initiativeService?: InitiativeService
+  /**
+   * Optional: the initiative store, wired into the agent-context builder so an
+   * `initiative`-level run carries the interview + analysis context into the analyst/planner
+   * prompts. Same repo the {@link initiativeService} wraps; absent → those steps run off the
+   * raw block description.
+   */
+  initiativeRepository?: InitiativeRepository
+  /**
+   * Optional: the inline interviewer for the interactive-planning gate (slice 2). When
+   * wired, the `initiative-interviewer` step interviews the human (park/answer/resume) and
+   * synthesizes the goal/constraints brief onto the entity before the analyst/planner run.
+   * Absent (or no model) → the interviewer step passes through and planning runs off the
+   * raw block description. Requires {@link initiativeService} to persist the interview state.
+   */
+  initiativeInterviewService?: InitiativeInterviewService
+  /**
    * Optional: raises human-actionable notifications (a PR needs a merge decision,
    * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
    * transition the block but no notification surfaces (tests).
@@ -445,6 +472,8 @@ export class ExecutionService {
   private readonly clarityReviewActions: ClarityReviewActions
   /** Brainstorm window actions (exposed via {@link brainstorm}). */
   private readonly brainstormActions: BrainstormActions
+  /** Drives the interactive-planning interviewer gate (exposed via {@link initiativeInterview}). */
+  private readonly initiativeInterviewController?: InitiativeInterviewController
   // `blueprintReconciler` / `notificationService` / `ticketTrackerProvider` /
   // `resolveRunRepoContext` / `runInitiatorScope` are NOT stored on the engine: their only
   // consumers (the ingest/follow-up/tracker/notification paths + the pre/post-op repo binding +
@@ -514,6 +543,9 @@ export class ExecutionService {
     environmentTeardown,
     branchUpdater,
     blueprintReconciler,
+    initiativeService,
+    initiativeRepository,
+    initiativeInterviewService,
     notificationService,
     resolveBinaryArtifactStore,
     workspaceSettingsService,
@@ -574,6 +606,7 @@ export class ExecutionService {
       requirementReviews: requirementReviewRepository,
       clarityReviews: clarityReviewRepository,
       brainstormSessions: brainstormSessionRepository,
+      initiatives: initiativeRepository,
       environmentProvisioning,
       fragmentResolver,
     })
@@ -675,6 +708,22 @@ export class ExecutionService {
       'architecture',
       ARCHITECTURE_BRAINSTORM_AGENT_KIND,
     )
+    // The interactive-planning interviewer gate — wired whenever the initiative store is
+    // present (the entity is where its state lives). The interviewer LLM is optional: without
+    // it (or without a model) the gate passes through, so planning still runs off the raw
+    // block description. Absent initiative store → the `initiative-interviewer` step passes
+    // through in RunDispatcher (an initiative pipeline can't run without the store anyway).
+    this.initiativeInterviewController = initiativeService
+      ? new InitiativeInterviewController({
+          blockRepository,
+          executionRepository,
+          workRunner,
+          stateMachine: this.runStateMachine,
+          stepGraph: this.stepGraph,
+          interviewService: initiativeInterviewService,
+          initiativeService,
+        })
+      : undefined
     // The per-step dispatch + completion spine. Composes the collaborators built above; the
     // merge subgraph stays on the engine, reached only through the injected `resolveMergePreset`
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
@@ -702,12 +751,14 @@ export class ExecutionService {
       clarityKind: this.clarityKind,
       requirementsBrainstormKind: this.requirementsBrainstormKind,
       architectureBrainstormKind: this.architectureBrainstormKind,
+      initiativeInterviewController: this.initiativeInterviewController,
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,
       issueWriteback,
       notificationService,
       blueprintReconciler,
+      initiativeService,
       resolveRunRepoContext,
       resolveProviderCapabilities,
       resolveMergePreset: (ws, block) => this.resolveMergePreset(ws, block),
@@ -765,6 +816,15 @@ export class ExecutionService {
   /** Visual-confirmation gate window actions (approve / request-fix / recapture). */
   get visualConfirm(): VisualConfirmActions {
     return this.visualConfirmationController
+  }
+
+  /**
+   * Interactive-planning interviewer window actions (answer / continue / proceed). Undefined
+   * when the interviewer isn't wired (no model / no initiative store) — the server controller
+   * then 503s, exactly like the other optional gate windows.
+   */
+  get initiativeInterview(): InitiativeInterviewController | undefined {
+    return this.initiativeInterviewController
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -1123,6 +1183,11 @@ export class ExecutionService {
     // become invalid out of band.
     validatePipelineShape(shape)
 
+    // The Initiative Planning kinds run ONLY on an `initiative`-level block, and an
+    // initiative block accepts ONLY such a chain — bidirectional, and here in the shared
+    // guard so start/retry/restart can't drift on it.
+    assertInitiativeShapeAllowed(block, shape.agentKinds)
+
     // A chain with visual steps (`tester-ui` / `visual-confirmation`) needs a UI to exercise:
     // it can only run on a `frontend` frame or a frame a frontend links to — else a `tester-ui`
     // step has no app to drive.
@@ -1345,6 +1410,7 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      createdAt: this.clock.now(),
       ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
     }

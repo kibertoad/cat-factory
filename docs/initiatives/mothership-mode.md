@@ -14,320 +14,133 @@
 > loopback Node mothership over Postgres + a no-Postgres local node) and by the cross-runtime
 > `[mothership]` conformance config. The board-load + run paths are allow-listed
 > (`REMOTE_PERSISTENCE_METHODS`) and every direct-db store on those paths is routed through the
-> `pickRepoSource` seam, so the earlier "first board load 500s" failure no longer applies.
+> `pickRepoSource` seam.
 >
 > **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
 > status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
 > (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry /
 > subscription-activation no-ops a run makes over the remote (telemetry is local-first, Phase 5;
-> activation is the local-sqlite bucket); the `fragments` / `slack` connect/provision surfaces; and
-> the durable SQLite work queue (PR 2 — the in-process runner is single-process / best-effort).
-> Login-based machine-token minting has **landed** (PR 3): the token is minted from a whitelisted
-> login and cached locally, so `LOCAL_MOTHERSHIP_TOKEN` is now only a headless/CI override.
+> activation is the local-sqlite bucket); and the `fragments` / `slack` connect/provision surfaces.
 > The remaining `pending` org methods are the live per-repo checklist below.
 
 ### Landed so far
 
-- **Phase 3 follow-up (Kaizen grading read surface)** — the Kaizen SCREEN
-  (`KaizenController` → `KaizenService.getOverview` / `listForExecution`) is now functional in
-  mothership mode: a mothership-mode SPA can display the grading history, the verified-combo
-  library, and a run's per-step grading status. Previously the run-path grade reads/writes
-  (`kaizenGradingRepository.getByStep`/`upsert`, `kaizenVerifiedComboRepository.getByKey`) were
-  remotely callable but the screen's list reads came back `unknown_method`. Newly allow-listed:
-  `kaizenGradingRepository.listByWorkspace` (the screen's bounded history) + `listByExecution` (the
-  run-window per-step status) and `kaizenVerifiedComboRepository.listByWorkspace` (the verified-combo
-  library) — each takes the workspaceId as arg0 (the existing `workspace` rule), read-only and
-  member-level (the Kaizen endpoints are not admin-gated), matching the other board-load read
-  surfaces. These are core repos (`createDrizzleRepositories`), so a mothership-mode node already
-  SOURCES them from the full-surface remote registry (`composeMothership`) — no `pickRepoSource`
-  routing change, just the allow-list. Still off the SPA path: the internal-only single-grade
-  `kaizenGradingRepository.get` (the service never calls it) and the background-sweep methods
-  (`listPending`/`claim`, kind-spanning cron reads); the combo `upsert` (the streak/verified write)
-  stays off too — kaizen GRADING itself is best-effort in mothership mode until the Phase 5
-  telemetry/local-first sync, but the screen that VIEWS prior grades now reads them over the RPC.
-  Server-only allow-list change, symmetric by construction (the dispatcher reflects over each
-  facade's registry). Round-trip + cross-account-scope unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
-- **Phase 3 follow-up (bootstrap / reference-architecture / env-config-repair management surface)** —
-  the repo-bootstrap flow and the env-config-repair retry/stop path are now fully remotely callable,
-  so a mothership-mode SPA can not just LIST bootstrap/repair runs but START a bootstrap, poll a
-  single job's board card, RETRY a failed run, and STOP a running one — completing the
-  `AgentRunController` retry/stop surface for those two run kinds (the EXECUTION-run branch landed
-  earlier) and making the bootstrap modal + reference-architecture library functional. Previously
-  only the board-load reads (`bootstrapJobRepository.listByWorkspace`/`listByServices`,
-  `envConfigRepairJobRepository.listByWorkspace`) were remotely callable; the single-job reads and
-  the write methods came back `unknown_method`. Newly allow-listed: `bootstrapJobRepository`
-  `get`/`update` (workspaceId arg0 → `workspace` rule) + `insert` (record-based → `workspaceField`
-  rule on the job's `workspaceId` field); the whole `referenceArchitectureRepository`
-  (`get`/`listByWorkspace`/`update`/`softDelete` via `workspace`, `insert` via `workspaceField`);
-  and `envConfigRepairJobRepository` `get`/`update` (`workspace`) + `insert` (`workspaceField`).
-  Each is member-level (none of these endpoints is admin-gated) and workspace-scoped, matching the
-  block/pipeline mutation policy. The `insert` records' sibling ids (`blockId`,
-  `referenceArchitectureId`) are NOT re-validated over the RPC (the `workspaceField` rule binds only
-  the top-level `workspaceId`): the row is stored under — and later read by — the bound workspace, and
-  a foreign `referenceArchitectureId` is harmless because the retry run re-resolves it via the
-  workspace-scoped `referenceArchitectureRepository.get`, which 404s a cross-workspace id. These are
-  the non-core repos the Node/local facade routes through the `pickRepoSource` seam (already sourced
-  from the full-surface remote registry when `db` is undefined), so this is an allow-list change only,
-  symmetric by construction (the dispatcher reflects over each facade's registry). Round-trip +
-  cross-account-scope + missing-workspaceId fail-closed unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
-  `bootstrapJob` — bar the serviceId-keyed `listByService` + the `blockServiceId` helper —
-  `referenceArchitecture`, and `envConfigRepairJob` repos are now remote).
-- **Phase 3 follow-up (shared-service mount management surface)** — the org-catalog / shared-service
-  mounting flow (`ServiceMountService` / `ServiceMountController` — mount / unmount / re-layout a
-  shared account service onto a workspace board) is now fully remotely callable, so a mothership-mode
-  SPA can not just DISPLAY the catalog but MOUNT from it. Previously the catalog-badge reads
-  (`workspaceMountRepository.listByWorkspace` / `countByServiceIds`) were exposed, but the
-  single-service read the mount flow performs and the mount write/update/remove methods came back
-  `unknown_method`. Newly allow-listed: `serviceRepository.get(serviceId)` — bound by a **new
-  `service` scope kind** (a single serviceId → owning account, the single-id form of `serviceList`,
-  reusing the controller's existing service→account resolver, so no controller change; the
-  dispatched `get` is routed through the same per-request `listByIds` memo the scope check reads, so
-  a mount precheck resolves the service in ONE query) — and `workspaceMountRepository`
-  `get`/`update`/`remove` (arg0 = workspaceId → the `workspace` rule) + the record-based
-  `upsert(mount)` (bound by a **new `serviceMount` scope kind**). Each is member-level (the mount
-  endpoints are not admin-gated) and workspace-scoped. **Cross-org sharing stays enforced AT THE RPC
-  LAYER, not only in the bypassed service layer:** the `serviceMount` rule binds `upsert` on the
-  mount's `workspaceId` FIELD (out-of-scope workspace → refused) AND requires the mounted `serviceId`
-  to be owned by the SAME account as that workspace, so a raw `upsert` can never plant a cross-org
-  mount — including for a machine token that spans several accounts (a user in multiple orgs, where a
-  workspace-only bind would let one org's service be mounted onto another org's board). The local
-  node's `mount()` also reads `serviceRepository.get` first (the `service` rule 404s a foreign
-  service, so `assertFound` throws), and board composition (`listByServices`) stays account-scoped as
-  a second line of defence. The real-time fan-out reads
-  (`listByService`/`listWorkspaceIdsMountingBlock`) and the frame-deletion batch cleanup
-  (`removeByServices` / `serviceRepository.deleteMany` / `listByFrameBlocks`) stay off the SPA path —
-  mothership-internal / a later board-frame-deletion slice. **Known gap (a later slice):** without
-  the fan-out reads, mounting/unmounting a shared service does not live-update OTHER boards mounting
-  the same service in mothership mode (the acting user's own board is driven directly). These are
-  core repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
-  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
-  allow-list plus the two new scope kinds. Server-only, symmetric by construction (the dispatcher
-  reflects over each facade's registry). Round-trip + cross-account-scope tests for every new method
-  (incl. the `service` kind's out-of-scope / unknown-id / non-string fail-closed edges and the
-  `serviceMount` rule's cross-org / multi-account-token denials) are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending`.
-- **Phase 3 follow-up (advanced review / structured-dialogue session surface)** — the clarity-review
-  (bug-report triage), brainstorm (structured dialogue) and consensus (multi-strategy orchestration)
-  session repositories are now fully allow-listed, so a mothership-mode SPA can not just READ the
-  board-load view of a review but PERSIST/REPLACE one as its window iterates (run → re-read →
-  upsert/delete). Previously only the board-load reads (`clarityReviewRepository.getByBlock`,
-  `brainstormSessionRepository.getByBlockStage`) were remotely callable; the write/delete methods came
-  back `unknown_method`. Newly allow-listed, mirroring the requirements-review surface: `clarityReview`
-  `get`/`upsert`/`deleteByBlock`, `brainstormSession` `get`/`upsert`/`deleteByBlockStage`,
-  `consensusSession` `get`/`getByStep`/`getByBlock`/`upsert` (a new repo entry), and
-  `requirementReview.deleteByBlock` (the pre-review-run drop that completes that repo). Every method
-  takes the workspaceId as arg0 — the `upsert(workspaceId, review)` signature carries it positionally,
-  so the existing `workspace` rule binds it (not `workspaceField`) — and each is member-level (none of
-  the review endpoints is admin-gated), matching the requirement-review policy. These are core repos
-  (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the full-surface
-  remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the allow-list.
-  Server-only, symmetric by construction (the dispatcher reflects over each facade's registry).
-  Round-trip + cross-account-scope unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
-  clarity-review / brainstorm / consensus / requirement-review session surface is now remote).
-- **Phase 3 follow-up (post-release-health / observability settings write surface)** — the
-  three settings repositories the post-release-health flow's panels manage are now allow-listed,
-  so a mothership-mode SPA can PERSIST (not just display) an observability connection, a per-block
-  monitor/SLO mapping, and an incident-enrichment connection. Previously none of these was remotely
-  callable, so every call came back `unknown_method`. Newly allow-listed:
-  `observabilityConnectionRepository` `get`/`upsert`/`delete`, `releaseHealthConfigRepository`
-  `getByBlock`/`listByWorkspace`/`upsert`/`delete`, and `incidentEnrichmentConnectionRepository`
-  `get`/`upsert`/`delete`. The reads/deletes take the workspaceId as arg0 (the existing `workspace`
-  rule); the record-based `upsert(record)` needed a **new `workspaceField` scope rule** — the
-  scope key is a `workspaceId` FIELD of the record, not a positional arg. Binding on
-  `record.workspaceId` is exactly right: the write targets that workspace, so the record can only be
-  persisted into an in-scope one; a missing/non-string field or an out-of-scope workspace is refused
-  as 404. Each is member-level (the controllers mount under `/workspaces/:workspaceId`, none is
-  admin-gated) and workspace-scoped, matching the other settings panels' policy. These are core
-  repos (`createDrizzleRepositories`), so a mothership-mode node already SOURCES them from the
-  full-surface remote registry (`composeMothership`) — no `pickRepoSource` routing change, just the
-  allow-list. Server-only, symmetric by construction (the dispatcher reflects over each facade's
-  registry). Round-trip + cross-account-scope + missing-field unit tests for every new method are in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (the whole
-  observability / incident-enrichment / release-health-config surface is now remote). **Explicitly
-  NOT in this slice:** decrypting a sealed connection cipher at gate-probe time (the later
-  secrets-delegation slice) and `accountSettingsRepository` (account-scoped, a separate decision).
-  So the settings PANELS are functional end-to-end (persist + read back the redacted summary),
-  but a saved observability connection does NOT yet drive a post-release-health gate probe in
-  mothership mode — that waits on the secrets-delegation slice. Note the connection `get` returns
-  the full record (the sealed `credentials` blob) over the machine API, matching the
-  `environmentRegistryRepository.get` precedent (the RPC client is the trusted, account-scoped
-  local node; the blob is sealed). The `workspaceField` rule binds only the record's top-level
-  `workspaceId`; `releaseHealthConfigRepository`'s `blockId` is not re-validated over the RPC (the
-  service layer, bypassed here, owns block-existence), so a config can only ever land in the
-  caller's own in-scope workspace.
-- **Phase 3 follow-up (failed-run retry / stop control surface)** — the board's run controls
-  (`POST /workspaces/:ws/agent-runs/:id/{retry,stop}`, `AgentRunController`) enter through the
-  unified `agent_runs` table's `agentRunRepository.getRef(workspaceId, id)`, which resolves a run's
-  KIND before dispatching to the matching service. That read was the last thing keeping the
-  EXECUTION-run retry/stop path returning `unknown_method` in mothership mode, so it is now
-  allow-listed (workspace-scoped on arg0, reusing the existing `workspace` rule). Every downstream
-  read+write the execution retry/stop services make — `executionRepository.get`/`deleteByBlock`/
-  `upsert`/`markFailed`, `blockRepository.update`, `pipelineRepository.get`, the budget/binary-storage
-  prechecks — was already exposed on the run/start path, so `getRef` is the only new entry. The
-  bootstrap + env-config-repair retry BRANCHES read their own repos (`bootstrapJobRepository.get`,
-  `referenceArchitectureRepository.get`, …) and stayed `pending` at the time (_now landed — see the
-  bootstrap / reference-architecture / env-config-repair management surface entry above_); the sweeper-only
-  `agentRunRepository.listStale`/`liveRunIds` stay mothership-internal. **Wiring fix (both facades):**
-  `agentRunRepository` is the ONE repo surfaced on the container OUTSIDE `CoreDependencies`, so the
-  reflected `repositories` registry (built from `dependencies`) didn't carry it — a remote `getRef`
-  came back `... is not wired`. `buildNodeContainer` and the Cloudflare `buildContainer` now fold it
-  into the registry explicitly (the integration test below is what surfaced this). Otherwise a
-  server-only allow-list change, symmetric by construction (the dispatcher reflects over each facade's
-  registry). Round-trip +
-  cross-account-scope + off-allow-list (`listStale`) unit tests in
-  `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves `getRef` out of `pending`; and the
-  fake-mothership integration test (`runtimes/local/test/mothership-integration.spec.ts`) asserts the
-  retry endpoint resolves an execution run's kind over the real RPC (then the engine refuses the
-  non-failed run with 409 `run_not_retryable`) and 404s an unknown run id (`getRef`'s `null` round-trip).
-- **Phase 3 follow-up (settings / preset / schedule management write surface)** — the workspace-scoped
-  WRITES a mothership-mode SPA drives to SAVE settings are now allow-listed, so the settings panels
-  are functional (not read-only) in mothership mode. Previously only the board-load READS of these
-  repos were remotely callable, leaving the settings/preset/schedule editors able to display but not
-  persist. Newly allow-listed (every method takes the workspaceId as arg0, reusing the existing
-  `workspace` scope rule — no new scope machinery): `workspaceSettingsRepository.upsert`,
-  `trackerSettingsRepository.put`, `serviceFragmentDefaultsRepository.set`, `mergePresetRepository`
-  `get`/`remove`, `modelPresetRepository` `get`/`remove` (completing both preset libraries' CRUD),
-  and the recurring-schedule management surface `pipelineScheduleRepository` `get`/`upsert`/`remove`/
-  `insertRun`/`updateRun`/`listRuns` (the local node's `RecurringPipelineService` CRUD + `runNow`,
-  which fires in-process so its `fire()` writes are on the path). Each is member-level (none is
-  admin-gated) and workspace-scoped, matching the block/pipeline mutation policy already exposed. The
-  sweeper-only `pipelineScheduleRepository` `listDue`/`pruneRunsBefore` and the serviceId-keyed
-  `listByService` stay off the SPA path. Round-trip + cross-account-scope tests for every new method
-  are in `packages/server/test/persistenceRpc.spec.ts`; the static drift guard
-  (`runtimes/node/test/mothership-allowlist.spec.ts`) moves them out of `pending` (so the whole
-  merge-preset / model-preset / workspace-settings / tracker-settings / service-fragment-defaults
-  repos are now fully remote). Server-only allow-list change, symmetric by construction (the
-  dispatcher reflects over each facade's registry).
-- **PR 3 (login-based machine-token minting)** — the required static `LOCAL_MOTHERSHIP_TOKEN` is
-  replaced by a token minted from a whitelisted login and cached locally; the env var is now only a
-  headless/CI override. A mothership (either facade, via `registerCoreControllers`) serves
-  `POST /auth/machine-token`, which verifies the caller's SESSION (audience-pinned `session`),
-  derives the account scope from `accountService.listForUser` (a `requestedAccountIds` hint may only
-  NARROW it, never widen), and mints via the single production `mintMachineToken`
-  (`@cat-factory/server` — the hand-rolled test copy is gone). The local facade adds a `node:sqlite`
-  machine-token cache (`sqlite/machineTokenStore.ts`) and a local-only
-  `POST /local/mothership/connect` proxy (the `mothershipConnect` seam): the SPA signs the user into
-  the mothership (OAuth), captures the returned session from the redirect fragment, and hands it to
-  its OWN node (same origin — no CORS); the node forwards it to the mint endpoint, caches the OPAQUE
-  machine token (it is signed with the MOTHERSHIP's secret, so the node never verifies it), mints a
-  LOCAL session for the same user, and returns it so the SPA is signed in locally. `composeMothership`
-  resolves the token PER RPC via a provider (env override → unexpired cached token → none), so a
-  token-less node boots INERT (rather than throwing) and the SPA can drive the login.
-  `AUTH_MACHINE_TOKEN_TTL_MS` (default 30d) bounds the token; an expired cached token is treated as
-  absent (re-login on expiry — no silent refresh this slice). Tests: the mint helper + endpoint
-  scope/allowlist (`packages/server/test/machineToken*.spec.ts`), the sqlite token store
-  (`sqlite/machineTokenStore.test.ts`), the connector + `composeMothership` precedence
-  (`mothership.test.ts`), and the fake-mothership integration (`mothership-integration.spec.ts` now
-  mints via the endpoint AND drives the full `/local/mothership/connect` login flow end-to-end).
-  **Deferred:** device-code / headless CLI login, token rotation/revocation (nodeId denylist, PR 6),
-  silent refresh, and auto-allow-listing the loopback OAuth redirect on the mothership.
-- **PR 2 (durable SQLite work queue)** — the best-effort in-memory `InProcessWorkRunner` (PR 1) is
-  replaced by the durable `SqliteWorkRunner`, backed by a file-based `node:sqlite` work queue
-  (`runtimes/local/src/sqlite/workQueue.ts`, default `~/.cat-factory/work-queue.sqlite`, override
-  `LOCAL_MOTHERSHIP_WORK_DB`). The queue persists the intent "this run needs driving", so a crash or
-  restart re-drives what was in flight — the durability pg-boss gives the Node facade, now without
-  Postgres. It mirrors pg-boss's `exclusive` advance queue: one row per run (PRIMARY KEY = the
-  `singletonKey` dedup); a `startRun`/`signalDecision` (re)queues + kicks a drain loop that claims
-  drivable runs up to `concurrency` and drives each via the SAME `driveExecution` advance/poll loop;
-  a signal mid-drive coalesces via the row's `rerun` flag; a re-armed unbounded gate is deferred for
-  the gate poll interval then re-polled; and crash recovery comes from a boot-time orphan reset
-  (`active`→`queued`) plus a periodic recovery poll that reclaims lease-expired rows. Lease/sweeper/
-  retry/concurrency knobs reuse the same `executionRuntime()` derivation the pg-boss queue+sweeper
-  use. This is a **local-sqlite bucket** differentiator (no cross-runtime symmetry obligation). It is
-  exercised by the merge-gate integration test (`mothership-integration.spec.ts` drives a run to a
-  persisted terminal state through it) and unit-tested in `sqlite/workQueue.test.ts` (dedup, claim
-  ordering, lease/orphan reclaim, rerun coalescing, defer, poison eviction) + `mothership.test.ts`
-  (the runner's completion, coalescing, error-defer, and crash-recovery-on-bind paths).
-- **Repository conformance (cross-runtime `[mothership]` config + static drift guard)** — the
-  shared conformance suite now runs against a THIRD configuration: a no-Postgres mothership-mode
-  node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership
-  (`backend/runtimes/local/test/mothership/harness.ts`). The **execution group** is green over the
-  real `/internal/persistence` path, so an un-proxied / mis-scoped / non-serializing run-path
-  repository method fails an EXISTING assertion (no test written twice). The run-path allow-list
-  was widened to match (merge-preset `getDefault`, service `getByFrameBlock`, notification /
-  requirement-review `get`, requirement-review `upsert`, kaizen `getByStep`/`upsert`, the kaizen
-  LLM-metric summary, env-config-repair + kaizen-combo reads). A static guard
-  (`backend/runtimes/node/test/mothership-allowlist.spec.ts`) reflects EVERY Drizzle repository
-  method and fails unless each is allow-listed or explicitly classified
-  (`pending`/`local`/`telemetry`/`admin`/`sweeper`/`onboarding`/`helper`) — so adding a repo/method
-  without proxying it (or recording why not) goes red regardless of behavioural coverage. The
-  `pending` reasons in that guard ARE the remaining Phase-3 surface-completion backlog. The
-  `test-db` CI lane is sharded (vitest `--shard`) so the extra config doesn't grow wall-clock.
-  Remaining: extend the `[mothership]` behavioural config to the core/agents/integration/misc
-  groups (they need mode-skips for HTTP workspace/account creation + user-dependent onboarding
-  flows), and proxy the `pending` methods slice by slice.
+> Concise ledger — one line per merged slice. The full rationale for each lives in its PR
+> description + git history; the live per-repo status is the [checklist table](#per-repository-bucket-checklist).
+> Every slice is a server-only allow-list change (symmetric by construction — the dispatcher
+> reflects over each facade's registry), with round-trip + cross-account-scope tests in
+> `packages/server/test/persistenceRpc.spec.ts` and the static drift guard
+> (`runtimes/node/test/mothership-allowlist.spec.ts`) moving the methods out of `pending`, unless
+> noted otherwise.
+
+**Spine & durability (PR 0–2)**
+
 - **PR 0** — this tracker.
-- **PR 1 (spine)** — the persistence-RPC core in `@cat-factory/server`: the `machine` token
-  audience, the wire envelope + method allow-list + scope table + dispatcher
-  (`src/persistence/rpc.ts`), the `Proxy`-backed `createRemoteRepositoryRegistry`
-  (`src/persistence/remoteRepositories.ts`), the `POST /internal/persistence` controller, and
-  a unit test covering the full round-trip (reads, undefined/null, rev write-back, DomainError
-  re-throw, allow-list, cross-account scope). BOTH facades attach their repository registry
-  (`ServerContainer.repositories`) so either can be a mothership, guarded by a cross-runtime
-  conformance assertion.
-- **PR 1 (remaining)** — the local-facade _consumer_ side: the `node:sqlite` credential store +
-  local cipher, the `LOCAL_MOTHERSHIP_URL` switch composing remote + local repos in
-  `buildLocalContainer`, the no-Postgres `startLocal` boot path with an in-process work runner,
-  and the `config.mothership` SPA flag. The six pilot repos below are remotely _callable_ now;
-  this slice makes a local node _consume_ them.
-  - **Landed (1a):** the local `node:sqlite` credential store
-    (`runtimes/local/src/sqlite/credentialStore.ts`) — `createLocalCredentialStore(path)` plus
-    `SqliteProviderApiKeyRepository` + `SqliteLocalModelEndpointRepository`, the two
-    `local-sqlite` bucket ports, mirroring the Drizzle/D1 repos column-for-column (usage-window
-    rotation, atomic lease-least-used, createdAt-preserving endpoint upsert) and unit-tested
-    against an in-memory db. It stores only the already-sealed cipher envelopes, so the local
-    key wiring (the existing `ENCRYPTION_KEY`-keyed `WebCryptoSecretCipher`, which never carries
-    the mothership's key) belongs to the composition step.
-  - **Landed (1b):** the `LOCAL_MOTHERSHIP_URL` switch is live. `createRemoteRepositoryRegistry`
-    (`@cat-factory/server`) is a drift-proof full-surface remote `CoreRepositories` (a `Proxy`
-    lazily forwarding any repo to one RPC); `composeMothership` (`runtimes/local/src/mothership.ts`)
-    pairs it with the local credential store, and `buildLocalContainer` threads both into
-    `buildNodeContainer` with `db: undefined`, injecting the two credential repos. The
-    **`db: undefined` audit was pulled forward** (it was nominally PR 3): `buildNodeContainer` now
-    takes an optional `db`, the per-user Postgres services (subscriptions / user-secrets /
-    OpenRouter catalog) turn off without one, the API-key pool + local-model endpoints accept an
-    injected repository. NOTE: the Drizzle constructors only stash the handle (no build-time work),
-    so BUILDING the container over `db: undefined` is safe — but CALLING the direct-db repos
-    (notifications / bootstrap / projections / subscription-activation / …) on a board load or run
-    still throws, because they are not yet routed to the remote surface. That, plus the narrow
-    allow-list, is why mothership mode was NOT yet functional at 1b (see the merge gate + Phase 3).
-    _(Superseded: Phase-3 slices 3–4 routed those direct-db stores via `pickRepoSource` and widened
-    the allow-list, so the board-load + run paths now work — the gate is MET; see the banner.)_ The
-    **no-Postgres `startLocal` boot** is a dedicated path (`startLocalMothership`) — no
-    `DATABASE_URL`/`migrate`/pg-boss; it serves the same Hono app + WebSocket transport and drives
-    runs with the new in-process `WorkRunner` (serialized per execution, the pg-boss analogue). The
-    `config.localMode.mothership` flag is surfaced to the SPA. A static `LOCAL_MOTHERSHIP_TOKEN` is
-    used for now (login minting is PR 3). Tests: the remote-registry round-trip + allow-list
-    (`packages/server/test/persistenceRpc.spec.ts`), and `composeMothership` / `InProcessWorkRunner`
-    / the no-Postgres `buildLocalContainer` build (`runtimes/local/src/mothership.test.ts`).
-  - **Review fixes folded into 1b (PR #514):** the credential SQLite handle is now released on
-    shutdown via a new `ServerContainer.onShutdown` seam (the boot path calls it); the runner-pool
-    connection repo resolves remotely in mothership mode (a clean gated `unknown_method`, not an
-    undefined-db `TypeError`); the superseded `createRemoteRepositories` (pilot-6 typed set) was
-    removed in favour of the single `createRemoteRepositoryRegistry` (the round-trip test now runs
-    against the registry production uses); `makeRepoProxy` guards `then`/symbol probes so an
-    accidental `await` of a repo proxy can't forward a bogus RPC; the in-process runner no longer
-    double-arms a re-drive when a gate re-arm and a signal coincide; the boot serve/realtime tail is
-    a shared `serveAppWithRealtime` helper (no drift with `start()`); and the overstated
-    "loads a board / persists executions" claims were corrected to match the gated reality.
-  - **Deferred from 1b (carried forward):** the full cross-runtime `defineConformanceSuite`
-    binding for the local-sqlite store still wants a **fake mothership server** so the suite can
-    build a real mothership-mode `buildLocalContainer` over a working RPC backend — folded into
-    Phase 2 alongside the durable SQLite work queue (the in-process runner is single-process /
-    best-effort, with no durable queue or stale-run sweeper yet). The credential store keeps its
-    isolated unit test (`sqlite/credentialStore.test.ts`) and is now proven _wired into the
-    container_ by the no-Postgres build test. At 1b the allow-list exposed only the six core
-    domain repos remotely — the spine, NOT a working board/run; making it actually functional was
-    [Phase 3](#phase-3--functional-repository-surface-the-merge-gate), the merge gate, now **MET**.
+- **PR 1 (spine)** — the persistence-RPC core in `@cat-factory/server`: `machine` token audience,
+  wire envelope + method allow-list + scope table + dispatcher (`src/persistence/rpc.ts`), the
+  `Proxy`-backed `createRemoteRepositoryRegistry`, the `POST /internal/persistence` controller, and
+  the full round-trip test (reads, undefined/null, rev write-back, DomainError re-throw, allow-list,
+  scope). Both facades attach `ServerContainer.repositories`, so either can be a mothership (guarded
+  by a conformance assertion).
+- **PR 1 (consumer side)** — the local `node:sqlite` credential store (`providerApiKey` +
+  `localModelEndpoint`, sealed-envelope only), the `LOCAL_MOTHERSHIP_URL` switch composing
+  `composeMothership` (remote registry + local store) into `buildNodeContainer` with `db: undefined`,
+  the no-Postgres `startLocalMothership` boot (no `DATABASE_URL`/`migrate`/pg-boss; same Hono app +
+  WebSocket transport), and the `config.localMode.mothership` SPA flag. The `db: undefined` audit was
+  pulled forward here (per-user Postgres services turn off without a `db`). Review fixes (PR #514):
+  `ServerContainer.onShutdown` seam, remote runner-pool repo resolution, single
+  `createRemoteRepositoryRegistry`, proxy `then`/symbol guards, shared `serveAppWithRealtime` helper.
+- **PR 2 (durable SQLite work queue)** — `SqliteWorkRunner` replaces the in-memory `InProcessWorkRunner`,
+  backed by a file-based `node:sqlite` queue (`~/.cat-factory/work-queue.sqlite`, override
+  `LOCAL_MOTHERSHIP_WORK_DB`): pg-boss's durability without Postgres (one row per run, rerun-coalescing,
+  boot-time orphan reset + lease-expiry recovery poll). A **local-sqlite bucket** differentiator (no
+  symmetry obligation). Tested in `sqlite/workQueue.test.ts` + `mothership.test.ts`.
+- **Repository conformance** — the shared conformance suite runs a THIRD `[mothership]` config (a
+  no-Postgres node whose `CoreRepositories` are RPC-backed by a real in-process Node mothership), so
+  an un-proxied / mis-scoped / non-serializing run-path method fails an EXISTING assertion. The static
+  drift guard reflects EVERY Drizzle method and fails unless it is allow-listed or classified
+  (`pending`/`local`/`telemetry`/`admin`/`sweeper`/`onboarding`/`helper`); the `pending` reasons ARE
+  the Phase-3 backlog. `test-db` CI lane sharded so the extra config doesn't grow wall-clock.
+
+**Phase 3 — functional surface (the merge gate, MET)**
+
+- **Slice 1–2 (board-load reads)** — workspace-scoped + mixed board-load reads (`workspace` rule),
+  plus cross-service / entity-id-keyed board-composition reads via two new scope kinds: `serviceList`
+  (arg0 = `serviceIds[]`, every id must resolve in-scope) and `block` (arg0 = blockId → workspace →
+  account). Reads only.
+- **Slice 3 (`db: undefined` routing)** — the org/durable stores `buildNodeContainer` built directly
+  from `options.db` now route through the `pickRepoSource(remoteRepos, name, build)` seam (remote
+  registry when `db` is undefined, else Drizzle): projections, installation, runner-pool, bootstrap,
+  reference-architecture, env-config-repair, notifications, task, subscription-activation; the separate
+  `DrizzleServiceFrameRepository` is gone. Routing is orthogonal to the allow-list (an un-listed method
+  returns a clean `unknown_method`, never a `TypeError`).
+- **Slice 4 (functional integration test — gate exit criteria)** —
+  `mothership-integration.spec.ts` boots a real loopback Node mothership + a no-Postgres local node and
+  asserts a board loads and a run drives to a persisted terminal state over the RPC. Surfaced that
+  `AgentContextBuilder` reads a block's docs/tasks + provisioned env on every dispatch, so those
+  sub-helper repos (`document`/`task`/`environmentRegistry`/`environmentConnection`) were routed
+  remotely and their workspace-scoped reads + lazy-seed / notification writes allow-listed.
+
+**Phase 3 follow-ups (surface-completion slices — each widens `REMOTE_PERSISTENCE_METHODS`)**
+
+- **Settings / preset / schedule writes** — the settings panels can now PERSIST, not just display:
+  `workspaceSettings.upsert`, `trackerSettings.put`, `serviceFragmentDefaults.set`, both preset
+  libraries' `get`/`remove`, and the recurring-schedule mgmt surface
+  (`pipelineSchedule.get`/`upsert`/`remove`/`insertRun`/`updateRun`/`listRuns`). Sweeper-only
+  `listDue`/`pruneRunsBefore` + `listByService` stay off.
+- **Failed-run retry / stop control** — `agentRunRepository.getRef` (resolves a run's kind before
+  dispatch) completes the EXECUTION-run retry/stop path. **Wiring fix (both facades):** `agentRunRepository`
+  lives outside `CoreDependencies`, so `buildNodeContainer` + the Cloudflare `buildContainer` now fold
+  it into the reflected registry explicitly. Sweeper-only `listStale`/`liveRunIds` stay off.
+- **Post-release-health / observability settings writes** — `observabilityConnection`,
+  `releaseHealthConfig`, `incidentEnrichmentConnection` repos (reads/deletes via `workspace`, the
+  record-based `upsert` via a new `workspaceField` rule binding `record.workspaceId`). Connection `get`
+  returns the sealed `credentials` blob (the `environmentRegistry.get` precedent). Gate-probe decryption
+  stays off (secrets-delegation slice); `accountSettingsRepository` is a separate decision.
+- **Advanced review / structured-dialogue sessions** — clarity-review, brainstorm and consensus
+  session repos gain write/delete (mirroring the requirements-review surface):
+  `clarityReview`/`brainstormSession`/`consensusSession` `get`/`upsert`/`delete*`, plus
+  `requirementReview.deleteByBlock`.
+- **Shared-service mount management** — `serviceRepository.get` (new `service` scope kind — single
+  serviceId → owning account, routed through the request's `listByIds` memo) + `workspaceMountRepository`
+  `get`/`update`/`remove` + record-based `upsert` (new `serviceMount` scope kind). Cross-org sharing is
+  enforced AT THE RPC LAYER: `serviceMount` binds the mount's `workspaceId` field AND requires the
+  mounted `serviceId` to be owned by the same account (defeats a multi-account token planting a
+  cross-org mount). Fan-out / batch-cleanup reads stay off. **Known gap:** mount/unmount does not
+  live-update OTHER boards mounting the same service (needs the fan-out reads — a later slice).
+- **Bootstrap / reference-architecture / env-config-repair management** — the full run-mgmt surface
+  (start / poll a single job / retry / stop): `bootstrapJob` `get`/`update`/`insert`,
+  the whole `referenceArchitecture` repo, `envConfigRepairJob` `get`/`update`/`insert` (record-based
+  `insert`s via `workspaceField`). Completes the `AgentRunController` retry/stop surface for those kinds.
+- **Kaizen grading reads** — the Kaizen SCREEN reads: `kaizenGrading.listByWorkspace`/`listByExecution`
+  + `kaizenVerifiedCombo.listByWorkspace`. The combo `upsert` + background-sweep methods stay off
+  (grading itself is best-effort until Phase 5).
+- **VCS / GitHub projection reads** — the SPA's VCS board panels: `repoProjection.list`,
+  `branchProjection.listByRepo`, `pullRequestProjection.listByWorkspace`,
+  `issueProjection.listByWorkspace`, plus `githubInstallation.getByWorkspace` (also the run-path
+  `resolveRepoTarget` read). Projection WRITE surface (`upsertMany`, `linkBlock`, sync cursors,
+  `repoProjection.get`) stays off — the mothership owns GitHub sync; opening repo-writes without it
+  would let create-branch/open-PR half-succeed. A later GitHub sync + repo-write slice.
+- **Ephemeral-environment connection management** — the environment provider-connection + per-type
+  infra-handler settings panels + the custom-manifest-type catalog: the whole
+  `environmentConnectionRepository` and `customManifestTypeRepository` (reads via `workspace`,
+  record-based `upsert` via `workspaceField`). Safe because the connection carries handler secrets as a
+  SEALED `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key — no plaintext
+  crosses the machine API); custom-manifest-type rows carry no secrets. Contrast the document/task
+  connection repos, which decrypt INSIDE the repo — left off. Provisioning WRITES + access-cipher
+  decryption stay off (secrets-delegation slice).
+
+**Login (PR 3)**
+
+- **Login-based machine-token minting** — the static `LOCAL_MOTHERSHIP_TOKEN` is replaced by a token
+  minted from a whitelisted login and cached in local SQLite (env var now a headless/CI override).
+  The mothership serves `POST /auth/machine-token` (session-authed, account scope from
+  `accountService.listForUser`, a `requestedAccountIds` hint may only NARROW). The local facade adds a
+  `node:sqlite` machine-token cache + a local-only `POST /local/mothership/connect` proxy: the SPA signs
+  into the mothership (OAuth), hands the session to its own node, which mints + caches the opaque machine
+  token and returns a local session. `composeMothership` resolves the token per-RPC (env → cached →
+  none), so a token-less node boots INERT. `AUTH_MACHINE_TOKEN_TTL_MS` (default 30d); expired = re-login.
+  **Deferred:** device-code / headless CLI login, token rotation/revocation (PR 6), silent refresh.
 
 ## Goal & rationale
 
@@ -378,11 +191,11 @@ The **generic persistence-RPC** spine is the template every later slice follows:
    so exposing those raw repo writes would let any in-scope member self-promote to admin. They
    come back only once a later slice adds a role dimension to the scope (or routes them through
    the service). The pilot exposes the account/membership **reads** a board load needs.
-2. **Local client** `createRemoteRepositories(rpcClient): CoreRepositories` (`src/persistence/`):
-   each entry is a `Proxy` forwarding `(repo, method, args)` to one RPC, decoded with the existing
+2. **Local client** `createRemoteRepositoryRegistry(rpcClient): CoreRepositories` (`src/persistence/`):
+   a `Proxy` lazily forwarding `(repo, method, args)` to one RPC, decoded with the existing
    shared mappers (`src/persistence/mappers.ts`, `decode.ts`).
-3. **Composite repositories in the local facade**: `buildLocalContainer` composes
-   `createRemoteRepositories` (org repos) + the local `node:sqlite` repos (credentials/settings) +
+3. **Composite repositories in the local facade**: `composeMothership` / `buildLocalContainer`
+   compose the remote registry (org repos) + the local `node:sqlite` repos (credentials/settings) +
    the telemetry composite into ONE `CoreRepositories`, passed to `buildNodeContainer` with
    `db: undefined`.
 4. **Conformance**: a round-trip suite asserts the remote-backed `CoreRepositories` behaves
@@ -407,53 +220,56 @@ Every persistence port, and where it lives in mothership mode. `remote` = mother
 `local-sqlite` = local `node:sqlite` store; `telemetry` = local-first + batched up; `excluded` =
 never remotely invocable (mothership-internal cron).
 
-| Port                                                        | Bucket                                              | Status  | PR                              |
-| ----------------------------------------------------------- | --------------------------------------------------- | ------- | ------------------------------- |
-| `workspaceRepository`                                       | remote                                              | ✅ done | PR 1                            |
-| `blockRepository`                                           | remote                                              | ✅ done | PR 1                            |
-| `executionRepository` (CAS/rev)                             | remote                                              | ✅ done | PR 1                            |
-| `accountRepository`                                         | remote                                              | ✅ done | PR 1                            |
-| `membershipRepository`                                      | remote                                              | ✅ done | PR 1                            |
-| `pipelineRepository`                                        | remote                                              | ✅ done | PR 1                            |
-| `userRepository`                                            | remote                                              | ⬜ todo | PR 3                            |
-| `invitationRepository`                                      | remote                                              | ⬜ todo | PR 3                            |
-| `passwordResetTokenRepository`                              | remote                                              | ⬜ todo | PR 3                            |
-| `emailConnectionRepository`                                 | remote (delivery delegated)                         | ⬜ todo | PR 4                            |
-| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)           | ✅ done | PR 3 (retry/stop surface)       |
-| `modelPresetRepository`                                     | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `serviceFragmentDefaultsRepository`                         | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)              | ◑ part  | PR 3 (settings writes)          |
-| `trackerSettingsRepository`                                 | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)      | ◑ part  | PR 3 (mount management)         |
-| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)          | ◑ part  | PR 3 (mount management)         |
-| `requirementReviewRepository`                               | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `kaizenGradingRepository`                                   | remote (run-path + screen reads; `get`/sweep off)   | ◑ part  | PR 3 (kaizen read surface)      |
-| `kaizenVerifiedComboRepository`                             | remote (`getByKey`/`listByWorkspace`; `upsert` off) | ◑ part  | PR 3 (kaizen read surface)      |
-| `consensusSessionRepository`                                | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `clarityReviewRepository`                                   | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `brainstormSessionRepository`                               | remote                                              | ✅ done | PR 3 (advanced-review surface)  |
-| `mergePresetRepository`                                     | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `workspaceSettingsRepository`                               | remote                                              | ✅ done | PR 3 (settings writes)          |
-| `observabilityConnectionRepository`                         | remote                                              | ✅ done | PR 3 (release-health settings)  |
-| `incidentEnrichmentConnectionRepository`                    | remote                                              | ✅ done | PR 3 (release-health settings)  |
-| `accountSettingsRepository`                                 | remote                                              | ⬜ todo | PR 3                            |
-| `releaseHealthConfigRepository`                             | remote                                              | ✅ done | PR 3 (release-health settings)  |
-| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership)    | ⬜ todo | PR 3                            |
-| `githubInstallationRepository`                              | remote                                              | ⬜ todo | PR 3                            |
-| `runnerPoolConnectionRepository`                            | remote                                              | ⬜ todo | PR 3                            |
-| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote                                              | ⬜ todo | PR 3                            |
-| `providerApiKeyRepository`                                  | local-sqlite                                        | ✅ done | PR 1 (store)                    |
-| `localModelEndpointRepository`                              | local-sqlite                                        | ✅ done | PR 1 (store)                    |
-| `providerSubscriptionTokenRepository`                       | local-sqlite                                        | ⬜ todo | PR 3                            |
-| `personalSubscriptionRepository`                            | local-sqlite                                        | ⬜ todo | PR 3                            |
-| `subscriptionActivationRepository`                          | local-sqlite                                        | ⬜ todo | PR 3                            |
-| `localSettingsRepository`                                   | local-sqlite                                        | ⬜ todo | PR 3                            |
-| durable execution work queue                                | local-sqlite (replaces pg-boss)                     | ✅ done | PR 1 (in-proc) → PR 2 (durable) |
-| cached mothership machine token                             | local-sqlite                                        | ✅ done | PR 3                            |
-| `llmCallMetricRepository`                                   | telemetry                                           | ⬜ todo | PR 5                            |
-| `agentContextSnapshotRepository`                            | telemetry                                           | ⬜ todo | PR 5                            |
-| `tokenUsageRepository`                                      | telemetry                                           | ⬜ todo | PR 5                            |
-| `provisioningLogRepository`                                 | telemetry                                           | ⬜ todo | PR 5                            |
+| Port                                                        | Bucket                                                | Status  | PR                              |
+| ----------------------------------------------------------- | ----------------------------------------------------- | ------- | ------------------------------- |
+| `workspaceRepository`                                       | remote                                                | ✅ done | PR 1                            |
+| `blockRepository`                                           | remote                                                | ✅ done | PR 1                            |
+| `executionRepository` (CAS/rev)                             | remote                                                | ✅ done | PR 1                            |
+| `accountRepository`                                         | remote                                                | ✅ done | PR 1                            |
+| `membershipRepository`                                      | remote                                                | ✅ done | PR 1                            |
+| `pipelineRepository`                                        | remote                                                | ✅ done | PR 1                            |
+| `userRepository`                                            | remote                                                | ⬜ todo | PR 3                            |
+| `invitationRepository`                                      | remote                                                | ⬜ todo | PR 3                            |
+| `passwordResetTokenRepository`                              | remote                                                | ⬜ todo | PR 3                            |
+| `emailConnectionRepository`                                 | remote (delivery delegated)                           | ⬜ todo | PR 4                            |
+| `agentRunRepository`                                        | remote (`getRef`; sweeper reads internal)             | ✅ done | PR 3 (retry/stop surface)       |
+| `modelPresetRepository`                                     | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `serviceFragmentDefaultsRepository`                         | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `pipelineScheduleRepository`                                | remote (mgmt; `listByService` pending)                | ◑ part  | PR 3 (settings writes)          |
+| `trackerSettingsRepository`                                 | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `serviceRepository`                                         | remote (mount reads; CRUD/`getByRepo` pending)        | ◑ part  | PR 3 (mount management)         |
+| `workspaceMountRepository`                                  | remote (mount mgmt; fan-out/batch pending)            | ◑ part  | PR 3 (mount management)         |
+| `requirementReviewRepository`                               | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `kaizenGradingRepository`                                   | remote (run-path + screen reads; `get`/sweep off)     | ◑ part  | PR 3 (kaizen read surface)      |
+| `kaizenVerifiedComboRepository`                             | remote (`getByKey`/`listByWorkspace`; `upsert` off)   | ◑ part  | PR 3 (kaizen read surface)      |
+| `consensusSessionRepository`                                | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `clarityReviewRepository`                                   | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `brainstormSessionRepository`                               | remote                                                | ✅ done | PR 3 (advanced-review surface)  |
+| `mergePresetRepository`                                     | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `workspaceSettingsRepository`                               | remote                                                | ✅ done | PR 3 (settings writes)          |
+| `observabilityConnectionRepository`                         | remote                                                | ✅ done | PR 3 (release-health settings)  |
+| `incidentEnrichmentConnectionRepository`                    | remote                                                | ✅ done | PR 3 (release-health settings)  |
+| `accountSettingsRepository`                                 | remote                                                | ⬜ todo | PR 3                            |
+| `releaseHealthConfigRepository`                             | remote                                                | ✅ done | PR 3 (release-health settings)  |
+| `environmentConnectionRepository`                           | remote                                                | ✅ done | PR 3 (env connection surface)   |
+| `customManifestTypeRepository`                              | remote                                                | ✅ done | PR 3 (env connection surface)   |
+| `environmentRegistryRepository`                             | remote (reads; provision writes/decrypt pending)      | ◑ part  | PR 3 (secrets-delegation later) |
+| `binaryArtifactMetadataStore` (metadata)                    | remote; blobs → shared backend (S3 / mothership)      | ⬜ todo | PR 3                            |
+| `githubInstallationRepository`                              | remote (`getByWorkspace` run-path read; rest pending) | ◑ part  | PR 3 (VCS projection reads)     |
+| `runnerPoolConnectionRepository`                            | remote                                                | ⬜ todo | PR 3                            |
+| GitHub projection repos (repo/branch/PR/issue/commit/check) | remote (board-panel reads; sync/repo-writes pending)  | ◑ part  | PR 3 (VCS projection reads)     |
+| `providerApiKeyRepository`                                  | local-sqlite                                          | ✅ done | PR 1 (store)                    |
+| `localModelEndpointRepository`                              | local-sqlite                                          | ✅ done | PR 1 (store)                    |
+| `providerSubscriptionTokenRepository`                       | local-sqlite                                          | ⬜ todo | PR 3                            |
+| `personalSubscriptionRepository`                            | local-sqlite                                          | ⬜ todo | PR 3                            |
+| `subscriptionActivationRepository`                          | local-sqlite                                          | ⬜ todo | PR 3                            |
+| `localSettingsRepository`                                   | local-sqlite                                          | ⬜ todo | PR 3                            |
+| durable execution work queue                                | local-sqlite (replaces pg-boss)                       | ✅ done | PR 1 (in-proc) → PR 2 (durable) |
+| cached mothership machine token                             | local-sqlite                                          | ✅ done | PR 3                            |
+| `llmCallMetricRepository`                                   | telemetry                                             | ⬜ todo | PR 5                            |
+| `agentContextSnapshotRepository`                            | telemetry                                             | ⬜ todo | PR 5                            |
+| `tokenUsageRepository`                                      | telemetry                                             | ⬜ todo | PR 5                            |
+| `provisioningLogRepository`                                 | telemetry                                             | ⬜ todo | PR 5                            |
 
 ## Cross-cutting delegation (not per-call repo proxies)
 
@@ -471,159 +287,36 @@ never remotely invocable (mothership-internal cron).
 
 ## Phased delivery
 
-- **PR 0 — this tracker doc.** No code.
-- **PR 1 — vertical slice (the SPINE).** `machine` audience; `registerPersistenceController`
-  (scope + allow-list); `PersistenceRpcClient` + `createRemoteRepositoryRegistry` (the full-surface
-  remote registry); local `node:sqlite` store + local cipher with `providerApiKey` +
-  `localModelEndpoint`; `LOCAL_MOTHERSHIP_URL` switch + no-Postgres `startLocal` boot with an
-  **in-process** work runner; static `LOCAL_MOTHERSHIP_TOKEN` for now; `config.mothership` flag to
-  the SPA. Conformance: rev/undefined/scope round-trip (server spine) + the no-Postgres composition
-  build. The board-load + run end-to-end surface that makes it functional landed under Phase 3 (the
-  merge gate, now **MET** — see the banner at the top).
-- **PR 2 — real-time both directions + durable SQLite work queue** (+ the deferred local-sqlite
-  conformance binding via a fake mothership server). **Durable SQLite work queue: ✅ landed** (see
-  "Landed so far"). Remaining in PR 2: real-time both directions (`RpcEventPublisher` +
-  `UpstreamEventSubscriber`) and the local-sqlite conformance binding.
+- **PR 0 — this tracker doc.** ✅ landed.
+- **PR 1 — vertical slice (the SPINE).** ✅ landed — the persistence-RPC spine + local consumer side.
+  See "Landed so far". The board-load + run end-to-end surface that makes it functional landed under
+  Phase 3 (the merge gate, **MET**).
+- **PR 2 — real-time both directions + durable SQLite work queue.** Durable SQLite work queue **✅
+  landed**. **Remaining:** real-time both directions (`RpcEventPublisher` + `UpstreamEventSubscriber`)
+  and the local-sqlite conformance binding via a fake mothership server.
 
 ### Phase 3 — Functional repository surface (THE MERGE GATE)
 
-This is the phase that makes mothership mode actually work, and the one PR #514 must wait for.
-It also carries login-based machine-token minting and the formal `db: undefined` audit. It is
-larger than one hop — split it across several PRs, but **none of the mothership boot ships until
-the board-load + run paths below are green**. The work is in three parts:
+✅ **MET.** The phase that makes mothership mode actually work. Split across several PRs (slices 1–4 +
+the follow-up surface-completion slices in "Landed so far"). **Exit criteria — MET:** a mothership-mode
+`buildLocalContainer` loads a board and drives a run to a persisted terminal state against a real RPC
+backend, asserted by `mothership-integration.spec.ts` (green). The three parts of the work were:
 
-> **Landed (Phase 3 slice 1):** part 2's workspace-scoped + mixed (workspaceId + entity-id) board-load
-> reads are now allow-listed in `REMOTE_PERSISTENCE_METHODS`, each reusing the existing `workspace`
-> scope rule (resolve the owning account, reject out-of-scope as 404). Reads only — no new mutation
-> is exposed. Part 3 needed no registry change: the dispatcher already reflects over the full
-> `CoreDependencies` object, so allow-listing a method is enough to expose it. Round-trip +
-> cross-account-scope tests for every newly-listed method are in `packages/server/test/persistenceRpc.spec.ts`.
->
-> **Landed (Phase 3 slice 2):** part 2's **cross-service** + **entity-id-keyed** board-composition
-> reads are now allow-listed, via two NEW scope kinds that resolve the entity's owning account
-> server-side before the check: `serviceList` (arg0 = `serviceIds[]`; resolve each service's
-> account, EVERY id must be in scope, a missing/out-of-scope id fails closed, empty list is a no-op)
-> and `block` (arg0 = blockId; resolve block → home workspace → account). Newly callable:
-> `serviceRepository.listByIds`/`listByAccount` (the latter on the existing `account` rule, so the
-> `null` unscoped listing is refused), `blockRepository.findById`/`listByServices`,
-> `executionRepository.listByServices`, `bootstrapJobRepository.listByServices`,
-> `pipelineScheduleRepository.listByServices`, `workspaceMountRepository.countByServiceIds`. The two
-> resolvers are wired in `PersistenceController` (block → `blockRepository.findById` + `accountOf`;
-> service → `serviceRepository.listByIds`) and the dispatcher fails closed if a kind's resolver is
-> absent. Round-trip + cross-account-scope + unknown-id + empty-list tests are in `persistenceRpc.spec.ts`.
-> Note: `subscriptionActivationRepository.deleteByExecution` is NOT exposed remotely — per the
-> per-repo bucket checklist it is the **local-sqlite** bucket (the token is re-sealed with the system
-> key for the run; how that key is available in mothership mode is an open design question for the
-> credential/activation slice), so it stays off the remote allow-list.
->
-> **Landed (Phase 3 slice 3):** part 1's `db: undefined` audit for the board-load + run path. The
-> org/durable stores `buildNodeContainer` constructed directly from `options.db` now route through a
-> single `pickRepoSource(remoteRepos, name, build)` seam (exported from `runtimes/node/src/container.ts`):
-> when `db` is undefined, `options.repos` is the full-surface remote `Proxy` (`composeMothership`) and
-> the repo comes from THERE; else the Drizzle repo is built over `db` as before. Routed:
-> `githubInstallationRepository`, `repoProjectionRepository` + the five GitHub projections
-> (branch/PR/issue/commit/check), `runnerPoolConnectionRepository`, `bootstrapJobRepository`,
-> `referenceArchitectureRepository`, `envConfigRepairJobRepository`, `notificationRepository`,
-> `taskRepository` (issue writeback), and `subscriptionActivationRepository`; the separate
-> `DrizzleServiceFrameRepository` construction is gone — `buildResolveRepoTarget` now reuses
-> `repos.serviceRepository` (remote in mothership mode, Drizzle otherwise). Routing is orthogonal to
-> the allow-list: an un-allow-listed remote method returns a clean `unknown_method`, never a
-> `db`-undefined `TypeError`. Tests: `pickRepoSource` routing in `runtimes/node/test/mothership-repo-source.spec.ts`
->
-> - the existing no-Postgres build test (which now exercises the remote-sourced repos and still makes
->   no build-time network call).
->
-> **Landed (Phase 3 slice 4):** the **fake-mothership functional integration test** — the gate's exit
-> criteria — and the agent-context run-path repo surface it surfaced.
-> `runtimes/local/test/mothership-integration.spec.ts` boots a stock Node mothership
-> (`buildNodeContainer` over real Postgres) on a 127.0.0.1 loopback and a no-Postgres mothership-mode
-> `buildLocalContainer` whose `CoreRepositories` are the RPC-backed remote registry pointing at it,
-> then asserts a board **loads** over the remote RPC and a run **drives to a persisted terminal state**
-> (`done`) over it — the execution read back straight from the mothership's Postgres. It corrected a
-> wrong assumption from slice 3: `AgentContextBuilder` resolves a block's linked docs/tasks AND its
-> provisioned environment on EVERY agent dispatch, so those feature-flagged sub-helper repos ARE on the
-> board-load + run path, not off it. Fixes: `buildNodeContainer` now routes `documentRepository` /
-> `taskRepository` / `environmentRegistryRepository` / `environmentConnectionRepository` from the remote
-> registry when `db` is undefined (the sub-helpers built them directly over the absent `db`; their
-> connect/provision surfaces stay db-direct, off the path); and `REMOTE_PERSISTENCE_METHODS` gained the
-> workspace-scoped methods the path exercises — `documentRepository.{listByBlock,get,getByUrl}`,
-> `taskRepository.{listByBlock,get,getByUrl}`, `environmentRegistryRepository.{getByBlock,get}`,
-> `modelPresetRepository.getDefault`, the board-load lazy default-preset seeds
-> `mergePresetRepository.upsert` / `modelPresetRepository.upsert`, and the completion notification raise
->
-> - inbox transitions `notificationRepository.{findOpenByBlock,upsertOpenForBlock,upsert}` (round-trip +
->   cross-account-scope unit tests for each in `persistenceRpc.spec.ts`). The `*.getByUrl` reads back a
->   URL named in a block's description and `notificationRepository.upsert` backs block-less raises + the
->   inbox act/dismiss/escalate transitions — both on the same run/post-run path as the methods beside
->   them, so the integration test now patches the run's task with a URL + Jira/GitHub refs and enables
->   the environment integration on the local node, so `*.get`/`getByUrl` and
->   `environmentRegistryRepository.getByBlock` are exercised over the RPC end-to-end (not unit-only).
->
-> **Residual after slice 4** (none on the basic board-load + run path): decrypting a remotely-sealed
-> PROVISIONED environment's access cipher needs the mothership's key (only the non-secret block→env
-> mapping read is on the path here; full decryption is the later secrets-delegation slice); the
-> kaizen-grading, LLM-metric and subscription-activation calls a run also makes currently degrade as
-> best-effort no-ops over the remote (telemetry is Phase 5 local-first; activation is the local-sqlite
-> bucket); and the `fragments` / `slack` connect/provision surfaces are follow-ups.
+1. **Route every direct-db store through the remote surface when `db` is undefined** — via the
+   `pickRepoSource(remoteRepos, name, build)` seam (slice 3, extended in slice 4 for the
+   `AgentContextBuilder` sub-helper repos). STILL TODO: the sub-helper surfaces genuinely off the
+   board-load + run path — `fragments` / `slack` connect/provision. (Telemetry repos stay local-first,
+   Phase 5, degrading as best-effort no-ops over the remote for now.)
+2. **Widen `REMOTE_PERSISTENCE_METHODS`** to the board-load + run methods, each with a correct scope
+   rule (`workspace` / `workspaceField` / `block` / `serviceList` / `service` / `serviceMount`). The
+   boundary is security-sensitive: a machine token scopes ACCOUNTS not roles, so admin-gated mutations
+   and global sweeper reads stay excluded. Ongoing surface-completion is the follow-up slices + the
+   `pending` entries in the drift guard.
+3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
+   round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 
-1. ✅ **Route every direct-db store through the remote surface when `db` is undefined — DONE
-   (slice 3) for the board-load + run path.** The stores `buildNodeContainer` constructed directly
-   from `options.db` now route through the `pickRepoSource(remoteRepos, name, build)` seam (sourced
-   from the remote registry when `db` is undefined, else the Drizzle repo): `notificationRepository`,
-   `bootstrapJobRepository`, `envConfigRepairJobRepository`, `subscriptionActivationRepository`,
-   `runnerPoolConnectionRepository`, `githubInstallationRepository`, the GitHub projection repos
-   (repo/branch/PR/issue/commit/check), `taskRepository`, `referenceArchitectureRepository`; the
-   separate `DrizzleServiceFrameRepository` is gone (`buildResolveRepoTarget` reuses
-   `repos.serviceRepository`). **Slice 4 then routed the feature-flagged sub-helper repos that turned
-   out to be ON the run path** — `documentRepository` / `taskRepository` / `environmentRegistryRepository`
-   / `environmentConnectionRepository` (the `AgentContextBuilder` per-step reads). STILL TODO: the
-   remaining sub-helper surfaces that are genuinely off the basic board-load + run path —
-   `fragments` / `slack` connect/provision — a follow-up sub-slice. (Telemetry repos —
-   `tokenUsage`/`llmCallMetric`/`agentContextSnapshot`/`provisioningLog` — are the local-first
-   telemetry bucket, Phase 5, NOT remote; they degrade as best-effort no-ops over the remote for now.)
-
-2. **Widen the server allow-list (`REMOTE_PERSISTENCE_METHODS`) to the methods a board load + a run
-   exercise, each with a correct scope rule.** The boundary is security-sensitive: a machine token
-   is scoped to ACCOUNTS, not roles, so admin-gated mutations and global sweeper reads stay excluded.
-   The concrete map (from a call-graph trace of `GET /workspaces/:id` and the execution lifecycle):
-   - ✅ **Workspace-scoped (arg0 = workspaceId; reuse the existing `workspace` rule) — DONE (slice 1):**
-     `workspaceMountRepository.listByWorkspace`, `workspaceSettingsRepository.get`,
-     `mergePresetRepository.list`, `modelPresetRepository.list`, `serviceFragmentDefaultsRepository.get`,
-     `pipelineScheduleRepository.list`, `trackerSettingsRepository.get`, `notificationRepository.listOpen`,
-     `bootstrapJobRepository.listByWorkspace`, `tokenUsageRepository.totalsSinceForWorkspace`,
-     plus the run-path writes `blockRepository.update`, `executionRepository.upsert/getByBlock/deleteByBlock`
-     (the latter were already in the pilot set).
-   - ✅ **Mixed (workspaceId + entity id) — keep the workspace arg as the scope key — DONE (slice 1):**
-     `requirementReviewRepository.getByBlock`, `clarityReviewRepository.getByBlock`,
-     `brainstormSessionRepository.getByBlockStage` (+ `pipelineScheduleRepository.getByBlock`).
-   - ✅ **Entity-id-keyed (NO workspaceId arg) — NEW `block` scope kind resolves the entity's
-     workspace/account server-side before the check — DONE (slice 2) for `blockRepository.findById`.**
-     `subscriptionActivationRepository.deleteByExecution(executionId)` is NOT done: it is the
-     **local-sqlite** bucket (see the per-repo checklist), so it is off the remote surface, not a
-     remote allow-list entry.
-   - ✅ **Cross-service reads (arg0 = serviceIds[] / accountId) — NEW `serviceList` scope kind
-     resolves each service's owning account; `listByAccount` reuses the `account` rule — DONE
-     (slice 2):** `serviceRepository.listByIds`, `serviceRepository.listByAccount`,
-     `blockRepository.listByServices`, `executionRepository.listByServices`,
-     `bootstrapJobRepository.listByServices`, `pipelineScheduleRepository.listByServices`,
-     `workspaceMountRepository.countByServiceIds`.
-
-3. ✅ **Expose those repos in the mothership-side `PersistenceRegistry`** (the dispatcher reflects
-   over it) and add round-trip + cross-account-scope tests for every newly-allow-listed method, plus
-   an integration test that actually serves `GET /workspaces/:id` and drives a run in mothership mode
-   over a fake mothership — **DONE (slice 4).** `runtimes/local/test/mothership-integration.spec.ts`
-   serves both sides for real (a loopback Node mothership over Postgres + a no-Postgres local node)
-   and asserts the board-load + run-to-terminal. Standing it up also forced the agent-context run-path
-   repos (`documentRepository` / `taskRepository` / `environmentRegistryRepository`) to route remotely
-   - their workspace-scoped reads + the lazy-seed / notification writes onto the allow-list (see the
-     slice-4 note above; unit round-trip + scope tests in `persistenceRpc.spec.ts`).
-
-Exit criteria for the gate: a mothership-mode `buildLocalContainer` loads a board and drives a run
-to a persisted terminal state against a real RPC backend, asserted by that integration test. ✅ **MET
-(slice 4)** — `mothership-integration.spec.ts` is green. The residual items listed in the slice-4 note
-(provisioned-env secret decryption; the best-effort kaizen/telemetry/activation no-ops; `fragments` /
-`slack` connect surfaces) are NOT on the basic board-load + run path; a maintainer decides whether to
-lift the ⛔ gate / mark PR #514 ready in light of them.
+Residual items (provisioned-env secret decryption; best-effort kaizen/telemetry/activation no-ops;
+`fragments` / `slack` connect surfaces) are NOT on the basic board-load + run path.
 
 - **PR 4 — notifications + email + Slack delegation.**
 - **PR 5 — telemetry/logs local-first sync.**
@@ -639,7 +332,9 @@ Each PR adds a changeset and updates this checklist.
   local-facade-only differentiator (like the container transport) and carries **no** symmetry
   obligation — only the mothership-served endpoints do.
 - **The mothership `ENCRYPTION_KEY` must never reach the laptop.** Local secrets use a separate local
-  key (the one `applyLocalDefaults` already guarantees). A security check asserts this.
+  key (the one `applyLocalDefaults` already guarantees). A security check asserts this. A connection
+  repo is only remotely exposable if it returns its credential **sealed** (env/observability
+  connections); repos that decrypt INSIDE the repo (document/task connections) stay off.
 - **Raw-repo RPC is powerful — default-deny.** Method allow-list per repo; global/sweeper methods
   AND admin-gated mutations excluded (the RPC bypasses the service-layer `requireAdmin`, and the
   token scopes accounts not roles); every call account-scoped to the token; the scope switch
@@ -647,11 +342,8 @@ Each PR adds a changeset and updates this checklist.
   attacker-supplied `__proto__`/`constructor` can't reach a non-spec member. Treat the
   `/internal/persistence` surface as the highest-risk new code.
 - **`db: undefined` audit.** `buildNodeContainer` constructs many repos directly from `options.db`
-  (projections, blob backends, notifications, bootstrap, subscription-activation, …) rather than from
-  `options.repos`. PR 1 made `db` optional and turned the per-user Postgres services off without one,
-  but the direct-db repos still throw when CALLED on a board load / run — each must route through the
-  composed remote repos in mothership mode. This is the single largest correctness risk and is the
-  core of the [Phase 3 merge gate](#phase-3--functional-repository-surface-the-merge-gate): the
-  mothership boot does not ship until it is done.
+  rather than from `options.repos`; each on the board-load / run path must route through the composed
+  remote repos in mothership mode via `pickRepoSource`. This was the single largest correctness risk
+  and the core of the Phase 3 merge gate (now MET).
 - **Pre-1.0 = no back-compat.** No shims for the old siloed-Postgres local mode; mothership mode is a
   parallel boot path selected by `LOCAL_MOTHERSHIP_URL`.

@@ -50,7 +50,8 @@
       "revoked": "{name} révoqué",
       "cleared": "{name} effacé",
       "destroyed": "{name} détruit"
-    }
+    },
+    "undo": "Annuler"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -80,7 +81,9 @@
       "moveFailed": "Impossible de déplacer",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
-      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent"
+      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent",
+      "deleted": "\"{name}\" supprimé",
+      "moved": "\"{name}\" déplacé"
     },
     "repoTypes": {
       "service": "Service",
@@ -245,7 +248,8 @@
       "dragService": "Faire glisser le service",
       "dragTask": "Faire glisser la tâche",
       "dragToResize": "Glisser pour redimensionner",
-      "addFirstTask": "Ajouter la première tâche"
+      "addFirstTask": "Ajouter la première tâche",
+      "createInitiativeTitle": "Creer une initiative"
     },
     "decisionBadge": {
       "decisionNeeded": "Décision requise",
@@ -959,7 +963,8 @@
         "recurring": {
           "title": "Supprimer ce pipeline récurrent ?",
           "body": "\"{name}\", sa planification et son historique d'exécution seront supprimés. Cette action est irréversible."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" et le {count} élément qu'il contient seront supprimés. Cette action est irréversible. | \"{name}\" et les {count} éléments qu'il contient seront supprimés. Cette action est irréversible."
       }
     }
   },
@@ -3951,6 +3956,83 @@
       "toast": {
         "reseedFailed": "Impossible de régénérer le preset de fusion"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Creer une initiative",
+      "inFrame": "Nouvelle initiative dans {frame}",
+      "titleField": "Titre",
+      "titlePlaceholder": "p. ex. Migrer l'API vers le nouveau modele d'authentification",
+      "goalField": "Objectif",
+      "goalPlaceholder": "Decrivez l'objectif, les contraintes et le perimetre approximatif. Le planificateur l'affine en un plan multiphase.",
+      "hint": "Rien ne s'execute encore : apres la creation, lancez le pipeline de planification d'initiative sur le bloc. Il analyse le code et redige le plan multiphase pour votre approbation.",
+      "submit": "Creer l'initiative",
+      "failedTitle": "Impossible de creer l'initiative"
+    },
+    "status": {
+      "planning": "Planification",
+      "awaiting_approval": "En attente d'approbation",
+      "executing": "En cours d'execution",
+      "paused": "En pause",
+      "done": "Terminee",
+      "cancelled": "Annulee"
+    },
+    "itemStatus": {
+      "pending": "En attente",
+      "in_progress": "En cours",
+      "pr_open": "PR ouverte",
+      "done": "Termine",
+      "blocked": "Bloque",
+      "skipped": "Ignore"
+    },
+    "card": {
+      "kind": "Initiative",
+      "progress": "{done}/{total} elements termines",
+      "openTracker": "Ouvrir le suivi"
+    },
+    "tracker": {
+      "title": "Suivi de l'initiative",
+      "subtitle": "Phases, elements de travail, decisions et progression de cette initiative",
+      "empty": "Aucune initiative trouvee pour ce bloc.",
+      "goal": "Objectif",
+      "constraints": "Contraintes",
+      "nonGoals": "Hors perimetre",
+      "analysis": "Analyse du code",
+      "noPlan": "Pas encore de plan. Lancez le pipeline de planification pour rediger le plan multiphase.",
+      "phase": "Phase : {title}",
+      "colItem": "Element",
+      "colStatus": "Statut",
+      "colPr": "PR",
+      "dependsOn": "Depend de : {items}",
+      "prLink": "PR",
+      "policy": "Politique d'execution",
+      "maxConcurrent": "Taches concurrentes maximum : {count}",
+      "defaultPipeline": "Pipeline par defaut :",
+      "axisComplexity": "complexite >= {value}",
+      "axisRisk": "risque >= {value}",
+      "axisImpact": "impact >= {value}",
+      "axisNever": "ne correspond jamais (aucun seuil)",
+      "decisions": "Decisions",
+      "deviations": "Ecarts",
+      "followUps": "Suites a donner",
+      "caveats": "Limites connues"
+    },
+    "inspector": {
+      "runPlanning": "Lancer la planification",
+      "answerPlanning": "Repondre aux questions de planification",
+      "hint": "Le pipeline de planification explore le code, redige le plan multiphase pour approbation, puis valide le document de suivi dans le depot."
+    },
+    "planning": {
+      "title": "Planifier l'initiative",
+      "subtitle": "Repondez aux questions du planificateur pour cadrer l'initiative",
+      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis continuez, ou procedez a la planification avec ce qu'il a.",
+      "empty": "Aucune initiative trouvee pour ce bloc.",
+      "converged": "Aucune question en attente. Le planificateur dispose de ce qu'il faut et redige le plan.",
+      "answerPlaceholder": "Votre reponse",
+      "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
+      "proceed": "Proceder a la planification",
+      "continue": "Continuer"
     }
   }
 }

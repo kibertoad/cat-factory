@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "idx_initiatives_slug" ON "initiatives" ("workspace_id","slug");

@@ -229,6 +229,9 @@ export const blocks = pgTable(
     // Task-level: membership link to an `epic`-level block, independent of parent_id
     // (the structural container). Deleting an epic clears this, never the member tasks.
     epic_id: text('epic_id'),
+    // Task-level: membership link to an `initiative`-level block (a task the
+    // initiative's execution loop spawned), independent of parent_id.
+    initiative_id: text('initiative_id'),
     // Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. When set, merging
     // this task auto-starts every dependent whose other dependencies are also done.
     auto_start_dependents: integer('auto_start_dependents'),
@@ -285,6 +288,9 @@ export const blocks = pgTable(
     // the workspace's writeback_* settings). Comment-on-PR-open and resolve-on-merge.
     tracker_comment_on_pr_open: text('tracker_comment_on_pr_open'),
     tracker_resolve_on_merge: text('tracker_resolve_on_merge'),
+    // Headless marker (mirrors the D1 `blocks.internal` column): 1 ⇒ a public-API "initiative"
+    // anchor block, excluded from every board projection. Null/absent ⇒ a normal, visible block.
+    internal: integer('internal'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): block list reads come
     // back in insertion order — sibling order in the board tree, deterministic
     // snapshots — matching the Cloudflare facade (which orders by `rowid`).
@@ -295,6 +301,7 @@ export const blocks = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
     index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
+    index('idx_blocks_initiative').on(t.workspace_id, t.initiative_id),
     index('idx_blocks_service').on(t.service_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.
@@ -382,6 +389,9 @@ export const pipelines = pgTable(
     // custom/cloned pipelines and on legacy rows. Lets a workspace's persisted copy be compared
     // against the current `seedPipelines()` catalog and offered a reseed when it moves ahead.
     version: integer('version'),
+    // `public = 1` marks a pipeline callable via the public API (mirror of D1 migration 0034);
+    // NULL/absent ⇒ not exposed. Only inline pipelines are honored by the public surface.
+    public: integer('public'),
     // Monotonic insert sequence (Postgres has no SQLite rowid): a workspace's pipelines
     // are read back in the order they were seeded — the curated `seedPipelines()` order
     // — so the catalog order (and the UI's default `pipelines[0]`) is deterministic and
@@ -882,6 +892,36 @@ export const brainstormSessions = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
+  ],
+)
+
+// Initiatives: the long-running multi-task work container (mirror of D1 migration
+// 0035_initiatives). One row per `initiative`-level block; the whole entity lives in
+// the `doc` JSON blob with the loop-relevant keys (status, rev) lifted into columns.
+// `rev` is the optimistic-concurrency token every post-insert write CAS-es on.
+export const initiatives = pgTable(
+  'initiatives',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    slug: text('slug').notNull(),
+    status: text('status').notNull(),
+    rev: integer('rev').notNull(),
+    doc: text('doc').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    uniqueIndex('idx_initiatives_block').on(t.workspace_id, t.block_id),
+    // The tracker folder `docs/initiatives/<slug>/` is keyed by slug, so a slug must be
+    // unique per workspace — this backstops the read-then-insert slug derivation in
+    // InitiativeService.create against a concurrent same-title race (the loser's insert
+    // fails rather than silently sharing a folder with the winner).
+    uniqueIndex('idx_initiatives_slug').on(t.workspace_id, t.slug),
+    // The cron sweeper's work list (slice 3): every `executing` initiative.
+    index('idx_initiatives_status').on(t.status),
   ],
 )
 
@@ -1478,6 +1518,24 @@ export const providerApiKeys = pgTable(
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [index('idx_provider_api_keys_pool').on(t.scope, t.scope_id, t.provider, t.deleted_at)],
+)
+
+// Inbound public-API keys: the credentials external systems present to `/api/v1` (mirror of D1
+// migration 0034). The secret is stored ONLY as a one-way peppered hash — never plaintext, never
+// recoverable — the opposite of the provider keys above (which are decryptable for outbound use).
+export const publicApiKeys = pgTable(
+  'public_api_keys',
+  {
+    id: text('id').primaryKey(),
+    account_id: text('account_id').notNull(),
+    workspace_id: text('workspace_id').notNull(),
+    label: text('label').notNull(),
+    secret_hash: text('secret_hash').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    last_used_at: bigint('last_used_at', { mode: 'number' }),
+    revoked_at: bigint('revoked_at', { mode: 'number' }),
+  },
+  (t) => [index('idx_public_api_keys_workspace').on(t.workspace_id)],
 )
 
 // Individual-usage subscriptions (Claude): per-USER, never pooled (mirror of D1

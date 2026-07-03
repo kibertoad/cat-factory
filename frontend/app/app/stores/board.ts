@@ -22,8 +22,11 @@ import { useBlockQueries } from '~/composables/useBlockQueries'
 interface RemovalSnapshot {
   /** The removed block + all its descendants, in their original order. */
   removed: Block[]
-  /** Survivors whose `dependsOn`/`epicId` lost an edge to a removed block (originals to restore). */
-  edges: { id: string; dependsOn: string[]; epicId: string | null }[]
+  /**
+   * Survivors whose `dependsOn`/`epicId`/`initiativeId` lost an edge to a removed block
+   * (originals to restore on rollback).
+   */
+  edges: { id: string; dependsOn: string[]; epicId: string | null; initiativeId: string | null }[]
 }
 
 export const useBoardStore = defineStore('board', () => {
@@ -33,12 +36,54 @@ export const useBoardStore = defineStore('board', () => {
   // global i18n instance (the same handle `plugins/locale.client.ts` uses) rather than
   // `useI18n()`, which requires an active component instance.
   const nuxtApp = useNuxtApp()
-  const tr = (key: string): string => (nuxtApp.$i18n as { t: (k: string) => string }).t(key)
+  const tr = (key: string, params?: Record<string, unknown>): string =>
+    (nuxtApp.$i18n as { t: (k: string, p?: Record<string, unknown>) => string }).t(
+      key,
+      params ?? {},
+    )
   const blocks = ref<Block[]>([])
 
   // Pure derivations (hierarchy, status/progress, sizing) live in the composable.
   const queries = useBlockQueries(blocks)
   const { getBlock } = queries
+
+  /**
+   * How long a deleted block stays undoable. The backend delete is DEFERRED for this
+   * window (a real "undo", not a client illusion) — the block is hidden immediately but
+   * only actually deleted once the window elapses, so undo just cancels the pending call.
+   */
+  const UNDO_WINDOW_MS = 6000
+  /**
+   * Blocks hidden by an optimistic delete whose backend call hasn't fired yet, keyed by
+   * the deleted root's id. Their subtree stays filtered out of every incoming server
+   * snapshot (`hydrate`) and single-block live event (`upsert`) for the undo window, so a
+   * coarse refresh or a stray event can't resurrect a block the user just deleted.
+   */
+  const pendingRemovals = new Map<
+    string,
+    { snap: RemovalSnapshot; timer: ReturnType<typeof setTimeout>; wsId: string }
+  >()
+  // Flat set of every id in a pending removal (root + descendants), for O(1) checks in the
+  // hot upsert path. Kept in lockstep with `pendingRemovals`.
+  const pendingDoomed = new Set<string>()
+
+  /**
+   * Drop any pending-removal subtree from a reconciled block list and prune survivors'
+   * edges to it — the same detach the backend will perform once the deferred delete fires.
+   * Applied to every hydrate so the undo window survives a full refresh.
+   */
+  function applyPendingRemovals(list: Block[]): Block[] {
+    if (pendingDoomed.size === 0) return list
+    const survivors = list.filter((b) => !pendingDoomed.has(b.id))
+    for (const b of survivors) {
+      if (b.dependsOn.some((d) => pendingDoomed.has(d))) {
+        b.dependsOn = b.dependsOn.filter((d) => !pendingDoomed.has(d))
+      }
+      if (b.epicId != null && pendingDoomed.has(b.epicId)) b.epicId = null
+      if (b.initiativeId != null && pendingDoomed.has(b.initiativeId)) b.initiativeId = null
+    }
+    return survivors
+  }
 
   /**
    * Reconcile the cached blocks against a server snapshot, reusing the existing
@@ -64,14 +109,18 @@ export const useBoardStore = defineStore('board', () => {
   }
   function hydrate(next: Block[]) {
     const prev = new Map(blocks.value.map((b) => [b.id, b]))
-    blocks.value = next.map((n) => {
+    const reconciled = next.map((n) => {
       const existing = prev.get(n.id)
       return existing && jsonFor(existing) === jsonFor(n) ? existing : n
     })
+    // Keep blocks the user just deleted hidden while their delete is still pending.
+    blocks.value = applyPendingRemovals(reconciled)
   }
 
   /** Insert or replace a block returned by the backend. */
   function upsert(block: Block) {
+    // A live event for a block awaiting its deferred delete must not resurrect it.
+    if (pendingDoomed.has(block.id)) return
     const i = blocks.value.findIndex((b) => b.id === block.id)
     if (i >= 0) blocks.value[i] = block
     else blocks.value.push(block)
@@ -196,11 +245,16 @@ export const useBoardStore = defineStore('board', () => {
     return block
   }
 
-  /** Move a block into a new container at a new local position. */
+  /**
+   * Move a block into a new container at a new local position. Drag-reparent commits
+   * silently on a small overshoot, so a successful move (into a *different* container,
+   * not an undo of one) offers a one-click undo back to its previous home.
+   */
   async function reparentBlock(
     id: string,
     newParentId: string,
     position: { x: number; y: number },
+    opts: { undoable?: boolean } = { undoable: true },
   ) {
     const b = getBlock(id)
     const parent = getBlock(newParentId)
@@ -214,6 +268,7 @@ export const useBoardStore = defineStore('board', () => {
     // block in the wrong container (a structural lie that survives until re-hydrate).
     const prevParentId = b.parentId
     const prevPosition = b.position
+    const name = b.title
     b.parentId = newParentId
     b.position = position
     try {
@@ -223,6 +278,24 @@ export const useBoardStore = defineStore('board', () => {
           position,
         }),
       )
+      // Offer an undo back to the previous container (a drag overshoot is easy). The undo
+      // move is itself non-undoable so the toast doesn't ping-pong.
+      if (opts.undoable && prevParentId) {
+        toast.add({
+          title: tr('board.toast.moved', { name }),
+          icon: 'i-lucide-move',
+          color: 'neutral',
+          duration: UNDO_WINDOW_MS,
+          actions: [
+            {
+              label: tr('common.undo'),
+              icon: 'i-lucide-undo-2',
+              onClick: () =>
+                void reparentBlock(id, prevParentId, prevPosition, { undoable: false }),
+            },
+          ],
+        })
+      }
     } catch (e) {
       b.parentId = prevParentId
       b.position = prevPosition
@@ -255,15 +328,23 @@ export const useBoardStore = defineStore('board', () => {
       }
     }
     const removed = blocks.value.filter((b) => doomed.has(b.id))
-    // Survivors that pointed at a doomed block (dependency edge or epic membership) lose
-    // that link — snapshot the originals so a failed delete restores them faithfully.
+    // Survivors that pointed at a doomed block (dependency edge, epic membership, or initiative
+    // membership) lose that link — snapshot the originals so a failed delete restores them
+    // faithfully. Mirrors the backend `pruneDanglingEdges` detach.
     const edges = blocks.value
       .filter(
         (b) =>
           !doomed.has(b.id) &&
-          (b.dependsOn.some((d) => doomed.has(d)) || (b.epicId != null && doomed.has(b.epicId))),
+          (b.dependsOn.some((d) => doomed.has(d)) ||
+            (b.epicId != null && doomed.has(b.epicId)) ||
+            (b.initiativeId != null && doomed.has(b.initiativeId))),
       )
-      .map((b) => ({ id: b.id, dependsOn: [...b.dependsOn], epicId: b.epicId ?? null }))
+      .map((b) => ({
+        id: b.id,
+        dependsOn: [...b.dependsOn],
+        epicId: b.epicId ?? null,
+        initiativeId: b.initiativeId ?? null,
+      }))
     blocks.value = blocks.value.filter((b) => !doomed.has(b.id))
     for (const b of blocks.value) {
       if (b.dependsOn.some((d) => doomed.has(d))) {
@@ -271,6 +352,8 @@ export const useBoardStore = defineStore('board', () => {
       }
       // A member of a deleted epic loses its membership (the task itself survives).
       if (b.epicId != null && doomed.has(b.epicId)) b.epicId = null
+      // Likewise a task spawned by a deleted initiative loses its (non-structural) membership.
+      if (b.initiativeId != null && doomed.has(b.initiativeId)) b.initiativeId = null
     }
     return { removed, edges }
   }
@@ -278,34 +361,99 @@ export const useBoardStore = defineStore('board', () => {
   /** Re-insert a detached subtree and restore its broken edges (delete rollback). */
   function reattach(snap: RemovalSnapshot) {
     for (const b of snap.removed) if (!getBlock(b.id)) blocks.value.push(b)
+    const restored = new Set(snap.removed.map((b) => b.id))
     for (const e of snap.edges) {
       const b = getBlock(e.id)
-      if (b) {
-        b.dependsOn = e.dependsOn
-        b.epicId = e.epicId
+      if (!b) continue
+      // Re-establish only the links that pointed at a now-restored block, merged with
+      // whatever the survivor gained meanwhile — so a delayed undo (the delete is deferred by
+      // a window during which a live event may add edges) doesn't clobber a newer dependency /
+      // epic / initiative link with the stale detach-time snapshot.
+      const readd = e.dependsOn.filter((d) => restored.has(d) && !b.dependsOn.includes(d))
+      if (readd.length) b.dependsOn = [...b.dependsOn, ...readd]
+      if (b.epicId == null && e.epicId != null && restored.has(e.epicId)) b.epicId = e.epicId
+      if (b.initiativeId == null && e.initiativeId != null && restored.has(e.initiativeId)) {
+        b.initiativeId = e.initiativeId
       }
     }
   }
 
   /**
-   * Delete a block. The subtree is hidden IMMEDIATELY (optimistic) so the board
-   * feels instant; if the backend rejects the delete we put it back and surface a
-   * toast rather than silently leaving a ghost.
+   * Delete a block. The subtree is hidden IMMEDIATELY (optimistic) so the board feels
+   * instant, and the real backend delete is DEFERRED by {@link UNDO_WINDOW_MS} so the
+   * accompanying "Deleted — Undo" toast can cancel it in place (a genuine undo, since
+   * nothing was destroyed server-side yet). The subtree stays filtered out of any
+   * hydrate/upsert in the meantime (see {@link applyPendingRemovals}). If the deferred
+   * call ultimately fails we put the subtree back and surface an error toast.
    */
-  async function removeBlock(id: string) {
+  function removeBlock(
+    id: string,
+    opts: { onCommit?: (wsId: string) => void | Promise<void> } = {},
+  ) {
+    const block = getBlock(id)
     const snap = detach(id)
-    if (!snap) return
-    try {
-      await api.removeBlock(useWorkspaceStore().requireId(), id)
-    } catch (e) {
-      reattach(snap)
-      toast.add({
-        title: tr('board.toast.deleteFailed'),
-        description: e instanceof Error ? e.message : String(e),
-        icon: 'i-lucide-triangle-alert',
-        color: 'error',
-      })
+    if (!block || !snap) return
+    // Capture the workspace now: the deferred delete must target the workspace the block
+    // was deleted from even if the user has since switched.
+    const wsId = useWorkspaceStore().requireId()
+    for (const b of snap.removed) pendingDoomed.add(b.id)
+
+    const finalize = async () => {
+      const pending = pendingRemovals.get(id)
+      if (!pending) return
+      pendingRemovals.delete(id)
+      try {
+        // Any irreversible side effect the delete implies (e.g. cancelling the block's run)
+        // is deferred to here so it fires only once the delete truly commits — undo within
+        // the window then leaves the run untouched instead of restoring an already-cancelled one.
+        await opts.onCommit?.(pending.wsId)
+        await api.removeBlock(pending.wsId, id)
+        // Stop filtering the subtree only after the server has actually dropped it, so a
+        // snapshot that raced the in-flight delete can't briefly resurrect it.
+        for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
+      } catch (e) {
+        for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
+        // Only restore into the board the block was deleted from; a mid-window workspace
+        // switch must not inject the old subtree onto the workspace now on screen (it
+        // re-hydrates from the server there on the next refresh anyway).
+        if (useWorkspaceStore().workspaceId === pending.wsId) reattach(pending.snap)
+        toast.add({
+          title: tr('board.toast.deleteFailed'),
+          description: e instanceof Error ? e.message : String(e),
+          icon: 'i-lucide-triangle-alert',
+          color: 'error',
+        })
+      }
     }
+    const timer = setTimeout(() => void finalize(), UNDO_WINDOW_MS)
+    pendingRemovals.set(id, { snap, timer, wsId })
+
+    toast.add({
+      title: tr('board.toast.deleted', { name: block.title }),
+      icon: 'i-lucide-trash-2',
+      color: 'neutral',
+      duration: UNDO_WINDOW_MS,
+      actions: [
+        {
+          label: tr('common.undo'),
+          icon: 'i-lucide-undo-2',
+          onClick: () => undoRemove(id),
+        },
+      ],
+    })
+  }
+
+  /** Cancel a still-pending delete and restore the hidden subtree. */
+  function undoRemove(id: string) {
+    const pending = pendingRemovals.get(id)
+    if (!pending) return
+    clearTimeout(pending.timer)
+    pendingRemovals.delete(id)
+    for (const b of pending.snap.removed) pendingDoomed.delete(b.id)
+    // Don't resurrect the subtree into a different workspace if the user navigated away
+    // mid-window; the delete was already cancelled, which is the safe outcome there.
+    if (useWorkspaceStore().workspaceId !== pending.wsId) return
+    reattach(pending.snap)
   }
 
   /**
@@ -343,7 +491,7 @@ export const useBoardStore = defineStore('board', () => {
       // spot the server never stored (a lie that survives until the next re-hydrate).
       b.position = prevPosition
       toast.add({
-        title: 'Could not move',
+        title: tr('board.toast.moveFailed'),
         description: e instanceof Error ? e.message : String(e),
         icon: 'i-lucide-triangle-alert',
         color: 'error',

@@ -60,6 +60,8 @@ export interface BlockRow {
   parent_id: string | null
   /** Task-level: membership link to an `epic`-level block (independent of parent_id). */
   epic_id?: string | null
+  /** Task-level: membership link to an `initiative`-level block (loop-spawned tasks). */
+  initiative_id?: string | null
   /** Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. */
   auto_start_dependents?: number | null
   confidence: number | null
@@ -97,6 +99,8 @@ export interface BlockRow {
   /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
   tracker_comment_on_pr_open?: string | null
   tracker_resolve_on_merge?: string | null
+  /** Headless marker: 1 ⇒ a public-API "initiative" anchor block excluded from the board; null ⇒ normal. */
+  internal?: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +373,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   scalarField('parentId'),
   // Epic membership; an empty string / null detaches the task from its epic.
   optField('epicId', { clearOnEmpty: true }),
+  // Initiative membership (loop-spawned tasks); empty/null detaches.
+  optField('initiativeId', { clearOnEmpty: true }),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
   optField('moduleName'),
@@ -488,6 +494,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   // Per-task writeback overrides; an empty string clears it (back to inheriting the workspace setting).
   optField('trackerCommentOnPrOpen', { clearOnEmpty: true }),
   optField('trackerResolveOnMerge', { clearOnEmpty: true }),
+  // Headless public-API "initiative" anchor: 1/0 column, set once at insert (never patched).
+  optBoolIntField('internal'),
 ]
 
 const blockMapper = makeEntityMapper<Block, BlockPatch, BlockRow>(blockFields)
@@ -532,6 +540,8 @@ export interface PipelineRow {
   archived?: number | boolean | null
   /** Monotonic seed version for a built-in pipeline (migration 0017); null on custom/legacy rows. */
   version?: number | null
+  /** Truthy (1) when the pipeline is callable via the public API (migration 0034). */
+  public?: number | boolean | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -552,6 +562,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),
     ...(row.version != null ? { version: row.version } : {}),
+    ...(row.public ? { public: true } : {}),
   }
 }
 
@@ -587,6 +598,8 @@ interface ExecutionDetail {
   initiatedBy: string | null
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
+  /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
+  createdAt?: number
   /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
   notes?: string[]
   /** Frontend bindings resolved once at run start (see {@link ExecutionInstance.frontendBindings}). */
@@ -722,6 +735,8 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
+    // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
+    ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
     // Optimistic-concurrency token; a legacy row without the column reads as 0.
     rev: row.rev ?? 0,
   }
@@ -740,6 +755,7 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
+    ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
     // Likewise only persist run-start notes when there is something to flag.
     notes: instance.notes?.length ? instance.notes : undefined,
     // The resolved bindings are stamped once at start; only a frontend run carries any.

@@ -46,6 +46,7 @@ export type {
 } from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
+export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,
   KaizenVerifiedComboRepository,
@@ -337,6 +338,7 @@ export type {
   ProviderApiKeyRecord,
   ProviderApiKeyRepository,
 } from './provider-api-key-repositories.js'
+export type { PublicApiKeyRecord, PublicApiKeyRepository } from './public-api-key-repositories.js'
 export type {
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,

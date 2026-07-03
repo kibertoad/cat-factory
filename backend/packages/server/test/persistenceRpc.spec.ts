@@ -159,6 +159,29 @@ function makeRegistry(): {
       getByBlock: async (ws: string) => ({ ws }),
       get: async (ws: string) => ({ ws }),
     },
+    // The environment-connection management surface: workspace-scoped reads/deletes echo their
+    // workspaceId (arg0); the record-based `upsert` binds on the record's `workspaceId` FIELD.
+    environmentConnectionRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+      getByWorkspaceAndType: async (
+        ws: string,
+        provisionType: string,
+        manifestId: string | null,
+      ) => ({
+        ws,
+        provisionType,
+        manifestId,
+      }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+    },
+    // The custom-manifest-type catalog (no secrets): reads/removes echo their workspaceId (arg0);
+    // the record-based `upsert` binds on the record's `workspaceId` FIELD.
+    customManifestTypeRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      remove: async () => undefined,
+    },
     serviceFragmentDefaultsRepository: {
       get: async (ws: string) => [{ ws }],
       set: async () => undefined,
@@ -277,6 +300,26 @@ function makeRegistry(): {
       listByExecution: async (ws: string, executionId: string) => [{ ws, executionId }],
     },
     kaizenVerifiedComboRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+    },
+    // The VCS/GitHub projection READ surface the SPA's board panels display (repos/branches/
+    // PRs/issues). Each echoes its workspaceId (arg0); `list` is also on the run-path repo
+    // resolution. The projection WRITES + per-repo `listByRepo` variants stay off (a later slice).
+    // `githubInstallationRepository.getByWorkspace` is the run path's FIRST read (before `list`);
+    // it echoes the workspaceId as a single record. The rest of the installation repo stays off.
+    githubInstallationRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+    },
+    repoProjectionRepository: {
+      list: async (ws: string) => [{ ws }],
+    },
+    branchProjectionRepository: {
+      listByRepo: async (ws: string) => [{ ws }],
+    },
+    pullRequestProjectionRepository: {
+      listByWorkspace: async (ws: string) => [{ ws }],
+    },
+    issueProjectionRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
     },
   } as unknown as PersistenceRegistry
@@ -1014,6 +1057,101 @@ describe('post-release-health settings surface (observability / release-health /
   }
 })
 
+describe('environment-connection management surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // Workspace-scoped reads/deletes (arg0 = workspaceId → the `workspace` rule). Value-returning
+  // reads (`echoes: true`) echo the workspaceId so we prove the call reached the bound workspace;
+  // void deletes just resolve.
+  const WORKSPACE_METHODS: Array<{
+    repo: string
+    method: string
+    args: unknown[]
+    echoes?: boolean
+  }> = [
+    { repo: 'environmentConnectionRepository', method: 'listByWorkspace', args: [], echoes: true },
+    {
+      repo: 'environmentConnectionRepository',
+      method: 'getByWorkspaceAndType',
+      args: ['kubernetes', null],
+      echoes: true,
+    },
+    {
+      repo: 'environmentConnectionRepository',
+      method: 'softDelete',
+      args: ['kubernetes', null, 1],
+    },
+    { repo: 'customManifestTypeRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'customManifestTypeRepository', method: 'remove', args: ['helm-app'] },
+  ]
+
+  for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      if (echoes) {
+        const echoed = Array.isArray(result) ? result[0] : result
+        expect(echoed).toMatchObject({ ws: 'ws_in' })
+      } else {
+        expect(result).toBeUndefined()
+      }
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  // The record-based `upsert(record)` methods bind on the record's `workspaceId` FIELD (the
+  // `workspaceField` rule): a connection / custom-type row can only ever land in an in-scope
+  // workspace, and a missing/non-object arg fails closed before any repo write.
+  const UPSERTS = ['environmentConnectionRepository', 'customManifestTypeRepository']
+
+  for (const repo of UPSERTS) {
+    it(`forwards ${repo}.upsert when the record targets an in-scope workspace`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ workspaceId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.upsert when the record targets an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ workspaceId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has no workspaceId field (404)`, async () => {
+      await expect(remoteRegistry()[repo]!.upsert!({})).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+
+    for (const [label, arg] of [
+      ['null', null],
+      ['a non-string primitive', 'not-a-record'],
+    ] as const) {
+      it(`rejects ${repo}.upsert when the arg is ${label} (404, fail-closed)`, async () => {
+        await expect(remoteRegistry()[repo]!.upsert!(arg)).rejects.toMatchObject({
+          code: 'not_found',
+        })
+      })
+    }
+  }
+})
+
 describe('advanced review / session management surface (workspace-scoped)', () => {
   function remoteRegistry(accountIds = [ACCOUNT]) {
     const { registry, ...resolvers } = makeRegistry()
@@ -1285,5 +1423,69 @@ describe('shared-service mount management surface', () => {
     await expect(
       remoteRegistry().workspaceMountRepository!.listByService!('svc_in'),
     ).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The projection READS the SPA's VCS board panels display (repos/branches/PRs/issues), served
+  // straight from the local projections by `GitHubService` — no GitHub API call, so they run
+  // unchanged over the remote-sourced projection repos. Each takes the workspaceId as arg0 (the
+  // `workspace` rule); `args` are the trailing arguments after it (a `listByRepo` also carries the
+  // repoGithubId, which the scope check ignores — only the workspace binds). The installation
+  // `getByWorkspace` is the run path's FIRST read (`resolveRepoTarget` resolves the installation
+  // before walking the `github_repos` projection), also workspace-scoped on arg0.
+  const READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'githubInstallationRepository', method: 'getByWorkspace', args: [] },
+    { repo: 'repoProjectionRepository', method: 'list', args: [] },
+    { repo: 'branchProjectionRepository', method: 'listByRepo', args: [42] },
+    { repo: 'pullRequestProjectionRepository', method: 'listByWorkspace', args: [] },
+    { repo: 'issueProjectionRepository', method: 'listByWorkspace', args: [] },
+  ]
+
+  for (const { repo, method, args } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('ws_in', ...args)
+      // Each stub echoes the workspaceId, proving the call reached the bound workspace.
+      expect(Array.isArray(result) ? result[0] : result).toMatchObject({ ws: 'ws_in' })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(remoteRegistry()[repo]![method]!('ws_out', ...args)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  it('still refuses the projection WRITE surface (sync ingest / board-linkage stay off)', async () => {
+    // `upsertMany` (sync ingest), `linkBlock`/`setMonorepo` (board-linkage), and the single-repo
+    // `get` (repo-write facade) are NOT allow-listed — the mothership owns GitHub sync + writes.
+    const repos = remoteRegistry()
+    await expect(repos.repoProjectionRepository!.upsertMany!('ws_in', [])).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(repos.repoProjectionRepository!.get!('ws_in', 42)).rejects.toThrow(/not callable/)
+    await expect(repos.repoProjectionRepository!.setMonorepo!('ws_in', 42, true)).rejects.toThrow(
+      /not callable/,
+    )
+    // Only `getByWorkspace` on the installation repo is opened — its installationId-keyed reads,
+    // token/sync writes, the webhook fan-out, and the cron `listActive` stay off the SPA path.
+    await expect(repos.githubInstallationRepository!.getByInstallationId!(42)).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(repos.githubInstallationRepository!.listActive!()).rejects.toThrow(/not callable/)
   })
 })

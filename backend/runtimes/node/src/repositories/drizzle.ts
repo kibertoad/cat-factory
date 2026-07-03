@@ -77,6 +77,8 @@ import type {
   BrainstormItem,
   BrainstormStage,
   BrainstormSessionRepository,
+  Initiative,
+  InitiativeRepository,
   RunRef,
   SandboxExperiment,
   SandboxExperimentRepository,
@@ -114,7 +116,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
-import { agentRunKindSchema } from '@cat-factory/contracts'
+import { agentRunKindSchema, decodeInitiativeRow } from '@cat-factory/contracts'
 import {
   decodeEnum,
   tryDecodeRows,
@@ -181,6 +183,7 @@ import {
   clarityReviews,
   binaryArtifacts,
   brainstormSessions,
+  initiatives,
   sandboxPromptVersions,
   sandboxFixtures,
   sandboxExperiments,
@@ -394,6 +397,20 @@ class DrizzleBlockRepository implements BlockRepository {
       .delete(blocks)
       .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
   }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.workspace_id, workspaceId),
+          eq(blocks.internal, 1),
+          eq(blocks.status, 'in_progress'),
+        ),
+      )
+    return row?.n ?? 0
+  }
 }
 
 class DrizzlePipelineRepository implements PipelineRepository {
@@ -437,6 +454,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
       version: pipeline.version ?? null,
+      public: pipeline.public ? 1 : null,
     })
   }
 
@@ -459,6 +477,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,
+        public: pipeline.public ? 1 : null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
@@ -3062,6 +3081,101 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
   }
 }
 
+// The row → entity decode (doc blob + column-lifted keys) is the shared
+// `decodeInitiativeRow` (contracts), so the Drizzle and D1 repos can't drift.
+const rowToInitiative = decodeInitiativeRow
+
+/**
+ * Initiatives over Postgres — the Drizzle mirror of the Worker's
+ * `D1InitiativeRepository` (migration 0035). Behaviourally identical so the
+ * cross-runtime conformance suite asserts the same CRUD + rev-guarded CAS against
+ * both stores.
+ */
+export class DrizzleInitiativeRepository implements InitiativeRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<Initiative | null> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(and(eq(initiatives.workspace_id, workspaceId), eq(initiatives.id, id)))
+      .limit(1)
+    return rows[0] ? rowToInitiative(rows[0]) : null
+  }
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<Initiative | null> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(and(eq(initiatives.workspace_id, workspaceId), eq(initiatives.block_id, blockId)))
+      .limit(1)
+    return rows[0] ? rowToInitiative(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<Initiative[]> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(eq(initiatives.workspace_id, workspaceId))
+      .orderBy(asc(initiatives.created_at))
+    // Snapshot-facing list read: drop a corrupt row rather than failing the board load.
+    return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
+  }
+
+  async listExecuting(): Promise<Initiative[]> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(eq(initiatives.status, 'executing'))
+      .orderBy(asc(initiatives.created_at))
+    return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
+  }
+
+  async insert(workspaceId: string, initiative: Initiative): Promise<void> {
+    await this.db.insert(initiatives).values({
+      workspace_id: workspaceId,
+      id: initiative.id,
+      block_id: initiative.blockId,
+      slug: initiative.slug,
+      status: initiative.status,
+      rev: initiative.rev,
+      doc: JSON.stringify(initiative),
+      created_at: initiative.createdAt,
+      updated_at: initiative.updatedAt,
+    })
+  }
+
+  async compareAndSwap(
+    workspaceId: string,
+    next: Initiative,
+    expectedRev: number,
+  ): Promise<boolean> {
+    const result = await this.db
+      .update(initiatives)
+      .set({
+        slug: next.slug,
+        status: next.status,
+        rev: next.rev,
+        doc: JSON.stringify(next),
+        updated_at: next.updatedAt,
+      })
+      .where(
+        and(
+          eq(initiatives.workspace_id, workspaceId),
+          eq(initiatives.id, next.id),
+          eq(initiatives.rev, expectedRev),
+        ),
+      )
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(initiatives)
+      .where(and(eq(initiatives.workspace_id, workspaceId), eq(initiatives.id, id)))
+  }
+}
+
 type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
 
 function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
@@ -4105,6 +4219,7 @@ export interface CoreRepositories {
   consensusSessionRepository: ConsensusSessionRepository
   clarityReviewRepository: ClarityReviewRepository
   brainstormSessionRepository: BrainstormSessionRepository
+  initiativeRepository: InitiativeRepository
   mergePresetRepository: MergePresetRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
@@ -4145,6 +4260,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
+    initiativeRepository: new DrizzleInitiativeRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),

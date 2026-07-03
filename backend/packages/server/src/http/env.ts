@@ -15,6 +15,7 @@ import type {
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
+  PublicApiKeyService,
   RunnerBackendRegistry,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -98,6 +99,13 @@ export interface ServerContainer extends Core {
    * controller, the per-scope model-provider resolver, and the LLM proxy's key lease.
    */
   apiKeys?: ApiKeyService
+  /**
+   * The INBOUND public-API key store — the credentials external systems present to the
+   * `/api/v1` surface. Present only when the facade wired the public-api-key repository (needs
+   * ENCRYPTION_KEY as the HMAC pepper). Drives the key-management controller and the in-controller
+   * authentication of `PublicApiController`. Absent ⇒ both surfaces 503.
+   */
+  publicApiKeys?: PublicApiKeyService
   /**
    * Whether the opt-in Cloudflare Workers AI provider lib is registered for this
    * deployment (binding on the Worker, REST account/token on Node). When false, the

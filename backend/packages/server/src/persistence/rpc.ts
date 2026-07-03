@@ -346,6 +346,46 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // `AgentContextBuilder.resolveFrontendConfig` — a batch read, not a per-binding point read).
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // --- Ephemeral-environment backend connection management surface ----------------
+  // The environment provider-connection + per-type infra-handler management panels a mothership-mode
+  // SPA drives (`EnvironmentController` → `EnvironmentConnectionService`: connect / list / disconnect
+  // a backend, and register / test / re-secret / unregister a per-type engine handler). Its
+  // controller mounts under `/workspaces/:workspaceId` and is member-level (not admin-gated), so it
+  // follows the same policy as the observability / other settings panels above. Reads/deletes take
+  // the workspaceId as arg0 (the `workspace` rule); the record-based `upsert(record)` binds on the
+  // record's `workspaceId` FIELD (the `workspaceField` rule — the id is a property, not a positional
+  // arg). Exposing these makes the environment-connection settings panels functional (persist +
+  // read back the redacted summary) in mothership mode.
+  //
+  // Safe to expose like the observability connection above: the connection record carries the
+  // handler secrets as a SEALED blob (`secretsCipher`) — the repo returns it verbatim (it does NOT
+  // decrypt); sealing/decryption live in `EnvironmentConnectionService` under the LOCAL key, so no
+  // plaintext credential crosses the machine API and the mothership only ever stores ciphertext (the
+  // initiative's "the mothership ENCRYPTION_KEY never reaches the laptop" split holds). What this
+  // does NOT yet unlock: actually PROVISIONING an environment in mothership mode — the registry
+  // WRITE path (`environmentRegistryRepository.insert`/`update`) + decrypting a remotely-sealed
+  // access cipher stay off, the later secrets-delegation slice, exactly like the observability gate
+  // probe. The `workspaceField` rule binds only the record's top-level `workspaceId` (see its note
+  // above), so a connection row can only ever land in the caller's own in-scope workspace.
+  environmentConnectionRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    getByWorkspaceAndType: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    softDelete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // The workspace-defined custom-manifest-type catalog the infra configurator reads + edits
+  // (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`/`removeCustomType`, merged
+  // with the deployment's registered code types for display). Rows carry NO secrets — just manifest
+  // metadata — so the whole CRUD surface is remote. `listByWorkspace`/`remove` take the workspaceId
+  // as arg0 (the `workspace` rule); the record-based `upsert(record)` binds on the record's
+  // `workspaceId` FIELD (the `workspaceField` rule). Member-level, workspace-scoped — the same policy
+  // as the connection surface above, and it completes the environments management panel (the
+  // `listHandlers` bundle loads both the connection handlers AND this catalog).
+  customManifestTypeRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   serviceFragmentDefaultsRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     // The service-fragment-defaults editor saves the workspace's default fragment set. Member-level,
@@ -528,6 +568,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     deleteByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Initiatives (the long-running multi-task work container): the create/read surface the
+  // board + tracker window use, plus the planning pipeline's ingest writes. Every method is
+  // workspaceId-arg0 scoped; the rev-guarded `compareAndSwap` carries the whole entity as
+  // arg1 with the expected rev as arg2. `listExecuting` (the cross-workspace cron sweeper
+  // read) is deliberately NOT here — it stays mothership-internal.
+  initiativeRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    insert: { scope: { kind: 'workspace', arg: 0 } },
+    compareAndSwap: { scope: { kind: 'workspace', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
   consensusSessionRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     getByStep: { scope: { kind: 'workspace', arg: 0 } },
@@ -580,6 +633,50 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     upsert: { scope: { kind: 'workspaceField', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  // --- VCS / GitHub projection READ surface ---------------------------------------
+  // The GitHub read models the SPA's VCS board panels display (repos / branches / PRs /
+  // issues), served straight from the local projections by `GitHubService` (`container.github`)
+  // — fast, rate-limit-free, and NO GitHub API call, so they run unchanged in mothership mode
+  // over the remote-sourced projection repos. Each takes the workspaceId as arg0 (the
+  // `workspace` rule); reads only.
+  //
+  // These same reads are ALSO the run path: `resolveRepoTarget` (which runs on EVERY
+  // container-agent dispatch to find a block's repo) reads `githubInstallationRepository.
+  // getByWorkspace` FIRST and returns null if there's no installation, THEN walks the
+  // `github_repos` projection via `repoProjectionRepository.list` and the block ancestry via
+  // `blockRepository.get` / `serviceRepository.getByFrameBlock` (both already remote). So
+  // closing the run-path gap for real (non-fake-executor) runs needs BOTH the installation
+  // read and `list` — allow-listing `list` alone left the resolver failing one call earlier on
+  // the un-remoted installation read. `getByWorkspace` is a member-level read (its own binding
+  // or the account-shared one), workspace-scoped on arg0.
+  //
+  // Deliberately EXCLUDED (a later "GitHub sync + repo-write" slice): the projection WRITE
+  // surface — `upsertMany` (the sync/webhook ingest; the mothership owns GitHub sync, since the
+  // App + webhooks live there), the board-linkage writes `repoProjectionRepository.linkBlock` /
+  // `setMonorepo`, the sync cursors (`getCursor`/`setCursor`, keyed on installationId not
+  // workspaceId), and `tombstoneMissing`. `repoProjectionRepository.get` stays off too: it backs
+  // only `GitHubService.resolve` for the repo-WRITE endpoints (create-branch / open-PR /
+  // merge / comment), and exposing it alone would let create-branch/open-PR perform the real
+  // GitHub write and THEN fail on the un-remoted `upsertMany` projection refresh — a worse
+  // failure than today's clean pre-write refusal. It comes back with the repo-write slice. The
+  // rest of `githubInstallationRepository` (installationId-keyed reads, sync/token writes, the
+  // fan-out, the cron `listActive`) also stays off — only the workspace-scoped `getByWorkspace`
+  // the run path needs is opened here.
+  githubInstallationRepository: {
+    getByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  repoProjectionRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  branchProjectionRepository: {
+    listByRepo: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  pullRequestProjectionRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+  },
+  issueProjectionRepository: {
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
   },
 }
 

@@ -82,6 +82,7 @@ import type {
   ServiceFragmentDefaultsRepository,
   NotificationChannel,
   NotificationRepository,
+  InitiativeRepository,
   PipelineScheduleRepository,
   PullRequestMerger,
   BranchUpdater,
@@ -187,6 +188,8 @@ import {
 import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
+import { InitiativeService } from './modules/initiative/InitiativeService.js'
+import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
@@ -762,6 +765,15 @@ export interface CoreDependencies {
    */
   serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
 
+  // ---- Initiatives (optional; wired when the repository is present) ----------
+  /**
+   * Persistence for initiatives (the long-running multi-task work container).
+   * When present the initiatives module assembles: the create/read API, the
+   * planning pipeline's plan ingest, and the committer step's tracker mirror.
+   * Absent → the module is off and the initiative pipeline steps fail loudly.
+   */
+  initiativeRepository?: InitiativeRepository
+
   // ---- Recurring pipelines + issue tracker (optional; wired when configured) -
   // The recurring-pipeline feature (scheduled runs of a pipeline against a
   // service) assembles when `pipelineScheduleRepository` is present. The
@@ -952,6 +964,11 @@ export interface RecurringModule {
   service: RecurringPipelineService
 }
 
+/** The initiatives feature's service, present only when its repository is wired. */
+export interface InitiativesModule {
+  service: InitiativeService
+}
+
 /** The issue-tracker-settings feature's service, present only when its repository is wired. */
 export interface TrackerModule {
   service: TrackerSettingsService
@@ -1046,6 +1063,8 @@ export interface Core {
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
+  /** Present only when the initiative repository is wired (see CoreDependencies). */
+  initiatives?: InitiativesModule
   /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */
   recurring?: RecurringModule
   /** Present only when the tracker-settings repository is wired (see CoreDependencies). */
@@ -2187,6 +2206,41 @@ export function createCore(dependencies: CoreDependencies): Core {
   const incidentEnrichmentSettings = createIncidentEnrichmentModule(dependencies)
   const modelPresets = createModelPresetsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
+  // Built before the execution engine so the planning pipeline's plan ingest + the
+  // committer step's tracker mirror can run through it.
+  const initiatives = dependencies.initiativeRepository
+    ? {
+        service: new InitiativeService({
+          workspaceRepository: dependencies.workspaceRepository,
+          blockRepository: dependencies.blockRepository,
+          initiativeRepository: dependencies.initiativeRepository,
+          events: executionEventPublisher,
+          clock: dependencies.clock,
+          idGenerator: dependencies.idGenerator,
+        }),
+      }
+    : undefined
+  // The interactive-planning interviewer's inline LLM (slice 2). Resolves its model exactly
+  // like the requirements reviewer — the routing default, honouring a block pin and the
+  // workspace's model preset for the `initiative-interviewer` kind — so it needs no dedicated
+  // facade wiring. `enabled` gates it: with no model provider the interviewer gate passes
+  // through and planning runs off the raw block description.
+  const initiativeInterviewService = new InitiativeInterviewService({
+    modelProviderResolver: dependencies.modelProviderResolver,
+    modelProvider: dependencies.modelProvider,
+    modelRef: dependencies.requirementReviewModel ?? dependencies.documentPlannerModel,
+    resolveBlockModel: dependencies.requirementReviewResolveModel,
+    ...(dependencies.inlineHarnessRef ? { runsInline: dependencies.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            dependencies.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
   const requirements = createRequirementsModule(
@@ -2236,6 +2290,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
+    initiativeService: initiatives?.service,
+    initiativeRepository: dependencies.initiativeRepository,
+    initiativeInterviewService,
     notificationService: notifications?.service,
     workspaceSettingsService: settings?.service,
     llmObservability,
@@ -2310,6 +2367,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(modelPresets ? { modelPresets } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
+    ...(initiatives ? { initiatives } : {}),
     ...(recurring ? { recurring } : {}),
     ...(tracker ? { tracker } : {}),
     ...(services ? { services } : {}),

@@ -50,7 +50,8 @@
       "revoked": "{name} revocado",
       "cleared": "{name} borrado",
       "destroyed": "{name} destruido"
-    }
+    },
+    "undo": "Deshacer"
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -80,7 +81,9 @@
       "moveFailed": "No se pudo mover",
       "deleteFailed": "No se pudo eliminar",
       "linkFailed": "No se pudieron vincular las tareas",
-      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente"
+      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente",
+      "deleted": "\"{name}\" eliminado",
+      "moved": "\"{name}\" movido"
     },
     "repoTypes": {
       "service": "Servicio",
@@ -245,7 +248,8 @@
       "dragService": "Arrastrar servicio",
       "dragTask": "Arrastrar tarea",
       "dragToResize": "Arrastra para cambiar el tamaño",
-      "addFirstTask": "Añade la primera tarea"
+      "addFirstTask": "Añade la primera tarea",
+      "createInitiativeTitle": "Crear iniciativa"
     },
     "decisionBadge": {
       "decisionNeeded": "Decisión necesaria",
@@ -959,7 +963,8 @@
         "recurring": {
           "title": "¿Eliminar este pipeline recurrente?",
           "body": "Se eliminarán \"{name}\", su programación y su historial de ejecución. Esta acción no se puede deshacer."
-        }
+        },
+        "containerBodyWithCount": "Se eliminará \"{name}\" y el {count} elemento que contiene. Esta acción no se puede deshacer. | Se eliminará \"{name}\" y los {count} elementos que contiene. Esta acción no se puede deshacer."
       }
     }
   },
@@ -3951,6 +3956,83 @@
       "toast": {
         "reseedFailed": "No se pudo regenerar el preset de fusión"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Crear iniciativa",
+      "inFrame": "Nueva iniciativa en {frame}",
+      "titleField": "Titulo",
+      "titlePlaceholder": "p. ej. Migrar la API al nuevo modelo de autenticacion",
+      "goalField": "Objetivo",
+      "goalPlaceholder": "Describe el objetivo, las restricciones y el alcance aproximado. El planificador lo refina en un plan multifase.",
+      "hint": "Todavia no se ejecuta nada: tras crearla, ejecuta el pipeline de planificacion de iniciativas sobre el bloque. Analiza el codigo y redacta el plan multifase para tu aprobacion.",
+      "submit": "Crear iniciativa",
+      "failedTitle": "No se pudo crear la iniciativa"
+    },
+    "status": {
+      "planning": "Planificando",
+      "awaiting_approval": "Pendiente de aprobacion",
+      "executing": "En ejecucion",
+      "paused": "En pausa",
+      "done": "Completada",
+      "cancelled": "Cancelada"
+    },
+    "itemStatus": {
+      "pending": "Pendiente",
+      "in_progress": "En curso",
+      "pr_open": "PR abierta",
+      "done": "Completado",
+      "blocked": "Bloqueado",
+      "skipped": "Omitido"
+    },
+    "card": {
+      "kind": "Iniciativa",
+      "progress": "{done}/{total} elementos completados",
+      "openTracker": "Abrir seguimiento"
+    },
+    "tracker": {
+      "title": "Seguimiento de la iniciativa",
+      "subtitle": "Fases, elementos de trabajo, decisiones y progreso de esta iniciativa",
+      "empty": "No se encontro ninguna iniciativa para este bloque.",
+      "goal": "Objetivo",
+      "constraints": "Restricciones",
+      "nonGoals": "Fuera de alcance",
+      "analysis": "Analisis del codigo",
+      "noPlan": "Aun no hay plan. Ejecuta el pipeline de planificacion para redactar el plan multifase.",
+      "phase": "Fase: {title}",
+      "colItem": "Elemento",
+      "colStatus": "Estado",
+      "colPr": "PR",
+      "dependsOn": "Depende de: {items}",
+      "prLink": "PR",
+      "policy": "Politica de ejecucion",
+      "maxConcurrent": "Tareas concurrentes maximas: {count}",
+      "defaultPipeline": "Pipeline por defecto:",
+      "axisComplexity": "complejidad >= {value}",
+      "axisRisk": "riesgo >= {value}",
+      "axisImpact": "impacto >= {value}",
+      "axisNever": "nunca coincide (sin umbrales)",
+      "decisions": "Decisiones",
+      "deviations": "Desviaciones",
+      "followUps": "Seguimientos",
+      "caveats": "Advertencias conocidas"
+    },
+    "inspector": {
+      "runPlanning": "Ejecutar planificacion",
+      "answerPlanning": "Responder preguntas de planificacion",
+      "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
+    },
+    "planning": {
+      "title": "Planificar la iniciativa",
+      "subtitle": "Responde las preguntas del planificador para acotar la iniciativa",
+      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, luego continua, o procede a planificar con lo que tiene.",
+      "empty": "No se encontro ninguna iniciativa para este bloque.",
+      "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
+      "answerPlaceholder": "Tu respuesta",
+      "hint": "Continuar permite al planificador hacer mas preguntas; Proceder planifica con las respuestas actuales.",
+      "proceed": "Proceder a planificar",
+      "continue": "Continuar"
     }
   }
 }

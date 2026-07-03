@@ -22,6 +22,7 @@ import {
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
+  PublicApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
@@ -176,6 +177,7 @@ import {
 } from './repositories/github.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
+import { DrizzlePublicApiKeyRepository } from './repositories/publicApiKey.js'
 import {
   DrizzlePersonalSubscriptionRepository,
   DrizzleSubscriptionActivationRepository,
@@ -1071,6 +1073,28 @@ function buildNodeApiKeyService(
 }
 
 /**
+ * Build the INBOUND public-API key store for the Node/local facade (Postgres-backed), or
+ * undefined when the shared ENCRYPTION_KEY is absent. Uses ENCRYPTION_KEY as the HMAC pepper for
+ * the one-way secret hash (a public-API key is verified, never decrypted). Mirrors the Worker's
+ * buildPublicApiKeyService.
+ */
+function buildNodePublicApiKeyService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb | undefined,
+  idGenerator: CoreDependencies['idGenerator'],
+  clock: Clock,
+): PublicApiKeyService | undefined {
+  const pepper = env.ENCRYPTION_KEY?.trim()
+  if (!pepper || !db) return undefined
+  return new PublicApiKeyService({
+    repository: new DrizzlePublicApiKeyRepository(db),
+    pepper,
+    idGenerator,
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude) for the Node/local
  * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
  * Double-encrypts the credential (password layer inside the system layer). Mirrors the
@@ -1385,6 +1409,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     options.providerApiKeyRepository,
   )
+  // The inbound public-API key store — drives the public `/api/v1` surface's authentication.
+  const publicApiKeys = buildNodePublicApiKeyService(env, db, idGenerator, clock)
   // The per-user locally-run model endpoints store (Ollama / LM Studio / …), shared by
   // the local-runner controller, the per-user model catalog, the inline model provider,
   // and the LLM proxy.
@@ -2103,6 +2129,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
     clarityReviewRepository: repos.clarityReviewRepository,
     brainstormSessionRepository: repos.brainstormSessionRepository,
+    // Initiatives (the long-running multi-task work container). Wired unconditionally,
+    // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
+    // planning pipeline's ingest/committer steps work identically on both runtimes.
+    initiativeRepository: repos.initiativeRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
@@ -2345,9 +2375,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
   // The sub-helpers above (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly
   // over the absent `db`, so re-source the context-builder run-path repos from the remote registry —
-  // the connection/provider surfaces they also build stay db-direct (off the run path; a later
-  // integration slice remotes them). Routing is orthogonal to the allow-list: an un-allow-listed
-  // remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
+  // plus (below) the environment CONNECTION management surface. The document/task connection/provider
+  // surfaces they also build stay db-direct (a later integration slice remotes them — their
+  // credential rows would ship DECRYPTED over the RPC, an open secrets design point, unlike the
+  // sealed-blob environment connection here). Routing is orthogonal to the allow-list: an
+  // un-allow-listed remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
   if (remoteRepos) {
     dependencies.documentRepository =
       remoteRepos.documentRepository as CoreDependencies['documentRepository']
@@ -2363,6 +2395,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
     dependencies.environmentConnectionRepository =
       remoteRepos.environmentConnectionRepository as CoreDependencies['environmentConnectionRepository']
+    // The environments management panel also reads/edits the workspace's custom-manifest-type
+    // catalog (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`), built directly
+    // over the absent `db` by `selectNodeEnvironmentsDeps`. Route it from the remote registry too so
+    // the connection + infra-handler management surface is functional (no secrets — just manifest
+    // metadata; the RPC allow-list gates its CRUD). Provisioning WRITES stay db-direct/off (a later
+    // secrets-delegation slice), like the environment registry above.
+    dependencies.customManifestTypeRepository =
+      remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
   }
 
   return {
@@ -2417,6 +2457,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a

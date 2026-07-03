@@ -8,6 +8,7 @@ import type {
   ClarityReview,
   EnvConfigRepairJob,
   ExecutionInstance,
+  Initiative,
   KaizenGrading,
   LlmCallActivity,
   Notification,
@@ -172,6 +173,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async kaizenGradingChanged(workspaceId: string, grading: KaizenGrading): Promise<void> {
     this.publish(workspaceId, { type: 'kaizen', grading, at: Date.now() })
+  }
+
+  async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
+    this.publish(workspaceId, { type: 'initiative', initiative, at: Date.now() })
   }
 
   private publish(

@@ -13,7 +13,12 @@ import type {
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  isAsyncAgentExecutor,
+  isInitiativeAgentKind,
+} from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -171,7 +176,15 @@ export class RunStateMachine {
       this.attachStepMetrics(workspaceId, instance),
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
-    await this.events.executionChanged(workspaceId, instance, block)
+    // A HEADLESS internal anchor block (a public-API "initiative" run) must NEVER reach the SPA:
+    // the snapshot read filters it, but the live push path would otherwise broadcast the external
+    // run's brief (block.description) + LLM output (instance.steps[].output) — and the hidden block
+    // itself — to every connected client. The engine/durable driver never consume this event (they
+    // drive by run id) and the public API polls the repository directly, so suppressing the push for
+    // an internal run is safe. Terminal-state cleanup below still runs (activation delete / Kaizen).
+    if (!block?.internal) {
+      await this.events.executionChanged(workspaceId, instance, block)
+    }
     // When a run reaches a terminal state, schedule a post-run Kaizen grading for each
     // completed agent step (the scheduler skips verified combos + already-graded steps).
     // Best-effort + idempotent: a failure here must never derail the emit, and a re-emit
@@ -374,6 +387,16 @@ export class RunStateMachine {
     if (!block || block.status === 'done') return
 
     if ((block.level ?? 'frame') !== 'task') {
+      // An initiative block's PLANNING run finishing means execution BEGINS, not that
+      // the initiative is done — the block stays `in_progress`, and the execution loop
+      // (a later slice) flips it terminal once every tracker item settles.
+      if (instance.steps.some((s) => isInitiativeAgentKind(s.agentKind))) {
+        await this.blockRepository.update(workspaceId, block.id, {
+          status: 'in_progress',
+          progress: 0,
+        })
+        return
+      }
       // A mapping-only run (just the `blueprints` step, e.g. kicked off after a
       // bootstrap) leaves the service frame `ready` and droppable rather than
       // marking the whole service "done".

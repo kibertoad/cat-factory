@@ -1,5 +1,195 @@
 # @cat-factory/server
 
+## 0.74.0
+
+### Minor Changes
+
+- 7fa7578: Initiatives slice 2 — interactive planning.
+
+  The Initiative Planning pipeline (`pl_initiative`) now interviews the human and analyses the
+  codebase before the planner drafts, so the plan is grounded in the stakeholder's intent and the
+  real code. The pipeline becomes
+  `[initiative-interviewer → initiative-analyst → initiative-planner → approval gate → initiative-committer]`
+  (catalog `version` bumped to 2, so workspaces get the reseed offer).
+
+  - **`initiative-interviewer`** — a new inline LLM gate that asks clarifying questions about goals,
+    scope and constraints, PARKS the planning run on a durable decision-wait while the human answers
+    through a dedicated planning Q&A window, then synthesizes the agreed goal / constraints / non-goals
+    brief. It is **entity-native**: the questions, answers and brief live directly on the `initiatives`
+    entity (its `qa` + new `interview` fields) via the CAS `mutate` — no new table. Reuses the shared
+    `RunStateMachine` park/answer/resume spine (the review-gate model). Passes through when no
+    interviewer model is wired, so pipelines run unchanged.
+  - **`initiative-analyst`** — a new container-explore agent that reads the repo and writes a prose
+    codebase analysis onto the entity (`analysisSummary`), grounding the plan.
+  - The **planner** and **analyst** prompts now fold in the interview brief + analysis (threaded onto
+    the agent context for `initiative`-level runs).
+  - New endpoints (`POST /blocks/:blockId/initiative-planning/{answer,continue,proceed}`), store
+    actions and the `initiative-planning` result-view window; the inspector surfaces an "Answer
+    planning questions" button while the interviewer is parked. `initiative.planning.*` copy added to
+    all locales.
+
+  Runtime-symmetric with no facade changes (the interviewer resolves its model exactly like the
+  requirements reviewer, from the routing default already wired in both runtimes) and no new
+  persistence — so no D1/Drizzle migration and no executor-harness image bump.
+
+### Patch Changes
+
+- f372f4e: Mothership mode: allow-list the ephemeral-environment connection management surface.
+
+  The environment provider-connection + per-type infra-handler settings panels
+  (`EnvironmentController` → `EnvironmentConnectionService`: connect / list / disconnect a
+  backend, register / test / re-secret / unregister a per-type engine handler) are now
+  functional in mothership mode, alongside the workspace-defined custom-manifest-type catalog
+  the infra configurator reads + edits.
+
+  - Newly allow-listed in `REMOTE_PERSISTENCE_METHODS`: the whole `environmentConnectionRepository`
+    (`listByWorkspace`/`getByWorkspaceAndType`/`softDelete` via the `workspace` rule, the
+    record-based `upsert` via the `workspaceField` rule) and the whole `customManifestTypeRepository`
+    (`listByWorkspace`/`remove` via `workspace`, `upsert` via `workspaceField`). Member-level,
+    workspace-scoped — the same policy as the observability / other settings panels.
+  - Safe to expose like the observability connection: the connection record carries handler secrets
+    as a **sealed** `secretsCipher` blob (the repo returns it verbatim; sealing/decryption live in
+    the service under the local key), so no plaintext credential crosses the machine API and the
+    mothership only ever stores ciphertext. Custom-manifest-type rows carry no secrets.
+  - `customManifestTypeRepository` (built directly over `db` by `selectNodeEnvironmentsDeps`) is now
+    routed through the `pickRepoSource`/`remoteRepos` seam in `buildNodeContainer` so it resolves
+    from the remote registry when there is no Postgres (`environmentConnectionRepository` was already
+    routed).
+
+  Deliberately still off (a later secrets-delegation slice): actually provisioning an environment
+  (`environmentRegistryRepository.insert`/`update`) + decrypting a remotely-sealed access cipher.
+  Server-only allow-list change + one routing line, symmetric by construction.
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/contracts@0.89.0
+  - @cat-factory/kernel@0.77.0
+  - @cat-factory/orchestration@0.63.0
+  - @cat-factory/agents@0.29.1
+  - @cat-factory/integrations@0.58.1
+  - @cat-factory/prompt-fragments@0.9.49
+  - @cat-factory/spend@0.10.83
+
+## 0.73.1
+
+### Patch Changes
+
+- 6917962: mothership: allow-list the VCS / GitHub projection read surface
+
+  In mothership mode the SPA's VCS board panels (repos / branches / pull requests / issues) were not
+  functional over `/internal/persistence`: the projection reads `GitHubService` (`container.github`)
+  serves straight from the local projections came back `unknown_method`. This widens
+  `REMOTE_PERSISTENCE_METHODS` with those reads, each workspace-scoped on arg0 (the existing
+  `workspace` rule — no new scope machinery), read-only and member-level (the GitHub read endpoints
+  mount under `/workspaces/:workspaceId`, not admin-gated):
+
+  - `repoProjectionRepository.list` — the repos panel.
+  - `branchProjectionRepository.listByRepo` — a repo's branches.
+  - `pullRequestProjectionRepository.listByWorkspace` — the pull-requests panel.
+  - `issueProjectionRepository.listByWorkspace` — the issues panel.
+  - `githubInstallationRepository.getByWorkspace` — the run path's installation lookup (see below).
+
+  `repoProjectionRepository.list` is ALSO on the run path — `resolveRepoTarget` walks the
+  `github_repos` projection to find a block's repo on EVERY container-agent dispatch. But it reads
+  `githubInstallationRepository.getByWorkspace` FIRST (returning null when GitHub isn't connected),
+  so closing the run-path gap for real (non-fake-executor) runs needs BOTH reads: with only `list`
+  allow-listed the resolver still failed one call earlier on the un-remoted installation read. Its
+  other deps — `blockRepository.get`, `serviceRepository.getByFrameBlock` — are already remote, so
+  adding `getByWorkspace` + `list` genuinely closes it (the merge-gate integration test uses the
+  `FakeAgentExecutor`, which bypasses repo resolution, so the gap didn't surface there).
+
+  Still off the SPA path (a later GitHub sync + repo-write slice): the projection WRITE surface —
+  `upsertMany` (the sync/webhook ingest; the mothership owns GitHub sync, since the App + webhooks
+  live there), the board-linkage writes `repoProjectionRepository.linkBlock` / `setMonorepo`, the
+  installationId-keyed sync cursors, `tombstoneMissing`, and the per-repo `listByRepo` variants the
+  panels don't drive. `repoProjectionRepository.get` stays off too: it backs only
+  `GitHubService.resolve` for the repo-WRITE endpoints (create-branch / open-PR / merge / comment),
+  and exposing it alone would let create-branch/open-PR do the real GitHub write and THEN fail on the
+  un-remoted `upsertMany` projection refresh — a worse failure than today's clean pre-write refusal.
+
+  Still off on the installation repo: only the workspace-scoped `getByWorkspace` the run path needs
+  is opened; its installationId-keyed reads, the token/sync writes, the webhook fan-out, and the
+  cron `listActive` stay off (the same later GitHub sync + repo-write slice).
+
+  The projection repos + the installation repo are already routed through the `pickRepoSource`/
+  `sourced` seam, so a mothership-mode node already sources them from the full-surface remote registry
+  when `db` is undefined — an allow-list change only, symmetric by construction (the dispatcher
+  reflects over each facade's registry).
+
+## 0.73.0
+
+### Minor Changes
+
+- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
+  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
+  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
+  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
+  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
+
+  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
+    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
+    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
+    key is shown once on create.
+  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
+    external runs never appear in the UI.
+  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+  - @cat-factory/agents@0.29.0
+  - @cat-factory/integrations@0.58.0
+  - @cat-factory/orchestration@0.62.0
+  - @cat-factory/prompt-fragments@0.9.48
+  - @cat-factory/spend@0.10.82
+
+## 0.72.0
+
+### Minor Changes
+
+- ca5c3e8: Initiatives (slice 1 of 4): the long-running, multi-task counterpart to a task — see
+  `docs/initiatives/initiatives-feature.md` for the full multi-slice plan.
+
+  - **New `initiative` block level** — a container block under a service frame (created via the
+    new "Create initiative" button in the frame header, next to add-task/import-task). Tasks a
+    later slice's execution loop spawns link back via the new `blocks.initiative_id` membership
+    column (epic-style). D1 migration `0035_initiatives.sql` ⇄ Drizzle schema, shared mapper.
+  - **New `initiatives` entity + store** — the DB row is the source of truth (phases, items with
+    planner-authored estimates + dependencies, the execution policy with estimate→pipeline rules,
+    decisions / deviations / follow-ups / caveats), guarded by a `rev` compare-and-swap so the
+    loop has a single logical writer. Mirrored D1 ⇄ Drizzle repositories with a cross-runtime
+    conformance suite (CRUD, doc round-trip, CAS conflict, `blocks.initiative_id`).
+  - **Initiative Planning pipeline skeleton (`pl_initiative`)** — `initiative-planner` (a
+    read-only structured container explore that drafts the multi-phase plan, gated for human
+    approval) + `initiative-committer` (a deterministic engine step that flips the entity to
+    `executing` and commits the rendered tracker to `docs/initiatives/<slug>/` — canonical
+    `initiative.json` + human `tracker.md` + `version.json`, hash-short-circuited and
+    replay-safe, following the blueprint artifact pattern). A bidirectional guard in the
+    engine's shared `assertRunnable` makes `pl_initiative` the ONLY pipeline runnable on an
+    initiative block (and vice versa), across start/retry/restart.
+  - **API + snapshot + realtime** — `POST/GET /workspaces/:ws/initiatives` (+ by-block read),
+    the snapshot's optional `initiatives` field, and a new `initiative` WorkspaceEvent pushed
+    from both runtimes' publishers.
+  - **Frontend** — the Create Initiative modal + frame-header button, the initiative board card,
+    an inspector body (run planning / open tracker) and the read-only Initiative Tracker window
+    (`initiative-tracker` result view), with the `initiative.*` i18n namespace across all 8
+    locales.
+
+  Later slices add the interactive planning interview, the execution loop (just-in-time task
+  spawning with estimate-gated pipeline selection), and follow-up/deviation harvesting.
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+  - @cat-factory/agents@0.28.0
+  - @cat-factory/orchestration@0.61.0
+  - @cat-factory/integrations@0.57.2
+  - @cat-factory/prompt-fragments@0.9.47
+  - @cat-factory/spend@0.10.81
+
 ## 0.71.2
 
 ### Patch Changes

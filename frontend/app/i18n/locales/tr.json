@@ -50,7 +50,8 @@
       "revoked": "{name} iptal edildi",
       "cleared": "{name} temizlendi",
       "destroyed": "{name} yok edildi"
-    }
+    },
+    "undo": "Geri al"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -80,7 +81,9 @@
       "moveFailed": "Taşınamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
-      "recurringDeleteFailed": "Yinelenen pipeline silinemedi"
+      "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
+      "deleted": "\"{name}\" silindi",
+      "moved": "\"{name}\" taşındı"
     },
     "repoTypes": {
       "service": "Servis",
@@ -245,7 +248,8 @@
       "dragService": "Servisi sürükle",
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
-      "addFirstTask": "İlk görevi ekle"
+      "addFirstTask": "İlk görevi ekle",
+      "createInitiativeTitle": "Girisim olustur"
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -959,7 +963,8 @@
         "recurring": {
           "title": "Bu yinelenen pipeline silinsin mi?",
           "body": "\"{name}\", zamanlaması ve çalıştırma geçmişi kaldırılacak. Bu işlem geri alınamaz."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz. | \"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz."
       }
     }
   },
@@ -3964,6 +3969,83 @@
       "toast": {
         "reseedFailed": "Birleştirme ön ayarı yeniden tohumlanamadı"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Girisim olustur",
+      "inFrame": "{frame} icinde yeni girisim",
+      "titleField": "Baslik",
+      "titlePlaceholder": "orn. API'yi yeni kimlik dogrulama modeline tasi",
+      "goalField": "Hedef",
+      "goalPlaceholder": "Hedefi, kisitlari ve yaklasik kapsami aciklayin. Planlayici bunu cok asamali bir plana donusturur.",
+      "hint": "Henuz hicbir sey calismiyor: olusturduktan sonra blok uzerinde Girisim Planlama hattini calistirin. Kod tabanini analiz eder ve onayiniz icin cok asamali plani taslak olarak hazirlar.",
+      "submit": "Girisim olustur",
+      "failedTitle": "Girisim olusturulamadi"
+    },
+    "status": {
+      "planning": "Planlaniyor",
+      "awaiting_approval": "Onay bekliyor",
+      "executing": "Yurutuluyor",
+      "paused": "Duraklatildi",
+      "done": "Tamamlandi",
+      "cancelled": "Iptal edildi"
+    },
+    "itemStatus": {
+      "pending": "Beklemede",
+      "in_progress": "Devam ediyor",
+      "pr_open": "PR acik",
+      "done": "Tamamlandi",
+      "blocked": "Engellendi",
+      "skipped": "Atlandi"
+    },
+    "card": {
+      "kind": "Girisim",
+      "progress": "{done}/{total} oge tamamlandi",
+      "openTracker": "Izleyiciyi ac"
+    },
+    "tracker": {
+      "title": "Girisim izleyici",
+      "subtitle": "Bu girisimin asamalari, is ogeleri, kararlari ve ilerlemesi",
+      "empty": "Bu blok icin girisim bulunamadi.",
+      "goal": "Hedef",
+      "constraints": "Kisitlar",
+      "nonGoals": "Kapsam disi",
+      "analysis": "Kod tabani analizi",
+      "noPlan": "Henuz plan yok. Cok asamali plani taslak olarak hazirlamak icin Girisim Planlama hattini calistirin.",
+      "phase": "Asama: {title}",
+      "colItem": "Oge",
+      "colStatus": "Durum",
+      "colPr": "PR",
+      "dependsOn": "Sunlara bagli: {items}",
+      "prLink": "PR",
+      "policy": "Yurutme politikasi",
+      "maxConcurrent": "En fazla es zamanli gorev: {count}",
+      "defaultPipeline": "Varsayilan hat:",
+      "axisComplexity": "karmasiklik >= {value}",
+      "axisRisk": "risk >= {value}",
+      "axisImpact": "etki >= {value}",
+      "axisNever": "hicbir zaman eslesmez (esik yok)",
+      "decisions": "Kararlar",
+      "deviations": "Sapmalar",
+      "followUps": "Takip isleri",
+      "caveats": "Bilinen uyarilar"
+    },
+    "inspector": {
+      "runPlanning": "Planlamayi calistir",
+      "answerPlanning": "Planlama sorularini yanitla",
+      "hint": "Planlama hatti kod tabanini inceler, onay icin cok asamali plani hazirlar ve ardindan izleyici belgesini depoya kaydeder."
+    },
+    "planning": {
+      "title": "Girisimi planla",
+      "subtitle": "Girisimi kapsamlandirmak icin planlayicinin sorularini yanitlayin",
+      "intro": "Planlayici bu girisimi kapsamlandiriyor. Hedefi ve kisitlari sekillendirmek icin sorularini yanitlayin, ardindan devam edin veya elindekiyle planlamaya gecin.",
+      "empty": "Bu blok icin girisim bulunamadi.",
+      "converged": "Bekleyen soru yok. Planlayici ihtiyaci olani aldi ve plani hazirliyor.",
+      "answerPlaceholder": "Yanitiniz",
+      "hint": "Devam et, planlayicinin ek sorular sormasini saglar; Planlamaya gec, mevcut yanitlarla planlar.",
+      "proceed": "Planlamaya gec",
+      "continue": "Devam et"
     }
   }
 }

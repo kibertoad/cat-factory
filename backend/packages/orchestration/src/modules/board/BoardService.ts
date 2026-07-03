@@ -15,6 +15,7 @@ import type {
   Clock,
   ExecutionEventPublisher,
   ExecutionRepository,
+  InitiativeRepository,
   RepoProjectionRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
@@ -62,6 +63,14 @@ export interface BoardServiceDependencies {
    */
   serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   /**
+   * Initiative persistence, present only when the initiatives module is wired. Backs the
+   * cascade cleanup in {@link BoardService.removeBlock}: deleting an `initiative`-level block
+   * must also delete its 1:1 entity row, the same way a doomed service frame's account-owned
+   * service is reclaimed — otherwise the row survives as a phantom in the snapshot with its
+   * slug reserved forever. Absent → no initiatives exist, so nothing to clean up.
+   */
+  initiativeRepository?: InitiativeRepository
+  /**
    * Real-time push. When wired, every successful board mutation emits a coarse
    * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
    * (and every board mounting a shared service) see the create/rename/move/reparent/delete
@@ -103,6 +112,7 @@ export class BoardService {
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+  private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
 
   constructor({
@@ -115,6 +125,7 @@ export class BoardService {
     serviceRepository,
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
+    initiativeRepository,
     executionEventPublisher,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -126,6 +137,7 @@ export class BoardService {
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
+    this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
   }
 
@@ -467,6 +479,70 @@ export class BoardService {
     return block
   }
 
+  /**
+   * Create a HEADLESS internal task — a top-level, `internal: true` block used purely to anchor
+   * a public-API run (an external "initiative breakdown"). It is EXCLUDED from every board
+   * projection (see the snapshot/board reads), so it never renders in the UI; deliberately does
+   * NOT emit a `block-added` event (nothing should flash onto a live board). Returns the block so
+   * the caller can start an execution on it. The engine writes status onto it like any block.
+   */
+  async createInternalTask(
+    workspaceId: string,
+    input: { title: string; description: string },
+  ): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    const block: Block = {
+      id: this.idGenerator.next('task'),
+      title: input.title.trim() || 'Initiative',
+      // `type` is the service/repo CLASSIFICATION (frontend/service/library/…), orthogonal to the
+      // `level` hierarchy; there is no task-specific BlockType. This anchor is a standalone,
+      // never-rendered, repo-less `level:'task'` block, so `type` is irrelevant to it — 'service'
+      // is just the neutral default (a normal task inherits its parent service's type instead).
+      type: 'service',
+      description: input.description ?? '',
+      position: { x: 0, y: 0 },
+      status: 'planned',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'task',
+      parentId: null,
+      internal: true,
+    }
+    await this.blockRepository.insert(workspaceId, block)
+    return block
+  }
+
+  /**
+   * Fetch a HEADLESS internal anchor block by id, or null when no block with that id exists in
+   * the workspace OR it is not `internal`. The public-API job reads use this to confine an
+   * external key to the runs IT created (an `internal` block) — never an arbitrary board
+   * execution that merely shares the key's workspace. See PublicApiController.
+   */
+  async getInternalTask(workspaceId: string, blockId: string): Promise<Block | null> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    return block?.internal ? block : null
+  }
+
+  /**
+   * Delete a HEADLESS internal anchor block. Used by the public API to roll back the anchor when
+   * the run it was created for fails to start, so a failed dispatch never leaves an orphan
+   * `internal` block behind (it renders nowhere and is invisible to the cap, so it would just
+   * accumulate). A headless anchor has no children/service subtree, so a direct delete is enough.
+   */
+  async deleteInternalTask(workspaceId: string, blockId: string): Promise<void> {
+    await this.blockRepository.deleteMany(workspaceId, [blockId])
+  }
+
+  /**
+   * How many of the workspace's headless internal "initiative" runs are still in flight — the
+   * concurrency backstop the public API checks before starting another, so a single (possibly
+   * leaked) key can't spin up unbounded LLM runs. A SQL `COUNT`, not a load-and-count.
+   */
+  countActiveInternalTasks(workspaceId: string): Promise<number> {
+    return this.blockRepository.countActiveInternal(workspaceId)
+  }
+
   /** Add a module (sub-frame) inside a service. */
   async addModule(workspaceId: string, serviceId: string, input: AddModuleInput): Promise<Block> {
     await this.requireWorkspace(workspaceId)
@@ -783,12 +859,17 @@ export class BoardService {
       const patch: {
         dependsOn?: string[]
         epicId?: string | null
+        initiativeId?: string | null
         serviceConnections?: ServiceConnection[]
         involvedServiceIds?: string[]
       } = {}
       const next = b.dependsOn.filter((d) => !removed.has(d))
       if (next.length !== b.dependsOn.length) patch.dependsOn = next
       if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+      // Initiative membership is non-structural (epic-style): a task the loop spawned
+      // isn't a descendant of the deleted initiative block, so detach the dangling link
+      // here the same way epic membership is pruned above.
+      if (b.initiativeId && removed.has(b.initiativeId)) patch.initiativeId = null
       // Service-connection edges into the removed set, and task selections of a removed
       // involved service, dangle the same way dependency edges do — drop them here too.
       const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))
@@ -868,6 +949,27 @@ export class BoardService {
         const ids = [...doomedServiceIds]
         await this.workspaceMountRepository.removeByServices(ids)
         await this.serviceRepository.deleteMany(ids)
+      }
+    }
+    // Delete the `initiatives` entity anchored to any doomed initiative-level block, the same
+    // way the doomed service frames' account-owned services are reclaimed above. Without this
+    // the 1:1 row survives with a `block_id` pointing at a deleted block: the snapshot's
+    // `initiatives` list keeps returning a phantom, its `(workspace_id, slug)` stays reserved
+    // (re-creating a same-title initiative silently gets `<slug>-2`), and slice 3's
+    // `listExecuting` sweeper would re-drive a dead initiative. One `list` read + bounded
+    // deletes (the doomed set holds at most the subtree's few initiative blocks), never a
+    // per-block `getByBlock` loop.
+    if (this.initiativeRepository) {
+      const doomedInitiativeBlockIds = new Set(
+        blocks.filter((b) => doomed.has(b.id) && b.level === 'initiative').map((b) => b.id),
+      )
+      if (doomedInitiativeBlockIds.size > 0) {
+        const initiatives = await this.initiativeRepository.list(homeWorkspaceId)
+        for (const initiative of initiatives) {
+          if (doomedInitiativeBlockIds.has(initiative.blockId)) {
+            await this.initiativeRepository.delete(homeWorkspaceId, initiative.id)
+          }
+        }
       }
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])

@@ -304,6 +304,9 @@ export function workspaceController(): Hono<AppEnv> {
       // is fetched lazily, not here.
       recurringPipelines,
       trackerSettings,
+      // The workspace's initiatives (long-running multi-task work containers), so the
+      // board renders initiative cards + trackers on load.
+      initiatives,
       // The workspace's runtime settings (human-wait escalation threshold + per-service
       // task limit), so the board renders the settings panel on load.
       settings,
@@ -323,6 +326,7 @@ export function workspaceController(): Hono<AppEnv> {
       container.serviceFragmentDefaults?.service.get(workspaceId),
       container.recurring?.service.list(workspaceId),
       container.tracker?.service.get(workspaceId),
+      container.initiatives?.service.list(workspaceId),
       container.settings?.service.get(workspaceId),
       container.services?.service.listMounts(workspaceId),
       container.services
@@ -349,6 +353,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
         ...(recurringPipelines ? { recurringPipelines } : {}),
         ...(trackerSettings ? { trackerSettings } : {}),
+        ...(initiatives ? { initiatives } : {}),
         ...(settings ? { settings } : {}),
         ...(mounts ? { mounts } : {}),
         ...(serviceCatalog ? { serviceCatalog } : {}),

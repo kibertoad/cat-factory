@@ -87,6 +87,14 @@ export const blockSchema = v.object({
    */
   epicId: v.optional(v.nullable(v.string())),
   /**
+   * Membership link to an `initiative`-level block, INDEPENDENT of `parentId`.
+   * A task spawned by an initiative's execution loop carries the initiative's
+   * block id here so the loop can reconcile its items from the spawned blocks
+   * and the board can badge initiative work. Absent/null ⇒ not spawned by an
+   * initiative. Only meaningful on `task`-level blocks.
+   */
+  initiativeId: v.optional(v.nullable(v.string())),
+  /**
    * Preceding-task toggle: when this task's PR merges (it reaches `done`), the
    * engine automatically starts every task that `dependsOn` it and whose other
    * dependencies are also done. Off/absent ⇒ dependents wait for a manual start.
@@ -259,6 +267,14 @@ export const blockSchema = v.object({
    * Only meaningful on `task`-level blocks that have a linked tracker issue.
    */
   trackerResolveOnMerge: v.optional(v.nullable(writebackOverrideSchema)),
+  /**
+   * Headless marker: when `true` this block was created by the public API (an external
+   * "initiative breakdown" run) purely to anchor an execution, and is EXCLUDED from every
+   * board projection — the board-listing read and the workspace snapshot filter it out, so
+   * it never renders in the UI. The block still exists for the engine (it carries the run's
+   * `executionId` and receives status writes). Absent / false ⇒ a normal, board-visible block.
+   */
+  internal: v.optional(v.boolean()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
@@ -525,6 +541,14 @@ export const pipelineSchema = v.object({
    * not version-tracked) and on rows persisted before versioning existed (treated as 0).
    */
   version: v.optional(v.number()),
+  /**
+   * When true this pipeline may be invoked by an EXTERNAL caller through the public API
+   * (`POST /api/v1/initiatives`). Only honored for inline (no-container/no-GitHub) pipelines,
+   * so an external initiative run never pushes to a repo. Absent / false ⇒ not exposed to the
+   * public API (still fully usable from the authenticated SPA). See the `initiative-breakdown`
+   * pipeline for the first public entry.
+   */
+  public: v.optional(v.boolean()),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
 
@@ -1449,6 +1473,15 @@ export const pipelineStepSchema = v.object({
     v.nullable(v.object({ itemIds: v.array(v.string()), note: v.optional(v.string()) })),
   ),
   /**
+   * Transient interview intent carried on a parked `initiative-interviewer` gate step. Set
+   * when the human has answered the planning questions and asked to continue (or proceed):
+   * the run is signalled to wake and the durable driver, on re-entering the gate, runs the
+   * interviewer LLM again against the answers — asking follow-ups (re-park) or synthesizing
+   * the goal/constraints brief and advancing. `proceed` skips any remaining questions.
+   * Cleared once that async re-entry completes. Absent when no continuation is pending.
+   */
+  pendingInterview: v.optional(v.nullable(v.object({ proceed: v.optional(v.boolean()) }))),
+  /**
    * Consensus configuration for this step, copied from the pipeline's `consensus`
    * array at run start. Present (with `enabled: true`) when this step should run
    * through the multi-model consensus mechanism; read by the consensus executor
@@ -1634,6 +1667,12 @@ export const executionInstanceSchema = v.object({
    * signed-in user (auth-disabled/local dev) and for legacy runs.
    */
   initiatedBy: v.optional(v.nullable(v.string())),
+  /**
+   * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
+   * creation timestamp independent of when its first step actually starts (the public-API
+   * job view reports it as `createdAt`). Absent on legacy runs persisted before this field.
+   */
+  createdAt: v.optional(v.number()),
   /**
    * Optimistic-concurrency token: a monotonic revision of the persisted run row,
    * bumped on every write. Read back by the repository and used by
