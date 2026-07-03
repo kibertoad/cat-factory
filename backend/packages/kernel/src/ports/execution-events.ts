@@ -6,6 +6,7 @@ import type {
   ClarityReview,
   EnvConfigRepairJob,
   ExecutionInstance,
+  Initiative,
   KaizenGrading,
   LlmCallActivity,
   Notification,
@@ -111,6 +112,13 @@ export interface ExecutionEventPublisher {
    * transport wired leaves it a no-op. Never surfaced on the board — run-details only.
    */
   kaizenGradingChanged?(workspaceId: string, grading: KaizenGrading): Promise<void>
+  /**
+   * An initiative changed (created, plan ingested, an item settled, status moved):
+   * push the updated entity so an open tracker window / the board card reflects
+   * the transition live. Optional; a runtime with no real-time transport wired
+   * leaves it a no-op.
+   */
+  initiativeChanged?(workspaceId: string, initiative: Initiative): Promise<void>
 }
 
 /**
@@ -130,4 +138,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async clarityReviewChanged(): Promise<void> {}
   async brainstormSessionChanged(): Promise<void> {}
   async kaizenGradingChanged(): Promise<void> {}
+  async initiativeChanged(): Promise<void> {}
 }

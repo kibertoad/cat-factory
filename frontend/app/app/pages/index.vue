@@ -329,6 +329,7 @@ watch(
       <AgentStepDetail />
       <StepResultViewHost />
       <AddTaskModal />
+      <CreateInitiativeModal />
       <CommandBar />
       <PersonalCredentialModal />
       <ConfirmDialog />

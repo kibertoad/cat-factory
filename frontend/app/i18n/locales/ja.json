@@ -245,7 +245,8 @@
       "dragService": "サービスをドラッグ",
       "dragTask": "タスクをドラッグ",
       "dragToResize": "ドラッグしてサイズ変更",
-      "addFirstTask": "最初のタスクを追加"
+      "addFirstTask": "最初のタスクを追加",
+      "createInitiativeTitle": "イニシアチブを作成"
     },
     "decisionBadge": {
       "decisionNeeded": "判断が必要",
@@ -3901,6 +3902,71 @@
       "toast": {
         "reseedFailed": "マージプリセットを再シードできませんでした"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "イニシアチブを作成",
+      "inFrame": "{frame} の新しいイニシアチブ",
+      "titleField": "タイトル",
+      "titlePlaceholder": "例: API を新しい認証モデルへ移行する",
+      "goalField": "ゴール",
+      "goalPlaceholder": "ゴール、制約、おおまかなスコープを記述してください。プランナーが複数フェーズの計画に練り上げます。",
+      "hint": "この時点では何も実行されません。作成後、このブロックでイニシアチブ計画パイプラインを実行してください。コードベースを分析し、承認用の複数フェーズ計画を起草します。",
+      "submit": "イニシアチブを作成",
+      "failedTitle": "イニシアチブを作成できませんでした"
+    },
+    "status": {
+      "planning": "計画中",
+      "awaiting_approval": "承認待ち",
+      "executing": "実行中",
+      "paused": "一時停止",
+      "done": "完了",
+      "cancelled": "キャンセル"
+    },
+    "itemStatus": {
+      "pending": "未着手",
+      "in_progress": "進行中",
+      "pr_open": "PR オープン",
+      "done": "完了",
+      "blocked": "ブロック中",
+      "skipped": "スキップ"
+    },
+    "card": {
+      "kind": "イニシアチブ",
+      "progress": "{done}/{total} 項目完了",
+      "openTracker": "トラッカーを開く"
+    },
+    "tracker": {
+      "title": "イニシアチブトラッカー",
+      "subtitle": "このイニシアチブのフェーズ、作業項目、決定事項、進捗",
+      "empty": "このブロックにイニシアチブが見つかりません。",
+      "goal": "ゴール",
+      "constraints": "制約",
+      "nonGoals": "対象外",
+      "analysis": "コードベース分析",
+      "noPlan": "まだ計画がありません。イニシアチブ計画パイプラインを実行して複数フェーズの計画を起草してください。",
+      "phase": "フェーズ: {title}",
+      "colItem": "項目",
+      "colStatus": "ステータス",
+      "colPr": "PR",
+      "dependsOn": "依存: {items}",
+      "prLink": "PR",
+      "policy": "実行ポリシー",
+      "maxConcurrent": "最大同時タスク数: {count}",
+      "defaultPipeline": "デフォルトパイプライン:",
+      "axisComplexity": "複雑度 >= {value}",
+      "axisRisk": "リスク >= {value}",
+      "axisImpact": "影響度 >= {value}",
+      "axisNever": "一致しない (しきい値なし)",
+      "decisions": "決定事項",
+      "deviations": "逸脱",
+      "followUps": "フォローアップ",
+      "caveats": "既知の注意点"
+    },
+    "inspector": {
+      "runPlanning": "計画を実行",
+      "hint": "計画パイプラインはコードベースを調査し、承認用の複数フェーズ計画を起草し、その後トラッカー文書をリポジトリにコミットします。"
     }
   }
 }

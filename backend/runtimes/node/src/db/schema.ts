@@ -229,6 +229,9 @@ export const blocks = pgTable(
     // Task-level: membership link to an `epic`-level block, independent of parent_id
     // (the structural container). Deleting an epic clears this, never the member tasks.
     epic_id: text('epic_id'),
+    // Task-level: membership link to an `initiative`-level block (a task the
+    // initiative's execution loop spawned), independent of parent_id.
+    initiative_id: text('initiative_id'),
     // Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. When set, merging
     // this task auto-starts every dependent whose other dependencies are also done.
     auto_start_dependents: integer('auto_start_dependents'),
@@ -295,6 +298,7 @@ export const blocks = pgTable(
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_blocks_parent').on(t.workspace_id, t.parent_id),
     index('idx_blocks_epic').on(t.workspace_id, t.epic_id),
+    index('idx_blocks_initiative').on(t.workspace_id, t.initiative_id),
     index('idx_blocks_service').on(t.service_id),
     // findById looks a block up by id alone (no workspace_id), so it can't use the
     // (workspace_id, id) PK — index id directly to avoid scanning the largest table.
@@ -880,6 +884,31 @@ export const brainstormSessions = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.id] }),
     index('idx_brainstorm_sessions_block_stage').on(t.workspace_id, t.block_id, t.stage),
+  ],
+)
+
+// Initiatives: the long-running multi-task work container (mirror of D1 migration
+// 0035_initiatives). One row per `initiative`-level block; the whole entity lives in
+// the `doc` JSON blob with the loop-relevant keys (status, rev) lifted into columns.
+// `rev` is the optimistic-concurrency token every post-insert write CAS-es on.
+export const initiatives = pgTable(
+  'initiatives',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    slug: text('slug').notNull(),
+    status: text('status').notNull(),
+    rev: integer('rev').notNull(),
+    doc: text('doc').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    uniqueIndex('idx_initiatives_block').on(t.workspace_id, t.block_id),
+    // The cron sweeper's work list (slice 3): every `executing` initiative.
+    index('idx_initiatives_status').on(t.status),
   ],
 )
 

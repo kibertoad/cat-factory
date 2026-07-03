@@ -7,6 +7,7 @@ import type {
   EnvConfigRepairJob,
   ExecutionEventPublisher,
   ExecutionInstance,
+  Initiative,
   LlmCallActivity,
   Notification,
   RequirementReview,
@@ -123,6 +124,12 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   async brainstormSessionChanged(workspaceId: string, session: BrainstormSession): Promise<void> {
     for (const ws of await this.targets(workspaceId, session.blockId)) {
       await this.inner.brainstormSessionChanged?.(ws, session)
+    }
+  }
+
+  async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
+    for (const ws of await this.targets(workspaceId, initiative.blockId)) {
+      await this.inner.initiativeChanged?.(ws, initiative)
     }
   }
 }

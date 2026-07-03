@@ -46,6 +46,7 @@ export type {
 } from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
+export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,
   KaizenVerifiedComboRepository,

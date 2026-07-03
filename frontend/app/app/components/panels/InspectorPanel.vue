@@ -17,6 +17,7 @@ import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
 import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
 import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
+import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -73,6 +74,7 @@ watch(
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
 const isEpic = computed(() => level.value === 'epic')
+const isInitiative = computed(() => level.value === 'initiative')
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
@@ -491,6 +493,9 @@ const showOriginalDescription = ref(false)
 
       <!-- epic: the full tree of member tasks, grouped by service → module -->
       <EpicChildren v-else-if="isEpic" :block="block" />
+
+      <!-- initiative: status + goal, run-planning + tracker controls -->
+      <InitiativeInspector v-else-if="isInitiative" :block="block" />
 
       <!-- actions -->
       <div class="flex items-center gap-2">

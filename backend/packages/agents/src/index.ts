@@ -205,6 +205,21 @@ export { runRepoOps } from './repo-ops/run.js'
 // + commit lifted out of the executor-harness, keyed by the engine's built-in op map (NOT
 // the registry, so they never leak into the custom-kind palette).
 export { blueprintPostOp, specPostOp } from './repo-ops/builtin.js'
+// Initiative tracker helpers: lenient plan coercion + the deterministic render/commit of
+// the in-repo `docs/initiatives/<slug>/` projection (the blueprint pattern applied to the
+// initiative entity). Driven from the engine's committer step handler, not a postOp — the
+// tracker renders the DB entity, which a RepoOp context doesn't carry.
+export {
+  coerceInitiativePlan,
+  canonicalInitiativeJson,
+  hashInitiative,
+  initiativeContentView,
+  nextInitiativeVersion,
+  renderInitiativeFiles,
+  renderInitiativeTrackerMarkdown,
+  parseInitiativeVersionFile,
+  commitInitiativeTracker,
+} from './repo-ops/initiative.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages

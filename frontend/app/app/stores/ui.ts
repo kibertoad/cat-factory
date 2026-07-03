@@ -86,6 +86,10 @@ export const useUiStore = defineStore('ui', () => {
   // the frame opens it, scoped to that frame).
   const addRecurringFrameId = ref<string | null>(null)
 
+  // Create-initiative modal: the service frame a new initiative is being created
+  // under, or null when closed (mirrors the add-task flow).
+  const createInitiativeFrameId = ref<string | null>(null)
+
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
 
@@ -421,6 +425,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeAddRecurring() {
     addRecurringFrameId.value = null
   }
+  function openCreateInitiative(frameId: string) {
+    createInitiativeFrameId.value = frameId
+  }
+  function closeCreateInitiative() {
+    createInitiativeFrameId.value = null
+  }
   function openBootstrap() {
     bootstrapOpen.value = true
   }
@@ -704,6 +714,10 @@ export const useUiStore = defineStore('ui', () => {
   function openServiceSpec(blockId: string) {
     resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
   }
+  // Open the initiative tracker window for an initiative block (board card / inspector).
+  function openInitiativeTracker(blockId: string) {
+    resultView.value = { view: 'initiative-tracker', blockId, instanceId: null, stepIndex: null }
+  }
   // Open the Follow-up companion window for a run's Coder step (the blinking chip + the
   // `followup_pending` notification). Resolves the Coder step index from the run when not
   // given, so callers that only know the run can still open it.
@@ -773,6 +787,7 @@ export const useUiStore = defineStore('ui', () => {
     addTaskContainerId,
     addTaskPrefill,
     addRecurringFrameId,
+    createInitiativeFrameId,
     bootstrapOpen,
     addServiceOpen,
     githubOpen,
@@ -845,6 +860,8 @@ export const useUiStore = defineStore('ui', () => {
     closeAddTask,
     openAddRecurring,
     closeAddRecurring,
+    openCreateInitiative,
+    closeCreateInitiative,
     openBootstrap,
     closeBootstrap,
     openAddService,
@@ -908,6 +925,7 @@ export const useUiStore = defineStore('ui', () => {
     openClarityReview,
     openBrainstorm,
     openServiceSpec,
+    openInitiativeTracker,
     openFollowUps,
     closeRequirementReview,
     openStepDetail,

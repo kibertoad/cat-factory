@@ -275,7 +275,8 @@
       "dragService": "Drag service",
       "dragTask": "Drag task",
       "dragToResize": "Drag to resize",
-      "addFirstTask": "Add the first task"
+      "addFirstTask": "Add the first task",
+      "createInitiativeTitle": "Create initiative"
     },
     "decisionBadge": {
       "decisionNeeded": "Decision needed",
@@ -4007,6 +4008,71 @@
       "bootstrapFailed": "Could not bootstrap",
       "saveArchFailed": "Could not save reference architecture",
       "deleteFailed": "Could not delete"
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Create initiative",
+      "inFrame": "New initiative in {frame}",
+      "titleField": "Title",
+      "titlePlaceholder": "e.g. Migrate the API to the new auth model",
+      "goalField": "Goal",
+      "goalPlaceholder": "Describe the goal, constraints and rough scope. The planner refines this into a multi-phase plan.",
+      "hint": "Nothing runs yet: after creating, run the Initiative Planning pipeline on the block. It analyses the codebase and drafts the multi-phase plan for your approval.",
+      "submit": "Create initiative",
+      "failedTitle": "Could not create the initiative"
+    },
+    "status": {
+      "planning": "Planning",
+      "awaiting_approval": "Awaiting approval",
+      "executing": "Executing",
+      "paused": "Paused",
+      "done": "Done",
+      "cancelled": "Cancelled"
+    },
+    "itemStatus": {
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "pr_open": "PR open",
+      "done": "Done",
+      "blocked": "Blocked",
+      "skipped": "Skipped"
+    },
+    "card": {
+      "kind": "Initiative",
+      "progress": "{done}/{total} items done",
+      "openTracker": "Open tracker"
+    },
+    "tracker": {
+      "title": "Initiative tracker",
+      "subtitle": "Phases, work items, decisions and progress of this initiative",
+      "empty": "No initiative found for this block.",
+      "goal": "Goal",
+      "constraints": "Constraints",
+      "nonGoals": "Non-goals",
+      "analysis": "Codebase analysis",
+      "noPlan": "No plan yet. Run the Initiative Planning pipeline to draft the multi-phase plan.",
+      "phase": "Phase: {title}",
+      "colItem": "Item",
+      "colStatus": "Status",
+      "colPr": "PR",
+      "dependsOn": "Depends on: {items}",
+      "prLink": "PR",
+      "policy": "Execution policy",
+      "maxConcurrent": "Max concurrent tasks: {count}",
+      "defaultPipeline": "Default pipeline:",
+      "axisComplexity": "complexity >= {value}",
+      "axisRisk": "risk >= {value}",
+      "axisImpact": "impact >= {value}",
+      "axisNever": "never matches (no thresholds)",
+      "decisions": "Decisions",
+      "deviations": "Deviations",
+      "followUps": "Follow-ups",
+      "caveats": "Known caveats"
+    },
+    "inspector": {
+      "runPlanning": "Run planning",
+      "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
     }
   }
 }

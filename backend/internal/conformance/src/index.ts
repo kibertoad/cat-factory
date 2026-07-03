@@ -44,6 +44,7 @@ export {
 } from './content-storage-resolution-suite.js'
 export { defineAgentContextSuite } from './agent-context-suite.js'
 export { defineBrainstormSuite } from './brainstorm-suite.js'
+export { defineInitiativeSuite } from './initiative-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'

@@ -245,7 +245,8 @@
       "dragService": "גרור שירות",
       "dragTask": "גרור משימה",
       "dragToResize": "גרור לשינוי גודל",
-      "addFirstTask": "הוסף את המשימה הראשונה"
+      "addFirstTask": "הוסף את המשימה הראשונה",
+      "createInitiativeTitle": "יצירת יוזמה"
     },
     "decisionBadge": {
       "decisionNeeded": "נדרשת החלטה",
@@ -3899,6 +3900,71 @@
       "toast": {
         "reseedFailed": "לא ניתן לזרוע מחדש את קביעת המיזוג"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "יצירת יוזמה",
+      "inFrame": "יוזמה חדשה ב-{frame}",
+      "titleField": "כותרת",
+      "titlePlaceholder": "לדוגמה: העברת ה-API למודל האימות החדש",
+      "goalField": "מטרה",
+      "goalPlaceholder": "תארו את המטרה, המגבלות והיקף משוער. המתכנן מזקק זאת לתוכנית רב-שלבית.",
+      "hint": "שום דבר לא רץ עדיין: לאחר היצירה, הריצו את צינור תכנון היוזמה על הבלוק. הוא מנתח את הקוד ומנסח את התוכנית הרב-שלבית לאישורכם.",
+      "submit": "יצירת יוזמה",
+      "failedTitle": "לא ניתן היה ליצור את היוזמה"
+    },
+    "status": {
+      "planning": "בתכנון",
+      "awaiting_approval": "ממתין לאישור",
+      "executing": "בביצוע",
+      "paused": "מושהה",
+      "done": "הושלם",
+      "cancelled": "בוטל"
+    },
+    "itemStatus": {
+      "pending": "ממתין",
+      "in_progress": "בתהליך",
+      "pr_open": "PR פתוח",
+      "done": "הושלם",
+      "blocked": "חסום",
+      "skipped": "דולג"
+    },
+    "card": {
+      "kind": "יוזמה",
+      "progress": "{done}/{total} פריטים הושלמו",
+      "openTracker": "פתיחת מעקב"
+    },
+    "tracker": {
+      "title": "מעקב יוזמה",
+      "subtitle": "שלבים, פריטי עבודה, החלטות והתקדמות של יוזמה זו",
+      "empty": "לא נמצאה יוזמה עבור בלוק זה.",
+      "goal": "מטרה",
+      "constraints": "מגבלות",
+      "nonGoals": "מחוץ להיקף",
+      "analysis": "ניתוח הקוד",
+      "noPlan": "אין עדיין תוכנית. הריצו את צינור תכנון היוזמה כדי לנסח את התוכנית הרב-שלבית.",
+      "phase": "שלב: {title}",
+      "colItem": "פריט",
+      "colStatus": "סטטוס",
+      "colPr": "PR",
+      "dependsOn": "תלוי ב: {items}",
+      "prLink": "PR",
+      "policy": "מדיניות ביצוע",
+      "maxConcurrent": "מקסימום משימות במקביל: {count}",
+      "defaultPipeline": "צינור ברירת מחדל:",
+      "axisComplexity": "מורכבות >= {value}",
+      "axisRisk": "סיכון >= {value}",
+      "axisImpact": "השפעה >= {value}",
+      "axisNever": "לעולם לא תואם (ללא ספים)",
+      "decisions": "החלטות",
+      "deviations": "סטיות",
+      "followUps": "משימות המשך",
+      "caveats": "הסתייגויות ידועות"
+    },
+    "inspector": {
+      "runPlanning": "הרצת תכנון",
+      "hint": "צינור התכנון חוקר את הקוד, מנסח את התוכנית הרב-שלבית לאישור, ואז שומר את מסמך המעקב במאגר."
     }
   }
 }

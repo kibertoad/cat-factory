@@ -245,7 +245,8 @@
       "dragService": "Przeciągnij usługę",
       "dragTask": "Przeciągnij zadanie",
       "dragToResize": "Przeciągnij, aby zmienić rozmiar",
-      "addFirstTask": "Dodaj pierwsze zadanie"
+      "addFirstTask": "Dodaj pierwsze zadanie",
+      "createInitiativeTitle": "Utworz inicjatywe"
     },
     "decisionBadge": {
       "decisionNeeded": "Wymagana decyzja",
@@ -3888,6 +3889,71 @@
       "toast": {
         "reseedFailed": "Nie udało się zregenerować presetu scalania"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Utworz inicjatywe",
+      "inFrame": "Nowa inicjatywa w {frame}",
+      "titleField": "Tytul",
+      "titlePlaceholder": "np. Migracja API do nowego modelu uwierzytelniania",
+      "goalField": "Cel",
+      "goalPlaceholder": "Opisz cel, ograniczenia i przyblizony zakres. Planista doprecyzuje to w wielofazowy plan.",
+      "hint": "Nic jeszcze nie jest uruchamiane: po utworzeniu uruchom na bloku pipeline planowania inicjatywy. Analizuje on kod i przygotowuje wielofazowy plan do zatwierdzenia.",
+      "submit": "Utworz inicjatywe",
+      "failedTitle": "Nie udalo sie utworzyc inicjatywy"
+    },
+    "status": {
+      "planning": "Planowanie",
+      "awaiting_approval": "Oczekuje na zatwierdzenie",
+      "executing": "W realizacji",
+      "paused": "Wstrzymana",
+      "done": "Ukonczona",
+      "cancelled": "Anulowana"
+    },
+    "itemStatus": {
+      "pending": "Oczekuje",
+      "in_progress": "W toku",
+      "pr_open": "PR otwarty",
+      "done": "Ukonczone",
+      "blocked": "Zablokowane",
+      "skipped": "Pominiete"
+    },
+    "card": {
+      "kind": "Inicjatywa",
+      "progress": "{done}/{total} pozycji ukonczonych",
+      "openTracker": "Otworz tracker"
+    },
+    "tracker": {
+      "title": "Tracker inicjatywy",
+      "subtitle": "Fazy, pozycje pracy, decyzje i postep tej inicjatywy",
+      "empty": "Nie znaleziono inicjatywy dla tego bloku.",
+      "goal": "Cel",
+      "constraints": "Ograniczenia",
+      "nonGoals": "Poza zakresem",
+      "analysis": "Analiza kodu",
+      "noPlan": "Nie ma jeszcze planu. Uruchom pipeline planowania inicjatywy, aby przygotowac wielofazowy plan.",
+      "phase": "Faza: {title}",
+      "colItem": "Pozycja",
+      "colStatus": "Status",
+      "colPr": "PR",
+      "dependsOn": "Zalezy od: {items}",
+      "prLink": "PR",
+      "policy": "Polityka wykonania",
+      "maxConcurrent": "Maksymalna liczba rownoczesnych zadan: {count}",
+      "defaultPipeline": "Domyslny pipeline:",
+      "axisComplexity": "zlozonosc >= {value}",
+      "axisRisk": "ryzyko >= {value}",
+      "axisImpact": "wplyw >= {value}",
+      "axisNever": "nigdy nie pasuje (brak progow)",
+      "decisions": "Decyzje",
+      "deviations": "Odstepstwa",
+      "followUps": "Dzialania nastepcze",
+      "caveats": "Znane zastrzezenia"
+    },
+    "inspector": {
+      "runPlanning": "Uruchom planowanie",
+      "hint": "Pipeline planowania bada kod, przygotowuje wielofazowy plan do zatwierdzenia, a nastepnie zapisuje dokument trackera w repozytorium."
     }
   }
 }

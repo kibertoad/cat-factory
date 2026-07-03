@@ -23,6 +23,7 @@ import GenericStructuredResultView from '~/components/panels/GenericStructuredRe
 import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
 import MergerResultView from '~/components/panels/MergerResultView.vue'
+import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWindow.vue'
 
 const ui = useUiStore()
 
@@ -52,6 +53,10 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // The merger's verdict: the PR's complexity/risk/impact scores + the engine's auto-merge
   // or awaiting-review decision (and why), instead of the agent's raw JSON.
   merger: MergerResultView,
+  // The initiative tracker: phases, per-item status + PR links, decisions, deviations,
+  // caveats. Opened from the initiative card / inspector (`ui.openInitiativeTracker`) and
+  // as the planner step's result view.
+  'initiative-tracker': InitiativeTrackerWindow,
 }
 
 const active = computed<Component | null>(() => {

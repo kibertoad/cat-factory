@@ -87,6 +87,14 @@ export const blockSchema = v.object({
    */
   epicId: v.optional(v.nullable(v.string())),
   /**
+   * Membership link to an `initiative`-level block, INDEPENDENT of `parentId`.
+   * A task spawned by an initiative's execution loop carries the initiative's
+   * block id here so the loop can reconcile its items from the spawned blocks
+   * and the board can badge initiative work. Absent/null ⇒ not spawned by an
+   * initiative. Only meaningful on `task`-level blocks.
+   */
+  initiativeId: v.optional(v.nullable(v.string())),
+  /**
    * Preceding-task toggle: when this task's PR merges (it reaches `done`), the
    * engine automatically starts every task that `dependsOn` it and whose other
    * dependencies are also done. Off/absent ⇒ dependents wait for a manual start.

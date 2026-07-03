@@ -44,6 +44,8 @@ import {
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
   getProvider,
+  INITIATIVE_COMMITTER_AGENT_KIND,
+  INITIATIVE_PLANNER_AGENT_KIND,
   isAsyncAgentExecutor,
   NotFoundError,
   parseLocalModelId,
@@ -60,6 +62,7 @@ import {
 } from '@cat-factory/contracts'
 import {
   blueprintPostOp,
+  commitInitiativeTracker,
   isCompanionKind,
   isContainerBackedCompanion,
   registeredAgentStep,
@@ -127,6 +130,7 @@ import {
 } from './step-handler-registry.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
+import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { SpendService } from '@cat-factory/spend'
 import type { BlueprintReconciler } from './ExecutionService.js'
 
@@ -211,6 +215,7 @@ export interface RunDispatcherDeps {
   issueWriteback?: IssueWritebackProvider
   notificationService?: NotificationService
   blueprintReconciler?: BlueprintReconciler
+  initiativeService?: InitiativeService
   resolveRunRepoContext?: ResolveRunRepoContext
   resolveProviderCapabilities?: (
     workspaceId: string,
@@ -266,6 +271,7 @@ export class RunDispatcher {
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly notificationService?: NotificationService
   private readonly blueprintReconciler?: BlueprintReconciler
+  private readonly initiativeService?: InitiativeService
   private readonly resolveRunRepoContext?: ResolveRunRepoContext
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
@@ -314,6 +320,7 @@ export class RunDispatcher {
     this.issueWriteback = deps.issueWriteback
     this.notificationService = deps.notificationService
     this.blueprintReconciler = deps.blueprintReconciler
+    this.initiativeService = deps.initiativeService
     this.resolveRunRepoContext = deps.resolveRunRepoContext
     this.resolveProviderCapabilities = deps.resolveProviderCapabilities
     this.resolveMergePreset = deps.resolveMergePreset
@@ -1616,6 +1623,63 @@ export class RunDispatcher {
   }
 
   /**
+   * Persist an APPROVED initiative plan for an `initiative-committer` step: flip the
+   * entity to `executing` and mirror the tracker into the repo's default branch
+   * (`docs/initiatives/<slug>/`) via the checkout-free {@link RepoFiles}. Deterministic,
+   * no LLM. REPLAY-SAFE: the tracker commit hash-short-circuits (an unchanged entity
+   * commits nothing) and `markExecuting` is content-idempotent, so a durable-driver
+   * replay re-enters harmlessly. The repo mirror is skipped gracefully when GitHub
+   * isn't wired (the DB entity stays the source of truth); a missing entity or an
+   * empty plan is a REAL failure — completing the run would strand the initiative in
+   * `planning` behind a green run.
+   */
+  private async runInitiativeCommitter(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{ kind: 'ok'; result: AgentRunResult } | { kind: 'failed'; error: string }> {
+    if (!this.initiativeService) {
+      return { kind: 'failed', error: 'Initiative module is not wired on this deployment.' }
+    }
+    const initiative = await this.initiativeService.getByBlock(workspaceId, block.id)
+    if (!initiative) {
+      return { kind: 'failed', error: 'No initiative entity found for this block.' }
+    }
+    if ((initiative.items ?? []).length === 0) {
+      return {
+        kind: 'failed',
+        error: 'No approved plan to commit — the planner produced no usable items.',
+      }
+    }
+
+    let doc: { version: number; hash: string } | null = null
+    let mirror = 'Repo tracker mirror skipped (GitHub not connected).'
+    const runRepo = await this.resolveRunRepo(workspaceId, block.id)
+    if (runRepo) {
+      doc = await commitInitiativeTracker(
+        runRepo.repo,
+        runRepo.baseBranch,
+        initiative,
+        new Date(this.clock.now()),
+      )
+      mirror = doc
+        ? `Committed docs/initiatives/${initiative.slug}/ (v${doc.version}) to ${runRepo.baseBranch}.`
+        : `Tracker already up to date in docs/initiatives/${initiative.slug}/.`
+    }
+    await this.initiativeService.markExecuting(workspaceId, block.id, doc)
+
+    const phases = (initiative.phases ?? []).length
+    const items = (initiative.items ?? []).length
+    return {
+      kind: 'ok',
+      result: {
+        output:
+          `Initiative plan approved: ${phases} phase${phases === 1 ? '' : 's'}, ` +
+          `${items} item${items === 1 ? '' : 's'}. ${mirror}`,
+      },
+    }
+  }
+
+  /**
    * The polling-gate registry, keyed by `agentKind`. A gate runs a programmatic
    * precheck against a provider and only escalates to a helper container agent on a
    * negative verdict. Built lazily (the closures capture `this`, so the providers /
@@ -1880,6 +1944,22 @@ export class RunDispatcher {
           return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
         },
       },
+      // The `initiative-committer` step persists an APPROVED initiative plan: it runs
+      // strictly after the planner's human gate, flips the entity to `executing`, and
+      // mirrors the tracker into the repo (`docs/initiatives/<slug>/`) when GitHub is
+      // wired — no LLM of its own (the `tracker`-style deterministic one-shot).
+      {
+        kind: INITIATIVE_COMMITTER_AGENT_KIND,
+        order: 115,
+        canHandle: ({ step }) => step.agentKind === INITIATIVE_COMMITTER_AGENT_KIND,
+        handle: async ({ workspaceId, instance, step, block, isFinalStep }) => {
+          const outcome = await this.runInitiativeCommitter(workspaceId, block)
+          if (outcome.kind === 'failed') {
+            return { kind: 'job_failed', error: outcome.error, failureKind: 'agent' }
+          }
+          return this.recordStepResult(workspaceId, instance, step, isFinalStep, outcome.result)
+        },
+      },
       // The `requirements-review` / `clarity-review` / `requirements-brainstorm` /
       // `architecture-brainstorm` steps are inline reviewers that park for their dedicated
       // window and drive the iterative answer → incorporate → re-review loop — NOT
@@ -2131,6 +2211,32 @@ export class RunDispatcher {
         resolve: async ({ workspaceId, instance, result }) => {
           if (result.blueprintService !== undefined) {
             await this.ingestBlueprint(workspaceId, instance.blockId, result.blueprintService)
+          }
+        },
+      },
+      // An initiative-planner step produced a plan draft. Ingest it into the block's
+      // `initiatives` entity (strict-parse at the trust boundary; replay-idempotent —
+      // the same draft re-applies to identical content). The run then parks at the
+      // planner's human gate; the committer step later mirrors the APPROVED plan into
+      // the repo. A malformed draft fails the step loudly — completing the run without
+      // an ingested plan would strand the initiative in `planning` with a green run.
+      {
+        kind: INITIATIVE_PLANNER_AGENT_KIND,
+        phase: 'post-completion',
+        resolve: async ({ workspaceId, instance, result }) => {
+          if (!this.initiativeService) return
+          if (result.initiativePlan === undefined) {
+            throw new Error(
+              'The initiative planner returned no usable plan (malformed or empty JSON)',
+            )
+          }
+          const ingested = await this.initiativeService.ingestPlan(
+            workspaceId,
+            instance.blockId,
+            result.initiativePlan,
+          )
+          if (!ingested) {
+            throw new Error('No initiative entity found for this block — cannot ingest the plan')
           }
         },
       },

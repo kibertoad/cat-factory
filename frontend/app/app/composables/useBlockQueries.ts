@@ -59,6 +59,11 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return childrenOf(serviceId).filter((b) => b.level === 'module')
   }
 
+  /** Initiative containers inside a service (frame children, like modules). */
+  function initiativesOf(serviceId: string) {
+    return childrenOf(serviceId).filter((b) => b.level === 'initiative')
+  }
+
   /** Tasks anywhere under a container — directly, or nested inside its modules. */
   function allTasksUnder(containerId: string): Block[] {
     const direct = tasksOf(containerId)
@@ -153,6 +158,11 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
       w = Math.max(w, m.position.x + s.w + 12)
       inner = Math.max(inner, m.position.y + s.h + 12)
     }
+    // Initiative cards render inside the frame's drop zone like tasks (230×~170).
+    for (const i of initiativesOf(id)) {
+      w = Math.max(w, i.position.x + 230 + 12)
+      inner = Math.max(inner, i.position.y + 170 + 12)
+    }
     return { w, h: inner + headerH }
   }
 
@@ -180,6 +190,7 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     childrenOf,
     tasksOf,
     modulesOf,
+    initiativesOf,
     allTasksUnder,
     serviceOf,
     unmetDeps,
