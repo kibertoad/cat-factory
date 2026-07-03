@@ -86,8 +86,8 @@ export const fragmentSourceSchema = v.object({
   repoName: v.string(),
   gitRef: v.string(),
   dirPath: v.string(),
-  /** Digest of the source tree at the last successful sync; null if never synced. */
-  lastSyncedSha: v.nullable(v.string()),
+  /** Head commit sha of the source dir at the last successful sync; null if never synced. */
+  lastSyncedCommit: v.nullable(v.string()),
   lastSyncedAt: v.nullable(v.number()),
   createdAt: v.number(),
 })
@@ -109,16 +109,22 @@ export const fragmentSyncResultSchema = v.object({
   upserted: v.number(),
   tombstoned: v.number(),
   unchanged: v.number(),
-  lastSyncedSha: v.nullable(v.string()),
+  /** Head commit sha the source dir was synced to. */
+  lastSyncedCommit: v.nullable(v.string()),
 })
 export type FragmentSyncResult = v.InferOutput<typeof fragmentSyncResultSchema>
 
-/** Cheap "check for changes" result (no writes); powers the resync badge. */
+/**
+ * Lightweight "check for changes" result (no writes); powers the resync badge. A
+ * single commit-version probe: `changed` is true when the source dir's current head
+ * commit differs from the one it was last synced to.
+ */
 export const fragmentSourceStatusSchema = v.object({
   changed: v.boolean(),
-  changedCount: v.number(),
-  lastSyncedSha: v.nullable(v.string()),
-  remoteSha: v.nullable(v.string()),
+  /** Head commit sha at the last successful sync; null if never synced. */
+  lastSyncedCommit: v.nullable(v.string()),
+  /** The source dir's current head commit sha upstream; null if the dir has no commits. */
+  remoteCommit: v.nullable(v.string()),
 })
 export type FragmentSourceStatus = v.InferOutput<typeof fragmentSourceStatusSchema>
 

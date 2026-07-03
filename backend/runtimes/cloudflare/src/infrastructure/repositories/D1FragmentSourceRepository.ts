@@ -28,7 +28,8 @@ function rowToRecord(row: FragmentSourceRow): FragmentSourceRecord {
     repoName: row.repo_name,
     gitRef: row.git_ref,
     dirPath: row.dir_path,
-    lastSyncedSha: row.last_synced_sha,
+    // Physical column keeps its historical name; it now stores a commit sha.
+    lastSyncedCommit: row.last_synced_sha,
     lastSyncedAt: row.last_synced_at,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
@@ -88,7 +89,7 @@ export class D1FragmentSourceRepository implements FragmentSourceRepository {
         record.repoName,
         record.gitRef,
         record.dirPath,
-        record.lastSyncedSha,
+        record.lastSyncedCommit,
         record.lastSyncedAt,
         record.createdAt,
         record.deletedAt,
@@ -96,10 +97,14 @@ export class D1FragmentSourceRepository implements FragmentSourceRepository {
       .run()
   }
 
-  async updateSyncState(id: string, lastSyncedSha: string, lastSyncedAt: number): Promise<void> {
+  async updateSyncState(
+    id: string,
+    lastSyncedCommit: string | null,
+    lastSyncedAt: number,
+  ): Promise<void> {
     await this.db
       .prepare('UPDATE fragment_sources SET last_synced_sha = ?, last_synced_at = ? WHERE id = ?')
-      .bind(lastSyncedSha, lastSyncedAt, id)
+      .bind(lastSyncedCommit, lastSyncedAt, id)
       .run()
   }
 

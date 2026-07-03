@@ -3676,7 +3676,7 @@
     "sources": {
       "metaSynced": "סונכרן · ref {ref}",
       "metaNever": "מעולם לא סונכרן · ref {ref}",
-      "changes": "שינוי אחד | {count} שינויים",
+      "changes": "שינויים",
       "empty": "אין מאגרי הנחיות מקושרים. קשר אחד למטה כדי לייבא את קובצי ה-Markdown שלו כמקטעים.",
       "linkTitle": "קשר מאגר הנחיות",
       "ownerPlaceholder": "בעלים",
@@ -3701,7 +3701,7 @@
       "linkSourceFailed": "לא ניתן היה לקשר מקור",
       "synced": "סונכרן: {updated} עודכנו, {removed} הוסרו",
       "syncFailed": "לא ניתן היה לסנכרן מקור",
-      "changesAvailable": "שינוי אחד זמין | {count} שינויים זמינים",
+      "changesAvailable": "יש שינויים זמינים",
       "upToDate": "מעודכן",
       "checkSourceFailed": "לא ניתן היה לבדוק את המקור",
       "sourceUnlinked": "קישור המקור בוטל",

@@ -3665,7 +3665,7 @@
     "sources": {
       "metaSynced": "sincronizado · ref {ref}",
       "metaNever": "nunca sincronizado · ref {ref}",
-      "changes": "{count} cambio | {count} cambios",
+      "changes": "Cambios",
       "empty": "No hay repositorios de pautas vinculados. Vincula uno abajo para importar sus archivos Markdown como fragmentos.",
       "linkTitle": "Vincular un repositorio de pautas",
       "ownerPlaceholder": "propietario",
@@ -3690,7 +3690,7 @@
       "linkSourceFailed": "No se pudo vincular el origen",
       "synced": "Sincronizado: {updated} actualizados, {removed} eliminados",
       "syncFailed": "No se pudo sincronizar el origen",
-      "changesAvailable": "{count} cambio disponible | {count} cambios disponibles",
+      "changesAvailable": "Cambios disponibles",
       "upToDate": "Al día",
       "checkSourceFailed": "No se pudo comprobar el origen",
       "sourceUnlinked": "Origen desvinculado",

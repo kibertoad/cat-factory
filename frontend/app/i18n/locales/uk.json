@@ -3665,7 +3665,7 @@
     "sources": {
       "metaSynced": "синхронізовано · ref {ref}",
       "metaNever": "ніколи не синхронізовано · ref {ref}",
-      "changes": "{count} зміна | {count} зміни | {count} змін",
+      "changes": "Зміни",
       "empty": "Немає прив'язаних репозиторіїв із настановами. Прив'яжіть один нижче, щоб імпортувати його файли Markdown як фрагменти.",
       "linkTitle": "Прив'язати репозиторій із настановами",
       "ownerPlaceholder": "власник",
@@ -3690,7 +3690,7 @@
       "linkSourceFailed": "Не вдалося прив'язати джерело",
       "synced": "Синхронізовано: {updated} оновлено, {removed} видалено",
       "syncFailed": "Не вдалося синхронізувати джерело",
-      "changesAvailable": "Доступна {count} зміна | Доступні {count} зміни | Доступно {count} змін",
+      "changesAvailable": "Доступні зміни",
       "upToDate": "Актуально",
       "checkSourceFailed": "Не вдалося перевірити джерело",
       "sourceUnlinked": "Джерело відв'язано",

@@ -78,6 +78,8 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
       vcs.listDirectory(conn(i), toRepoRef(ref), path, gitRef),
     getFileContent: (i, ref, path, gitRef) =>
       vcs.getFileContent(conn(i), toRepoRef(ref), path, gitRef),
+    latestCommitSha: (i, ref, path, gitRef) =>
+      vcs.latestCommitSha(conn(i), toRepoRef(ref), path, gitRef),
     listPullRequests: (i, ref, opts) => vcs.listPullRequests(conn(i), toRepoRef(ref), opts),
     listIssues: (i, ref, opts) => vcs.listIssues(conn(i), toRepoRef(ref), opts),
     getIssue: (i, ref, n) => vcs.getIssue(conn(i), toRepoRef(ref), n),

@@ -289,6 +289,20 @@ export interface GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoFileContent | null>
+  /**
+   * The sha of the most recent commit that touched `path` on `gitRef` (the repo's
+   * default branch when `gitRef` is omitted or `'HEAD'`), or null when the path/repo
+   * has no such commit (empty repo / unknown ref). `path` may be `''` for the whole
+   * repo (the ref's head). A single cheap read — the fragment library uses it as the
+   * lightweight staleness probe (compare against the last-synced commit) instead of
+   * listing the whole directory.
+   */
+  latestCommitSha(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<string | null>
   listPullRequests(
     installationId: number,
     ref: GitHubRepoRef,
