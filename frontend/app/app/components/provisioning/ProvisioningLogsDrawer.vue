@@ -4,15 +4,27 @@
 // container), with its outcome and — for failures — the verbatim provider/runtime
 // error. Two modes, mutually exclusive: pass `subsystem` for the provider config
 // panels' drawer, or `executionId` for a run's "Infrastructure attempts" drawer (which
-// surfaces that run's container/runner/env attempts). Loaded on mount + re-loadable.
-import { onMounted } from 'vue'
+// surfaces that run's container/runner/env attempts).
+//
+// In `executionId` mode the drawer LIVE-tracks: while the run is active (`live`) it
+// silently re-polls so each container spin-up / tear-down appears with its timestamp as
+// it happens, and it does one final poll when the run goes terminal to catch the last
+// tear-down row (written just before the terminal event). Once the run is no longer
+// doing anything there is nothing left to refresh, so the refresh control (and its
+// spinner) is hidden and polling stops.
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import type {
   ProvisioningOperation,
   ProvisioningOutcome,
   ProvisioningSubsystem,
 } from '~/types/provisioningLogs'
 
-const props = defineProps<{ subsystem?: ProvisioningSubsystem; executionId?: string }>()
+const props = defineProps<{
+  subsystem?: ProvisioningSubsystem
+  executionId?: string
+  /** Run-details mode only: whether the run is still active (drives live polling). */
+  live?: boolean
+}>()
 
 const { t, d } = useI18n()
 
@@ -23,12 +35,49 @@ const state = computed(() =>
     : store.bySubsystem[props.subsystem ?? 'environment'],
 )
 
-function reload() {
-  if (props.executionId) void store.loadForExecution(props.executionId)
+function reload(silent = false) {
+  if (props.executionId) void store.loadForExecution(props.executionId, { silent })
   else if (props.subsystem) void store.load(props.subsystem)
 }
 
-onMounted(reload)
+// The refresh affordance is hidden once a run is terminal ("nothing to refresh anymore"):
+// only shown in subsystem mode (always) or while a run-details drawer is still live.
+const canRefresh = computed(() => props.subsystem != null || props.live === true)
+
+// --- live polling (executionId mode only) --------------------------------
+const POLL_MS = 4000
+let timer: ReturnType<typeof setInterval> | undefined
+
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = undefined
+  }
+}
+
+function startPolling() {
+  stopPolling()
+  timer = setInterval(() => reload(true), POLL_MS)
+}
+
+watch(
+  () => props.live,
+  (live, wasLive) => {
+    if (props.executionId == null) return
+    if (live) {
+      startPolling()
+    } else {
+      stopPolling()
+      // On the active→terminal transition, poll once more (silently) to pick up the
+      // tear-down row the engine writes just before it emits the terminal state.
+      if (wasLive) reload(true)
+    }
+  },
+  { immediate: true },
+)
+
+onMounted(() => reload())
+onBeforeUnmount(stopPolling)
 
 // Exhaustive enum→label maps of literal `t(...)` keys (keeps the typed-key drift guard
 // live for these runtime-indexed lookups).
@@ -58,11 +107,12 @@ function when(epochMs: number): string {
         {{ t('provisioning.title') }}
       </p>
       <UButton
+        v-if="canRefresh"
         icon="i-lucide-rotate-ccw"
         variant="ghost"
         size="xs"
         :loading="state.loading"
-        @click="reload"
+        @click="reload()"
       >
         {{ t('provisioning.refresh') }}
       </UButton>
