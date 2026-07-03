@@ -395,6 +395,10 @@ export type {
   IncidentEnrichmentConnectionRepository,
 } from './incident-enrichment-repositories.js'
 export type {
+  PackageRegistryConnectionRecord,
+  PackageRegistryConnectionRepository,
+} from './package-registry-repositories.js'
+export type {
   AccountSettingsRecord,
   AccountSettingsRepository,
 } from './account-settings-repositories.js'

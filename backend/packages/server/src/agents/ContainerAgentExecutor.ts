@@ -72,6 +72,22 @@ export type MintInstallationToken = (
 ) => Promise<string>
 
 /**
+ * One private package-registry entry as it rides the harness job body: the decrypted
+ * token plus the registry host (derived backend-side from the fixed vendor set — the
+ * harness hard-allowlists the hosts it will send a token to). Ecosystem-discriminated
+ * so later ecosystems (pip/maven/cargo) are additive. Deliberately a dedicated
+ * top-level body field, NEVER a context file: the agent-context snapshot copies
+ * `contextFiles` content verbatim, while unknown top-level fields are omitted by its
+ * allow-list projection.
+ */
+export interface JobPackageRegistrySpec {
+  ecosystem: 'npm'
+  host: string
+  scopes: string[]
+  token: string
+}
+
+/**
  * Ensure the per-task work branch exists on the remote, so every agent in the pipeline
  * operates on the SAME branch. Returns whether the branch is present afterwards; a
  * `false`/absent result makes read-only agents fall back to the base branch (writers
@@ -464,6 +480,15 @@ export interface ContainerAgentExecutorDependencies {
    * web search stays disabled for the run.
    */
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>
+  /**
+   * Resolve the workspace's private package-registry entries (npm private orgs, GitHub
+   * Packages) for a container dispatch — decrypted host + scopes + token, rendered by
+   * the harness into `~/.npmrc` before the agent runs so private dependencies resolve
+   * on install. A resolution failure PROPAGATES (fails the dispatch): a workspace that
+   * configured private registries must not silently run without them. Absent ⇒ no
+   * registry auth is forwarded.
+   */
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
   /**
    * Optional observability trace sink (e.g. Langfuse). When wired, each poll forwards
    * the container's drained tool spans as child spans under the run's trace — the same
@@ -910,11 +935,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
     const tuning = agentTuningFor(context.agentKind)
+    // Private-registry auth for the checkout's installs. Resolved per dispatch (like
+    // ghToken) and spread into `common`, so every kind with a checkout gets it.
+    const packageRegistries = (await this.deps.resolvePackageRegistries?.(workspaceId)) ?? []
     const common = {
       jobId,
       model: ref.model,
       ...auth,
       ghToken,
+      ...(packageRegistries.length ? { packageRegistries } : {}),
       repo: buildRepoSpec(repo, (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)),
       ...(this.deps.githubApiBase ? { githubApiBase: this.deps.githubApiBase } : {}),
       ...(contextFiles.length ? { contextFiles } : {}),

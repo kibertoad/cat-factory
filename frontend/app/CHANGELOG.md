@@ -1,5 +1,169 @@
 # @cat-factory/app
 
+## 0.81.0
+
+### Minor Changes
+
+- cc924a9: Requirements-review recommendations: batch, tighten, and surface what's awaited.
+
+  - The Requirement Writer now answers findings in CHUNKS (up to 4 per LLM call) instead of one
+    call per finding, so a batch of N findings costs `ceil(N / 4)` calls rather than N. Shared
+    grounding is still gathered once and progress still streams `ready / total` a chunk at a time;
+    a failure is isolated to its chunk. Each finding keeps the same per-finding output budget the
+    single-call path used (scaled by chunk size), and a batched response is routed back to its
+    findings by the echoed itemId with a prompt-order fallback — so a response that drops the ids
+    isn't discarded wholesale and the whole chunk force-reopened.
+  - The Writer prompt (`requirement-writer`, bumped to v2) now asks for precise, succinct
+    recommendations — the concrete answer in a couple of sentences, cite sources briefly, no
+    preamble or padding — instead of open-ended prose.
+  - The review window now shows a persistent "awaited recommendations" summary (how many the
+    Writer is still generating and how many are waiting on the human) in the stats rail, and lets
+    you request recommendations while a merged review is being reworked — not only in the initial
+    `ready` state.
+  - The incorporated-requirements document can now be collapsed as a whole. It defaults to collapsed
+    only in the pre-incorporation `ready` phase (so a long doc doesn't push the findings being worked
+    through off-screen) and expanded in `merged`/`incorporated`, where the document itself is the
+    thing to read; a manual collapse no longer leaks across a status change.
+
+## 0.80.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+### Patch Changes
+
+- f21b06f: Cleaner inspector panel: related entries are grouped into collapsible sections (a shared InspectorSection shell with a chevron header, item count, and header actions), each section carries a plain-language explanation of what it means and what it is used for, secondary configuration collapses by default while the live execution surface stays open, and a task's execution now renders above its configuration. New hint strings are translated in every locale.
+- Updated dependencies [b216fdc]
+  - @cat-factory/contracts@0.86.0
+
+## 0.79.2
+
+### Patch Changes
+
+- b4c4130: Board: a newly added service frame is placed clear of existing board nodes and the camera centres on it.
+
+  Adding a frame no longer drops it on top of a neighbour or leaves it off-screen. A new pure
+  helper (`findFreeFramePosition` in `utils/framePlacement.ts`) picks the nearest non-overlapping
+  top-left for a frame of a given size, and the `useFramePlacement` composable wires it to the live
+  board + Vue Flow camera (`focusFrame` pans, gently zooming in only if the board is zoomed far out).
+  The clearance considers every top-level board node — both service frames and epic grouping cards —
+  so a new frame never lands on top of an epic either.
+  Wired into all three add-a-frame paths:
+
+  - **Palette drop** (`BoardCanvas`): the frame lands where you drop it, nudged off any frame it
+    would overlap, then centred.
+  - **Import from repo** (`AddServiceFromRepoModal`): the client now sends a computed free position
+    instead of relying on the backend's fixed diagonal stagger, then centres on the import.
+  - **Bootstrap** (`BootstrapModal`): the provisional frame is re-homed to free space (the backend
+    stagger can land on top of a large existing service) and centred.
+
+## 0.79.1
+
+### Patch Changes
+
+- bf4c029: Infrastructure attempts window (run details) now live-tracks every container spin-up /
+  tear-down as it happens: while the run is active it silently re-polls so each attempt
+  appears with its timestamp, and it does one final poll on the terminal transition to catch
+  the last tear-down row. Background polls are silent, so the "refreshing" spinner no longer
+  flickers; once the run is terminal the auto-poll stops, while the manual refresh control
+  stays available so a missed or not-yet-persisted tear-down row can always be refetched.
+
+## 0.79.0
+
+### Minor Changes
+
+- 0ac0dc4: Surface per-iteration fixing instructions in polling-gate run details. A `ci` /
+  `conflicts` gate's helper attempt now records the instructions it was handed (the
+  failing-check summary + structured red checks for CI, the conflict/review detail for the
+  others) alongside the helper's own report, so the gate window shows WHAT each round set out
+  to fix — bringing the gate attempt timeline to parity with the Tester's fixer timeline
+  (`concerns` + `summary`). Adds `instructions` / `failingChecks` to `gateAttemptSchema` and a
+  transient `lastDispatchedInstructions` stash on `gateStepStateSchema` (schemaless step JSON,
+  no migration).
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+
+## 0.78.0
+
+### Minor Changes
+
+- 36f4cf6: Frontend UI-test bindings: surface how each backend binding resolves + a non-fatal run-start note.
+
+  - **Shared resolution helpers moved to `@cat-factory/contracts`** (next to `frontendOriginsForService`)
+    so the SPA and the backend share ONE source of truth: `resolveFrontendBindings`,
+    `indexLiveServiceEnvUrls`, `boundServiceFrameIds`, the `ResolvedFrontendBinding`/`LiveEnvHandle`
+    types, and a new pure `buildFrontendRunNotes`. Orchestration re-exports them, so existing importers
+    are unchanged.
+  - **Inspector resolved-binding visibility**: `FrontendConfig.vue` now shows, live, how each backend
+    binding resolves — `envVar → a bound service's live ephemeral URL | mocked (WireMock)` — mirroring
+    what a UI-test run resolves, plus a warning for duplicate env vars. Backed by a new lightweight
+    `environments` store over `GET /workspaces/:ws/environments`.
+  - **Run/step detail projection + run-start note**: the engine stamps BOTH the resolved bindings
+    (`ExecutionInstance.frontendBindings`) and the non-fatal advisories (`ExecutionInstance.notes`:
+    duplicate env vars, or a partial-live set where some bound services fall back to WireMock) on the
+    run ONCE at start — the SPA-visible mirror of the harness's own `buildInfraNotes`. A `tester-ui`
+    step's detail projects the FROZEN start-time bindings (so a finished run shows what it actually
+    drove against, not a live re-resolution that could disagree with the co-located note after the
+    envs are torn down); the run-start note shows on any step detail of a frontend-frame run. Both
+    ride in the run's `detail` JSON (no migration) and round-trip identically on D1 ⇄ Postgres.
+
+  No wire/behaviour break: the notes field is optional, the moved helpers are re-exported, and a
+  non-frontend run is unaffected.
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+
 ## 0.77.0
 
 ### Minor Changes

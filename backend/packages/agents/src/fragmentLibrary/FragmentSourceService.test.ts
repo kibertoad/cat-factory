@@ -54,9 +54,9 @@ class FakeSourceRepo implements FragmentSourceRepository {
   async upsert(record: FragmentSourceRecord) {
     this.rows.set(record.id, record)
   }
-  async updateSyncState(id: string, lastSyncedSha: string, lastSyncedAt: number) {
+  async updateSyncState(id: string, lastSyncedCommit: string | null, lastSyncedAt: number) {
     const r = this.rows.get(id)
-    if (r) Object.assign(r, { lastSyncedSha, lastSyncedAt })
+    if (r) Object.assign(r, { lastSyncedCommit, lastSyncedAt })
   }
   async softDelete(id: string, at: number) {
     const r = this.rows.get(id)
@@ -78,6 +78,14 @@ function fakeGitHub(files: Record<string, { sha: string; content: string }>) {
     getFileContent: async (_i: number, _r: unknown, path: string) => {
       const f = files[path]
       return f ? { content: f.content, sha: f.sha } : null
+    },
+    // Pseudo head-commit sha derived from the current files, so a resync with no upstream
+    // change pins the same commit (idempotent) and any file change advances it.
+    latestCommitSha: async () => {
+      const parts = Object.entries(files)
+        .map(([p, f]) => `${p}:${f.sha}`)
+        .sort()
+      return parts.length ? `commit:${parts.join('|')}` : null
     },
   }
 }

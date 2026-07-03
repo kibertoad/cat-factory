@@ -1892,7 +1892,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const step = exec.steps.find((s) => s.agentKind === 'ci')!
         expect(step.state).toBe('done')
         expect(step.gate?.attempts).toBe(1)
-        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
+        const attempt = step.gate?.attemptLog?.[0]
+        expect(attempt?.outcome).toBe('completed')
+        // The round records WHAT it was handed to fix (the failing-check summary + the
+        // structured red checks), not only that a round happened — the gate analogue of the
+        // Tester attempt's concerns, surfaced per-runtime.
+        expect(attempt?.instructions).toBeTruthy()
+        expect(attempt?.failingChecks?.map((c) => c.name)).toEqual(['build'])
       })
     })
 
@@ -3294,6 +3300,101 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(custom?.configFields.find((f) => f.secret)?.key).toBe('token')
         // ...and the built-in still resolves off the SAME registry instance.
         expect(probe.describe('github_pat')?.supportsTest).toBe(true)
+      })
+    })
+
+    describe('private package registries (per-workspace npm/GitHub-Packages auth)', () => {
+      it('adds, lists redacted, resolves decrypted for dispatch, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        const probe = app.packageRegistries?.()
+        if (!probe) return
+        const { workspace } = await app.createWorkspace()
+        const base = `/workspaces/${workspace.id}/package-registries`
+
+        const empty = await app.call<{ entries: unknown[] }>('GET', base)
+        expect(empty.status).toBe(200)
+        expect(empty.body.entries).toEqual([])
+
+        // Add one entry per vendor. The list view is REDACTED: vendor + scopes + token
+        // tail only — the raw token must never appear on the wire.
+        const added = await app.call<{
+          entries: { id: string; vendor: string; scopes: string[]; tokenTail: string }[]
+        }>('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme'],
+          token: 'npm_secret_token_1234',
+        })
+        expect(added.status).toBe(200)
+        const listed = await app.call<{
+          entries: { id: string; vendor: string; scopes: string[]; tokenTail: string }[]
+        }>('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'github-packages',
+          scopes: ['@acme-internal', '@acme-tools'],
+          token: 'ghp_registry_secret_5678',
+        })
+        expect(listed.status).toBe(200)
+        expect(listed.body.entries).toHaveLength(2)
+        const [npmjs, ghp] = listed.body.entries
+        expect(npmjs?.vendor).toBe('npmjs')
+        expect(npmjs?.scopes).toEqual(['@acme'])
+        expect(npmjs?.tokenTail).toBe('1234')
+        expect(ghp?.vendor).toBe('github-packages')
+        expect(JSON.stringify(listed.body)).not.toContain('npm_secret_token_1234')
+        expect(JSON.stringify(listed.body)).not.toContain('ghp_registry_secret_5678')
+
+        // A second entry for an already-configured vendor is a 409: the harness renders one
+        // host-keyed `_authToken` per registry, so a duplicate would be silently dropped.
+        const dup = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme-extra'],
+          token: 'npm_second_token_9999',
+        })
+        expect(dup.status).toBe(409)
+
+        // A malformed scope is rejected at the write boundary.
+        const bad = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['not-a-scope!'],
+          token: 'x_token_x',
+        })
+        expect(bad.status).toBeGreaterThanOrEqual(400)
+
+        // The dispatch path decrypts the sealed entries and derives the vendor host —
+        // this is what rides the container job body as `packageRegistries`.
+        const dispatch = await probe.resolveForDispatch(workspace.id)
+        expect(dispatch).toEqual([
+          {
+            ecosystem: 'npm',
+            host: 'registry.npmjs.org',
+            scopes: ['@acme'],
+            token: 'npm_secret_token_1234',
+          },
+          {
+            ecosystem: 'npm',
+            host: 'npm.pkg.github.com',
+            scopes: ['@acme-internal', '@acme-tools'],
+            token: 'ghp_registry_secret_5678',
+          },
+        ])
+        // A workspace with no connection dispatches nothing (no error).
+        const other = await app.createWorkspace()
+        expect(await probe.resolveForDispatch(other.workspace.id)).toEqual([])
+
+        // Remove both entries; the second removal deletes the row outright.
+        const firstId = listed.body.entries[0]?.id as string
+        const secondId = listed.body.entries[1]?.id as string
+        expect((await app.call('DELETE', `${base}/${firstId}`)).status).toBe(204)
+        // Removing an unknown entry 404s rather than silently succeeding.
+        expect((await app.call('DELETE', `${base}/${firstId}`)).status).toBe(404)
+        expect((await app.call('DELETE', `${base}/${secondId}`)).status).toBe(204)
+        const cleared = await app.call<{ entries: unknown[] }>('GET', base)
+        expect(cleared.body.entries).toEqual([])
+        expect(await probe.resolveForDispatch(workspace.id)).toEqual([])
       })
     })
 
@@ -5106,6 +5207,134 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         },
       )
 
+      it.skipIf(harness.name === 'mothership')(
+        'injects the derived frontend origins into the deployer provision and stamps run-start notes',
+        async () => {
+          // Slice 6b (frontend-preview-ui-testing): the REVERSE of a frontend's backend bindings —
+          // the browser origins a bound service's ephemeral env must accept (CORS) — is derived by
+          // reading the frontend frame's `frontend_config` and passed to the deployer as
+          // `inputs.frontendOrigins` (which an operator's manifest folds in via
+          // `{{input.frontendOrigins}}`; the render itself is unit-tested in 6a). This pins the
+          // cross-runtime half: a facade that dropped/mismapped `frontend_config` would derive NO
+          // origins. It ALSO asserts the run-start `notes` (the resolved-binding advisories) round-
+          // trip through each store's `agent_runs.detail` JSON (D1 ⇄ Drizzle).
+          let capturedFrontendOrigins: string | undefined
+          const provider = {
+            provision: async (req: { inputs: Record<string, string> }) => {
+              capturedFrontendOrigins = req.inputs.frontendOrigins
+              return {
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+                expiresAt: null,
+                access: null,
+                fields: {},
+              }
+            },
+            status: async () =>
+              ({
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+              }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+            resolveBinaryArtifactStore: STORAGE_ON,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // A manifest connection gives the deployer a provider to reach; its `bodyTemplate` is
+          // where the operator folds the derived origins into the backend's CORS allow-list.
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: {
+              method: 'POST',
+              pathTemplate: '/environments',
+              bodyTemplate: '{"cors":"{{input.frontendOrigins}}"}',
+            },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // Bind the frontend frame to the auth service BEFORE provisioning, so the deployer
+          // derives the frontend's origin. A duplicate env var (mock, then `service` LAST so the
+          // live binding wins the resolution) makes the run-start note deterministic.
+          const patched = await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+            frontendConfig: {
+              backendBindings: [
+                { envVar: 'PUB_API_URL', source: { kind: 'mock' } },
+                { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+              ],
+            },
+          })
+          expect(patched.status).toBe(200)
+
+          // Provision the auth service's live env via a deployer on a task inside its frame.
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy auth',
+            agentKinds: ['deployer'],
+          })
+          const startDeploy = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: deployPipeline.body.id },
+          )
+          expect(startDeploy.status).toBe(201)
+          await app.drive(wsId)
+
+          // The derived origin (the frontend's default serve port) reached the provider — proving
+          // each store read `frontend_config` to compute `frontendOriginsForService`.
+          expect(capturedFrontendOrigins).toBe('http://localhost:4173')
+
+          // A UI-tester run against the frontend now starts (blk_auth is live) and carries the
+          // duplicate-env-var run-start note.
+          const task = await app.call<Block>(
+            'POST',
+            `/workspaces/${wsId}/blocks/blk_frontend/tasks`,
+            { title: 'Exercise the dashboard' },
+          )
+          const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Build + UI test',
+            agentKinds: ['coder', 'tester-ui'],
+          })
+          const started = await app.call<{
+            id: string
+            notes?: string[]
+            frontendBindings?: { envVar: string; serviceUrl?: string }[]
+          }>('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+            pipelineId: uiPipeline.body.id,
+          })
+          expect(started.status).toBe(201)
+          expect(started.body.notes?.some((n) => n.includes('PUB_API_URL'))).toBe(true)
+          // The bindings resolved once at start are stamped on the run as a frozen snapshot: the
+          // (last-wins) `service` binding resolved to blk_auth's live env URL.
+          expect(started.body.frontendBindings).toContainEqual({
+            envVar: 'PUB_API_URL',
+            serviceUrl: 'https://auth-live.example',
+          })
+
+          // Re-read from the store (fresh snapshot): the note AND the frozen bindings persisted in
+          // `agent_runs.detail` identically on D1 and Postgres.
+          const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+          const persisted = snapshot.body.executions.find((e) => e.id === started.body.id)
+          expect(persisted?.notes?.some((n) => n.includes('only the last binding'))).toBe(true)
+          expect(persisted?.frontendBindings).toContainEqual({
+            envVar: 'PUB_API_URL',
+            serviceUrl: 'https://auth-live.example',
+          })
+        },
+      )
+
       // Slice 5c (frontend-preview-ui-testing): the browsable-preview lifecycle + its ephemeral
       // `environments`-row persistence, driven through a FAKE preview transport (the real one is a
       // per-runtime differentiator, wired only in local). Skipped on Cloudflare (the Worker reports
@@ -6078,6 +6307,130 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(decision.outcome).toBe('auto_merged')
         expect(decision.reason).toBe('within_thresholds')
         expect(decision.thresholds?.presetName).toBeTruthy()
+      })
+
+      it('never auto-merges a task pinned to a "human review only" preset, even on a credible within-threshold assessment', async () => {
+        // The "Manual review only" built-in preset (`autoMergeEnabled: false`) is the
+        // human-review-only policy: a task pinned to it must ALWAYS route its PR to a human,
+        // regardless of how low the assessment scores are. This drives the full task-threshold
+        // wiring end-to-end — `block.mergePresetId` → `resolveMergePreset` repository lookup →
+        // `MergeResolver` — which the resolver unit test can't (it injects the preset directly).
+        // A maximally-mergeable assessment (0/0/0 + a real rationale) would auto-merge under the
+        // default preset; here it must NOT, proving the pinned preset — not the default — governs.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0,
+            risk: 0,
+            impact: 0,
+            rationale: 'Trivial, well-tested change.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        // Listing the catalog lazily seeds the built-ins so `mp_manual_review` is a real row the
+        // task can pin (the resolver reads it back via the repository, which does not self-seed).
+        const presets = await app.call<MergeThresholdPreset[]>(
+          'GET',
+          `/workspaces/${wsId}/merge-presets`,
+        )
+        expect(presets.body.some((p) => p.id === 'mp_manual_review')).toBe(true)
+        // Pin the human-review-only preset on the task.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          mergePresetId: 'mp_manual_review',
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        // Human review only: the PR is left open for a human — never auto-merged.
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
+        // The recorded decision names the pinned preset and the disabled-auto-merge reason so the
+        // SPA banner is precise (distinct from an over-threshold `exceeded_thresholds`).
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          thresholds?: { presetName?: string; autoMergeEnabled?: boolean }
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('auto_merge_disabled')
+        expect(decision.thresholds?.presetName).toBe('Manual review only')
+        expect(decision.thresholds?.autoMergeEnabled).toBe(false)
+      })
+
+      it('routes to human review when a task pinned to a strict preset gets an over-threshold assessment', async () => {
+        // The auto-merge ceilings a task's PICKED preset carries must actually gate the merge —
+        // not just the workspace default. Pin a custom strict preset (low ceilings) and return an
+        // assessment that clears the default's ceilings but exceeds the strict one's: the merge
+        // must be blocked, proving the pinned preset's thresholds — resolved via the repository —
+        // are the ones compared, and the exceeded axes are reported precisely.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0.45,
+            risk: 0.1,
+            impact: 0.45,
+            rationale: 'Touches several modules with moderate coupling.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const strict = await app.call<MergeThresholdPreset>(
+          'POST',
+          `/workspaces/${wsId}/merge-presets`,
+          {
+            name: 'Strict',
+            maxComplexity: 0.3,
+            maxRisk: 0.3,
+            maxImpact: 0.3,
+            ciMaxAttempts: 10,
+            maxRequirementIterations: 6,
+            maxRequirementConcernAllowed: 'none',
+          },
+        )
+        expect(strict.status).toBe(201)
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          mergePresetId: strict.body.id,
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          exceededAxes?: string[]
+          thresholds?: { presetName?: string }
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('exceeded_thresholds')
+        // complexity (0.45) and impact (0.45) clear the default (0.5) but exceed the strict 0.3;
+        // risk (0.1) is within — so only the two breaching axes are reported.
+        expect(decision.exceededAxes?.sort()).toEqual(['complexity', 'impact'])
+        expect(decision.thresholds?.presetName).toBe('Strict')
       })
 
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {

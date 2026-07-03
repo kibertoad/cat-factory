@@ -10,6 +10,7 @@ import {
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -185,7 +186,13 @@ async function mergePr() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <!-- The live run surface stays open by default: it is what a user selecting a
+       running task is looking for (and what the e2e specs assert on). -->
+  <InspectorSection
+    :title="t('inspector.execution.title')"
+    :hint="t('inspector.execution.hint')"
+    default-open
+  >
     <!-- running pipeline -->
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
@@ -472,5 +479,5 @@ async function mergePr() {
     >
       {{ t('inspector.execution.mergePr') }}
     </UButton>
-  </div>
+  </InspectorSection>
 </template>

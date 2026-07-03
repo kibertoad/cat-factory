@@ -47,22 +47,34 @@ export const useProvisioningLogsStore = defineStore('provisioningLogs', () => {
     }
   }
 
-  async function loadForExecution(executionId: string) {
+  /**
+   * Load a run's provisioning attempts. `silent` is for the drawer's background poll
+   * while the run is live: it must NOT flip the `loading` spinner (it would flicker
+   * every poll) and a transient failure must NOT clear the last-good entries or surface
+   * an error banner — the visible refresh path (initial open / manual refresh) owns those.
+   */
+  async function loadForExecution(executionId: string, opts?: { silent?: boolean }) {
     const ws = useWorkspaceStore()
     const s = (byExecution[executionId] ??= emptyState())
-    s.loading = true
-    s.error = null
+    if (!opts?.silent) {
+      s.loading = true
+      s.error = null
+    }
     try {
       const { entries } = await api.listProvisioningLogs(ws.requireId(), {
         executionId,
         limit: 200,
       })
       s.entries = entries
+      s.error = null
     } catch (err) {
-      s.error = err instanceof Error ? err.message : 'Failed to load logs'
-      s.entries = []
+      // A background poll keeps the last snapshot on a blip; only a visible load reports.
+      if (!opts?.silent) {
+        s.error = err instanceof Error ? err.message : 'Failed to load logs'
+        s.entries = []
+      }
     } finally {
-      s.loading = false
+      if (!opts?.silent) s.loading = false
     }
   }
 

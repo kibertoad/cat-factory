@@ -131,6 +131,9 @@ export class AppleContainerRuntimeAdapter implements ContainerRuntimeAdapter {
   readonly id = 'apple' as const
   readonly binary: string
   readonly hostAlias: string
+  // One VM per container with its own IP and no published-port model: a preview's served-app
+  // port is reached at the container's IP, not a pinnable localhost port (see the transport).
+  readonly publishesToLocalhost = false
   // One-VM-per-container with a deterministic-name identity: no Docker-in-Docker, and the
   // warm pool isn't supported (re-leasing a name-keyed VM is messy) — so the transport
   // keeps the per-run path here even when a pool size is configured.

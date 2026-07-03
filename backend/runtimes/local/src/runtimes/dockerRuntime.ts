@@ -36,6 +36,9 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
   readonly binary: string
   readonly hostAlias: string
   readonly capabilities: { localDind: boolean; pooling: boolean }
+  // Docker/Podman/OrbStack/Colima all forward published ports to the host loopback, so a
+  // preview's served-app port is reachable (and pinnable) on localhost.
+  readonly publishesToLocalhost = true
   private readonly addHostGateway: boolean
 
   constructor(options: DockerRuntimeAdapterOptions) {
@@ -62,8 +65,10 @@ export class DockerRuntimeAdapter implements ContainerRuntimeAdapter {
       `HARNESS_SHARED_SECRET=${spec.sharedSecret}`,
     ]
     // Extra published ports (the preview transport's served-app port) alongside the harness
-    // :8080, each on its own ephemeral host port read back via `endpoint(id, port)`.
-    for (const port of spec.publishPorts ?? []) args.push('-p', `127.0.0.1:0:${port}`)
+    // :8080. A pinned `host` gives a deterministic, pre-knowable host port (the preview origin);
+    // an absent one takes an ephemeral port read back via `endpoint(id, port)`.
+    for (const p of spec.publishPorts ?? [])
+      args.push('-p', `127.0.0.1:${p.host ?? 0}:${p.container}`)
     if (spec.instanceSize)
       args.push('--memory', spec.instanceSize.memory, '--cpus', spec.instanceSize.cpus)
     if (spec.privileged) args.push('--privileged')

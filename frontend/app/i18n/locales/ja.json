@@ -387,6 +387,8 @@
   },
   "inspector": {
     "container": {
+      "title": "内容",
+      "hint": "このブロック内のモジュールとタスク。エントリをクリックするとボード上で選択されます。",
       "modules": "モジュール ({count})",
       "taskCount": "{count} 件のタスク | {count} 件のタスク",
       "allTasks": "すべてのタスク ({count})",
@@ -397,6 +399,7 @@
     },
     "epicChildren": {
       "title": "エピックのタスク",
+      "hint": "このエピックに割り当てられたすべてのタスクを、所属するサービスとモジュールごとにまとめて表示します。エピックはタスクをまとめるだけで、それ自体は何も実行しません。",
       "doneCount": "{done}/{total} 完了",
       "empty": "このエピックに属するタスクはまだありません。エピックの子タスクをインポートするか、タスクのエピックを設定してください。",
       "unassigned": "未割り当て"
@@ -435,6 +438,7 @@
     },
     "fragments": {
       "serviceTitle": "サービスのベストプラクティス",
+      "serviceHint": "サービス全体のプログラミング標準です。選択した各フラグメントの内容は、このサービスのタスクに取り組むコード対応エージェントすべてのプロンプトに追加されます。",
       "serviceEmpty": "なし。このサービスのコード対応エージェントはデフォルトのガイダンスに従います。",
       "manageBoard": "このボードのフラグメントライブラリを管理…",
       "manageAccount": "アカウントのフラグメントを管理…"
@@ -501,6 +505,12 @@
           "failed": "失敗",
           "stopped": "停止中"
         }
+      },
+      "resolved": {
+        "title": "現在の解決先",
+        "duplicateWarning": "複数のバインディングで使用されているため、最後のもののみが適用されます: {vars}。",
+        "serviceOffline": "{service}: 稼働環境なし（モック）",
+        "mock": "モック (WireMock)"
       }
     },
     "serviceConnections": {
@@ -513,6 +523,7 @@
     },
     "releaseHealth": {
       "title": "リリース後の健全性",
+      "sectionHint": "このサービスの変更がマージされリリースされた後、ゲートが設定されたモニターと SLO をしばらく監視します。リグレッションが起きるとオンコールエージェントを起動して調査します。自動で取り消されることはありません。",
       "clear": "クリア",
       "connectPrompt": "リリース後にこのサービスを監視するには、可観測性インテグレーションを接続してください。",
       "connectFirst": "まず可観測性インテグレーションを接続してください",
@@ -529,6 +540,7 @@
     },
     "testConfig": {
       "title": "テストインフラ",
+      "hint": "パイプラインがこのサービスを実行する必要があるときに、テスト環境をどう立ち上げるか: インフラなし、Docker Compose ファイル、Kubernetes マニフェスト、またはカスタムマニフェストタイプ。",
       "provisionType": "プロビジョニングの種類",
       "provisionTypeHint": "このサービスが Tester 用の環境をどのように立ち上げるか。各種類の扱い方（エンジンと接続）はワークスペースで設定します。",
       "provisionTypes": {
@@ -612,11 +624,13 @@
     },
     "agentConfig": {
       "title": "エージェント設定",
+      "hint": "このタスクのパイプラインのエージェントが提供するオプションです。各オプションは担当エージェントが開始するまで編集でき、その後はその実行のためにロックされます。",
       "inherited": "サービスから継承",
       "frozen": "固定: エージェントは開始済みです"
     },
     "dependencies": {
       "title": "依存先",
+      "hint": "このタスクを実行する前にマージされている必要があるタスク。すべての依存関係が完了するまで実行コントロールはロックされたままです。",
       "merged": "マージ済み",
       "notMerged": "未マージ",
       "empty": "依存関係はありません。いつでも実行できます。",
@@ -628,11 +642,14 @@
     },
     "estimate": {
       "title": "見積もり",
+      "hint": "タスク見積もりエージェントが生成: このタスクの複雑さ、リスク、影響の見立てです。コンセンサス (複数実行) ステップを行う価値があるかの判断に使われます。",
       "complexity": "複雑度",
       "risk": "リスク",
       "impact": "影響度"
     },
     "execution": {
+      "title": "実行",
+      "hint": "このタスクのパイプラインのライブ実行: 各エージェントステップ、その進捗、生成されたプルリクエスト。",
       "stage": {
         "incorporating": "取り込み中…",
         "reviewing": "再レビュー中…",
@@ -686,12 +703,18 @@
       }
     },
     "structure": {
+      "title": "構造",
+      "hint": "このタスクがサービス内のどこに属し、エージェントがどのコーディング標準に従うか。",
       "module": "モジュール",
       "modulePlaceholder": "例: Sessions (新規の場合は実装時に作成)",
+      "moduleHint": "このタスクが属するサービスのモジュール。名前を入力してください。まだ存在しないモジュールはタスクの実装時に作成されます。",
       "bestPractices": "ベストプラクティス",
-      "bestPracticesEmpty": "なし。エージェントは既定のガイダンスに従います。"
+      "bestPracticesEmpty": "なし。エージェントは既定のガイダンスに従います。",
+      "bestPracticesHint": "サービスレベルの標準に加えて、このタスクのエージェントのプロンプトに組み込まれるベストプラクティスフラグメント。"
     },
     "runSettings": {
+      "title": "実行設定",
+      "hint": "このタスクのパイプラインの実行方法: どのパイプラインが開始するか、どのマージポリシーとモデルポリシーが適用されるか、実行の前後で何が起きるか。",
       "unassigned": "未割り当て",
       "workspaceDefault": "ワークスペースの既定",
       "workspaceDefaultParen": "(ワークスペースの既定)",
@@ -710,10 +733,13 @@
       },
       "pipeline": "パイプライン",
       "pipelineEmpty": "既定なし。このタスクを実行するときにパイプラインを選択してください。",
+      "pipelineHint": "実行ボタンが既定で開始するパイプライン: このタスクのために実行されるエージェントステップの並び (例: 仕様、コード、テスト、マージ)。",
       "mergePolicy": "マージポリシー",
       "mergePresetDetail": "{name}: 複雑度 ≤ {complexity}、リスク ≤ {risk}、影響度 ≤ {impact} のとき自動マージ。CI 修正は最大 {attempts} 回まで。",
       "mergePresetEmpty": "プリセットが設定されていません。マージャーはすべての PR についてレビュー通知を発行します。",
+      "mergePolicyHint": "完成したプルリクエストを人のレビューを待たずに自動マージする条件と、実行が得られる CI 修正の試行回数を決めます。",
       "modelPreset": "モデルプリセット",
+      "modelPresetHint": "各エージェントステップがどの AI モデルで実行されるかを決めます。",
       "modelPresetBase": "ベース {model}",
       "modelPresetOverrides": "、オーバーライド {count} 件 | 、オーバーライド {count} 件",
       "modelPresetEmpty": "プリセットが設定されていません。エージェントはデプロイの既定ルーティングで実行されます。",
@@ -1438,6 +1464,7 @@
         "documents": "ドキュメント",
         "taskTrackers": "タスクトラッカー",
         "observability": "オブザーバビリティ",
+        "development": "開発",
         "personal": "個人（あなたのみ）"
       },
       "items": {
@@ -1474,6 +1501,10 @@
         "observability": {
           "label": "リリース後のヘルス",
           "description": "リリース後にモニターと SLO を監視します (Datadog)。"
+        },
+        "packageRegistries": {
+          "label": "プライベートパッケージレジストリ",
+          "description": "エージェントがプライベート依存関係のインストールに使う npm と GitHub Packages のトークン。"
         },
         "githubPat": {
           "label": "マイ GitHub トークン",
@@ -1975,6 +2006,31 @@
       },
       "connectionNoun": "オブザーバビリティ接続",
       "incidentNoun": "インシデントプロバイダー"
+    },
+    "packageRegistries": {
+      "title": "プライベートパッケージレジストリ",
+      "intro": "リポジトリが依存関係をインストールするプライベートレジストリを接続します。エージェントはリポジトリのチェックアウト時にこれらを受け取り、インストール時にプライベート依存関係を解決できます。トークンは書き込み専用です。変更するにはエントリを削除してから追加し直してください。",
+      "entryNoun": "レジストリエントリ",
+      "list": {
+        "heading": "接続済みのレジストリ",
+        "tokenTail": "トークン …{tail}",
+        "remove": "エントリを削除"
+      },
+      "add": {
+        "heading": "レジストリを追加",
+        "vendor": "レジストリ",
+        "host": "トークンは {host} にのみ送信されます。",
+        "scopes": "パッケージスコープ",
+        "scopesHelp": "カンマ区切りの npm スコープ",
+        "token": "アクセストークン",
+        "save": "レジストリを追加"
+      },
+      "toast": {
+        "loadFailed": "パッケージレジストリを読み込めませんでした",
+        "added": "レジストリを追加しました",
+        "addFailed": "レジストリを追加できませんでした",
+        "removeFailed": "レジストリエントリを削除できませんでした"
+      }
     },
     "localMode": {
       "title": "ローカルモード",
@@ -2579,6 +2635,7 @@
     },
     "taskDocs": {
       "heading": "コンテキストドキュメント",
+      "hint": "このタスクにコンテキストとして添付されたドキュメント。その内容はタスクに取り組むエージェントに渡されます。",
       "attach": "添付",
       "importPage": "ページをインポート…",
       "empty": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
@@ -2599,6 +2656,7 @@
     },
     "contextIssues": {
       "title": "コンテキスト課題",
+      "hint": "このタスクにコンテキストとして添付されたトラッカーの課題。その内容はタスクに取り組むエージェントに渡されます。",
       "attach": "添付",
       "attached": "課題を添付しました",
       "attachFailed": "添付できませんでした",
@@ -2862,6 +2920,8 @@
     },
     "attemptsHeading": "{helper} の試行",
     "attempt": "試行 {number}",
+    "attemptInstructions": "{helper} への指示",
+    "attemptReport": "{helper} のレポート",
     "outcome": {
       "completed": "完了",
       "failed": "失敗"
@@ -2935,6 +2995,9 @@
       "findings": "所見",
       "open": "未対応",
       "answered": "回答済み",
+      "recommendations": "推奨事項",
+      "recsGenerating": "生成中",
+      "recsToReview": "確認待ち",
       "model": "モデル"
     },
     "actions": {
@@ -3642,7 +3705,7 @@
     "sources": {
       "metaSynced": "同期済み · ref {ref}",
       "metaNever": "未同期 · ref {ref}",
-      "changes": "{count} 件の変更 | {count} 件の変更",
+      "changes": "変更",
       "empty": "リンクされたガイドラインリポジトリはありません。下からリンクして Markdown ファイルをフラグメントとしてインポートしてください。",
       "linkTitle": "ガイドラインリポジトリをリンク",
       "ownerPlaceholder": "owner",
@@ -3667,7 +3730,7 @@
       "linkSourceFailed": "ソースをリンクできませんでした",
       "synced": "同期完了: {updated} 件更新、{removed} 件削除",
       "syncFailed": "ソースを同期できませんでした",
-      "changesAvailable": "{count} 件の変更が利用可能 | {count} 件の変更が利用可能",
+      "changesAvailable": "変更が利用可能",
       "upToDate": "最新です",
       "checkSourceFailed": "ソースを確認できませんでした",
       "sourceUnlinked": "ソースのリンクを解除しました",

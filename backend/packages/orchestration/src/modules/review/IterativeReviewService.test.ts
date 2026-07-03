@@ -217,7 +217,7 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
     // A's explicit answer is untouched by requesting a recommendation for B.
     expect(prepared.items.find((i) => i.id === a.id)!.reply).toBe('My explicit answer to A.')
 
-    // The Writer fills the placeholder in the background (one call per finding); progress streams.
+    // The Writer fills the placeholder in the background (a batched call); progress streams.
     const progress: number[] = []
     script.push({
       text: JSON.stringify({
@@ -315,11 +315,15 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
       [x!.id, y!.id].sort(),
     )
 
+    // Both findings are answered by ONE batched Writer call (chunk size > 2); each suggestion is
+    // still routed back to its own finding by itemId, so the two identical findings stay distinct.
     script.push({
-      text: JSON.stringify({ recommendations: [{ itemId: x!.id, recommendation: 'For X.' }] }),
-    })
-    script.push({
-      text: JSON.stringify({ recommendations: [{ itemId: y!.id, recommendation: 'For Y.' }] }),
+      text: JSON.stringify({
+        recommendations: [
+          { itemId: x!.id, recommendation: 'For X.' },
+          { itemId: y!.id, recommendation: 'For Y.' },
+        ],
+      }),
     })
     const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
     expect(produced).toBe(2)
@@ -328,6 +332,42 @@ describe('RequirementReviewService recommendations (Requirement Writer, async)',
       'For X.',
       'For Y.',
     ])
+  })
+
+  it('answers a batch of findings in chunks, not one Writer call per finding', async () => {
+    const svc = makeService()
+    // Five findings → with a chunk size of 4 the Writer is called ceil(5 / 4) = 2 times, not 5.
+    const FIVE_FINDINGS = JSON.stringify({
+      items: Array.from({ length: 5 }, (_, i) => ({
+        category: 'gap',
+        severity: 'high',
+        title: `F${i}`,
+        detail: `f${i}?`,
+      })),
+    })
+    script.push({ text: FIVE_FINDINGS })
+    const review = await svc.review(WS, BLOCK.id, {})
+    expect(review.items).toHaveLength(5)
+    const ids = review.items.map((i) => i.id)
+    await svc.prepareRecommendations(WS, review.id, ids)
+    const callsBeforeFill = script.calls.length // just the one reviewer pass so far
+
+    // First chunk answers findings 0-3 in one response; the second chunk answers finding 4.
+    script.push({
+      text: JSON.stringify({
+        recommendations: ids.slice(0, 4).map((id, i) => ({ itemId: id, recommendation: `R${i}` })),
+      }),
+    })
+    script.push({
+      text: JSON.stringify({ recommendations: [{ itemId: ids[4]!, recommendation: 'R4' }] }),
+    })
+    const { produced } = await svc.fillPendingRecommendations(WS, review.id, {})
+    expect(produced).toBe(5)
+    // The whole point of batching: 2 Writer calls, not 5.
+    expect(script.calls.length - callsBeforeFill).toBe(2)
+    const after = await svc.getForBlock(WS, BLOCK.id)
+    expect(after!.recommendations.every((r) => r.status === 'ready')).toBe(true)
+    expect(after!.recommendations).toHaveLength(5)
   })
 
   it('keeps a valid suggestion even when the Writer omits the echoed itemId', async () => {

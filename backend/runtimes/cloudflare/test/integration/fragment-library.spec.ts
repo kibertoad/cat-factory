@@ -136,7 +136,7 @@ describe('prompt-fragment library (ADR 0006)', () => {
         { repoOwner: 'acme', repoName: 'guidelines', dirPath: 'guidelines' },
       )
       expect(source.status).toBe(201)
-      expect(source.body.lastSyncedSha).toBeNull()
+      expect(source.body.lastSyncedCommit).toBeNull()
 
       const sync = await app.call<FragmentSyncResult>(
         'POST',
@@ -145,7 +145,7 @@ describe('prompt-fragment library (ADR 0006)', () => {
       // Two markdown files import; the .png is skipped.
       expect(sync.body.upserted).toBe(2)
       expect(sync.body.tombstoned).toBe(0)
-      expect(sync.body.lastSyncedSha).not.toBeNull()
+      expect(sync.body.lastSyncedCommit).not.toBeNull()
 
       const resolved = await app.call<ResolvedFragment[]>(
         'GET',
@@ -158,7 +158,7 @@ describe('prompt-fragment library (ADR 0006)', () => {
       expect(sourced?.source?.path).toBe('guidelines/backend.md')
     })
 
-    it('reports no changes after a sync and detects a changed blob', async () => {
+    it('reports no changes after a sync and detects a new upstream commit', async () => {
       const source = await app.call<FragmentSource>(
         'POST',
         `/workspaces/${wsId}/fragment-sources`,
@@ -171,16 +171,18 @@ describe('prompt-fragment library (ADR 0006)', () => {
         `/workspaces/${wsId}/fragment-sources/${source.body.id}/status`,
       )
       expect(clean.body.changed).toBe(false)
-      expect(clean.body.changedCount).toBe(0)
+      // The lightweight probe: synced-to commit matches the current head commit.
+      expect(clean.body.remoteCommit).not.toBeNull()
+      expect(clean.body.remoteCommit).toBe(clean.body.lastSyncedCommit)
 
-      // Upstream edit: same path, new blob sha.
+      // Upstream edit: same path, new blob sha → the dir's head commit advances.
       github.files['guidelines/backend.md']!.sha = 'sha-backend-2'
       const dirty = await app.call<FragmentSourceStatus>(
         'GET',
         `/workspaces/${wsId}/fragment-sources/${source.body.id}/status`,
       )
       expect(dirty.body.changed).toBe(true)
-      expect(dirty.body.changedCount).toBe(1)
+      expect(dirty.body.remoteCommit).not.toBe(dirty.body.lastSyncedCommit)
     })
 
     it("hides another tenant's source from sync/status/unlink (404, nothing mutated)", async () => {

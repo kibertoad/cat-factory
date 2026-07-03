@@ -13,7 +13,7 @@ import {
   serviceProvisioningSchema,
 } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
-import { frontendConfigSchema } from './frontend.js'
+import { frontendConfigSchema, resolvedFrontendBindingSchema } from './frontend.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
@@ -778,6 +778,23 @@ export const gateAttemptSchema = v.object({
   outcome: v.picklist(['completed', 'failed']),
   /** The PR head commit the helper worked against, when known. */
   headSha: v.optional(v.nullable(v.string())),
+  /**
+   * The fixing instructions handed to the helper for this round — the failing-check
+   * summary the CI gate fed the `ci-fixer`, the conflict reason / human-review comments
+   * the other gates fed their fixer. Stashed at dispatch and recorded with the attempt so
+   * the run-detail UI can show WHAT each round was asked to fix (not only that a round
+   * happened) — the gate analogue of the Tester attempt's `concerns`. Null when the gate
+   * hands its fixer no textual instructions (the conflicts gate: GitHub reports mergeability
+   * as a single bit and the harness leaves the conflict markers for the resolver).
+   */
+  instructions: v.optional(v.nullable(v.string())),
+  /**
+   * Structured failing checks handed to this attempt's helper (the CI gate's red check runs
+   * behind {@link instructions}), snapshotted at dispatch so each attempt shows the checks it
+   * set out to fix. Absent for the conflicts gate (no file-level detail) and when the round
+   * carried no structured checks.
+   */
+  failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
   /** The helper's own summary (or the failure reason), naming what it did / what remains. */
   summary: v.optional(v.nullable(v.string())),
 })
@@ -809,6 +826,14 @@ export const gateStepStateSchema = v.object({
    * gate (GitHub reports no file-level detail) and when the last probe passed.
    */
   failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
+  /**
+   * The fixing instructions handed to the most-recently dispatched helper (the failing-check
+   * summary / conflict reason / human fix prompt), stashed at dispatch so the attempt recorded
+   * when that helper's job settles can carry WHAT the round was asked to fix onto its
+   * {@link gateAttemptSchema} entry. Transient bookkeeping — the durable per-round history lives
+   * on {@link attemptLog}. Null when the gate hands its fixer no textual instructions.
+   */
+  lastDispatchedInstructions: v.optional(v.nullable(v.string())),
   /**
    * Epoch ms of the release marker for a time-windowed gate (post-release-health) — the
    * moment it began watching the deployed release. The gate keeps polling `pending`
@@ -1552,6 +1577,25 @@ export const executionInstanceSchema = v.object({
    * Absent/empty for a run that has never been failed-then-retried.
    */
   failureHistory: v.optional(v.array(agentFailureSchema)),
+  /**
+   * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
+   * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live
+   * set of bound services where some fall back to WireMock). Mirrors the harness's own
+   * `buildInfraNotes` but surfaced on the RUN so the SPA renders it in the run/step detail
+   * (distinct from a `failure`, which aborts the run). Absent/empty when there is nothing to
+   * flag. Rides in the `detail` JSON column (no dedicated column), reflecting the start-time
+   * state even after the underlying envs change.
+   */
+  notes: v.optional(v.array(v.string())),
+  /**
+   * The frontend UI-test flow's backend bindings RESOLVED once at run start (env var → the bound
+   * service's live ephemeral URL, or absent ⇒ mocked; see {@link resolveFrontendBindings}). Stamped
+   * on the run so the SPA's run/step detail projects what the run ACTUALLY drove against — a frozen
+   * snapshot that stays truthful after the underlying envs are torn down, rather than re-resolving
+   * against current live state (which for a finished run could disagree with the co-located
+   * start-time {@link notes}). Rides in the `detail` JSON column; absent for a non-frontend run.
+   */
+  frontendBindings: v.optional(v.array(resolvedFrontendBindingSchema)),
   /**
    * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
    * so the individual-usage restricted mode can use the initiator's OWN personal

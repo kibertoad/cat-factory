@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
 import EmptyState from '~/components/common/EmptyState.vue'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -42,11 +43,14 @@ async function removeDep(dep: Block) {
 </script>
 
 <template>
-  <div>
-    <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('inspector.dependencies.title') }}
-      </span>
+  <!-- The warning flag keeps "this task is blocked" visible even while collapsed. -->
+  <InspectorSection
+    :title="t('inspector.dependencies.title')"
+    :hint="t('inspector.dependencies.hint')"
+    :count="deps.length"
+    :warning="!runnable"
+  >
+    <template #actions>
       <UDropdownMenu v-if="depMenu.length" :items="depMenu">
         <UButton
           size="xs"
@@ -56,7 +60,7 @@ async function removeDep(dep: Block) {
           trailing-icon="i-lucide-chevron-down"
         />
       </UDropdownMenu>
-    </div>
+    </template>
     <div v-if="deps.length" class="flex flex-wrap gap-1">
       <UBadge
         v-for="d in deps"
@@ -82,8 +86,8 @@ async function removeDep(dep: Block) {
       icon="i-lucide-git-branch"
       :title="t('inspector.dependencies.empty')"
     />
-    <div v-if="!runnable" class="mt-1 text-[10px] text-amber-400">
+    <div v-if="!runnable" class="text-[10px] text-amber-400">
       {{ t('inspector.dependencies.blocked') }}
     </div>
-  </div>
+  </InspectorSection>
 </template>

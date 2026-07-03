@@ -298,9 +298,7 @@ async function checkSource(id: string) {
   try {
     const status = await library.checkSource(id)
     toast.add({
-      title: status.changed
-        ? t('fragments.toast.changesAvailable', { count: status.changedCount }, status.changedCount)
-        : t('fragments.toast.upToDate'),
+      title: status.changed ? t('fragments.toast.changesAvailable') : t('fragments.toast.upToDate'),
       icon: status.changed ? 'i-lucide-bell-dot' : 'i-lucide-check',
     })
   } catch (e) {
@@ -585,13 +583,7 @@ async function unlinkSource(id: string) {
             variant="subtle"
             class="ms-auto"
           >
-            {{
-              t(
-                'fragments.sources.changes',
-                { count: library.sourceChanges[s.id] },
-                library.sourceChanges[s.id] ?? 0,
-              )
-            }}
+            {{ t('fragments.sources.changes') }}
           </UBadge>
           <div class="ms-auto flex gap-1">
             <UButton

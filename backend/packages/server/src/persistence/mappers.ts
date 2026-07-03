@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   Pipeline,
   PipelineStep,
+  ResolvedFrontendBinding,
   Workspace,
 } from '@cat-factory/contracts'
 import {
@@ -13,6 +14,7 @@ import {
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
+  resolvedFrontendBindingSchema,
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
@@ -594,6 +596,10 @@ interface ExecutionDetail {
   failureHistory?: AgentFailure[]
   /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
   createdAt?: number
+  /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
+  notes?: string[]
+  /** Frontend bindings resolved once at run start (see {@link ExecutionInstance.frontendBindings}). */
+  frontendBindings?: ResolvedFrontendBinding[]
 }
 
 // ---------------------------------------------------------------------------
@@ -656,6 +662,15 @@ function parseFailureHistory(list: unknown): AgentFailure[] {
   return Array.isArray(list) ? list.filter(isUsableFailure) : []
 }
 
+/**
+ * The run-start resolved frontend bindings packed into `detail`. Tolerant like the failure
+ * parsers: a non-array, or an entry that doesn't match the wire schema, is dropped rather than
+ * bricking the whole snapshot decode (the SPA re-validates the full snapshot).
+ */
+function parseFrontendBindings(list: unknown): ResolvedFrontendBinding[] {
+  return Array.isArray(list) ? list.filter((b) => is(resolvedFrontendBindingSchema, b)) : []
+}
+
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   let detail: Partial<ExecutionDetail>
   try {
@@ -702,6 +717,17 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
     // no dedicated column); a run that never failed-then-retried simply has none.
     failureHistory: parseFailureHistory(detail.failureHistory),
+    // Run-start advisories ride in `detail` too (only present for a frontend UI-test run that
+    // had something to flag); tolerate a non-array-of-strings by dropping it.
+    ...(Array.isArray(detail.notes) && detail.notes.every((n) => typeof n === 'string')
+      ? { notes: detail.notes }
+      : {}),
+    // The run-start resolved bindings ride in `detail` too (only a frontend UI-test run has
+    // them); a frozen snapshot so the SPA projects what the run drove against. Drop malformed.
+    ...(() => {
+      const frontendBindings = parseFrontendBindings(detail.frontendBindings)
+      return frontendBindings.length ? { frontendBindings } : {}
+    })(),
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
@@ -726,5 +752,9 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
     ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
+    // Likewise only persist run-start notes when there is something to flag.
+    notes: instance.notes?.length ? instance.notes : undefined,
+    // The resolved bindings are stamped once at start; only a frontend run carries any.
+    frontendBindings: instance.frontendBindings?.length ? instance.frontendBindings : undefined,
   } satisfies ExecutionDetail)
 }

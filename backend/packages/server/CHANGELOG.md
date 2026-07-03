@@ -1,5 +1,169 @@
 # @cat-factory/server
 
+## 0.71.2
+
+### Patch Changes
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+  - @cat-factory/orchestration@0.60.4
+
+## 0.71.1
+
+### Patch Changes
+
+- 803fa76: mothership: allow-list the Kaizen grading read surface
+
+  In mothership mode the Kaizen SCREEN (`KaizenController` → `KaizenService.getOverview` /
+  `listForExecution`) was not functional over `/internal/persistence`: the run-path grade
+  reads/writes (`kaizenGradingRepository.getByStep`/`upsert`,
+  `kaizenVerifiedComboRepository.getByKey`) were remotely callable, but the screen's list reads
+  came back `unknown_method`, so a mothership-mode SPA could not display the grading history, the
+  verified-combo library, or a run's per-step grading status. This widens
+  `REMOTE_PERSISTENCE_METHODS` with the screen's reads, each workspace-scoped on arg0 (the existing
+  `workspace` rule), read-only and member-level (the Kaizen endpoints are not admin-gated):
+
+  - `kaizenGradingRepository.listByWorkspace` — the Kaizen screen's bounded grading history.
+  - `kaizenGradingRepository.listByExecution` — the run-window per-step grading status.
+  - `kaizenVerifiedComboRepository.listByWorkspace` — the verified-combo library.
+
+  Still off the SPA path: the internal-only single-grade `kaizenGradingRepository.get` (the service
+  never calls it), the background-sweep reads (`listPending`/`claim`, kind-spanning cron), and the
+  combo `upsert` (the streak/verified write) — kaizen GRADING itself is best-effort in mothership
+  mode until the Phase 5 telemetry/local-first sync, but the screen that VIEWS prior grades now reads
+  them over the RPC. These are core repositories (`createDrizzleRepositories`), so a mothership-mode
+  node already sources them from the full-surface remote registry (`composeMothership`) when `db` is
+  undefined — an allow-list change only, symmetric by construction (the dispatcher reflects over each
+  facade's registry).
+
+## 0.71.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/agents@0.27.0
+  - @cat-factory/integrations@0.57.1
+  - @cat-factory/orchestration@0.60.3
+  - @cat-factory/spend@0.10.80
+  - @cat-factory/prompt-fragments@0.9.46
+
+## 0.70.0
+
+### Minor Changes
+
+- 7fd6a19: Import-from-repo picker: find and link accessible repos in realtime instead of enumerating the whole installation and filtering in memory. The old path listed every installation repo (capped at a bounded page count) then substring-filtered client-of-the-cap — so on a wide App install a repo beyond that window returned "no matches" for a repo you actually had access to, and every keystroke re-fetched all pages. Two new `GitHubClient` primitives fix it end to end: `searchInstallationRepos` issues one bounded, account-scoped GitHub search per query, and `getRepoById` point-reads the picked repo by id when linking it (so a repo surfaced by search from beyond the enumeration cap links instead of spuriously 409-ing). Blank-query browse-all is unchanged; PAT (local) and GitLab connections filter their bounded token listing. When an installation has no resolvable account to scope the GitHub search to, the App adapter filters its own bounded listing rather than running an unscoped global search (which would surface arbitrary, unlinkable public repos).
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+  - @cat-factory/integrations@0.57.0
+  - @cat-factory/agents@0.26.18
+  - @cat-factory/orchestration@0.60.2
+  - @cat-factory/spend@0.10.79
+
+## 0.69.1
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/orchestration@0.60.1
+  - @cat-factory/agents@0.26.17
+  - @cat-factory/integrations@0.56.5
+  - @cat-factory/prompt-fragments@0.9.45
+  - @cat-factory/spend@0.10.78
+
+## 0.69.0
+
+### Minor Changes
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- 36f4cf6: Frontend UI-test bindings: surface how each backend binding resolves + a non-fatal run-start note.
+
+  - **Shared resolution helpers moved to `@cat-factory/contracts`** (next to `frontendOriginsForService`)
+    so the SPA and the backend share ONE source of truth: `resolveFrontendBindings`,
+    `indexLiveServiceEnvUrls`, `boundServiceFrameIds`, the `ResolvedFrontendBinding`/`LiveEnvHandle`
+    types, and a new pure `buildFrontendRunNotes`. Orchestration re-exports them, so existing importers
+    are unchanged.
+  - **Inspector resolved-binding visibility**: `FrontendConfig.vue` now shows, live, how each backend
+    binding resolves — `envVar → a bound service's live ephemeral URL | mocked (WireMock)` — mirroring
+    what a UI-test run resolves, plus a warning for duplicate env vars. Backed by a new lightweight
+    `environments` store over `GET /workspaces/:ws/environments`.
+  - **Run/step detail projection + run-start note**: the engine stamps BOTH the resolved bindings
+    (`ExecutionInstance.frontendBindings`) and the non-fatal advisories (`ExecutionInstance.notes`:
+    duplicate env vars, or a partial-live set where some bound services fall back to WireMock) on the
+    run ONCE at start — the SPA-visible mirror of the harness's own `buildInfraNotes`. A `tester-ui`
+    step's detail projects the FROZEN start-time bindings (so a finished run shows what it actually
+    drove against, not a live re-resolution that could disagree with the co-located note after the
+    envs are torn down); the run-start note shows on any step detail of a frontend-frame run. Both
+    ride in the run's `detail` JSON (no migration) and round-trip identically on D1 ⇄ Postgres.
+
+  No wire/behaviour break: the notes field is optional, the moved helpers are re-exported, and a
+  non-frontend run is unaffected.
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/orchestration@0.60.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/agents@0.26.16
+  - @cat-factory/integrations@0.56.4
+  - @cat-factory/prompt-fragments@0.9.44
+  - @cat-factory/spend@0.10.77
+
 ## 0.68.2
 
 ### Patch Changes

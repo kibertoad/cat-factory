@@ -92,6 +92,34 @@ describe('asGitHubClient (VcsClient → GitHubClient)', () => {
     expect(calls.at(-1)?.url).toBe('/projects?membership=true&per_page=100')
   })
 
+  it('searches the accessible projects by owner/name over the neutral listing', async () => {
+    const { client } = adapted({
+      'GET /projects?membership=true&per_page=100': {
+        body: [
+          { id: 1, path: 'api-gateway', namespace: { full_path: 'group' }, default_branch: 'main' },
+          { id: 2, path: 'web-app', namespace: { full_path: 'group' }, default_branch: 'main' },
+        ],
+      },
+    })
+    const hits = await client.searchInstallationRepos(123, 'gateway')
+    expect(hits.map((r) => r.githubId)).toEqual([1])
+    // A blank query short-circuits to no results (no listing round-trip needed).
+    expect(await client.searchInstallationRepos(123, '   ')).toEqual([])
+  })
+
+  it('resolves a repo by id against the accessible-projects listing', async () => {
+    const { client } = adapted({
+      'GET /projects?membership=true&per_page=100': {
+        body: [{ id: 7, path: 'proj', namespace: { full_path: 'group' }, default_branch: 'main' }],
+      },
+    })
+    expect((await client.getRepoById(123, 7))?.name).toBe('proj')
+    const { client: missing } = adapted({
+      'GET /projects?membership=true&per_page=100': { body: [] },
+    })
+    expect(await missing.getRepoById(123, 7)).toBeNull()
+  })
+
   it('throws for App-installation discovery (no single-token equivalent)', async () => {
     const { client } = adapted({})
     await expect(client.getInstallation(1)).rejects.toThrow(/not supported/i)

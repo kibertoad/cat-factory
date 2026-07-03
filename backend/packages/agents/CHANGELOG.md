@@ -1,5 +1,84 @@
 # @cat-factory/agents
 
+## 0.27.1
+
+### Patch Changes
+
+- cc924a9: Requirements-review recommendations: batch, tighten, and surface what's awaited.
+
+  - The Requirement Writer now answers findings in CHUNKS (up to 4 per LLM call) instead of one
+    call per finding, so a batch of N findings costs `ceil(N / 4)` calls rather than N. Shared
+    grounding is still gathered once and progress still streams `ready / total` a chunk at a time;
+    a failure is isolated to its chunk. Each finding keeps the same per-finding output budget the
+    single-call path used (scaled by chunk size), and a batched response is routed back to its
+    findings by the echoed itemId with a prompt-order fallback — so a response that drops the ids
+    isn't discarded wholesale and the whole chunk force-reopened.
+  - The Writer prompt (`requirement-writer`, bumped to v2) now asks for precise, succinct
+    recommendations — the concrete answer in a couple of sentences, cite sources briefly, no
+    preamble or padding — instead of open-ended prose.
+  - The review window now shows a persistent "awaited recommendations" summary (how many the
+    Writer is still generating and how many are waiting on the human) in the stats rail, and lets
+    you request recommendations while a merged review is being reworked — not only in the initial
+    `ready` state.
+  - The incorporated-requirements document can now be collapsed as a whole. It defaults to collapsed
+    only in the pre-incorporation `ready` phase (so a long doc doesn't push the findings being worked
+    through off-screen) and expanded in `merged`/`incorporated`, where the document itself is the
+    thing to read; a manual collapse no longer leaks across a status change.
+
+## 0.27.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/prompt-fragments@0.9.46
+
+## 0.26.18
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+
+## 0.26.17
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/prompt-fragments@0.9.45
+
+## 0.26.16
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/prompt-fragments@0.9.44
+
 ## 0.26.15
 
 ### Patch Changes

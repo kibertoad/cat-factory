@@ -170,6 +170,34 @@ export class FetchGitLabClient implements VcsClient {
     }))
   }
 
+  async latestCommitSha(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<string | null> {
+    const clean = path.replace(/^\/+|\/+$/g, '')
+    const params = new URLSearchParams({ per_page: '1' })
+    if (clean) params.set('path', clean)
+    // GitLab's commits API wants a concrete ref (`HEAD` is not reliable on every
+    // instance), so resolve the project default branch for a `HEAD`/absent gitRef.
+    const refName =
+      !gitRef || gitRef === 'HEAD' ? await this.defaultBranch(connection, ref) : gitRef
+    if (refName) params.set('ref_name', refName)
+    let json: unknown
+    try {
+      ;({ json } = await this.request(
+        `/projects/${projectPath(ref)}/repository/commits?${params.toString()}`,
+        { connection },
+      ))
+    } catch (err) {
+      if (err instanceof GitLabApiError && err.status === 404) return null
+      throw err
+    }
+    const commits = (Array.isArray(json) ? json : []) as Array<{ id?: string }>
+    return commits[0]?.id ?? null
+  }
+
   async listDirectory(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

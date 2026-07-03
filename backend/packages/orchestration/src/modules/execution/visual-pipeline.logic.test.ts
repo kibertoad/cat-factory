@@ -90,7 +90,11 @@ describe('frontendOriginsForService', () => {
   /** A `frontend` frame binding `serviceBlockId` with a given envVar + optional servePort. */
   function fe(
     serviceBlockId: string,
-    { envVar = 'PUB_API_URL', servePort }: { envVar?: string; servePort?: number } = {},
+    {
+      envVar = 'PUB_API_URL',
+      servePort,
+      previewEnabled,
+    }: { envVar?: string; servePort?: number; previewEnabled?: boolean } = {},
   ): Pick<Block, 'level' | 'type' | 'frontendConfig'> {
     return {
       level: 'frame',
@@ -98,6 +102,7 @@ describe('frontendOriginsForService', () => {
       frontendConfig: {
         backendBindings: [{ envVar, source: { kind: 'service', serviceBlockId } }],
         ...(servePort !== undefined ? { servePort } : {}),
+        ...(previewEnabled !== undefined ? { previewEnabled } : {}),
       },
     }
   }
@@ -144,5 +149,16 @@ describe('frontendOriginsForService', () => {
 
   it('ignores a binding with an empty envVar (an unfinished row the frontend never injects)', () => {
     expect(frontendOriginsForService('blk_svc', [fe('blk_svc', { envVar: '  ' })])).toEqual([])
+  })
+
+  it('covers the browsable preview with the same origin (pinned host port == serve port)', () => {
+    // The local Docker-family preview pins its host port to the serve port, so a developer browses
+    // it at the SAME `http://localhost:<servePort>` the in-container UI tester uses — one origin
+    // serves both, so `previewEnabled` adds no extra CORS entry.
+    expect(
+      frontendOriginsForService('blk_svc', [
+        fe('blk_svc', { servePort: 5000, previewEnabled: true }),
+      ]),
+    ).toEqual(['http://localhost:5000'])
   })
 })

@@ -238,9 +238,42 @@ export interface GitHubClient {
   listInstallations(): Promise<InstallationSummary[]>
   /** List every repository the installation can access (for backfill/reconcile). */
   listInstallationRepos(installationId: number): Promise<Paged<GitHubRepo>>
+  /**
+   * Search the installation's repositories by an `owner/name` query, server-side and in
+   * **realtime** — one bounded request per query, for the add-service picker's typeahead.
+   * Unlike {@link listInstallationRepos} (which enumerates the WHOLE installation, capped
+   * at a bounded page count so a wide install silently truncates and a repo beyond the
+   * window can't be found), this asks the provider to match, so a match anywhere in the
+   * installation is returned. `opts.owner`/`opts.ownerType` scope the search to the
+   * installation's account and `opts.limit` caps the result count (defaults applied by the
+   * adapter). An empty/whitespace query returns `[]`.
+   *
+   * Matching semantics are the ADAPTER's, not a guaranteed `owner/name` substring: the
+   * GitHub-App adapter delegates to GitHub's name search (token/prefix match, so the
+   * interior of a single-token name like `board` in `dashboard` may not match), and may
+   * surface a public org repo the App wasn't granted — such a repo simply fails to link
+   * (its {@link getRepoById} returns `null`). The single-token adapters (PAT/GitLab) keep
+   * the exact case-insensitive substring match over their bounded listing. When no
+   * `opts.owner` scope is available the GitHub-App adapter also falls back to that
+   * substring match rather than an unscoped global search.
+   */
+  searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts?: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number },
+  ): Promise<GitHubRepo[]>
 
   // ---- reads --------------------------------------------------------------
   getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo>
+  /**
+   * Point-read a single accessible repository by its numeric id, or `null` when the
+   * installation can't access it. This is the id-keyed counterpart of {@link getRepo}
+   * (which needs `owner/name`): the picker's realtime search returns ids, and linking one
+   * must resolve it WITHOUT enumerating the whole installation — {@link
+   * listInstallationRepos} caps at a bounded page count, so a repo beyond that window
+   * would be unlinkable even though search surfaced it.
+   */
+  getRepoById(installationId: number, repoGithubId: number): Promise<GitHubRepo | null>
   /**
    * Whether the installation actually has **push (write)** access to a repo. GitHub
    * returns the token's *effective* `permissions` on the repo payload, so a public
@@ -289,6 +322,20 @@ export interface GitHubClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoFileContent | null>
+  /**
+   * The sha of the most recent commit that touched `path` on `gitRef` (the repo's
+   * default branch when `gitRef` is omitted or `'HEAD'`), or null when the path/repo
+   * has no such commit (empty repo / unknown ref). `path` may be `''` for the whole
+   * repo (the ref's head). A single cheap read — the fragment library uses it as the
+   * lightweight staleness probe (compare against the last-synced commit) instead of
+   * listing the whole directory.
+   */
+  latestCommitSha(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<string | null>
   listPullRequests(
     installationId: number,
     ref: GitHubRepoRef,

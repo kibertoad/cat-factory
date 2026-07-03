@@ -1,5 +1,31 @@
 # @cat-factory/executor-harness
 
+## 1.34.2
+
+### Patch Changes
+
+- 96cff56: Bump the bundled coding-agent CLIs in the executor-harness image (image tag
+  1.34.0 -> 1.34.1): Claude Code `2.1.197 -> 2.1.199` and Codex `0.142.4 ->
+0.142.5`. Pi stays at `0.80.3` (already the latest release). Routine upstream
+  updates; no harness code changes. The matching image tag is bumped in
+  `deploy/backend` (`wrangler.toml` + the `image:publish` script) and in
+  `RECOMMENDED_HARNESS_IMAGE` (`backend/runtimes/local/src/harnessImage.ts`).
+
+## 1.34.0
+
+### Minor Changes
+
+- b78adf5: Consume the job body's new `packageRegistries` field: validated against a hard host
+  allowlist (`registry.npmjs.org`, `npm.pkg.github.com`; entries of an unknown
+  ecosystem are dropped so future ecosystems stay additive; a token carrying a space
+  or control character is rejected so it can't inject extra `~/.npmrc` lines), rendered
+  into a 0600
+  `~/.npmrc` before any mode runs (read by npm/pnpm/yarn v1 in the agent's shell
+  installs and the frontend-infra stand-up alike), cleared when a job carries no
+  entries so a reused warm-pool container never leaks a prior job's token, and the
+  tokens registered with the shared output redaction. Yarn berry (`.yarnrc.yml`) and
+  Docker-in-Docker compose image builds do not pick up the auth yet.
+
 ## 1.32.0
 
 ### Minor Changes

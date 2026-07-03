@@ -64,14 +64,21 @@ export type GateHelperOutcome =
 
 /**
  * Build the record of a just-finished gate-helper attempt (a ci-fixer / conflict-resolver
- * run) for {@link GateStepState.attemptLog}. The summary is the helper's OWN account — its
- * output on completion (which the conflict-resolver fills with the files it left
- * conflicting), or the error on failure — tagged with the current attempt number + the
- * gated head sha. The gate's next precheck remains the source of truth for pass/fail; this
- * is purely the per-attempt history the UI shows so a looping gate isn't a black box.
+ * run) for {@link GateStepState.attemptLog}. It captures BOTH sides of the round so the run
+ * detail can show it in full (the gate analogue of the Tester attempt's `concerns` + `summary`):
+ *   - `instructions` / `failingChecks` — what the round was ASKED to fix, carried from the
+ *     dispatch-time `lastDispatchedInstructions` + `failingChecks` stash on the gate state.
+ *   - `summary` — the helper's OWN account: its output on completion (which the conflict-resolver
+ *     fills with the files it left conflicting), or the error on failure.
+ * Tagged with the current attempt number + the gated head sha. The gate's next precheck remains
+ * the source of truth for pass/fail; this is purely the per-attempt history the UI shows so a
+ * looping gate isn't a black box.
  */
 export function recordGateAttempt(
-  gate: Pick<GateStepState, 'attempts' | 'headSha'>,
+  gate: Pick<
+    GateStepState,
+    'attempts' | 'headSha' | 'lastDispatchedInstructions' | 'failingChecks'
+  >,
   outcome: GateHelperOutcome,
   at: number,
 ): GateAttempt {
@@ -80,6 +87,10 @@ export function recordGateAttempt(
     at,
     outcome: outcome.state === 'done' ? 'completed' : 'failed',
     headSha: gate.headSha ?? null,
+    ...(gate.lastDispatchedInstructions ? { instructions: gate.lastDispatchedInstructions } : {}),
+    ...(gate.failingChecks && gate.failingChecks.length
+      ? { failingChecks: gate.failingChecks }
+      : {}),
     summary:
       outcome.state === 'done'
         ? outcome.output

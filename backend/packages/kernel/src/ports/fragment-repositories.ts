@@ -98,8 +98,15 @@ export interface FragmentSourceRecord {
   repoName: string
   gitRef: string
   dirPath: string
-  /** Digest of the source tree at the last successful sync; powers "changed?". */
-  lastSyncedSha: string | null
+  /**
+   * Sha of the most recent commit that touched the source directory at the last
+   * successful sync; powers the lightweight "changed?" check (compare against the
+   * repo's current head commit for the dir). Null before the first sync.
+   *
+   * NOTE: the physical column is still named `last_synced_sha` in both stores — it
+   * now holds a commit sha rather than the former tree-listing digest.
+   */
+  lastSyncedCommit: string | null
   lastSyncedAt: number | null
   createdAt: number
   deletedAt: number | null
@@ -109,6 +116,6 @@ export interface FragmentSourceRepository {
   listByOwner(ownerKind: FragmentOwnerKind, ownerId: string): Promise<FragmentSourceRecord[]>
   get(id: string): Promise<FragmentSourceRecord | null>
   upsert(record: FragmentSourceRecord): Promise<void>
-  updateSyncState(id: string, lastSyncedSha: string, lastSyncedAt: number): Promise<void>
+  updateSyncState(id: string, lastSyncedCommit: string | null, lastSyncedAt: number): Promise<void>
   softDelete(id: string, at: number): Promise<void>
 }

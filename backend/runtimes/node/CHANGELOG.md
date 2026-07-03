@@ -1,5 +1,157 @@
 # @cat-factory/node-server
 
+## 0.62.2
+
+### Patch Changes
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+  - @cat-factory/orchestration@0.60.4
+  - @cat-factory/consensus@0.8.21
+  - @cat-factory/provider-bedrock@0.7.126
+  - @cat-factory/provider-cloudflare@0.7.126
+  - @cat-factory/server@0.71.2
+
+## 0.62.1
+
+### Patch Changes
+
+- Updated dependencies [803fa76]
+  - @cat-factory/server@0.71.1
+
+## 0.62.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/agents@0.27.0
+  - @cat-factory/server@0.71.0
+  - @cat-factory/gitlab@0.6.0
+  - @cat-factory/consensus@0.8.20
+  - @cat-factory/gates@0.2.76
+  - @cat-factory/integrations@0.57.1
+  - @cat-factory/observability-langfuse@0.7.119
+  - @cat-factory/orchestration@0.60.3
+  - @cat-factory/provider-bedrock@0.7.125
+  - @cat-factory/provider-cloudflare@0.7.125
+  - @cat-factory/provider-s3@0.2.69
+  - @cat-factory/spend@0.10.80
+  - @cat-factory/prompt-fragments@0.9.46
+
+## 0.61.2
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+  - @cat-factory/server@0.70.0
+  - @cat-factory/integrations@0.57.0
+  - @cat-factory/gitlab@0.5.0
+  - @cat-factory/agents@0.26.18
+  - @cat-factory/consensus@0.8.19
+  - @cat-factory/gates@0.2.75
+  - @cat-factory/observability-langfuse@0.7.118
+  - @cat-factory/orchestration@0.60.2
+  - @cat-factory/provider-bedrock@0.7.124
+  - @cat-factory/provider-cloudflare@0.7.124
+  - @cat-factory/provider-s3@0.2.68
+  - @cat-factory/spend@0.10.79
+
+## 0.61.1
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/gates@0.2.74
+  - @cat-factory/orchestration@0.60.1
+  - @cat-factory/agents@0.26.17
+  - @cat-factory/consensus@0.8.18
+  - @cat-factory/gitlab@0.4.45
+  - @cat-factory/integrations@0.56.5
+  - @cat-factory/prompt-fragments@0.9.45
+  - @cat-factory/server@0.69.1
+  - @cat-factory/spend@0.10.78
+  - @cat-factory/observability-langfuse@0.7.117
+  - @cat-factory/provider-bedrock@0.7.123
+  - @cat-factory/provider-cloudflare@0.7.123
+  - @cat-factory/provider-s3@0.2.67
+
+## 0.61.0
+
+### Minor Changes
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/orchestration@0.60.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/server@0.69.0
+  - @cat-factory/agents@0.26.16
+  - @cat-factory/consensus@0.8.17
+  - @cat-factory/gates@0.2.73
+  - @cat-factory/gitlab@0.4.44
+  - @cat-factory/integrations@0.56.4
+  - @cat-factory/prompt-fragments@0.9.44
+  - @cat-factory/spend@0.10.77
+  - @cat-factory/observability-langfuse@0.7.116
+  - @cat-factory/provider-bedrock@0.7.122
+  - @cat-factory/provider-cloudflare@0.7.122
+  - @cat-factory/provider-s3@0.2.66
+
 ## 0.60.2
 
 ### Patch Changes

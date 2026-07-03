@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Block, ServiceConnection } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Service-frame (`type: 'service'`) connections: the other services this one USES
 // (consumer→provider edges, stored on this frame — the consumer end). Each row picks a
@@ -78,11 +79,13 @@ const usedBy = computed(() =>
 </script>
 
 <template>
-  <div class="space-y-2 border-t border-slate-800 pt-2" data-testid="service-connections">
-    <div class="flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('inspector.serviceConnections.title') }}
-      </span>
+  <InspectorSection
+    :title="t('inspector.serviceConnections.title')"
+    :hint="t('inspector.serviceConnections.hint')"
+    :count="connections.length"
+    data-testid="service-connections"
+  >
+    <template #actions>
       <UButton
         size="xs"
         variant="ghost"
@@ -92,10 +95,7 @@ const usedBy = computed(() =>
         data-testid="service-connection-add"
         @click="addConnection"
       />
-    </div>
-    <p class="text-[11px] leading-snug text-slate-500">
-      {{ t('inspector.serviceConnections.hint') }}
-    </p>
+    </template>
 
     <div v-if="connections.length" class="space-y-1.5">
       <div
@@ -147,5 +147,5 @@ const usedBy = computed(() =>
         </UBadge>
       </div>
     </div>
-  </div>
+  </InspectorSection>
 </template>

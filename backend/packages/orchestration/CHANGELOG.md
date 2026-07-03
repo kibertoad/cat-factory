@@ -1,5 +1,151 @@
 # @cat-factory/orchestration
 
+## 0.60.4
+
+### Patch Changes
+
+- cc924a9: Requirements-review recommendations: batch, tighten, and surface what's awaited.
+
+  - The Requirement Writer now answers findings in CHUNKS (up to 4 per LLM call) instead of one
+    call per finding, so a batch of N findings costs `ceil(N / 4)` calls rather than N. Shared
+    grounding is still gathered once and progress still streams `ready / total` a chunk at a time;
+    a failure is isolated to its chunk. Each finding keeps the same per-finding output budget the
+    single-call path used (scaled by chunk size), and a batched response is routed back to its
+    findings by the echoed itemId with a prompt-order fallback — so a response that drops the ids
+    isn't discarded wholesale and the whole chunk force-reopened.
+  - The Writer prompt (`requirement-writer`, bumped to v2) now asks for precise, succinct
+    recommendations — the concrete answer in a couple of sentences, cite sources briefly, no
+    preamble or padding — instead of open-ended prose.
+  - The review window now shows a persistent "awaited recommendations" summary (how many the
+    Writer is still generating and how many are waiting on the human) in the stats rail, and lets
+    you request recommendations while a merged review is being reworked — not only in the initial
+    `ready` state.
+  - The incorporated-requirements document can now be collapsed as a whole. It defaults to collapsed
+    only in the pre-incorporation `ready` phase (so a long doc doesn't push the findings being worked
+    through off-screen) and expanded in `merged`/`incorporated`, where the document itself is the
+    thing to read; a manual collapse no longer leaks across a status change.
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+  - @cat-factory/sandbox@0.8.91
+
+## 0.60.3
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/agents@0.27.0
+  - @cat-factory/integrations@0.57.1
+  - @cat-factory/sandbox@0.8.90
+  - @cat-factory/spend@0.10.80
+  - @cat-factory/workspaces@0.10.27
+  - @cat-factory/prompt-fragments@0.9.46
+
+## 0.60.2
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+  - @cat-factory/integrations@0.57.0
+  - @cat-factory/agents@0.26.18
+  - @cat-factory/sandbox@0.8.89
+  - @cat-factory/spend@0.10.79
+  - @cat-factory/workspaces@0.10.26
+
+## 0.60.1
+
+### Patch Changes
+
+- 0ac0dc4: Surface per-iteration fixing instructions in polling-gate run details. A `ci` /
+  `conflicts` gate's helper attempt now records the instructions it was handed (the
+  failing-check summary + structured red checks for CI, the conflict/review detail for the
+  others) alongside the helper's own report, so the gate window shows WHAT each round set out
+  to fix — bringing the gate attempt timeline to parity with the Tester's fixer timeline
+  (`concerns` + `summary`). Adds `instructions` / `failingChecks` to `gateAttemptSchema` and a
+  transient `lastDispatchedInstructions` stash on `gateStepStateSchema` (schemaless step JSON,
+  no migration).
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/agents@0.26.17
+  - @cat-factory/integrations@0.56.5
+  - @cat-factory/prompt-fragments@0.9.45
+  - @cat-factory/sandbox@0.8.88
+  - @cat-factory/spend@0.10.78
+  - @cat-factory/workspaces@0.10.25
+
+## 0.60.0
+
+### Minor Changes
+
+- 36f4cf6: Frontend UI-test bindings: surface how each backend binding resolves + a non-fatal run-start note.
+
+  - **Shared resolution helpers moved to `@cat-factory/contracts`** (next to `frontendOriginsForService`)
+    so the SPA and the backend share ONE source of truth: `resolveFrontendBindings`,
+    `indexLiveServiceEnvUrls`, `boundServiceFrameIds`, the `ResolvedFrontendBinding`/`LiveEnvHandle`
+    types, and a new pure `buildFrontendRunNotes`. Orchestration re-exports them, so existing importers
+    are unchanged.
+  - **Inspector resolved-binding visibility**: `FrontendConfig.vue` now shows, live, how each backend
+    binding resolves — `envVar → a bound service's live ephemeral URL | mocked (WireMock)` — mirroring
+    what a UI-test run resolves, plus a warning for duplicate env vars. Backed by a new lightweight
+    `environments` store over `GET /workspaces/:ws/environments`.
+  - **Run/step detail projection + run-start note**: the engine stamps BOTH the resolved bindings
+    (`ExecutionInstance.frontendBindings`) and the non-fatal advisories (`ExecutionInstance.notes`:
+    duplicate env vars, or a partial-live set where some bound services fall back to WireMock) on the
+    run ONCE at start — the SPA-visible mirror of the harness's own `buildInfraNotes`. A `tester-ui`
+    step's detail projects the FROZEN start-time bindings (so a finished run shows what it actually
+    drove against, not a live re-resolution that could disagree with the co-located note after the
+    envs are torn down); the run-start note shows on any step detail of a frontend-frame run. Both
+    ride in the run's `detail` JSON (no migration) and round-trip identically on D1 ⇄ Postgres.
+
+  No wire/behaviour break: the notes field is optional, the moved helpers are re-exported, and a
+  non-frontend run is unaffected.
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/agents@0.26.16
+  - @cat-factory/integrations@0.56.4
+  - @cat-factory/prompt-fragments@0.9.44
+  - @cat-factory/sandbox@0.8.87
+  - @cat-factory/spend@0.10.77
+  - @cat-factory/workspaces@0.10.24
+
 ## 0.59.2
 
 ### Patch Changes
