@@ -275,15 +275,25 @@ const hasActionableWork = computed(() => {
   )
 })
 // The whole incorporated-requirements section collapses as a unit (independent of the per-heading
-// collapse below). Default: collapsed while there's actionable work AND the review hasn't converged
-// — so the (potentially long) reference doc stays out of the way — else expanded. The human's
-// explicit toggle wins until the window is re-opened.
+// collapse below). Default: collapsed only in the pre-incorporation `ready`-style phase while
+// there's still actionable work — so the (potentially long) reference doc stays out of the way of
+// the findings the human is working through. In `merged` (inspect the draft to decide re-review vs
+// redo) and `incorporated` (the settled deliverable) the document IS the thing to read, so it
+// defaults expanded. The human's explicit toggle wins within a phase; a status change (below)
+// clears it so a collapse from one phase doesn't leak into the next.
 const docCollapsed = computed(
-  () => docCollapsedOverride.value ?? (!incorporated.value && hasActionableWork.value),
+  () =>
+    docCollapsedOverride.value ?? (!incorporated.value && !merged.value && hasActionableWork.value),
 )
 function toggleDoc() {
   docCollapsedOverride.value = !docCollapsed.value
 }
+// Reset the manual collapse on every status transition so a collapse chosen in one phase doesn't
+// persist into the next (e.g. a `ready` collapse leaking into `merged`, or surviving convergence to
+// `incorporated` and hiding the final requirements) — each phase then falls back to its own default.
+watch(status, () => {
+  docCollapsedOverride.value = null
+})
 
 function isMarkedForRecommend(item: RequirementReviewItem): boolean {
   return markedForRecommend.value.has(item.id)
@@ -878,9 +888,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               <!-- Request the Requirement Writer for the marked findings. Kept OUT of the
                    status-scoped blocks below so it's available whenever the review is still
                    editable — the `ready` first pass AND a `merged` review being reworked — not
-                   only when status is exactly `ready`. -->
+                   only when status is exactly `ready`. Scoped to exactly those two states (NOT a
+                   bare `!frozen`, which would also expose it in `exceeded`, where the run is parked
+                   on the cap decision and a fresh recommendation batch has no path to settle). -->
               <div
-                v-if="review && markedForRecommend.size > 0 && !frozen"
+                v-if="review && markedForRecommend.size > 0 && (status === 'ready' || merged)"
                 class="border-t border-slate-800 pt-4"
               >
                 <UButton

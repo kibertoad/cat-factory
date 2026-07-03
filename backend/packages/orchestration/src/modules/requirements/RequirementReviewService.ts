@@ -32,7 +32,7 @@ import {
   buildRecommendationPrompt,
   buildReviewPrompt,
   buildReworkPrompt,
-  coerceRecommendations,
+  coerceChunkRecommendations,
   coerceSingleRecommendation,
   extractJson,
   findSourceItem,
@@ -471,8 +471,9 @@ export class RequirementReviewService extends IterativeReviewService<
    * Run the Writer once for a CHUNK of live findings; returns a map of finding id → suggestion
    * (empty when the call fails or yields nothing — the caller then drops+reopens those findings).
    * A single-finding chunk uses the tolerant single-item coercion (a lone-finding prompt often
-   * omits the echoed itemId); a multi-finding chunk needs the itemIds to route each suggestion
-   * back to its finding.
+   * omits the echoed itemId); a multi-finding chunk routes each suggestion back to its finding by
+   * the echoed itemId, falling back to prompt order for any the ids didn't cover (so a response
+   * that drops the ids isn't discarded wholesale — see {@link coerceChunkRecommendations}).
    */
   private async runWriterForChunk(
     workspaceId: string,
@@ -496,9 +497,10 @@ export class RequirementReviewService extends IterativeReviewService<
         system: WRITER_SYSTEM_PROMPT,
         prompt: buildRecommendationPrompt(context, findings, grounding, note),
         temperature: 0.2,
-        // Scale the output budget with the chunk size (bounded) so a batched call has room for one
-        // recommendation per finding without truncating.
-        maxOutputTokens: Math.min(6000 * findings.length, 16000),
+        // Keep the SAME 6000-token budget per finding the single-finding path used, scaled by the
+        // chunk size, so a batched call is no more truncation-prone than N separate calls. The chunk
+        // is bounded by RECOMMENDATION_CHUNK_SIZE, so the total stays bounded (≤ 6000 * that size).
+        maxOutputTokens: 6000 * Math.min(findings.length, RECOMMENDATION_CHUNK_SIZE),
         // Provider-hosted web search when the model supports it (Anthropic/OpenAI); the
         // gateway-RAG `webResults` already folded into the prompt cover other providers.
         ...(providerWebSearchTools(ref.provider)
@@ -514,7 +516,7 @@ export class RequirementReviewService extends IterativeReviewService<
         const single = coerceSingleRecommendation(parsed, only.id)
         return single ? new Map([[only.id, single]]) : new Map()
       }
-      return coerceRecommendations(parsed)
+      return coerceChunkRecommendations(parsed, findings)
     } catch {
       // Best-effort per chunk — a failure drops just this chunk's placeholders (caller reopens them).
       return new Map()

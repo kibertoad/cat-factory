@@ -4,7 +4,12 @@ import type {
   ReviewItemSeverity,
   ReviewItemStatus,
 } from '@cat-factory/kernel'
-import { buildReviewPrompt, disposeReview, hasNotesToIncorporate } from './requirements.logic.js'
+import {
+  buildReviewPrompt,
+  coerceChunkRecommendations,
+  disposeReview,
+  hasNotesToIncorporate,
+} from './requirements.logic.js'
 
 function item(
   severity: ReviewItemSeverity,
@@ -115,5 +120,71 @@ describe('buildReviewPrompt', () => {
     })
     expect(prompt).toContain('severity')
     expect(prompt).toContain('Assign a severity to EVERY item')
+  })
+})
+
+describe('coerceChunkRecommendations', () => {
+  const findings = (...ids: string[]): RequirementReviewItem[] =>
+    ids.map((id) => ({
+      id,
+      category: 'gap',
+      severity: 'high',
+      title: `title-${id}`,
+      detail: `detail-${id}`,
+      status: 'recommend_requested',
+      reply: null,
+      createdAt: 0,
+      updatedAt: 0,
+    }))
+
+  it('routes each suggestion to its finding by the echoed itemId', () => {
+    const out = coerceChunkRecommendations(
+      {
+        recommendations: [
+          { itemId: 'b', recommendation: 'for B' },
+          { itemId: 'a', recommendation: 'for A', fromStandard: 'std-1' },
+        ],
+      },
+      findings('a', 'b'),
+    )
+    expect(out.get('a')).toEqual({ recommendation: 'for A', fromStandard: 'std-1' })
+    expect(out.get('b')).toEqual({ recommendation: 'for B', fromStandard: null })
+  })
+
+  it('falls back to prompt order when the Writer omits the echoed itemIds', () => {
+    // The whole batched response would otherwise be discarded (every finding force-reopened);
+    // with no ids to route by, entries map to findings in the order the prompt listed them.
+    const out = coerceChunkRecommendations(
+      { recommendations: [{ recommendation: 'for A' }, { recommendation: 'for B' }] },
+      findings('a', 'b'),
+    )
+    expect(out.get('a')).toEqual({ recommendation: 'for A', fromStandard: null })
+    expect(out.get('b')).toEqual({ recommendation: 'for B', fromStandard: null })
+  })
+
+  it('mixes id-matched and positional fallback without stealing a matched entry', () => {
+    // 'b' is echoed correctly; 'a' and 'c' come back id-less and fill the remaining findings in
+    // order — the 'b' entry is consumed by its id match and not reused positionally.
+    const out = coerceChunkRecommendations(
+      {
+        recommendations: [
+          { recommendation: 'for A' },
+          { itemId: 'b', recommendation: 'for B' },
+          { recommendation: 'for C' },
+        ],
+      },
+      findings('a', 'b', 'c'),
+    )
+    expect(out.get('a')).toEqual({ recommendation: 'for A', fromStandard: null })
+    expect(out.get('b')).toEqual({ recommendation: 'for B', fromStandard: null })
+    expect(out.get('c')).toEqual({ recommendation: 'for C', fromStandard: null })
+  })
+
+  it('drops entries with no recommendation text and leaves unfilled findings absent', () => {
+    const out = coerceChunkRecommendations(
+      { recommendations: [{ itemId: 'a', recommendation: '' }, { recommendation: '   ' }] },
+      findings('a', 'b'),
+    )
+    expect(out.size).toBe(0)
   })
 })
