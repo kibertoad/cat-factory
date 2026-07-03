@@ -24,6 +24,7 @@ import ServiceSpecWindow from '~/components/spec/ServiceSpecWindow.vue'
 import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
 import MergerResultView from '~/components/panels/MergerResultView.vue'
 import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWindow.vue'
+import InitiativePlanningWindow from '~/components/initiative/InitiativePlanningWindow.vue'
 
 const ui = useUiStore()
 
@@ -57,6 +58,7 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // caveats. Opened from the initiative card / inspector (`ui.openInitiativeTracker`) and
   // as the planner step's result view.
   'initiative-tracker': InitiativeTrackerWindow,
+  'initiative-planning': InitiativePlanningWindow,
 }
 
 const active = computed<Component | null>(() => {

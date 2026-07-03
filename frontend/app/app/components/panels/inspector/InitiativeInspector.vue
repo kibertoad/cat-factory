@@ -22,11 +22,21 @@ const status = computed<InitiativeStatus>(() => initiative.value?.status ?? 'pla
 const planningPipeline = computed(() => pipelines.pipelines.find((p) => p.id === 'pl_initiative'))
 const running = computed(() => !!props.block.executionId)
 
+// The interviewer has parked the planning run with questions awaiting answers.
+const awaitingAnswers = computed(
+  () =>
+    initiative.value?.interview?.status === 'awaiting' &&
+    (initiative.value?.qa ?? []).some((q) => !(q.answer ?? '').trim()),
+)
+
 function runPlanning() {
   if (planningPipeline.value) void execution.start(props.block.id, planningPipeline.value)
 }
 function openTracker() {
   ui.openInitiativeTracker(props.block.id)
+}
+function openPlanning() {
+  ui.openInitiativePlanning(props.block.id)
 }
 
 const progress = computed(() => initiativeProgress(initiative.value?.items))
@@ -48,6 +58,17 @@ const progress = computed(() => initiativeProgress(initiative.value?.items))
     </p>
 
     <div class="flex flex-wrap items-center gap-2">
+      <UButton
+        v-if="awaitingAnswers"
+        data-testid="initiative-answer-planning"
+        color="primary"
+        variant="solid"
+        size="sm"
+        icon="i-lucide-messages-square"
+        @click="openPlanning"
+      >
+        {{ t('initiative.inspector.answerPlanning') }}
+      </UButton>
       <UButton
         data-testid="initiative-run-planning"
         color="primary"

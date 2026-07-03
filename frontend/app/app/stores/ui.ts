@@ -728,6 +728,11 @@ export const useUiStore = defineStore('ui', () => {
   function openInitiativeTracker(blockId: string) {
     resultView.value = { view: 'initiative-tracker', blockId, instanceId: null, stepIndex: null }
   }
+  // Open the interactive-planning Q&A window for an initiative block (inspector / card,
+  // when the interviewer has parked the planning run with pending questions).
+  function openInitiativePlanning(blockId: string) {
+    resultView.value = { view: 'initiative-planning', blockId, instanceId: null, stepIndex: null }
+  }
   // Open the Follow-up companion window for a run's Coder step (the blinking chip + the
   // `followup_pending` notification). Resolves the Coder step index from the run when not
   // given, so callers that only know the run can still open it.
@@ -939,6 +944,7 @@ export const useUiStore = defineStore('ui', () => {
     openBrainstorm,
     openServiceSpec,
     openInitiativeTracker,
+    openInitiativePlanning,
     openFollowUps,
     closeRequirementReview,
     openStepDetail,

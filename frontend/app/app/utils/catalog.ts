@@ -347,6 +347,25 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
   // The Initiative Planning pipeline's two steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata
   // system kinds, never palette archetypes.
+  'initiative-interviewer': {
+    kind: 'initiative-interviewer',
+    label: 'Initiative Interviewer',
+    icon: 'i-lucide-messages-square',
+    color: '#818cf8',
+    description:
+      'Interviews you on the goals, scope and constraints of the initiative, then synthesizes the agreed brief the analyst and planner build on.',
+    // Opens the dedicated planning Q&A window (answer / continue / proceed) while parked.
+    resultView: 'initiative-planning',
+  },
+  'initiative-analyst': {
+    kind: 'initiative-analyst',
+    label: 'Initiative Analyst',
+    icon: 'i-lucide-microscope',
+    color: '#818cf8',
+    description:
+      'Explores the codebase and writes an analysis (architecture, touch points, risks) that grounds the plan. Makes no changes.',
+    resultView: 'initiative-tracker',
+  },
   'initiative-planner': {
     kind: 'initiative-planner',
     label: 'Initiative Planner',
