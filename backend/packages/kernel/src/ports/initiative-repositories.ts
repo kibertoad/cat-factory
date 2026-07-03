@@ -15,10 +15,11 @@ export interface InitiativeRepository {
   /** Every initiative of a workspace (snapshot assembly). */
   list(workspaceId: string): Promise<Initiative[]>
   /**
-   * Every `executing` initiative across ALL workspaces — the cron sweeper's work
-   * list (mirrors the recurring-pipeline due-schedule read).
+   * Every `executing` initiative across ALL workspaces, each paired with its owning
+   * workspace — the execution loop's cron work list (mirrors the recurring-pipeline
+   * `listDue` shape, since the entity itself carries no workspace id).
    */
-  listExecuting(): Promise<Initiative[]>
+  listExecuting(): Promise<Array<{ workspaceId: string; initiative: Initiative }>>
   /** Insert a fresh initiative (rev 0). Throws on a duplicate block anchor. */
   insert(workspaceId: string, initiative: Initiative): Promise<void>
   /**

@@ -327,6 +327,13 @@ export interface ExecutionServiceDependencies {
    */
   initiativeInterviewService?: InitiativeInterviewService
   /**
+   * Best-effort poke of the initiative execution loop (slice 3): called after a spawned task's
+   * PR merges (`finalizeMerge`), so its owning initiative reconciles + advances immediately
+   * rather than on the next cron sweep. Threaded through to the {@link RunStateMachine} for the
+   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired.
+   */
+  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  /**
    * Optional: raises human-actionable notifications (a PR needs a merge decision,
    * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
    * transition the block but no notification surfaces (tests).
@@ -484,6 +491,7 @@ export class ExecutionService {
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
+  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -562,6 +570,7 @@ export class ExecutionService {
     resolveRunRepoContext,
     assertAgentBackendConfigured,
     runInitiatorScope,
+    pokeInitiativeLoop,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -586,6 +595,7 @@ export class ExecutionService {
       kaizenScheduler,
       subscriptionActivations: subscriptionActivationRepository,
       llmObservability,
+      pokeInitiativeLoop,
     })
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
@@ -780,6 +790,7 @@ export class ExecutionService {
     this.mergePresetRepository = mergePresetRepository
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
+    this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.inlineHarnessRef = inlineHarnessRef
@@ -2176,6 +2187,10 @@ export class ExecutionService {
       if (block.autoStartDependents) {
         await this.autoStartDependents(workspaceId, blockId).catch(() => {})
       }
+      // A spawned initiative task's PR merging pokes its owning initiative's loop so it
+      // reconciles the item + spawns the next wave immediately (the manual-merge path, which
+      // doesn't emit a terminal run event). Fire-and-forget; the sweep is the backstop.
+      if (block.initiativeId) this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
     }
   }
 

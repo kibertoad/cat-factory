@@ -3122,13 +3122,18 @@ export class DrizzleInitiativeRepository implements InitiativeRepository {
     return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
   }
 
-  async listExecuting(): Promise<Initiative[]> {
+  async listExecuting(): Promise<Array<{ workspaceId: string; initiative: Initiative }>> {
     const rows = await this.db
       .select()
       .from(initiatives)
       .where(eq(initiatives.status, 'executing'))
       .orderBy(asc(initiatives.created_at))
-    return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
+    return rows
+      .map((row) => {
+        const initiative = rowToInitiative(row)
+        return initiative ? { workspaceId: row.workspace_id, initiative } : null
+      })
+      .filter((r): r is { workspaceId: string; initiative: Initiative } => r !== null)
   }
 
   async insert(workspaceId: string, initiative: Initiative): Promise<void> {

@@ -1,11 +1,14 @@
 import {
   answerInitiativeQuestionContract,
+  cancelInitiativeContract,
   continueInitiativePlanningContract,
   createInitiativeContract,
   getInitiativeByBlockContract,
   getInitiativeContract,
   listInitiativesContract,
+  pauseInitiativeContract,
   proceedInitiativePlanningContract,
+  resumeInitiativeContract,
 } from '@cat-factory/contracts'
 import type { InitiativesModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -88,6 +91,32 @@ export function initiativeController(): Hono<AppEnv> {
     if (!planning) return unavailable(c)
     const { blockId } = c.req.valid('param')
     return c.json(await planning.proceed(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  // ---- Execution loop controls (slice 3) -----------------------------------
+  // Pause / resume / cancel an executing initiative. Each is a CAS transition on the entity
+  // (the loop skips a non-`executing` initiative on its next sweep) and returns the updated
+  // entity so the SPA patches its cache.
+
+  buildHonoRoute(app, pauseInitiativeContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    return c.json(await initiatives.service.pause(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  buildHonoRoute(app, resumeInitiativeContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    return c.json(await initiatives.service.resume(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  buildHonoRoute(app, cancelInitiativeContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { blockId } = c.req.valid('param')
+    return c.json(await initiatives.service.cancel(param(c, 'workspaceId'), blockId), 200)
   })
 
   return app

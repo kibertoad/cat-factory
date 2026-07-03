@@ -7,6 +7,7 @@ import type {
   IdGenerator,
   Initiative,
   InitiativeRepository,
+  PipelineRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, assertFound, requireWorkspace } from '@cat-factory/kernel'
@@ -30,6 +31,13 @@ export interface InitiativeServiceDependencies {
   events: ExecutionEventPublisher
   clock: Clock
   idGenerator: IdGenerator
+  /**
+   * Pipelines, used ONLY to validate the plan's `defaultPipelineId` at ingest (fail the
+   * planning run loudly on a plan that names a non-existent pipeline, rather than surfacing
+   * it later as a per-item spawn deviation). Optional so a deployment/test without pipelines
+   * wired still ingests. A pipeline deleted AFTER ingest is handled by the loop at spawn.
+   */
+  pipelineRepository?: PipelineRepository
 }
 
 /** How many times a CAS write is retried against a concurrent writer before giving up. */
@@ -151,9 +159,32 @@ export class InitiativeService {
   ): Promise<Initiative | null> {
     const draft = parseInitiativePlanDraft(rawDraft)
     validatePlanDraft(draft)
+    await this.assertPipelinesExist(workspaceId, draft)
     return this.mutate(workspaceId, blockId, (current) =>
       applyPlanDraft(current, draft, this.deps.clock.now()),
     )
+  }
+
+  /**
+   * Fail a plan ingest whose policy names a pipeline that doesn't exist (the default, or a
+   * rule/item override) — a plan the loop could never execute. No-op when no pipeline
+   * repository is wired (tests/conformance). The loop still guards a pipeline deleted AFTER
+   * ingest at spawn time (a deviation + notification, never a throw inside the sweep).
+   */
+  private async assertPipelinesExist(
+    workspaceId: string,
+    draft: ReturnType<typeof parseInitiativePlanDraft>,
+  ): Promise<void> {
+    const repo = this.deps.pipelineRepository
+    if (!repo) return
+    const ids = new Set<string>([draft.policy.defaultPipelineId])
+    for (const rule of draft.policy.rules ?? []) ids.add(rule.pipelineId)
+    for (const item of draft.items) if (item.pipelineId) ids.add(item.pipelineId)
+    for (const id of ids) {
+      if (!(await repo.get(workspaceId, id))) {
+        throw new ValidationError(`Plan references unknown pipeline '${id}'`)
+      }
+    }
   }
 
   /**
@@ -175,6 +206,51 @@ export class InitiativeService {
           : current.status,
       ...(doc ? { doc: { ...doc, committedAt: this.deps.clock.now() } } : {}),
     }))
+  }
+
+  // ---- Execution loop (slice 3) -------------------------------------------
+  // The loop drives the entity through the same CAS `mutate` path. `update` is the generic
+  // transform seam the loop passes its (pure) item-lifecycle closures to; the lifecycle
+  // transitions below are the human-driven controls (pause / resume / cancel).
+
+  /**
+   * Apply a CAS-guarded transform to the block's initiative — the execution loop's write
+   * path. A content-identical transform short-circuits to no write (replay/idempotency);
+   * a lost CAS reloads and retries a bounded number of times. Returns the persisted entity,
+   * or null when the block has no initiative.
+   */
+  update(
+    workspaceId: string,
+    blockId: string,
+    transform: (current: Initiative) => Initiative,
+  ): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, transform)
+  }
+
+  /** Pause an executing initiative (the sweep skips it; in-flight tasks finish naturally). */
+  pause(workspaceId: string, blockId: string): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      current.status === 'executing' ? { ...current, status: 'paused' } : current,
+    )
+  }
+
+  /** Resume a paused initiative back to `executing` (the next sweep picks it up). */
+  resume(workspaceId: string, blockId: string): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      current.status === 'paused' ? { ...current, status: 'executing' } : current,
+    )
+  }
+
+  /**
+   * Cancel an initiative: stop spawning further work. Terminal from the loop's view. In-flight
+   * spawned tasks are left to finish on their own (cascading their teardown is slice 4).
+   */
+  cancel(workspaceId: string, blockId: string): Promise<Initiative | null> {
+    return this.mutate(workspaceId, blockId, (current) =>
+      current.status === 'done' || current.status === 'cancelled'
+        ? current
+        : { ...current, status: 'cancelled' },
+    )
   }
 
   // ---- Interactive planning interview (slice 2) ---------------------------

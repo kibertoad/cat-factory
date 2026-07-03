@@ -1294,6 +1294,7 @@
         "visual_confirmation_ready": "Marcar como leída",
         "human_review": "Marcar como leída",
         "followup_pending": "Marcar como leída",
+        "initiative": "Marcar como leída",
         "markRead": "Marcar como leída"
       },
       "toast": {
@@ -2549,7 +2550,8 @@
       "clarity_review": "Revision de claridad",
       "release_regression": "Regresion de version",
       "human_test_ready": "Listo para pruebas humanas",
-      "visual_confirmation_ready": "Listo para confirmacion visual"
+      "visual_confirmation_ready": "Listo para confirmacion visual",
+      "initiative": "Actualizaciones de la iniciativa"
     },
     "role": {
       "engineering": "Ingenieria",
@@ -4021,6 +4023,9 @@
     "inspector": {
       "runPlanning": "Ejecutar planificacion",
       "answerPlanning": "Responder preguntas de planificacion",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "cancel": "Cancelar iniciativa",
       "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
     },
     "planning": {

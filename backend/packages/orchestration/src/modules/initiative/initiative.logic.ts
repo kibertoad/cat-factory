@@ -1,7 +1,9 @@
 import type {
   Block,
   Initiative,
+  InitiativeExecutionPolicy,
   InitiativeItem,
+  InitiativeItemStatus,
   InitiativePhase,
   InitiativePlanDraft,
   InitiativeQa,
@@ -367,4 +369,186 @@ export function interviewAtCap(initiative: Initiative): boolean {
 /** Fold the analyst's codebase-analysis prose onto the entity. */
 export function applyAnalysis(initiative: Initiative, summary: string): Initiative {
   return { ...initiative, analysisSummary: summary.trim().slice(0, INITIATIVE_PROSE_MAX) }
+}
+
+// ---------------------------------------------------------------------------
+// Execution loop (slice 3) — pure item-lifecycle transitions over the entity's
+// `items`/`deviations`, plus the estimate→pipeline selection. The InitiativeLoopService
+// wraps each transform in InitiativeService's CAS `mutate`, so every tick-write is
+// single-writer + replay-safe (a lost CAS abandons the tick; the next sweep retries).
+// ---------------------------------------------------------------------------
+
+/** Item statuses that occupy a concurrency slot (a spawned task is in flight). */
+const INITIATIVE_ITEM_ACTIVE_STATUSES: ReadonlySet<InitiativeItemStatus> = new Set([
+  'in_progress',
+  'pr_open',
+])
+
+/** How many of the initiative's items currently hold a concurrency slot (a running/PR task). */
+export function activeItemCount(initiative: Initiative): number {
+  return (initiative.items ?? []).filter((i) => INITIATIVE_ITEM_ACTIVE_STATUSES.has(i.status))
+    .length
+}
+
+/** Whether every item is settled (done/skipped) — the initiative's work is complete. */
+export function allItemsSettled(initiative: Initiative): boolean {
+  const items = initiative.items ?? []
+  return items.length > 0 && items.every((i) => INITIATIVE_ITEM_TERMINAL_STATUSES.has(i.status))
+}
+
+/**
+ * A phase is HALTED when it holds a `blocked` item: the loop stops spawning NEW work in
+ * it until a human retries/skips the failure (the "halt the phase, notify" policy). Since
+ * `blocked` is non-terminal, {@link deriveCurrentPhase} also keeps a halted phase current,
+ * so the initiative never advances past it either.
+ */
+export function phaseIsHalted(initiative: Initiative, phaseId: string): boolean {
+  return (initiative.items ?? []).some((i) => i.phaseId === phaseId && i.status === 'blocked')
+}
+
+/**
+ * The effective concurrency cap for a phase: the phase's own tighter cap (when set) clamped
+ * by the policy-wide cap. No policy ⇒ 1 (fail-safe to serial).
+ */
+export function effectiveMaxConcurrent(
+  initiative: Initiative,
+  phase: InitiativePhase | null,
+): number {
+  const policyCap = initiative.policy?.maxConcurrent ?? 1
+  const phaseCap = phase?.maxConcurrent
+  return phaseCap !== undefined ? Math.min(phaseCap, policyCap) : policyCap
+}
+
+/**
+ * Whether all of an item's intra-initiative dependencies are settled (done/skipped). A
+ * dependency that no longer exists (a re-plan dropped it) counts as satisfied.
+ */
+export function itemDependenciesMet(initiative: Initiative, item: InitiativeItem): boolean {
+  const byId = new Map((initiative.items ?? []).map((i) => [i.id, i]))
+  return (item.dependsOn ?? []).every((dep) => {
+    const d = byId.get(dep)
+    return !d || INITIATIVE_ITEM_TERMINAL_STATUSES.has(d.status)
+  })
+}
+
+/**
+ * The items eligible to spawn RIGHT NOW: `pending`, in the derived current phase, that
+ * phase not halted by a blocked sibling, with every dependency met. Declared order is
+ * preserved. The caller applies the concurrency cap (this returns the full eligible set,
+ * not a cap-sliced one) so it can account for slots already taken by in-flight items.
+ */
+export function eligibleItemsToSpawn(initiative: Initiative): InitiativeItem[] {
+  const phase = deriveCurrentPhase(initiative)
+  if (!phase) return []
+  if (phaseIsHalted(initiative, phase.id)) return []
+  return (initiative.items ?? []).filter(
+    (i) => i.phaseId === phase.id && i.status === 'pending' && itemDependenciesMet(initiative, i),
+  )
+}
+
+/**
+ * Pick the pipeline a spawned item should run: an explicit `item.pipelineId` wins; else the
+ * first policy rule whose thresholds the estimate meets (OR across axes — the
+ * `shouldRunGatedStep` semantics: risk ≥ minRisk OR impact ≥ minImpact OR complexity ≥
+ * minComplexity; a rule with no thresholds never matches); else the policy default. An item
+ * with NO estimate follows `onMissingEstimate`: `default` ⇒ `defaultPipelineId`, `strongest`
+ * ⇒ the last (weakest-first-ordered) rule's pipeline, fail-safe to thoroughness.
+ */
+export function selectInitiativePipeline(
+  item: Pick<InitiativeItem, 'estimate' | 'pipelineId'>,
+  policy: InitiativeExecutionPolicy,
+): string {
+  if (item.pipelineId) return item.pipelineId
+  const rules = policy.rules ?? []
+  if (!item.estimate) {
+    if ((policy.onMissingEstimate ?? 'default') === 'strongest' && rules.length > 0) {
+      return rules[rules.length - 1]!.pipelineId
+    }
+    return policy.defaultPipelineId
+  }
+  const est = item.estimate
+  for (const rule of rules) {
+    const axes: Array<[number | undefined, number]> = [
+      [rule.minComplexity, est.complexity],
+      [rule.minRisk, est.risk],
+      [rule.minImpact, est.impact],
+    ]
+    if (axes.some(([threshold, value]) => threshold !== undefined && value >= threshold)) {
+      return rule.pipelineId
+    }
+  }
+  return policy.defaultPipelineId
+}
+
+/**
+ * Reconcile ONE item from its spawned block's current state. Only actively-spawned items
+ * (`in_progress`/`pr_open`) are touched — a settled/blocked/un-spawned item is left alone,
+ * which is what makes reconcile idempotent across durable-driver replays (the first pass
+ * already moved a finished item out of the active set). A missing block (claimed but not
+ * yet inserted, or since removed) leaves the item untouched.
+ */
+export function reconcileItem(item: InitiativeItem, block: Block | undefined): InitiativeItem {
+  if (!INITIATIVE_ITEM_ACTIVE_STATUSES.has(item.status)) return item
+  if (!block) return item
+  const pr = block.pullRequest
+    ? {
+        url: block.pullRequest.url,
+        ...(block.pullRequest.number !== undefined ? { number: block.pullRequest.number } : {}),
+      }
+    : item.pr
+  switch (block.status) {
+    case 'done':
+      return { ...item, status: 'done', ...(pr ? { pr } : {}) }
+    case 'pr_ready':
+      return { ...item, status: 'pr_open', ...(pr ? { pr } : {}) }
+    case 'blocked':
+      return {
+        ...item,
+        status: 'blocked',
+        note: item.note ?? 'The spawned task failed — retry or skip it to unblock the phase.',
+      }
+    default:
+      // planned / ready / in_progress → the task is still running.
+      return { ...item, status: 'in_progress', ...(pr ? { pr } : {}) }
+  }
+}
+
+/** Claim a `pending` item for spawning: flip it to `in_progress` with the pre-generated block id.
+ *  A no-op when the item is not `pending` (already claimed/settled), so a concurrent ticker that
+ *  lost the CAS observes the winner's claim and abandons. */
+export function applySpawnClaim(
+  initiative: Initiative,
+  itemId: string,
+  spawnedBlockId: string,
+): Initiative {
+  return {
+    ...initiative,
+    items: (initiative.items ?? []).map((i) =>
+      i.id === itemId && i.status === 'pending'
+        ? { ...i, status: 'in_progress', blockId: spawnedBlockId }
+        : i,
+    ),
+  }
+}
+
+/** Revert a claim we own (matched by our block id) back to `pending` — used when the run failed
+ *  to start (e.g. the per-service task limit was hit; leave the item for the next sweep). */
+export function applyRevertClaim(
+  initiative: Initiative,
+  itemId: string,
+  spawnedBlockId: string,
+): Initiative {
+  return {
+    ...initiative,
+    items: (initiative.items ?? []).map((i) =>
+      i.id === itemId && i.status === 'in_progress' && i.blockId === spawnedBlockId
+        ? { ...i, status: 'pending', blockId: null }
+        : i,
+    ),
+  }
+}
+
+/** Whether an item currently holds an active concurrency slot. Exported for the loop's math. */
+export function itemIsActive(item: InitiativeItem): boolean {
+  return INITIATIVE_ITEM_ACTIVE_STATUSES.has(item.status)
 }

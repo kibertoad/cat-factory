@@ -32,6 +32,10 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          Informational + a deep-link to the parked task (where the human
 //                          can also request a freeform fix); the gate waits indefinitely and
 //                          the severity sweep escalates the card the longer it waits.
+//   - `initiative`       — the initiative execution loop needs a human: a spawned task was
+//                          blocked (its phase is halted until it is retried/skipped), or the
+//                          initiative finished (every planned task resolved). Informational +
+//                          a deep-link to the initiative block; `act` just marks it read.
 //   - `decision_required`— an iterative gate parked on a human decision after spending
 //                          its automatic budget (a quality companion at its rework cap,
 //                          or the requirements reviewer at its iteration cap). Without
@@ -62,6 +66,7 @@ export const notificationTypeSchema = v.picklist([
   'visual_confirmation_ready',
   'human_review',
   'followup_pending',
+  'initiative',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
@@ -111,6 +116,8 @@ export const notificationPayloadSchema = v.object({
    * it as "for you"; the notification stays workspace-visible to everyone.
    */
   targetUserId: v.optional(v.nullable(v.string())),
+  /** Why the initiative loop raised the card, on an `initiative` notification. */
+  initiativeReason: v.optional(v.picklist(['item_blocked', 'complete'])),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 

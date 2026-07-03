@@ -1294,6 +1294,7 @@
         "visual_confirmation_ready": "既読にする",
         "human_review": "既読にする",
         "followup_pending": "既読にする",
+        "initiative": "既読にする",
         "markRead": "既読にする"
       },
       "toast": {
@@ -2562,7 +2563,8 @@
       "clarity_review": "明確性レビュー",
       "release_regression": "リリースリグレッション",
       "human_test_ready": "人手テスト準備完了",
-      "visual_confirmation_ready": "ビジュアル確認準備完了"
+      "visual_confirmation_ready": "ビジュアル確認準備完了",
+      "initiative": "イニシアチブの更新"
     },
     "role": {
       "engineering": "エンジニアリング",
@@ -4034,6 +4036,9 @@
     "inspector": {
       "runPlanning": "計画を実行",
       "answerPlanning": "計画の質問に回答",
+      "pause": "一時停止",
+      "resume": "再開",
+      "cancel": "イニシアチブをキャンセル",
       "hint": "計画パイプラインはコードベースを調査し、承認用の複数フェーズ計画を起草し、その後トラッカー文書をリポジトリにコミットします。"
     },
     "planning": {

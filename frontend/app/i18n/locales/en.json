@@ -1346,6 +1346,7 @@
         "visual_confirmation_ready": "Mark read",
         "human_review": "Mark read",
         "followup_pending": "Mark read",
+        "initiative": "Mark read",
         "markRead": "Mark read"
       }
     },
@@ -2623,7 +2624,8 @@
       "clarity_review": "Clarity review",
       "release_regression": "Release regression",
       "human_test_ready": "Ready for human testing",
-      "visual_confirmation_ready": "Ready for visual confirmation"
+      "visual_confirmation_ready": "Ready for visual confirmation",
+      "initiative": "Initiative updates"
     },
     "role": {
       "engineering": "Engineering",
@@ -4140,6 +4142,9 @@
     "inspector": {
       "runPlanning": "Run planning",
       "answerPlanning": "Answer planning questions",
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancel": "Cancel initiative",
       "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
     },
     "planning": {

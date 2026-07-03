@@ -1294,6 +1294,7 @@
         "visual_confirmation_ready": "Marquer comme lu",
         "human_review": "Marquer comme lu",
         "followup_pending": "Marquer comme lu",
+        "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu"
       },
       "toast": {
@@ -2549,7 +2550,8 @@
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
       "human_test_ready": "Pret pour les tests humains",
-      "visual_confirmation_ready": "Pret pour la confirmation visuelle"
+      "visual_confirmation_ready": "Pret pour la confirmation visuelle",
+      "initiative": "Mises a jour de l'initiative"
     },
     "role": {
       "engineering": "Ingenierie",
@@ -4021,6 +4023,9 @@
     "inspector": {
       "runPlanning": "Lancer la planification",
       "answerPlanning": "Repondre aux questions de planification",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "cancel": "Annuler l'initiative",
       "hint": "Le pipeline de planification explore le code, redige le plan multiphase pour approbation, puis valide le document de suivi dans le depot."
     },
     "planning": {

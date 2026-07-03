@@ -81,6 +81,12 @@ export interface RunStateMachineDeps {
   kaizenScheduler?: KaizenScheduler
   subscriptionActivations?: SubscriptionActivationRepository
   llmObservability?: LlmObservabilityService
+  /**
+   * Best-effort poke of the initiative execution loop (slice 3): called when a spawned child
+   * run reaches a terminal state so its owning initiative reconciles immediately instead of
+   * waiting for the next cron sweep. Fire-and-forget; a no-op when initiatives are unwired.
+   */
+  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
 }
 
 /**
@@ -110,6 +116,7 @@ export class RunStateMachine {
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly llmObservability?: LlmObservabilityService
+  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
 
   constructor(deps: RunStateMachineDeps) {
     this.executionRepository = deps.executionRepository
@@ -124,6 +131,7 @@ export class RunStateMachine {
     this.kaizenScheduler = deps.kaizenScheduler
     this.subscriptionActivations = deps.subscriptionActivations
     this.llmObservability = deps.llmObservability
+    this.pokeInitiativeLoop = deps.pokeInitiativeLoop
   }
 
   /** Persist the instance (the single write seam shared by the engine + controllers). */
@@ -202,6 +210,12 @@ export class RunStateMachine {
     // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or
     // a re-emit of an already-cleared run is a no-op, and a failure here must never
     // derail the emit.
+    // A spawned initiative task reaching a terminal state pokes its owning initiative's loop so
+    // it reconciles the item (and spawns the next wave) immediately, not on the next cron sweep.
+    // Fire-and-forget — the poke swallows its own errors and the sweep is the backstop.
+    if (block?.initiativeId && (instance.status === 'done' || instance.status === 'failed')) {
+      this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
+    }
     if (
       this.subscriptionActivations &&
       (instance.status === 'done' || instance.status === 'failed')
