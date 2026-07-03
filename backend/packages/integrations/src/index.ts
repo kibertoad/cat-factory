@@ -189,6 +189,14 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService.js'
 export * as environmentsLogic from './modules/environments/environments.logic.js'
+// The shared SSRF-safe fetch (per-hop redirect revalidation + response byte cap) used by
+// the policy-based providers; also reused by the server's web-search upstream.
+export {
+  type MakeHttpError,
+  DEFAULT_MAX_REDIRECTS,
+  readCappedText,
+  safeFetch,
+} from './modules/shared/safe-fetch.js'
 // The HTTP environment provider (a `fetch` shell around the manifest logic above),
 // promoted from the Worker infra so every facade composes the same provider.
 export {

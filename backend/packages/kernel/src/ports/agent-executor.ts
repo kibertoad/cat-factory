@@ -409,6 +409,13 @@ export interface AgentJobHandle {
    */
   subscriptionTokenId?: string
   /**
+   * The model provider/vendor the job runs on (e.g. `claude`, `codex`, `openai`),
+   * known at dispatch. Carried so the poll site can stamp it on the per-call telemetry
+   * a subscription harness reports (which the proxy would otherwise supply). Absent ⇒
+   * telemetry falls back to the provider parsed from {@link model}.
+   */
+  provider?: string
+  /**
    * The agent kind the job runs as (`coder`, `merger`, …). The poll site MUST supply it
    * for any kind whose result is mapped kind-aware (e.g. a migrated `merger`/`on-call`,
    * whose structured output is coerced into `mergeAssessment`/`onCallAssessment`); without

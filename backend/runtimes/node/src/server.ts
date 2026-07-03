@@ -3,6 +3,7 @@ import {
   type AppEnv,
   CORS_ALLOWED_HEADERS,
   type ServerContainer,
+  corsReflectsWhenUnset,
   handleError,
   logger,
   mountAuthGate,
@@ -52,7 +53,8 @@ export function createApp(
   app.use(
     '*',
     cors({
-      origin: (origin) => resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS),
+      origin: (origin) =>
+        resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS, corsReflectsWhenUnset(env.ENVIRONMENT)),
       // Same shared allow-list the Worker uses, so the facades stay symmetric (Hono
       // would otherwise echo the requested headers, masking a drift like the missing
       // X-Connection-Id the Worker hit).

@@ -1,5 +1,125 @@
 # @cat-factory/orchestration
 
+## 0.59.2
+
+### Patch Changes
+
+- e0aab3f: Connections between services, phase 1 of the service-connections initiative (see
+  `backend/docs/service-connections.md` + `docs/initiatives/service-connections.md`):
+
+  - **Service connections**: a `service`-type frame carries `serviceConnections` — directed
+    consumer→provider edges to the other services it uses, each with an optional
+    description ("sends transactional email via it"). Stored as a JSON column on the block
+    (D1 migration `0034` ⇄ Drizzle), validated at the `updateBlock` write gate (no
+    self-connection, no duplicates, targets must be service frames; cycles are deliberately
+    legal), pruned when a connected frame is deleted, and drawn as emerald consumer→provider
+    edges on the board. A new inspector panel on service frames edits the connections and
+    shows the reverse "Used by" list.
+  - **Per-task involved services**: a task carries `involvedServiceIds` — the connected
+    services directly involved in it beyond its own service, picked (in the task's run
+    settings) from the frame's connection neighbors in either direction. Validated at the
+    write gate against the neighbor set; a selection whose connection was later removed is
+    badged stale in the UI and dropped on the next change. Later phases use the selection
+    to provision every involved service as an ephemeral environment and to let the coding
+    agent change every involved repo (multi-repo sibling checkouts) — designed in the
+    docs, not yet implemented.
+  - Cross-runtime conformance now round-trips both JSON columns and asserts the write-gate
+    rejections on both stores.
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+  - @cat-factory/agents@0.26.15
+  - @cat-factory/integrations@0.56.3
+  - @cat-factory/prompt-fragments@0.9.43
+  - @cat-factory/sandbox@0.8.86
+  - @cat-factory/spend@0.10.76
+  - @cat-factory/workspaces@0.10.23
+
+## 0.59.1
+
+### Patch Changes
+
+- 0d51638: Secret-handling hardening:
+
+  - **LLM telemetry** (`LlmObservabilityService`) now scrubs credential shapes from the
+    prompt/response/reasoning bodies AND the `errorMessage` with a shared `redactSecrets`
+    (promoted to `@cat-factory/kernel`, reused by the provisioning-log path) BEFORE anything is
+    stored or fanned out to an external trace sink (Langfuse). `errorMessage` is kept as
+    diagnostic metadata even when bodies are dropped and is fanned out ungated, so it is
+    scrubbed too (an upstream 4xx/5xx string can echo an auth header). Prompt/response/reasoning
+    body capture is additionally gated on the per-workspace `storeAgentContext` toggle (numeric
+    telemetry is always recorded). Also fixed a latent O(n²) regex backtrack in the URL-userinfo
+    redaction rule that a large prompt could trigger.
+  - **Signed tokens** (`HmacSigner`) now derive an independent HKDF-SHA256 subkey per audience
+    (`session`/`oauth-state`/`llm-proxy`/`ws`/`machine`), so a token class is cryptographically
+    isolated rather than sharing one raw HMAC key. Key derivation is bounded to that fixed
+    audience set — `verify` selects the key from the token's attacker-controlled claimed `aud`
+    before the MAC check, so an unrecognised (or absent) audience falls back to the raw-secret
+    base key rather than deriving+caching a fresh subkey, preventing an unbounded key-cache /
+    per-request-HKDF DoS from a flood of junk-audience tokens. Breaking: any tokens signed before
+    this change no longer verify (pre-1.0, no migration — clients re-authenticate).
+
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+  - @cat-factory/integrations@0.56.2
+  - @cat-factory/kernel@0.70.1
+  - @cat-factory/agents@0.26.14
+  - @cat-factory/sandbox@0.8.85
+  - @cat-factory/spend@0.10.75
+  - @cat-factory/workspaces@0.10.22
+
+## 0.59.0
+
+### Minor Changes
+
+- eb67d40: Record per-call LLM telemetry for the Claude Code and Codex subscription harnesses,
+  so their calls appear in the same `llm_call_metrics` store (and the "Model activity"
+  observability panel) as the proxy-metered Pi harness.
+
+  These harnesses talk direct to the vendor and bypass the LLM proxy, so the harness now
+  lifts per-call metrics off each CLI's event stream: Claude Code (`stream-json --verbose`)
+  carries full request/response bodies, per-turn tokens, model, and finish reason; Codex
+  (`exec --json`) is thinner — flat assistant text plus per-turn token counts, with no
+  request transcript (a CLI limitation). The executor records these into the SAME
+  `LlmObservabilityService` the proxy uses (with zero per-HTTP timing, since the CLIs don't
+  expose it), wired symmetrically on the Cloudflare and Node facades. Captured bodies are
+  credential-scrubbed and honour the existing `LLM_RECORD_PROMPTS` switch. Telemetry is
+  recorded on failed runs too (not only successful ones), so a token-spending run that
+  ends with no changes / unusable output stays observable, and each row is minted a
+  deterministic id off the job id so a durable-driver replay re-records idempotently.
+
+  Also tightens `LLM_RECORD_PROMPTS`: it now empties the response and reasoning bodies as
+  well as the prompt when recording is off (previously only the prompt was suppressed),
+  so a deployment that opts out of retaining prompts no longer retains model replies
+  either.
+
+  Bumps the executor-harness runner image (harness `src/**` changed).
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+  - @cat-factory/agents@0.26.13
+  - @cat-factory/integrations@0.56.1
+  - @cat-factory/sandbox@0.8.84
+  - @cat-factory/spend@0.10.74
+  - @cat-factory/workspaces@0.10.21
+
+## 0.58.1
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/integrations@0.56.0
+  - @cat-factory/agents@0.26.12
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/prompt-fragments@0.9.42
+  - @cat-factory/sandbox@0.8.83
+  - @cat-factory/spend@0.10.73
+  - @cat-factory/workspaces@0.10.20
+
 ## 0.58.0
 
 ### Minor Changes

@@ -414,6 +414,38 @@ export interface RunDiagnostics {
   finalAnswerEmpty: boolean
 }
 
+/**
+ * One model call captured from a subscription harness's CLI event stream, shaped so
+ * the backend can record it into the same `llm_call_metrics` telemetry the LLM proxy
+ * writes for the Pi harness. The subscription harnesses (Claude Code / Codex) talk
+ * DIRECT to the vendor and never touch the proxy, so this is the only place their
+ * per-call bodies are observable. Claude Code's `stream-json --verbose` is a near-
+ * verbatim Anthropic Messages stream, so its calls carry full request/response
+ * bodies; Codex's `exec --json` only surfaces flat assistant text + per-turn tokens,
+ * so its rows are honestly thinner (no request transcript, no tool/command bodies).
+ */
+export interface HarnessCallMetric {
+  /** The vendor model that served this call (from the CLI event), when reported. */
+  model?: string
+  /**
+   * The full request as an OpenAI-style chat array (`[{role, content}, …]`),
+   * JSON-stringified — the growing history as of this call. Matches the proxy's
+   * `promptText` shape so the telemetry chain delta-compresses + renders identically.
+   */
+  promptText: string
+  /** Number of messages encoded in {@link promptText} (the telemetry chain messageCount). */
+  messageCount: number
+  /** The assistant's response text, as a plain string (`''` for a tool-only turn). */
+  responseText: string
+  /** The reasoning/thinking trace, as a plain string (`''` when none). */
+  reasoningText: string
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  /** The provider finish/stop reason when the CLI reports one (else null). */
+  finishReason: string | null
+}
+
 /** Pi's assistant summary plus {@link PiRunStats} describing what it did. */
 export interface PiRunOutcome {
   summary: string
@@ -432,6 +464,14 @@ export interface PiRunOutcome {
    * (usage-aware rotation) and telemetry. Absent for the proxy-metered Pi harness.
    */
   usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * Per-model-call telemetry lifted from a subscription harness's CLI event stream
+   * (Claude Code / Codex), which the backend records into `llm_call_metrics` — the
+   * proxy-bypassing analogue of the per-call rows the LLM proxy writes for Pi. Absent
+   * for the proxy-metered Pi harness (the proxy is its metering point). See
+   * {@link HarnessCallMetric}.
+   */
+  callMetrics?: HarnessCallMetric[]
   /** Output-quality signals (truncation / empty final answer); see {@link RunDiagnostics}. */
   diagnostics?: RunDiagnostics
 }

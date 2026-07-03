@@ -9,6 +9,7 @@ import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.v
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
 import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
+import ServiceConnections from '~/components/panels/inspector/ServiceConnections.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -464,6 +465,9 @@ const showOriginalDescription = ref(false)
       <ContainerSummary v-if="isContainer" :block="block" />
       <!-- frontend (frame): build/serve/mock config + backend bindings (board links) -->
       <FrontendConfig v-if="isFrame && block.type === 'frontend'" :block="block" />
+
+      <!-- service (frame): directed connections to the other services it uses (board links) -->
+      <ServiceConnections v-if="isFrame && block.type === 'service'" :block="block" />
 
       <!-- service (frame): test infra + provisioning configuration -->
       <ServiceTestConfig v-if="isFrame" :block="block" />

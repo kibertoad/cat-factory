@@ -509,6 +509,14 @@
         "mock": "Mock (WireMock)"
       }
     },
+    "serviceConnections": {
+      "title": "Połączenia usług",
+      "hint": "Inne usługi, z których korzysta ta usługa, np. usługa wysyłająca za nią e-maile. Połączenia rysują krawędzie na tablicy, a zadania mogą oznaczyć połączoną usługę jako bezpośrednio zaangażowaną.",
+      "descriptionPlaceholder": "Jak ta usługa z niej korzysta, np. wysyła przez nią e-maile",
+      "remove": "Usuń połączenie",
+      "empty": "Brak połączeń. Dodaj połączenie, aby powiązać tę usługę z inną usługą, z której korzysta.",
+      "usedBy": "Używana przez"
+    },
     "releaseHealth": {
       "title": "Kondycja po wydaniu",
       "clear": "Wyczyść",
@@ -732,7 +740,11 @@
       "responsibleProduct": "Odpowiedzialny produkt",
       "responsibleEmpty": "Nieprzypisane. Ustaw właściciela produktu, aby powiadamiać go, gdy recenzja wymagań oznaczy to zadanie.",
       "autoStartDependents": "Automatycznie uruchamiaj zależne",
-      "autoStartHint": "Gdy to zadanie zostanie scalone, automatycznie uruchom zadania od niego zależne (gdy ich pozostałe zależności również będą gotowe)."
+      "autoStartHint": "Gdy to zadanie zostanie scalone, automatycznie uruchom zadania od niego zależne (gdy ich pozostałe zależności również będą gotowe).",
+      "involvedServices": "Zaangażowane usługi",
+      "involvedServicesHint": "Połączone usługi bezpośrednio zaangażowane w to zadanie: każda z nich uruchamiana jest jako środowisko tymczasowe obok własnej usługi zadania, a agent kodujący może też zmieniać ich repozytoria.",
+      "involvedServicesEmpty": "Brak połączonych usług. Połącz usługi na ramce usługi, aby móc je tutaj wybrać.",
+      "involvedServiceStale": "Nie jest już połączona z usługą tego zadania; zostanie usunięta przy następnej zmianie."
     }
   },
   "panels": {

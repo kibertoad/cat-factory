@@ -20,6 +20,7 @@ import {
 } from '@cat-factory/kernel'
 import * as environmentsLogic from './environments.logic.js'
 import { referencedSecretKeys } from './environments.logic.js'
+import { type MakeHttpError, readCappedText, safeFetch } from '../shared/safe-fetch.js'
 
 // The single generic adapter that interprets ANY environment manifest. There are
 // no per-provider presets: an org's self-rolled management API is described as
@@ -35,8 +36,6 @@ const DEFAULT_TIMEOUT_MS = 15_000
 const MAX_RESPONSE_CHARS = 200_000
 /** Hard cap on the bytes read off any response body (mirrors MAX_RESPONSE_CHARS). */
 const MAX_RESPONSE_BYTES = MAX_RESPONSE_CHARS
-/** Bound the redirect chain so a permitted first hop can't walk us anywhere. */
-const MAX_REDIRECTS = 5
 const USER_AGENT = 'cat-factory'
 
 /** Carries the HTTP status so the API can surface a meaningful (redacted) error. */
@@ -50,88 +49,9 @@ export class EnvironmentApiError extends Error {
   }
 }
 
-/**
- * `fetch` with redirects followed by hand so the SSRF guard runs against EVERY
- * hop, not just the first URL. With the default `redirect: 'follow'` a permitted
- * host can 302 to an internal target (e.g. 169.254.169.254) — or downgrade
- * https→http — and the runtime would follow it unchecked. We force
- * `redirect: 'manual'`, re-resolve the `Location` against the current URL, and
- * re-run the same `assertSafe` guard (which also enforces https-only) before
- * following. A redirect target that fails the guard throws exactly as an invalid
- * initial URL would.
- */
-async function safeFetch(
-  url: string,
-  init: RequestInit,
-  assertSafe: (u: string) => void,
-): Promise<Response> {
-  let current = url
-  for (let hop = 0; ; hop++) {
-    assertSafe(current)
-    const res = await fetch(current, { ...init, redirect: 'manual' })
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get('location')
-      if (!location) return res
-      if (hop >= MAX_REDIRECTS) {
-        throw new EnvironmentApiError(502, 'Environment provider returned too many redirects')
-      }
-      // Resolve relative redirects against the current URL, then re-validate.
-      current = new URL(location, current).toString()
-      continue
-    }
-    return res
-  }
-}
-
-/**
- * Read a response body with a running byte cap so a hostile/huge response can't
- * OOM the isolate. Checks the declared Content-Length first, then enforces the
- * cap while streaming. When `throwOnOverflow` is false (error snippets) the body
- * is truncated instead of throwing.
- */
-async function readCappedText(
-  res: Response,
-  maxBytes: number,
-  throwOnOverflow = true,
-): Promise<string> {
-  const declared = res.headers.get('content-length')
-  if (declared && Number(declared) > maxBytes) {
-    if (throwOnOverflow) {
-      throw new EnvironmentApiError(502, 'Environment provider response too large')
-    }
-  }
-  const body = res.body
-  if (!body) return ''
-  const reader = body.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value) continue
-      total += value.byteLength
-      if (total > maxBytes) {
-        await reader.cancel()
-        if (throwOnOverflow) {
-          throw new EnvironmentApiError(502, 'Environment provider response too large')
-        }
-        chunks.push(value)
-        break
-      }
-      chunks.push(value)
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  const merged = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0))
-  let offset = 0
-  for (const c of chunks) {
-    merged.set(c, offset)
-    offset += c.byteLength
-  }
-  return new TextDecoder().decode(merged).slice(0, maxBytes)
-}
+/** Redirect/size failures from the shared SSRF-safe fetch surface as this provider's error. */
+const makeEnvError: MakeHttpError = (status, message) =>
+  new EnvironmentApiError(status, `Environment provider ${message.toLowerCase()}`)
 
 export interface HttpEnvironmentProviderOptions {
   defaultTimeoutMs?: number
@@ -258,16 +178,19 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         signal: AbortSignal.timeout(template.timeoutMs ?? this.defaultTimeoutMs),
       },
       (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'request URL', this.urlPolicy),
+      makeEnvError,
     )
 
     if (!res.ok) {
-      const errText = await readCappedText(res, MAX_RESPONSE_BYTES, false).catch(() => '')
+      const errText = await readCappedText(res, MAX_RESPONSE_BYTES, makeEnvError, false).catch(
+        () => '',
+      )
       throw new EnvironmentApiError(
         res.status,
         `Environment provider ${template.method} → ${res.status}: ${errText.slice(0, 300)}`,
       )
     }
-    const text = await readCappedText(res, MAX_RESPONSE_BYTES)
+    const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeEnvError)
     if (!text) return {}
     try {
       return JSON.parse(text)
@@ -359,15 +282,18 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
         signal: AbortSignal.timeout(this.defaultTimeoutMs),
       },
       (u) => environmentsLogic.assertSafeEnvironmentUrl(u, 'OAuth token URL', this.urlPolicy),
+      makeEnvError,
     )
     if (!res.ok) {
-      const text = await readCappedText(res, MAX_RESPONSE_BYTES, false).catch(() => '')
+      const text = await readCappedText(res, MAX_RESPONSE_BYTES, makeEnvError, false).catch(
+        () => '',
+      )
       throw new EnvironmentApiError(
         res.status,
         `OAuth token request → ${res.status}: ${text.slice(0, 200)}`,
       )
     }
-    const tokenText = await readCappedText(res, MAX_RESPONSE_BYTES)
+    const tokenText = await readCappedText(res, MAX_RESPONSE_BYTES, makeEnvError)
     const json = (() => {
       try {
         return JSON.parse(tokenText) as { access_token?: string; expires_in?: number }

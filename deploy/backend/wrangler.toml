@@ -137,7 +137,7 @@ class_name = "EnvConfigRepairWorkflow"
 # pin that tag here (the account id below is THIS deployment's — change it).
 [[containers]]
 class_name = "ExecutionContainer"
-image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.31.11"
+image = "registry.cloudflare.com/fe0047c6e869c8cb875ca425a9c341af/cat-factory-executor:1.32.0"
 max_instances = 10
 # Coding/bootstrap runs legitimately install dependencies and run build/test/e2e
 # suites inside the box. The default `dev` tier (~256 MiB / ~1/16 vCPU) thrashes

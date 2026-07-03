@@ -142,6 +142,8 @@ export type {
   // Frontend backend-binding resolution (shared pure helpers' types).
   ResolvedFrontendBinding,
   LiveEnvHandle,
+  // Directed service→service connections (stored on the consumer frame).
+  ServiceConnection,
   KubernetesEngineConfig,
   InfraHandlerConfig,
   CustomManifestType,

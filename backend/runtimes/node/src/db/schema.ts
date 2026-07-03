@@ -254,6 +254,15 @@ export const blocks = pgTable(
     // build/serve/mock the frontend for a self-contained UI test + its backend
     // bindings (env-var → upstream), which double as the board's frontend→service links.
     frontend_config: text('frontend_config'),
+    // Service-frame-level (`type: 'service'`): the service's directed connections to the
+    // other services it uses (consumer→provider), serialized JSON array of
+    // { serviceBlockId, description? }. Board edges + the source of a task's
+    // "involved services" choices.
+    service_connections: text('service_connections'),
+    // Task-level: the selected connected service frames directly involved in this task
+    // beyond its own service (JSON array of frame block ids) — spun up as ephemeral
+    // environments too; the coding agent may change their repos.
+    involved_service_ids: text('involved_service_ids'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),

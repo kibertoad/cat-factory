@@ -35,6 +35,7 @@ export type {
   FrontendBackendSource,
   ResolvedFrontendBinding,
   EnvironmentHandle,
+  ServiceConnection,
   FrontendBranch,
   FrontendPackageManager,
   FrontendServeMode,

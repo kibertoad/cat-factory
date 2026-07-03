@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/provider-s3",
-  "version": "0.2.61",
+  "version": "0.2.65",
   "description": "Opt-in AWS S3 blob backend for the Agent Architecture Board's binary-artifact storage abstraction. Implements the kernel BinaryBlobBackend port over an S3 bucket.",
   "repository": {
     "type": "git",
