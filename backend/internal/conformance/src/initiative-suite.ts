@@ -126,8 +126,57 @@ export function defineInitiativeSuite(
       await initiatives.insert(b.ws, planning)
 
       const due = await initiatives.listExecuting()
-      expect(due.some((i) => i.id === a.id)).toBe(true)
-      expect(due.some((i) => i.id === b.id)).toBe(false)
+      // The sweeper read pairs each executing initiative with its owning workspace (the entity
+      // itself carries no workspace id), so the execution loop can tick the right workspace.
+      const hit = due.find((r) => r.initiative.id === a.id)
+      expect(hit?.workspaceId).toBe(a.ws)
+      expect(due.some((r) => r.initiative.id === b.id)).toBe(false)
+    })
+
+    it('round-trips the execution-loop item state through the CAS (spawn/reconcile/block)', async () => {
+      // The loop's per-item runtime state (a spawned block link, a settled PR, a blocked item
+      // + its deviation, and the paused lifecycle) must persist byte-identically on both stores,
+      // since the loop reads it back every tick to decide what to reconcile / spawn next.
+      const { initiatives } = makeRepos()
+      const { ws, block, id } = ids()
+      await initiatives.insert(ws, initiative({ id, blockId: block, slug: 'loop-state' }))
+
+      const advanced: Initiative = {
+        ...initiative({ id, blockId: block, slug: 'loop-state' }),
+        status: 'paused',
+        items: [
+          {
+            id: 'item-1',
+            phaseId: 'phase-1',
+            title: 'Convert the gate registry',
+            description: 'Move registerGate to app-owned DI.',
+            dependsOn: [],
+            estimate: { complexity: 0.4, risk: 0.2, impact: 0.6, rationale: 'contained' },
+            status: 'pr_open',
+            blockId: `${block}-task-1`,
+            pr: { url: 'https://github.com/o/r/pull/7', number: 7 },
+          },
+          {
+            id: 'item-2',
+            phaseId: 'phase-1',
+            title: 'Convert the model-provider registry',
+            description: 'Second registry.',
+            dependsOn: ['item-1'],
+            status: 'blocked',
+            blockId: `${block}-task-2`,
+            note: 'The spawned task failed.',
+          },
+        ],
+        deviations: [
+          { id: 'idev-1', at: 5, itemId: 'item-2', description: 'Task blocked; phase halted.' },
+        ],
+        rev: 1,
+        updatedAt: 2,
+      }
+      expect(await initiatives.compareAndSwap(ws, advanced, 0)).toBe(true)
+
+      const read = await initiatives.get(ws, id)
+      expect(read).toEqual(advanced)
     })
 
     it('delete removes the entity', async () => {

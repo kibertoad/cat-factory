@@ -60,6 +60,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // Clicking the title opens the Follow-up companion window for the run (see `reveal`); "act"
   // just marks it read (items are decided in that window — file / send back / answer — not here).
   followup_pending: { icon: 'i-lucide-compass', color: 'warning' },
+  // The initiative loop needs attention (a blocked task, or completion). Clicking the title
+  // opens the initiative tracker window; "act" just marks it read.
+  initiative: { icon: 'i-lucide-milestone', color: 'primary' },
 }
 
 // Per-type primary-action label. An exhaustive Record keyed off the notification
@@ -78,6 +81,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   visual_confirmation_ready: 'layout.notifications.action.visual_confirmation_ready',
   human_review: 'layout.notifications.action.human_review',
   followup_pending: 'layout.notifications.action.followup_pending',
+  initiative: 'layout.notifications.action.initiative',
 }
 
 /** The localized primary-action label for a notification (te()-guarded against a
@@ -147,6 +151,7 @@ function reveal(n: Notification) {
   else if (n.type === 'visual_confirmation_ready') revealVisualConfirm(n)
   else if (n.type === 'human_review') revealHumanReview(n)
   else if (n.type === 'followup_pending') revealFollowUps(n)
+  else if (n.type === 'initiative') ui.openInitiativeTracker(n.blockId)
   else ui.select(n.blockId)
 }
 

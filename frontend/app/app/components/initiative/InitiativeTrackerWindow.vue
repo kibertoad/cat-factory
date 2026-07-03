@@ -13,6 +13,7 @@ import {
   INITIATIVE_ITEM_STATUS_CHIPS,
   INITIATIVE_ITEM_STATUS_LABEL_KEYS,
   INITIATIVE_STATUS_LABEL_KEYS,
+  initiativeProgress,
 } from '~/utils/initiative'
 
 const board = useBoardStore()
@@ -30,6 +31,13 @@ const phases = computed(() => initiative.value?.phases ?? [])
 function itemsOf(phaseId: string): InitiativeItem[] {
   return (initiative.value?.items ?? []).filter((i) => i.phaseId === phaseId)
 }
+
+const progress = computed(() => initiativeProgress(initiative.value?.items))
+const progressPct = computed(() =>
+  progress.value && progress.value.total > 0
+    ? Math.round((progress.value.settled / progress.value.total) * 100)
+    : 0,
+)
 
 const policyRules = computed(() => initiative.value?.policy?.rules ?? [])
 function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: number }): string {
@@ -73,6 +81,17 @@ function ruleAxes(rule: { minComplexity?: number; minRisk?: number; minImpact?: 
             <p class="truncate text-[11px] text-slate-400">
               {{ t('initiative.tracker.subtitle') }}
             </p>
+          </div>
+          <div v-if="progress" class="flex items-center gap-2" data-testid="initiative-progress">
+            <div class="h-1.5 w-24 overflow-hidden rounded-full bg-slate-800">
+              <div
+                class="h-full rounded-full bg-emerald-500 transition-[width] duration-500"
+                :style="{ width: `${progressPct}%` }"
+              />
+            </div>
+            <span class="text-[11px] tabular-nums text-slate-400">
+              {{ t('initiative.card.progress', { done: progress.settled, total: progress.total }) }}
+            </span>
           </div>
           <UBadge v-if="initiative" color="primary" variant="subtle" size="sm">
             {{ t(INITIATIVE_STATUS_LABEL_KEYS[initiative.status]) }}

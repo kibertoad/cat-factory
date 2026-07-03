@@ -189,6 +189,7 @@ import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefault
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
 import { InitiativeService } from './modules/initiative/InitiativeService.js'
+import { InitiativeLoopService } from './modules/initiative/InitiativeLoopService.js'
 import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
@@ -964,9 +965,11 @@ export interface RecurringModule {
   service: RecurringPipelineService
 }
 
-/** The initiatives feature's service, present only when its repository is wired. */
+/** The initiatives feature's service + execution loop, present only when its repository is wired. */
 export interface InitiativesModule {
   service: InitiativeService
+  /** The execution loop (slice 3): tick/runDue driven by the cron seams + terminal pokes. */
+  loop: InitiativeLoopService
 }
 
 /** The issue-tracker-settings feature's service, present only when its repository is wired. */
@@ -2208,17 +2211,18 @@ export function createCore(dependencies: CoreDependencies): Core {
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
   // Built before the execution engine so the planning pipeline's plan ingest + the
   // committer step's tracker mirror can run through it.
-  const initiatives = dependencies.initiativeRepository
-    ? {
-        service: new InitiativeService({
-          workspaceRepository: dependencies.workspaceRepository,
-          blockRepository: dependencies.blockRepository,
-          initiativeRepository: dependencies.initiativeRepository,
-          events: executionEventPublisher,
-          clock: dependencies.clock,
-          idGenerator: dependencies.idGenerator,
-        }),
-      }
+  const initiativeService = dependencies.initiativeRepository
+    ? new InitiativeService({
+        workspaceRepository: dependencies.workspaceRepository,
+        blockRepository: dependencies.blockRepository,
+        initiativeRepository: dependencies.initiativeRepository,
+        events: executionEventPublisher,
+        clock: dependencies.clock,
+        idGenerator: dependencies.idGenerator,
+        // Validate the plan's pipeline ids at ingest (fail a plan that names a missing pipeline
+        // loudly during planning, rather than surfacing it as a per-item spawn deviation later).
+        pipelineRepository: dependencies.pipelineRepository,
+      })
     : undefined
   // The interactive-planning interviewer's inline LLM (slice 2). Resolves its model exactly
   // like the requirements reviewer — the routing default, honouring a block pin and the
@@ -2254,11 +2258,20 @@ export function createCore(dependencies: CoreDependencies): Core {
   // post-run Kaizen grading for each completed agent step.
   const kaizen = createKaizenModule(dependencies)
 
+  // Late-bound so the engine's terminal hooks can poke the execution loop, which is built AFTER
+  // the engine (the loop depends on `executionService.start`). Fire-and-forget; a null ref (the
+  // loop unwired, or the settled block not part of an initiative) is a no-op.
+  let initiativeLoopRef: InitiativeLoopService | undefined
+  const pokeInitiativeLoop = (workspaceId: string, initiativeBlockId: string): void => {
+    void initiativeLoopRef?.pokeForInitiativeBlock(workspaceId, initiativeBlockId)
+  }
+
   const executionService = new ExecutionService({
     ...dependencies,
     workRunner,
     executionEventPublisher,
     boardService,
+    pokeInitiativeLoop,
     spendService,
     // Route runtime fragment-id resolution through the merged tenant catalog (so
     // managed + document-backed fragments reach a run), present only when the
@@ -2290,7 +2303,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
-    initiativeService: initiatives?.service,
+    initiativeService,
     initiativeRepository: dependencies.initiativeRepository,
     initiativeInterviewService,
     notificationService: notifications?.service,
@@ -2322,6 +2335,31 @@ export function createCore(dependencies: CoreDependencies): Core {
   )
   const tracker = createTrackerModule(dependencies)
   const recurring = createRecurringModule(dependencies, executionService)
+  // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
+  // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
+  // settling child run advances its owning initiative immediately. Present only when initiatives
+  // are wired; the cron/interval sweepers call `loop.runDue`.
+  const initiativeLoop =
+    initiativeService && dependencies.initiativeRepository
+      ? new InitiativeLoopService({
+          initiativeRepository: dependencies.initiativeRepository,
+          initiativeService,
+          blockRepository: dependencies.blockRepository,
+          pipelineRepository: dependencies.pipelineRepository,
+          executionService,
+          events: executionEventPublisher,
+          clock: dependencies.clock,
+          idGenerator: dependencies.idGenerator,
+          notificationService: notifications?.service,
+          resolveRunRepoContext: dependencies.resolveRunRepoContext,
+          serviceRepository: dependencies.serviceRepository,
+        })
+      : undefined
+  initiativeLoopRef = initiativeLoop
+  const initiatives =
+    initiativeService && initiativeLoop
+      ? { service: initiativeService, loop: initiativeLoop }
+      : undefined
   const services = createServicesModule(dependencies)
 
   return {

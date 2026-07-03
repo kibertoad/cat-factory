@@ -401,6 +401,24 @@ export default {
         ),
     )
 
+    // Tick the initiative execution loop (every 2 min): reconcile each executing initiative's
+    // spawned tasks and spawn the next wave up to its concurrency cap. Terminal child runs poke
+    // the loop directly, so this is the backstop cadence. No-op when initiatives aren't wired.
+    ctx.waitUntil(
+      Promise.resolve(buildContainer(env).initiatives?.loop.runDue(clock.now()))
+        .then((result) => {
+          if (result && (result.spawned > 0 || result.completed > 0)) {
+            logger.info({ cron: 'initiative-loop', ...result }, 'ticked initiative loop')
+          }
+        })
+        .catch((error) =>
+          logger.error(
+            { cron: 'initiative-loop', err: errInfo(error) },
+            'initiative-loop sweep failed',
+          ),
+        ),
+    )
+
     // Run any pending Kaizen gradings (every 2 min): the engine only inserts `scheduled`
     // rows at run completion, so this background pass does the actual LLM grading (and
     // re-drives `running` rows orphaned by a crashed sweep). Bounded per pass to stay

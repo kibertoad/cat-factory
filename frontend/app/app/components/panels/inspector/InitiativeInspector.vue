@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // Inspector body for an `initiative`-level block: the entity's status + goal, the
 // "Run planning" control (pinned to the Initiative Planning pipeline — the engine
-// refuses any other on this block), and the tracker window opener. Read-only in
-// this slice; plan/policy editing lands with the execution loop.
+// refuses any other on this block), the execution-loop controls (pause / resume /
+// cancel once executing), and the tracker window opener. Plan/policy editing lands
+// with slice 4.
 import type { Block, InitiativeStatus } from '~/types/domain'
 import { INITIATIVE_STATUS_LABEL_KEYS, initiativeProgress } from '~/utils/initiative'
 
@@ -40,6 +41,13 @@ function openPlanning() {
 }
 
 const progress = computed(() => initiativeProgress(initiative.value?.items))
+
+// Execution-loop controls appear once planning is done (the loop owns the block).
+const isExecuting = computed(() => status.value === 'executing')
+const isPaused = computed(() => status.value === 'paused')
+function control(action: 'pause' | 'resume' | 'cancel') {
+  void initiatives.control(props.block.id, action)
+}
 </script>
 
 <template>
@@ -89,6 +97,45 @@ const progress = computed(() => initiativeProgress(initiative.value?.items))
         @click="openTracker"
       >
         {{ t('initiative.card.openTracker') }}
+      </UButton>
+    </div>
+
+    <!-- Execution-loop controls (slice 3): pause / resume / cancel an executing initiative. -->
+    <div v-if="isExecuting || isPaused" class="flex flex-wrap items-center gap-2">
+      <UButton
+        v-if="isExecuting"
+        data-testid="initiative-pause"
+        color="warning"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-pause"
+        :loading="initiatives.controlling"
+        @click="control('pause')"
+      >
+        {{ t('initiative.inspector.pause') }}
+      </UButton>
+      <UButton
+        v-if="isPaused"
+        data-testid="initiative-resume"
+        color="primary"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-play"
+        :loading="initiatives.controlling"
+        @click="control('resume')"
+      >
+        {{ t('initiative.inspector.resume') }}
+      </UButton>
+      <UButton
+        data-testid="initiative-cancel"
+        color="error"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-square"
+        :loading="initiatives.controlling"
+        @click="control('cancel')"
+      >
+        {{ t('initiative.inspector.cancel') }}
       </UButton>
     </div>
 

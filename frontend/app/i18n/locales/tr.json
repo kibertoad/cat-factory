@@ -1294,6 +1294,7 @@
         "visual_confirmation_ready": "Okundu işaretle",
         "human_review": "Okundu işaretle",
         "followup_pending": "Okundu işaretle",
+        "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle"
       },
       "toast": {
@@ -2562,7 +2563,8 @@
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
       "human_test_ready": "İnsan testine hazır",
-      "visual_confirmation_ready": "Görsel onaya hazır"
+      "visual_confirmation_ready": "Görsel onaya hazır",
+      "initiative": "Girisim guncellemeleri"
     },
     "role": {
       "engineering": "Mühendislik",
@@ -4034,6 +4036,9 @@
     "inspector": {
       "runPlanning": "Planlamayi calistir",
       "answerPlanning": "Planlama sorularini yanitla",
+      "pause": "Duraklat",
+      "resume": "Devam et",
+      "cancel": "Girisimi iptal et",
       "hint": "Planlama hatti kod tabanini inceler, onay icin cok asamali plani hazirlar ve ardindan izleyici belgesini depoya kaydeder."
     },
     "planning": {

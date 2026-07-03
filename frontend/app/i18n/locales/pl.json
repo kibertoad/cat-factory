@@ -1294,6 +1294,7 @@
         "visual_confirmation_ready": "Oznacz jako przeczytane",
         "human_review": "Oznacz jako przeczytane",
         "followup_pending": "Oznacz jako przeczytane",
+        "initiative": "Oznacz jako przeczytane",
         "markRead": "Oznacz jako przeczytane"
       },
       "toast": {
@@ -2549,7 +2550,8 @@
       "clarity_review": "Przeglad klarownosci",
       "release_regression": "Regresja wydania",
       "human_test_ready": "Gotowe do testow przez czlowieka",
-      "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego"
+      "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
+      "initiative": "Aktualizacje inicjatywy"
     },
     "role": {
       "engineering": "Inzynieria",
@@ -4021,6 +4023,9 @@
     "inspector": {
       "runPlanning": "Uruchom planowanie",
       "answerPlanning": "Odpowiedz na pytania planowania",
+      "pause": "Wstrzymaj",
+      "resume": "Wznow",
+      "cancel": "Anuluj inicjatywe",
       "hint": "Pipeline planowania bada kod, przygotowuje wielofazowy plan do zatwierdzenia, a nastepnie zapisuje dokument trackera w repozytorium."
     },
     "planning": {

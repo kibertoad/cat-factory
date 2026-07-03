@@ -1294,6 +1294,7 @@
         "visual_confirmation_ready": "סמן כנקרא",
         "human_review": "סמן כנקרא",
         "followup_pending": "סמן כנקרא",
+        "initiative": "סמן כנקרא",
         "markRead": "סמן כנקרא"
       },
       "toast": {
@@ -2560,7 +2561,8 @@
       "clarity_review": "סקירת בהירות",
       "release_regression": "רגרסיית שחרור",
       "human_test_ready": "מוכן לבדיקה אנושית",
-      "visual_confirmation_ready": "מוכן לאישור חזותי"
+      "visual_confirmation_ready": "מוכן לאישור חזותי",
+      "initiative": "עדכוני יוזמה"
     },
     "role": {
       "engineering": "הנדסה",
@@ -4032,6 +4034,9 @@
     "inspector": {
       "runPlanning": "הרצת תכנון",
       "answerPlanning": "מענה על שאלות התכנון",
+      "pause": "השהה",
+      "resume": "המשך",
+      "cancel": "ביטול היוזמה",
       "hint": "צינור התכנון חוקר את הקוד, מנסח את התוכנית הרב-שלבית לאישור, ואז שומר את מסמך המעקב במאגר."
     },
     "planning": {

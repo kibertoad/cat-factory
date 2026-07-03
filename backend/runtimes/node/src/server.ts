@@ -23,6 +23,7 @@ import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
+import { startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
@@ -243,6 +244,10 @@ export async function start(
     : () => {}
   // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
   const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
+  // Tick the initiative execution loop on a one-minute timer (the Worker uses cron); reconciles
+  // + spawns for every executing initiative. Terminal child runs poke the loop directly, so this
+  // is the backstop cadence; no-op unless the initiatives module is wired.
+  const stopInitiativeLoop = startInitiativeLoopSweeper(container, clock, logger)
   // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
   // environments integration is wired.
   const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
@@ -279,6 +284,7 @@ export async function start(
     stopRetention()
     stopArtifactRetention()
     stopScheduleSweeper()
+    stopInitiativeLoop()
     stopEnvironmentSweeper()
     stopNotificationEscalation()
     stopKaizenSweeper()
