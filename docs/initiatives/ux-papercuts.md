@@ -1,6 +1,8 @@
 # UX papercuts & improvements — audit + fix tracker
 
-Status: **audit complete, no fixes landed yet.** This document catalogs UX papercuts
+Status: **fixes in progress.** First slice landed — the undo & confirmation-blast-radius
+cluster (UX-01/02/03/13, [#737](https://github.com/kibertoad/cat-factory/pull/737)). This
+document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
 verified against the code at the referenced `file:line` (line numbers drift as the
@@ -53,40 +55,42 @@ per-file patches:
 
 ## A. Board & canvas
 
-| ID    | Sev | Status | Finding                                                                       |
-| ----- | --- | ------ | ----------------------------------------------------------------------------- |
-| UX-01 | P1  | todo   | No undo after a successful block delete                                       |
-| UX-02 | P1  | todo   | Delete confirmation never states cascade scope                                |
-| UX-03 | P1  | todo   | Accidental drag-reparent commits silently, no undo                            |
-| UX-04 | P2  | todo   | Drag/reparent has no drop-target highlighting                                 |
-| UX-05 | P2  | todo   | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
-| UX-06 | P2  | todo   | Dependency edges cannot be removed (or hovered) on the canvas                 |
-| UX-07 | P2  | todo   | Pipeline dropped on blank canvas gives no feedback                            |
-| UX-08 | P2  | todo   | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
-| UX-09 | P2  | todo   | Double-clicking a frame/epic is a dead no-op                                  |
-| UX-10 | P2  | todo   | Selection, zoom, viewport lost on reload / workspace switch                   |
-| UX-11 | P2  | todo   | Camera doesn't refit on workspace switch                                      |
-| UX-12 | P2  | todo   | No arrow-key navigation or keyboard block movement                            |
-| UX-13 | P2  | todo   | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
-| UX-14 | P3  | todo   | No reset-zoom-to-100%; zoom readout not clickable                             |
-| UX-15 | P3  | todo   | Zoom/LOD readout hidden below `sm` breakpoint                                 |
-| UX-16 | P3  | todo   | Zoom buttons don't disable at min/max                                         |
-| UX-17 | P3  | todo   | Desktop frame-resize grips are an 8px hit target                              |
+| ID    | Sev | Status      | Finding                                                                       |
+| ----- | --- | ----------- | ----------------------------------------------------------------------------- |
+| UX-01 | P1  | done (#737) | No undo after a successful block delete                                       |
+| UX-02 | P1  | done (#737) | Delete confirmation never states cascade scope                                |
+| UX-03 | P1  | done (#737) | Accidental drag-reparent commits silently, no undo                            |
+| UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                 |
+| UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
+| UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                 |
+| UX-07 | P2  | todo        | Pipeline dropped on blank canvas gives no feedback                            |
+| UX-08 | P2  | todo        | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
+| UX-09 | P2  | todo        | Double-clicking a frame/epic is a dead no-op                                  |
+| UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                   |
+| UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                      |
+| UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                            |
+| UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
+| UX-14 | P3  | todo        | No reset-zoom-to-100%; zoom readout not clickable                             |
+| UX-15 | P3  | todo        | Zoom/LOD readout hidden below `sm` breakpoint                                 |
+| UX-16 | P3  | todo        | Zoom buttons don't disable at min/max                                         |
+| UX-17 | P3  | todo        | Desktop frame-resize grips are an 8px hit target                              |
 
-- **UX-01 — No undo after delete.** `composables/useBlockDeletion.ts:50-59`,
-  `stores/board.ts:289-303`. `detach()`/`reattach()` already capture a full
-  `RemovalSnapshot` (subtree + broken dependency/epic edges) but it's used only to
-  roll back on backend failure. On success there is no "Deleted X — Undo" toast, so
-  deleting a service nukes modules/tasks/edges/run history unrecoverably. Fix: wire
-  the existing `reattach` to a toast action.
-- **UX-02 — Cascade scope not stated.** `useBlockDeletion.ts:22-35` interpolates
-  only `{ name }` into the confirm body while `detach()` grows a `doomed` set of all
-  descendants (`board.ts:240-268`). Confirming "Delete service Foo?" silently
-  destroys N tasks. Fix: include the descendant count in the confirm body.
-- **UX-03 — Silent drag-reparent.** `composables/useBlockDrag.ts:51-93`. Any task
-  drag ending over a _different_ `[data-drop-zone]` reparents optimistically; a
-  small overshoot while nudging a card moves it to a neighbouring module with no
-  confirmation and (per UX-01) no undo.
+- **UX-01 — No undo after delete. DONE.** `stores/board.ts` `removeBlock` now
+  **defers** the backend delete by a `UNDO_WINDOW_MS` (6s) window and shows a
+  "Deleted X — Undo" toast whose action cancels the pending call and `reattach`es the
+  subtree — a genuine undo, since nothing was destroyed server-side yet. The pending
+  subtree is filtered out of every `hydrate`/`upsert` (`applyPendingRemovals` +
+  `pendingDoomed`) so a coarse refresh or stray live event can't resurrect it, and the
+  deferred call captures the workspace id so a mid-window switch still deletes the right
+  board. (The recurring-pipeline delete path keeps its immediate-delete semantics.)
+- **UX-02 — Cascade scope not stated. DONE.** `useBlockDeletion.copyFor` now reads a
+  pure `board.descendantsOf(id)` count (added to `useBlockQueries`) and, for a non-empty
+  container, uses the pluralized `confirmDelete.containerBodyWithCount` so the confirm
+  states the exact number of items that go with it.
+- **UX-03 — Silent drag-reparent. DONE.** A successful `reparentBlock` into a
+  _different_ container now offers the same "Moved X — Undo" toast, moving the block back
+  to its previous parent + position (the undo move is itself non-undoable so the toast
+  doesn't ping-pong). Covers the drag-overshoot-into-a-neighbour case.
 - **UX-04 — No drop-target highlight.** `useBlockDrag.ts:69-92`,
   `components/board/BoardCanvas.vue:113-116`. Destination resolved via
   `elementFromPoint` _on release only_; nothing highlights the hovered drop zone
@@ -118,9 +122,9 @@ per-file patches:
 - **UX-12 — No keyboard spatial actions.** `composables/useKeyboardShortcuts.ts:50-80`
   implements only Escape / Delete / `?`. No arrow-key traversal or nudge; every
   spatial action requires a pointer. (See also UX-69.)
-- **UX-13 — Un-i18n'd move-failure toast.** `stores/board.ts:339-340` uses literal
-  `'Could not move'` + raw error while siblings use `tr('board.toast.…')`; a
-  translated `board.toast.moveFailed` key already exists (used at `:224`).
+- **UX-13 — Un-i18n'd move-failure toast. DONE.** `moveBlock`'s failure toast now uses
+  `tr('board.toast.moveFailed')` (the key already existed) instead of the literal
+  `'Could not move'`.
 - **UX-14/15/16 — Zoom polish.** `BoardToolbar.vue:102-130` + `BoardCanvas.vue:176-177`:
   readout is static text (make it click-to-reset-100%), hidden below `sm`, and the
   buttons stay enabled-but-inert at the 0.2/3.0 clamps.
@@ -486,6 +490,20 @@ per-file patches:
 
 ## Conventions & gotchas carried between iterations
 
+- **Undo pattern = deferred destructive action, not client-only rollback.** A "real"
+  undo can't just `reattach` the client cache after a successful server delete — a coarse
+  `board` refresh (`useWorkspaceStream` → `workspace.refresh()`) would re-fetch the block
+  (still present server-side) and resurrect it. The working pattern (see `board.ts`
+  `removeBlock`): **defer** the backend mutation by `UNDO_WINDOW_MS`, hide the subtree
+  optimistically, and keep it filtered out of `hydrate`/`upsert` via a `pendingDoomed` set
+  until the window elapses; the undo toast action just cancels the timer + restores. Capture
+  the workspace id at call time so the deferred call targets the right board after a switch.
+  A reversible (non-destructive) action like reparent doesn't need deferral — just offer an
+  "Undo" toast that performs the inverse move (mark the inverse non-undoable to avoid a
+  ping-pong toast).
+- The shared undo toast shape: `color: 'neutral'`, `duration: UNDO_WINDOW_MS`, a single
+  `actions: [{ label: t('common.undo'), icon: 'i-lucide-undo-2', onClick }]`. Reuse it for
+  the remaining undo items (UX-52 high-blast-radius disconnects).
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding
   or changing an `en.json` key requires the same change in every other locale in
   the same PR.

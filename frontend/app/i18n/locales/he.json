@@ -50,7 +50,8 @@
       "revoked": "{name} בוטל",
       "cleared": "{name} נוקה",
       "destroyed": "{name} הושמד"
-    }
+    },
+    "undo": "בטל"
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -80,7 +81,9 @@
       "moveFailed": "לא ניתן היה להעביר",
       "deleteFailed": "לא ניתן היה למחוק",
       "linkFailed": "לא ניתן היה לקשר משימות",
-      "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר"
+      "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר",
+      "deleted": "\"{name}\" נמחק",
+      "moved": "\"{name}\" הועבר"
     },
     "repoTypes": {
       "service": "שירות",
@@ -960,7 +963,8 @@
         "recurring": {
           "title": "למחוק את ה־pipeline החוזר הזה?",
           "body": "\"{name}\", התזמון שלו והיסטוריית ההרצות יימחקו. לא ניתן לבטל פעולה זו."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" ו-{count} פריט שבתוכו יימחקו. לא ניתן לבטל פעולה זו. | \"{name}\" ו-{count} פריטים שבתוכו יימחקו. לא ניתן לבטל פעולה זו."
       }
     }
   },

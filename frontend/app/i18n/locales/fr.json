@@ -50,7 +50,8 @@
       "revoked": "{name} révoqué",
       "cleared": "{name} effacé",
       "destroyed": "{name} détruit"
-    }
+    },
+    "undo": "Annuler"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -80,7 +81,9 @@
       "moveFailed": "Impossible de déplacer",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
-      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent"
+      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent",
+      "deleted": "\"{name}\" supprimé",
+      "moved": "\"{name}\" déplacé"
     },
     "repoTypes": {
       "service": "Service",
@@ -960,7 +963,8 @@
         "recurring": {
           "title": "Supprimer ce pipeline récurrent ?",
           "body": "\"{name}\", sa planification et son historique d'exécution seront supprimés. Cette action est irréversible."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" et le {count} élément qu'il contient seront supprimés. Cette action est irréversible. | \"{name}\" et les {count} éléments qu'il contient seront supprimés. Cette action est irréversible."
       }
     }
   },

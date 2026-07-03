@@ -71,6 +71,23 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return [...direct, ...nested]
   }
 
+  /**
+   * Every block nested under a container (transitive), excluding the container
+   * itself — the exact set a delete cascades over. Used to state the blast radius
+   * in the delete confirmation. Structural children only (via `parentId`), so a
+   * non-structural epic membership is not counted.
+   */
+  function descendantsOf(id: string): Block[] {
+    const out: Block[] = []
+    const stack = [...childrenOf(id)]
+    while (stack.length > 0) {
+      const b = stack.pop()!
+      out.push(b)
+      stack.push(...childrenOf(b.id))
+    }
+    return out
+  }
+
   /** The top-level service a block ultimately belongs to. */
   function serviceOf(block: Block): Block | undefined {
     let cur: Block | undefined = block
@@ -200,6 +217,7 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     modulesOf,
     initiativesOf,
     allTasksUnder,
+    descendantsOf,
     serviceOf,
     unmetDeps,
     isRunnable,

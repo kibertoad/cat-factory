@@ -50,7 +50,8 @@
       "revoked": "Unieważniono {name}",
       "cleared": "Wyczyszczono {name}",
       "destroyed": "Zniszczono {name}"
-    }
+    },
+    "undo": "Cofnij"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -80,7 +81,9 @@
       "moveFailed": "Nie udało się przenieść",
       "deleteFailed": "Nie udało się usunąć",
       "linkFailed": "Nie udało się powiązać zadań",
-      "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u"
+      "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u",
+      "deleted": "Usunięto \"{name}\"",
+      "moved": "Przeniesiono \"{name}\""
     },
     "repoTypes": {
       "service": "Usługa",
@@ -960,7 +963,8 @@
         "recurring": {
           "title": "Usunąć ten cykliczny pipeline?",
           "body": "\"{name}\", jego harmonogram i historia uruchomień zostaną usunięte. Tej operacji nie można cofnąć."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" i {count} element w środku zostaną usunięte. Tej operacji nie można cofnąć. | \"{name}\" i {count} elementy w środku zostaną usunięte. Tej operacji nie można cofnąć. | \"{name}\" i {count} elementów w środku zostanie usuniętych. Tej operacji nie można cofnąć."
       }
     }
   },

@@ -50,7 +50,8 @@
       "revoked": "{name} iptal edildi",
       "cleared": "{name} temizlendi",
       "destroyed": "{name} yok edildi"
-    }
+    },
+    "undo": "Geri al"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -80,7 +81,9 @@
       "moveFailed": "Taşınamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
-      "recurringDeleteFailed": "Yinelenen pipeline silinemedi"
+      "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
+      "deleted": "\"{name}\" silindi",
+      "moved": "\"{name}\" taşındı"
     },
     "repoTypes": {
       "service": "Servis",
@@ -960,7 +963,8 @@
         "recurring": {
           "title": "Bu yinelenen pipeline silinsin mi?",
           "body": "\"{name}\", zamanlaması ve çalıştırma geçmişi kaldırılacak. Bu işlem geri alınamaz."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz. | \"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz."
       }
     }
   },

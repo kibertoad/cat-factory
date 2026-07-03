@@ -59,7 +59,8 @@
     },
     "@clear": {
       "description": "Verb meaning empty / reset a stored value (a config, a saved connection), NOT the adjective 'transparent / obvious'. Used as a destructive-action button label."
-    }
+    },
+    "undo": "Undo"
   },
   "nav": {
     "menu": "Navigation menu",
@@ -95,7 +96,9 @@
       "moveFailed": "Could not move",
       "deleteFailed": "Could not delete",
       "linkFailed": "Could not link tasks",
-      "recurringDeleteFailed": "Could not delete recurring pipeline"
+      "recurringDeleteFailed": "Could not delete recurring pipeline",
+      "deleted": "Deleted \"{name}\"",
+      "moved": "Moved \"{name}\""
     },
     "repoTypes": {
       "service": "Service",
@@ -985,7 +988,8 @@
         "recurring": {
           "title": "Delete this recurring pipeline?",
           "body": "\"{name}\", its schedule and its run history will be removed. This can't be undone."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" and the {count} item inside it will be removed. This can't be undone. | \"{name}\" and the {count} items inside it will be removed. This can't be undone."
       },
       "titlePlaceholder": "Title…",
       "reworkedRequirements": "Reworked requirements",
