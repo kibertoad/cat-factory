@@ -5,37 +5,51 @@ import {
   resolveFrontendBindings,
   type FrontendBackendBinding,
   type FrontendConfig,
+  type ResolvedFrontendBinding,
 } from '@cat-factory/contracts'
 
-// The LIVE resolution of a frontend frame's backend bindings — the SPA mirror of what a UI-test
-// run resolves at start: each env var → a bound service's live ephemeral URL, or WireMock. Shared
-// by the frame inspector (current state) and a `tester-ui` step's run detail (what the run drives
-// against). Reads the workspace's env handles once via the environments store and feeds the SAME
-// pure helpers the backend uses (`resolveFrontendBindings` / `indexLiveServiceEnvUrls`), so the
-// view can't drift from the run. Also surfaces the duplicate-env-var misconfiguration.
-const props = defineProps<{ config: FrontendConfig }>()
+// The resolution of a frontend frame's backend bindings — each env var → a bound service's live
+// ephemeral URL, or WireMock. Two modes, same view:
+//   - **Live** (frame inspector, `resolved` omitted): resolves against the workspace's CURRENT env
+//     handles (fetched once via the environments store), so the operator sees how a run would
+//     resolve RIGHT NOW. Feeds the SAME pure helpers the backend uses so it can't drift.
+//   - **Projected** (`tester-ui` run/step detail, `resolved` provided): renders the FROZEN
+//     start-time bindings the engine stamped on the run, so a finished run shows what it ACTUALLY
+//     drove against — truthful even after the underlying envs are torn down (no live re-read).
+// Also surfaces the duplicate-env-var misconfiguration in live mode (projected mode leaves that to
+// the run-start note, which owns the frozen advisory).
+const props = defineProps<{ config: FrontendConfig; resolved?: ResolvedFrontendBinding[] }>()
 
 const environments = useEnvironmentsStore()
 const board = useBoardStore()
 const { t } = useI18n()
 
-// Refresh the env handles when this view opens so a just-provisioned service shows as live.
-onMounted(() => void environments.load())
+const projected = computed(() => props.resolved !== undefined)
 
-const duplicates = computed(() => duplicateBindingEnvVars(props.config))
+// Live mode refreshes the env handles when this view opens so a just-provisioned service shows as
+// live; a projected snapshot needs no live read.
+onMounted(() => {
+  if (!projected.value) void environments.load()
+})
+
+// The duplicate advisory is config-derived; in projected mode the run-start note owns it (frozen
+// at start), so don't re-derive it here against a possibly-since-edited config.
+const duplicates = computed(() => (projected.value ? [] : duplicateBindingEnvVars(props.config)))
 
 // Each resolved binding + the display metadata a bare {envVar, serviceUrl} can't carry: whether
 // a mocked upstream was a `mock` source or a `service` with no live env, and the bound service's
 // title. Joined off the LAST config binding per envVar (matching `resolveFrontendBindings`'
 // last-wins dedup), so the extra labels stay in step with the canonical resolution.
 const rows = computed(() => {
-  const live = environments.liveServiceEnvUrls(props.config)
+  const resolved =
+    props.resolved ??
+    resolveFrontendBindings(props.config, environments.liveServiceEnvUrls(props.config))
   const lastByEnvVar = new Map<string, FrontendBackendBinding>()
   for (const b of props.config.backendBindings) {
     const key = b.envVar.trim()
     if (key) lastByEnvVar.set(key, b)
   }
-  return resolveFrontendBindings(props.config, live).map((r) => {
+  return resolved.map((r) => {
     const source = lastByEnvVar.get(r.envVar)?.source
     const serviceFrameId = source?.kind === 'service' ? source.serviceBlockId : undefined
     return {

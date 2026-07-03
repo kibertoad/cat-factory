@@ -13,7 +13,7 @@ import {
   serviceProvisioningSchema,
 } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
-import { frontendConfigSchema } from './frontend.js'
+import { frontendConfigSchema, resolvedFrontendBindingSchema } from './frontend.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
@@ -1546,6 +1546,15 @@ export const executionInstanceSchema = v.object({
    * state even after the underlying envs change.
    */
   notes: v.optional(v.array(v.string())),
+  /**
+   * The frontend UI-test flow's backend bindings RESOLVED once at run start (env var → the bound
+   * service's live ephemeral URL, or absent ⇒ mocked; see {@link resolveFrontendBindings}). Stamped
+   * on the run so the SPA's run/step detail projects what the run ACTUALLY drove against — a frozen
+   * snapshot that stays truthful after the underlying envs are torn down, rather than re-resolving
+   * against current live state (which for a finished run could disagree with the co-located
+   * start-time {@link notes}). Rides in the `detail` JSON column; absent for a non-frontend run.
+   */
+  frontendBindings: v.optional(v.array(resolvedFrontendBindingSchema)),
   /**
    * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
    * so the individual-usage restricted mode can use the initiator's OWN personal

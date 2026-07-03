@@ -61,16 +61,22 @@ const testPhase = computed(() => step.value?.test ?? null)
 const stepEnvironment = computed(() => step.value?.environment ?? null)
 
 // For a frontend UI-test step (`tester-ui`): the enclosing `frontend` frame's backend-binding
-// config, so the detail can project how each env var resolves (live URL | mocked) — the same
-// resolution a run drives against. Plus the run-start advisories the engine stamped on the run
-// (duplicate env vars / partially-mocked services), shown here where the frontend infra matters.
+// config, so the detail can project how each env var resolved (live URL | mocked) — rendered from
+// the FROZEN bindings the engine stamped on the run (`instance.frontendBindings`), so a finished
+// run shows what it actually drove against rather than re-resolving against current live state.
 const frontendFrame = computed(() => (block.value ? board.serviceOf(block.value) : undefined))
+const isFrontendFrame = computed(() => frontendFrame.value?.type === 'frontend')
 const frontendConfig = computed(() =>
-  step.value?.agentKind === UI_TESTER_AGENT_KIND && frontendFrame.value?.type === 'frontend'
-    ? (frontendFrame.value.frontendConfig ?? null)
+  step.value?.agentKind === UI_TESTER_AGENT_KIND && isFrontendFrame.value
+    ? (frontendFrame.value!.frontendConfig ?? null)
     : null,
 )
-const runNotes = computed(() => (frontendConfig.value ? (instance.value?.notes ?? []) : []))
+// The frozen start-time resolution the tester ran against (absent for a non-frontend / pre-6b run).
+const frontendBindings = computed(() => instance.value?.frontendBindings ?? [])
+// The run-start advisories the engine stamped on the run (duplicate env vars / partially-mocked
+// services) are a whole-RUN fact, so surface them on ANY step detail of a frontend-frame run, not
+// only the `tester-ui` step — a duplicate-env-var note shouldn't be invisible from the coder step.
+const runNotes = computed(() => (isFrontendFrame.value ? (instance.value?.notes ?? []) : []))
 
 // The run's infrastructure attempts (container/runner/env spin-up + tear-down), behind
 // a toggle. This is the surface that makes the per-run `container` log rows + the
@@ -361,8 +367,14 @@ async function copyOutput() {
 
               <!-- frontend UI-test: how the frame's backend bindings resolved (env var →
                    live URL | mocked) + the run-start advisories (duplicate env vars /
-                   partially-mocked services) the engine stamped on the run -->
-              <FrontendBindingsResolved v-if="frontendConfig" :config="frontendConfig" />
+                   partially-mocked services) the engine stamped on the run. Rendered from the
+                   FROZEN start-time bindings so a finished run shows what it actually drove
+                   against, not a live re-resolution. -->
+              <FrontendBindingsResolved
+                v-if="frontendConfig"
+                :config="frontendConfig"
+                :resolved="frontendBindings"
+              />
               <ul v-if="runNotes.length" class="space-y-1" data-testid="run-notes">
                 <li
                   v-for="(note, i) in runNotes"

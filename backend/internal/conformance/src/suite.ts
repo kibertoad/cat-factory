@@ -5090,19 +5090,31 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
             name: 'Build + UI test',
             agentKinds: ['coder', 'tester-ui'],
           })
-          const started = await app.call<{ id: string; notes?: string[] }>(
-            'POST',
-            `/workspaces/${wsId}/blocks/${task.body.id}/executions`,
-            { pipelineId: uiPipeline.body.id },
-          )
+          const started = await app.call<{
+            id: string
+            notes?: string[]
+            frontendBindings?: { envVar: string; serviceUrl?: string }[]
+          }>('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+            pipelineId: uiPipeline.body.id,
+          })
           expect(started.status).toBe(201)
           expect(started.body.notes?.some((n) => n.includes('PUB_API_URL'))).toBe(true)
+          // The bindings resolved once at start are stamped on the run as a frozen snapshot: the
+          // (last-wins) `service` binding resolved to blk_auth's live env URL.
+          expect(started.body.frontendBindings).toContainEqual({
+            envVar: 'PUB_API_URL',
+            serviceUrl: 'https://auth-live.example',
+          })
 
-          // Re-read from the store (fresh snapshot): the note persisted in `agent_runs.detail`
-          // identically on D1 and Postgres.
+          // Re-read from the store (fresh snapshot): the note AND the frozen bindings persisted in
+          // `agent_runs.detail` identically on D1 and Postgres.
           const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
           const persisted = snapshot.body.executions.find((e) => e.id === started.body.id)
           expect(persisted?.notes?.some((n) => n.includes('only the last binding'))).toBe(true)
+          expect(persisted?.frontendBindings).toContainEqual({
+            envVar: 'PUB_API_URL',
+            serviceUrl: 'https://auth-live.example',
+          })
         },
       )
 

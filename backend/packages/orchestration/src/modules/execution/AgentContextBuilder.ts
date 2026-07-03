@@ -361,11 +361,12 @@ export class AgentContextBuilder {
   }
 
   /**
-   * The run-detail projection + run-start soft notes for a frontend UI-test / preview run: the
+   * The run-start binding snapshot + soft notes for a frontend UI-test / preview run: the
    * resolved bindings (env-var → live URL | mocked) plus the non-fatal advisories
    * ({@link buildFrontendRunNotes}). Shares the SAME single-read resolution as
-   * {@link resolveFrontendConfig}, so a start caches the resolved bindings on the run (for the
-   * SPA's run/step detail) and attaches the notes with no extra live-env read at view time.
+   * {@link resolveFrontendConfig}. The engine stamps BOTH results on the run (`frontendBindings`
+   * + `notes`) at start, so the SPA's run/step detail projects the frozen start-time resolution
+   * with no extra live-env read at view time (and it stays truthful after the envs are torn down).
    * Returns undefined for a non-frontend frame (nothing to project), exactly like
    * {@link resolveFrontendConfig}.
    */
