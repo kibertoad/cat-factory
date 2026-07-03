@@ -1362,6 +1362,7 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      createdAt: this.clock.now(),
       ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
     }

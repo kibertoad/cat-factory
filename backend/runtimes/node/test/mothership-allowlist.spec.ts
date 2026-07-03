@@ -123,7 +123,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     deleteExpired: 'sweeper',
   },
   emailConnectionRepository: { getByAccount: 'pending', upsert: 'pending', softDelete: 'pending' },
-  blockRepository: { listByService: 'pending' },
+  // `countActiveInternal` (the public API's initiative-start concurrency backstop, a
+  // workspace-scoped SQL COUNT) is org/durable and REMOTE-eligible, but proxying the public-API
+  // path is a later mothership slice, so it stays pending until then, like `listByService`.
+  blockRepository: { listByService: 'pending', countActiveInternal: 'pending' },
   pipelineRepository: {},
   executionRepository: { listByService: 'pending', listStale: 'sweeper' },
   // `getRef` is allow-listed (the board's retry/stop run-control entry point). `listStale`/

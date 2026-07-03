@@ -492,6 +492,122 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
+    describe('public API (break down an initiative)', () => {
+      it('authenticates a public-API key, runs a public inline pipeline headlessly, persists a retrievable result, and hides the anchor block', async () => {
+        const { call, createOrgWorkspace, drive } = harness.makeApp()
+        // Account-scoped: public-API keys are only minted for an account-owning workspace, so use a
+        // seeded ORG workspace (the seed brings the built-in `pl_initiative_breakdown` pipeline).
+        const { workspace } = await createOrgWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        // Mint an inbound public-API key (needs ENCRYPTION_KEY, which both harnesses configure).
+        const created = await call<{ key: { id: string }; secret: string }>(
+          'POST',
+          `/workspaces/${wsId}/public-api-keys`,
+          { label: 'external' },
+        )
+        expect(created.status).toBe(201)
+        const secret = created.body.secret
+        expect(secret).toMatch(/^cf_live_/)
+        const auth = { authorization: `Bearer ${secret}` }
+
+        // A missing key is refused; a valid key starts the run.
+        expect(
+          (
+            await call('POST', '/api/v1/initiatives', {
+              pipelineId: 'pl_initiative_breakdown',
+              input: 'x',
+            })
+          ).status,
+        ).toBe(401)
+        const started = await call<{ jobId: string; status: string }>(
+          'POST',
+          '/api/v1/initiatives',
+          { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
+          auth,
+        )
+        expect(started.status).toBe(202)
+        const jobId = started.body.jobId
+
+        // Drive the run to completion and read back the DB-persisted result.
+        await drive(wsId)
+        const job = await call<{ status: string; result: { output: string } | null }>(
+          'GET',
+          `/api/v1/jobs/${jobId}`,
+          undefined,
+          auth,
+        )
+        expect(job.status).toBe(200)
+        expect(job.body.status).toBe('succeeded')
+        expect(job.body.result?.output).toBeTruthy()
+
+        // The headless anchor block AND its execution are excluded from the board snapshot on both
+        // stores — neither the hidden block nor the external run's brief/output reaches the SPA.
+        const board = await call<{
+          blocks: { title: string; internal?: boolean }[]
+          executions: { id: string }[]
+        }>('GET', `/workspaces/${wsId}`)
+        expect(board.body.blocks.some((b) => b.internal)).toBe(false)
+        expect(board.body.blocks.some((b) => b.title === 'Build a cat feeder service')).toBe(false)
+        expect(board.body.executions.some((e) => e.id === jobId)).toBe(false)
+
+        // A key can read ONLY the initiative runs it created, never an arbitrary board run in the
+        // same workspace: start the SAME public pipeline on a NORMAL seeded task, and the key gets
+        // a 404 (its anchor block isn't internal), even though the run exists and shares the scope.
+        const normalStart = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_initiative_breakdown',
+        })
+        expect(normalStart.status).toBe(201)
+        const normalExec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect((await call('GET', `/api/v1/jobs/${normalExec.id}`, undefined, auth)).status).toBe(
+          404,
+        )
+
+        // Concurrency backstop (both stores): a workspace may only have 5 initiative runs in
+        // flight; leaving them undriven, the 6th start is refused with 429.
+        for (let i = 0; i < 5; i++) {
+          expect(
+            (
+              await call(
+                'POST',
+                '/api/v1/initiatives',
+                { pipelineId: 'pl_initiative_breakdown', input: `run ${i}` },
+                auth,
+              )
+            ).status,
+          ).toBe(202)
+        }
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_initiative_breakdown', input: 'overflow' },
+              auth,
+            )
+          ).status,
+        ).toBe(429)
+        await drive(wsId) // let the in-flight runs finish so none dangle
+
+        // A non-public pipeline id is refused; a revoked key no longer authenticates.
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_blueprint', input: 'x' },
+              auth,
+            )
+          ).status,
+        ).toBe(400)
+        expect(
+          (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`))
+            .status,
+        ).toBe(204)
+        expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
+      })
+    })
+
     describe('pipeline versioning + reseed', () => {
       it('ships catalog versions on the snapshot and reseeds a built-in, preserving organization', async () => {
         const { call, createWorkspace } = harness.makeApp()

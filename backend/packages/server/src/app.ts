@@ -65,6 +65,8 @@ import {
 } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
+import { publicApiController } from './modules/publicApi/PublicApiController.js'
+import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 
 /**
  * Mount the runtime-neutral controllers onto a facade's Hono app, preserving the
@@ -94,6 +96,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // facade attached its repository registry. Mounted on both facades so either can be a
   // mothership.
   app.route('/', persistenceController())
+  // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
+  // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
+  app.route('/', publicApiController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())
@@ -127,6 +132,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', provisioningLogController())
   app.route('/workspaces/:workspaceId', vendorCredentialController())
   app.route('/workspaces/:workspaceId', workspaceApiKeyController())
+  app.route('/workspaces/:workspaceId', publicApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
   // Binary-artifact API (screenshots + reference uploads) for the visual-confirmation

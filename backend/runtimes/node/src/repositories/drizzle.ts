@@ -397,6 +397,20 @@ class DrizzleBlockRepository implements BlockRepository {
       .delete(blocks)
       .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
   }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.workspace_id, workspaceId),
+          eq(blocks.internal, 1),
+          eq(blocks.status, 'in_progress'),
+        ),
+      )
+    return row?.n ?? 0
+  }
 }
 
 class DrizzlePipelineRepository implements PipelineRepository {
@@ -440,6 +454,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
       version: pipeline.version ?? null,
+      public: pipeline.public ? 1 : null,
     })
   }
 
@@ -462,6 +477,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,
+        public: pipeline.public ? 1 : null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
