@@ -237,14 +237,23 @@ export class FetchGitHubClient implements GitHubClient {
     if (!trimmed) return []
     const syncedAt = this.deps.clock.now()
     const per = Math.min(Math.max(opts.limit ?? 50, 1), 100)
+    // Without an account to scope it to, `/search/repositories` would run UNSCOPED across
+    // all of GitHub and return arbitrary public repos this installation can't link (each
+    // would then 404 on `getRepoById`). Never do that: fall back to filtering the
+    // installation's own bounded repo listing, so a missing account can't leak the search.
+    if (!opts.owner) {
+      const q = trimmed.toLowerCase()
+      const { items } = await this.listInstallationRepos(installationId)
+      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)).slice(0, per)
+    }
     // Match the typed text against the repo NAME (accepting an `owner/name` paste by
-    // matching only the name segment), scoped to the installation's account so results
-    // stay within what it manages. The installation token further limits matches to
-    // repos the installation can access, exactly like searchIssues/searchCode.
+    // matching only the name segment), scoped to the installation's account so results stay
+    // within what it manages. GitHub matches names by token/prefix (NOT arbitrary
+    // substring), and a public org repo the App wasn't granted may still surface — linking
+    // one point-reads it via `getRepoById`, which returns null (a clean "grant access"
+    // signal) when the installation genuinely can't access it.
     const nameTerm = trimmed.slice(trimmed.lastIndexOf('/') + 1).trim() || trimmed
-    const scope = opts.owner
-      ? ` ${opts.ownerType === 'Organization' ? 'org' : 'user'}:${opts.owner}`
-      : ''
+    const scope = ` ${opts.ownerType === 'Organization' ? 'org' : 'user'}:${opts.owner}`
     const q = encodeURIComponent(`${nameTerm} in:name fork:true${scope}`)
     const { json } = await this.request(`/search/repositories?q=${q}&per_page=${per}`, {
       installationId,
