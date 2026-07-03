@@ -71,9 +71,20 @@ export {
   seedBlocks,
   seedPipelines,
   BLUEPRINT_PIPELINE_ID,
+  INITIATIVE_PIPELINE_ID,
   DEP_UPDATE_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
 } from './domain/seed.js'
+
+// Pure initiative vocabulary (agent-kind constants + pipeline-shape predicates),
+// shared by the agents package and the execution engine's runnable guard.
+export {
+  INITIATIVE_PLANNER_AGENT_KIND,
+  INITIATIVE_COMMITTER_AGENT_KIND,
+  INITIATIVE_AGENT_KINDS,
+  isInitiativeAgentKind,
+  hasInitiativeKinds,
+} from './domain/initiative-logic.js'
 // Installation-level extension point for predefined pipelines (mirrors the custom
 // agent-kind / model-provider registry seams): a deployment registers extra pipelines at
 // startup and `seedPipelines()` seeds them into every new workspace.

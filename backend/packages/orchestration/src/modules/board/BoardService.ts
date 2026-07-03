@@ -15,6 +15,7 @@ import type {
   Clock,
   ExecutionEventPublisher,
   ExecutionRepository,
+  InitiativeRepository,
   RepoProjectionRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
@@ -62,6 +63,14 @@ export interface BoardServiceDependencies {
    */
   serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   /**
+   * Initiative persistence, present only when the initiatives module is wired. Backs the
+   * cascade cleanup in {@link BoardService.removeBlock}: deleting an `initiative`-level block
+   * must also delete its 1:1 entity row, the same way a doomed service frame's account-owned
+   * service is reclaimed — otherwise the row survives as a phantom in the snapshot with its
+   * slug reserved forever. Absent → no initiatives exist, so nothing to clean up.
+   */
+  initiativeRepository?: InitiativeRepository
+  /**
    * Real-time push. When wired, every successful board mutation emits a coarse
    * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
    * (and every board mounting a shared service) see the create/rename/move/reparent/delete
@@ -103,6 +112,7 @@ export class BoardService {
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+  private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
 
   constructor({
@@ -115,6 +125,7 @@ export class BoardService {
     serviceRepository,
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
+    initiativeRepository,
     executionEventPublisher,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -126,6 +137,7 @@ export class BoardService {
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
+    this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
   }
 
@@ -783,12 +795,17 @@ export class BoardService {
       const patch: {
         dependsOn?: string[]
         epicId?: string | null
+        initiativeId?: string | null
         serviceConnections?: ServiceConnection[]
         involvedServiceIds?: string[]
       } = {}
       const next = b.dependsOn.filter((d) => !removed.has(d))
       if (next.length !== b.dependsOn.length) patch.dependsOn = next
       if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+      // Initiative membership is non-structural (epic-style): a task the loop spawned
+      // isn't a descendant of the deleted initiative block, so detach the dangling link
+      // here the same way epic membership is pruned above.
+      if (b.initiativeId && removed.has(b.initiativeId)) patch.initiativeId = null
       // Service-connection edges into the removed set, and task selections of a removed
       // involved service, dangle the same way dependency edges do — drop them here too.
       const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))
@@ -868,6 +885,27 @@ export class BoardService {
         const ids = [...doomedServiceIds]
         await this.workspaceMountRepository.removeByServices(ids)
         await this.serviceRepository.deleteMany(ids)
+      }
+    }
+    // Delete the `initiatives` entity anchored to any doomed initiative-level block, the same
+    // way the doomed service frames' account-owned services are reclaimed above. Without this
+    // the 1:1 row survives with a `block_id` pointing at a deleted block: the snapshot's
+    // `initiatives` list keeps returning a phantom, its `(workspace_id, slug)` stays reserved
+    // (re-creating a same-title initiative silently gets `<slug>-2`), and slice 3's
+    // `listExecuting` sweeper would re-drive a dead initiative. One `list` read + bounded
+    // deletes (the doomed set holds at most the subtree's few initiative blocks), never a
+    // per-block `getByBlock` loop.
+    if (this.initiativeRepository) {
+      const doomedInitiativeBlockIds = new Set(
+        blocks.filter((b) => doomed.has(b.id) && b.level === 'initiative').map((b) => b.id),
+      )
+      if (doomedInitiativeBlockIds.size > 0) {
+        const initiatives = await this.initiativeRepository.list(homeWorkspaceId)
+        for (const initiative of initiatives) {
+          if (doomedInitiativeBlockIds.has(initiative.blockId)) {
+            await this.initiativeRepository.delete(homeWorkspaceId, initiative.id)
+          }
+        }
       }
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])

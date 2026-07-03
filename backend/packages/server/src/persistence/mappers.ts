@@ -60,6 +60,8 @@ export interface BlockRow {
   parent_id: string | null
   /** Task-level: membership link to an `epic`-level block (independent of parent_id). */
   epic_id?: string | null
+  /** Task-level: membership link to an `initiative`-level block (loop-spawned tasks). */
+  initiative_id?: string | null
   /** Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. */
   auto_start_dependents?: number | null
   confidence: number | null
@@ -369,6 +371,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   scalarField('parentId'),
   // Epic membership; an empty string / null detaches the task from its epic.
   optField('epicId', { clearOnEmpty: true }),
+  // Initiative membership (loop-spawned tasks); empty/null detaches.
+  optField('initiativeId', { clearOnEmpty: true }),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
   optField('moduleName'),

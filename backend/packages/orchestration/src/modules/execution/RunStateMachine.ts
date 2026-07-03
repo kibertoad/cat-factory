@@ -13,7 +13,12 @@ import type {
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  isAsyncAgentExecutor,
+  isInitiativeAgentKind,
+} from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -374,6 +379,16 @@ export class RunStateMachine {
     if (!block || block.status === 'done') return
 
     if ((block.level ?? 'frame') !== 'task') {
+      // An initiative block's PLANNING run finishing means execution BEGINS, not that
+      // the initiative is done — the block stays `in_progress`, and the execution loop
+      // (a later slice) flips it terminal once every tracker item settles.
+      if (instance.steps.some((s) => isInitiativeAgentKind(s.agentKind))) {
+        await this.blockRepository.update(workspaceId, block.id, {
+          status: 'in_progress',
+          progress: 0,
+        })
+        return
+      }
       // A mapping-only run (just the `blueprints` step, e.g. kicked off after a
       // bootstrap) leaves the service frame `ready` and droppable rather than
       // marking the whole service "done".

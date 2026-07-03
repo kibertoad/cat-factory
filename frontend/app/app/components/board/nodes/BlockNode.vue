@@ -3,6 +3,7 @@ import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import DecisionBadge from './DecisionBadge.vue'
 import DraggableTask from './DraggableTask.vue'
+import InitiativeCard from './InitiativeCard.vue'
 import ModuleFrame from './ModuleFrame.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -36,10 +37,13 @@ const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) :
 // ---- this service's children (tasks + modules) -----------------------------
 const directTasks = computed(() => board.tasksOf(props.id))
 const modules = computed(() => board.modulesOf(props.id))
+const initiativeBlocks = computed(() => board.initiativesOf(props.id))
 const allTasks = computed(() => board.allTasksUnder(props.id))
 const taskIds = computed(() => new Set(allTasks.value.map((t) => t.id)))
 const taskCount = computed(() => allTasks.value.length)
-const hasTasks = computed(() => taskCount.value > 0 || modules.value.length > 0)
+const hasTasks = computed(
+  () => taskCount.value > 0 || modules.value.length > 0 || initiativeBlocks.value.length > 0,
+)
 // Single pass over the tasks for both rollups (vs. one filter each).
 const taskStats = computed(() => {
   let merged = 0
@@ -154,6 +158,11 @@ function createTaskFromIssue() {
 
 function addRecurring() {
   ui.openAddRecurring(props.id)
+}
+
+function createInitiative() {
+  ui.expandFrame(props.id)
+  ui.openCreateInitiative(props.id)
 }
 
 // A task needs merging → green pulse; a task needs a decision → amber pulse.
@@ -464,6 +473,16 @@ const ITEM_ICON: Record<string, string> = {
               />
               <UButton
                 class="nodrag"
+                data-testid="frame-add-initiative"
+                :size="isTouch ? 'sm' : 'xs'"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-milestone"
+                :title="t('board.frame.createInitiativeTitle')"
+                @click.stop="createInitiative"
+              />
+              <UButton
+                class="nodrag"
                 :size="isTouch ? 'sm' : 'xs'"
                 variant="ghost"
                 color="neutral"
@@ -494,6 +513,7 @@ const ITEM_ICON: Record<string, string> = {
           :style="{ width: canvas.w + 'px', height: canvas.h + 'px' }"
         >
           <ModuleFrame v-for="m in modules" :key="m.id" :module-id="m.id" />
+          <InitiativeCard v-for="i in initiativeBlocks" :key="i.id" :block-id="i.id" />
           <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" />
           <button
             v-if="!hasTasks"

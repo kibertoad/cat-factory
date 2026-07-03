@@ -519,6 +519,19 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     deleteByBlockStage: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Initiatives (the long-running multi-task work container): the create/read surface the
+  // board + tracker window use, plus the planning pipeline's ingest writes. Every method is
+  // workspaceId-arg0 scoped; the rev-guarded `compareAndSwap` carries the whole entity as
+  // arg1 with the expected rev as arg2. `listExecuting` (the cross-workspace cron sweeper
+  // read) is deliberately NOT here — it stays mothership-internal.
+  initiativeRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    insert: { scope: { kind: 'workspace', arg: 0 } },
+    compareAndSwap: { scope: { kind: 'workspace', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
   consensusSessionRepository: {
     get: { scope: { kind: 'workspace', arg: 0 } },
     getByStep: { scope: { kind: 'workspace', arg: 0 } },

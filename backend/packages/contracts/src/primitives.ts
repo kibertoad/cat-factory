@@ -49,9 +49,12 @@ export type BlockStatus = v.InferOutput<typeof blockStatusSchema>
  * structural containment tree (`parentId`); `epic` is a NON-structural grouping
  * node — it groups tasks (which may live under different modules/services) via
  * their `epicId` membership link, not via `parentId`, so deleting an epic never
- * deletes its member tasks.
+ * deletes its member tasks. `initiative` is a structural child of a frame (like
+ * a module) anchoring a long-running multi-task body of work: its plan lives in
+ * the `initiatives` entity, and the tasks its execution loop spawns link back
+ * via their `initiativeId` membership link (epic-style, not containment).
  */
-export const blockLevelSchema = v.picklist(['frame', 'module', 'task', 'epic'])
+export const blockLevelSchema = v.picklist(['frame', 'module', 'task', 'epic', 'initiative'])
 export type BlockLevel = v.InferOutput<typeof blockLevelSchema>
 
 /**

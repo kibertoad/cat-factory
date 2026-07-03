@@ -43,6 +43,7 @@ import { humanReviewController } from './modules/humanReview/HumanReviewControll
 import { consensusController } from './modules/consensus/ConsensusController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
 import { brainstormController } from './modules/brainstorm/BrainstormController.js'
+import { initiativeController } from './modules/initiatives/InitiativeController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { provisioningLogController } from './modules/provisioningLogs/ProvisioningLogController.js'
@@ -140,6 +141,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', consensusController())
   app.route('/workspaces/:workspaceId', clarityReviewController())
   app.route('/workspaces/:workspaceId', brainstormController())
+  app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', sandboxController())

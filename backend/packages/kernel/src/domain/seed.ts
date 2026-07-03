@@ -509,6 +509,20 @@ export function seedPipelines(): Pipeline[] {
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
+    {
+      // The Initiative Planning pipeline — the ONLY pipeline runnable on an
+      // `initiative`-level block (and initiative blocks accept no other; see the
+      // engine's runnable guard). The planner analyses the codebase and emits the
+      // multi-phase plan as structured output; the HUMAN GATE after it holds the
+      // run until the plan is approved; the committer then persists the plan (the
+      // `initiatives` entity + the in-repo tracker under `docs/initiatives/<slug>/`)
+      // and arms the execution loop. The interviewer/analyst steps land in a later
+      // slice (see docs/initiatives/initiatives-feature.md).
+      id: 'pl_initiative',
+      name: 'Plan initiative',
+      agentKinds: ['initiative-planner', 'initiative-committer'],
+      gates: [true, false],
+    },
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
@@ -570,6 +584,9 @@ export function seedPipelines(): Pipeline[] {
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
 export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
+
+/** Pipeline id of the Initiative Planning pipeline (initiative blocks only). */
+export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'

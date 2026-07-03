@@ -190,6 +190,7 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
+import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import {
   D1SandboxPromptVersionRepository,
@@ -641,6 +642,7 @@ function selectMergeLifecycleDeps(
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
+    initiativeRepository: new D1InitiativeRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present)
   // and Slack (when the integration is enabled) implement the same NotificationChannel

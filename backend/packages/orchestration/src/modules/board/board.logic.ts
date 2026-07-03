@@ -56,6 +56,10 @@ export function canReparent(childLevel: BlockLevel, parent: Block): boolean {
   // An epic may optionally be placed under a service/module (or live top-level); it is a
   // grouping node, never a container, so nothing reparents INTO it.
   if (childLevel === 'epic') return parent.level === 'frame' || parent.level === 'module'
+  // An initiative lives directly under a service frame (like a module). The tasks its
+  // execution loop spawns join it via their `initiativeId` membership link (epic-style),
+  // never by reparenting into it.
+  if (childLevel === 'initiative') return parent.level === 'frame'
   return false // frames are not nested
 }
 
