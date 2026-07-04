@@ -29,6 +29,16 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
+      # Coarse test-lane gating (computed in the `scope` step below):
+      #   backendCode — backend source OR a root build/dependency input changed. Gates the
+      #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
+      #                 docs-only PR leaves it false so those lanes skip.
+      #   code        — ANY real source changed (backend, frontend, a `deploy/*` example, or
+      #                 a root build input), i.e. NOT a docs-/prose-only diff. Gates the
+      #                 cross-stack lanes (`test-units`, `test-e2e`); a docs-only PR runs no
+      #                 tests at all. (On non-PR events both flags are forced true — see `scope`.)
+      backendCode: ${{ steps.scope.outputs.backendCode }}
+      code: ${{ steps.scope.outputs.code }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -83,6 +93,82 @@ jobs:
               - 'backend/internal/deploy-harness/**'
               - '.github/workflows/ci.yml'
               - '.github/actions/**'
+            # Root build / dependency / CI inputs that can change the outcome of ANY suite:
+            # the lockfile, the workspace + root package manifests, the shared tsconfigs, the
+            # Turbo task graph, and this workflow (or the composite actions it calls). Any of
+            # these forces every lane to run — a dep or build-graph change is never "no-op".
+            rootBuild:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+              - 'backend/tsconfig*.json'
+              - 'turbo.json'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
+
+      # A SECOND paths-filter with `predicate-quantifier: every` so each rule set is an AND —
+      # which is what makes the `!` exclusions actually SUBTRACT (under the default `some`
+      # quantifier a broad `**`-style positive would still match a doc file, defeating the
+      # exclusion). It can't share the step above, whose OR-style positive filters rely on
+      # `some`. Purpose: decide whether a diff touched real SOURCE, treating markdown/prose as
+      # non-code so a docs-only change is genuinely "zero code changes".
+      - id: src
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            # Backend source in any package / runtime / internal harness — but NOT markdown
+            # or the backend/docs tree, so a backend docs-only edit doesn't drag in the whole
+            # backend test matrix.
+            backendSrc:
+              - 'backend/**'
+              - '!**/*.md'
+              - '!backend/docs/**'
+            # Frontend layer source, likewise minus its markdown docs.
+            frontendSrc:
+              - 'frontend/**'
+              - '!**/*.md'
+            # Example deployments (`deploy/*`) — the assembled-product wiring. `test-e2e`
+            # builds and serves `deploy/frontend` as its real SPA (Playwright's webServer
+            # runs `pnpm --filter @cat-factory/deploy-frontend run build && ... preview`), so a
+            # deploy-only change must still run the cross-stack lanes. Kept a SEPARATE filter
+            # (not another positive on `frontendSrc`): under `predicate-quantifier: every`
+            # multiple positives are AND-ed, so `frontend/**` AND `deploy/**` would match
+            # nothing. Markdown excluded so a deploy README edit stays docs-only.
+            deploySrc:
+              - 'deploy/**'
+              - '!**/*.md'
+
+      # Fold the two paths-filter steps into the coarse lane flags the jobs gate on. Kept in a
+      # shell step (not inline `if:` expressions) so each job's condition stays a single,
+      # readable output reference. Values are our own 'true'/'false' strings passed via env —
+      # never interpolated into the script body — so there's no template-injection surface.
+      - id: scope
+        env:
+          BACKEND_SRC: ${{ steps.src.outputs.backendSrc }}
+          FRONTEND_SRC: ${{ steps.src.outputs.frontendSrc }}
+          DEPLOY_SRC: ${{ steps.src.outputs.deploySrc }}
+          ROOT_BUILD: ${{ steps.filter.outputs.rootBuild }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          backend=false
+          code=false
+          if [ "$BACKEND_SRC" = 'true' ] || [ "$ROOT_BUILD" = 'true' ]; then backend=true; fi
+          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ]; then code=true; fi
+          # Change-gating only makes sense against a PR base. On non-PR events (a push to
+          # `main`, or a manual `workflow_dispatch`) paths-filter diffs against the default
+          # branch, so a dispatch on `main` — HEAD == base tip — yields an EMPTY diff and every
+          # filter reads false. Don't let that skip the whole suite green: on any non-PR event
+          # run everything, matching the pre-gating behaviour (these lanes had no change gate).
+          if [ "$EVENT_NAME" != 'pull_request' ]; then backend=true; code=true; fi
+          {
+            echo "backendCode=$backend"
+            echo "code=$code"
+          } >> "$GITHUB_OUTPUT"
+          echo "backendCode=$backend | code=$code" \
+            "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
+            "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
 
   lint:
     name: Lint & format
@@ -235,6 +321,11 @@ jobs:
   # worker uses a local D1 inside the Workers pool.
   test-worker:
     name: Test worker (shard ${{ matrix.shard }})
+    needs: changes
+    # Pure-backend lane: the Cloudflare worker facade never imports the frontend, so a
+    # frontend-only or docs-only PR has nothing here to test and skips (the `Test` gate
+    # treats that skip as a pass).
+    if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -265,6 +356,11 @@ jobs:
   # paying the database's ~20s init or sharing its lane.
   test-units:
     name: Test units (no DB)
+    needs: changes
+    # Cross-stack lane: this runs every non-facade package's unit suite, which spans the
+    # backend shared packages AND the frontend layer — so it runs whenever ANY real source
+    # changed, and skips only on a docs-/prose-only PR (nothing to test).
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -297,6 +393,10 @@ jobs:
   # the conformance suite is split into per-group spec files that fan out across workers.
   test-db:
     name: Test DB (node/local) (shard ${{ matrix.shard }})
+    needs: changes
+    # Pure-backend lane (Node + Local Postgres facades): skips on a frontend-only or
+    # docs-only PR, exactly like `test-worker`.
+    if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -352,7 +452,8 @@ jobs:
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
   # same Postgres service as the Node suite; Playwright's own webServer boots both the
   # backend (src/testServer.ts) and the SPA (deploy/frontend's nuxt dev). Covers
-  # frontend + backend, so it runs on every PR (not gated by the backend paths filter).
+  # frontend + backend, so it is gated only on the coarse `code` flag (any real source,
+  # frontend OR backend) — it still runs on every code PR, but a docs-only diff skips it.
   #
   # NON-BLOCKING: deliberately NOT a dependency of the aggregated `Test` gate below, so a
   # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
@@ -371,6 +472,9 @@ jobs:
   # per-shard wall-clock bounded as coverage expands.)
   test-e2e:
     name: Test e2e (shard ${{ matrix.shard }})
+    needs: changes
+    # Skip only on a docs-only diff; any frontend or backend source change runs it.
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -450,7 +554,9 @@ jobs:
   test-e2e-report:
     name: Test e2e (merged report)
     needs: [test-e2e]
-    if: ${{ !cancelled() }}
+    # Run even when a shard failed (that's when the merged report matters most), but NOT when
+    # e2e was skipped wholesale (a docs-only PR) — there'd be no blob reports to merge.
+    if: ${{ !cancelled() && needs.test-e2e.result != 'skipped' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -622,29 +728,47 @@ jobs:
         run: k3d cluster delete cf-it || true
 
   # Single aggregated status named "Test" so branch protection can require one
-  # check regardless of the job/shard layout. Fails unless every test job passed.
+  # check regardless of the job/shard layout. Fails unless every test job passed OR was
+  # legitimately skipped by the change-detection gate (no relevant changes → nothing to run).
   # NOTE: `test-e2e` is intentionally NOT in `needs` — it's non-blocking for now (see the
   # job comment above), so its result does not gate this required status.
   test-gate:
     name: Test
-    needs: [test-worker, test-units, test-db, test-k8s]
+    needs: [changes, test-worker, test-units, test-db, test-k8s]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Verify all test jobs passed
+      - name: Verify all test jobs passed (or were correctly skipped)
         env:
+          # The change-detection job's own status. It MUST have succeeded: a `skipped` lane is
+          # only trustworthy if the paths filter that decided to skip it actually ran. If
+          # `changes` failed, the lanes below skip on empty outputs and this gate would pass
+          # with nothing tested — so gate on it explicitly to close that fail-open hole.
+          CHANGES: ${{ needs.changes.result }}
+          # Each lane is `success` when it ran, or `skipped` when the change-detection gate
+          # found no relevant changes for it (a pure-backend lane on a frontend/docs PR, any
+          # lane on a docs-only PR, or `test-k8s` on a non-Kubernetes PR). Both count as a pass.
           WORKER: ${{ needs.test-worker.result }}
           UNITS: ${{ needs.test-units.result }}
           DB: ${{ needs.test-db.result }}
-          # `test-k8s` only runs when Kubernetes files change, so on an unrelated PR it is
-          # SKIPPED — which counts as a pass here (the gate must not block a non-K8s PR on an
-          # un-run job). When it does run, it must succeed.
           K8S: ${{ needs.test-k8s.result }}
         run: |
-          echo "worker shards: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
-          test "$WORKER" = "success" && test "$UNITS" = "success" && test "$DB" = "success"
-          test "$K8S" = "success" || test "$K8S" = "skipped"
+          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
+          if [ "$CHANGES" != 'success' ]; then
+            echo "::error::change detection did not succeed; refusing to pass the test gate"
+            exit 1
+          fi
+          for lane in "$WORKER" "$UNITS" "$DB" "$K8S"; do
+            case "$lane" in
+              success | skipped) ;;
+              *)
+                echo "::error::a required test lane reported '$lane'"
+                exit 1
+                ;;
+            esac
+          done
+          echo "All required test lanes passed or were skipped with no relevant changes."
 
   acceptance:
     name: Container acceptance (Docker)
