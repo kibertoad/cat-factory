@@ -1,5 +1,12 @@
 # @cat-factory/node-server
 
+## 0.69.1
+
+### Patch Changes
+
+- Updated dependencies [fcc8010]
+  - @cat-factory/provider-cloudflare@0.7.134
+
 ## 0.69.0
 
 ### Minor Changes
