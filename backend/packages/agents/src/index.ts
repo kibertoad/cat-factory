@@ -160,6 +160,10 @@ export {
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
 // built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.
+// The public surface is the registry + the two cross-consumer helpers: `requiredSectionTitles`
+// (the WS4 doc-quality gate's source of truth) and `renderTemplateSkeleton` (for override
+// authors to preview a template). The prompt-weaving helpers (`templateStructureLine` /
+// `templateOutlineGuidance` / `templateSkeletonGuidance`) stay module-private to `document.ts`.
 export {
   type DocTemplate,
   type DocTemplateSection,
@@ -169,9 +173,6 @@ export {
   clearRegisteredDocTemplates,
   docTemplateFor,
   requiredSectionTitles,
-  templateStructureLine,
-  templateOutlineGuidance,
-  templateSkeletonGuidance,
   renderTemplateSkeleton,
 } from './agents/kinds/doc-templates.js'
 export {

@@ -82,12 +82,26 @@ function docFields(context: AgentRunContext): {
   }
 }
 
-/** The shared "what document are we writing" brief woven into every doc-kind prompt. */
-function docBriefSection(context: AgentRunContext, opts: { materialized?: boolean }): string {
+/**
+ * The shared "what document are we writing" brief woven into every doc-kind prompt.
+ *
+ * `structure: 'full'` (the default) spells out the section list via `templateStructureLine` —
+ * the researcher/finalizer get ONLY this brief, so they need it. The outliner/writer pass
+ * `structure: 'summary'` because they also receive the fuller template guidance below
+ * (`templateOutlineGuidance` / `templateSkeletonGuidance`), so repeating the section list in
+ * the brief would just spend tokens with no added signal.
+ */
+function docBriefSection(
+  context: AgentRunContext,
+  opts: { materialized?: boolean; structure?: 'full' | 'summary' },
+): string {
   const { docKind, audience, targetPath, outlineHints } = docFields(context)
+  const template = docTemplateFor(docKind)
+  const structure =
+    opts.structure === 'summary' ? template.summary : templateStructureLine(template)
   const lines: string[] = [
     `Document title: ${context.block.title}`,
-    `Document kind: ${docKind} — produce ${templateStructureLine(docTemplateFor(docKind))}.`,
+    `Document kind: ${docKind} — produce ${structure}.`,
     `Target file: \`${targetPath}\` (Markdown).`,
   ]
   if (audience) lines.push(`Intended audience: ${audience}. Pitch the depth and tone for them.`)
@@ -174,7 +188,7 @@ function docOutlinerUserPrompt(context: AgentRunContext): string {
   const { docKind } = docFields(context)
   return [
     `Pipeline: ${context.pipelineName}`,
-    docBriefSection(context, {}),
+    docBriefSection(context, { structure: 'summary' }),
     priorWorkSection(context),
     '',
     templateOutlineGuidance(docTemplateFor(docKind)),
@@ -187,7 +201,7 @@ function docWriterUserPrompt(context: AgentRunContext): string {
   const { docKind, targetPath } = docFields(context)
   return [
     `Pipeline: ${context.pipelineName}`,
-    docBriefSection(context, { materialized: true }),
+    docBriefSection(context, { materialized: true, structure: 'summary' }),
     priorWorkSection(context),
     '',
     templateSkeletonGuidance(docTemplateFor(docKind), context.block.title),
