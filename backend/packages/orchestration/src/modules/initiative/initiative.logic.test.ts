@@ -629,7 +629,12 @@ const executingEntity = (): Initiative => ({
       blockId: 'blk-child-a',
     },
   ],
-  policy: { maxConcurrent: 2, rules: [], defaultPipelineId: 'pl_full', onMissingEstimate: 'default' },
+  policy: {
+    maxConcurrent: 2,
+    rules: [],
+    defaultPipelineId: 'pl_full',
+    onMissingEstimate: 'default',
+  },
 })
 
 const runInstance = (overrides: Partial<ExecutionInstance> = {}): ExecutionInstance =>
@@ -739,7 +744,8 @@ describe('applyRunHarvest', () => {
 })
 
 describe('applyPromoteFollowUp', () => {
-  const seeded = (): Initiative => applyRunHarvest(executingEntity(), extractRunHarvest(runInstance()), 100)
+  const seeded = (): Initiative =>
+    applyRunHarvest(executingEntity(), extractRunHarvest(runInstance()), 100)
   const fuId = harvestFollowUpId('blk-child-a', 'fu-1')
 
   it('creates a new pending item and marks the follow-up promoted', () => {
@@ -747,7 +753,11 @@ describe('applyPromoteFollowUp', () => {
     const promoted = next.followUps!.find((f) => f.id === fuId)!
     expect(promoted.status).toBe('promoted')
     const newItem = next.items!.find((i) => i.id === promoted.promotedItemId)!
-    expect(newItem).toMatchObject({ phaseId: 'p1', status: 'pending', title: 'Extract shared helper' })
+    expect(newItem).toMatchObject({
+      phaseId: 'p1',
+      status: 'pending',
+      title: 'Extract shared helper',
+    })
   })
 
   it('honours a title/description/phase override', () => {
@@ -803,7 +813,9 @@ describe('applyItemEdit', () => {
   })
 
   it('skips a blocked item', () => {
-    expect(applyItemEdit(blockedEntity(), 'a', { action: 'skip' }).items![0]!.status).toBe('skipped')
+    expect(applyItemEdit(blockedEntity(), 'a', { action: 'skip' }).items![0]!.status).toBe(
+      'skipped',
+    )
   })
 
   it('edits content of a pending/blocked item', () => {

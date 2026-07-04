@@ -466,7 +466,9 @@ async function savePolicy() {
                   <div v-if="editable && f.status === 'open'" class="mt-2">
                     <div v-if="promotingId === f.id" class="flex flex-col gap-2">
                       <label class="flex items-center gap-2 text-[12px]">
-                        <span class="text-slate-400">{{ t('initiative.curation.phaseField') }}</span>
+                        <span class="text-slate-400">{{
+                          t('initiative.curation.phaseField')
+                        }}</span>
                         <select
                           v-model="promoteForm.phaseId"
                           class="flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"

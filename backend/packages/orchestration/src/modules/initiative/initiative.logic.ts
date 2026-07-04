@@ -772,12 +772,16 @@ export function applyItemEdit(
 
   if (input.action === 'skip') {
     if (!editable) {
-      throw new ConflictError(`Item '${itemId}' is ${item.status}; only pending/blocked can be skipped`)
+      throw new ConflictError(
+        `Item '${itemId}' is ${item.status}; only pending/blocked can be skipped`,
+      )
     }
     next = { ...next, status: 'skipped' }
   } else if (input.action === 'retry') {
     if (item.status !== 'blocked') {
-      throw new ConflictError(`Only a blocked item can be retried (item '${itemId}' is ${item.status})`)
+      throw new ConflictError(
+        `Only a blocked item can be retried (item '${itemId}' is ${item.status})`,
+      )
     }
     next = { ...next, status: 'pending', blockId: null, note: undefined }
   }

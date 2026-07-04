@@ -1,6 +1,6 @@
 # Initiatives — the long-running, multi-task work container
 
-**Status:** in progress · **Started:** 2026-07-03
+**Status:** complete · **Started:** 2026-07-03 · **Completed:** 2026-07-05
 
 > Durable source of truth for the multi-PR Initiatives feature. Update the slice
 > checklist at the end of each PR so a later iteration can pick the work up without
@@ -68,7 +68,7 @@ Locked product decisions:
 | 1. Foundation: contracts + persistence + block level + planning-pipeline skeleton (`planner` → gate → `committer`) + Create Initiative button + read-only tracker window                                                                                                                                        | contracts/kernel/agents/orchestration/server/worker/node/app | ✅ done | (this PR) |
 | 2. Interactive planning: `initiative-interviewer` park/answer/resume loop (model: `ReviewGateController`), `initiative-analyst`, planning window Q&A UI, statuses `planning → awaiting_approval → executing`                                                                                                    | engine + server + app                                        | ✅ done | (this PR) |
 | 3. Execution loop: `InitiativeLoopService` (tick + `runDue` in BOTH cron seams + terminal pokes in `RunStateMachine.emitInstance` / `ExecutionService.finalizeMerge`), JIT spawning with estimate→pipeline rules, reconcile + PR links + tracker re-commit, pause/cancel/resume, `initiative` notification type | engine + both runtimes + app                                 | ✅ done | (this PR) |
-| 4. Follow-ups & polish: harvest child-run follow-ups + failure deviations into the tracker, promote-to-item, policy/item editing in the inspector, docs                                                                                                                                                         | engine + app                                                 | ⬜ todo | —         |
+| 4. Follow-ups & polish: harvest child-run follow-ups + failure deviations into the tracker, promote-to-item, retry/skip/edit items + edit policy, docs                                                                                                                                                          | engine + server + app                                        | ✅ done | (this PR) |
 
 ## Conventions & gotchas carried between iterations
 
@@ -168,8 +168,40 @@ Locked product decisions:
   cross-runtime conformance suite covers only the PERSISTED loop state (item blockId/pr/blocked +
   deviations + `paused`, and the `listExecuting` workspace pairing), which is the drift risk.
 
+### Slice-4 (follow-ups & polish) specifics
+
+- **Harvest rides the terminal poke, not an extra read.** `RunStateMachine.emitInstance` already
+  has the settling child run's `ExecutionInstance` in hand, so `extractRunHarvest` lifts its
+  coder step's `follow_up`-kind items (questions are per-task, NOT harvested) + the failure cause
+  straight off it and threads them through the (now 3-arg) `pokeInitiativeLoop`. The loop folds
+  them via the SAME CAS `update` BEFORE reconcile, so nothing reads the child execution twice and
+  there is no N+1. `applyRunHarvest` is idempotent by a stable `harvestFollowUpId(childBlockId,
+sourceId)`, so a durable-driver replay of the poke folds nothing twice.
+- **Failure deviations are enriched in place, not duplicated.** The harvest stamps the failing
+  item's `note` with the real cause; the EXISTING reconcile blocked-transition deviation then
+  records that note (it only fires once per `active→blocked` transition, so replays don't
+  duplicate). No second deviation writer, no dedup bookkeeping.
+- **Promote-to-item / dismiss / item edit / policy edit are id-keyed edits over the CAS.** They go
+  through `InitiativeService.mutateById` (resolve id → block → the same `mutate`), so a human edit
+  and a live tick are serialised by the single-writer `rev` guard. The pure transforms
+  (`applyPromoteFollowUp` / `applyDismissFollowUp` / `applyItemEdit` / `applyPolicyEdit`) throw
+  `ValidationError`/`ConflictError` for illegal edits (unknown phase/dependency, editing an
+  in-flight item, retrying a non-blocked one) BEFORE any write. Content edits are allowed only on
+  `pending`/`blocked` items (an in-flight/settled item's spawned task already carries its own copy).
+- **No new persistence, no facade wiring, no migration.** `followUps`/`deviations`/`policy` all
+  ride the existing `initiatives.doc` blob (already round-tripped identically by D1 ⇄ Drizzle), so
+  slice 4 is runtime-symmetric by construction — the only new backend surface is the shared
+  `@cat-factory/server` controller endpoints. The conformance suite adds one persisted-shape
+  assertion (an open + a promoted follow-up with `promotedItemId`) as the drift backstop.
+- **Editing lives in the tracker window** (opened from the inspector / card), gated on
+  `status === 'executing'`: open follow-ups render a promote form (phase + optional title) + a
+  dismiss action; blocked/pending items get retry/skip; the policy's two scalar knobs
+  (`maxConcurrent` + `defaultPipelineId`) edit inline while the planner-authored rules are
+  preserved. Reshaping rules is a re-plan, not an inline edit.
+
 ## Out of scope
 
 - Cross-repo initiatives (an initiative spans ONE service frame / repo for now).
-- Deleting an initiative block does not yet cascade the entity row (slice 4).
-- Editing the plan mid-flight from the UI (slice 4); re-running `pl_initiative` re-plans.
+- Deleting an initiative block does not cascade the entity row.
+- Reshaping the policy's pipeline RULES from the UI (only the two scalar knobs are inline-editable);
+  re-running `pl_initiative` re-plans and reshapes rules.

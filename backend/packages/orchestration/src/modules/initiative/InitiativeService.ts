@@ -358,7 +358,8 @@ export class InitiativeService {
     policy: InitiativeExecutionPolicy,
   ): Promise<Initiative> {
     await this.assertPipelineExists(workspaceId, policy.defaultPipelineId)
-    for (const rule of policy.rules ?? []) await this.assertPipelineExists(workspaceId, rule.pipelineId)
+    for (const rule of policy.rules ?? [])
+      await this.assertPipelineExists(workspaceId, rule.pipelineId)
     return this.mutateById(workspaceId, initiativeId, (current) => applyPolicyEdit(current, policy))
   }
 
