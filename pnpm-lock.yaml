@@ -52,13 +52,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.89
-        version: 3.0.89(zod@3.25.76)
+        version: 3.0.89(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: ^3.0.77
-        version: 3.0.77(zod@3.25.76)
+        version: 3.0.77(zod@4.4.3)
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.54
-        version: 2.0.54(zod@3.25.76)
+        version: 2.0.54(zod@4.4.3)
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
@@ -79,13 +79,13 @@ importers:
         version: link:../../packages/spend
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
       valibot:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.1-rc)
       workers-ai-provider:
-        specifier: ^3.2.1
-        version: 3.2.1(@ai-sdk/anthropic@3.0.89(zod@3.25.76))(@ai-sdk/openai@3.0.77(zod@3.25.76))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@3.25.76))
+        specifier: ^3.3.1
+        version: 3.3.1(@ai-sdk/anthropic@3.0.89(zod@4.4.3))(@ai-sdk/openai@3.0.77(zod@4.4.3))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@4.4.3))
     devDependencies:
       '@types/node':
         specifier: ^26.0.1
@@ -240,13 +240,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.89
-        version: 3.0.89(zod@3.25.76)
+        version: 3.0.89(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: ^3.0.77
-        version: 3.0.77(zod@3.25.76)
+        version: 3.0.77(zod@4.4.3)
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.54
-        version: 2.0.54(zod@3.25.76)
+        version: 2.0.54(zod@4.4.3)
       '@ai-sdk/provider':
         specifier: ^3.0.12
         version: 3.0.12
@@ -261,7 +261,7 @@ importers:
         version: link:../prompt-fragments
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
       handlebars:
         specifier: ^4.7.9
         version: 4.7.9
@@ -314,7 +314,7 @@ importers:
         version: link:../kernel
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -381,7 +381,7 @@ importers:
         version: link:../kernel
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
       yaml:
         specifier: ^2.9.0
         version: 2.9.0
@@ -403,7 +403,7 @@ importers:
         version: link:../contracts
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -453,7 +453,7 @@ importers:
         version: link:../workspaces
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
     devDependencies:
       '@cat-factory/sandbox-fixtures':
         specifier: workspace:*
@@ -479,7 +479,7 @@ importers:
     dependencies:
       '@ai-sdk/amazon-bedrock':
         specifier: ^4.0.124
-        version: 4.0.124(zod@3.25.76)
+        version: 4.0.124(zod@4.4.3)
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../agents
@@ -488,7 +488,7 @@ importers:
         version: link:../kernel
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -504,10 +504,10 @@ importers:
         version: link:../kernel
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
       workers-ai-provider:
-        specifier: ^3.2.1
-        version: 3.2.1(@ai-sdk/anthropic@3.0.89(zod@4.4.3))(@ai-sdk/openai@3.0.77(zod@4.4.3))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@3.25.76))
+        specifier: ^3.3.1
+        version: 3.3.1(@ai-sdk/anthropic@3.0.89(zod@4.4.3))(@ai-sdk/openai@3.0.77(zod@4.4.3))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@4.4.3))
     devDependencies:
       typescript:
         specifier: 7.0.1-rc
@@ -649,13 +649,13 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: ^3.0.89
-        version: 3.0.89(zod@3.25.76)
+        version: 3.0.89(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: ^3.0.77
-        version: 3.0.77(zod@3.25.76)
+        version: 3.0.77(zod@4.4.3)
       '@ai-sdk/openai-compatible':
         specifier: ^2.0.54
-        version: 2.0.54(zod@3.25.76)
+        version: 2.0.54(zod@4.4.3)
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
@@ -703,7 +703,7 @@ importers:
         version: 0.6.1(hono@4.12.27)(valibot@1.4.2(typescript@7.0.1-rc))
       ai:
         specifier: ^6.0.214
-        version: 6.0.214(zod@3.25.76)
+        version: 6.0.214(zod@4.4.3)
       hono:
         specifier: ^4.12.27
         version: 4.12.27
@@ -714,18 +714,18 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.1-rc)
       workers-ai-provider:
-        specifier: ^3.2.1
-        version: 3.2.1(@ai-sdk/anthropic@3.0.89(zod@3.25.76))(@ai-sdk/openai@3.0.77(zod@3.25.76))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@3.25.76))
+        specifier: ^3.3.1
+        version: 3.3.1(@ai-sdk/anthropic@3.0.89(zod@4.4.3))(@ai-sdk/openai@3.0.77(zod@4.4.3))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@4.4.3))
     devDependencies:
       '@cat-factory/conformance':
         specifier: workspace:*
         version: link:../../internal/conformance
       '@cloudflare/vitest-pool-workers':
-        specifier: ^0.16.20
-        version: 0.16.20(@cloudflare/workers-types@4.20260628.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)))
+        specifier: ^0.18.0
+        version: 0.18.0(@cloudflare/workers-types@4.20260702.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)))
       '@cloudflare/workers-types':
-        specifier: ^4.20260628.1
-        version: 4.20260628.1
+        specifier: ^4.20260702.1
+        version: 4.20260702.1
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
@@ -733,8 +733,8 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
       wrangler:
-        specifier: ^4.105.0
-        version: 4.105.0(@cloudflare/workers-types@4.20260628.1)
+        specifier: ^4.107.0
+        version: 4.107.0(@cloudflare/workers-types@4.20260702.1)
 
   backend/runtimes/local:
     dependencies:
@@ -770,7 +770,7 @@ importers:
         version: 2.0.6(hono@4.12.27)
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260628.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@3.25.76)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@4.4.3)
     devDependencies:
       '@cat-factory/conformance':
         specifier: workspace:*
@@ -840,7 +840,7 @@ importers:
         version: 2.0.6(hono@4.12.27)
       drizzle-orm:
         specifier: 1.0.0-rc.4
-        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260628.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@3.25.76)
+        version: 1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@4.4.3)
       hono:
         specifier: ^4.12.27
         version: 4.12.27
@@ -887,14 +887,14 @@ importers:
         version: link:../../backend/runtimes/cloudflare
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20260628.1
-        version: 4.20260628.1
+        specifier: ^4.20260702.1
+        version: 4.20260702.1
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
       wrangler:
-        specifier: ^4.105.0
-        version: 4.105.0(@cloudflare/workers-types@4.20260628.1)
+        specifier: ^4.107.0
+        version: 4.107.0(@cloudflare/workers-types@4.20260702.1)
 
   deploy/frontend:
     dependencies:
@@ -912,8 +912,8 @@ importers:
         specifier: ^3.3.5
         version: 3.3.5(typescript@6.0.3)
       wrangler:
-        specifier: ^4.105.0
-        version: 4.105.0(@cloudflare/workers-types@4.20260628.1)
+        specifier: ^4.107.0
+        version: 4.107.0(@cloudflare/workers-types@4.20260702.1)
 
   deploy/local:
     dependencies:
@@ -948,7 +948,7 @@ importers:
         version: link:../../backend/packages/contracts
       '@nuxt/ui':
         specifier: ^4.9.0
-        version: 4.9.0(46b653553da111069e3ca505fa3376df)
+        version: 4.9.0(905ae965cd32266d5d24038a3ded5c5a)
       '@nuxtjs/i18n':
         specifier: ^10.4.0
         version: 10.4.0(@vue/compiler-dom@3.5.39)(aws4fetch@1.0.20)(db0@0.3.4)(esbuild@0.28.1)(eslint@10.6.0(jiti@2.7.0))(ioredis@5.11.1)(magicast@0.5.3)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3)))(rollup@4.62.2)(typescript@6.0.3)(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.39(typescript@6.0.3))
@@ -1434,45 +1434,45 @@ packages:
       workerd:
         optional: true
 
-  '@cloudflare/vitest-pool-workers@0.16.20':
-    resolution: {integrity: sha512-buw0YgsAMT7s60wcmyxbtciEJjMJzKcWzayDMPhWaqMqfQzW+0WPLV67Lobn4C80nkNQhYocEJPnrEhLWnOf+A==}
+  '@cloudflare/vitest-pool-workers@0.18.0':
+    resolution: {integrity: sha512-h4yFk1SmL5OT2HP2LEE8CzX0UuF+jS40MYPo2o/wlYn/qQIj1cBbWeGh20h6Wn/HFcx9KqxecAGWb8EENIKTTQ==}
     peerDependencies:
       '@vitest/runner': ^4.1.0
       '@vitest/snapshot': ^4.1.0
       vitest: ^4.1.0
 
-  '@cloudflare/workerd-darwin-64@1.20260625.1':
-    resolution: {integrity: sha512-naCfBv0WnnTQIQPTniqMoUlklOIFjrAcSn1X+IAOhY8aFLF/xGYtFjs1eEE8sFib3ZuChGGpU23FFORVczqr0A==}
+  '@cloudflare/workerd-darwin-64@1.20260701.1':
+    resolution: {integrity: sha512-Zd9Y1bah6DwwBN2RW8vJohffQrIUazb8UXnqSNecOxM+jJLhUuvv5IOG8dbHcV83TyZAubea6gsQXo2yH1lDdw==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@cloudflare/workerd-darwin-arm64@1.20260625.1':
-    resolution: {integrity: sha512-jmH6zjp6Wrux46+qtFwDwrj+vd7s5bdwEqeGvdnwE0a4IEeAhKs0L42HQOyID+g5lkrHq9m55+AbhtmRAm63Pw==}
+  '@cloudflare/workerd-darwin-arm64@1.20260701.1':
+    resolution: {integrity: sha512-yBLsjS1qCWqFyCY37qRUrYfzHHvMGvjh8zRKJ6MvUivYDhkZTzqduppK38FoqYvayLJ5KbcxH7zo5rkxGqbsaA==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@cloudflare/workerd-linux-64@1.20260625.1':
-    resolution: {integrity: sha512-MiQkpA/dX8d83Zp64pzHUKfd6ca4cvwxnNobSP6CnXvfESvnNI9pfa+nfwnParla36sPmnYntNkjR7NjRuDeKQ==}
+  '@cloudflare/workerd-linux-64@1.20260701.1':
+    resolution: {integrity: sha512-vMfqSIMfoo4xmZXEuUVqLpSFS921YKjiR9q7kDXPi6Vld1PK74UHg9LZuBavT2KSyemHUCTpj9y/4JSYOEyQbQ==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@cloudflare/workerd-linux-arm64@1.20260625.1':
-    resolution: {integrity: sha512-LxxW7Qv60Xvv37+w6gUSDpYZziyqMy+cZWd9IvSA5ehVgKAxmzEaYPMiSZlxk32nbIWL9u/tfjXYCOKJ4Lo+XQ==}
+  '@cloudflare/workerd-linux-arm64@1.20260701.1':
+    resolution: {integrity: sha512-HRfwbKU2pK44V2NhoM0+iH0JJSj7nQ9Wv13ifIiGYCmTtDL8/zKtEhX7kQ3D4Vy/Cpjhttl0FkfqXj1aqLDPPg==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@cloudflare/workerd-windows-64@1.20260625.1':
-    resolution: {integrity: sha512-LH6iIX1HHaTwVKV5VokDxxUErXJzQoNZFRwVm7Vx/3fB/ApcTcRCUaMqcxI4as94jEUqg+pmX5czOndiveohow==}
+  '@cloudflare/workerd-windows-64@1.20260701.1':
+    resolution: {integrity: sha512-ngxCiIN9s/fM2o1IBMD0o1/mcXrv2NJVdyznh51UH8sQuvrTrXvV2nM0Uj/qU2wMwF6prgNBcdcd7AZeZGiBQA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20260628.1':
-    resolution: {integrity: sha512-fMy5zBnNl/PxGqDzSOQb1TdqyR1sRT1Z7T4F8/cqtxpZ1w8VkejWi0qUH7GZE0I2gJyapdP0oW4pNZfxUbekmw==}
+  '@cloudflare/workers-types@4.20260702.1':
+    resolution: {integrity: sha512-mOhf5TUEB1m2vPrxtqoIGfz0fUC9xyxRDx5gWHy5s+OCo6dcV+g7wI1R7gYCMFohhqF/2y2xeKVwMwCJjfn/WA==}
 
   '@colordx/core@5.4.3':
     resolution: {integrity: sha512-kIxYSfA5T8HXjav55UaaH/o/cKivF6jCCGIb8eqtcsfI46wsvlSiT8jMDyrl779qLec3c2c2oHBZo4oAhvbjrQ==}
@@ -6717,8 +6717,8 @@ packages:
     resolution: {integrity: sha512-vqiC06CuhBTUdZH+RYl8sFrL096vA45Ok5ISO6sE/Mr1jRbGH4Csnhi8f3wKVl7x8mO4Au7Ir9D3Oyv1VYMFJw==}
     engines: {node: '>=12'}
 
-  miniflare@4.20260625.0:
-    resolution: {integrity: sha512-3kKXwRUObJsnBYPBgR0NiNZYKF/yv8GFyha1cx2EeAEraxNODgRVcyeRo+F1ok1tg5Mg7iUpOWSkknQTHuFhwA==}
+  miniflare@4.20260701.0:
+    resolution: {integrity: sha512-L6eAAi6IKtyb/7J6L+YsH2vb1yBrJWKRXI293JYDiMl70+6nncdAgigex58w6WBd+CwvdMsqOyNyGs95Op5gWQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -8590,13 +8590,13 @@ packages:
   wordwrap@1.0.0:
     resolution: {integrity: sha512-gvVzJFlPycKc5dZN4yPkP8w7Dc37BtP1yczEneOb4uq34pXZcvrtRTmWV8W+Ume+XCxKgbjM+nevkyFPMybd4Q==}
 
-  workerd@1.20260625.1:
-    resolution: {integrity: sha512-GApQvFX52SDM6L4u0+RRnUDB1wJOnEwoXjinkmOPtIyofWBxrlZckdegJSYc1leg++lLZ3+DQ4zMVmBqYVtzfA==}
+  workerd@1.20260701.1:
+    resolution: {integrity: sha512-uF813NG09JwNRRUfJ0zBomyTslSPM810dMj9LVvkQ7RAkLrQLzAlPU8Xh/3dIqZDo2bfd7tChbf2PtqLRARRJQ==}
     engines: {node: '>=16'}
     hasBin: true
 
-  workers-ai-provider@3.2.1:
-    resolution: {integrity: sha512-VEnwunVpYTJeGAadgsljIQSc3JhBDQ9QYxzTOnq4fcQHguWTpb06MKLd5al7UIb7lxa5XzZm9CdQ9T+EN99Rtw==}
+  workers-ai-provider@3.3.1:
+    resolution: {integrity: sha512-vArwnmiAxQQF1clsXJd9ADn1xK9YUZVxE4umaMhrdsxM2kucxP430LfaoH4rn0AfoqtnuH3bfRhW1ak0r1x/8A==}
     peerDependencies:
       '@ai-sdk/anthropic': ^3.0.0
       '@ai-sdk/google': ^3.0.0
@@ -8611,12 +8611,12 @@ packages:
       '@ai-sdk/openai':
         optional: true
 
-  wrangler@4.105.0:
-    resolution: {integrity: sha512-7dXFH6OLj1Fv0y6ZeRPUxFTkp+duWD7/xxVi/1c0vfOeEYwIFKWB7cdqnY05DvY1Ta3BnqAwRkXfLs8PDj538g==}
+  wrangler@4.107.0:
+    resolution: {integrity: sha512-fw69ThymNitZ0oIEBU2yNeq3kK59UKz/jyA3udwRrQIAIsxX57q5qLOpPTN7qc5t8n9pnUeofe0uxtMuhQZW8w==}
     engines: {node: '>=22.0.0'}
     hasBin: true
     peerDependencies:
-      '@cloudflare/workers-types': ^4.20260625.1
+      '@cloudflare/workers-types': ^4.20260701.1
     peerDependenciesMeta:
       '@cloudflare/workers-types':
         optional: true
@@ -8739,62 +8739,41 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/amazon-bedrock@4.0.124(zod@3.25.76)':
+  '@ai-sdk/amazon-bedrock@4.0.124(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/anthropic': 3.0.89(zod@3.25.76)
-      '@ai-sdk/openai': 3.0.77(zod@3.25.76)
+      '@ai-sdk/anthropic': 3.0.89(zod@4.4.3)
+      '@ai-sdk/openai': 3.0.77(zod@4.4.3)
       '@ai-sdk/provider': 3.0.12
-      '@ai-sdk/provider-utils': 4.0.33(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.33(zod@4.4.3)
       '@smithy/eventstream-codec': 4.4.2
       '@smithy/util-utf8': 4.4.2
       aws4fetch: 1.0.20
-      zod: 3.25.76
-
-  '@ai-sdk/anthropic@3.0.89(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.12
-      '@ai-sdk/provider-utils': 4.0.33(zod@3.25.76)
-      zod: 3.25.76
+      zod: 4.4.3
 
   '@ai-sdk/anthropic@3.0.89(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.12
       '@ai-sdk/provider-utils': 4.0.33(zod@4.4.3)
       zod: 4.4.3
-    optional: true
 
-  '@ai-sdk/gateway@3.0.139(zod@3.25.76)':
+  '@ai-sdk/gateway@3.0.139(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.12
-      '@ai-sdk/provider-utils': 4.0.33(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.33(zod@4.4.3)
       '@vercel/oidc': 3.2.0
-      zod: 3.25.76
+      zod: 4.4.3
 
-  '@ai-sdk/openai-compatible@2.0.54(zod@3.25.76)':
+  '@ai-sdk/openai-compatible@2.0.54(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.12
-      '@ai-sdk/provider-utils': 4.0.33(zod@3.25.76)
-      zod: 3.25.76
-
-  '@ai-sdk/openai@3.0.77(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.12
-      '@ai-sdk/provider-utils': 4.0.33(zod@3.25.76)
-      zod: 3.25.76
+      '@ai-sdk/provider-utils': 4.0.33(zod@4.4.3)
+      zod: 4.4.3
 
   '@ai-sdk/openai@3.0.77(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.12
       '@ai-sdk/provider-utils': 4.0.33(zod@4.4.3)
       zod: 4.4.3
-    optional: true
-
-  '@ai-sdk/provider-utils@4.0.33(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.12
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.1.0
-      zod: 3.25.76
 
   '@ai-sdk/provider-utils@4.0.33(zod@4.4.3)':
     dependencies:
@@ -8802,7 +8781,6 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.0
       zod: 4.4.3
-    optional: true
 
   '@ai-sdk/provider@3.0.12':
     dependencies:
@@ -9430,43 +9408,43 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260625.1)':
+  '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260701.1)':
     dependencies:
       unenv: 2.0.0-rc.24
     optionalDependencies:
-      workerd: 1.20260625.1
+      workerd: 1.20260701.1
 
-  '@cloudflare/vitest-pool-workers@0.16.20(@cloudflare/workers-types@4.20260628.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)))':
+  '@cloudflare/vitest-pool-workers@0.18.0(@cloudflare/workers-types@4.20260702.1)(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0)))':
     dependencies:
       '@vitest/runner': 4.1.9
       '@vitest/snapshot': 4.1.9
       cjs-module-lexer: 1.2.3
       esbuild: 0.28.1
-      miniflare: 4.20260625.0
+      miniflare: 4.20260701.0
       vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
-      wrangler: 4.105.0(@cloudflare/workers-types@4.20260628.1)
+      wrangler: 4.107.0(@cloudflare/workers-types@4.20260702.1)
       zod: 3.25.76
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - bufferutil
       - utf-8-validate
 
-  '@cloudflare/workerd-darwin-64@1.20260625.1':
+  '@cloudflare/workerd-darwin-64@1.20260701.1':
     optional: true
 
-  '@cloudflare/workerd-darwin-arm64@1.20260625.1':
+  '@cloudflare/workerd-darwin-arm64@1.20260701.1':
     optional: true
 
-  '@cloudflare/workerd-linux-64@1.20260625.1':
+  '@cloudflare/workerd-linux-64@1.20260701.1':
     optional: true
 
-  '@cloudflare/workerd-linux-arm64@1.20260625.1':
+  '@cloudflare/workerd-linux-arm64@1.20260701.1':
     optional: true
 
-  '@cloudflare/workerd-windows-64@1.20260625.1':
+  '@cloudflare/workerd-windows-64@1.20260701.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260628.1': {}
+  '@cloudflare/workers-types@4.20260702.1': {}
 
   '@colordx/core@5.4.3': {}
 
@@ -10560,7 +10538,7 @@ snapshots:
       rc9: 3.0.1
       std-env: 4.1.0
 
-  '@nuxt/ui@4.9.0(46b653553da111069e3ca505fa3376df)':
+  '@nuxt/ui@4.9.0(905ae965cd32266d5d24038a3ded5c5a)':
     dependencies:
       '@floating-ui/dom': 1.7.6
       '@iconify/vue': 5.0.1(vue@3.5.39(typescript@6.0.3))
@@ -10631,7 +10609,7 @@ snapshots:
       '@internationalized/number': 3.6.7
       valibot: 1.4.2(typescript@6.0.3)
       vue-router: 5.1.0(@vue/compiler-sfc@3.5.39)(esbuild@0.28.1)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3)))(rollup@4.62.2)(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue@3.5.39(typescript@6.0.3))
-      zod: 3.25.76
+      zod: 4.4.3
     transitivePeerDependencies:
       - '@azure/app-configuration'
       - '@azure/cosmos'
@@ -12645,13 +12623,13 @@ snapshots:
 
   agent-base@7.1.4: {}
 
-  ai@6.0.214(zod@3.25.76):
+  ai@6.0.214(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 3.0.139(zod@3.25.76)
+      '@ai-sdk/gateway': 3.0.139(zod@4.4.3)
       '@ai-sdk/provider': 3.0.12
-      '@ai-sdk/provider-utils': 4.0.33(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.33(zod@4.4.3)
       '@opentelemetry/api': 1.9.1
-      zod: 3.25.76
+      zod: 4.4.3
 
   ajv@6.15.0:
     dependencies:
@@ -13208,14 +13186,14 @@ snapshots:
       get-tsconfig: 4.14.0
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260628.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@3.25.76):
+  drizzle-orm@1.0.0-rc.4(@cloudflare/workers-types@4.20260702.1)(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(pg@8.22.0)(valibot@1.4.2(typescript@7.0.1-rc))(zod@4.4.3):
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260628.1
+      '@cloudflare/workers-types': 4.20260702.1
       '@opentelemetry/api': 1.9.1
       '@types/pg': 8.20.0
       pg: 8.22.0
       valibot: 1.4.2(typescript@7.0.1-rc)
-      zod: 3.25.76
+      zod: 4.4.3
 
   duplexer@0.1.2: {}
 
@@ -14235,12 +14213,12 @@ snapshots:
 
   mimic-fn@4.0.0: {}
 
-  miniflare@4.20260625.0:
+  miniflare@4.20260701.0:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.34.5
       undici: 7.28.0
-      workerd: 1.20260625.1
+      workerd: 1.20260701.1
       ws: 8.21.0
       youch: 4.1.0-beta.10
     transitivePeerDependencies:
@@ -16636,42 +16614,34 @@ snapshots:
 
   wordwrap@1.0.0: {}
 
-  workerd@1.20260625.1:
+  workerd@1.20260701.1:
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20260625.1
-      '@cloudflare/workerd-darwin-arm64': 1.20260625.1
-      '@cloudflare/workerd-linux-64': 1.20260625.1
-      '@cloudflare/workerd-linux-arm64': 1.20260625.1
-      '@cloudflare/workerd-windows-64': 1.20260625.1
+      '@cloudflare/workerd-darwin-64': 1.20260701.1
+      '@cloudflare/workerd-darwin-arm64': 1.20260701.1
+      '@cloudflare/workerd-linux-64': 1.20260701.1
+      '@cloudflare/workerd-linux-arm64': 1.20260701.1
+      '@cloudflare/workerd-windows-64': 1.20260701.1
 
-  workers-ai-provider@3.2.1(@ai-sdk/anthropic@3.0.89(zod@3.25.76))(@ai-sdk/openai@3.0.77(zod@3.25.76))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@3.25.76)):
+  workers-ai-provider@3.3.1(@ai-sdk/anthropic@3.0.89(zod@4.4.3))(@ai-sdk/openai@3.0.77(zod@4.4.3))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@4.4.3)):
     dependencies:
       '@ai-sdk/provider': 3.0.12
-      ai: 6.0.214(zod@3.25.76)
-    optionalDependencies:
-      '@ai-sdk/anthropic': 3.0.89(zod@3.25.76)
-      '@ai-sdk/openai': 3.0.77(zod@3.25.76)
-
-  workers-ai-provider@3.2.1(@ai-sdk/anthropic@3.0.89(zod@4.4.3))(@ai-sdk/openai@3.0.77(zod@4.4.3))(@ai-sdk/provider@3.0.12)(ai@6.0.214(zod@3.25.76)):
-    dependencies:
-      '@ai-sdk/provider': 3.0.12
-      ai: 6.0.214(zod@3.25.76)
+      ai: 6.0.214(zod@4.4.3)
     optionalDependencies:
       '@ai-sdk/anthropic': 3.0.89(zod@4.4.3)
       '@ai-sdk/openai': 3.0.77(zod@4.4.3)
 
-  wrangler@4.105.0(@cloudflare/workers-types@4.20260628.1):
+  wrangler@4.107.0(@cloudflare/workers-types@4.20260702.1):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260625.1)
+      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260701.1)
       blake3-wasm: 2.1.5
       esbuild: 0.28.1
-      miniflare: 4.20260625.0
+      miniflare: 4.20260701.0
       path-to-regexp: 6.3.0
       unenv: 2.0.0-rc.24
-      workerd: 1.20260625.1
+      workerd: 1.20260701.1
     optionalDependencies:
-      '@cloudflare/workers-types': 4.20260628.1
+      '@cloudflare/workers-types': 4.20260702.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil
