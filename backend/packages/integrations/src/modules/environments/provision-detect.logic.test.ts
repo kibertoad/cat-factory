@@ -235,6 +235,26 @@ releases:
     })
   })
 
+  it('recommends build-from-source mode when a compose service builds from source', async () => {
+    const reader = makeReader({
+      'docker-compose.yml': 'services:\n  web:\n    build: .\n  db:\n    image: postgres\n',
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.type).toBe('docker-compose')
+    expect(rec.provisioning.composeBuild).toBe(true)
+    expect(rec.notes.some((n) => n.field === 'composeBuild')).toBe(true)
+  })
+
+  it('does NOT set build mode for an image-only compose stack', async () => {
+    const reader = makeReader({
+      'docker-compose.yml': 'services:\n  web:\n    image: nginx\n',
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.type).toBe('docker-compose')
+    expect(rec.provisioning.composeBuild).toBeUndefined()
+    expect(rec.notes.some((n) => n.field === 'composeBuild')).toBe(false)
+  })
+
   it('recommends infraless when nothing is detected', async () => {
     const reader = makeReader({ 'README.md': '# hello' })
     const rec = await detectKubernetesProvisioning(reader)

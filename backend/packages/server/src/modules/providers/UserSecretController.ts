@@ -62,6 +62,9 @@ export function userSecretController(): Hono<AppEnv> {
     if (!user) return signInRequired(c)
     const kind = v.parse(userSecretKindSchema, c.req.valid('param').kind)
     await store.remove(user.id, kind)
+    // Revoke the fail-closed access cache too: without their PAT the user no longer has
+    // personal-repo access, so their recorded grants must stop revealing those frames.
+    if (kind === 'github_pat') await c.get('container').userRepoAccess?.removeForUser(user.id)
     return c.body(null, 204)
   })
 

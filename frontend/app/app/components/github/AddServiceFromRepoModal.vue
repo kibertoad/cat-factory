@@ -27,6 +27,7 @@ const typeItems = useFrameRepoTypeItems()
 const ui = useUiStore()
 const github = useGitHubStore()
 const board = useBoardStore()
+const services = useServicesStore()
 const toast = useToast()
 const { freeFramePosition, focusFrame } = useFramePlacement()
 
@@ -65,9 +66,12 @@ watch(
 const needsGitHub = computed(() => github.available === true && !github.connected)
 
 // Repos already backing a board service can't be added again — UNLESS they're a
-// monorepo, which can host several services (each at its own subdirectory).
+// monorepo, which can host several services (each at its own subdirectory). Derived from
+// the account's service catalog (each service carries the repo it targets), since the repo
+// projection no longer carries a repo→block link.
 const onBoardIds = computed(
-  () => new Set(github.repos.filter((r) => r.blockId).map((r) => r.githubId)),
+  () =>
+    new Set(services.catalog.map((s) => s.repoGithubId).filter((id): id is number => id != null)),
 )
 
 // Map an available repo to a combobox item. The label carries the private/monorepo/
@@ -77,6 +81,9 @@ function toRepoItem(r: GitHubAvailableRepo) {
   const suffix = [
     r.private ? t('github.addService.repoLabel.private') : '',
     r.isMonorepo ? t('github.addService.repoLabel.monorepo') : '',
+    // Reachable only via the signed-in user's PAT (not the workspace App) — its frame is
+    // hidden from members without their own access.
+    r.personal ? t('github.addService.repoLabel.personal') : '',
     onBoard ? t('github.addService.repoLabel.onBoard') : '',
   ].join('')
   return { label: `${r.owner}/${r.name}${suffix}`, value: r.githubId, disabled: onBoard }

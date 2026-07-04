@@ -53,6 +53,7 @@ import {
 } from '../src/repositories/personalSubscription.js'
 import { DrizzleLocalModelEndpointRepository } from '../src/repositories/localModelEndpoint.js'
 import { DrizzleUserSecretRepository } from '../src/repositories/userSecret.js'
+import { DrizzleUserRepoAccessRepository } from '../src/repositories/userRepoAccess.js'
 
 // ---------------------------------------------------------------------------
 // Mothership-mode allow-list completeness guard (docs/initiatives/mothership-mode.md).
@@ -346,8 +347,8 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // infra-configurator reads/edits it — no secrets, just manifest metadata).
   customManifestTypeRepository: {},
   // `list` is now allow-listed (the SPA's repos panel + the run-path `resolveRepoTarget` walk of
-  // the `github_repos` projection). The board-linkage writes (`linkBlock`/`setMonorepo`), the
-  // sync ingest (`upsertMany`/`tombstoneMissing`), the installationId-keyed cursors, the fan-out
+  // the `github_repos` projection). The board-linkage write (`setMonorepo`), the sync ingest
+  // (`upsertMany`/`tombstoneMissing`), the installationId-keyed cursors, the fan-out
   // `linkedWorkspaces`, and the single-repo `get` (repo-write facade only) stay off the SPA path
   // — a later GitHub sync + repo-write slice; `listStale` is the reconcile sweeper's read.
   repoProjectionRepository: {
@@ -355,7 +356,6 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     get: 'pending',
     linkedWorkspaces: 'pending',
     tombstoneMissing: 'pending',
-    linkBlock: 'pending',
     setMonorepo: 'pending',
     listStale: 'sweeper',
     getCursor: 'pending',
@@ -429,6 +429,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'local',
     remove: 'local',
   },
+  // Per-user PAT-reachable repo projection: a personal store consulted for board redaction +
+  // picker expansion. A local-first per-user store (like the secret / local-model stores), not
+  // proxied org state — the mothership node degrades redaction to "visible" without it.
+  userRepoAccessRepository: {
+    replaceForUser: 'local',
+    recordAccessible: 'local',
+    listAccessibleRepoIds: 'local',
+    listByUser: 'local',
+    removeForUser: 'local',
+  },
   providerModelCatalogRepository: {
     getByWorkspace: 'local',
     listByWorkspace: 'local',
@@ -498,6 +508,7 @@ function reflectAllRepositories(): Record<string, string[]> {
     subscriptionActivationRepository: DrizzleSubscriptionActivationRepository,
     localModelEndpointRepository: DrizzleLocalModelEndpointRepository,
     userSecretRepository: DrizzleUserSecretRepository,
+    userRepoAccessRepository: DrizzleUserRepoAccessRepository,
   }
   for (const [name, Cls] of Object.entries(nonCore)) {
     out[name] = publicMethods(Cls.prototype as object)

@@ -25,6 +25,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { StateSigner } from '../../github/state.js'
+import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -104,9 +105,11 @@ export function githubController(): Hono<AppEnv> {
   buildHonoRoute(app, listGitHubAvailableReposContract, async (c) => {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)
+    const viewer = await resolveViewerPat(c)
     return c.json(
       await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
         q: c.req.valid('query').q,
+        ...viewer,
       }),
       200,
     )

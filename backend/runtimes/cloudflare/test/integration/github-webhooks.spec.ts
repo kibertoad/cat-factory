@@ -21,7 +21,6 @@ function seededClient() {
       name: 'web',
       defaultBranch: 'main',
       private: false,
-      blockId: null,
       syncedAt: 0,
     },
   ]

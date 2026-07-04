@@ -228,7 +228,13 @@ export class EnvironmentProvisioningService {
       resolved.manifest,
       resolved.resolveSecret,
     )
-    const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
+    const req = await this.buildProvisionRequest(
+      args,
+      resolved.manifest,
+      resolved.resolveSecret,
+      undefined,
+      { resolveClone: true },
+    )
     return this.provisionSync(args, resolved, req)
   }
 
@@ -257,6 +263,7 @@ export class EnvironmentProvisioningService {
       resolved.manifest,
       resolved.resolveSecret,
       deploy,
+      { resolveClone: true },
     )
     let job: DeployProvisionJob | null = null
     try {
@@ -411,6 +418,7 @@ export class EnvironmentProvisioningService {
     manifest: EnvironmentManifest,
     resolveSecret: SecretResolver,
     deploy?: DeployProvisionInputs,
+    opts?: { resolveClone?: boolean },
   ): Promise<ProvisionEnvironmentRequest> {
     const { workspaceId } = args
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a manifest can
@@ -434,12 +442,31 @@ export class EnvironmentProvisioningService {
       repoBlockId && this.deps.resolveRunRepoContext
         ? await this.deps.resolveRunRepoContext(workspaceId, repoBlockId)
         : null
+    // LAZY clone target for a SYNCHRONOUS provider that needs a working tree (Docker Compose
+    // build-from-source). Exposed as a memoized thunk so ONLY the build-mode provider that
+    // actually clones pays the token mint — image-mode compose / custom / k8s-sync provisions
+    // never invoke it, and `finalizeProvision` (no `resolveClone`) can't mint at all. Reuse the
+    // async deploy inputs' already-resolved clone when present so one provision never mints twice.
+    let clonePromise: Promise<DeployCloneTarget | undefined> | undefined
+    const clone = opts?.resolveClone
+      ? () =>
+          (clonePromise ??= (async () =>
+            deploy?.clone ??
+            (this.deps.resolveDeployCloneTarget && repoBlockId
+              ? ((await this.deps.resolveDeployCloneTarget(
+                  workspaceId,
+                  repoBlockId,
+                  args.context?.branch,
+                )) ?? undefined)
+              : undefined))())
+      : undefined
     return {
       manifest,
       inputs,
       ...(args.context ? { provisionContext: args.context } : {}),
       resolveSecret,
       ...(runRepo ? { runRepo } : {}),
+      ...(clone ? { clone } : {}),
       ...(this.deps.resolveRepoFilesForWorkspace
         ? {
             resolveRepoFiles: (coords) =>

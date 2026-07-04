@@ -184,6 +184,7 @@ import {
 } from './repositories/personalSubscription.js'
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
 import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
+import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { PostgresBinaryBlobBackend } from './storage/PostgresBinaryBlobBackend.js'
@@ -1873,6 +1874,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             'checkRunProjectionRepository',
             (d) => new DrizzleCheckRunProjectionRepository(d),
           ),
+          // Per-user PAT-reachable repo projection (picker expansion + redaction); Postgres-only,
+          // so absent in a no-DB mothership node (the picker keeps its App-only behaviour there).
+          userRepoAccessRepository: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
           webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
           // Bound the initial backfill to the commit retention horizon (0 = full).
           commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -2508,6 +2512,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     localModelEndpoints,
     // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
+    // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
+    userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
   }

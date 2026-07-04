@@ -282,6 +282,72 @@ export class FetchGitHubClient implements GitHubClient {
     }
   }
 
+  async listReposForToken(token: string): Promise<Paged<GitHubRepo>> {
+    // The PAT analogue of `/installation/repositories` (App-only): enumerate the repos the
+    // token can reach. Flagged `linkedVia:'user_pat'` — personal, not App-reachable. The
+    // installation id is a placeholder here (the picker dedups by github id); the link flow
+    // attributes the row to the workspace's real installation.
+    const syncedAt = this.deps.clock.now()
+    const items: GitHubRepo[] = []
+    let url: string | undefined =
+      `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
+    let page = 0
+    for (; url && page < MAX_PAGES; page++) {
+      const { json, next } = await this.requestWithToken(url, token)
+      const repos = (json as gp.GhRepoPayload[] | null) ?? []
+      for (const r of repos) {
+        items.push({ ...gp.toRepoProjection(r, 0, syncedAt), linkedVia: 'user_pat' })
+      }
+      url = next
+    }
+    // A `next` link still present at the page cap means the token reaches more repos than we
+    // enumerated — flag it so the access-cache refresh records additively rather than replacing
+    // (a truncated REPLACE would drop reachable repos and fail-closed-redact the user's own frames).
+    return { items, truncated: Boolean(url) }
+  }
+
+  async getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {
+    try {
+      const { json } = await this.requestWithToken(`/repositories/${repoGithubId}`, token)
+      return {
+        ...gp.toRepoProjection(json as gp.GhRepoPayload, 0, this.deps.clock.now()),
+        linkedVia: 'user_pat',
+      }
+    } catch (err) {
+      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return null
+      throw err
+    }
+  }
+
+  /**
+   * A minimal authenticated GET using an explicit personal access token instead of the
+   * installation/App registry — the only place the client talks to GitHub with a
+   * caller-supplied bearer. Used by the PAT-scoped repo reads above; never mints or caches.
+   */
+  private async requestWithToken(
+    pathOrUrl: string,
+    token: string,
+  ): Promise<{ json: unknown; next?: string }> {
+    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.deps.apiBase}${pathOrUrl}`
+    const res = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: ACCEPT,
+        'user-agent': USER_AGENT,
+        'x-github-api-version': API_VERSION,
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new GitHubApiError(
+        res.status,
+        `GitHub GET ${url} → ${res.status}: ${text.slice(0, 300)}`,
+      )
+    }
+    const json = res.status === 204 ? null : await res.json().catch(() => null)
+    return { json, next: parseNextLink(res.headers.get('link')) }
+  }
+
   async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {
     // The repo payload carries the *token's* effective access in `permissions`. A
     // public repo the installation can read but is not granted (not in the App's

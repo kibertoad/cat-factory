@@ -209,6 +209,7 @@ function deploymentModelDefaults(routing: AgentRouting) {
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
+import { redactBoard, resolveDeniedFrameIds } from './redactFrames.js'
 
 /** The signed-in user, narrowed to what the tenancy layer needs. */
 function accountUser<E extends AppEnv>(c: Context<E>) {
@@ -315,6 +316,10 @@ export function workspaceController(): Hono<AppEnv> {
       mounts,
       serviceCatalog,
       infraSetup,
+      // The workspace's projected repos (with each repo's `linkedVia`), so the per-viewer
+      // redaction can tell an App-reachable frame from a personal-PAT one. Only when GitHub is
+      // wired; absent ⇒ no personal repos, so nothing to redact.
+      repoProjections,
     ] = await Promise.all([
       container.workspaceService.snapshot(workspaceId),
       container.spendService.status(workspaceId),
@@ -339,15 +344,40 @@ export function workspaceController(): Hono<AppEnv> {
             )
         : undefined,
       snapshotInfraSetup(container, workspaceId),
+      container.github ? container.github.service.listRepos(workspaceId) : undefined,
     ])
     const customAgentKinds = snapshotCustomAgentKinds()
+
+    // Redact service frames backed by a repo linked via ANOTHER member's personal PAT that this
+    // viewer can't reach (fail closed): scrub the frame to a locked stub + drop its subtree, so
+    // the SPA shows "Permission denied" instead of the service's contents. A no-op when no repo
+    // is personal or GitHub isn't wired.
+    const deniedFrameIds = await resolveDeniedFrameIds({
+      viewerUserId: c.get('user')?.id,
+      services: serviceCatalog ?? [],
+      repos: repoProjections ?? [],
+      userRepoAccess: container.userRepoAccess,
+    })
+    const redacted = redactBoard(
+      {
+        blocks: snapshot.blocks,
+        executions: snapshot.executions,
+        services: serviceCatalog,
+        bootstrapJobs,
+        notifications,
+      },
+      deniedFrameIds,
+    )
+
     return c.json(
       {
         ...snapshot,
+        blocks: redacted.blocks,
+        executions: redacted.executions,
         spend,
-        ...(bootstrapJobs ? { bootstrapJobs } : {}),
+        ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
-        ...(notifications ? { notifications } : {}),
+        ...(redacted.notifications ? { notifications: redacted.notifications } : {}),
         ...(mergePresets ? { mergePresets } : {}),
         ...(modelPresets ? { modelPresets } : {}),
         ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
@@ -356,7 +386,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...(initiatives ? { initiatives } : {}),
         ...(settings ? { settings } : {}),
         ...(mounts ? { mounts } : {}),
-        ...(serviceCatalog ? { serviceCatalog } : {}),
+        ...(redacted.services ? { serviceCatalog: redacted.services } : {}),
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),

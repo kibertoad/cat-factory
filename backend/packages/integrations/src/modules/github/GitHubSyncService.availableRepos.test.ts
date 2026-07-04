@@ -101,3 +101,105 @@ describe('GitHubSyncService.listAvailableRepos', () => {
     expect(result).toEqual([])
   })
 })
+
+// Coverage for the personal-PAT picker expansion + its fail-closed access-cache refresh.
+interface AccessCalls {
+  replace: { userId: string; count: number }[]
+  record: { userId: string; count: number }[]
+}
+
+function makePatService(opts: {
+  appRepos: GitHubRepo[]
+  personal?: { items: GitHubRepo[]; truncated?: boolean } | (() => never)
+}): { service: GitHubSyncService; access: AccessCalls } {
+  const access: AccessCalls = { replace: [], record: [] }
+  const personal = opts.personal
+  const deps = {
+    githubInstallationRepository: {
+      getByWorkspace: async () => ({
+        installationId: 1,
+        deletedAt: null,
+        accountLogin: 'acme',
+        targetType: 'Organization',
+      }),
+    },
+    githubClient: {
+      listInstallationRepos: async () => ({ items: opts.appRepos }),
+      searchInstallationRepos: async (_id: number, query: string) => {
+        const q = query.trim().toLowerCase()
+        return q
+          ? opts.appRepos.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+          : []
+      },
+      listReposForToken: async () => {
+        if (typeof personal === 'function') return personal()
+        return { items: personal?.items ?? [], truncated: personal?.truncated }
+      },
+    },
+    repoProjectionRepository: { list: async () => [] },
+    userRepoAccessRepository: {
+      replaceForUser: async (userId: string, repos: unknown[]) =>
+        void access.replace.push({ userId, count: repos.length }),
+      recordAccessible: async (userId: string, repos: unknown[]) =>
+        void access.record.push({ userId, count: repos.length }),
+    },
+    clock: { now: () => 123 },
+  } as unknown as GitHubSyncServiceDependencies
+  return { service: new GitHubSyncService(deps), access }
+}
+
+describe('GitHubSyncService.listAvailableRepos — personal PAT expansion', () => {
+  const personalRepos = [repo(10, 'me', 'private-tool'), repo(11, 'me', 'scratch')]
+
+  it('merges PAT-reachable repos (badged personal) and records them on a blank browse', async () => {
+    const { service, access } = makePatService({
+      appRepos: [REPOS[0]!],
+      personal: { items: personalRepos },
+    })
+    const result = await service.listAvailableRepos('ws', { userId: 'usr_a', userToken: 'tok' })
+    expect(result.filter((r) => r.personal).map((r) => r.githubId)).toEqual([10, 11])
+    // Blank browse-all → the full accessible set is REPLACED (fail-closed cache refresh).
+    expect(access.replace).toEqual([{ userId: 'usr_a', count: 2 }])
+    expect(access.record).toHaveLength(0)
+  })
+
+  it('degrades to App-only (never throws) when the PAT enumeration fails', async () => {
+    const { service, access } = makePatService({
+      appRepos: [REPOS[0]!],
+      personal: () => {
+        throw new Error('401 bad credentials')
+      },
+    })
+    const result = await service.listAvailableRepos('ws', { userId: 'usr_a', userToken: 'tok' })
+    // The App repo still renders; no personal repos; nothing recorded.
+    expect(result.map((r) => r.githubId)).toEqual([1])
+    expect(access.replace).toHaveLength(0)
+    expect(access.record).toHaveLength(0)
+  })
+
+  it('records additively (never replaces) when the enumeration is truncated', async () => {
+    const { service, access } = makePatService({
+      appRepos: [],
+      personal: { items: personalRepos, truncated: true },
+    })
+    await service.listAvailableRepos('ws', { userId: 'usr_a', userToken: 'tok' })
+    expect(access.record).toEqual([{ userId: 'usr_a', count: 2 }])
+    expect(access.replace).toHaveLength(0)
+  })
+
+  it('does NOT rewrite the access cache on a search (only a blank browse)', async () => {
+    const { service, access } = makePatService({
+      appRepos: [],
+      personal: { items: personalRepos },
+    })
+    const result = await service.listAvailableRepos('ws', {
+      q: 'scratch',
+      userId: 'usr_a',
+      userToken: 'tok',
+    })
+    // The search still filters the PAT set in memory, but writes nothing.
+    expect(result.map((r) => r.githubId)).toEqual([11])
+    expect(access.replace).toHaveLength(0)
+    expect(access.record).toHaveLength(0)
+  })
+})
