@@ -87,4 +87,23 @@ const html = computed(() => renderMarkdown(props.text))
   font-weight: 600;
   color: rgb(226 232 240);
 }
+.cf-prose :deep(table) {
+  margin: 0.6rem 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.cf-prose :deep(th),
+.cf-prose :deep(td) {
+  border: 1px solid rgb(51 65 85);
+  padding: 0.3rem 0.6rem;
+}
+.cf-prose :deep(th) {
+  background: rgb(30 41 59 / 0.6);
+  font-weight: 600;
+}
+.cf-prose :deep(hr) {
+  margin: 1rem 0;
+  border: none;
+  border-top: 1px solid rgb(51 65 85);
+}
 </style>

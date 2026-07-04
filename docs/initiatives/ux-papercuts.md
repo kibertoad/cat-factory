@@ -214,20 +214,20 @@ per-file patches:
 
 ## C. Review windows, inspector & pipeline surfaces
 
-| ID    | Sev | Status | Finding                                                                                                          |
-| ----- | --- | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| UX-32 | P1  | todo   | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
-| UX-33 | P1  | todo   | Typed review answers lost when window closes without blur/save                                                   |
-| UX-34 | P2  | todo   | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
-| UX-35 | P2  | todo   | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
-| UX-36 | P2  | done   | Raw model id rendered verbatim in review windows                                                                 |
-| UX-37 | P2  | done   | Internal `agentKind` enum + raw model id leak in consensus window                                                |
-| UX-38 | P2  | done   | Clipboard copies give no feedback and swallow failures                                                           |
-| UX-39 | P2  | done   | Agent/provider errors have no copy button                                                                        |
-| UX-40 | P2  | todo   | Inspector "Run" disabled with no explanation                                                                     |
-| UX-41 | P2  | todo   | Stopping a running bootstrap has no confirmation                                                                 |
-| UX-42 | P3  | todo   | "Restart from here" only visible on hover (invisible on touch)                                                   |
-| UX-43 | P3  | done   | Agent prose rendered as plain text in several result views                                                       |
+| ID    | Sev | Status  | Finding                                                                                                          |
+| ----- | --- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| UX-32 | P1  | todo    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
+| UX-33 | P1  | todo    | Typed review answers lost when window closes without blur/save                                                   |
+| UX-34 | P2  | todo    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
+| UX-35 | P2  | todo    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
+| UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
+| UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
+| UX-38 | P2  | done    | Clipboard copies give no feedback and swallow failures                                                           |
+| UX-39 | P2  | done    | Agent/provider errors have no copy button                                                                        |
+| UX-40 | P2  | todo    | Inspector "Run" disabled with no explanation                                                                     |
+| UX-41 | P2  | todo    | Stopping a running bootstrap has no confirmation                                                                 |
+| UX-42 | P3  | todo    | "Restart from here" only visible on hover (invisible on touch)                                                   |
+| UX-43 | P3  | done    | Agent prose rendered as plain text in several result views                                                       |
 | UX-44 | P3  | partial | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
 - **UX-32 — Hidden gate actions.** `requirements/RequirementsReviewWindow.vue:794`
