@@ -1,10 +1,10 @@
 import type { AgentRunContext, AgentStepSpec, RunnerDispatchKind } from '@cat-factory/kernel'
 import {
+  type AgentKindRegistry,
   composeBlockSystemPrompt,
   FOLLOW_UP_GUIDANCE,
   isContainerBackedCompanion,
   isReadOnlyAgentKind,
-  registeredAgentStep,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -90,11 +90,12 @@ export interface KindBodyParts {
 export function buildKindBody(
   context: AgentRunContext,
   parts: KindBodyParts,
+  registry: AgentKindRegistry,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
   // `buildRegisteredAgentBody`/`buildMigratedBuiltInBody`, not directly here.
   const baseRoleSystemPrompt = composeBlockSystemPrompt(
-    systemPromptFor(context.agentKind),
+    systemPromptFor(context.agentKind, registry),
     context.block,
   )
   // When the future-looking Follow-up companion is enabled for this (coder) step, append
@@ -108,9 +109,9 @@ export function buildKindBody(
   // A registered (custom or migrated) kind that declares an `agent` step dispatches
   // through the generic, manifest-driven `agent` harness kind — no per-kind case here.
   // Built-in kinds (below) still carry their bespoke bodies until they are migrated.
-  const registeredStep = registeredAgentStep(context.agentKind)
+  const registeredStep = registry.agentStep(context.agentKind)
   if (registeredStep) {
-    return buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt)
+    return buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt, registry)
   }
 
   // Built-in container kinds migrated onto the generic, manifest-driven `agent` harness
@@ -122,7 +123,7 @@ export function buildKindBody(
   // backend-side in `toRunResult`), the `tester` (read-only structured explore with
   // docker-compose infra stand-up), and the conflict-resolver (coding with a `mergeBase`).
   // The default coder dispatches the generic coding agent at the end of this method.
-  const migrated = buildMigratedBuiltInBody(context, parts, roleSystemPrompt)
+  const migrated = buildMigratedBuiltInBody(context, parts, roleSystemPrompt, registry)
   if (migrated) return migrated
 
   // Container-backed companions (reviewer / doc-reviewer): a read-only explore that clones
@@ -138,6 +139,7 @@ export function buildKindBody(
       parts,
       { surface: 'container-explore', clone: { branch: 'pr' }, output: { kind: 'structured' } },
       roleSystemPrompt,
+      registry,
     )
   }
 
@@ -160,6 +162,7 @@ export function buildKindBody(
       parts,
       { surface: 'container-explore' },
       roleSystemPrompt,
+      registry,
     )
   }
 
@@ -178,6 +181,7 @@ export function buildKindBody(
     parts,
     { surface: 'container-coding', clone: { branch: 'work' } },
     roleSystemPrompt,
+    registry,
   )
 }
 
@@ -195,13 +199,14 @@ export function buildRegisteredAgentBody(
   parts: KindBodyParts,
   step: AgentStepSpec,
   roleSystemPrompt: string,
+  registry: AgentKindRegistry,
   /**
    * The concrete task prompt. Defaults to the generic `userPromptFor` (block context +
    * prior outputs) — the same prompt a registered custom kind gets. A migrated built-in
    * (merger / on-call) overrides it with its bespoke, JSON-instructing prompt so its
    * body matches the old per-kind handler's.
    */
-  userPrompt: string = userPromptFor(context, { materialized: true }),
+  userPrompt: string = userPromptFor(context, registry, { materialized: true }),
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   const { common, webTools, repo, workBranch, workBranchReady } = parts
   const prBranch = context.block.pullRequest?.branch
@@ -372,6 +377,7 @@ export function buildMigratedBuiltInBody(
   context: AgentRunContext,
   parts: KindBodyParts,
   roleSystemPrompt: string,
+  registry: AgentKindRegistry,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } | undefined {
   const { repo } = parts
   const prBranch = context.block.pullRequest?.branch
@@ -393,6 +399,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
         },
         BLUEPRINT_SYSTEM_PROMPT,
+        registry,
         blueprintUserPrompt(),
       )
     // The spec-writer maintains the prescriptive `spec/` document. It now runs as a
@@ -421,6 +428,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
         },
         SPEC_WRITER_SYSTEM_PROMPT,
+        registry,
         specWriterUserPrompt(context),
       )
     // The initiative analyst explores the repository (read-only, base branch — an
@@ -435,6 +443,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-explore', clone: { branch: 'base' } },
         INITIATIVE_ANALYST_SYSTEM_PROMPT,
+        registry,
         initiativeAnalystUserPrompt(context),
       )
     // The initiative planner explores the repository (read-only, base branch — an
@@ -459,6 +468,7 @@ export function buildMigratedBuiltInBody(
           },
         },
         INITIATIVE_PLANNER_SYSTEM_PROMPT,
+        registry,
         initiativePlannerUserPrompt(context),
       )
     // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
@@ -470,6 +480,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-coding', clone: { branch: 'pr' } },
         roleSystemPrompt,
+        registry,
       )
     case FIXER_AGENT_KIND:
       if (!prBranch) throw new Error('Fixer needs the implementation PR branch to push fixes to')
@@ -478,6 +489,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-coding', clone: { branch: 'pr' } },
         roleSystemPrompt,
+        registry,
       )
     // The conflict-resolver clones the PR head branch (full history), merges the base in
     // to surface the conflicts, resolves them and pushes back onto the SAME branch (no new
@@ -503,6 +515,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-coding', clone: { branch: 'pr', full: true } },
         roleSystemPrompt,
+        registry,
         `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
       )
       return { kind: built.kind, body: { ...built.body, mergeBase: repo.baseBranch } }
@@ -519,6 +532,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: MERGE_ASSESSMENT_SHAPE_HINT },
         },
         MERGER_SYSTEM_PROMPT,
+        registry,
         mergerUserPrompt(context, repo),
       )
     // The on-call agent clones the BASE branch (full, to locate + diff the merged
@@ -536,7 +550,8 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
         },
         composeBlockSystemPrompt(ON_CALL_SYSTEM_PROMPT, context.block),
-        onCallUserPrompt(context, repo),
+        registry,
+        onCallUserPrompt(context, repo, registry),
       )
     // The tester clones the PR head branch (read-only — it makes NO commits), stands up
     // its dependencies (locally via the service's docker-compose, or against the
@@ -558,6 +573,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: TEST_REPORT_SHAPE_HINT },
         },
         roleSystemPrompt,
+        registry,
       )
       return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
     }
@@ -576,6 +592,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: UI_TEST_REPORT_SHAPE_HINT },
         },
         roleSystemPrompt,
+        registry,
       )
       return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
     }

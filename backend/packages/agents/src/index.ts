@@ -18,23 +18,15 @@ export {
 } from './agents/runtime/routing.js'
 export { systemPromptFor, userPromptFor } from './agents/catalog.js'
 export { TASK_ESTIMATOR_AGENT_KIND } from './agents/prompts/roles.js'
-// Installation-level extension point for custom agent kinds (mirrors the model-provider
-// registry seam): a deployment registers extra kinds at startup and the prompt catalog +
-// the Worker's executor routing pick them up.
+// App-owned agent-kind registry (mirrors the backend-registries pilot): the composition
+// root news ONE `AgentKindRegistry` (pre-loaded with the built-ins by
+// `defaultAgentKindRegistry()`), threads it through `CoreDependencies`, and a deployment
+// registers extra kinds by reference on the injected instance. No module-global, no
+// `clear*()`, no external-adapter module-identity gotcha.
 export {
   type AgentKindDefinition,
-  registerAgentKind,
-  registerAgentKinds,
-  registeredAgentKind,
-  registeredAgentKinds,
-  registeredKindRequiresContainer,
-  registeredConfigContributions,
-  registeredAgentStep,
-  registeredPreOps,
-  registeredPostOps,
-  registeredAgentPresentation,
-  registeredStructuredOutput,
-  clearRegisteredAgentKinds,
+  AgentKindRegistry,
+  defaultAgentKindRegistry,
 } from './agents/kinds/registry.js'
 export {
   isInlineModelStep,

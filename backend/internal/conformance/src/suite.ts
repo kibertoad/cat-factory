@@ -25,7 +25,7 @@ import {
   clearRegisteredPromptFragments,
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
-import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import {
   composeEnvironmentBackend,
   createBackendRegistries,
@@ -1643,8 +1643,6 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
     })
 
     describe('registered custom kind pre/post-ops', () => {
-      afterEach(() => clearRegisteredAgentKinds())
-
       // A registered custom agent kind decomposes into preOps → agent → postOps, with the
       // deterministic repo work (read a baseline artifact, render + commit files) running
       // as BACKEND TypeScript over the checkout-free RepoFiles port — never in a container.
@@ -1673,7 +1671,12 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           },
         }
 
-        registerAgentKind({
+        // App-owned DI: a deployment news a registry (pre-loaded with the built-ins) and
+        // registers its kind on it BY REFERENCE, then injects the SAME instance into the
+        // container build — no module-global, no `clear*()`. The suite threads it through
+        // `makeApp`'s `agentKindRegistry` option (into both the container and the fake).
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.register({
           kind: 'conformance-auditor',
           systemPrompt: 'You audit the service for compliance.',
           // A read-only container-explore step returning structured JSON (surfaced as
@@ -1707,10 +1710,21 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
         const app = harness.makeApp(
           { customResult: { findings: 'all clear' } },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }), agentKindRegistry },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+
+        // The registered kind is advertised in the workspace snapshot's custom-kind palette on
+        // every runtime — proving the injected instance reaches the HTTP snapshot projection,
+        // not just the engine (the module-global registration this replaces used to do this).
+        const snap = await app.call<{ customAgentKinds?: { kind: string }[] }>(
+          'GET',
+          `/workspaces/${wsId}`,
+        )
+        expect(
+          (snap.body.customAgentKinds ?? []).some((k) => k.kind === 'conformance-auditor'),
+        ).toBe(true)
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Compliance audit',
@@ -1741,11 +1755,12 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       afterEach(() => {
         clearRegisteredGates()
         clearRegisteredStepResolvers()
-        clearRegisteredAgentKinds()
         // The built-in gates (ci / conflicts / post-release-health) live in the SAME registry
         // as the test's `license-check` gate, so clearing wipes them too — restore them so
         // later assertions (and a real harness build) still see the platform's own gates.
         registerBuiltinGates()
+        // NOTE: the agent-kind registry is now app-owned (per-test instance injected via
+        // `makeApp({ agentKindRegistry })`), so there is nothing global to clear here.
       })
 
       // A deployment-registered polling gate is the OTHER half of the extension story
@@ -1757,8 +1772,9 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       // built-in `ci`→`ci-fixer` gate, with the provider faked in-test (no real GitHub).
 
       // The custom gate's helper is just a registered agent kind — no new dispatch path.
-      const registerLicenseFixer = (): void =>
-        registerAgentKind({
+      // Registered on a per-test app-owned registry (injected via makeApp), not a global.
+      const registerLicenseFixer = (registry: ReturnType<typeof defaultAgentKindRegistry>): void =>
+        registry.register({
           kind: 'license-fixer',
           systemPrompt: 'You add missing license headers and push.',
           agent: { surface: 'container-coding', clone: { branch: 'pr' } },
@@ -1794,9 +1810,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       }
 
       it('passes through on a clean precheck without spinning up the helper', async () => {
-        registerLicenseFixer()
+        const agentKindRegistry = defaultAgentKindRegistry()
+        registerLicenseFixer(agentKindRegistry)
         registerLicenseGate([true]) // clean on first probe
-        const app = harness.makeApp({ asyncKinds: ['coder', 'license-fixer'] })
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'license-fixer'] },
+          { agentKindRegistry },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -1819,12 +1839,16 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       })
 
       it('escalates to the helper on a red precheck, then advances when it re-probes clean', async () => {
-        registerLicenseFixer()
+        const agentKindRegistry = defaultAgentKindRegistry()
+        registerLicenseFixer(agentKindRegistry)
         registerLicenseGate([false, true]) // red first, clean after the fixer ran
-        const app = harness.makeApp({
-          asyncKinds: ['coder', 'license-fixer'],
-          pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
-        })
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'license-fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          { agentKindRegistry },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -1851,7 +1875,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       // the engine merges registered resolvers into the (built-in merger) resolver registry
       // and runs them in recordStepResult, identically on every runtime.
       it('runs a registered step resolver after its agent step completes', async () => {
-        registerAgentKind({
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.register({
           kind: 'conformance-auditor',
           systemPrompt: 'You audit.',
           agent: { surface: 'container-explore', output: { kind: 'structured' } },
@@ -1861,7 +1886,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           applies: (result) => result.custom !== undefined,
           resolve: async () => ({ output: 'resolver-rewrote-this' }),
         }))
-        const app = harness.makeApp({ customResult: { ok: true } })
+        const app = harness.makeApp({ customResult: { ok: true } }, { agentKindRegistry })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 

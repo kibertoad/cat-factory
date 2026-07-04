@@ -29,6 +29,7 @@ import {
   isCompanionKind,
   isInlineModelStep,
 } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
 import {
   assertPipelineLaunchable,
@@ -159,6 +160,12 @@ export interface ExecutionServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
   agentExecutor: AgentExecutor
+  /**
+   * The app-owned agent-kind registry, threaded through to the trait/inline-surface checks
+   * and a registered kind's pre/post-op hooks. `createCore` defaults it to
+   * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
+   */
+  agentKindRegistry: AgentKindRegistry
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService
@@ -460,6 +467,8 @@ export class ExecutionService {
   /** The async instance/block state-machine spine (persist/emit/park/advance/finalize/fail). */
   private readonly runStateMachine: RunStateMachine
   private readonly agentExecutor: AgentExecutor
+  /** App-owned agent-kind registry (custom-kind traits/inline-surface + pre/post-op hooks). */
+  private readonly agentKindRegistry: AgentKindRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
@@ -589,6 +598,7 @@ export class ExecutionService {
     assertAgentBackendConfigured,
     runInitiatorScope,
     pokeInitiativeLoop,
+    agentKindRegistry,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -616,6 +626,7 @@ export class ExecutionService {
       pokeInitiativeLoop,
     })
     this.agentExecutor = agentExecutor
+    this.agentKindRegistry = agentKindRegistry
     this.workRunner = workRunner
     this.events = executionEventPublisher
     this.board = boardService
@@ -628,6 +639,7 @@ export class ExecutionService {
       workspaceRepository,
       blockRepository,
       accountRepository,
+      agentKindRegistry,
       documents: documentRepository,
       documentUrlResolver,
       tasks: taskRepository,
@@ -761,6 +773,7 @@ export class ExecutionService {
       blockRepository,
       executionRepository,
       agentExecutor,
+      agentKindRegistry,
       workRunner,
       events: executionEventPublisher,
       idGenerator,
@@ -1045,7 +1058,8 @@ export class ExecutionService {
     workspaceId: string,
     agentKinds: readonly string[],
   ): Promise<void> {
-    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT))) return
+    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT, this.agentKindRegistry)))
+      return
     const resolve = this.resolveBinaryArtifactStore
     if (!resolve) return
     const store = await resolve(workspaceId)
@@ -1093,7 +1107,10 @@ export class ExecutionService {
     if (block.modelId) {
       // A block-level pin applies to every step; it must satisfy an inline step too when the
       // pipeline has one.
-      check(block.modelId, agentKinds.some(isInlineModelStep))
+      check(
+        block.modelId,
+        agentKinds.some((kind) => isInlineModelStep(kind, this.agentKindRegistry)),
+      )
     } else if (this.resolveWorkspaceModelDefault) {
       // Independent per-kind resolutions on the start path — run them concurrently.
       const ids = await Promise.all(
@@ -1101,7 +1118,9 @@ export class ExecutionService {
           this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
         ),
       )
-      agentKinds.forEach((kind, i) => check(ids[i], isInlineModelStep(kind)))
+      agentKinds.forEach((kind, i) =>
+        check(ids[i], isInlineModelStep(kind, this.agentKindRegistry)),
+      )
     }
     if (unconfigured.size > 0) {
       throw new ConflictError(

@@ -7,6 +7,7 @@ import {
   type PublicJobStatus,
 } from '@cat-factory/contracts'
 import {
+  type AgentKindRegistry,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   isInlineModelStep,
@@ -117,18 +118,23 @@ export function toPublicJob(execution: ExecutionInstance): PublicJob {
  * (an approval gate, or a review kind that waits for input). A public run has no human to answer,
  * so a parking step would hang until the SSE/timeout cap — reject it up front instead.
  */
-function isHeadlessInlinePipeline(pipeline: {
-  agentKinds: string[]
-  enabled?: boolean[]
-  gates?: boolean[]
-}): boolean {
+function isHeadlessInlinePipeline(
+  pipeline: {
+    agentKinds: string[]
+    enabled?: boolean[]
+    gates?: boolean[]
+  },
+  registry: AgentKindRegistry,
+): boolean {
   const enabled = pipeline.agentKinds
     .map((kind, i) => ({ kind, i }))
     .filter(({ i }) => pipeline.enabled?.[i] !== false)
   if (enabled.length === 0) return false
   // An approval gate on any enabled step parks the run for a human decision.
   if (enabled.some(({ i }) => pipeline.gates?.[i])) return false
-  return enabled.every(({ kind }) => isInlineModelStep(kind) && !PARKING_INLINE_KINDS.has(kind))
+  return enabled.every(
+    ({ kind }) => isInlineModelStep(kind, registry) && !PARKING_INLINE_KINDS.has(kind),
+  )
 }
 
 /**
@@ -195,7 +201,7 @@ export function publicApiController(): Hono<AppEnv> {
         400,
       )
     }
-    if (!isHeadlessInlinePipeline(pipeline)) {
+    if (!isHeadlessInlinePipeline(pipeline, container.agentKindRegistry)) {
       // Defense in depth: a public pipeline must be inline-only (so an external run can never
       // trigger a container/GitHub push) AND non-parking (no human gate to hang a headless run).
       // The built-in public pipeline already satisfies both.

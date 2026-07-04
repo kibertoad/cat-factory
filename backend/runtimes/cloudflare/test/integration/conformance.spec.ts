@@ -35,10 +35,16 @@ const harness: ConformanceHarness = {
     // intermediate transitions. Confined to the conformance adapter so the shared
     // `makeApp`/`TestApp` other worker tests use is untouched.
     const recorder = new RecordingEventPublisher()
+    // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake
+    // (so it detects the custom kind's structured output) and the container overrides below.
+    const fakeOptions = {
+      ...agentOptions,
+      ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+    }
     const app = makeApp(
       agentOptions?.asyncKinds?.length
-        ? new AsyncFakeAgentExecutor(agentOptions)
-        : new FakeAgentExecutor(agentOptions),
+        ? new AsyncFakeAgentExecutor(fakeOptions)
+        : new FakeAgentExecutor(fakeOptions),
       // A deterministic bootstrapper so the shared suite can drive the bootstrap
       // lifecycle against D1 without a real container (driven via driveBootstrap); the
       // prompt-fragment library repos (deterministic selector) so the library CRUD
@@ -91,6 +97,10 @@ const harness: ConformanceHarness = {
               userSecretKindRegistry: opts.backendRegistries.userSecretKindRegistry,
             }
           : {}),
+        // Inject the app-owned agent-kind registry (pre-loaded with a custom kind in the
+        // custom-kind suite) via the CoreDependencies overrides the Worker build reads, so the
+        // container resolves it by reference — the SAME instance the fake executor above got.
+        ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
         // shared suite can assert create-task-from-issue parity against D1 too. The suite may

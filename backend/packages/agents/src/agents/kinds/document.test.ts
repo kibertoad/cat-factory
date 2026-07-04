@@ -15,10 +15,11 @@ import {
   DOC_REVIEWER_KIND,
   DOC_WRITER_KIND,
 } from './document.js'
-import { registeredAgentStep, registeredKindRequiresContainer } from './registry.js'
+import { defaultAgentKindRegistry } from './registry.js'
 
-// Importing the package registers the document kinds as a side effect; ./document is imported
-// transitively here, so the registry is populated.
+// `defaultAgentKindRegistry()` pre-loads the built-in document kinds, so a fresh instance
+// exposes them (no module-global side effect).
+const registry = defaultAgentKindRegistry()
 
 function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
@@ -41,17 +42,17 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 
 describe('document agent kinds', () => {
   it('registers the inline research/outline kinds and container-coding writer/finalizer', () => {
-    expect(registeredAgentStep(DOC_RESEARCHER_KIND)?.surface).toBe('inline')
-    expect(registeredAgentStep(DOC_OUTLINER_KIND)?.surface).toBe('inline')
-    expect(registeredAgentStep(DOC_WRITER_KIND)?.surface).toBe('container-coding')
-    expect(registeredAgentStep(DOC_FINALIZER_KIND)?.surface).toBe('container-coding')
+    expect(registry.agentStep(DOC_RESEARCHER_KIND)?.surface).toBe('inline')
+    expect(registry.agentStep(DOC_OUTLINER_KIND)?.surface).toBe('inline')
+    expect(registry.agentStep(DOC_WRITER_KIND)?.surface).toBe('container-coding')
+    expect(registry.agentStep(DOC_FINALIZER_KIND)?.surface).toBe('container-coding')
     // The writer branches off base + opens a PR (coder-like); the finalizer polishes the PR.
-    expect(registeredAgentStep(DOC_WRITER_KIND)?.clone?.branch).toBe('work')
-    expect(registeredAgentStep(DOC_FINALIZER_KIND)?.clone?.branch).toBe('pr')
+    expect(registry.agentStep(DOC_WRITER_KIND)?.clone?.branch).toBe('work')
+    expect(registry.agentStep(DOC_FINALIZER_KIND)?.clone?.branch).toBe('pr')
     // Container kinds route to the container executor.
-    expect(registeredKindRequiresContainer(DOC_WRITER_KIND)).toBe(true)
-    expect(registeredKindRequiresContainer(DOC_FINALIZER_KIND)).toBe(true)
-    expect(registeredKindRequiresContainer(DOC_RESEARCHER_KIND)).toBe(false)
+    expect(registry.requiresContainer(DOC_WRITER_KIND)).toBe(true)
+    expect(registry.requiresContainer(DOC_FINALIZER_KIND)).toBe(true)
+    expect(registry.requiresContainer(DOC_RESEARCHER_KIND)).toBe(false)
   })
 
   it('makes doc-reviewer a companion of doc-writer', () => {
@@ -65,7 +66,7 @@ describe('document agent kinds', () => {
     // branch and read it — an inline review of the writer's summary reply is worthless.
     expect(isContainerBackedCompanion(DOC_REVIEWER_KIND)).toBe(true)
     // The system prompt tells it to read the checkout rather than judge from the reply.
-    const prompt = systemPromptFor(DOC_REVIEWER_KIND)
+    const prompt = systemPromptFor(DOC_REVIEWER_KIND, registry)
     expect(prompt).toContain('read-only checkout')
     expect(prompt).toContain('Do NOT judge from the')
     // It still emits the structured verdict JSON the engine parses.
@@ -73,7 +74,7 @@ describe('document agent kinds', () => {
   })
 
   it("specialises the writer's prompt on the task's docKind and target path", () => {
-    const prompt = userPromptFor(ctx(), { materialized: true })
+    const prompt = userPromptFor(ctx(), registry, { materialized: true })
     // The kind-specific structure guidance + the default target path are woven in.
     expect(prompt).toContain('Document kind: prd')
     expect(prompt).toContain('docs/prd/billing-service-prd.md')
@@ -88,6 +89,7 @@ describe('document agent kinds', () => {
           taskTypeFields: { docKind: 'rfc', targetPath: 'docs/rfcs/0001-foo.md' },
         },
       }),
+      registry,
       { materialized: true },
     )
     expect(prompt).toContain('docs/rfcs/0001-foo.md')
@@ -97,11 +99,11 @@ describe('document agent kinds', () => {
   it('the container-coding writer is NOT told to put its answer in the reply (it commits)', () => {
     // FINAL_ANSWER_IN_REPLY is for inline/explore deliverable-is-the-reply kinds; the writer's
     // product is a pushed commit, so it must not get that directive.
-    expect(systemPromptFor(DOC_WRITER_KIND)).not.toContain(
+    expect(systemPromptFor(DOC_WRITER_KIND, registry)).not.toContain(
       'Your deliverable is the text of your FINAL reply',
     )
     // The inline outliner DOES (its prose reply is the deliverable).
-    expect(systemPromptFor(DOC_OUTLINER_KIND)).toContain(
+    expect(systemPromptFor(DOC_OUTLINER_KIND, registry)).toContain(
       'Your deliverable is the text of your FINAL reply',
     )
   })

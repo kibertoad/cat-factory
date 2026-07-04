@@ -24,6 +24,7 @@ import {
   createDrizzleRepositories,
   migrate,
 } from '@cat-factory/node-server'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type { Clock, ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
@@ -141,15 +142,22 @@ export function makeConformanceApp(
     deployJobClient?: CoreDependencies['deployJobClient']
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
+    agentKindRegistry?: AgentKindRegistry
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     taskSourceProviders?: CoreDependencies['taskSourceProviders']
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
+  // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
+  // (so it detects the custom kind's structured output) and the container build below.
+  const agentExecutorOptions: FakeAgentOptions = {
+    ...agentOptions,
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+  }
   const overrides: Partial<CoreDependencies> = {
     agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentOptions)
-      : new FakeAgentExecutor(agentOptions),
+      ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+      : new FakeAgentExecutor(agentExecutorOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     // Deterministic bootstrapper so the suite drives the bootstrap lifecycle through the
@@ -217,6 +225,10 @@ export function makeConformanceApp(
     // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
     // suite) so a registered custom backend is resolved by reference, exactly like a real deployment.
     ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
+    // Inject the app-owned agent-kind registry (pre-loaded with a custom kind in the custom-kind
+    // suite) so buildLocalContainer forwards it into buildNodeContainer — the SAME instance the
+    // fake executor above got.
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
   })
   const app = createApp(container, TEST_ENV)
 

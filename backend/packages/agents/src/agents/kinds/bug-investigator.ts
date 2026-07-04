@@ -1,7 +1,6 @@
 import * as v from 'valibot'
 import { defineStructuredOutput } from './structured-output.js'
-import type { AgentKindDefinition } from './registry.js'
-import { registerAgentKind } from './registry.js'
+import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
 // The `bug-investigator` agent kind — the read-only, multi-repo investigation that
@@ -112,12 +111,9 @@ export const BUG_INVESTIGATOR_AGENT_KINDS: AgentKindDefinition[] = [
 ]
 
 /**
- * Register the bug-investigator kind. Idempotent (the registry replaces by kind), so calling
- * it explicitly and importing this module for its side effect are safe to combine.
+ * Register the bug-investigator kind on the given registry. Called by
+ * `defaultAgentKindRegistry()`; idempotent (the registry replaces by kind).
  */
-export function registerBugInvestigatorAgent(): void {
-  for (const def of BUG_INVESTIGATOR_AGENT_KINDS) registerAgentKind(def)
+export function registerBugInvestigatorAgent(registry: AgentKindRegistry): void {
+  registry.registerAll(BUG_INVESTIGATOR_AGENT_KINDS)
 }
-
-// Side-effect registration: importing `@cat-factory/agents` registers this first-class kind.
-registerBugInvestigatorAgent()

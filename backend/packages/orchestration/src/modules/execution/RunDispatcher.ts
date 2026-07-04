@@ -68,13 +68,11 @@ import {
   isCompanionKind,
   isContainerBackedCompanion,
   moduleSlug,
-  registeredAgentStep,
-  registeredPostOps,
-  registeredPreOps,
   runRepoOps,
   specPostOp,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
 import type {
   BugIntakeOutcome,
@@ -238,6 +236,8 @@ export interface RunDispatcherDeps {
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   agentExecutor: AgentExecutor
+  /** App-owned agent-kind registry: a registered kind's step spec + pre/post-op hooks. */
+  agentKindRegistry: AgentKindRegistry
   workRunner: WorkRunner
   events: ExecutionEventPublisher
   idGenerator: IdGenerator
@@ -298,6 +298,7 @@ export class RunDispatcher {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
   private readonly agentExecutor: AgentExecutor
+  private readonly agentKindRegistry: AgentKindRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly idGenerator: IdGenerator
@@ -349,6 +350,7 @@ export class RunDispatcher {
     this.blockRepository = deps.blockRepository
     this.executionRepository = deps.executionRepository
     this.agentExecutor = deps.agentExecutor
+    this.agentKindRegistry = deps.agentKindRegistry
     this.workRunner = deps.workRunner
     this.events = deps.events
     this.idGenerator = deps.idGenerator
@@ -2266,12 +2268,12 @@ export class RunDispatcher {
     step: PipelineStep,
     context: AgentRunContext,
   ): Promise<void> {
-    const ops = registeredPreOps(step.agentKind)
+    const ops = this.agentKindRegistry.preOps(step.agentKind)
     if (ops.length === 0) return
     const runRepo = await this.resolveRunRepo(workspaceId, block.id)
     if (!runRepo) return
     const branch = await this.resolveRepoOpBranch(
-      registeredAgentStep(step.agentKind),
+      this.agentKindRegistry.agentStep(step.agentKind),
       block,
       runRepo,
     )
@@ -2309,7 +2311,7 @@ export class RunDispatcher {
     isFinalStep: boolean,
     result: AgentRunResult,
   ): Promise<void> {
-    const registered = registeredPostOps(step.agentKind)
+    const registered = this.agentKindRegistry.postOps(step.agentKind)
     const builtIn = this.builtInPostOps(step.agentKind)
     if (registered.length === 0 && builtIn.length === 0) return
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
@@ -2326,7 +2328,7 @@ export class RunDispatcher {
     // Registered (custom) kinds resolve their branch from their declared clone target.
     if (registered.length > 0) {
       const branch = await this.resolveRepoOpBranch(
-        registeredAgentStep(step.agentKind),
+        this.agentKindRegistry.agentStep(step.agentKind),
         block,
         runRepo,
       )

@@ -379,8 +379,11 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
   // Multi-repo read-only exploration (service-connections phase 3): when the job carries peer
   // repos, clone them all as siblings and run at the workspace root. Keyed off job DATA
   // (`peerRepos`), not the agent kind — the backend sets it for the bug-investigator when the
-  // task has involved services in distinct repos. A reused persistent checkout is single-repo.
-  if (job.peerRepos?.length && !job.persistentCheckout) return runMultiRepoExplore(job, opts)
+  // task has involved services in distinct repos. `runMultiRepoExplore` uses its own ephemeral
+  // `withWorkspace`, so a `persistentCheckout` flag (which a warm-pool dispatch injects on EVERY
+  // job) is harmlessly ignored — it must NOT suppress the fan-out, or a pooled bug-investigator
+  // would silently drop its peer repos and only ever see the primary one.
+  if (job.peerRepos?.length) return runMultiRepoExplore(job, opts)
   return acquireRepoCheckout(
     { persistent: job.persistentCheckout === true, prefix: 'agent-explore', repo: job.repo },
     async (dir) => {

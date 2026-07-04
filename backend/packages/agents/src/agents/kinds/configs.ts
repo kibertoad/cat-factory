@@ -1,5 +1,5 @@
 import type { AgentConfigDescriptor, AgentKind } from '@cat-factory/kernel'
-import { registeredConfigContributions } from './registry.js'
+import type { AgentKindRegistry } from './registry.js'
 
 // Built-in agent config contributions. An agent kind declares the task-level
 // parameters it cares about here; the union over a pipeline's kinds is what the
@@ -31,9 +31,12 @@ const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescrip
  * The config descriptors an agent kind contributes: the built-in ones plus any a
  * deployment registered for the kind. Empty for kinds that contribute none.
  */
-export function configContributionsFor(kind: AgentKind): AgentConfigDescriptor[] {
+export function configContributionsFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): AgentConfigDescriptor[] {
   const builtin = BUILTIN_CONFIG_CONTRIBUTIONS[kind] ?? []
-  const registered = registeredConfigContributions(kind)
+  const registered = registry.configContributions(kind)
   return registered.length ? [...builtin, ...registered] : builtin
 }
 
@@ -42,10 +45,13 @@ export function configContributionsFor(kind: AgentKind): AgentConfigDescriptor[]
  * kinds (e.g. all the kinds used by a workspace's pipelines), keyed by descriptor
  * id (first contribution wins). This is what the workspace snapshot carries.
  */
-export function configContributionCatalog(kinds: Iterable<AgentKind>): AgentConfigDescriptor[] {
+export function configContributionCatalog(
+  kinds: Iterable<AgentKind>,
+  registry: AgentKindRegistry,
+): AgentConfigDescriptor[] {
   const byId = new Map<string, AgentConfigDescriptor>()
   for (const kind of kinds) {
-    for (const descriptor of configContributionsFor(kind)) {
+    for (const descriptor of configContributionsFor(kind, registry)) {
       if (!byId.has(descriptor.id)) byId.set(descriptor.id, descriptor)
     }
   }

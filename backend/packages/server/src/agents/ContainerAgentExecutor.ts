@@ -26,8 +26,10 @@ import {
 } from '@cat-factory/kernel'
 import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
+  type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
+  defaultAgentKindRegistry,
   isProxyableProvider,
   isReadOnlyAgentKind,
   webResearchGuidanceFor,
@@ -536,6 +538,13 @@ export interface ContainerAgentExecutorDependencies {
    * `storeAgentContext` setting); absent ⇒ nothing is captured.
    */
   agentContextObservability?: AgentContextRecorder
+  /**
+   * The app-owned agent-kind registry: threaded into the job-body builders so a
+   * registered kind's system/user prompt, tuning and web-research hint resolve off the
+   * SAME instance the rest of the app uses. Defaults to a fresh
+   * {@link defaultAgentKindRegistry} (built-ins only) when a facade doesn't inject one.
+   */
+  agentKindRegistry?: AgentKindRegistry
 }
 
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
@@ -582,8 +591,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   /** Resolves which model + subscription path a step runs on (routing policy). */
   private readonly modelRouter: ModelRouter
 
+  /** The app-owned agent-kind registry the job-body builders read (custom-kind prompts/tuning). */
+  private readonly agentKindRegistry: AgentKindRegistry
+
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
+    this.agentKindRegistry = deps.agentKindRegistry ?? defaultAgentKindRegistry()
     this.modelRouter = new ModelRouter({
       agentRouting: deps.agentRouting,
       resolveBlockModel: deps.resolveBlockModel,
@@ -966,7 +979,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
-    const tuning = agentTuningFor(context.agentKind)
+    const tuning = agentTuningFor(context.agentKind, this.agentKindRegistry)
     // Private-registry auth for the checkout's installs. Resolved per dispatch (like
     // ghToken) and spread into `common`, so every kind with a checkout gets it.
     const packageRegistries = (await this.deps.resolvePackageRegistries?.(workspaceId)) ?? []
@@ -995,7 +1008,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // analysis/… and any custom container kind resolves its own).
     const webSearchEnabled = (await this.deps.resolveWebSearchEnabled?.(workspaceId)) ?? false
     const webTools = {
-      webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+      webToolsGuidance: webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, {
+        fetch: true,
+      }),
       ...(webSearchEnabled ? { webSearch: true } : {}),
     }
 
@@ -1049,15 +1064,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
 
-    const { body, kind } = buildKindBody(promptContext, {
-      common: commonForKind,
-      webTools,
-      repo,
-      workBranch,
-      workBranchReady,
-      ...(peerRepos ? { peerRepos } : {}),
-      ...(multiRepoSection ? { multiRepoSection } : {}),
-    })
+    const { body, kind } = buildKindBody(
+      promptContext,
+      {
+        common: commonForKind,
+        webTools,
+        repo,
+        workBranch,
+        workBranchReady,
+        ...(peerRepos ? { peerRepos } : {}),
+        ...(multiRepoSection ? { multiRepoSection } : {}),
+      },
+      this.agentKindRegistry,
+    )
     return {
       subscriptionTokenId,
       body,

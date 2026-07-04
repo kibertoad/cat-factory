@@ -132,6 +132,7 @@ async function startLocalMothership(
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
   validateRegistrationsOnce({
+    agentKindRegistry: container.agentKindRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
 
