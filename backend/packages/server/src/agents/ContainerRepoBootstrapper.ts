@@ -7,6 +7,8 @@ import type {
   BootstrapRepoRequest,
   GitHubClient,
   GitHubInstallationRepository,
+  GitHubRepo,
+  GroupCacheHandle,
   ModelRef,
   RepoBootstrapper,
   RepoEntry,
@@ -30,6 +32,12 @@ export interface ContainerRepoBootstrapperDependencies {
   bootstrapJobRepository: BootstrapJobRepository
   /** Local repo projection: where the bootstrapped repo is recorded + linked to its frame. */
   repoRepository: RepoProjectionRepository
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, slice 3): projecting
+   * a freshly-bootstrapped repo changes what `resolveRepoTarget` lists, so drop the
+   * workspace group after the write. Absent (tests / the Worker's pass-through) ⇒ no-op.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   /** Resolves/validates the pre-created target repository (existence + emptiness). */
   githubClient: GitHubClient
   /** Mints a short-lived GitHub installation token for clone + push. */
@@ -345,6 +353,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       repo: outcome.name,
     })
     await this.deps.repoRepository.upsertMany(workspaceId, [repo])
+    await this.deps.repoProjectionCache?.invalidateGroup(workspaceId)
     log.info(
       { repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId },
       'bootstrap: projected repo for service frame',

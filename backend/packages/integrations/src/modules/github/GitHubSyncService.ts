@@ -5,6 +5,7 @@ import type {
   CheckRunProjectionRepository,
   CommitProjectionRepository,
   GitHubInstallationRepository,
+  GroupCacheHandle,
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
@@ -52,10 +53,23 @@ export interface GitHubSyncServiceDependencies {
    * (more recent) cursor. Undefined means backfill the full history (legacy).
    */
   commitBackfillHorizonMs?: number
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, slice 3). Every
+   * method here that mutates a workspace's projected repos (link / monorepo-flag / the
+   * exact-set write + tombstone / the link-time full re-stamp) drops that workspace's group
+   * after the write so the block→repo resolver re-lists fresh. Absent (tests / the
+   * Worker's pass-through profile) ⇒ the invalidations are no-ops.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
 }
 
 export class GitHubSyncService {
   constructor(private readonly deps: GitHubSyncServiceDependencies) {}
+
+  /** Drop a workspace's cached repo projection after a write that changed it. */
+  private invalidateRepoProjection(workspaceId: string): Promise<void> {
+    return this.deps.repoProjectionCache?.invalidateGroup(workspaceId) ?? Promise.resolve()
+  }
 
   /**
    * The repos the workspace's installation can access, annotated with whether
@@ -194,6 +208,8 @@ export class GitHubSyncService {
       throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
     }
     await this.deps.repoProjectionRepository.setMonorepo(workspaceId, repoGithubId, isMonorepo)
+    // The monorepo flag decides whether the resolver hands agents the service subdirectory.
+    await this.invalidateRepoProjection(workspaceId)
     return { ...existing, isMonorepo }
   }
 
@@ -266,6 +282,7 @@ export class GitHubSyncService {
         syncedAt: this.deps.clock.now(),
       }
       await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
+      await this.invalidateRepoProjection(workspaceId)
       // Full pass: the org cursor may already be advanced, so bypass it to populate this
       // newly-linked workspace.
       await this.syncRepo(repo, { full: true })
@@ -296,6 +313,7 @@ export class GitHubSyncService {
       syncedAt: this.deps.clock.now(),
     }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
+    await this.invalidateRepoProjection(workspaceId)
     if (userId && this.deps.userRepoAccessRepository) {
       await this.deps.userRepoAccessRepository.recordAccessible(userId, [
         this.toAccessRecord(userId, repo),
@@ -330,6 +348,9 @@ export class GitHubSyncService {
       selected.map((r) => r.githubId),
       this.deps.clock.now(),
     )
+    // The exact-set write + tombstone changed this workspace's projection (even when
+    // nothing was selected — a full deselect tombstones everything and runs no syncRepo).
+    await this.invalidateRepoProjection(workspaceId)
     for (const repo of selected) await this.syncRepo(repo, { full: true })
     return this.deps.repoProjectionRepository.list(workspaceId)
   }
@@ -484,11 +505,20 @@ export class GitHubSyncService {
       }
     }
 
-    // Stamp the repo row as freshly synced for every workspace that links it.
+    // Stamp the repo row as freshly synced for every workspace that links it. On an
+    // incremental resync (`full` false — the queue consumer / periodic reconcile) the
+    // `repo` came from the stored projection, so only `syncedAt` changes — not a field the
+    // resolver reads — and there is nothing to invalidate. A `full` pass runs only at link
+    // time (linkRepo / setLinkedRepos) with freshly-FETCHED metadata, which can differ from
+    // what ANOTHER workspace sharing this repo has cached, so drop each fanned-out
+    // workspace's group then. (The triggering workspace's own group was already dropped by
+    // the link/set caller.) Gating on `full` keeps the frequent resync path from churning
+    // the cache the durable poll ticks are meant to hit.
     const now = this.deps.clock.now()
     await fanOut((ws) =>
       this.deps.repoProjectionRepository.upsertMany(ws, [{ ...repo, syncedAt: now }]),
     )
+    if (full) for (const ws of workspaces) await this.invalidateRepoProjection(ws)
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */

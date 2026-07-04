@@ -1,4 +1,10 @@
-import type { Block, GitHubInstallation, GitHubRepo, Service } from '@cat-factory/kernel'
+import type {
+  Block,
+  GitHubInstallation,
+  GitHubRepo,
+  GroupCacheHandle,
+  Service,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { buildResolveRepoTarget } from '../src/agents/resolveRepoTarget.js'
 
@@ -145,5 +151,91 @@ describe('buildResolveRepoTarget — monorepo service directories', () => {
       services: [],
     })
     await expect(resolve('ws', 'task')).rejects.toThrow(/not under a service linked/)
+  })
+})
+
+// A tiny in-memory `GroupCacheHandle` standing in for `AppCaches.repoProjection`. It
+// keeps read-through + group invalidation semantics honest without pulling the real
+// layered-loader implementation into this package (that behaviour is covered by
+// @cat-factory/caching's own tests). Enough to assert that the resolver reads the
+// projection THROUGH the cache and that a projection write's `invalidateGroup` makes
+// the very next resolve re-list.
+function fakeGroupCache<T>(): GroupCacheHandle<T> {
+  const byGroup = new Map<string, Map<string, T>>()
+  return {
+    async get(key, group, load) {
+      const entries = byGroup.get(group) ?? new Map<string, T>()
+      byGroup.set(group, entries)
+      if (entries.has(key)) return entries.get(key) as T
+      const value = await load()
+      entries.set(key, value)
+      return value
+    },
+    async invalidate(key, group) {
+      byGroup.get(group)?.delete(key)
+    },
+    async invalidateGroup(group) {
+      byGroup.delete(group)
+    },
+    async invalidateAll() {
+      byGroup.clear()
+    },
+  }
+}
+
+describe('buildResolveRepoTarget — repoProjection cache (slice 3)', () => {
+  function cachingHarness(initialRepos: GitHubRepo[]) {
+    const state = { repos: initialRepos, listCalls: 0 }
+    const cache = fakeGroupCache<GitHubRepo[]>()
+    const resolve = buildResolveRepoTarget({
+      installationRepository: { getByWorkspace: async () => installation },
+      repoProjectionRepository: {
+        list: async () => {
+          state.listCalls++
+          return state.repos
+        },
+      },
+      blockRepository: {
+        get: async (_ws, id) =>
+          ({
+            ...block(id, id === 'task' ? 'frame' : null, id === 'task' ? 'task' : 'frame'),
+          }) as Block,
+      },
+      serviceRepository: {
+        getByFrameBlock: async (id) => (id === 'frame' ? service('frame', 1, null) : null),
+      },
+      repoProjectionCache: cache,
+    })
+    return { state, cache, resolve }
+  }
+
+  it('reads the projection through the cache — a second resolve does not re-list', async () => {
+    const { state, resolve } = cachingHarness([repo({ githubId: 1, owner: 'acme', name: 'a' })])
+    expect((await resolve('ws', 'task'))?.name).toBe('a')
+    expect((await resolve('ws', 'task'))?.name).toBe('a')
+    expect(state.listCalls).toBe(1)
+  })
+
+  it('a projection write (invalidateGroup) makes the next resolve re-list fresh repos', async () => {
+    const { state, cache, resolve } = cachingHarness([
+      repo({ githubId: 1, owner: 'acme', name: 'old' }),
+    ])
+    expect((await resolve('ws', 'task'))?.name).toBe('old')
+
+    // Simulate a projection write: the source changed, then the write site invalidated.
+    state.repos = [repo({ githubId: 1, owner: 'acme', name: 'new' })]
+    await cache.invalidateGroup('ws')
+
+    expect((await resolve('ws', 'task'))?.name).toBe('new')
+    expect(state.listCalls).toBe(2)
+  })
+
+  it('without invalidation the cached (now-stale) projection is served — proving it caches', async () => {
+    const { state, resolve } = cachingHarness([repo({ githubId: 1, owner: 'acme', name: 'old' })])
+    expect((await resolve('ws', 'task'))?.name).toBe('old')
+    state.repos = [repo({ githubId: 1, owner: 'acme', name: 'new' })]
+    // No invalidateGroup → the warmed entry stands.
+    expect((await resolve('ws', 'task'))?.name).toBe('old')
+    expect(state.listCalls).toBe(1)
   })
 })

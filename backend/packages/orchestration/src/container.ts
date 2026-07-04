@@ -1113,7 +1113,7 @@ function createServicesModule(deps: CoreDependencies): ServicesModule | undefine
  * Assemble the GitHub module when every dependency it needs is present;
  * otherwise return undefined so the feature stays cleanly opt-in.
  */
-function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
+function createGitHubModule(deps: CoreDependencies, caches: AppCaches): GitHubModule | undefined {
   const {
     githubClient,
     githubInstallationRepository,
@@ -1159,6 +1159,8 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     userRepoAccessRepository: deps.userRepoAccessRepository,
     clock: deps.clock,
     commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
+    // Drop a workspace's cached repo projection (slice 3) after any link/sync write.
+    repoProjectionCache: caches.repoProjection,
   })
   const webhookService = new WebhookService({
     githubInstallationRepository,
@@ -1169,6 +1171,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     commitProjectionRepository,
     checkRunProjectionRepository,
     clock: deps.clock,
+    repoProjectionCache: caches.repoProjection,
   })
   const service = new GitHubService({
     githubClient,
@@ -2114,10 +2117,21 @@ function createRecurringModule(
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
+  // The cache bag the caching-initiative slices read through. A facade passes its own
+  // (Redis-notified on multi-node Node, isolate-safe on the Worker); tests and harnesses
+  // fall back to bare in-memory loaders, so the cached path — including the services'
+  // write-site invalidation — is exercised everywhere. Built here (before the services that
+  // invalidate through it) so it can be threaded into all of them.
+  const caches = dependencies.caches ?? createAppCaches()
   // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every
   // user on the workspace (and every board mounting a shared service) — both facades route
-  // here, so the wiring is symmetric by construction.
-  const boardService = new BoardService({ ...dependencies, executionEventPublisher })
+  // here, so the wiring is symmetric by construction. The repo-projection cache lets
+  // `addServiceFromRepo`'s monorepo-flag write invalidate the same group the resolver reads.
+  const boardService = new BoardService({
+    ...dependencies,
+    executionEventPublisher,
+    repoProjectionCache: caches.repoProjection,
+  })
   const workspaceService = new WorkspaceService(dependencies)
   const accountService = new AccountService({
     accountRepository: dependencies.accountRepository,
@@ -2207,11 +2221,6 @@ export function createCore(dependencies: CoreDependencies): Core {
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = createDocumentsModule(dependencies, boardService)
-  // The cache bag the caching-initiative slices read through. A facade passes its
-  // own (Redis-notified on multi-node Node, isolate-safe on the Worker); tests and
-  // harnesses fall back to bare in-memory loaders, so the cached path — including
-  // the services' write-site invalidation — is exercised everywhere.
-  const caches = dependencies.caches ?? createAppCaches()
   const fragmentLibrary = createFragmentLibraryModule(
     dependencies,
     documents?.contentResolver,
@@ -2356,7 +2365,7 @@ export function createCore(dependencies: CoreDependencies): Core {
       : undefined,
   })
 
-  const github = createGitHubModule(dependencies)
+  const github = createGitHubModule(dependencies, caches)
   const tasks = createTasksModule(dependencies, boardService)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by

@@ -1,6 +1,6 @@
 # Initiative: caching layer (layered-loader, in-memory + Redis-notified invalidation)
 
-**Status:** in progress — pilot (row 0) + slices 1–2 landed · **Owner:** core ·
+**Status:** in progress — pilot (row 0) + slices 1–3 landed · **Owner:** core ·
 **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -173,8 +173,8 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
 | 0   | **Pilot: `@cat-factory/caching` + notification wiring + seams + conformance suite** (target pattern §1–§7, with slice 1 as the proving consumer; real-ioredis CI test still open — no Redis service in CI)                                                                                                  | new package; `runtimes/node/src/server.ts`, `container.ts`, `cacheNotifications.ts`; `runtimes/cloudflare/.../container.ts`; `internal/conformance/src/cache-suite.ts`; kernel `ports/caching.ts` | —                                                             | —                                                                                                                                                 | —                                                                      | ✅ done                         | [#767](https://github.com/kibertoad/cat-factory/pull/767) |
 | 1   | **Fragment catalog** — `FragmentLibraryService.resolveCatalog` (per-dispatch tenant merge)                                                                                                                                                                                                                  | `agents/src/fragmentLibrary/FragmentLibraryService.ts`                                                                                                                                            | group `workspaceId`, key `workspaceId` (see pilot deviations) | fragment `create`/`update`/`remove`/`createFromDocument`/`refresh` + the run-time document-body re-resolve; `FragmentSourceService.sync`/`unlink` | no                                                                     | ✅ done                         | [#767](https://github.com/kibertoad/cat-factory/pull/767) |
-| 2   | **Doc-backed fragment bodies** — replace `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS` with the `fragmentDocumentBody` loader + version probe. (The git fragment-source `status()` half was evaluated and **dropped** — see the conventions note; it's a cold, must-be-live UI action with no hot read path to cache.) | `agents/src/fragmentLibrary/FragmentLibraryService.ts`; `kernel/ports/{document-source,caching}.ts`; `caching/src/appCaches.ts`; `integrations/.../documents/*Provider.ts`                        | group `viaWorkspaceId`, key `<source>:<externalId>`           | fragment `create`/`refresh`/`update`/`remove` (best-effort; the version probe bounds staleness regardless)                                        | **yes** (provider `version` token vs cached `DocumentContent.version`) | ✅ done                         | _this PR_                                                 |
-| 3   | **Repo projection + `resolveRepoTarget`** — `repoProjectionRepository.list` + ancestry walk (per dispatch, per poll tick)                                                                                                                                                                                   | `server/src/agents/resolveRepoTarget.ts`; `GitHubSyncService`; `BoardService` link/reparent                                                                                                       | group `workspaceId`                                           | GitHub sync + webhooks; `linkBlock`; reparent                                                                                                     | no                                                                     | ⬜ todo                         |                                                           |
+| 2   | **Doc-backed fragment bodies** — replace `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS` with the `fragmentDocumentBody` loader + version probe. (The git fragment-source `status()` half was evaluated and **dropped** — see the conventions note; it's a cold, must-be-live UI action with no hot read path to cache.) | `agents/src/fragmentLibrary/FragmentLibraryService.ts`; `kernel/ports/{document-source,caching}.ts`; `caching/src/appCaches.ts`; `integrations/.../documents/*Provider.ts`                        | group `viaWorkspaceId`, key `<source>:<externalId>`           | fragment `create`/`refresh`/`update`/`remove` (best-effort; the version probe bounds staleness regardless)                                        | **yes** (provider `version` token vs cached `DocumentContent.version`) | ✅ done                         | [#782](https://github.com/kibertoad/cat-factory/pull/782) |
+| 3   | **Repo projection** — `repoProjectionRepository.list` (per dispatch, per poll tick). Caches the whole-projection re-list only; the installation lookup + tree-depth-bounded ancestry walk stay live (so reparent/service-link need no invalidation). See the slice-3 findings.                              | `server/src/agents/resolveRepoTarget.ts`, `ContainerRepoBootstrapper.ts`; `integrations/.../github/{GitHubSyncService,WebhookService}.ts`; `orchestration/src/container.ts`                       | group `workspaceId`, key `workspaceId`                        | `GitHubSyncService` link/monorepo/setLinkedRepos/syncRepo + `WebhookService` installation-removed tombstone + `ContainerRepoBootstrapper` project | no                                                                     | ✅ done                         | _this PR_                                                 |
 | 4   | **`RepoFiles.getFile`/`listDirectory`** — repo-op idempotency re-reads (`blueprintPostOp`, `specPostOp`, spec excerpts)                                                                                                                                                                                     | `server/src/agents/repoFiles.ts`; `agents/src/repo-ops/builtin.ts`                                                                                                                                | `(installationId, owner, repo, ref, path)`                    | own `commitFiles` (self-invalidate the branch group); push webhook where ingested                                                                 | **yes** for branch refs (`headSha`); pinned shas immutable             | ⬜ todo                         |                                                           |
 | 5   | **Workspace capabilities + per-workspace `GET /models`**                                                                                                                                                                                                                                                    | `server/src/agents/providerCapabilities.ts`; `ModelController.ts`                                                                                                                                 | `(workspaceId, userId)`                                       | API-key / subscription / local-endpoint / OpenRouter-catalog writes                                                                               | no                                                                     | ⬜ todo                         |                                                           |
 | 6   | **`LocalSettingsService`** — migrate the bespoke 5s cache (multi-replica correctness win: today a peer serves stale settings for the TTL)                                                                                                                                                                   | `integrations/src/modules/localSettings/LocalSettingsService.ts`                                                                                                                                  | singleton key                                                 | `write()`                                                                                                                                         | no                                                                     | ⬜ todo                         |                                                           |
@@ -250,6 +250,55 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
     `createFromDocument`/`refresh`. This is why the loader load does NOT persist or invalidate
     the catalog (slice 1's churn-on-every-refresh is gone). Body-cache invalidation on writes
     is best-effort — the version probe bounds staleness even if a group can't be resolved.
+- **Slice 3 findings (carry forward):**
+  - **`linkBlock` is gone — the checklist's original invalidation list was stale.** Block→repo
+    linkage no longer lives on `github_repos.block_id`; it flows through the account-owned
+    `Service` (`getByFrameBlock` → `repoGithubId`/`directory`). So there is no `linkBlock`
+    write to invalidate, and the resolver's linkage read is the (live) ancestry walk.
+  - **Cache the projection LIST only, not the whole `resolveRepoTarget` result.** Caching the
+    full resolved target (keyed by block) would have to invalidate on installation writes
+    (many fan-out sites needing a new `listWorkspacesForInstallation` port consumer), on every
+    `Service` repo-link write (~6 sites across board/bootstrap/seed), AND on reparent — a
+    sprawling, drift-prone surface for a mostly-bounded read. Instead slice 3 caches ONLY the
+    unbounded `repoProjectionRepository.list(workspaceId)` re-list (group=key=`workspaceId`,
+    same shape as slice 1). The installation lookup (one cheap read) and the block ancestry
+    walk (bounded by tree depth ≤3: task→module→frame) stay live, so **reparent and
+    service-link changes need NO cache invalidation** — the entire invalidation surface is the
+    projection's own writes, fully enumerable across the GitHub sync/webhook services plus the
+    board + bootstrap monorepo/link writes.
+  - **Every projection-write site has a `workspaceId` in scope** (a method param, or the
+    fan-out loop var in `syncRepo`/the webhook tombstone), so invalidation is always a per-ws
+    `invalidateGroup` — no coarse `invalidateAll` needed. The wired sites:
+    `GitHubSyncService.{setRepoMonorepo,linkRepo,linkPersonalRepo,setLinkedRepos,syncRepo}`,
+    `BoardService.addServiceFromRepo` (the monorepo-flag write on the import-existing-repo
+    path — it writes `setMonorepo` directly, NOT via `GitHubSyncService`, so it carries its own
+    invalidation), `WebhookService.handleInstallation` (installation_repositories removed), and
+    `ContainerRepoBootstrapper.projectBootstrappedRepo`. The push/check_run webhook events
+    write OTHER projection tables the resolver never lists, so they do NOT invalidate it.
+  - **`syncRepo` invalidates only on a `full` (link-time) pass.** An incremental resync
+    (`full` false — queue consumer / periodic reconcile) re-stamps the STORED repo row, so only
+    `syncedAt` changes (not a resolver-visible field) and invalidating would just churn the
+    per-workspace entry the durable poll ticks reuse. A `full` pass carries freshly-FETCHED
+    metadata that a workspace SHARING the repo may hold stale, so it still drops each
+    fanned-out workspace's group.
+  - **`GitHubSyncService`/`WebhookService` are wired in the SHARED composition root**
+    (`orchestration/createGitHubModule`), and `BoardService` gets the same handle from
+    `createCore`, so both runtimes get the invalidation uniformly; only the resolver read + the
+    bootstrapper are per-facade. On the Worker the cache is pass-through (mutable D1 state,
+    isolate-safe), so its resolver reads live and its invalidations are no-ops — correct, not a
+    gap (same class as `fragmentCatalog`). **Local mode is pass-through too:** it seeds the
+    projection via the out-of-process `link-repo` CLI and runs single-node with no invalidation
+    bus, so an in-memory TTL'd entry could serve a pre-link projection — `startLocal` passes a
+    `cachesProfile` that disables `repoProjection` (same isolate-safe reasoning as the Worker).
+    So the cache is active on the multi-node-capable Node facade only.
+  - **Cross-runtime conformance is deferred (documented, like the pilot's real-ioredis test).**
+    The conformance harness runs with GitHub OFF (no installation), so `resolveRepoTarget`
+    short-circuits to `null` and an HTTP write-then-read coherence test à la slice 1 isn't
+    reachable without wiring a full GitHub connection into the harness. The read-through +
+    per-site invalidation contract is instead proven by runtime-independent unit tests on the
+    SHARED code (`server` resolver read-through/invalidation, `integrations`
+    `GitHubSyncService`/`WebhookService` invalidation, the `caching` bag field). Promote to a
+    conformance assertion if the harness gains an installation+projection seam.
 
 ## Out of scope
 
