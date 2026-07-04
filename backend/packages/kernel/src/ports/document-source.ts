@@ -27,6 +27,15 @@ export interface DocumentContent {
   url: string
   /** Body normalized to lightweight Markdown (consumed by the planner/excerpt). */
   body: string
+  /**
+   * Opaque version token for the fetched content — a value that changes iff the
+   * page changed (Confluence version number, Notion `last_edited_time`, a git
+   * commit sha, a design-file version). Comparable only by equality; it is the
+   * value {@link DocumentSourceProvider.probeVersion} returns, so the caching seam
+   * can confirm a cached body is still current with a cheap metadata probe instead
+   * of re-fetching the whole page. `''` when the source exposes no version.
+   */
+  version: string
 }
 
 /** The result of validating + normalizing connect credentials. */
@@ -51,6 +60,14 @@ export interface DocumentSourceProvider {
   parseRef(input: string): string | null
   /** Fetch a single page by its id using the connection credentials. */
   fetchDocument(credentials: DocumentCredentials, externalId: string): Promise<DocumentContent>
+  /**
+   * Cheaply read the page's current version token — the {@link DocumentContent.version}
+   * value {@link fetchDocument} would return, fetched with metadata only (no body
+   * download or Markdown conversion). MUST be strictly cheaper than `fetchDocument`,
+   * so the caching seam can bump a cached body's TTL when the token is unchanged
+   * instead of re-fetching. Returns `''` when the source exposes no version.
+   */
+  probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string>
   /**
    * Search the source's catalogue by free text and return lean hits (no body).
    * Optional: a provider that only supports paste-a-URL import omits it (and its
@@ -83,6 +100,13 @@ export interface DocumentContentResolver {
     source: DocumentSourceKind,
     externalId: string,
   ): Promise<DocumentContent>
+  /**
+   * Cheaply probe the page's current version token (see
+   * {@link DocumentSourceProvider.probeVersion}) — the staleness check the caching
+   * seam runs against a cached body's {@link DocumentContent.version}. Throws on the
+   * same unreachable/not-connected conditions as {@link fetch}.
+   */
+  probeVersion(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<string>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

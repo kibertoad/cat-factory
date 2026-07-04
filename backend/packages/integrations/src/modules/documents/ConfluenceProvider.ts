@@ -110,6 +110,11 @@ interface ContentResponse {
   _links?: { base?: string; webui?: string }
 }
 
+/** The page's monotonic version number as the opaque staleness token (`''` if absent). */
+function versionToken(json: ContentResponse): string {
+  return json.version?.number !== undefined ? String(json.version.number) : ''
+}
+
 export class ConfluenceProvider implements DocumentSourceProvider {
   readonly kind = 'confluence' as const
   readonly descriptor = CONFLUENCE_DESCRIPTOR
@@ -140,7 +145,37 @@ export class ConfluenceProvider implements DocumentSourceProvider {
     externalId: string,
   ): Promise<DocumentContent> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
-    const url = `${base}/wiki/rest/api/content/${encodeURIComponent(externalId)}?expand=body.storage,version`
+    // Expand the body AND the version so the fetched content carries its version token.
+    const json = await this.getContent(credentials, externalId, 'body.storage,version')
+
+    const linkBase = json._links?.base ?? `${base}/wiki`
+    const webui = json._links?.webui ?? ''
+    return {
+      externalId: json.id!,
+      title: json.title ?? '(untitled)',
+      url: `${linkBase}${webui}`,
+      body: confluenceLogic.confluenceStorageToMarkdown(json.body?.storage?.value ?? ''),
+      version: versionToken(json),
+    }
+  }
+
+  /**
+   * The cheap version probe: expand ONLY `version` (no `body.storage`), so the
+   * page's XHTML is neither transferred nor converted — the staleness check costs
+   * a metadata read, not a full fetch.
+   */
+  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+    return versionToken(await this.getContent(credentials, externalId, 'version'))
+  }
+
+  /** Shared content read; `expand` selects how much of the page is materialised. */
+  private async getContent(
+    credentials: DocumentCredentials,
+    externalId: string,
+    expand: string,
+  ): Promise<ContentResponse> {
+    const base = credentials.baseUrl!.replace(/\/+$/, '')
+    const url = `${base}/wiki/rest/api/content/${encodeURIComponent(externalId)}?expand=${expand}`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
 
     const res = await safeFetch(
@@ -178,15 +213,7 @@ export class ConfluenceProvider implements DocumentSourceProvider {
         `Confluence returned an unexpected body for page ${externalId}`,
       )
     }
-
-    const linkBase = json._links?.base ?? `${base}/wiki`
-    const webui = json._links?.webui ?? ''
-    return {
-      externalId: json.id,
-      title: json.title ?? '(untitled)',
-      url: `${linkBase}${webui}`,
-      body: confluenceLogic.confluenceStorageToMarkdown(json.body?.storage?.value ?? ''),
-    }
+    return json
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {

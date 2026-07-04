@@ -1,7 +1,9 @@
 import type {
   DocumentContent,
   DocumentContentResolver,
+  DocumentCredentials,
   DocumentSourceKind,
+  DocumentSourceProvider,
   DocumentSourceRegistry,
 } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
@@ -29,11 +31,29 @@ export class DocumentContentResolverService implements DocumentContentResolver {
     source: DocumentSourceKind,
     externalId: string,
   ): Promise<DocumentContent> {
+    const { provider, credentials } = await this.resolve(workspaceId, source)
+    return provider.fetchDocument(credentials, externalId)
+  }
+
+  async probeVersion(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<string> {
+    const { provider, credentials } = await this.resolve(workspaceId, source)
+    return provider.probeVersion(credentials, externalId)
+  }
+
+  /** Resolve the provider + this workspace's connection credentials for a source. */
+  private async resolve(
+    workspaceId: string,
+    source: DocumentSourceKind,
+  ): Promise<{ provider: DocumentSourceProvider; credentials: DocumentCredentials }> {
     const provider = this.deps.registry.get(source)
     if (!provider) {
       throw new ValidationError(`Unknown or unconfigured document source '${source}'`)
     }
     const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
-    return provider.fetchDocument(connection.credentials, externalId)
+    return { provider, credentials: connection.credentials }
   }
 }

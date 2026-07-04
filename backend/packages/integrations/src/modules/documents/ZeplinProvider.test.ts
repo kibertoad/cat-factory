@@ -58,6 +58,38 @@ describe('ZeplinProvider.fetchDocument', () => {
     expect(doc.body).toContain('- Colors › primary = #ff0000')
   })
 
+  it("captures the project's updated timestamp as the version token", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/projects/p1')) return jsonResponse({ name: 'Acme', updated: 1751600000 })
+        if (url.includes('/screens')) return jsonResponse([{ id: 's1', name: 'Home' }])
+        return jsonResponse([])
+      }),
+    )
+    const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1')
+    expect(doc.version).toBe('1751600000')
+  })
+})
+
+describe('ZeplinProvider.probeVersion', () => {
+  it('reads ONLY the project object for its updated timestamp (no screens/components)', async () => {
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url)
+        if (url.endsWith('/projects/p1')) return jsonResponse({ name: 'Acme', updated: 1751600000 })
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+    const version = await new ZeplinProvider().probeVersion(TOKEN, 'p1:s1')
+    expect(version).toBe('1751600000')
+    // The probe is a single project read — it never touches the screen/component reads.
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.endsWith('/projects/p1')).toBe(true)
+  })
+
   it('drops an unreadable SUPPLEMENTARY section (tokens) instead of failing the import', async () => {
     vi.stubGlobal(
       'fetch',
