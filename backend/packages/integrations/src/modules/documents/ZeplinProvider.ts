@@ -77,7 +77,7 @@ export class ZeplinProvider implements DocumentSourceProvider {
     }
 
     // Primary read: validates the token + that the project exists (throws on a bad token).
-    const project = await this.get<{ name?: string }>(
+    const project = await this.get<{ name?: string; updated?: string | number }>(
       credentials,
       `/projects/${encodeURIComponent(projectId)}`,
     )
@@ -121,7 +121,25 @@ export class ZeplinProvider implements DocumentSourceProvider {
       title: context.title,
       url: context.url,
       body,
+      version: project.updated !== undefined ? String(project.updated) : '',
     }
+  }
+
+  /**
+   * The cheap version probe: read only the project object for its `updated`
+   * timestamp, skipping the screens + components + design-token reads that make up
+   * the bulk of a full fetch.
+   */
+  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+    const { projectId } = splitZeplinExternalId(externalId)
+    if (!projectId) {
+      throw new ZeplinApiError(400, `Zeplin ref is missing a project id: ${externalId}`)
+    }
+    const project = await this.get<{ updated?: string | number }>(
+      credentials,
+      `/projects/${encodeURIComponent(projectId)}`,
+    )
+    return project.updated !== undefined ? String(project.updated) : ''
   }
 
   /** Fetch the single referenced screen, or a bounded list of the project's screens. */

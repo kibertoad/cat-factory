@@ -39,10 +39,24 @@ write processed by another isolate — a correctness bug, not an optimization. T
 Worker therefore wires the isolate-safe profile: caches of mutable state are
 configured **pass-through** (`enabled: false` — every read runs its load), and only
 caches of immutable or self-verifying entries (sha-pinned repo reads, static
-catalogs) get real TTLs as later slices add them. Distributed invalidation is a
+catalogs) get real TTLs. Distributed invalidation is a
 genuine Node-only concern, not a facade-parity gap: the Worker's cross-instance state
 already lives in globally-addressed Durable Objects / D1. Revisit only if a
 per-isolate staleness bug actually surfaces.
+
+`fragmentDocumentBody` is the first self-verifying cache that stays **enabled** on the
+Worker: its entries are external Confluence/Notion/GitHub/… page content re-validated
+by the source's cheap version probe (`ttlLeftBeforeRefreshInMsecs` + `isStillCurrent`),
+so a peer isolate's cached body self-heals within the refresh window without an
+invalidation bus — its staleness is bounded by the probe, exactly like a sha-pinned
+read. Only `fragmentCatalog`, which mirrors our own mutable D1 rows, passes through.
+
+## Named caches
+
+| Cache                  | Value                                           | Group / key                                | Profile                                      |
+| ---------------------- | ----------------------------------------------- | ------------------------------------------ | -------------------------------------------- |
+| `fragmentCatalog`      | merged per-workspace catalog                    | `workspaceId` / `workspaceId`              | TTL + invalidation; pass-through on Worker   |
+| `fragmentDocumentBody` | a document-backed fragment's live external body | `viaWorkspaceId` / `<source>:<externalId>` | TTL + version probe; enabled on both facades |
 
 ## Usage
 

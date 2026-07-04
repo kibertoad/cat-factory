@@ -335,10 +335,19 @@ describe('createAppCaches (notification pair across two instances)', () => {
 })
 
 describe('profiles', () => {
-  it('the isolate-safe profile only flips enabled off, keeping the tuning intact', () => {
+  it('the isolate-safe profile only flips the DB-backed catalog to pass-through', () => {
     expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentCatalog).toEqual({
       ...DEFAULT_APP_CACHES_PROFILE.fragmentCatalog,
       enabled: false,
     })
+  })
+
+  it('keeps the self-verifying document-body cache enabled on the isolate-safe profile', () => {
+    // Its entries are external page content re-validated by a cheap version probe,
+    // so a Worker isolate can hold a real TTL without a cross-isolate bus.
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody).toEqual(
+      DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody,
+    )
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody.enabled).toBe(true)
   })
 })

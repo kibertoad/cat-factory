@@ -1,3 +1,4 @@
+import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,16 @@ export interface GroupCacheHandle<T> {
 export interface AppCaches {
   /** The merged per-workspace prompt-fragment catalog, grouped by workspace id. */
   fragmentCatalog: GroupCacheHandle<ResolvedCatalogEntry[]>
+  /**
+   * The live body of a document-backed prompt fragment (the external
+   * Confluence/Notion/GitHub/… page), grouped by the workspace whose connection
+   * fetches it and keyed by `<source>:<externalId>`. A self-verifying cache: an
+   * entry entering its refresh window runs the source's cheap version probe and
+   * keeps its cached body when the page hasn't moved, so an agent run reads a
+   * fragment body without blocking on a live page fetch. Explicit writes (a
+   * fragment refresh/edit) invalidate it directly.
+   */
+  fragmentDocumentBody: GroupCacheHandle<DocumentContent>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }

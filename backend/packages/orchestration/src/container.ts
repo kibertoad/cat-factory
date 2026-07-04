@@ -671,8 +671,6 @@ export interface CoreDependencies {
    * document as a fragment is rejected and run resolution uses cached bodies.
    */
   documentContentResolver?: DocumentContentResolver
-  /** Freshness window for a document-backed fragment body; defaults to 5 min. */
-  documentFragmentTtlMs?: number
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action
@@ -1816,8 +1814,8 @@ function createFragmentLibraryModule(
     // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
     // one the document-source module built from this deployment's providers.
     documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
-    documentFragmentTtlMs: deps.documentFragmentTtlMs,
     catalogCache: caches.fragmentCatalog,
+    documentBodyCache: caches.fragmentDocumentBody,
   })
 
   const sourceService =

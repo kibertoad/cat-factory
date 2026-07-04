@@ -57,11 +57,20 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
     const installationId = await this.resolveInstallationId(id.owner)
-    const file = await this.deps.githubClient.getFileContent(
-      installationId,
-      { owner: id.owner, repo: id.repo },
-      id.path,
-    )
+    // Read the body and the file's head commit sha together; the commit sha is the
+    // version token `probeVersion` re-reads cheaply (metadata, no file body).
+    const [file, commitSha] = await Promise.all([
+      this.deps.githubClient.getFileContent(
+        installationId,
+        { owner: id.owner, repo: id.repo },
+        id.path,
+      ),
+      this.deps.githubClient.latestCommitSha(
+        installationId,
+        { owner: id.owner, repo: id.repo },
+        id.path,
+      ),
+    ])
     if (!file) {
       throw new ConflictError(`GitHub file "${id.path}" was not found in ${id.owner}/${id.repo}`)
     }
@@ -70,7 +79,27 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
       title: githubDocsLogic.githubDocTitle(id.path),
       url: githubDocsLogic.githubDocUrl(id),
       body: file.content,
+      version: commitSha ?? '',
     }
+  }
+
+  /**
+   * The cheap version probe: the head commit sha touching the file's path — one
+   * commit-list read, no file body. Any commit to the file advances it, so an
+   * unchanged sha means the doc body is still current.
+   */
+  async probeVersion(_credentials: DocumentCredentials, externalId: string): Promise<string> {
+    const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
+    if (!id) {
+      throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
+    }
+    const installationId = await this.resolveInstallationId(id.owner)
+    const commitSha = await this.deps.githubClient.latestCommitSha(
+      installationId,
+      { owner: id.owner, repo: id.repo },
+      id.path,
+    )
+    return commitSha ?? ''
   }
 
   async search(
