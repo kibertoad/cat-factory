@@ -2193,6 +2193,14 @@ export class ExecutionService {
     // throws — which the resolver's fall-through would then misread as a failed merge
     // and downgrade the block to `pr_ready`. `done` already means "merged"; keep it.
     if (block.status === 'done') return { kind: 'merged' }
+    // Same idempotency guard for a PARTIALLY-merged multi-repo task: the first pass merged some
+    // PRs, then one failed, so it left the block `blocked` and raised the enumerated card. A
+    // durable-driver replay must NOT re-run the merge — re-merging the already-merged PRs throws
+    // (GitHub 405) and would be misread as a TOTAL failure (`merged.length === 0` → throw → the
+    // resolver downgrades the block to `pr_ready` + raises a SECOND card). The merger step only
+    // ever enters `finalizeMerge` on an already-`blocked` block on such a replay (the manual
+    // `mergePr` path gates on `pr_ready`), so return the already-recorded partial outcome.
+    if (block.status === 'blocked') return { kind: 'partial', merged: [], unmerged: [] }
     // Merge every PR the task opened (own-service + peers) — not just `block.pullRequest`, since a
     // multi-repo task can have changed ONLY peer repos (own service untouched, no own PR).
     const ordered = orderPrsForMerge(

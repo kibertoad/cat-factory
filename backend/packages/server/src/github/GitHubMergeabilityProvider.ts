@@ -8,7 +8,7 @@ import type {
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
-import { splitRepo } from './GitHubCiStatusProvider.js'
+import { splitRepo } from './repoFullName.js'
 
 export interface GitHubMergeabilityProviderDependencies {
   githubClient: GitHubClient
@@ -40,34 +40,35 @@ export class GitHubMergeabilityProvider implements PullRequestMergeabilityProvid
     if (!ownTarget) return { repos: [] }
     const installationId = ownTarget.installationId
 
-    // One remote round-trip per PR (each is a distinct GitHub PR). The block is read once.
-    const repos: RepoMergeability[] = []
-    for (const pr of prs) {
-      const [owner, name] = pr.repo ? splitRepo(pr.repo) : [ownTarget.owner, ownTarget.name]
-      const repoFull = `${owner}/${name}`
-      const number = pr.ref.number
-      if (number === undefined) {
-        repos.push({
+    // One remote round-trip per PR (each is a distinct GitHub PR), independent across repos, so
+    // run them concurrently. The block is read once (above). Order preserved: own PR first.
+    const repos: RepoMergeability[] = await Promise.all(
+      prs.map(async (pr): Promise<RepoMergeability> => {
+        const [owner, name] = pr.repo ? splitRepo(pr.repo) : [ownTarget.owner, ownTarget.name]
+        const repoFull = `${owner}/${name}`
+        const number = pr.ref.number
+        if (number === undefined) {
+          return {
+            repo: repoFull,
+            ...(pr.frameId ? { frameId: pr.frameId } : {}),
+            headSha: null,
+            verdict: 'unknown',
+          }
+        }
+        const { mergeable, mergeableState, headSha } =
+          await this.deps.githubClient.getPullRequestMergeability(
+            installationId,
+            { owner, repo: name },
+            number,
+          )
+        return {
           repo: repoFull,
           ...(pr.frameId ? { frameId: pr.frameId } : {}),
-          headSha: null,
-          verdict: 'unknown',
-        })
-        continue
-      }
-      const { mergeable, mergeableState, headSha } =
-        await this.deps.githubClient.getPullRequestMergeability(
-          installationId,
-          { owner, repo: name },
-          number,
-        )
-      repos.push({
-        repo: repoFull,
-        ...(pr.frameId ? { frameId: pr.frameId } : {}),
-        headSha,
-        verdict: classifyMergeability(mergeable, mergeableState),
-      })
-    }
+          headSha,
+          verdict: classifyMergeability(mergeable, mergeableState),
+        }
+      }),
+    )
     return { repos }
   }
 }

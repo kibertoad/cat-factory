@@ -20,6 +20,7 @@ import {
   describeFailingRepos,
   describeRegressedSignals,
   FIXER_AGENT_KIND,
+  headFields,
   HUMAN_REVIEW_AGENT_KIND,
   isCiGreen,
   isProviderWired,
@@ -76,16 +77,11 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
     const repos = report.repos
     const verdict = aggregateRepoCi(repos)
     const multi = repos.length > 1
-    const headSha = repos[0]?.headSha ?? null
-    const headShas = Object.fromEntries(
-      repos.filter((r) => r.headSha).map((r) => [r.repo, r.headSha as string]),
-    )
     const totalChecks = repos.reduce((n, r) => n + r.checks.length, 0)
     if (isCiGreen(verdict)) {
       return {
         status: 'pass',
-        headSha,
-        ...(multi ? { headShas } : {}),
+        ...headFields(repos),
         passOutput:
           verdict === 'none'
             ? 'CI gate passed: no checks configured for the PR head(s).'
@@ -94,11 +90,10 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
               : `CI gate passed: ${totalChecks} check(s) green.`,
       }
     }
-    if (verdict === 'pending') return { status: 'pending', headSha, ...(multi ? { headShas } : {}) }
+    if (verdict === 'pending') return { status: 'pending', ...headFields(repos) }
     return {
       status: 'fail',
-      headSha,
-      ...(multi ? { headShas } : {}),
+      ...headFields(repos),
       failureSummary: describeFailingRepos(repos),
       failingChecks: listFailingChecksAcrossRepos(repos),
     }
@@ -154,40 +149,64 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
       }
     }
     const multi = report.repos.length > 1
-    const headSha = report.repos[0]?.headSha ?? null
-    const headShas = Object.fromEntries(withPr.map((r) => [r.repo, r.headSha as string]))
+    const heads = headFields(withPr)
     // Any PR GitHub is still computing → keep polling.
     if (withPr.some((r) => r.verdict === 'unknown')) {
-      return { status: 'pending', headSha, ...(multi ? { headShas } : {}) }
+      return { status: 'pending', ...heads }
     }
     const conflicted = withPr.find((r) => r.verdict === 'conflicted')
     if (!conflicted) {
       return {
         status: 'pass',
-        headSha,
-        ...(multi ? { headShas } : {}),
+        ...heads,
         passOutput: multi
           ? `Conflict gate passed: all ${withPr.length} PRs merge cleanly with their base.`
           : 'Conflict gate passed: the PR merges cleanly with its base.',
       }
     }
+    // The single-repo conflict-resolver can only touch the OWN repo, so a conflict on a PEER
+    // repo (own-first, so any non-first entry — carrying a `frameId`) is NOT auto-fixable here:
+    // decline escalation so the engine goes straight to the manual-resolution give-up instead
+    // of burning the whole attempt budget on an own-repo resolver that can't reach it. (Peer-repo
+    // resolver dispatch is a tracked follow-up; see the service-connections Phase 4 tracker.)
+    const isPeerConflict = conflicted.frameId !== undefined
     return {
       status: 'fail',
+      ...heads,
       headSha: conflicted.headSha,
-      ...(multi ? { headShas } : {}),
-      conflictTarget: {
-        repo: conflicted.repo,
-        ...(conflicted.frameId ? { frameId: conflicted.frameId } : {}),
-      },
-      ...(multi ? { failureSummary: `${conflicted.repo} conflicts with its base.` } : {}),
+      ...(isPeerConflict ? { escalatable: false } : {}),
+      // Only tag the conflicted repo on a MULTI-repo block — a single-repo block has just the
+      // own repo, which the port documents as the implicit (absent) target.
+      ...(multi
+        ? {
+            conflictTarget: {
+              repo: conflicted.repo,
+              ...(conflicted.frameId ? { frameId: conflicted.frameId } : {}),
+            },
+            failureSummary: `${conflicted.repo} conflicts with its base.`,
+          }
+        : {}),
     }
   },
-  onExhausted: async ({ step }) => ({
-    error:
-      `The pull request still conflicts with its base after ` +
-      `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
-      `manually, then retry the run.`,
-  }),
+  onExhausted: async ({ step }) => {
+    const target = step.gate?.conflictTarget
+    // A peer-repo conflict was never escalated (the own-repo resolver can't fix it), so phrase
+    // the give-up around manual resolution rather than "after N attempts".
+    if (target && (step.gate?.attempts ?? 0) === 0) {
+      return {
+        error:
+          `The pull request for ${target.repo} conflicts with its base and can't be ` +
+          `auto-resolved (peer-repo conflict resolution isn't wired yet). Resolve the ` +
+          `conflict manually, then retry the run.`,
+      }
+    }
+    return {
+      error:
+        `The pull request still conflicts with its base after ` +
+        `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
+        `manually, then retry the run.`,
+    }
+  },
 })
 
 /** Raise a `release_regression` notification carrying the on-call assessment + signals. */

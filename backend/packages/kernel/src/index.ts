@@ -180,6 +180,7 @@ export {
   type ReleaseGateVerdict,
   aggregateCi,
   aggregateRepoCi,
+  headFields,
   isCiGreen,
   listFailingChecks,
   listFailingChecksAcrossRepos,

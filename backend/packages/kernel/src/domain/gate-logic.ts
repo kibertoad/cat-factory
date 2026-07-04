@@ -143,6 +143,25 @@ export function aggregateRepoCi(repos: RepoCiStatus[]): CiVerdict {
   return aggregateCi(repos.flatMap((r) => r.checks))
 }
 
+/**
+ * The head-commit fields a gate probe records for a per-repo report: the scalar `headSha`
+ * (the own-service PR head — the first entry) plus, for a MULTI-repo block only, the per-repo
+ * `headShas` map keyed by repo full name. Collapses the repeated
+ * `headSha` + `...(multi ? { headShas } : {})` shape both gate probes were open-coding.
+ * A single-repo block (0 or 1 entry) omits `headShas` so callers fall back to the scalar.
+ */
+export function headFields(repos: { repo: string; headSha: string | null }[]): {
+  headSha: string | null
+  headShas?: Record<string, string>
+} {
+  const headSha = repos[0]?.headSha ?? null
+  if (repos.length <= 1) return { headSha }
+  const headShas = Object.fromEntries(
+    repos.filter((r) => r.headSha).map((r) => [r.repo, r.headSha as string]),
+  )
+  return { headSha, headShas }
+}
+
 /** The completed-and-failing checks across every repo, each tagged with its repo full name. */
 export function listFailingChecksAcrossRepos(
   repos: RepoCiStatus[],

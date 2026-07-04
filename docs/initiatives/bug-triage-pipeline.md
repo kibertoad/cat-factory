@@ -147,8 +147,10 @@ Notes carried forward (mirrored in the service-connections tracker's Phase 4 row
 
 - **† Conflict-resolver peer targeting** — the conflicts gate detects conflicts across every PR and
   stashes the first conflicted repo on `step.gate.conflictTarget`; dispatching the resolver AT a
-  peer repo is a follow-up (a peer-only conflict currently degrades to the manual-resolution
-  notification). Relevant to Phase F/G, which reuse the gate helpers.
+  peer repo is a follow-up. A peer-only conflict now fast-fails to the manual-resolution give-up
+  (the gate returns `escalatable: false` so the engine doesn't burn the attempt budget on the
+  own-repo resolver that can't reach it) rather than looping the wrong resolver. Relevant to
+  Phase F/G, which reuse the gate helpers.
 - **‡ Merger combined-diff** — the engine merges ALL PRs in provider-before-consumer order, but the
   `merger` agent still scores the own-repo diff only (scoring the combined sibling-workspace diff
   needs a harness bump — deferred to keep this phase harness-free).

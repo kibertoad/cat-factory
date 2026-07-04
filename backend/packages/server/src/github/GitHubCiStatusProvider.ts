@@ -7,6 +7,7 @@ import type {
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
+import { splitRepo } from './repoFullName.js'
 
 export interface GitHubCiStatusProviderDependencies {
   githubClient: GitHubClient
@@ -42,42 +43,35 @@ export class GitHubCiStatusProvider implements CiStatusProvider {
     const installationId = ownTarget.installationId
 
     // One remote round-trip per PR is unavoidable — each PR is a distinct GitHub repo/branch
-    // with no cross-repo check-runs API. The block itself is read once (not per PR), so this
-    // is not a repository-layer N+1.
-    const repos: RepoCiStatus[] = []
-    for (const pr of prs) {
-      const [owner, name] = pr.repo ? splitRepo(pr.repo) : [ownTarget.owner, ownTarget.name]
-      const repoFull = `${owner}/${name}`
-      const branch = pr.ref.branch
-      if (!branch) {
-        repos.push({ repo: repoFull, headSha: null, checks: [] })
-        continue
-      }
-      const ref = { owner, repo: name }
-      const commits = await this.deps.githubClient.listCommits(installationId, ref, { sha: branch })
-      const headSha = commits.items[0]?.sha ?? null
-      if (!headSha) {
-        repos.push({ repo: repoFull, headSha: null, checks: [] })
-        continue
-      }
-      const checks = await this.deps.githubClient.listCheckRuns(installationId, ref, headSha)
-      repos.push({
-        repo: repoFull,
-        headSha,
-        checks: checks.items.map((c) => ({
-          name: c.name,
-          status: c.status,
-          conclusion: c.conclusion,
-          url: c.htmlUrl ?? null,
-        })),
-      })
-    }
+    // with no cross-repo check-runs API. Those per-PR reads are independent across repos, so
+    // run them concurrently (the block itself is read once, above — not a repository-layer
+    // N+1). Order is preserved: own-service PR first, then peers, so the gate reads the own
+    // head as `repos[0]`.
+    const repos: RepoCiStatus[] = await Promise.all(
+      prs.map(async (pr): Promise<RepoCiStatus> => {
+        const [owner, name] = pr.repo ? splitRepo(pr.repo) : [ownTarget.owner, ownTarget.name]
+        const repoFull = `${owner}/${name}`
+        const branch = pr.ref.branch
+        if (!branch) return { repo: repoFull, headSha: null, checks: [] }
+        const ref = { owner, repo: name }
+        const commits = await this.deps.githubClient.listCommits(installationId, ref, {
+          sha: branch,
+        })
+        const headSha = commits.items[0]?.sha ?? null
+        if (!headSha) return { repo: repoFull, headSha: null, checks: [] }
+        const checks = await this.deps.githubClient.listCheckRuns(installationId, ref, headSha)
+        return {
+          repo: repoFull,
+          headSha,
+          checks: checks.items.map((c) => ({
+            name: c.name,
+            status: c.status,
+            conclusion: c.conclusion,
+            url: c.htmlUrl ?? null,
+          })),
+        }
+      }),
+    )
     return { repos }
   }
-}
-
-/** Split an `owner/name` full name into its parts (an unslashed value is treated as the name). */
-export function splitRepo(full: string): [string, string] {
-  const i = full.indexOf('/')
-  return i === -1 ? ['', full] : [full.slice(0, i), full.slice(i + 1)]
 }

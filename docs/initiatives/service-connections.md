@@ -80,8 +80,9 @@ harness path via a widened `peerRepos` job body — no runner-image bump. `step.
 - **† Conflict-resolver peer-repo targeting.** The conflicts gate now probes mergeability across
   every PR and records the first conflicted repo on `step.gate.conflictTarget`. Dispatching the
   single-repo conflict-resolver AT a peer repo (vs the own repo) is a follow-up: a peer-only
-  conflict currently degrades to the small-budget "resolve manually" notification rather than
-  auto-resolving. The own-repo conflict path is unchanged.
+  conflict fast-fails to the "resolve manually" give-up — the gate returns `escalatable: false`
+  so the engine skips the own-repo resolver (which can't reach the peer) instead of burning the
+  whole attempt budget on it — rather than auto-resolving. The own-repo conflict path is unchanged.
 - **‡ Merger combined-diff.** The engine merges ALL PRs (`orderPrsForMerge`), but the `merger`
   agent still scores only the own-repo diff (unchanged harness — zero-harness-edit rule). Scoring
   the combined sibling-workspace diff needs a harness bump and is a follow-up.

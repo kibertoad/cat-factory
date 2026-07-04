@@ -2853,7 +2853,10 @@ export class RunDispatcher {
     }
 
     // probe.status === 'fail'.
-    const canEscalate = isAsyncAgentExecutor(this.agentExecutor)
+    // A gate can decline escalation for a failure its helper can't fix (e.g. the conflicts
+    // gate on a PEER-repo conflict it has no resolver for) — go straight to give-up instead
+    // of burning the attempt budget on a helper that can't touch the problem.
+    const canEscalate = isAsyncAgentExecutor(this.agentExecutor) && probe.escalatable !== false
     if (canEscalate && step.gate.attempts < step.gate.maxAttempts) {
       return this.dispatchGateHelper(
         workspaceId,

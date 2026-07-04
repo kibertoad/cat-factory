@@ -59,6 +59,15 @@ export interface GateProbe {
    * across all repos).
    */
   conflictTarget?: { repo: string; frameId?: string; branch?: string }
+  /**
+   * Whether a `fail` verdict may escalate to the helper agent. Defaults to `true` (the
+   * usual "dispatch the fixer / resolver" path). A gate sets it to `false` when the helper
+   * it has cannot fix this particular failure — e.g. the conflicts gate detects the conflict
+   * on a PEER repo but only has the single-repo (own-repo) conflict-resolver, so escalating
+   * would burn the whole attempt budget on a container that can't touch the conflicted repo.
+   * The engine then skips the dispatch and goes straight to {@link GateDefinition.onExhausted}.
+   */
+  escalatable?: boolean
   /** Step output recorded on `pass` (a short human-readable reason). */
   passOutput?: string
   /** A summary of what failed on `fail` — fed to the helper agent and the give-up error. */

@@ -3,6 +3,7 @@
 '@cat-factory/kernel': minor
 '@cat-factory/server': minor
 '@cat-factory/orchestration': minor
+'@cat-factory/gates': minor
 ---
 
 Service connections Phase 4 (= bug-triage Phase C) — multi-PR gates + merge-all. The `ci`,
@@ -27,3 +28,9 @@ body).
   a `MergeAllOutcome`.
 - Cross-runtime conformance asserts multi-repo CI aggregation + escalation on both runtimes;
   the merge-all ordering + provider fan-out are unit-tested.
+- A partially-merged multi-repo task (block left `blocked`) is now replay-idempotent: a
+  durable-driver retry no longer re-merges the already-merged PRs (which threw and downgraded
+  the block to `pr_ready` + raised a duplicate card).
+- A conflict on a PEER repo no longer burns the conflict-resolver attempt budget on the
+  own-repo resolver (which can't reach it): the gate declines escalation (`GateProbe.escalatable`)
+  and goes straight to the manual-resolution give-up. Own-repo conflicts are unchanged.

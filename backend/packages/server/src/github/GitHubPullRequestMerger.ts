@@ -6,7 +6,7 @@ import type {
   PullRequestMerger,
 } from '@cat-factory/kernel'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
-import { splitRepo } from './GitHubCiStatusProvider.js'
+import { splitRepo } from './repoFullName.js'
 import { logger } from '../observability/logger.js'
 
 export interface GitHubPullRequestMergerDependencies {
