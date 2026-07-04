@@ -486,18 +486,27 @@ export class FragmentLibraryService implements FragmentResolver {
     if (!ref || !this.documentResolver || entry.tier === 'builtin') return entry.body
     if (!this.documentBodyCache) return entry.body
     const resolver = this.documentResolver
-    // Re-read through the connection the fragment was linked/refreshed with — for an
-    // account-tier fragment that is a fixed workspace, not whichever workspace the run
-    // happens to be in (which may have no connection to this source). Pre-existing rows
-    // with no recorded workspace degrade to the run's own.
-    const via = entry.docViaWorkspaceId ?? workspaceId
+    // The connection workspace the body is cached + invalidated under. For a
+    // workspace-tier fragment that is its owning workspace (== the run's own). For an
+    // account-tier fragment it MUST be the recorded connection workspace, NOT the run's:
+    // the run can be any of the account's workspaces, so keying on it would fan the same
+    // document across N groups a later edit could never all invalidate. A legacy account
+    // row with none recorded can't be keyed stably, so it serves the durable persisted
+    // body — matching `invalidateDocumentBody`, which also skips it (best-effort).
+    const via = entry.docViaWorkspaceId ?? (entry.tier === 'account' ? null : workspaceId)
+    if (!via) return entry.body
     try {
       const content = await this.documentBodyCache.get(
         documentBodyKey(ref.source, ref.externalId),
         via,
         () => resolver.fetch(via, ref.source, ref.externalId),
-        async (cached) =>
-          (await resolver.probeVersion(via, ref.source, ref.externalId)) === cached.version,
+        async (cached) => {
+          // An empty version token means the source exposes no version to compare, so the
+          // probe can't confirm freshness — treat it as stale so the entry falls through
+          // to a real reload (bounded by the TTL) instead of being pinned forever.
+          if (!cached.version) return false
+          return (await resolver.probeVersion(via, ref.source, ref.externalId)) === cached.version
+        },
       )
       return content.body
     } catch {

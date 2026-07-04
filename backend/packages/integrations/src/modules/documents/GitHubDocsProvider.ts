@@ -57,20 +57,23 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
       throw new ValidationError(`"${externalId}" is not a valid GitHub doc reference`)
     }
     const installationId = await this.resolveInstallationId(id.owner)
-    // Read the body and the file's head commit sha together; the commit sha is the
-    // version token `probeVersion` re-reads cheaply (metadata, no file body).
-    const [file, commitSha] = await Promise.all([
-      this.deps.githubClient.getFileContent(
-        installationId,
-        { owner: id.owner, repo: id.repo },
-        id.path,
-      ),
-      this.deps.githubClient.latestCommitSha(
-        installationId,
-        { owner: id.owner, repo: id.repo },
-        id.path,
-      ),
-    ])
+    const ref = { owner: id.owner, repo: id.repo }
+    // Read the file's head commit sha FIRST (the version token), then read the body
+    // pinned to that exact sha, so the (body, version) pair is consistent: two unpinned
+    // parallel reads could straddle a commit and cache a stale body under a fresh
+    // version the probe would then treat as current and never reload. The sha is
+    // best-effort — a transient commits-API error (403 rate-limit, 5xx) must not fail
+    // the whole fetch when the body reads fine, so it degrades to an empty version token
+    // (which the cache treats as unverifiable ⇒ a TTL-bounded reload).
+    const commitSha = await this.deps.githubClient
+      .latestCommitSha(installationId, ref, id.path)
+      .catch(() => null)
+    const file = await this.deps.githubClient.getFileContent(
+      installationId,
+      ref,
+      id.path,
+      commitSha ?? undefined,
+    )
     if (!file) {
       throw new ConflictError(`GitHub file "${id.path}" was not found in ${id.owner}/${id.repo}`)
     }

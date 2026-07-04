@@ -248,6 +248,34 @@ describe('FragmentLibraryService — document-backed fragments', () => {
     expect(resolver.calls).toBe(2)
   })
 
+  it('re-fetches a versionless source instead of pinning its body forever', async () => {
+    // A source that exposes no version token always returns '' from the probe, so a
+    // naive `probe === cached.version` check ('' === '') would report "unchanged" every
+    // refresh window and never reload. The empty token must be treated as unverifiable so
+    // the body stays TTL-bounded rather than immortal.
+    let body = 'A'
+    const resolver = fakeResolver(() => body, { version: () => '' })
+    const svc = new FragmentLibraryService({
+      promptFragmentRepository: repo,
+      workspaceRepository: workspaces,
+      clock,
+      documentContentResolver: resolver,
+      documentBodyCache: fakeBodyCache(),
+    })
+    const created = await svc.createFromDocument(
+      'workspace',
+      'ws1',
+      { source: 'notion', ref: 'p1' },
+      'ws1',
+    )
+    resolver.calls = 0
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('A')
+
+    body = 'B' // the page moved, but the source has no version to prove it
+    expect((await svc.resolveBodiesForRun('ws1', [created.id]))[0]?.body).toBe('B')
+    expect(resolver.calls).toBe(2)
+  })
+
   it('without a body cache wired, a run serves the persisted body (no live re-resolve)', async () => {
     let body = 'PERSISTED'
     const resolver = fakeResolver(() => body)
