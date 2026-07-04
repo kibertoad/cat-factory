@@ -196,7 +196,9 @@
       "linearTeamId": "ID del equipo de Linear",
       "footerHint": "Se añade una única tarea recurrente dentro del servicio; cada ejecución reemplaza a la anterior. Su historial de ejecuciones es visible en el inspector.",
       "submit": "Añadir pipeline recurrente",
-      "addFailedTitle": "No se pudo añadir la pipeline recurrente"
+      "addFailedTitle": "No se pudo añadir la pipeline recurrente",
+      "onDemand": "Bajo demanda (solo manual)",
+      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual."
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
@@ -249,7 +251,11 @@
       "dragTask": "Arrastrar tarea",
       "dragToResize": "Arrastra para cambiar el tamaño",
       "addFirstTask": "Añade la primera tarea",
-      "createInitiativeTitle": "Crear iniciativa"
+      "createInitiativeTitle": "Crear iniciativa",
+      "accessDenied": {
+        "title": "Permiso denegado",
+        "hint": "No tienes acceso al repositorio que respalda este servicio."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decisión necesaria",
@@ -438,7 +444,9 @@
         "skipped": "Omitida"
       },
       "updateFailed": "No se pudo actualizar la programación",
-      "runNowFailed": "No se pudo ejecutar ahora"
+      "runNowFailed": "No se pudo ejecutar ahora",
+      "onDemand": "Bajo demanda",
+      "onDemandHint": "Solo manual. Se ejecuta cuando lo activas y puede usar un modelo de suscripción de uso individual."
     },
     "fragments": {
       "serviceTitle": "Buenas prácticas del servicio",
@@ -2100,9 +2108,10 @@
       "testEnvBackend": {
         "label": "Dónde se ejecutan los entornos de prueba",
         "local-compose": "docker-compose en contenedor",
-        "environment-provider": "Proveedor de entornos"
+        "environment-provider": "Proveedor de entornos",
+        "composeDesc": "Levanta el docker-compose.yml del propio repositorio en un daemon de Docker local como URL del Tester. Ideal para apps locales basadas en Compose. Admite imágenes prediseñadas o compilación desde el código fuente; requiere un daemon de Docker, por lo que solo en despliegues locales."
       },
-      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no hace falta conexión (el contenedor de la ejecución debe admitir Docker-in-Docker).",
+      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no se necesita conexión (el contenedor de la ejecución debe admitir Docker-in-Docker). Configura el servicio, el puerto y el origen de la imagen (usar prediseñada o compilar desde el código fuente) en los ajustes de entorno del servicio.",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes remoto"
@@ -2477,7 +2486,8 @@
       "repoLabel": {
         "private": " (privado)",
         "monorepo": " · monorepo",
-        "onBoard": " · ya en el tablero"
+        "onBoard": " · ya en el tablero",
+        "personal": " · personal (tu token)"
       },
       "monorepoLabel": "Es un monorepo (aloja más de un servicio)",
       "monorepoDescription": "Añade varios servicios desde un repositorio, cada uno fijado a un subdirectorio.",

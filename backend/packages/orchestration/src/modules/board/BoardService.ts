@@ -15,6 +15,8 @@ import type {
   Clock,
   ExecutionEventPublisher,
   ExecutionRepository,
+  GitHubRepo,
+  GroupCacheHandle,
   InitiativeRepository,
   RepoProjectionRepository,
   ServiceFragmentDefaultsRepository,
@@ -34,6 +36,7 @@ import {
   tasksOf,
   wouldCreateCycle,
 } from './board.logic.js'
+import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -47,6 +50,15 @@ export interface BoardServiceDependencies {
    * repo to the new service frame; absent → that path reports unavailable.
    */
   repoProjectionRepository?: RepoProjectionRepository
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, caching-layer
+   * slice 3). {@link BoardService.addServiceFromRepo} flips a repo's monorepo flag
+   * directly on the projection (a resolver-visible field), so it must drop the
+   * workspace's group afterwards — exactly as `GitHubSyncService.setRepoMonorepo` does
+   * for the same write on the GitHub-connect path. Absent (tests / the Worker's
+   * pass-through profile) ⇒ the invalidation is a no-op.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   /**
    * In-org shared services. When wired, every new top-level frame is registered as
    * an account-owned {@link Service} and mounted onto the creating workspace, so it
@@ -109,6 +121,7 @@ export class BoardService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly repoProjectionRepository?: RepoProjectionRepository
+  private readonly repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
@@ -122,6 +135,7 @@ export class BoardService {
     idGenerator,
     clock,
     repoProjectionRepository,
+    repoProjectionCache,
     serviceRepository,
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
@@ -134,6 +148,7 @@ export class BoardService {
     this.idGenerator = idGenerator
     this.clock = clock
     this.repoProjectionRepository = repoProjectionRepository
+    this.repoProjectionCache = repoProjectionCache
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
@@ -335,6 +350,10 @@ export class BoardService {
     if (input.isMonorepo !== undefined && input.isMonorepo !== repo.isMonorepo) {
       await this.repoProjectionRepository.setMonorepo(workspaceId, repo.githubId, input.isMonorepo)
       repo.isMonorepo = input.isMonorepo
+      // The monorepo flag decides whether `resolveRepoTarget` hands agents the service
+      // subdirectory, so drop the cached projection or a warmed entry keeps serving the
+      // old flag until its TTL — the agent would run at the repo root instead of the pin.
+      await this.repoProjectionCache?.invalidateGroup(workspaceId)
     }
     // Normalise the requested service subdirectory to a clean, SAFE relative path:
     // strip slashes/`.` and reject any `..` segment, so a stored directory can never
@@ -343,9 +362,13 @@ export class BoardService {
     const directory = normalizeServiceDirectory(input.directory)
     // A monorepo can back SEVERAL service frames (one per subdirectory), so the
     // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
-    // service MUST name its subdirectory so execution can scope agents to it.
-    if (repo.blockId && !repo.isMonorepo) {
-      throw new ValidationError('This repository is already linked to a board service')
+    // service MUST name its subdirectory so execution can scope agents to it. The link
+    // is the account-owned Service, so a duplicate is detected via `getByRepo`.
+    if (!repo.isMonorepo && this.serviceRepository) {
+      const existing = await this.serviceRepository.getByRepo(repo.installationId, repo.githubId)
+      if (existing) {
+        throw new ValidationError('This repository is already linked to a board service')
+      }
     }
     if (repo.isMonorepo && !directory) {
       throw new ValidationError('Select a service directory for this monorepo')
@@ -388,12 +411,6 @@ export class BoardService {
       directory: directory ?? null,
     })
     await this.blockRepository.insert(workspaceId, block, serviceId)
-    // A monorepo's repo backs several frames, so the projection's single `block_id`
-    // link can't represent it — the Service mapping (read by resolveRepoTarget) is
-    // authoritative there. Keep the legacy link only for a whole-repo service.
-    if (!repo.isMonorepo) {
-      await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
-    }
     await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
@@ -447,6 +464,13 @@ export class BoardService {
     // Small per-type form fields (bug severity / repro, spike timebox, …), when given.
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
+    }
+    // A document task starts with the universal writing-style fragments pre-selected
+    // (default-on, user-removable like any block pin). These fold into the `doc-aware`
+    // authoring/review kinds via the engine's fragment path — the selection default lives
+    // here, at task creation, not hard-coded in a prompt.
+    if (taskType === 'document') {
+      block.fragmentIds = [...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS]
     }
     // Optional epic membership at creation (the epic-import spawn path passes this so
     // every child task joins the epic it was imported under).
@@ -914,17 +938,6 @@ export class BoardService {
     const doomed = descendantIds(blocks, id)
 
     await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
-    // Unlink any repo backing a doomed service frame so the repo becomes
-    // addable again (otherwise its github_repos.block_id dangles to a deleted
-    // block: the repo shows "already on board" yet nothing renders it).
-    if (this.repoProjectionRepository) {
-      const repos = await this.repoProjectionRepository.list(homeWorkspaceId)
-      for (const repo of repos) {
-        if (repo.blockId && doomed.has(repo.blockId)) {
-          await this.repoProjectionRepository.linkBlock(homeWorkspaceId, repo.githubId, null)
-        }
-      }
-    }
     // Drop the account-owned service (and every workspace's mount of it) for any doomed
     // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
     // org catalog (mountable, badged, yet rendering nothing) on other boards.

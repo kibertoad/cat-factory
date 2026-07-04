@@ -39,7 +39,12 @@ export const LINEAR_DOCS_DESCRIPTOR: DocumentSourceDescriptor = {
 
 /** Fetch a single document's title, URL and Markdown content. */
 export const LINEAR_DOCUMENT_QUERY = `query Document($id: String!) {
-  document(id: $id) { id title url content }
+  document(id: $id) { id title url content updatedAt }
+}`
+
+/** Cheap staleness probe: the document's `updatedAt` only (no `content` body). */
+export const LINEAR_DOCUMENT_VERSION_QUERY = `query DocumentVersion($id: String!) {
+  document(id: $id) { id updatedAt }
 }`
 
 /** Search documents by title (used to populate the import picker). */
@@ -54,6 +59,8 @@ interface LinearDocumentNode {
   title?: string
   url?: string
   content?: string | null
+  /** ISO timestamp Linear advances on every edit — the version token. */
+  updatedAt?: string | null
 }
 
 /**
@@ -103,7 +110,15 @@ export function mapLinearDocument(data: { document?: LinearDocumentNode | null }
     title: doc.title?.trim() || '(untitled)',
     url: doc.url ?? `https://linear.app/document/${doc.id}`,
     body: normalizeMarkdown(doc.content ?? ''),
+    version: doc.updatedAt ?? '',
   }
+}
+
+/** The version token from a `document { id updatedAt }` probe payload. */
+export function linearDocumentVersion(data: {
+  document?: { updatedAt?: string | null } | null
+}): string {
+  return data.document?.updatedAt ?? ''
 }
 
 /** Map a `documents` search payload onto lean {@link DocumentSearchResult} hits. */

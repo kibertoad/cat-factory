@@ -1,7 +1,10 @@
 # UX papercuts & improvements — audit + fix tracker
 
-Status: **fixes in progress.** First slice landed — the undo & confirmation-blast-radius
-cluster (UX-01/02/03/13, [#737](https://github.com/kibertoad/cat-factory/pull/737)). This
+Status: **fixes in progress.** Slices landed: the undo & confirmation-blast-radius
+cluster (UX-01/02/03/13, [#737](https://github.com/kibertoad/cat-factory/pull/737)); the
+clipboard-feedback shared primitive (UX-38/39); friendly model/agent-kind labels in the
+review & consensus windows (UX-36/37); markdown prose + copy affordances in the result
+views (UX-43, UX-44 copy buttons). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -211,21 +214,21 @@ per-file patches:
 
 ## C. Review windows, inspector & pipeline surfaces
 
-| ID    | Sev | Status | Finding                                                                                                          |
-| ----- | --- | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| UX-32 | P1  | todo   | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
-| UX-33 | P1  | todo   | Typed review answers lost when window closes without blur/save                                                   |
-| UX-34 | P2  | todo   | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
-| UX-35 | P2  | todo   | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
-| UX-36 | P2  | todo   | Raw model id rendered verbatim in review windows                                                                 |
-| UX-37 | P2  | todo   | Internal `agentKind` enum + raw model id leak in consensus window                                                |
-| UX-38 | P2  | todo   | Clipboard copies give no feedback and swallow failures                                                           |
-| UX-39 | P2  | todo   | Agent/provider errors have no copy button                                                                        |
-| UX-40 | P2  | todo   | Inspector "Run" disabled with no explanation                                                                     |
-| UX-41 | P2  | todo   | Stopping a running bootstrap has no confirmation                                                                 |
-| UX-42 | P3  | todo   | "Restart from here" only visible on hover (invisible on touch)                                                   |
-| UX-43 | P3  | todo   | Agent prose rendered as plain text in several result views                                                       |
-| UX-44 | P3  | todo   | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
+| ID    | Sev | Status  | Finding                                                                                                          |
+| ----- | --- | ------- | ---------------------------------------------------------------------------------------------------------------- |
+| UX-32 | P1  | todo    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
+| UX-33 | P1  | todo    | Typed review answers lost when window closes without blur/save                                                   |
+| UX-34 | P2  | todo    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
+| UX-35 | P2  | todo    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
+| UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
+| UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
+| UX-38 | P2  | done    | Clipboard copies give no feedback and swallow failures                                                           |
+| UX-39 | P2  | done    | Agent/provider errors have no copy button                                                                        |
+| UX-40 | P2  | todo    | Inspector "Run" disabled with no explanation                                                                     |
+| UX-41 | P2  | todo    | Stopping a running bootstrap has no confirmation                                                                 |
+| UX-42 | P3  | todo    | "Restart from here" only visible on hover (invisible on touch)                                                   |
+| UX-43 | P3  | done    | Agent prose rendered as plain text in several result views                                                       |
+| UX-44 | P3  | partial | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
 - **UX-32 — Hidden gate actions.** `requirements/RequirementsReviewWindow.vue:794`
   and `clarity/ClarityReviewWindow.vue:479`: the entire action rail (Proceed,
@@ -248,20 +251,27 @@ per-file patches:
   `composables/useStepTimer.ts` is wired only into the step-detail overlay. A step
   that hasn't emitted subtasks reads as hung. Fix: surface `durationLabel` inline
   on the active step.
-- **UX-36 — Raw model ref.** `RequirementsReviewWindow.vue:811`,
-  `ClarityReviewWindow.vue:496` render `{{ review.model }}` verbatim while other
-  surfaces use `models.labelForRef(...)` (`StepMetadataCard.vue:49`,
-  `StepRunMeta.vue:36`).
-- **UX-37 — Consensus leaks internals.** `consensus/ConsensusSessionWindow.vue:116`
-  prints `session.agentKind` raw in the subtitle; `:200` shows participant
-  `p.modelId` raw. Fix: `agentKindMeta(...).label` + `models.labelForRef`.
-- **UX-38 — Silent clipboard.** `StepMetadataCard.vue:73`, `StepRunMeta.vue:43`,
-  `AgentStepDetail.vue:170` call `navigator.clipboard?.writeText` with no toast and
-  no catch (insecure context ⇒ silent no-op). `StepContainerStatus.vue:70` does it
-  right — extract and reuse.
-- **UX-39 — Uncopyable errors.** `board/AgentFailureCard.vue:68-93` (`failure.message`
-  - `<pre>` detail), `ConsensusSessionWindow.vue:154`, `gates/GateResultView.vue:341,367`
-    — the first thing users do with a stack trace is copy it. Add a copy button.
+- **UX-36 — Raw model ref. DONE.** `RequirementsReviewWindow.vue` and
+  `ClarityReviewWindow.vue` now render the reviewer model via
+  `models.labelForRef(review.model) ?? review.model` (the friendly `<label> · <provider>`
+  string the pipeline surfaces use — `StepMetadataCard`/`StepRunMeta`), falling back to the
+  bare ref when the catalog hasn't loaded.
+- **UX-37 — Consensus leaks internals. DONE.** `consensus/ConsensusSessionWindow.vue` renders
+  the session subtitle via `agentKindMeta(session.agentKind).label` and each participant's
+  model via `models.labelForRef(p.modelId) ?? p.modelId` instead of the raw enum / raw
+  `modelId`.
+- **UX-38 — Silent clipboard. DONE.** `StepContainerStatus.vue`'s copy-with-toast pattern
+  is extracted into the shared `useCopyToClipboard()` composable (VueUse `useClipboard` +
+  a success/failure toast; it only claims success once the write actually landed). Every
+  silent site now routes through it: `StepMetadataCard.vue`/`StepRunMeta.vue` (`copyRunId`),
+  `AgentStepDetail.vue` (`copyOutput`), `KubernetesEngineForm.vue` (auto-setup command), and
+  `StepContainerStatus.vue` itself is refactored onto the composable so the duplication is gone.
+- **UX-39 — Uncopyable errors. DONE.** A reusable `common/CopyButton.vue` (title + aria-label,
+  routed through `useCopyToClipboard`) puts a copy affordance on the failure surfaces: the
+  `FailureDetail.vue` stack-trace `<pre>` (so both `AgentFailureCard` and `AgentFailureHistory`
+  get it), the consensus failure banner (`ConsensusSessionWindow.vue`, when there's an error
+  string), and the gate failure summary (`GateResultView.vue`, both the human-review and
+  conflicts blocks).
 - **UX-40 — Unexplained lock.** `panels/InspectorPanel.vue:493-504` — when
   `!runnable` the run trigger becomes a disabled lock icon with no tooltip stating
   the blocking condition (unmet dependency, wrong status, …).
@@ -271,15 +281,18 @@ per-file patches:
 - **UX-42 — Hover-only restart.** `PipelineProgress.vue:325` styles the restart
   button `opacity-0 group-hover:opacity-100` — invisible on touch, no focus
   affordance. Fix: also reveal on `focus-within`, or always show dimmed.
-- **UX-43 — Markdown as plain text.** `GenericStructuredResultView.vue:99`,
-  `MergerResultView.vue:224` (rationale), `ConsensusSessionWindow.vue:169`
-  (synthesis) use `whitespace-pre-wrap` only, unlike the safe markdown reader in
-  `AgentStepDetail.vue` (`utils/agentOutput.ts`, `html:false`). Route through the
-  shared reader.
-- **UX-44 — Result-view polish.** No copy on pretty-printed JSON
-  (`GenericStructuredResultView.vue:108`) or consensus `<pre>`s (:169, :233); the
-  live consensus stream (`:141,206`) has no jump-to-latest; review findings/answers
-  carry no timestamps, so a user re-summoned across iterations can't tell what's new.
+- **UX-43 — Markdown as plain text. DONE.** A new shared `renderMarkdown()`
+  (`utils/agentOutput.ts` — the same secure markdown-it config as the reader, `html:false`,
+  links decorated to open safely) plus a reusable `common/MarkdownProse.vue` component replace
+  the `whitespace-pre-wrap` dumps in `GenericStructuredResultView.vue` (prose summary),
+  `MergerResultView.vue` (rationale + pre-structured raw output), and
+  `ConsensusSessionWindow.vue` (synthesis + round contributions), so agent prose renders as
+  formatted markdown consistent with `AgentStepDetail`'s reader.
+- **UX-44 — Result-view polish. PARTIAL (copy affordances done).** Copy buttons
+  (`common/CopyButton.vue`) now sit on the pretty-printed JSON block
+  (`GenericStructuredResultView.vue`) and on the consensus synthesis + each round contribution
+  (`ConsensusSessionWindow.vue`). **Still todo:** jump-to-latest in the live consensus stream,
+  and timestamps on review findings/answers so a re-summoned user can tell what's new.
 
 ## D. Settings, keys & integrations
 
@@ -504,6 +517,21 @@ per-file patches:
 - The shared undo toast shape: `color: 'neutral'`, `duration: UNDO_WINDOW_MS`, a single
   `actions: [{ label: t('common.undo'), icon: 'i-lucide-undo-2', onClick }]`. Reuse it for
   the remaining undo items (UX-52 high-blast-radius disconnects).
+- **Clipboard copies go through `useCopyToClipboard()` (never `navigator.clipboard` raw).**
+  The composable (`composables/useCopyToClipboard.ts`) wraps VueUse's `useClipboard` and always
+  toasts the outcome, only claiming success once the write landed — so an insecure context /
+  denied permission surfaces as a failure toast instead of a silent no-op. For a plain
+  copy-icon affordance use the shared `common/CopyButton.vue` (it carries both `title` and
+  `aria-label`); for a copy folded into a bespoke button, destructure `{ copy }` from the
+  composable. Default label is `common.copy`, so no new i18n keys are needed for a generic
+  copy button.
+- **Agent prose renders through `MarkdownProse` (never raw `whitespace-pre-wrap`).** For any
+  result-view surface that shows an agent's prose output (a rationale, a synthesis, a summary),
+  use the shared `common/MarkdownProse.vue` (backed by `renderMarkdown()` in
+  `utils/agentOutput.ts` — secure markdown-it, `html:false`, links opened safely), not a
+  plain-text `<pre>`/`<p whitespace-pre-wrap>`. It's the inline counterpart to the full
+  segmented reader (`parseOutputOutline`) used by `AgentStepDetail`. Pair copy-able output
+  (JSON, prose) with the shared `common/CopyButton.vue`.
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding
   or changing an `en.json` key requires the same change in every other locale in
   the same PR.

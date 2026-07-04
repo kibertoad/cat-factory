@@ -55,6 +55,7 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
       title: `Page ${externalId}`,
       url: `https://example.test/${this.kind}/${externalId}`,
       body: '',
+      version: '1',
       ...partial,
       externalId,
     })
@@ -83,9 +84,16 @@ export class FakeDocumentSourceProvider implements DocumentSourceProvider {
       title: `Page ${externalId}`,
       url: `https://example.test/${this.kind}/${externalId}`,
       body: `# Page ${externalId}`,
+      version: '1',
     }
     this.pages.set(externalId, generated)
     return generated
+  }
+
+  /** The canned page's current version token (fetching it first so it exists). */
+  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+    const page = this.pages.get(externalId) ?? (await this.fetchDocument(credentials, externalId))
+    return page.version
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {

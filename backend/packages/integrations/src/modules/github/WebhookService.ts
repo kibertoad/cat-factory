@@ -4,6 +4,8 @@ import type {
   CheckRunProjectionRepository,
   CommitProjectionRepository,
   GitHubInstallationRepository,
+  GitHubRepo,
+  GroupCacheHandle,
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
@@ -41,6 +43,15 @@ export interface WebhookServiceDependencies {
   commitProjectionRepository: CommitProjectionRepository
   checkRunProjectionRepository: CheckRunProjectionRepository
   clock: Clock
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, slice 3). The only
+   * repo-projection write here is the installation-removed tombstone; it drops each
+   * affected workspace's group so the resolver re-lists without the removed repos. The
+   * push-event projections (branches/PRs/issues/commits/checks) are separate tables the
+   * resolver never lists, so they don't invalidate it. Absent (tests / the Worker's
+   * pass-through profile) ⇒ no-op.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
 }
 
 type Json = Record<string, unknown>
@@ -206,6 +217,7 @@ export class WebhookService {
         .filter((repo) => repo.installationId === installationId && !removedIds.has(repo.githubId))
         .map((repo) => repo.githubId)
       await this.deps.repoProjectionRepository.tombstoneMissing(ws, installationId, remaining, now)
+      await this.deps.repoProjectionCache?.invalidateGroup(ws)
     }
   }
 

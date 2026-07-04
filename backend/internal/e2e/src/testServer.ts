@@ -161,7 +161,7 @@ await start({
   // The composition root: the stock Node container, but with the agent executor + repo
   // bootstrapper swapped for the deterministic fakes. `start()` supplies `db`, the started
   // pg-boss `boss` (so the REAL durable runner drives runs — NOT the Noop runner) and the
-  // `realtimeHub` (so the REAL NodeEventPublisher pushes live events to the browser); we
+  // `realtimeSink` (so the REAL NodeEventPublisher pushes live events to the browser); we
   // only add the overrides, so everything else stays production.
   buildContainer: (opts) =>
     buildNodeContainer({

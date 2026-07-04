@@ -1,5 +1,163 @@
 # @cat-factory/conformance
 
+## 0.10.15
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+  - @cat-factory/server@0.80.0
+  - @cat-factory/integrations@0.64.0
+  - @cat-factory/orchestration@0.70.1
+  - @cat-factory/agents@0.33.1
+  - @cat-factory/gates@0.2.88
+
+## 0.10.14
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/prompt-fragments@0.10.0
+  - @cat-factory/agents@0.33.0
+  - @cat-factory/orchestration@0.70.0
+  - @cat-factory/server@0.79.4
+
+## 0.10.13
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+- Updated dependencies [6213771]
+  - @cat-factory/kernel@0.84.0
+  - @cat-factory/integrations@0.63.0
+  - @cat-factory/agents@0.32.0
+  - @cat-factory/orchestration@0.69.1
+  - @cat-factory/gates@0.2.87
+  - @cat-factory/server@0.79.3
+
+## 0.10.12
+
+### Patch Changes
+
+- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
+  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
+
+  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
+    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
+    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
+    invalidation bus, never a data tier; with no notification factory injected the
+    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
+    machinery so ioredis never enters the module graph outside the Node facade's
+    REDIS_URL-gated wiring.
+  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
+    (group = workspace id), and every fragment write path — create / update / remove /
+    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
+    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
+    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
+  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
+    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
+    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
+    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
+    write — the same gating and resilience pattern as the realtime propagator. Local
+    mode stays bare in-memory (single-node by construction).
+  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
+    cross-instance state) is pass-through, since an isolate has no cross-isolate
+    invalidation bus. Documented in the caching package README.
+  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
+    catalog on all three runtimes (Worker/Node/local).
+  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+    in-memory `isEntryStillCurrentFn` support: a cache profile may set
+    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+    the probe reports the source unmoved, and fall back to a full background reload
+    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+  - @cat-factory/agents@0.31.0
+  - @cat-factory/orchestration@0.69.0
+  - @cat-factory/gates@0.2.86
+  - @cat-factory/integrations@0.62.1
+  - @cat-factory/server@0.79.2
+
+## 0.10.11
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+  - @cat-factory/integrations@0.62.0
+  - @cat-factory/agents@0.30.5
+  - @cat-factory/gates@0.2.85
+  - @cat-factory/orchestration@0.68.1
+  - @cat-factory/prompt-fragments@0.9.55
+  - @cat-factory/server@0.79.1
+
+## 0.10.10
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+  - @cat-factory/integrations@0.61.0
+  - @cat-factory/server@0.79.0
+  - @cat-factory/orchestration@0.68.0
+  - @cat-factory/agents@0.30.4
+  - @cat-factory/gates@0.2.84
+  - @cat-factory/prompt-fragments@0.9.54
+
+## 0.10.9
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/orchestration@0.67.0
+  - @cat-factory/server@0.78.0
+  - @cat-factory/agents@0.30.3
+  - @cat-factory/gates@0.2.83
+  - @cat-factory/integrations@0.60.2
+  - @cat-factory/prompt-fragments@0.9.53
+
+## 0.10.8
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/orchestration@0.66.0
+  - @cat-factory/server@0.77.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/gates@0.2.82
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/prompt-fragments@0.9.52
+
+## 0.10.7
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/integrations@0.60.0
+  - @cat-factory/orchestration@0.65.0
+  - @cat-factory/server@0.76.0
+  - @cat-factory/agents@0.30.1
+  - @cat-factory/gates@0.2.81
+  - @cat-factory/prompt-fragments@0.9.51
+
+## 0.10.6
+
+### Patch Changes
+
+- Updated dependencies [0477068]
+  - @cat-factory/server@0.75.2
+
 ## 0.10.5
 
 ### Patch Changes

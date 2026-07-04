@@ -14,6 +14,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
+import { type AppCachesProfile, createAppCaches } from '@cat-factory/caching'
+import { buildCacheNotifications } from './cacheNotifications.js'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
@@ -26,6 +28,7 @@ import { startScheduleSweeper } from './recurring.js'
 import { startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
+import { buildRealtimePropagator } from './propagator.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
@@ -140,6 +143,14 @@ export async function start(
      * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
      */
     host?: string
+    /**
+     * Per-cache profile overrides merged over the default profile. A sibling facade passes
+     * this to opt a cache out where its coherence assumptions don't hold: local mode makes
+     * the repo projection pass-through because its `link-repo` CLI writes the projection
+     * out-of-process and local mode has no cross-process invalidation bus (the same reason
+     * the Worker's isolate-safe profile passes it through). Omitted ⇒ the default profile.
+     */
+    cachesProfile?: Partial<AppCachesProfile>
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
@@ -162,10 +173,35 @@ export async function start(
   // The per-workspace real-time subscriber registry. Created here (not in the container
   // builder) because it must be shared between the engine's event publisher — wired
   // inside the container — and the HTTP server's WebSocket upgrade listener attached
-  // below. The local facade's builder forwards this option to buildNodeContainer
+  // below. The local facade's builder forwards these options to buildNodeContainer
   // unchanged, so local mode gets live updates too.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildContainer({ db, boss, env, repos, realtimeHub })
+  // Wrap the hub in the layered propagator: when REDIS_URL is set (a multi-node deployment)
+  // events also fan to peer nodes over Redis pub/sub so a browser on any node sees them; with
+  // no bus configured (local mode, single replica) it is the bare hub with zero overhead. The
+  // engine writes through this sink; the HTTP upgrade listener still registers sockets on the
+  // hub directly.
+  const realtimePropagator = buildRealtimePropagator(realtimeHub, env, logger)
+  // The process-wide cache bag (caching initiative). In-memory only; when REDIS_URL is
+  // set (multi-node) each cache also broadcasts its invalidations to peers over its own
+  // Redis notification channel, mirroring the realtime propagator's gating. Built here
+  // (not in the container builder) so this process owns exactly one bag + its shutdown.
+  const caches = createAppCaches({
+    notificationPairFactory: await buildCacheNotifications(env, logger),
+    logger,
+    ...(options.cachesProfile ? { profile: options.cachesProfile } : {}),
+  })
+  const container = buildContainer({
+    db,
+    boss,
+    env,
+    repos,
+    realtimeSink: realtimePropagator,
+    caches,
+  })
+  // Connect the cross-node adapters (a no-op when none are configured) so peer events start
+  // reaching this node's browsers.
+  await realtimePropagator.start(logger)
 
   // Validate the registered extensions (gates / agent kinds) once, before serving — every
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
@@ -290,6 +326,10 @@ export async function start(
     stopKaizenSweeper()
     stopGitHubReconcile()
     stopRealtime()
+    // Release any cross-node propagation adapters (Redis connections); a no-op when none.
+    await realtimePropagator.stop()
+    // Quit the cache-invalidation notification clients (a no-op for bare in-memory caches).
+    await caches.close()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()

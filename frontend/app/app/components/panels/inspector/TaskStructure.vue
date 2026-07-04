@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const props = defineProps<{ block: Block }>()
 
@@ -13,8 +15,6 @@ const { t } = useI18n()
 // The catalog is per-board and invalidated on a workspace switch, so (re)load it when the
 // task inspector mounts — mirrors ServiceFragments; ensureLoaded is a no-op while current.
 onMounted(() => fragments.ensureLoaded())
-
-type MenuItem = { label: string; icon?: string; onSelect: () => void }
 
 // ---- best-practice prompt fragments ----------------------------------------
 // Selected fragments, resolved against the catalog. An id the catalog no longer
@@ -29,8 +29,8 @@ const selectedFragments = computed(() =>
 // A trailing group that jumps from "attach a fragment" to authoring/editing the
 // library itself (board tier always; account tier when accounts are enabled).
 // Open to every member — managing fragments is not an admin-only action.
-const manageItems = computed<MenuItem[]>(() => {
-  const items: MenuItem[] = [
+const manageItems = computed<DropdownMenuItem[]>(() => {
+  const items: DropdownMenuItem[] = [
     {
       label: t('inspector.fragments.manageBoard'),
       icon: 'i-lucide-book-marked',
@@ -48,18 +48,18 @@ const manageItems = computed<MenuItem[]>(() => {
 })
 
 // Picker menu: fragments suitable for this block's type, not already selected,
-// grouped by category so the dropdown reads like the catalog, with the management
-// links appended as the final group.
-const fragmentMenu = computed<MenuItem[][]>(() => {
+// grouped into labelled per-category sections so the dropdown reads like the catalog,
+// with the management links appended as the final group.
+const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
   const selected = new Set(props.block.fragmentIds ?? [])
-  const groups = new Map<string, MenuItem[]>()
-  for (const f of fragments.forBlockType(props.block.type)) {
-    if (selected.has(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => addFragment(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.values(), manageItems.value]
+  return [
+    ...buildFragmentPickerGroups(
+      fragments.forBlockType(props.block.type),
+      (id) => selected.has(id),
+      addFragment,
+    ),
+    manageItems.value,
+  ]
 })
 
 function addFragment(id: string) {

@@ -127,6 +127,8 @@ interface PageResponse {
   id?: string
   url?: string
   properties?: Record<string, unknown>
+  /** ISO timestamp Notion advances on every edit — the version token. */
+  last_edited_time?: string
 }
 
 interface BlockChildrenResponse {
@@ -168,7 +170,24 @@ export class NotionProvider implements DocumentSourceProvider {
       title: notionLogic.notionPageTitle(page.properties),
       url: page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`,
       body: notionLogic.notionBlocksToMarkdown(blocks),
+      version: page.last_edited_time ?? '',
     }
+  }
+
+  /**
+   * The cheap version probe: read only the page object for its `last_edited_time`,
+   * skipping the (bounded but multi-request) block backfill that dominates a full
+   * fetch. An unchanged timestamp means the page body is still current.
+   */
+  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+    const page = await this.get<PageResponse>(
+      credentials,
+      `/pages/${encodeURIComponent(externalId)}`,
+    )
+    if (!page.id) {
+      throw new NotionApiError(502, `Notion returned an unexpected body for page ${externalId}`)
+    }
+    return page.last_edited_time ?? ''
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {

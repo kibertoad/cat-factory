@@ -96,7 +96,8 @@ export function toRepoProjection(
     name,
     defaultBranch: p.default_branch ?? null,
     private: p.visibility !== 'public',
-    blockId: null,
+    // Reached through the connection's shared token, so visible to every member.
+    linkedVia: 'app',
     syncedAt,
   }
 }

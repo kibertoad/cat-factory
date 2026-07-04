@@ -5,6 +5,38 @@ Orientation for working in this repo. High-level product docs live in
 `backend/docs/`. This file captures the **runtime flows** that are spread across
 many files and are otherwise slow to re-derive.
 
+## Clean, long-term maintainable architecture over quick solutions
+
+**Default to the clean, well-factored design — not the fastest thing that passes.** This
+repo optimizes for long-term maintainability, so when a quick hack and a proper solution
+diverge, take the proper one even when it costs more up front. This is the governing
+principle behind many of the specific rules below; when in doubt, resolve the ambiguity in
+favor of the design a future maintainer would thank you for.
+
+- **Fix causes, not symptoms.** When something breaks, trace it to the root and correct it
+  there rather than patching over it at the call site with a special-case, a `try/catch`
+  swallow, a defensive `if`, or a magic constant. A local workaround that leaves the
+  underlying flaw in place is a failed fix, not a completed one.
+- **Respect the existing seams.** Extend behaviour through the established ports, registries,
+  and public seams (`registerAgentKind`, `registerGate`, `registerPipeline`, the kernel
+  ports, the runtime `gateways`) instead of reaching around them or bolting on a parallel
+  path. Copy the shape of the nearest good citizen rather than inventing a one-off.
+- **No shortcuts that create debt.** Do not hard-code what should be configured, duplicate
+  what should be shared, widen a type to `any` to dodge a real modelling problem, or leave a
+  half-wired feature behind a TODO. If the clean solution needs a new port/method/table, add
+  it (mirrored across runtimes) — that is preferred over a loop of point-reads, a facade
+  that only wires one runtime, or a copy-pasted variant of existing machinery.
+- **Prefer deleting to accreting.** Since backwards compatibility is explicitly a non-goal
+  (see below), remove the obsolete path rather than keeping it alongside the new one — clean
+  beats compatible here.
+
+Concrete expressions of this principle appear throughout: **no N+1 repository access**
+(batch/reuse, add a port method rather than looping point-reads), **keep the runtimes
+symmetric** (land the proper cross-runtime change, never a one-facade shortcut), **backwards
+compatibility is NOT a goal** (prefer the clean shape, drop the legacy one), and **adding a
+gate is a new registry entry, not a copy of the machinery**. Reach for the durable design
+these encode even in situations they don't name explicitly.
+
 ## Fixing an existing PR (review findings AND CI failures) — push to ITS OWN branch
 
 When you are asked to act on an existing PR — whether that's **addressing review
@@ -537,12 +569,45 @@ tsconfig.build.json"` script, AND a **`"prepublishOnly": "pnpm run build"`** hoo
   packages are not.)
 - **Add a changeset** (`pnpm changeset`) — CI's `changeset status` gate fails the PR
   otherwise. A brand-new package still needs an initial-release changeset.
+- **Add a row to README.md's repository-layout tables** — CI's
+  `node scripts/check-package-catalog.mjs` guard fails the `Build & typecheck` job for any
+  workspace package missing from the map. (This is what bit the `@cat-factory/caching`
+  pilot PR.)
+- **Check knip knows about any dynamically-loaded dependency** — a dep referenced only via
+  an opaque dynamic import (`import('pkg' as string)`) is invisible to knip's static
+  analysis and fails `pnpm lint:knip` as "unused"; add an `ignoreDependencies` entry with a
+  comment in `knip.jsonc` (the `ioredis`/`layered-loader` pattern).
 - **Keep the runtimes symmetric** if the package is a shared behaviour both facades must
   wire (see "Keep the runtimes symmetric").
 
 After wiring, verify with a clean build + a publish dry-run from the package dir:
 `rm -rf dist && pnpm publish --dry-run --no-git-checks` — it must run `prepublishOnly`,
 rebuild `dist/`, and list the compiled files in the tarball.
+
+## Run the CI guard scripts locally before committing
+
+CI's `Build & typecheck` job runs a set of fast repo guards BEYOND build/typecheck/tests,
+and a locally-green branch fails CI when one of them is skipped. **Before committing —
+always after adding/renaming a package, touching dependencies, or bumping the harness —
+run the guards your change class can trip:**
+
+- `node scripts/check-package-catalog.mjs` — every workspace package must have a row in
+  README.md's repository-layout tables.
+- `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
+  a changeset (run after committing locally; it diffs git refs).
+- `pnpm lint:knip` — unused files/deps/exports (run after `pnpm build`); remember
+  dynamically-imported deps need a `knip.jsonc` ignore entry.
+- `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
+- `pnpm check:publish` (publint + attw, after `pnpm build`) — publish-artifact integrity
+  for every publishable package.
+- `node scripts/check-runner-image-tag.mjs --since origin/main` — harness image-tag
+  consistency, whenever anything image-affecting changed.
+- `pnpm lint:fix` (whole tree, per the formatting rule above) and
+  `pnpm exec turbo run typecheck --filter=<each touched package>` (typecheck covers tests,
+  which the build configs exclude).
+
+The full `pnpm test:run` matrix is CI's job; the guards above are cheap enough to run
+every time and catch the failures a plain build+test loop misses.
 
 ## Execution flow (the canonical async + observable pattern)
 
@@ -1086,8 +1151,19 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   can't upgrade from a Hono `Response`, and the SPA speaks raw WebSocket — not socket.io —
   so this keeps the client unchanged across runtimes). The ticket mint/verify is the
   shared `@cat-factory/server` `auth/wsTicket.ts` used by both the Worker's
-  `EventsController` and this upgrade handler. Single-process only for now (a
-  multi-replica deployment would front the hub with Postgres LISTEN/NOTIFY).
+  `EventsController` and this upgrade handler. **Multi-node is supported** via a layered
+  cross-node propagator (`runtimes/node/src/propagator.ts`): `NodeEventPublisher` writes
+  through a narrow `LocalEventSink` seam that both the bare `NodeRealtimeHub` and the
+  `LayeredEventPropagator` implement, so a horizontally-scaled deployment fans every event
+  to the local hub AND to peer nodes over a pluggable adapter — **Redis pub/sub today**
+  (`RedisWebSocketPropagator`, `runtimes/node/src/redisPropagator.ts`; the opt-in `ioredis`
+  dependency is dynamically imported only when `REDIS_URL` is set), a future Postgres
+  LISTEN/NOTIFY or NATS adapter implementing the same `WebSocketPropagator` port. With no
+  bus configured (single replica, and **local mode**, which is always single-node) the layer
+  is exactly the bare hub — zero overhead, no extra dependency. The Worker facade needs none
+  of this: its `WorkspaceEventsHub` Durable Object is globally addressed (one per workspace
+  across the deployment), so cross-node propagation is inherent — a genuine Node-only concern,
+  not a facade-parity gap.
   **Container agent steps** (coder/mocker/tester/playwright/blueprints/ci-fixer/
   conflict-resolver/merger) run via the **same** shared `CompositeAgentExecutor` +
   `ContainerAgentExecutor` the Worker uses (now in `@cat-factory/server`),

@@ -17,8 +17,10 @@ import type {
 export class FakeRepoBootstrapper implements RepoBootstrapper {
   /** Dispatch requests, in order. */
   readonly calls: BootstrapRepoRequest[] = []
-  /** Repo→frame links recorded on success. */
-  readonly links: { workspaceId: string; outcome: BootstrapRepoOutcome; blockId: string }[] = []
+  /** Repos projected on success (the caller binds the frame's Service to them). */
+  readonly projected: { workspaceId: string; outcome: BootstrapRepoOutcome }[] = []
+  /** Deterministic github id handed back per projected repo (owner/name → id). */
+  private nextGithubId = 9000
   /** Job ids whose container was asked to stop (the failure-cleanup path). */
   readonly stopped: string[] = []
   /** When set, `startBootstrap` throws (pre-flight failure path — fails fast). */
@@ -67,12 +69,12 @@ export class FakeRepoBootstrapper implements RepoBootstrapper {
     this.stopped.push(handle.jobId)
   }
 
-  async linkRepoToBlock(
+  async projectBootstrappedRepo(
     workspaceId: string,
     outcome: BootstrapRepoOutcome,
-    blockId: string,
-  ): Promise<void> {
-    this.links.push({ workspaceId, outcome, blockId })
+  ): Promise<{ installationId: number; githubId: number }> {
+    this.projected.push({ workspaceId, outcome })
+    return { installationId: 1, githubId: this.nextGithubId++ }
   }
 
   private outcomeFor(jobId: string): BootstrapRepoOutcome {

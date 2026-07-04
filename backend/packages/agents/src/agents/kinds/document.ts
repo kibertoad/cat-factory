@@ -2,7 +2,14 @@ import type { AgentRunContext, DocKind } from '@cat-factory/kernel'
 import { CONTEXT_BUDGET, estimateTokens } from '@cat-factory/kernel'
 import type { AgentKindDefinition } from './registry.js'
 import { registerAgentKinds } from './registry.js'
+import { DOC_AWARE_TRAIT } from './traits.js'
 import { linkedContextSection } from '../prompts/standard.js'
+import {
+  docTemplateFor,
+  templateOutlineGuidance,
+  templateSkeletonGuidance,
+  templateStructureLine,
+} from './doc-templates.js'
 
 // ---------------------------------------------------------------------------
 // The document-authoring agent kinds — a FORWARD-authoring track whose deliverable IS an
@@ -57,25 +64,6 @@ const DOC_KIND_DIR: Record<DocKind, string> = {
   other: 'docs',
 }
 
-/** One-line structural expectation per document kind, woven into the outliner/writer prompts. */
-const DOC_KIND_STRUCTURE: Record<DocKind, string> = {
-  prd: 'a product requirements document: problem & goals, target users, user stories, scope (in/out), functional requirements, acceptance criteria, success metrics, risks & open questions',
-  rfc: 'an RFC / design proposal: summary, motivation, detailed design, alternatives considered (with trade-offs), drawbacks, migration/rollout, unresolved questions',
-  adr: 'an architecture decision record: context, the decision, status, considered options with trade-offs, consequences (positive & negative)',
-  design:
-    'a technical design document: overview, goals/non-goals, architecture, key components & data flows, interfaces, alternatives, risks',
-  technical:
-    'a technical reference: purpose, concepts, step-by-step usage, configuration, examples, troubleshooting',
-  api: 'an API reference: overview & auth, each endpoint/operation (request, parameters, responses, errors), and worked examples',
-  runbook:
-    'an operational runbook: when to use it, prerequisites, numbered step-by-step procedure, verification, rollback, and escalation',
-  research:
-    'a research / analysis report: question, method, findings, comparison of options, recommendation, and references',
-  reference:
-    'a clear reference document organised by topic with a short overview and a navigable section structure',
-  other: 'a well-structured document with a short overview followed by clearly-headed sections',
-}
-
 /** The document fields on the task, defaulting `docKind` to `other` when unset. */
 function docFields(context: AgentRunContext): {
   docKind: DocKind
@@ -95,12 +83,26 @@ function docFields(context: AgentRunContext): {
   }
 }
 
-/** The shared "what document are we writing" brief woven into every doc-kind prompt. */
-function docBriefSection(context: AgentRunContext, opts: { materialized?: boolean }): string {
+/**
+ * The shared "what document are we writing" brief woven into every doc-kind prompt.
+ *
+ * `structure: 'full'` (the default) spells out the section list via `templateStructureLine` —
+ * the researcher/finalizer get ONLY this brief, so they need it. The outliner/writer pass
+ * `structure: 'summary'` because they also receive the fuller template guidance below
+ * (`templateOutlineGuidance` / `templateSkeletonGuidance`), so repeating the section list in
+ * the brief would just spend tokens with no added signal.
+ */
+function docBriefSection(
+  context: AgentRunContext,
+  opts: { materialized?: boolean; structure?: 'full' | 'summary' },
+): string {
   const { docKind, audience, targetPath, outlineHints } = docFields(context)
+  const template = docTemplateFor(docKind)
+  const structure =
+    opts.structure === 'summary' ? template.summary : templateStructureLine(template)
   const lines: string[] = [
     `Document title: ${context.block.title}`,
-    `Document kind: ${docKind} — produce ${DOC_KIND_STRUCTURE[docKind]}.`,
+    `Document kind: ${docKind} — produce ${structure}.`,
     `Target file: \`${targetPath}\` (Markdown).`,
   ]
   if (audience) lines.push(`Intended audience: ${audience}. Pitch the depth and tone for them.`)
@@ -184,23 +186,29 @@ function docResearcherUserPrompt(context: AgentRunContext): string {
 }
 
 function docOutlinerUserPrompt(context: AgentRunContext): string {
+  const { docKind } = docFields(context)
   return [
     `Pipeline: ${context.pipelineName}`,
-    docBriefSection(context, {}),
+    docBriefSection(context, { structure: 'summary' }),
     priorWorkSection(context),
+    '',
+    templateOutlineGuidance(docTemplateFor(docKind)),
     '',
     'Produce the outline (sections + one-line intent each). Do not write the prose.',
   ].join('\n')
 }
 
 function docWriterUserPrompt(context: AgentRunContext): string {
-  const { targetPath } = docFields(context)
+  const { docKind, targetPath } = docFields(context)
   return [
     `Pipeline: ${context.pipelineName}`,
-    docBriefSection(context, { materialized: true }),
+    docBriefSection(context, { materialized: true, structure: 'summary' }),
     priorWorkSection(context),
     '',
-    `Write the full document to \`${targetPath}\` as Markdown, following the approved outline.`,
+    templateSkeletonGuidance(docTemplateFor(docKind), context.block.title),
+    '',
+    `Write the full document to \`${targetPath}\` as Markdown, following the approved outline. ` +
+      'The outline leads where it refined the skeleton; cover every required section.',
   ].join('\n')
 }
 
@@ -223,6 +231,9 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     systemPrompt: DOC_RESEARCHER_SYSTEM_PROMPT,
     userPrompt: docResearcherUserPrompt,
     agent: { surface: 'inline' },
+    // Doc-aware: the engine folds the task's writing-style fragments (anti-LLM-isms,
+    // concise & actionable) into the prompt, exactly as `code-aware` folds tech fragments.
+    traits: [DOC_AWARE_TRAIT],
     webResearchHint:
       'gather current prior art, standards and references for the document being written',
     presentation: {
@@ -239,6 +250,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     systemPrompt: DOC_OUTLINER_SYSTEM_PROMPT,
     userPrompt: docOutlinerUserPrompt,
     agent: { surface: 'inline' },
+    traits: [DOC_AWARE_TRAIT],
     presentation: {
       label: 'Doc Outliner',
       icon: 'i-lucide-list-tree',
@@ -256,6 +268,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     // writes the Markdown, pushes the work branch and opens the PR (coder-like). Its companion
     // `doc-reviewer` loops it back for rework below threshold.
     agent: { surface: 'container-coding', clone: { branch: 'work' } },
+    traits: [DOC_AWARE_TRAIT],
     presentation: {
       label: 'Doc Writer',
       icon: 'i-lucide-file-pen-line',
@@ -273,6 +286,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     // back (no new PR), fixer-like. The human gate's revision feedback is threaded in by
     // `withRevision` (catalog.ts), so the editor addresses it on this pass.
     agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    traits: [DOC_AWARE_TRAIT],
     presentation: {
       label: 'Doc Finalizer',
       icon: 'i-lucide-file-check-2',

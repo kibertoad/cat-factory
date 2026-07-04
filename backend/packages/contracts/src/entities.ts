@@ -275,6 +275,16 @@ export const blockSchema = v.object({
    * `executionId` and receives status writes). Absent / false ⇒ a normal, board-visible block.
    */
   internal: v.optional(v.boolean()),
+  /**
+   * Redaction marker set ONLY in the per-viewer workspace snapshot (never persisted): when
+   * `true`, this service frame is backed by a repo the requesting user cannot reach (a repo
+   * linked via ANOTHER member's personal access token, `GitHubRepo.linkedVia === 'user_pat'`,
+   * that this viewer's PAT can't access). The server scrubs the frame's title/description and
+   * drops its whole subtree from the snapshot, leaving only the block id + this flag, so the
+   * SPA renders a "Permission denied" placeholder instead of the service's contents. Absent ⇒
+   * a normal, fully-visible block.
+   */
+  accessDenied: v.optional(v.boolean()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
@@ -549,8 +559,20 @@ export const pipelineSchema = v.object({
    * pipeline for the first public entry.
    */
   public: v.optional(v.boolean()),
+  /**
+   * How this pipeline may be LAUNCHED: `'one-off'` (only as a manual task), `'recurring'`
+   * (only attached to a schedule), or `'both'`. Absent means `'both'` — pre-1.0, no
+   * migration/back-fill, so existing rows read as unrestricted. Enforced server-side in
+   * {@link ExecutionService.start} (via the run `origin`) and in `RecurringPipelineService`,
+   * and used by the SPA pickers to filter the offered pipelines. A `bug-intake` step is
+   * meaningless without a schedule, so a pipeline carrying one must be `'recurring'`.
+   */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
+export type PipelineAvailability = NonNullable<Pipeline['availability']>
 
 export const decisionSchema = v.object({
   id: v.string(),

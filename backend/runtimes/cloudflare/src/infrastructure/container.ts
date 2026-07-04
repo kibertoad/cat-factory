@@ -78,6 +78,7 @@ import {
   makeHarnessCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
+import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -135,6 +136,7 @@ import {
 } from './repositories/D1PersonalSubscriptionRepository'
 import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
 import { D1UserSecretRepository } from './repositories/D1UserSecretRepository'
+import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1ProviderModelCatalogRepository } from './repositories/D1ProviderModelCatalogRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -572,6 +574,14 @@ function buildAppRegistry(
  * live in `@cat-factory/server` so the Worker and Node service can't drift). This
  * wrapper just binds the D1 repositories. Shared by the container executor, the CI
  * status provider and the PR merger.
+ *
+ * No `repoProjectionCache` is threaded here (unlike the Node facade, which caches the
+ * whole-projection re-list per workspace — caching-layer slice 3): the repo projection
+ * is our own mutable D1 state, and the Worker's isolate-safe profile makes that cache
+ * pass-through (no cross-isolate invalidation bus), so an in-isolate TTL would serve
+ * stale repos after a write on another isolate. Reading live IS the isolate-safe
+ * behaviour. The shared GitHub sync/webhook services still receive the (pass-through)
+ * handle via `createGitHubModule`, so their invalidation code path stays symmetric.
  */
 function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
   return buildSharedResolveRepoTarget({
@@ -1522,6 +1532,7 @@ function selectGitHubDeps(
     issueProjectionRepository: new D1IssueProjectionRepository({ db }),
     commitProjectionRepository: new D1CommitProjectionRepository({ db }),
     checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
+    userRepoAccessRepository: new D1UserRepoAccessRepository({ db }),
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
     // Bound the initial backfill to the commit retention horizon (0 = full).
     commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -2276,6 +2287,15 @@ export function buildContainer(
     ...selectDeployDeps(env, config, db, clock),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
+    // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
+    // cross-isolate invalidation bus (and no Redis), so caches of mutable
+    // cross-instance state — the fragment catalog today — are configured
+    // pass-through rather than TTL'd (a stale-serving cache would be a correctness
+    // bug, not an optimization; see @cat-factory/caching's README). Distributed
+    // invalidation is a genuine Node-only concern, not a facade-parity gap: the
+    // Worker's cross-instance state already lives in globally-addressed DOs / D1.
+    // Pass-through handles are stateless, so the per-request build costs nothing.
+    caches: createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE }),
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
@@ -2395,6 +2415,8 @@ export function buildContainer(
     localModelEndpoints,
     // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
+    userRepoAccess: new D1UserRepoAccessRepository({ db }),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     gateways: {

@@ -83,12 +83,14 @@ export interface RepoBootstrapper {
   stopBootstrap(handle: BootstrapJobHandle): Promise<void>
   /**
    * After a successful run: ensure the new repo is present in the local GitHub
-   * projection and link it to the board service frame `blockId`, so tasks dropped
-   * on that frame resolve to (and are implemented against) the bootstrapped repo.
+   * projection and return its identity, so the caller can bind the board service
+   * frame's {@link Service} to it (tasks dropped on that frame then resolve to, and
+   * are implemented against, the bootstrapped repo). The projection row is attributed
+   * to the workspace's GitHub App installation — the repo is created under it, so it is
+   * `'app'`-reachable by every workspace member.
    */
-  linkRepoToBlock(
+  projectBootstrappedRepo(
     workspaceId: string,
     outcome: BootstrapRepoOutcome,
-    blockId: string,
-  ): Promise<void>
+  ): Promise<{ installationId: number; githubId: number }>
 }

@@ -34,6 +34,13 @@ export interface FragmentSourceServiceDependencies {
   resolveInstallationId: ResolveFragmentInstallationId
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Drops the cached merged catalog for a tier after this service mutates its
+   * fragments (sync/unlink) — wired to
+   * {@link FragmentLibraryService.invalidateCatalogTier} by the composition root.
+   * Absent (tests) ⇒ no cache to keep coherent.
+   */
+  invalidateCatalog?: (ownerKind: FragmentOwnerKind, ownerId: string) => Promise<void>
 }
 
 /**
@@ -91,6 +98,7 @@ export class FragmentSourceService {
       await this.deps.promptFragmentRepository.softDelete(f.ownerKind, f.ownerId, f.fragmentId, now)
     }
     await this.deps.fragmentSourceRepository.softDelete(source.id, now)
+    if (fragments.length > 0) await this.deps.invalidateCatalog?.(ownerKind, ownerId)
   }
 
   /**
@@ -178,6 +186,9 @@ export class FragmentSourceService {
     }
 
     await this.deps.fragmentSourceRepository.updateSyncState(source.id, headCommit, now)
+    // Invalidate AFTER the sync state commits, and only when fragments actually
+    // changed — a no-op resync must not churn every peer's cached catalog.
+    if (upserted > 0 || tombstoned > 0) await this.deps.invalidateCatalog?.(ownerKind, ownerId)
     return { upserted, tombstoned, unchanged, lastSyncedCommit: headCommit }
   }
 

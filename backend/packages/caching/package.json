@@ -1,0 +1,42 @@
+{
+  "name": "@cat-factory/caching",
+  "version": "0.4.0",
+  "description": "The app-level caching seam for the Agent Architecture Board (docs/initiatives/caching-layer.md): createAppCaches builds the named, typed in-memory read-through caches (layered-loader) the services consume via the kernel AppCaches port, with optional distributed invalidation over an injected Redis notification pair. Redis is only ever an invalidation bus, never a data tier.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "backend/packages/caching"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepublishOnly": "pnpm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "@cat-factory/kernel": "workspace:*",
+    "layered-loader": "^14.5.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
+  }
+}

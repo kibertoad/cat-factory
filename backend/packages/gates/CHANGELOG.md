@@ -1,5 +1,66 @@
 # @cat-factory/gates
 
+## 0.2.88
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.2.87
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.2.86
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
+## 0.2.85
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+
+## 0.2.84
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+
+## 0.2.83
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+
+## 0.2.82
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/kernel@0.79.1
+
+## 0.2.81
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+
 ## 0.2.80
 
 ### Patch Changes

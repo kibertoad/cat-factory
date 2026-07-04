@@ -1,5 +1,167 @@
 # @cat-factory/contracts
 
+## 0.95.0
+
+### Minor Changes
+
+- 6c1efd1: Docker Compose ephemeral envs: opt-in build-from-source mode.
+
+  The Docker Compose environment backend was checkout-free / image-pull only and hard-rejected
+  `build:`, host bind mounts, relative `env_file`, and `privileged`, so an app repo that builds
+  its own images (e.g. a .NET + Angular + SQL Server stack) could not become a per-PR preview env.
+
+  A new opt-in `build` mode (workspace handler `providerConfig.build`, mirrored advisory
+  `ServiceProvisioning.composeBuild`) clones the PR head into a per-project working tree, writes
+  the isolation-safe rewritten compose beside the original inside the checkout, and runs
+  `docker compose build` + `up --wait`. In build mode `build:`, in-checkout relative bind mounts,
+  and relative `env_file`s are honored. Image mode is unchanged and remains the default.
+
+  Host-escape refusal is uniform across EVERY path-bearing reference, not just bind mounts: bind
+  sources, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:` `file:` sources are
+  all run through `escapesCheckout`, which now also catches UNC/backslash-absolute paths, a
+  separator-buried `../` source (`sub/../../../etc`, previously mis-read as a named volume), and an
+  unresolved `${VAR}` interpolation (expands to an arbitrary host path at runtime). `include:` and
+  cross-file `extends: { file }` are refused outright in both modes — the daemon merges those files
+  from disk, so their services would otherwise slip a privileged container / host bind / pinned port
+  past the parse-based guard. `privileged: true` stays refused.
+
+  The `ComposeRuntime` seam gains optional `checkout`/`writeCheckoutFile` (implemented in the local
+  facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a LAZY
+  `clone` resolver (a thunk) invoked only by the build-mode provider that actually needs a working
+  tree — so image-mode compose / custom / k8s-sync provisions no longer mint a short-lived VCS token
+  they never use (reusing the deploy clone-target seam, memoized so one provision never mints twice).
+  Build mode registers only on the docker-family local runtime — the documented runtime-bound
+  exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
+
+  Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
+  recommended in build-from-source mode (previously it was recommended blindly and then failed at
+  provision time).
+
+  The compose environment connect form gains an "Image source" selector (pull pre-built vs build
+  from source) and a build-timeout field; the misleading "image-based stacks only" copy is removed.
+
+## 0.94.0
+
+### Minor Changes
+
+- 6edcce0: Personal-PAT repo access + fail-closed board redaction, and removal of the legacy repo→block link.
+
+  - **Expand the repo picker with your own PAT (all facades).** A user's stored GitHub PAT
+    (`user_secrets` kind `github_pat`) now surfaces repos it can reach beyond the workspace's GitHub
+    App grant — even on the hosted Cloudflare/Node facades. Linking one creates a **personal service**
+    (`GitHubRepo.linkedVia === 'user_pat'`); runs against it already use the initiator's PAT.
+  - **Fail-closed frame redaction.** A service frame backed by a repo linked via another member's PAT
+    is hidden from members who can't reach it: the board snapshot scrubs the frame to just its
+    internal id + a "Permission denied" placeholder and drops its subtree. Access is a fail-closed
+    per-user projection (`github_user_repo_access`), refreshed when a user enumerates their PAT repos
+    and cleared when they remove their PAT — no live GitHub call on the snapshot path.
+  - **New:** `github_repos.linked_via` column + `github_user_repo_access` table (mirrored D1 ⇄
+    Drizzle, with a cross-runtime conformance suite); kernel `UserRepoAccessRepository` port and
+    optional `GitHubClient.listReposForToken`/`getRepoForToken`; `Block.accessDenied` +
+    `GitHubAvailableRepo.personal` wire fields.
+
+  **Breaking (pre-1.0, no migration):** the legacy `github_repos.block_id` repo↔frame link is removed
+  — the account-owned `Service` (`getByFrameBlock` → `repoGithubId`) is now the SOLE repo↔frame
+  linkage. `RepoProjectionRepository.linkBlock` and `GitHubRepo.blockId` are gone; `resolveRepoTarget`
+  now requires a `serviceRepository`; the `RepoBootstrapper` port's `linkRepoToBlock` is replaced by
+  `projectBootstrappedRepo` (the caller binds the frame's `Service`). Existing rows' `block_id` is
+  dropped; repos remain reachable through their `Service`.
+
+## 0.93.0
+
+### Minor Changes
+
+- ef57cb1: Bug-triage pipeline, Phase A — pipeline `availability` (one-off / recurring / both).
+
+  A library pipeline can now declare HOW it may be launched, so a recurring-only pipeline (the
+  upcoming `pl_bug_triage`) can't be started as a manual one-off, and a one-off-only pipeline can't
+  be attached to a schedule. Absent means `'both'` (unrestricted) — pre-1.0, no migration/back-fill,
+  existing rows read unchanged.
+
+  - **Contract**: `pipelineSchema` gains `availability?: 'one-off' | 'recurring' | 'both'` (+ the
+    `PipelineAvailability` type, re-exported from kernel); `createPipeline`/`updatePipeline` accept
+    and persist it.
+  - **Persistence** (both runtimes, kept symmetric): `availability` is a new `pipelines.availability`
+    column — D1 migration `0037_pipeline_availability.sql` ⇄ Drizzle schema + generated migration —
+    read/written by the shared `rowToPipeline` mapper and both repos, so the field round-trips
+    instead of being silently dropped on save.
+  - **Server enforcement** (the pickers are convenience, not the gate): `ExecutionService.start`
+    gains an `origin: 'manual' | 'recurring'` option (default `'manual'`), and a start-only
+    `assertPipelineLaunchable` gate rejects a manual start of a recurring-only pipeline (and a
+    scheduled fire of a one-off-only one). `RecurringPipelineService.fire` passes `'recurring'`; its
+    `create`/`update` reject attaching a one-off-only pipeline to a schedule. A retry/restart
+    re-drives an already-validated run, so it never re-checks the launch constraint. A pipeline
+    carrying an ENABLED `bug-intake` step must be `'recurring'` (validated at builder save + start;
+    a disabled step imposes no requirement). The schedule-attach check delegates to the same gate
+    (one rule, one `ValidationError`), and `clone` re-runs it so an un-launchable copy can't be
+    minted. Editing a pipeline to `'one-off'` while a schedule still references it is rejected
+    (`ConflictError`) rather than silently breaking every future fire.
+  - **SPA pickers**: the manual-start surfaces (add-task modal, board/inspector Run menus, task
+    run-settings default) filter out `'recurring'`-only pipelines, and the recurring-pipeline modal
+    filters out `'one-off'`-only ones — composed with the existing `pipelineAllowedForFrame`
+    predicate.
+
+## 0.92.0
+
+### Minor Changes
+
+- 1d738f7: feat(recurring): on-demand (manual-only) recurring tasks that can use individual-usage subscriptions
+
+  A recurring pipeline can now be flagged **on-demand**: it has no cadence and is never
+  fired by the sweeper — it runs ONLY when a person triggers it via "run now". Because a
+  human is present at every fire, an on-demand schedule's block MAY target an individual-usage
+  subscription model (Claude / Codex / GLM), unlocked per run-now with the initiator's personal
+  password exactly like a manual task start. A cadence schedule still refuses individual-usage
+  models (no one is present to unlock them unattended).
+
+  - New `onDemand` flag on `PipelineSchedule` + `createScheduleSchema` (recurrence is now
+    optional — an on-demand schedule needs none). Persisted as an `on_demand` column on both
+    runtimes (D1 migration `0037` ⇄ Drizzle), with `listDue` filtering `on_demand = 0` so the
+    sweeper skips them. Cross-runtime conformance asserts the flag round-trips and run-now fires.
+  - `RecurringPipelineService.fire` exempts on-demand schedules from the individual-usage
+    refusal and threads the run-now initiator + credential-activation closure into the run;
+    the run-now controller resolves the personal-credential gate (428 when a password is needed).
+  - Frontend: an "on-demand" toggle in the add-recurring modal (hides the cadence editor), an
+    on-demand inspector view (no cadence/pause, just run-now), and run-now now rides the cached
+    personal password through the credential modal. i18n in all 8 locales.
+
+## 0.91.0
+
+### Minor Changes
+
+- 47a2975: Initiatives slice 3 — the execution loop.
+
+  An approved initiative plan now RUNS: a new `InitiativeLoopService` drives each `executing`
+  initiative — reconciling its spawned tasks, spawning the next wave just-in-time, and completing
+  the initiative once every tracker item settles.
+
+  - **The loop** (`orchestration/modules/initiative/InitiativeLoopService.ts`): per-initiative
+    `tick` = reconcile (fold each spawned task block's status back onto its item — done + PR link /
+    `pr_open` / `blocked` + deviation, one batched block read, no N+1) → complete (all items settled
+    → initiative + anchor block `done`, tracker re-commit, notify) → spawn (create task blocks for
+    the eligible `pending` items — current phase, deps met, phase not halted — up to the concurrency
+    cap, each pipeline chosen by the policy's estimate→pipeline rules). Spawning is CLAIM-FIRST (a
+    rev-CAS write records the pre-generated block id before any side effect), so a concurrent ticker
+    never orphans a double-spawn. A per-service task-limit conflict leaves the item `pending` for the
+    next sweep; a missing pipeline (deleted after ingest) records a deviation + notification and
+    blocks the item — the sweep never throws.
+  - **Blocked = halt the phase, notify.** A blocked item stops new spawns in its phase (and keeps the
+    phase current, so the initiative never advances past it) and raises the new `initiative`
+    notification type; in-flight siblings finish. A human retries/skips the item to unblock.
+  - **Both cron seams + terminal pokes.** `runDue` is wired into the Worker `scheduled` handler and a
+    Node one-minute interval sweeper (symmetric). A settling child run pokes its owning initiative's
+    loop immediately (`RunStateMachine.emitInstance` on a terminal run, `ExecutionService.finalizeMerge`
+    on a merge), so work advances without waiting for the next sweep.
+  - **Controls.** Pause / resume / cancel endpoints + `InitiativeService` CAS transitions; the sweep
+    skips a non-`executing` initiative. The tracker window gains a live progress bar and the inspector
+    the loop controls (`initiative.inspector.pause/resume/cancel`, all locales).
+  - **`listExecuting()` now returns `{ workspaceId, initiative }[]`** (the entity carries no workspace
+    id) — mirrored in the D1 + Drizzle repos and asserted, with the persisted loop-state round-trip,
+    by the cross-runtime conformance suite.
+
+  No new persistence (the `initiatives` table already exists on both facades) — so no D1/Drizzle
+  migration and no executor-harness image bump.
+
 ## 0.90.0
 
 ### Minor Changes

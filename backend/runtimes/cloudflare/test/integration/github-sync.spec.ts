@@ -16,7 +16,6 @@ function seededClient(installationId: number): FakeGitHubClient {
       name: 'web',
       defaultBranch: 'main',
       private: true,
-      blockId: null,
       syncedAt: 0,
     },
   ]

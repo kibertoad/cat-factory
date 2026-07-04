@@ -1,15 +1,18 @@
 import type { Clock } from '@cat-factory/kernel'
-import type { GitHubClient, GitHubRepoRef } from '@cat-factory/kernel'
+import type { GitHubClient, GitHubRepoRef, Paged } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
   GitHubInstallationRepository,
+  GroupCacheHandle,
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
   SyncCursor,
   SyncCursorKind,
+  UserRepoAccessRecord,
+  UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
 
@@ -36,6 +39,13 @@ export interface GitHubSyncServiceDependencies {
   checkRunProjectionRepository: CheckRunProjectionRepository
   clock: Clock
   /**
+   * The per-user "repos my PAT can reach" projection. When wired, browsing the picker with a
+   * personal token records the viewer's PAT-reachable repos here (the fail-closed cache the
+   * board redaction reads), and linking a personal repo records the linker's access. Optional:
+   * a facade without it wired keeps the App-only behaviour.
+   */
+  userRepoAccessRepository?: UserRepoAccessRepository
+  /**
    * Bounds the initial commit backfill: when a repo has no commit cursor yet
    * (its first sync), commits are listed only from `now - commitBackfillHorizonMs`
    * rather than from the dawn of the repo. This keeps a large/monorepo connect
@@ -43,10 +53,23 @@ export interface GitHubSyncServiceDependencies {
    * (more recent) cursor. Undefined means backfill the full history (legacy).
    */
   commitBackfillHorizonMs?: number
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, slice 3). Every
+   * method here that mutates a workspace's projected repos (link / monorepo-flag / the
+   * exact-set write + tombstone / the link-time full re-stamp) drops that workspace's group
+   * after the write so the block→repo resolver re-lists fresh. Absent (tests / the
+   * Worker's pass-through profile) ⇒ the invalidations are no-ops.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
 }
 
 export class GitHubSyncService {
   constructor(private readonly deps: GitHubSyncServiceDependencies) {}
+
+  /** Drop a workspace's cached repo projection after a write that changed it. */
+  private invalidateRepoProjection(workspaceId: string): Promise<void> {
+    return this.deps.repoProjectionCache?.invalidateGroup(workspaceId) ?? Promise.resolve()
+  }
 
   /**
    * The repos the workspace's installation can access, annotated with whether
@@ -62,7 +85,7 @@ export class GitHubSyncService {
    */
   async listAvailableRepos(
     workspaceId: string,
-    opts: { q?: string } = {},
+    opts: { q?: string; userId?: string; userToken?: string } = {},
   ): Promise<GitHubAvailableRepo[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
@@ -75,13 +98,20 @@ export class GitHubSyncService {
     // expose far more repos than the enumeration cap, so a match beyond it would be
     // silently dropped — the exact "no results for a repo I have access to" bug. Without
     // a query, browse the whole accessible set (the repo-link panel's browse-all).
-    const items = query
+    const appRepos = query
       ? await this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
           owner: installation.accountLogin || undefined,
           ownerType: installation.targetType,
         })
       : (await this.deps.githubClient.listInstallationRepos(installation.installationId)).items
-    return items.map((r) => ({
+
+    // Expand with repos the signed-in user's own PAT can reach beyond the App's grant — even
+    // on the hosted facades. The App repos win on a github-id collision (they're shared, so a
+    // repo reachable both ways is NOT personal). Personal-only repos are badged so the user
+    // knows linking one makes a frame others may not see.
+    const personalRepos = await this.viewerPatRepos(workspaceId, opts, query)
+    const appIds = new Set(appRepos.map((r) => r.githubId))
+    const merged: GitHubAvailableRepo[] = appRepos.map((r) => ({
       githubId: r.githubId,
       owner: r.owner,
       name: r.name,
@@ -89,7 +119,75 @@ export class GitHubSyncService {
       private: r.private,
       linked: tracked.has(r.githubId),
       isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
+      personal: false,
     }))
+    for (const r of personalRepos) {
+      if (appIds.has(r.githubId)) continue
+      merged.push({
+        githubId: r.githubId,
+        owner: r.owner,
+        name: r.name,
+        defaultBranch: r.defaultBranch,
+        private: r.private,
+        linked: tracked.has(r.githubId),
+        isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
+        personal: true,
+      })
+    }
+    return merged
+  }
+
+  /**
+   * The repos the signed-in user's PAT can reach (via `/user/repos`), and — on a blank browse-all
+   * — the refresh of their fail-closed access projection. Empty when no token is supplied, the
+   * client can't enumerate by token, or the token can't be used (expired/revoked/network): a
+   * personal-token failure degrades to App-only, it never fails the whole picker. A search filters
+   * the (bounded) PAT set in memory.
+   */
+  private async viewerPatRepos(
+    workspaceId: string,
+    opts: { q?: string; userId?: string; userToken?: string },
+    query: string | undefined,
+  ): Promise<GitHubRepo[]> {
+    const { userToken, userId } = opts
+    if (!userToken || !this.deps.githubClient.listReposForToken) return []
+    // A stored PAT can be expired/revoked while still decrypting fine (or GitHub can be
+    // unreachable). Enumerating with it must NOT 500 the whole available-repos listing — the App
+    // repos still have to render — so degrade to App-only on any failure (mirrors the link path's
+    // `getRepoForToken` best-effort contract).
+    let page: Paged<GitHubRepo>
+    try {
+      page = await this.deps.githubClient.listReposForToken(userToken)
+    } catch {
+      return []
+    }
+    const { items, truncated } = page
+    // Refresh the fail-closed access cache only on a blank browse-all (the picker's initial
+    // full list), NOT on every search keystroke — a per-search refresh would delete+reinsert the
+    // user's whole recorded set on each request. A truncated enumeration is an incomplete prefix,
+    // so it can't safely REPLACE the set (that would drop repos beyond the page cap the user
+    // really can reach, then redact their own frames); record it additively instead. A complete
+    // enumeration replaces, so a repo the PAT can no longer reach stops granting visibility.
+    if (!query && userId && this.deps.userRepoAccessRepository) {
+      const records = items.map((r) => this.toAccessRecord(userId, r))
+      if (truncated) await this.deps.userRepoAccessRepository.recordAccessible(userId, records)
+      else await this.deps.userRepoAccessRepository.replaceForUser(userId, records)
+    }
+    if (!query) return items
+    const q = query.toLowerCase()
+    return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+  }
+
+  private toAccessRecord(userId: string, repo: GitHubRepo): UserRepoAccessRecord {
+    return {
+      userId,
+      repoGithubId: repo.githubId,
+      owner: repo.owner,
+      name: repo.name,
+      defaultBranch: repo.defaultBranch,
+      private: repo.private,
+      syncedAt: this.deps.clock.now(),
+    }
   }
 
   /**
@@ -110,6 +208,8 @@ export class GitHubSyncService {
       throw new Error(`Repo ${repoGithubId} is not accessible to workspace '${workspaceId}'`)
     }
     await this.deps.repoProjectionRepository.setMonorepo(workspaceId, repoGithubId, isMonorepo)
+    // The monorepo flag decides whether the resolver hands agents the service subdirectory.
+    await this.invalidateRepoProjection(workspaceId)
     return { ...existing, isMonorepo }
   }
 
@@ -159,7 +259,11 @@ export class GitHubSyncService {
    * caller surfaces a "grant the App access" hint. Backs the "add an existing
    * repo as a board service" flow, where the workspace may not link the repo yet.
    */
-  async linkRepo(workspaceId: string, repoGithubId: number): Promise<GitHubRepo | null> {
+  async linkRepo(
+    workspaceId: string,
+    repoGithubId: number,
+    opts: { userId?: string; userToken?: string } = {},
+  ): Promise<GitHubRepo | null> {
     const existing = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
     if (existing) return existing
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
@@ -170,12 +274,51 @@ export class GitHubSyncService {
     // realtime search surfaced from beyond that window would be unlinkable (returned null →
     // a spurious "grant the App access" 409) even though the App can access it.
     const match = await this.deps.githubClient.getRepoById(installationId, repoGithubId)
-    if (!match) return null
-    const repo: GitHubRepo = { ...match, installationId, syncedAt: this.deps.clock.now() }
+    if (match) {
+      const repo: GitHubRepo = {
+        ...match,
+        installationId,
+        linkedVia: 'app',
+        syncedAt: this.deps.clock.now(),
+      }
+      await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
+      await this.invalidateRepoProjection(workspaceId)
+      // Full pass: the org cursor may already be advanced, so bypass it to populate this
+      // newly-linked workspace.
+      await this.syncRepo(repo, { full: true })
+      return this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    }
+    // The App can't reach it — try the linking user's own PAT. If it can, project the repo as
+    // a PERSONAL repo (attributed to the workspace installation so `resolveRepoTarget` resolves
+    // it, but marked `user_pat`), record the linker's access, and SKIP the App-based sync (the
+    // App token can't read its branches/PRs). Runs against it use the initiator's PAT (already
+    // wired via the PAT-preferring token mint).
+    return this.linkPersonalRepo(workspaceId, repoGithubId, installationId, opts)
+  }
+
+  private async linkPersonalRepo(
+    workspaceId: string,
+    repoGithubId: number,
+    installationId: number,
+    opts: { userId?: string; userToken?: string },
+  ): Promise<GitHubRepo | null> {
+    const { userToken, userId } = opts
+    if (!userToken || !this.deps.githubClient.getRepoForToken) return null
+    const personal = await this.deps.githubClient.getRepoForToken(userToken, repoGithubId)
+    if (!personal) return null
+    const repo: GitHubRepo = {
+      ...personal,
+      installationId,
+      linkedVia: 'user_pat',
+      syncedAt: this.deps.clock.now(),
+    }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
-    // Full pass: the org cursor may already be advanced, so bypass it to populate this
-    // newly-linked workspace.
-    await this.syncRepo(repo, { full: true })
+    await this.invalidateRepoProjection(workspaceId)
+    if (userId && this.deps.userRepoAccessRepository) {
+      await this.deps.userRepoAccessRepository.recordAccessible(userId, [
+        this.toAccessRecord(userId, repo),
+      ])
+    }
     return this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
   }
 
@@ -205,6 +348,9 @@ export class GitHubSyncService {
       selected.map((r) => r.githubId),
       this.deps.clock.now(),
     )
+    // The exact-set write + tombstone changed this workspace's projection (even when
+    // nothing was selected — a full deselect tombstones everything and runs no syncRepo).
+    await this.invalidateRepoProjection(workspaceId)
     for (const repo of selected) await this.syncRepo(repo, { full: true })
     return this.deps.repoProjectionRepository.list(workspaceId)
   }
@@ -359,11 +505,20 @@ export class GitHubSyncService {
       }
     }
 
-    // Stamp the repo row as freshly synced for every workspace that links it.
+    // Stamp the repo row as freshly synced for every workspace that links it. On an
+    // incremental resync (`full` false — the queue consumer / periodic reconcile) the
+    // `repo` came from the stored projection, so only `syncedAt` changes — not a field the
+    // resolver reads — and there is nothing to invalidate. A `full` pass runs only at link
+    // time (linkRepo / setLinkedRepos) with freshly-FETCHED metadata, which can differ from
+    // what ANOTHER workspace sharing this repo has cached, so drop each fanned-out
+    // workspace's group then. (The triggering workspace's own group was already dropped by
+    // the link/set caller.) Gating on `full` keeps the frequent resync path from churning
+    // the cache the durable poll ticks are meant to hit.
     const now = this.deps.clock.now()
     await fanOut((ws) =>
       this.deps.repoProjectionRepository.upsertMany(ws, [{ ...repo, syncedAt: now }]),
     )
+    if (full) for (const ws of workspaces) await this.invalidateRepoProjection(ws)
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */

@@ -2,6 +2,8 @@ import {
   ValidationError,
   type BlockRepository,
   type GitHubInstallationRepository,
+  type GitHubRepo,
+  type GroupCacheHandle,
   type RepoProjectionRepository,
   type ServiceRepository,
 } from '@cat-factory/kernel'
@@ -16,19 +18,28 @@ export interface ResolveRepoTargetDependencies {
   repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>
   blockRepository: Pick<BlockRepository, 'get'>
   /**
-   * Resolves the {@link Service} owning a frame block, used to find which repo a
-   * frame targets AND (for a monorepo) the subdirectory the service pins. Optional:
-   * a facade/test without in-org services wired falls back to the repo-projection
-   * `block_id` link (one whole-repo service per repo, no subdirectory).
+   * Resolves the {@link Service} owning a frame block — the SOLE repo↔frame linkage: it
+   * yields which repo a frame targets AND (for a monorepo) the subdirectory the service
+   * pins. Every facade wires it whenever GitHub is configured.
    */
-  serviceRepository?: Pick<ServiceRepository, 'getByFrameBlock'>
+  serviceRepository: Pick<ServiceRepository, 'getByFrameBlock'>
+  /**
+   * Read-through cache for the workspace's whole repo projection
+   * (`AppCaches.repoProjection`, docs/initiatives/caching-layer.md slice 3), grouped
+   * AND keyed by workspace id. The unbounded `repoProjectionRepository.list` re-list
+   * this resolver runs on every dispatch and poll tick reads through it; the
+   * projection's write paths (GitHub sync/webhook, repo link/monorepo-flag, bootstrap)
+   * invalidate the workspace group after they commit. Absent (tests / the Worker's
+   * pass-through profile) ⇒ every resolve lists live.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
 }
 
 /**
  * Resolve the repo linked to a running block's enclosing service, shared verbatim by
  * both runtime facades (Worker D1 + Node Drizzle/Postgres). Repos are linked at the
- * service-frame level (see `linkBlock`), but execution runs at the task/module level,
- * so we walk up the block's ancestry to find the frame's repo.
+ * service-frame level (via the account-owned {@link ServiceRepository}), but execution
+ * runs at the task/module level, so we walk up the block's ancestry to find the frame's repo.
  *
  * There is deliberately NO "first repo" fallback: a workspace can have many repos, and
  * guessing silently pushes work into the wrong one (this is how a simple-service task
@@ -42,46 +53,47 @@ export interface ResolveRepoTargetDependencies {
  * because each wires its own resolver).
  */
 export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): ResolveRepoTarget {
-  const { installationRepository, repoProjectionRepository, blockRepository, serviceRepository } =
-    deps
+  const {
+    installationRepository,
+    repoProjectionRepository,
+    blockRepository,
+    serviceRepository,
+    repoProjectionCache,
+  } = deps
   return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
-    const repos = await repoProjectionRepository.list(workspaceId)
+    // The whole-projection re-list is the hot, unbounded read here — cache it per
+    // workspace. The installation lookup above and the block ancestry walk below stay
+    // live (both cheap / tree-depth-bounded), so a reparent or service repo-link
+    // change needs no cache invalidation; only the projection's own writes do.
+    const repos = repoProjectionCache
+      ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
+          repoProjectionRepository.list(workspaceId),
+        )
+      : await repoProjectionRepository.list(workspaceId)
     if (repos.length === 0) return null
     const reposByGithubId = new Map(repos.map((r) => [r.githubId, r]))
-    const reposByBlock = new Map(
-      repos.filter((r) => r.blockId).map((r) => [r.blockId as string, r]),
-    )
 
-    // Walk up the block's ancestry to the enclosing service frame, then resolve its
-    // repo. Two linkage mechanisms, checked in this order at each level:
-    //  1. The account-owned `Service` for the frame (`getByFrameBlock`) → its
-    //     `repoGithubId`. This is the only mechanism that supports a MONOREPO, where
-    //     several frames each own a service pinned to a different subdirectory of the
-    //     SAME repo (the projection's single `block_id` can't express that), and it is
-    //     the only one carrying the per-service `directory`.
-    //  2. The legacy repo-projection `block_id` link (one whole-repo service per repo),
-    //     for frames created before in-org services / without a service wired.
-    // There is deliberately NO "first repo" fallback: a workspace can have many repos,
-    // and guessing silently pushes work into the wrong one. If nothing in the chain is
-    // linked we throw so the misconfiguration surfaces instead of corrupting another repo.
+    // Walk up the block's ancestry to the enclosing service frame, then resolve its repo via
+    // the account-owned `Service` for that frame (`getByFrameBlock` → `repoGithubId`). This is
+    // the SOLE linkage: it is the only mechanism that supports a MONOREPO (several frames each
+    // owning a service pinned to a different subdirectory of the SAME repo) and the only one
+    // carrying the per-service `directory`. There is deliberately NO "first repo" fallback: a
+    // workspace can have many repos, and guessing silently pushes work into the wrong one. If
+    // nothing in the chain is linked we throw so the misconfiguration surfaces instead of
+    // corrupting another repo.
     let resolved: { repo: (typeof repos)[number]; directory: string | null } | undefined
     let cursor: string | null = blockId
     const seen = new Set<string>()
     while (cursor && !seen.has(cursor)) {
-      const service = await serviceRepository?.getByFrameBlock(cursor)
+      const service = await serviceRepository.getByFrameBlock(cursor)
       if (service?.repoGithubId != null) {
         const repo = reposByGithubId.get(service.repoGithubId)
         if (repo) {
           resolved = { repo, directory: service.directory ?? null }
           break
         }
-      }
-      const linked = reposByBlock.get(cursor)
-      if (linked) {
-        resolved = { repo: linked, directory: null }
-        break
       }
       seen.add(cursor)
       const block = await blockRepository.get(workspaceId, cursor)

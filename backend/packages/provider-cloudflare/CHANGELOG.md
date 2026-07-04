@@ -1,5 +1,86 @@
 # @cat-factory/provider-cloudflare
 
+## 0.7.140
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+  - @cat-factory/agents@0.33.1
+
+## 0.7.139
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/agents@0.33.0
+
+## 0.7.138
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+- Updated dependencies [6213771]
+  - @cat-factory/kernel@0.84.0
+  - @cat-factory/agents@0.32.0
+
+## 0.7.137
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+  - @cat-factory/agents@0.31.0
+
+## 0.7.136
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/kernel@0.82.0
+  - @cat-factory/agents@0.30.5
+
+## 0.7.135
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/kernel@0.81.0
+  - @cat-factory/agents@0.30.4
+
+## 0.7.134
+
+### Patch Changes
+
+- fcc8010: Update Cloudflare dependencies to the latest release-age-compliant versions:
+  `wrangler` 4.105.0 → 4.107.0, `@cloudflare/workers-types` 4.20260628.1 →
+  4.20260702.1, `@cloudflare/vitest-pool-workers` 0.16.20 → 0.18.0, and
+  `workers-ai-provider` 3.2.1 → 3.3.1 (still within the `ai@^6` / `@ai-sdk/*@^3`
+  peer range). `@cloudflare/containers` is already on the latest release (0.3.7).
+
+## 0.7.133
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/agents@0.30.3
+
+## 0.7.132
+
+### Patch Changes
+
+- @cat-factory/agents@0.30.2
+- @cat-factory/kernel@0.79.1
+
+## 0.7.131
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/agents@0.30.1
+
 ## 0.7.130
 
 ### Patch Changes

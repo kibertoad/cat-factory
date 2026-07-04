@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
-import { pipelineAllowedForFrame } from '~/utils/pipeline'
+import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
@@ -169,12 +169,13 @@ const taskBranchUrl = computed(() => {
   return base ? `${base}/tree/${pr.branch}` : null
 })
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise — they'd be refused
-// at run start (see utils/pipeline + the backend gate).
+// Hide UI-testing pipelines when this block's frame has no UI to exercise, and `'recurring'`-only
+// pipelines (a manual run of one is refused server-side) — they'd be refused at run start (see
+// utils/pipeline + the backend gate).
 const runMenu = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines
-    .filter((p) => pipelineAllowedForFrame(p, frame, board.blocks))
+    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks))
     .map((p) => ({
       label: p.name,
       icon: 'i-lucide-play',

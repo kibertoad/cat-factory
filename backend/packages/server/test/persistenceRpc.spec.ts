@@ -1548,7 +1548,7 @@ describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
   }
 
   it('still refuses the projection WRITE surface (sync ingest / board-linkage stay off)', async () => {
-    // `upsertMany` (sync ingest), `linkBlock`/`setMonorepo` (board-linkage), and the single-repo
+    // `upsertMany` (sync ingest), `setMonorepo` (board-linkage), and the single-repo
     // `get` (repo-write facade) are NOT allow-listed — the mothership owns GitHub sync + writes.
     const repos = remoteRegistry()
     await expect(repos.repoProjectionRepository!.upsertMany!('ws_in', [])).rejects.toThrow(

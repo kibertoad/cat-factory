@@ -196,7 +196,9 @@
       "linearTeamId": "מזהה צוות Linear",
       "footerHint": "משימה מחזורית אחת נוספת בתוך השירות; כל ריצה מחליפה את הקודמת. היסטוריית הריצות שלה מוצגת במפקח.",
       "submit": "הוסף צינור מחזורי",
-      "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי"
+      "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי",
+      "onDemand": "לפי דרישה (ידני בלבד)",
+      "onDemandHint": "רץ רק כשאתה מפעיל אותו, ללא תזמון. מכיוון שאתה נוכח בכל פעם, המשימה יכולה להשתמש במודל מנוי לשימוש אישי."
     },
     "failure": {
       "containerFailedToStart": "מכל הקונטיינר נכשל בהפעלה",
@@ -249,7 +251,11 @@
       "dragTask": "גרור משימה",
       "dragToResize": "גרור לשינוי גודל",
       "addFirstTask": "הוסף את המשימה הראשונה",
-      "createInitiativeTitle": "יצירת יוזמה"
+      "createInitiativeTitle": "יצירת יוזמה",
+      "accessDenied": {
+        "title": "הגישה נדחתה",
+        "hint": "אין לך גישה למאגר שעליו מבוסס שירות זה."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "נדרשת החלטה",
@@ -438,7 +444,9 @@
         "skipped": "דולג"
       },
       "updateFailed": "לא ניתן לעדכן את לוח הזמנים",
-      "runNowFailed": "לא ניתן להריץ עכשיו"
+      "runNowFailed": "לא ניתן להריץ עכשיו",
+      "onDemand": "לפי דרישה",
+      "onDemandHint": "ידני בלבד. רץ כשאתה מפעיל אותו, ויכול להשתמש במודל מנוי לשימוש אישי."
     },
     "fragments": {
       "serviceTitle": "מומלצות עבודה לשירות",
@@ -1608,9 +1616,10 @@
         "kubernetes": "אשכול Kubernetes",
         "kubernetesDesc": "הקצה מרחב שמות לכל PR באשכול Kubernetes שאתה מפעיל.",
         "environment-provider": "ספק HTTP מותאם",
-        "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך."
+        "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך.",
+        "composeDesc": "מריץ את קובץ docker-compose.yml של המאגר עצמו על דימון Docker מקומי ככתובת ה-URL של הבוחן. מתאים בעיקר לאפליקציות מקומיות מבוססות Compose. תומך בתמונות בנויות מראש או בבנייה מקוד המקור; דורש דימון Docker, ולכן פריסות מקומיות בלבד."
       },
-      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של זמן הריצה: אין צורך בחיבור (הקונטיינר של הריצה חייב לתמוך ב-Docker-in-Docker).",
+      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של סביבת הריצה: אין צורך בחיבור (מכולת ההרצה חייבת לתמוך ב-Docker-in-Docker). הגדר את השירות, הפורט ומקור התמונה (משיכת תמונה בנויה מראש או בנייה מקוד המקור) בהגדרות הסביבה של השירות.",
       "engine": {
         "local-k3s": "k3s מקומי",
         "remote-kubernetes": "Kubernetes מרוחק"
@@ -2488,7 +2497,8 @@
       "repoLabel": {
         "private": " (פרטי)",
         "monorepo": " · מונורפו",
-        "onBoard": " · כבר על הלוח"
+        "onBoard": " · כבר על הלוח",
+        "personal": " · אישי (הטוקן שלך)"
       },
       "monorepoLabel": "זהו מונורפו (מארח יותר משירות אחד)",
       "monorepoDescription": "הוסף כמה שירותים ממאגר אחד, כל אחד מוצמד לתת-ספרייה.",

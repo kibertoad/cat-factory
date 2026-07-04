@@ -43,6 +43,7 @@ describe('FigmaProvider.fetchDocument', () => {
         if (url.includes('/nodes?')) {
           return jsonResponse({
             name: 'My File',
+            version: 'file-v7',
             nodes: {
               '1:2': {
                 document: {
@@ -69,6 +70,7 @@ describe('FigmaProvider.fetchDocument', () => {
     expect(doc.body).toContain('Hi')
     expect(doc.body).toContain('Rendered preview: https://figma-cdn.example/x.png')
     expect(doc.url).toBe('https://www.figma.com/design/KEY?node-id=1-2')
+    expect(doc.version).toBe('file-v7') // the file version rides along as the staleness token
     expect(seen.some((u) => u.includes('/nodes?'))).toBe(true)
   })
 
@@ -104,5 +106,34 @@ describe('FigmaProvider.fetchDocument', () => {
     await expect(new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2')).rejects.toBeInstanceOf(
       FigmaApiError,
     )
+  })
+})
+
+describe('FigmaProvider.probeVersion', () => {
+  it('reads only the file metadata at depth=1 and returns its version token', async () => {
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url)
+        if (url.includes('/files/KEY?depth=1')) {
+          return jsonResponse({ name: 'My File', version: 'file-v7' })
+        }
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+    const version = await new FigmaProvider().probeVersion(TOKEN, 'KEY:1:2')
+    expect(version).toBe('file-v7')
+    // A single metadata read — no node tree, variables or preview render.
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toContain('/files/KEY?depth=1')
+  })
+
+  it('falls back to lastModified when no version field is present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ name: 'F', lastModified: '2026-07-04T00:00:00Z' })),
+    )
+    expect(await new FigmaProvider().probeVersion(TOKEN, 'KEY')).toBe('2026-07-04T00:00:00Z')
   })
 })

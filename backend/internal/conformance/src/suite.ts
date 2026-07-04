@@ -1473,7 +1473,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
           const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
             name: 'Code + document',
-            agentKinds: ['coder', 'documenter'],
+            agentKinds: ['coder', 'documenter', 'doc-outliner'],
           })
           const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
             pipelineId: pipeline.body.id,
@@ -1486,7 +1486,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           expect(coder.output).toContain('[frags]test.svc-standard[/frags]')
           expect(coder.selectedFragmentIds).toEqual(['test.svc-standard'])
 
-          // The documenter is neither code-aware nor spec-aware: no service fragments.
+          // The doc-outliner is `doc-aware`: it folds the same service fragments (the
+          // document writing-style path is the doc analogue of code-aware).
+          const outliner = exec.steps.find((s) => s.agentKind === 'doc-outliner')!
+          expect(outliner.output).toContain('[frags]test.svc-standard[/frags]')
+          expect(outliner.selectedFragmentIds).toEqual(['test.svc-standard'])
+
+          // The documenter is neither code-aware, doc-aware nor spec-aware: no fragments.
           const documenter = exec.steps.find((s) => s.agentKind === 'documenter')!
           expect(documenter.output).toContain('[frags][/frags]')
           expect(documenter.selectedFragmentIds ?? []).toEqual([])
@@ -3920,9 +3926,18 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // facade that didn't open its env-connection store to the `compose` kind, diverges here.
         // Registered by reference with a fake runtime (never invoked on the connect/describe
         // paths) so the assertion needs no real daemon.
+        // The fake runtime carries the optional build-mode `checkout`/`writeCheckoutFile` seam too
+        // (recorded, never invoked on the connect/describe paths asserted here) — it composes the
+        // same way the real local runtime does, and the build config below must persist regardless.
+        const checkouts: { cloneUrl: string; ref: string }[] = []
         const fakeRuntime: ComposeRuntime = {
           compose: async () => ({ code: 0, stdout: '', stderr: '' }),
           writeProjectFile: async () => '',
+          checkout: async (_project, target) => {
+            checkouts.push({ cloneUrl: target.cloneUrl, ref: target.ref })
+            return { dir: '/tmp/checkout' }
+          },
+          writeCheckoutFile: async () => '',
         }
         const backendRegistries = createBackendRegistries()
         backendRegistries.environmentBackendRegistry.register(
@@ -3939,7 +3954,15 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           auth: { type: 'none' },
           provision: { method: 'POST', pathTemplate: '' },
           response: {},
-          providerConfig: { service: 'web', port: '8080', composePath: 'docker-compose.yml' },
+          // Build-from-source config: the `build` flag + build timeout must survive the manifest
+          // JSON column round-trip identically on both stores (D1 ⇄ Drizzle).
+          providerConfig: {
+            service: 'web',
+            port: '8080',
+            composePath: 'docker-compose.yml',
+            build: 'true',
+            buildTimeoutMinutes: '20',
+          },
         }
         const registered = await call<{ kind: string; providerId: string; secretKeys: string[] }>(
           'POST',
@@ -3954,11 +3977,13 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const got = await call<{
           connection: {
             kind: string
-            config?: { manifest?: { providerConfig?: { service?: string } } }
+            config?: { manifest?: { providerConfig?: { service?: string; build?: string } } }
           } | null
         }>('GET', `${base}/connection`)
         expect(got.body.connection?.kind).toBe('compose')
         expect(got.body.connection?.config?.manifest?.providerConfig?.service).toBe('web')
+        // The build-mode flag round-trips through the store on every facade.
+        expect(got.body.connection?.config?.manifest?.providerConfig?.build).toBe('true')
 
         // Advertised in the snapshot so the SPA lists it (with its when-to-use guidance).
         const snap = await call<{ environmentBackendKinds?: { kind: string }[] }>(
@@ -3969,15 +3994,19 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           expect.arrayContaining(['compose']),
         )
 
-        // The descriptor-driven connect form exposes the flat fields (service + port required).
+        // The descriptor-driven connect form exposes the flat fields (service + port required) +
+        // the build-from-source selector, so the build toggle ships on every facade's connect UI.
         const descr = await call<{ kind: string; configFields: { key: string }[] }>(
           'GET',
           `${base}/provider?kind=compose`,
         )
         expect(descr.status).toBe(200)
         expect(descr.body.configFields.map((f) => f.key)).toEqual(
-          expect.arrayContaining(['service', 'port']),
+          expect.arrayContaining(['service', 'port', 'build']),
         )
+        // Registering + describing a build-mode connection must never clone (a clone only happens
+        // when a run actually provisions the env).
+        expect(checkouts).toHaveLength(0)
       })
 
       it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {
@@ -6805,6 +6834,57 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(archivedBuiltin.body.builtin).toBe(true)
       })
 
+      it('round-trips pipeline launch availability through create, update, and clone', async () => {
+        // `availability` gates HOW a pipeline may be launched (one-off / recurring / both). It is
+        // a plain persisted column on BOTH stores — a facade that forgot to map it would silently
+        // drop the field on save (the exact gap this asserts against), leaving the launch gate
+        // inert after a DB round-trip.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Recurring only',
+          agentKinds: ['coder'],
+          availability: 'recurring',
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.availability).toBe('recurring')
+
+        // Re-read from the store (not the create echo) — this is where a dropped column shows up.
+        const afterCreate = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterCreate.body.find((p) => p.id === created.body.id)?.availability).toBe(
+          'recurring',
+        )
+
+        const updated = await app.call<Pipeline>(
+          'PATCH',
+          `/workspaces/${wsId}/pipelines/${created.body.id}`,
+          { availability: 'both' },
+        )
+        expect(updated.status).toBe(200)
+        expect(updated.body.availability).toBe('both')
+        const afterUpdate = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterUpdate.body.find((p) => p.id === created.body.id)?.availability).toBe('both')
+
+        // A clone preserves the source's availability.
+        const source = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'One-off only',
+          agentKinds: ['coder'],
+          availability: 'one-off',
+        })
+        expect(source.status).toBe(201)
+        const cloned = await app.call<Pipeline>(
+          'POST',
+          `/workspaces/${wsId}/pipelines/${source.body.id}/clone`,
+          {},
+        )
+        expect(cloned.status).toBe(201)
+        expect(cloned.body.availability).toBe('one-off')
+        const afterClone = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterClone.body.find((p) => p.id === cloned.body.id)?.availability).toBe('one-off')
+      })
+
       it('reviews the spec-writer with its companion and reworks it without a human gate', async () => {
         // The Spec Writer is no longer human-gated by default: its `spec-companion`
         // (Spec Reviewer) rates the spec, and below threshold loops the spec-writer
@@ -7284,6 +7364,49 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
         )
         expect(again.status).toBe(200)
+      })
+
+      it('persists an on-demand schedule (no cadence) and fires it via run-now', async () => {
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'On-demand inline',
+          agentKinds: ['architect'],
+        })
+        // No `recurrence` on the body — an on-demand schedule needs none.
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Manual pass',
+            onDemand: true,
+          },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.onDemand).toBe(true)
+
+        // The flag round-trips through the store on both runtimes.
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(
+          snapshot.body.recurringPipelines?.find((s) => s.id === created.body.id)?.onDemand,
+        ).toBe(true)
+
+        // Manual run-now still fires it (the credential gate is a no-op with no individual model).
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+        const runs = await app.call<ScheduleRun[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/runs`,
+        )
+        expect(runs.body).toHaveLength(1)
+        expect(runs.body[0]!.executionId).toBeTruthy()
       })
 
       it('reads and writes the workspace tracker selection', async () => {

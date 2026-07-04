@@ -1,5 +1,427 @@
 # @cat-factory/node-server
 
+## 0.71.3
+
+### Patch Changes
+
+- 1f6d9fc: Cache the workspace GitHub repo projection through the app caching seam
+  (caching-layer initiative, slice 3). A new `AppCaches.repoProjection` group cache
+  (grouped and keyed by workspace id) serves the whole-projection re-list that the
+  block→repo resolver (`buildResolveRepoTarget`) runs on every agent dispatch and
+  every durable poll tick, replacing a live `repoProjectionRepository.list` per
+  resolution with a per-workspace cached read.
+
+  Coherence is invalidation-driven: every projection write drops the workspace
+  group after it commits — `GitHubSyncService` (repo link / monorepo-flag / the
+  exact-set write + tombstone / the link-time full re-stamp, fanned out per
+  workspace), `BoardService.addServiceFromRepo` (the monorepo-flag write on the
+  import-existing-repo path), `WebhookService` (the `installation_repositories`
+  removed tombstone), and `ContainerRepoBootstrapper` (projecting a freshly
+  bootstrapped repo). `GitHubSyncService.syncRepo` only invalidates on a `full`
+  (link-time) pass — an incremental resync re-stamps `syncedAt` alone, which the
+  resolver never reads, so invalidating there would only churn the cache. The
+  installation lookup and the tree-depth-bounded block ancestry walk stay live, so
+  a block reparent or a service repo-link change needs no cache invalidation.
+
+  The cache is pass-through on the Cloudflare Worker's isolate-safe profile (our own
+  mutable D1 state, no cross-isolate invalidation bus), so the Worker reads the
+  projection live. Local mode is likewise pass-through: it seeds the projection via
+  the out-of-process `link-repo` CLI and runs single-node with no invalidation bus,
+  so an in-memory TTL'd entry could serve a pre-link projection. So the cache is
+  active on the multi-node-capable Node facade only. Absent a cache (tests /
+  harnesses) every resolve lists live, unchanged.
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/caching@0.4.0
+  - @cat-factory/kernel@0.85.0
+  - @cat-factory/server@0.80.0
+  - @cat-factory/integrations@0.64.0
+  - @cat-factory/orchestration@0.70.1
+  - @cat-factory/agents@0.33.1
+  - @cat-factory/consensus@0.8.34
+  - @cat-factory/gates@0.2.88
+  - @cat-factory/gitlab@0.6.12
+  - @cat-factory/observability-langfuse@0.7.131
+  - @cat-factory/provider-bedrock@0.7.139
+  - @cat-factory/provider-cloudflare@0.7.140
+  - @cat-factory/provider-s3@0.2.81
+  - @cat-factory/spend@0.10.92
+
+## 0.71.2
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/prompt-fragments@0.10.0
+  - @cat-factory/agents@0.33.0
+  - @cat-factory/orchestration@0.70.0
+  - @cat-factory/server@0.79.4
+  - @cat-factory/consensus@0.8.33
+  - @cat-factory/provider-bedrock@0.7.138
+  - @cat-factory/provider-cloudflare@0.7.139
+
+## 0.71.1
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+- Updated dependencies [6213771]
+  - @cat-factory/caching@0.3.0
+  - @cat-factory/kernel@0.84.0
+  - @cat-factory/integrations@0.63.0
+  - @cat-factory/agents@0.32.0
+  - @cat-factory/orchestration@0.69.1
+  - @cat-factory/consensus@0.8.32
+  - @cat-factory/gates@0.2.87
+  - @cat-factory/gitlab@0.6.11
+  - @cat-factory/observability-langfuse@0.7.130
+  - @cat-factory/provider-bedrock@0.7.137
+  - @cat-factory/provider-cloudflare@0.7.138
+  - @cat-factory/provider-s3@0.2.80
+  - @cat-factory/server@0.79.3
+  - @cat-factory/spend@0.10.91
+
+## 0.71.0
+
+### Minor Changes
+
+- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
+  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
+
+  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
+    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
+    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
+    invalidation bus, never a data tier; with no notification factory injected the
+    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
+    machinery so ioredis never enters the module graph outside the Node facade's
+    REDIS_URL-gated wiring.
+  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
+    (group = workspace id), and every fragment write path — create / update / remove /
+    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
+    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
+    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
+  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
+    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
+    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
+    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
+    write — the same gating and resilience pattern as the realtime propagator. Local
+    mode stays bare in-memory (single-node by construction).
+  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
+    cross-instance state) is pass-through, since an isolate has no cross-isolate
+    invalidation bus. Documented in the caching package README.
+  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
+    catalog on all three runtimes (Worker/Node/local).
+  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+    in-memory `isEntryStillCurrentFn` support: a cache profile may set
+    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+    the probe reports the source unmoved, and fall back to a full background reload
+    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/caching@0.2.0
+  - @cat-factory/kernel@0.83.0
+  - @cat-factory/agents@0.31.0
+  - @cat-factory/orchestration@0.69.0
+  - @cat-factory/consensus@0.8.31
+  - @cat-factory/gates@0.2.86
+  - @cat-factory/gitlab@0.6.10
+  - @cat-factory/integrations@0.62.1
+  - @cat-factory/observability-langfuse@0.7.129
+  - @cat-factory/provider-bedrock@0.7.136
+  - @cat-factory/provider-cloudflare@0.7.137
+  - @cat-factory/provider-s3@0.2.79
+  - @cat-factory/server@0.79.2
+  - @cat-factory/spend@0.10.90
+
+## 0.70.1
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+  - @cat-factory/integrations@0.62.0
+  - @cat-factory/agents@0.30.5
+  - @cat-factory/consensus@0.8.30
+  - @cat-factory/gates@0.2.85
+  - @cat-factory/gitlab@0.6.9
+  - @cat-factory/orchestration@0.68.1
+  - @cat-factory/prompt-fragments@0.9.55
+  - @cat-factory/server@0.79.1
+  - @cat-factory/spend@0.10.89
+  - @cat-factory/observability-langfuse@0.7.128
+  - @cat-factory/provider-bedrock@0.7.135
+  - @cat-factory/provider-cloudflare@0.7.136
+  - @cat-factory/provider-s3@0.2.78
+
+## 0.70.0
+
+### Minor Changes
+
+- 6edcce0: Personal-PAT repo access + fail-closed board redaction, and removal of the legacy repo→block link.
+
+  - **Expand the repo picker with your own PAT (all facades).** A user's stored GitHub PAT
+    (`user_secrets` kind `github_pat`) now surfaces repos it can reach beyond the workspace's GitHub
+    App grant — even on the hosted Cloudflare/Node facades. Linking one creates a **personal service**
+    (`GitHubRepo.linkedVia === 'user_pat'`); runs against it already use the initiator's PAT.
+  - **Fail-closed frame redaction.** A service frame backed by a repo linked via another member's PAT
+    is hidden from members who can't reach it: the board snapshot scrubs the frame to just its
+    internal id + a "Permission denied" placeholder and drops its subtree. Access is a fail-closed
+    per-user projection (`github_user_repo_access`), refreshed when a user enumerates their PAT repos
+    and cleared when they remove their PAT — no live GitHub call on the snapshot path.
+  - **New:** `github_repos.linked_via` column + `github_user_repo_access` table (mirrored D1 ⇄
+    Drizzle, with a cross-runtime conformance suite); kernel `UserRepoAccessRepository` port and
+    optional `GitHubClient.listReposForToken`/`getRepoForToken`; `Block.accessDenied` +
+    `GitHubAvailableRepo.personal` wire fields.
+
+  **Breaking (pre-1.0, no migration):** the legacy `github_repos.block_id` repo↔frame link is removed
+  — the account-owned `Service` (`getByFrameBlock` → `repoGithubId`) is now the SOLE repo↔frame
+  linkage. `RepoProjectionRepository.linkBlock` and `GitHubRepo.blockId` are gone; `resolveRepoTarget`
+  now requires a `serviceRepository`; the `RepoBootstrapper` port's `linkRepoToBlock` is replaced by
+  `projectBootstrappedRepo` (the caller binds the frame's `Service`). Existing rows' `block_id` is
+  dropped; repos remain reachable through their `Service`.
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+  - @cat-factory/integrations@0.61.0
+  - @cat-factory/server@0.79.0
+  - @cat-factory/orchestration@0.68.0
+  - @cat-factory/gitlab@0.6.8
+  - @cat-factory/agents@0.30.4
+  - @cat-factory/consensus@0.8.29
+  - @cat-factory/gates@0.2.84
+  - @cat-factory/prompt-fragments@0.9.54
+  - @cat-factory/spend@0.10.88
+  - @cat-factory/observability-langfuse@0.7.127
+  - @cat-factory/provider-bedrock@0.7.134
+  - @cat-factory/provider-cloudflare@0.7.135
+  - @cat-factory/provider-s3@0.2.77
+
+## 0.69.1
+
+### Patch Changes
+
+- Updated dependencies [fcc8010]
+  - @cat-factory/provider-cloudflare@0.7.134
+
+## 0.69.0
+
+### Minor Changes
+
+- dbde3b8: Cross-node WebSocket propagation for the Node facade (optional Redis adapter).
+
+  The Node facade's real-time transport (`NodeRealtimeHub`) is an in-process, single-node socket
+  registry: an event published on the node that processed a run only reaches browsers connected to
+  THAT node. A horizontally-scaled Node deployment spreads browsers and background work across
+  several nodes, so an event produced on one node has to reach a browser attached to another.
+
+  This adds that reach as a **layered propagator** with pluggable cross-node adapters. Publishing an
+  event fans it to the local hub AND to each configured adapter; an adapter carries it to peer nodes,
+  which apply it to their own local hubs. **Redis pub/sub is the first adapter** — a Postgres
+  LISTEN/NOTIFY or NATS adapter would implement the same `WebSocketPropagator` port with no other
+  changes.
+
+  - `ioredis` is an **optional dependency**, imported dynamically only when `REDIS_URL` is set. With
+    no bus configured (single-replica Node, and **local mode**, which is always single-node) the
+    layer is exactly the bare hub with zero overhead and no extra dependency — the default.
+  - Config: `REDIS_URL` enables it; `REDIS_REALTIME_CHANNEL` (default `cat-factory:realtime`) and
+    `REALTIME_NODE_ID` (default a random uuid, used to drop a node's own echoes) tune it.
+  - The engine's event publisher now writes through a narrow `LocalEventSink` seam that both the bare
+    hub and the layered propagator implement, so no other code differs between single- and multi-node.
+
+  The Worker facade needs none of this: its real-time transport is a globally-addressed
+  `WorkspaceEventsHub` Durable Object (one per workspace across the whole deployment), so cross-node
+  propagation is inherent to the platform — this is a genuine Node-only concern, not a facade gap.
+
+## 0.68.0
+
+### Minor Changes
+
+- ef57cb1: Bug-triage pipeline, Phase A — pipeline `availability` (one-off / recurring / both).
+
+  A library pipeline can now declare HOW it may be launched, so a recurring-only pipeline (the
+  upcoming `pl_bug_triage`) can't be started as a manual one-off, and a one-off-only pipeline can't
+  be attached to a schedule. Absent means `'both'` (unrestricted) — pre-1.0, no migration/back-fill,
+  existing rows read unchanged.
+
+  - **Contract**: `pipelineSchema` gains `availability?: 'one-off' | 'recurring' | 'both'` (+ the
+    `PipelineAvailability` type, re-exported from kernel); `createPipeline`/`updatePipeline` accept
+    and persist it.
+  - **Persistence** (both runtimes, kept symmetric): `availability` is a new `pipelines.availability`
+    column — D1 migration `0037_pipeline_availability.sql` ⇄ Drizzle schema + generated migration —
+    read/written by the shared `rowToPipeline` mapper and both repos, so the field round-trips
+    instead of being silently dropped on save.
+  - **Server enforcement** (the pickers are convenience, not the gate): `ExecutionService.start`
+    gains an `origin: 'manual' | 'recurring'` option (default `'manual'`), and a start-only
+    `assertPipelineLaunchable` gate rejects a manual start of a recurring-only pipeline (and a
+    scheduled fire of a one-off-only one). `RecurringPipelineService.fire` passes `'recurring'`; its
+    `create`/`update` reject attaching a one-off-only pipeline to a schedule. A retry/restart
+    re-drives an already-validated run, so it never re-checks the launch constraint. A pipeline
+    carrying an ENABLED `bug-intake` step must be `'recurring'` (validated at builder save + start;
+    a disabled step imposes no requirement). The schedule-attach check delegates to the same gate
+    (one rule, one `ValidationError`), and `clone` re-runs it so an un-launchable copy can't be
+    minted. Editing a pipeline to `'one-off'` while a schedule still references it is rejected
+    (`ConflictError`) rather than silently breaking every future fire.
+  - **SPA pickers**: the manual-start surfaces (add-task modal, board/inspector Run menus, task
+    run-settings default) filter out `'recurring'`-only pipelines, and the recurring-pipeline modal
+    filters out `'one-off'`-only ones — composed with the existing `pipelineAllowedForFrame`
+    predicate.
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/orchestration@0.67.0
+  - @cat-factory/server@0.78.0
+  - @cat-factory/agents@0.30.3
+  - @cat-factory/consensus@0.8.28
+  - @cat-factory/gates@0.2.83
+  - @cat-factory/gitlab@0.6.7
+  - @cat-factory/integrations@0.60.2
+  - @cat-factory/prompt-fragments@0.9.53
+  - @cat-factory/spend@0.10.87
+  - @cat-factory/observability-langfuse@0.7.126
+  - @cat-factory/provider-bedrock@0.7.133
+  - @cat-factory/provider-cloudflare@0.7.133
+  - @cat-factory/provider-s3@0.2.76
+
+## 0.67.0
+
+### Minor Changes
+
+- 1d738f7: feat(recurring): on-demand (manual-only) recurring tasks that can use individual-usage subscriptions
+
+  A recurring pipeline can now be flagged **on-demand**: it has no cadence and is never
+  fired by the sweeper — it runs ONLY when a person triggers it via "run now". Because a
+  human is present at every fire, an on-demand schedule's block MAY target an individual-usage
+  subscription model (Claude / Codex / GLM), unlocked per run-now with the initiator's personal
+  password exactly like a manual task start. A cadence schedule still refuses individual-usage
+  models (no one is present to unlock them unattended).
+
+  - New `onDemand` flag on `PipelineSchedule` + `createScheduleSchema` (recurrence is now
+    optional — an on-demand schedule needs none). Persisted as an `on_demand` column on both
+    runtimes (D1 migration `0037` ⇄ Drizzle), with `listDue` filtering `on_demand = 0` so the
+    sweeper skips them. Cross-runtime conformance asserts the flag round-trips and run-now fires.
+  - `RecurringPipelineService.fire` exempts on-demand schedules from the individual-usage
+    refusal and threads the run-now initiator + credential-activation closure into the run;
+    the run-now controller resolves the personal-credential gate (428 when a password is needed).
+  - Frontend: an "on-demand" toggle in the add-recurring modal (hides the cadence editor), an
+    on-demand inspector view (no cadence/pause, just run-now), and run-now now rides the cached
+    personal password through the credential modal. i18n in all 8 locales.
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/orchestration@0.66.0
+  - @cat-factory/server@0.77.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/consensus@0.8.27
+  - @cat-factory/gates@0.2.82
+  - @cat-factory/gitlab@0.6.6
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/prompt-fragments@0.9.52
+  - @cat-factory/spend@0.10.86
+  - @cat-factory/provider-bedrock@0.7.132
+  - @cat-factory/provider-cloudflare@0.7.132
+  - @cat-factory/observability-langfuse@0.7.125
+  - @cat-factory/provider-s3@0.2.75
+
+## 0.66.0
+
+### Minor Changes
+
+- 47a2975: Initiatives slice 3 — the execution loop.
+
+  An approved initiative plan now RUNS: a new `InitiativeLoopService` drives each `executing`
+  initiative — reconciling its spawned tasks, spawning the next wave just-in-time, and completing
+  the initiative once every tracker item settles.
+
+  - **The loop** (`orchestration/modules/initiative/InitiativeLoopService.ts`): per-initiative
+    `tick` = reconcile (fold each spawned task block's status back onto its item — done + PR link /
+    `pr_open` / `blocked` + deviation, one batched block read, no N+1) → complete (all items settled
+    → initiative + anchor block `done`, tracker re-commit, notify) → spawn (create task blocks for
+    the eligible `pending` items — current phase, deps met, phase not halted — up to the concurrency
+    cap, each pipeline chosen by the policy's estimate→pipeline rules). Spawning is CLAIM-FIRST (a
+    rev-CAS write records the pre-generated block id before any side effect), so a concurrent ticker
+    never orphans a double-spawn. A per-service task-limit conflict leaves the item `pending` for the
+    next sweep; a missing pipeline (deleted after ingest) records a deviation + notification and
+    blocks the item — the sweep never throws.
+  - **Blocked = halt the phase, notify.** A blocked item stops new spawns in its phase (and keeps the
+    phase current, so the initiative never advances past it) and raises the new `initiative`
+    notification type; in-flight siblings finish. A human retries/skips the item to unblock.
+  - **Both cron seams + terminal pokes.** `runDue` is wired into the Worker `scheduled` handler and a
+    Node one-minute interval sweeper (symmetric). A settling child run pokes its owning initiative's
+    loop immediately (`RunStateMachine.emitInstance` on a terminal run, `ExecutionService.finalizeMerge`
+    on a merge), so work advances without waiting for the next sweep.
+  - **Controls.** Pause / resume / cancel endpoints + `InitiativeService` CAS transitions; the sweep
+    skips a non-`executing` initiative. The tracker window gains a live progress bar and the inspector
+    the loop controls (`initiative.inspector.pause/resume/cancel`, all locales).
+  - **`listExecuting()` now returns `{ workspaceId, initiative }[]`** (the entity carries no workspace
+    id) — mirrored in the D1 + Drizzle repos and asserted, with the persisted loop-state round-trip,
+    by the cross-runtime conformance suite.
+
+  No new persistence (the `initiatives` table already exists on both facades) — so no D1/Drizzle
+  migration and no executor-harness image bump.
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/integrations@0.60.0
+  - @cat-factory/orchestration@0.65.0
+  - @cat-factory/server@0.76.0
+  - @cat-factory/agents@0.30.1
+  - @cat-factory/consensus@0.8.26
+  - @cat-factory/gates@0.2.81
+  - @cat-factory/gitlab@0.6.5
+  - @cat-factory/prompt-fragments@0.9.51
+  - @cat-factory/spend@0.10.85
+  - @cat-factory/observability-langfuse@0.7.124
+  - @cat-factory/provider-bedrock@0.7.131
+  - @cat-factory/provider-cloudflare@0.7.131
+  - @cat-factory/provider-s3@0.2.74
+
+## 0.65.2
+
+### Patch Changes
+
+- 0477068: Mothership mode: widen the persistence-RPC allow-list to four more repository surfaces (the
+  prompt-fragment library + two account-onboarding reads) so mothership-mode local nodes can drive
+  them against a hosted mothership. Adds two new scope rules, `owner` (an `(ownerKind, ownerId)`
+  positional pair) and `ownerField` (the same as record fields on `upsert`), which resolve a
+  `workspace` owner to its account and take an `account` owner as the accountId directly — so a
+  machine token scoped to one account can never read/write another tenant's rows.
+
+  - `promptFragmentRepository` — the tenant-scoped prompt-fragment library management surface
+    (`listByOwner`/`get`/`softDelete` via the `owner` rule, `upsert` via `ownerField`). Rows carry no
+    secrets and both tiers are member-level (account-tier routes guard on `requireMember`, not
+    `requireAdmin`). The `sourceId`-keyed `listBySource` (repo-sync fan-out) stays mothership-internal.
+  - `fragmentSourceRepository` — the fragment-source library list + link (`listByOwner` via `owner`,
+    `upsert` via `ownerField`). The `sourceId`-keyed `get`/`updateSyncState`/`softDelete` stay off —
+    they back the repo-sync the mothership owns (its source service needs a GitHub client a mothership
+    node lacks). Node routes both fragment repos through the `pickRepoSource`/`if (remoteRepos)` seam
+    ONLY when the library is configured, so the module isn't spuriously turned on in mothership mode.
+  - `invitationRepository.listByAccount` — the account members panel's pending-invite read (member-level,
+    `account` rule). Invite `create`/`setStatus` (admin-gated) + the pre-auth `findByTokenHash`/`get`
+    accept-invite lookups stay off.
+  - `emailConnectionRepository.getByAccount` — the email-settings panel read (member-level, `account`
+    rule). Its provider key rides a sealed `apiKeyCipher` blob (the repo never decrypts), so no
+    plaintext crosses the machine API. Connect/disconnect (`upsert`/`softDelete`, admin-gated) stay off.
+
+- Updated dependencies [0477068]
+  - @cat-factory/server@0.75.2
+
 ## 0.65.1
 
 ### Patch Changes

@@ -51,11 +51,13 @@ export {
   defineStructuredOutput,
 } from './agents/kinds/structured-output.js'
 // Agent capability traits (standard + custom). `code-aware` gates the engine's folding
-// of the service's best-practice fragments; `spec-aware` appends the in-repo-spec guidance.
+// of the service's best-practice fragments; `doc-aware` folds the document-task writing
+// style fragments the same way; `spec-aware` appends the in-repo-spec guidance.
 export {
   type AgentTrait,
   type AgentTraitDefinition,
   CODE_AWARE_TRAIT,
+  DOC_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
   SPEC_AWARE_GUIDANCE,
@@ -157,6 +159,24 @@ export {
   DOCUMENT_AGENT_KINDS,
   registerDocumentAgents,
 } from './agents/kinds/document.js'
+// Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
+// woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
+// built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.
+// The public surface is the registry + the two cross-consumer helpers: `requiredSectionTitles`
+// (the WS4 doc-quality gate's source of truth) and `renderTemplateSkeleton` (for override
+// authors to preview a template). The prompt-weaving helpers (`templateStructureLine` /
+// `templateOutlineGuidance` / `templateSkeletonGuidance`) stay module-private to `document.ts`.
+export {
+  type DocTemplate,
+  type DocTemplateSection,
+  DOC_TEMPLATES,
+  registerDocTemplate,
+  registerDocTemplates,
+  clearRegisteredDocTemplates,
+  docTemplateFor,
+  requiredSectionTitles,
+  renderTemplateSkeleton,
+} from './agents/kinds/doc-templates.js'
 export {
   INITIATIVE_BREAKDOWN_KIND,
   INITIATIVE_AGENT_KINDS,

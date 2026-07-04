@@ -42,7 +42,8 @@ export function toRepoProjection(
     name: p.name,
     defaultBranch: p.default_branch ?? null,
     private: p.private ?? false,
-    blockId: null,
+    // Synced from the GitHub App installation, so App-reachable for every member.
+    linkedVia: 'app',
     syncedAt,
   }
 }

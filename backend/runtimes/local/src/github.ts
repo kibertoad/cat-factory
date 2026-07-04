@@ -121,7 +121,9 @@ function toRepoProjection(p: GhUserRepo, installationId: number, syncedAt: numbe
     name: p.name,
     defaultBranch: p.default_branch ?? null,
     private: p.private ?? false,
-    blockId: null,
+    // Local mode's shared `GITHUB_PAT` is the workspace-wide credential, so repos it
+    // enumerates are treated as App-reachable (visible to every member).
+    linkedVia: 'app',
     syncedAt,
   }
 }

@@ -23,6 +23,16 @@ export type AgentTrait = string
 export const CODE_AWARE_TRAIT: AgentTrait = 'code-aware'
 
 /**
+ * Doc-aware kinds AUTHOR or REVIEW a written document (the forward document-authoring
+ * track). The block's selected writing-style fragments (the `style.*` collection —
+ * anti-LLM-isms, concise & actionable) are folded into their system prompt by the
+ * execution engine, the SAME way `code-aware` folds a service's technical fragments. This
+ * is the trait gate that lets the doc kinds fold the style guidance without the prompt
+ * builders special-casing them.
+ */
+export const DOC_AWARE_TRAIT: AgentTrait = 'doc-aware'
+
+/**
  * Spec-aware kinds are told to read the in-repo `spec/` artifact (the prescriptive
  * service specification) and how to interpret it. The instruction is appended to their
  * system prompt via {@link traitGuidanceFor}.
@@ -57,6 +67,10 @@ export const SPEC_AWARE_GUIDANCE = [
  *  - `spec-aware`: every code-touching kind (anything that clones and reads the repo),
  *    so each is pointed at the in-repo spec. The `spec-writer` is intentionally absent —
  *    it AUTHORS the spec rather than consuming it.
+ *  - `doc-aware`: the document-authoring companion `doc-reviewer` (the writer/outliner/
+ *    finalizer producer kinds are REGISTERED kinds, so they carry `doc-aware` on their own
+ *    `AgentKindDefinition.traits` in `./document`, not here — the same way the code
+ *    `reviewer` companion is a built-in listed here while the coder declares its own).
  */
 export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   architect: [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
@@ -79,6 +93,10 @@ export const STANDARD_AGENT_TRAITS: Partial<Record<AgentKind, AgentTrait[]>> = {
   // The on-call agent clones the released change and reads the code to correlate the diff
   // with the regression evidence, so it gets the service's best-practice + spec context.
   'on-call': [CODE_AWARE_TRAIT, SPEC_AWARE_TRAIT],
+  // The document reviewer is a companion (no `AgentKindDefinition` of its own), so it
+  // gets `doc-aware` here — folding the SAME writing-style fragments the writer received,
+  // which become its review criteria (style guidance as both instruction and check).
+  'doc-reviewer': [DOC_AWARE_TRAIT],
 }
 
 /** Definition of a (custom) trait: its id and optional system-prompt guidance. */
@@ -165,9 +183,11 @@ export function traitGuidanceFor(kind: AgentKind): string[] {
   return lines
 }
 
-/** Register the two standard traits' definitions (spec-aware carries guidance). */
+/** Register the standard traits' definitions (only spec-aware carries guidance). */
 function registerStandardTraits(): void {
   registerAgentTrait({ id: CODE_AWARE_TRAIT })
+  // A pure marker, like `code-aware`: its whole effect is the engine's fragment fold.
+  registerAgentTrait({ id: DOC_AWARE_TRAIT })
   registerAgentTrait({ id: SPEC_AWARE_TRAIT, guidance: SPEC_AWARE_GUIDANCE })
 }
 

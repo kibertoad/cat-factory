@@ -47,12 +47,17 @@ const safeFetch = createHostPinnedFetch({ host: FIGMA_API_HOST, label: 'Figma' }
 
 interface FileResponse {
   name?: string
+  /** File version id / last-modified timestamp Figma advances on every edit. */
+  version?: string
+  lastModified?: string
   document?: figmaLogic.FigmaNode
   components?: figmaLogic.FigmaComponentMap
 }
 
 interface NodesResponse {
   name?: string
+  version?: string
+  lastModified?: string
   nodes?: Record<
     string,
     { document?: figmaLogic.FigmaNode; components?: figmaLogic.FigmaComponentMap } | undefined
@@ -66,6 +71,11 @@ interface VariablesResponse {
 interface ImagesResponse {
   images?: Record<string, string | null>
   err?: string | null
+}
+
+/** Figma's file `version` (falling back to `lastModified`) as the staleness token. */
+function fileVersion(res: { version?: string; lastModified?: string }): string {
+  return res.version ?? res.lastModified ?? ''
 }
 
 export class FigmaProvider implements DocumentSourceProvider {
@@ -93,7 +103,11 @@ export class FigmaProvider implements DocumentSourceProvider {
       throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
     }
 
-    const { roots, components, fileName } = await this.fetchNodes(credentials, fileKey, nodeId)
+    const { roots, components, fileName, version } = await this.fetchNodes(
+      credentials,
+      fileKey,
+      nodeId,
+    )
     // Design tokens are Enterprise-gated; on 403/404 drop them, don't fail. A rendered
     // preview rides along as a reference (no download) — best-effort, the short-lived URL
     // may expire and a non-multimodal agent ignores it.
@@ -115,7 +129,25 @@ export class FigmaProvider implements DocumentSourceProvider {
       title: context.title,
       url: context.url,
       body: renderDesignContext(context),
+      version,
     }
+  }
+
+  /**
+   * The cheap version probe: read the file's metadata at `depth=1` (no node tree)
+   * for its `version` / `lastModified`, skipping the deep node fetch + variables +
+   * preview render a full document fetch performs.
+   */
+  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+    const { fileKey } = figmaLogic.splitFigmaExternalId(externalId)
+    if (!fileKey) {
+      throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
+    }
+    const res = await this.get<FileResponse>(
+      credentials,
+      `/files/${encodeURIComponent(fileKey)}?depth=1`,
+    )
+    return fileVersion(res)
   }
 
   /** Fetch a specific node's subtree, or the whole file's document, plus its components. */
@@ -127,6 +159,7 @@ export class FigmaProvider implements DocumentSourceProvider {
     roots: figmaLogic.FigmaNode[]
     components: figmaLogic.FigmaComponentMap
     fileName: string
+    version: string
   }> {
     if (nodeId) {
       const res = await this.get<NodesResponse>(
@@ -141,6 +174,7 @@ export class FigmaProvider implements DocumentSourceProvider {
         roots: [entry.document],
         components: entry.components ?? {},
         fileName: res.name ?? fileKey,
+        version: fileVersion(res),
       }
     }
     const res = await this.get<FileResponse>(
@@ -157,6 +191,7 @@ export class FigmaProvider implements DocumentSourceProvider {
       roots: roots.length ? roots : [res.document],
       components: res.components ?? {},
       fileName: res.name ?? fileKey,
+      version: fileVersion(res),
     }
   }
 

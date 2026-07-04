@@ -151,7 +151,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
+import type { AppCaches, PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -162,7 +162,7 @@ import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
-import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
+import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -184,6 +184,7 @@ import {
 } from './repositories/personalSubscription.js'
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
 import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
+import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { PostgresBinaryBlobBackend } from './storage/PostgresBinaryBlobBackend.js'
@@ -625,14 +626,23 @@ export interface NodeContainerOptions {
    */
   gateProviders?: GateProviderOverrides
   /**
-   * The real-time subscriber registry. When provided, the container wires a
+   * The real-time delivery sink. When provided, the container wires a
    * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
-   * to subscribed browsers) and composes an in-app notification channel. `start()`
-   * creates the hub and attaches it to the HTTP server via {@link attachRealtime};
-   * `createServer`/tests leave it unset and the engine falls back to the no-op publisher
-   * (no live push), exactly as before.
+   * to subscribed browsers) and composes an in-app notification channel. `start()` passes
+   * the layered propagator here (the local hub + any cross-node adapter such as Redis) and
+   * attaches the hub itself to the HTTP server via {@link attachRealtime}; a single-node /
+   * local boot passes the bare hub. `createServer`/tests leave it unset and the engine
+   * falls back to the no-op publisher (no live push), exactly as before.
    */
-  realtimeHub?: NodeRealtimeHub
+  realtimeSink?: LocalEventSink
+  /**
+   * The app-owned cache bag (docs/initiatives/caching-layer.md). `start()` builds it once
+   * per process via `createAppCaches` — with the Redis-backed invalidation notification
+   * factory when `REDIS_URL` is set (multi-node), bare in-memory otherwise — and owns its
+   * shutdown. `createServer`/tests leave it unset and `createCore` builds bare in-memory
+   * defaults, so single-process coherence (write-site invalidation) still holds.
+   */
+  caches?: AppCaches
   /**
    * Override the shared HTTP provider the built-in `manifest` runner backend dispatches/tests
    * through (its OAuth cache reused), e.g. for tests. This is NOT the custom-kind seam: a
@@ -911,6 +921,9 @@ function selectNodeRepoBootstrapper(deps: {
     typeof ContainerRepoBootstrapper
   >[0]['bootstrapJobRepository']
   repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
+  repoProjectionCache?: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['repoProjectionCache']
   githubClient: GitHubClient | undefined
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
@@ -931,6 +944,7 @@ function selectNodeRepoBootstrapper(deps: {
     installationRepository: deps.installationRepository,
     bootstrapJobRepository: deps.bootstrapJobRepository,
     repoRepository: deps.repoRepository,
+    ...(deps.repoProjectionCache ? { repoProjectionCache: deps.repoProjectionCache } : {}),
     githubClient: deps.githubClient,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
@@ -1497,6 +1511,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
     // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
     serviceRepository: repos.serviceRepository,
+    // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
+    // module + bootstrapper invalidate the same bag on every projection write.
+    repoProjectionCache: options.caches?.repoProjection,
   })
 
   // Best-effort recorder for the provisioning event log (its own Postgres schema).
@@ -1864,6 +1881,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             'checkRunProjectionRepository',
             (d) => new DrizzleCheckRunProjectionRepository(d),
           ),
+          // Per-user PAT-reachable repo projection (picker expansion + redaction); Postgres-only,
+          // so absent in a no-DB mothership node (the picker keeps its App-only behaviour there).
+          userRepoAccessRepository: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
           webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
           // Bound the initial backfill to the commit retention horizon (0 = full).
           commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -1910,6 +1930,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     installationRepository: githubInstallationRepository,
     bootstrapJobRepository,
     repoRepository: repoProjectionRepository,
+    ...(options.caches?.repoProjection
+      ? { repoProjectionCache: options.caches.repoProjection }
+      : {}),
     githubClient,
     mintInstallationToken: bootstrapMintInstallationToken,
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
@@ -1922,8 +1945,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, db, repos)
-  const executionEventPublisher = options.realtimeHub
-    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeHub), {
+  const executionEventPublisher = options.realtimeSink
+    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
       })
     : undefined
@@ -2318,6 +2341,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App/env token.
     runInitiatorScope: runWithInitiator,
+    // The process-wide cache bag from start() (Redis-notified invalidation when REDIS_URL
+    // is set). Absent ⇒ createCore builds bare in-memory defaults.
+    ...(options.caches ? { caches: options.caches } : {}),
     ...options.overrides,
   }
 
@@ -2496,6 +2522,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     localModelEndpoints,
     // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
+    // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
+    userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
   }

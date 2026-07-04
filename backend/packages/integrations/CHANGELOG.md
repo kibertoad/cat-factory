@@ -1,5 +1,216 @@
 # @cat-factory/integrations
 
+## 0.64.0
+
+### Minor Changes
+
+- 1f6d9fc: Cache the workspace GitHub repo projection through the app caching seam
+  (caching-layer initiative, slice 3). A new `AppCaches.repoProjection` group cache
+  (grouped and keyed by workspace id) serves the whole-projection re-list that the
+  block→repo resolver (`buildResolveRepoTarget`) runs on every agent dispatch and
+  every durable poll tick, replacing a live `repoProjectionRepository.list` per
+  resolution with a per-workspace cached read.
+
+  Coherence is invalidation-driven: every projection write drops the workspace
+  group after it commits — `GitHubSyncService` (repo link / monorepo-flag / the
+  exact-set write + tombstone / the link-time full re-stamp, fanned out per
+  workspace), `BoardService.addServiceFromRepo` (the monorepo-flag write on the
+  import-existing-repo path), `WebhookService` (the `installation_repositories`
+  removed tombstone), and `ContainerRepoBootstrapper` (projecting a freshly
+  bootstrapped repo). `GitHubSyncService.syncRepo` only invalidates on a `full`
+  (link-time) pass — an incremental resync re-stamps `syncedAt` alone, which the
+  resolver never reads, so invalidating there would only churn the cache. The
+  installation lookup and the tree-depth-bounded block ancestry walk stay live, so
+  a block reparent or a service repo-link change needs no cache invalidation.
+
+  The cache is pass-through on the Cloudflare Worker's isolate-safe profile (our own
+  mutable D1 state, no cross-isolate invalidation bus), so the Worker reads the
+  projection live. Local mode is likewise pass-through: it seeds the projection via
+  the out-of-process `link-repo` CLI and runs single-node with no invalidation bus,
+  so an in-memory TTL'd entry could serve a pre-link projection. So the cache is
+  active on the multi-node-capable Node facade only. Absent a cache (tests /
+  harnesses) every resolve lists live, unchanged.
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.63.0
+
+### Minor Changes
+
+- e5ddaa4: Cache document-backed prompt-fragment bodies through the app caching seam
+  (caching-layer initiative, slice 2). A new `AppCaches.fragmentDocumentBody`
+  group cache serves a living fragment's external Confluence/Notion/GitHub/Figma/
+  Zeplin/Linear body, replacing the hand-rolled `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS`
+  in `FragmentLibraryService`: a run reads the cached body instead of blocking on a
+  live page fetch, and an entry entering its refresh window runs the source's cheap
+  version probe — keeping the cached body when the page hasn't moved, reloading in
+  the background when it has.
+
+  To support the probe, `DocumentContent` now carries an opaque `version` token and
+  `DocumentSourceProvider`/`DocumentContentResolver` gain a `probeVersion` method
+  (metadata-only, strictly cheaper than a full fetch), implemented across all
+  document providers. The self-verifying cache stays enabled on the Cloudflare
+  Worker (bounded staleness via the probe), unlike the mutable-state fragment
+  catalog.
+
+  Behavior change (pre-1.0, no back-compat): the durable `prompt_fragments.body` is
+  now the offline fallback + management-view content, refreshed only by an explicit
+  create/refresh; the live run-time body flows through the cache. Without a cache
+  wired, a run serves the persisted body and does not re-resolve live.
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.62.1
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
+## 0.62.0
+
+### Minor Changes
+
+- 6c1efd1: Docker Compose ephemeral envs: opt-in build-from-source mode.
+
+  The Docker Compose environment backend was checkout-free / image-pull only and hard-rejected
+  `build:`, host bind mounts, relative `env_file`, and `privileged`, so an app repo that builds
+  its own images (e.g. a .NET + Angular + SQL Server stack) could not become a per-PR preview env.
+
+  A new opt-in `build` mode (workspace handler `providerConfig.build`, mirrored advisory
+  `ServiceProvisioning.composeBuild`) clones the PR head into a per-project working tree, writes
+  the isolation-safe rewritten compose beside the original inside the checkout, and runs
+  `docker compose build` + `up --wait`. In build mode `build:`, in-checkout relative bind mounts,
+  and relative `env_file`s are honored. Image mode is unchanged and remains the default.
+
+  Host-escape refusal is uniform across EVERY path-bearing reference, not just bind mounts: bind
+  sources, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:` `file:` sources are
+  all run through `escapesCheckout`, which now also catches UNC/backslash-absolute paths, a
+  separator-buried `../` source (`sub/../../../etc`, previously mis-read as a named volume), and an
+  unresolved `${VAR}` interpolation (expands to an arbitrary host path at runtime). `include:` and
+  cross-file `extends: { file }` are refused outright in both modes — the daemon merges those files
+  from disk, so their services would otherwise slip a privileged container / host bind / pinned port
+  past the parse-based guard. `privileged: true` stays refused.
+
+  The `ComposeRuntime` seam gains optional `checkout`/`writeCheckoutFile` (implemented in the local
+  facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a LAZY
+  `clone` resolver (a thunk) invoked only by the build-mode provider that actually needs a working
+  tree — so image-mode compose / custom / k8s-sync provisions no longer mint a short-lived VCS token
+  they never use (reusing the deploy clone-target seam, memoized so one provision never mints twice).
+  Build mode registers only on the docker-family local runtime — the documented runtime-bound
+  exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
+
+  Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
+  recommended in build-from-source mode (previously it was recommended blindly and then failed at
+  provision time).
+
+  The compose environment connect form gains an "Image source" selector (pull pre-built vs build
+  from source) and a build-timeout field; the misleading "image-based stacks only" copy is removed.
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+
+## 0.61.0
+
+### Minor Changes
+
+- 6edcce0: Personal-PAT repo access + fail-closed board redaction, and removal of the legacy repo→block link.
+
+  - **Expand the repo picker with your own PAT (all facades).** A user's stored GitHub PAT
+    (`user_secrets` kind `github_pat`) now surfaces repos it can reach beyond the workspace's GitHub
+    App grant — even on the hosted Cloudflare/Node facades. Linking one creates a **personal service**
+    (`GitHubRepo.linkedVia === 'user_pat'`); runs against it already use the initiator's PAT.
+  - **Fail-closed frame redaction.** A service frame backed by a repo linked via another member's PAT
+    is hidden from members who can't reach it: the board snapshot scrubs the frame to just its
+    internal id + a "Permission denied" placeholder and drops its subtree. Access is a fail-closed
+    per-user projection (`github_user_repo_access`), refreshed when a user enumerates their PAT repos
+    and cleared when they remove their PAT — no live GitHub call on the snapshot path.
+  - **New:** `github_repos.linked_via` column + `github_user_repo_access` table (mirrored D1 ⇄
+    Drizzle, with a cross-runtime conformance suite); kernel `UserRepoAccessRepository` port and
+    optional `GitHubClient.listReposForToken`/`getRepoForToken`; `Block.accessDenied` +
+    `GitHubAvailableRepo.personal` wire fields.
+
+  **Breaking (pre-1.0, no migration):** the legacy `github_repos.block_id` repo↔frame link is removed
+  — the account-owned `Service` (`getByFrameBlock` → `repoGithubId`) is now the SOLE repo↔frame
+  linkage. `RepoProjectionRepository.linkBlock` and `GitHubRepo.blockId` are gone; `resolveRepoTarget`
+  now requires a `serviceRepository`; the `RepoBootstrapper` port's `linkRepoToBlock` is replaced by
+  `projectBootstrappedRepo` (the caller binds the frame's `Service`). Existing rows' `block_id` is
+  dropped; repos remain reachable through their `Service`.
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+
+## 0.60.2
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+
+## 0.60.1
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/kernel@0.79.1
+
+## 0.60.0
+
+### Minor Changes
+
+- 47a2975: Initiatives slice 3 — the execution loop.
+
+  An approved initiative plan now RUNS: a new `InitiativeLoopService` drives each `executing`
+  initiative — reconciling its spawned tasks, spawning the next wave just-in-time, and completing
+  the initiative once every tracker item settles.
+
+  - **The loop** (`orchestration/modules/initiative/InitiativeLoopService.ts`): per-initiative
+    `tick` = reconcile (fold each spawned task block's status back onto its item — done + PR link /
+    `pr_open` / `blocked` + deviation, one batched block read, no N+1) → complete (all items settled
+    → initiative + anchor block `done`, tracker re-commit, notify) → spawn (create task blocks for
+    the eligible `pending` items — current phase, deps met, phase not halted — up to the concurrency
+    cap, each pipeline chosen by the policy's estimate→pipeline rules). Spawning is CLAIM-FIRST (a
+    rev-CAS write records the pre-generated block id before any side effect), so a concurrent ticker
+    never orphans a double-spawn. A per-service task-limit conflict leaves the item `pending` for the
+    next sweep; a missing pipeline (deleted after ingest) records a deviation + notification and
+    blocks the item — the sweep never throws.
+  - **Blocked = halt the phase, notify.** A blocked item stops new spawns in its phase (and keeps the
+    phase current, so the initiative never advances past it) and raises the new `initiative`
+    notification type; in-flight siblings finish. A human retries/skips the item to unblock.
+  - **Both cron seams + terminal pokes.** `runDue` is wired into the Worker `scheduled` handler and a
+    Node one-minute interval sweeper (symmetric). A settling child run pokes its owning initiative's
+    loop immediately (`RunStateMachine.emitInstance` on a terminal run, `ExecutionService.finalizeMerge`
+    on a merge), so work advances without waiting for the next sweep.
+  - **Controls.** Pause / resume / cancel endpoints + `InitiativeService` CAS transitions; the sweep
+    skips a non-`executing` initiative. The tracker window gains a live progress bar and the inspector
+    the loop controls (`initiative.inspector.pause/resume/cancel`, all locales).
+  - **`listExecuting()` now returns `{ workspaceId, initiative }[]`** (the entity carries no workspace
+    id) — mirrored in the D1 + Drizzle repos and asserted, with the persisted loop-state round-trip,
+    by the cross-runtime conformance suite.
+
+  No new persistence (the `initiatives` table already exists on both facades) — so no D1/Drizzle
+  migration and no executor-harness image bump.
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+
 ## 0.59.0
 
 ### Minor Changes

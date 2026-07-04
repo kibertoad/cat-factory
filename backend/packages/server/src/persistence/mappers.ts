@@ -542,6 +542,11 @@ export interface PipelineRow {
   version?: number | null
   /** Truthy (1) when the pipeline is callable via the public API (migration 0034). */
   public?: number | boolean | null
+  /**
+   * How the pipeline may be launched: `'one-off'` / `'recurring'` / `'both'` (migration 0037).
+   * NULL/absent ⇒ unrestricted (`'both'`).
+   */
+  availability?: string | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -563,6 +568,7 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.builtin ? { builtin: true } : {}),
     ...(row.version != null ? { version: row.version } : {}),
     ...(row.public ? { public: true } : {}),
+    ...(row.availability ? { availability: row.availability as Pipeline['availability'] } : {}),
   }
 }
 

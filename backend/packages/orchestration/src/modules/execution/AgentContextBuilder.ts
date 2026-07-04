@@ -19,7 +19,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
-import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
+import { CODE_AWARE_TRAIT, DOC_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
 import {
   boundServiceFrameIds,
   buildFrontendRunNotes,
@@ -528,13 +528,14 @@ export class AgentContextBuilder {
 
   /**
    * Resolve the best-practice fragments to fold into a step's system prompt. Service
-   * fragments reach an agent ONLY when its kind carries the `code-aware` trait: those
-   * kinds get the running SERVICE's selected fragments (the frame's
-   * `serviceFragmentIds`, seeded from the workspace default and editable per service)
-   * unioned with the block's own manual pins, resolved against the universal pool. A
-   * non-code-aware kind returns null so `composeBlockSystemPrompt` falls back to the
-   * block's own `fragmentIds` unchanged. Records the selected ids on the step for
-   * observability; never throws (a lookup failure degrades to the block pins).
+   * fragments reach an agent ONLY when its kind carries the `code-aware` trait (technical
+   * standards) OR the `doc-aware` trait (document writing-style fragments): those kinds get
+   * the running SERVICE's selected fragments (the frame's `serviceFragmentIds`, seeded from
+   * the workspace default and editable per service) unioned with the block's own manual pins
+   * (for a document task, the default-on `style.*` pins seeded at creation), resolved against
+   * the universal pool. A kind carrying neither trait returns null so `composeBlockSystemPrompt`
+   * falls back to the block's own `fragmentIds` unchanged. Records the selected ids on the step
+   * for observability; never throws (a lookup failure degrades to the block pins).
    */
   private async resolveFragments(
     workspaceId: string,
@@ -546,7 +547,7 @@ export class AgentContextBuilder {
     // reused across dispatches (a gate/tester host, then its code-aware helper, then a
     // re-test) must not keep reporting a prior round's fragments: a non-code-aware kind
     // receives none, so clear it here rather than leaving a stale selection behind.
-    if (!hasTrait(agentKind, CODE_AWARE_TRAIT)) {
+    if (!hasTrait(agentKind, CODE_AWARE_TRAIT) && !hasTrait(agentKind, DOC_AWARE_TRAIT)) {
       step.selectedFragmentIds = undefined
       return null
     }

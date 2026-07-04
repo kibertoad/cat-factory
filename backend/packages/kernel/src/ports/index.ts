@@ -222,7 +222,9 @@ export type {
   PromptFragmentRepository,
   FragmentSourceRecord,
   FragmentSourceRepository,
+  ResolvedCatalogEntry,
 } from './fragment-repositories.js'
+export type { AppCaches, GroupCacheHandle } from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,
@@ -355,6 +357,10 @@ export type {
   ResolveUserGitHubToken,
   RunInitiatorScope,
 } from './user-secret-repositories.js'
+export type {
+  UserRepoAccessRecord,
+  UserRepoAccessRepository,
+} from './user-repo-access-repositories.js'
 export type {
   ProviderModelCatalogRecord,
   ProviderModelCatalogRepository,
