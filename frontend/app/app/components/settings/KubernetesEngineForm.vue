@@ -269,8 +269,9 @@ function optional(label: string): string {
 // example (not prose), so it stays inline rather than in the i18n catalog — mirroring the format
 // examples the i18n rules keep out of message bodies.
 const AUTO_SETUP_COMMAND = 'cat-factory k3s'
+const { copy } = useCopyToClipboard()
 async function copyAutoSetupCommand() {
-  await navigator.clipboard?.writeText(AUTO_SETUP_COMMAND)
+  await copy(AUTO_SETUP_COMMAND)
 }
 </script>
 
