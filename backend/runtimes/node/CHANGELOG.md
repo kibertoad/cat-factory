@@ -1,5 +1,87 @@
 # @cat-factory/node-server
 
+## 0.69.0
+
+### Minor Changes
+
+- dbde3b8: Cross-node WebSocket propagation for the Node facade (optional Redis adapter).
+
+  The Node facade's real-time transport (`NodeRealtimeHub`) is an in-process, single-node socket
+  registry: an event published on the node that processed a run only reaches browsers connected to
+  THAT node. A horizontally-scaled Node deployment spreads browsers and background work across
+  several nodes, so an event produced on one node has to reach a browser attached to another.
+
+  This adds that reach as a **layered propagator** with pluggable cross-node adapters. Publishing an
+  event fans it to the local hub AND to each configured adapter; an adapter carries it to peer nodes,
+  which apply it to their own local hubs. **Redis pub/sub is the first adapter** — a Postgres
+  LISTEN/NOTIFY or NATS adapter would implement the same `WebSocketPropagator` port with no other
+  changes.
+
+  - `ioredis` is an **optional dependency**, imported dynamically only when `REDIS_URL` is set. With
+    no bus configured (single-replica Node, and **local mode**, which is always single-node) the
+    layer is exactly the bare hub with zero overhead and no extra dependency — the default.
+  - Config: `REDIS_URL` enables it; `REDIS_REALTIME_CHANNEL` (default `cat-factory:realtime`) and
+    `REALTIME_NODE_ID` (default a random uuid, used to drop a node's own echoes) tune it.
+  - The engine's event publisher now writes through a narrow `LocalEventSink` seam that both the bare
+    hub and the layered propagator implement, so no other code differs between single- and multi-node.
+
+  The Worker facade needs none of this: its real-time transport is a globally-addressed
+  `WorkspaceEventsHub` Durable Object (one per workspace across the whole deployment), so cross-node
+  propagation is inherent to the platform — this is a genuine Node-only concern, not a facade gap.
+
+## 0.68.0
+
+### Minor Changes
+
+- ef57cb1: Bug-triage pipeline, Phase A — pipeline `availability` (one-off / recurring / both).
+
+  A library pipeline can now declare HOW it may be launched, so a recurring-only pipeline (the
+  upcoming `pl_bug_triage`) can't be started as a manual one-off, and a one-off-only pipeline can't
+  be attached to a schedule. Absent means `'both'` (unrestricted) — pre-1.0, no migration/back-fill,
+  existing rows read unchanged.
+
+  - **Contract**: `pipelineSchema` gains `availability?: 'one-off' | 'recurring' | 'both'` (+ the
+    `PipelineAvailability` type, re-exported from kernel); `createPipeline`/`updatePipeline` accept
+    and persist it.
+  - **Persistence** (both runtimes, kept symmetric): `availability` is a new `pipelines.availability`
+    column — D1 migration `0037_pipeline_availability.sql` ⇄ Drizzle schema + generated migration —
+    read/written by the shared `rowToPipeline` mapper and both repos, so the field round-trips
+    instead of being silently dropped on save.
+  - **Server enforcement** (the pickers are convenience, not the gate): `ExecutionService.start`
+    gains an `origin: 'manual' | 'recurring'` option (default `'manual'`), and a start-only
+    `assertPipelineLaunchable` gate rejects a manual start of a recurring-only pipeline (and a
+    scheduled fire of a one-off-only one). `RecurringPipelineService.fire` passes `'recurring'`; its
+    `create`/`update` reject attaching a one-off-only pipeline to a schedule. A retry/restart
+    re-drives an already-validated run, so it never re-checks the launch constraint. A pipeline
+    carrying an ENABLED `bug-intake` step must be `'recurring'` (validated at builder save + start;
+    a disabled step imposes no requirement). The schedule-attach check delegates to the same gate
+    (one rule, one `ValidationError`), and `clone` re-runs it so an un-launchable copy can't be
+    minted. Editing a pipeline to `'one-off'` while a schedule still references it is rejected
+    (`ConflictError`) rather than silently breaking every future fire.
+  - **SPA pickers**: the manual-start surfaces (add-task modal, board/inspector Run menus, task
+    run-settings default) filter out `'recurring'`-only pipelines, and the recurring-pipeline modal
+    filters out `'one-off'`-only ones — composed with the existing `pipelineAllowedForFrame`
+    predicate.
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/orchestration@0.67.0
+  - @cat-factory/server@0.78.0
+  - @cat-factory/agents@0.30.3
+  - @cat-factory/consensus@0.8.28
+  - @cat-factory/gates@0.2.83
+  - @cat-factory/gitlab@0.6.7
+  - @cat-factory/integrations@0.60.2
+  - @cat-factory/prompt-fragments@0.9.53
+  - @cat-factory/spend@0.10.87
+  - @cat-factory/observability-langfuse@0.7.126
+  - @cat-factory/provider-bedrock@0.7.133
+  - @cat-factory/provider-cloudflare@0.7.133
+  - @cat-factory/provider-s3@0.2.76
+
 ## 0.67.0
 
 ### Minor Changes

@@ -164,7 +164,7 @@ import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
-import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
+import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -627,14 +627,15 @@ export interface NodeContainerOptions {
    */
   gateProviders?: GateProviderOverrides
   /**
-   * The real-time subscriber registry. When provided, the container wires a
+   * The real-time delivery sink. When provided, the container wires a
    * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
-   * to subscribed browsers) and composes an in-app notification channel. `start()`
-   * creates the hub and attaches it to the HTTP server via {@link attachRealtime};
-   * `createServer`/tests leave it unset and the engine falls back to the no-op publisher
-   * (no live push), exactly as before.
+   * to subscribed browsers) and composes an in-app notification channel. `start()` passes
+   * the layered propagator here (the local hub + any cross-node adapter such as Redis) and
+   * attaches the hub itself to the HTTP server via {@link attachRealtime}; a single-node /
+   * local boot passes the bare hub. `createServer`/tests leave it unset and the engine
+   * falls back to the no-op publisher (no live push), exactly as before.
    */
-  realtimeHub?: NodeRealtimeHub
+  realtimeSink?: LocalEventSink
   /**
    * Override the shared HTTP provider the built-in `manifest` runner backend dispatches/tests
    * through (its OAuth cache reused), e.g. for tests. This is NOT the custom-kind seam: a
@@ -1950,8 +1951,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, db, repos)
-  const executionEventPublisher = options.realtimeHub
-    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeHub), {
+  const executionEventPublisher = options.realtimeSink
+    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
       })
     : undefined
