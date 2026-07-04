@@ -1,5 +1,5 @@
 import type { Clock } from '@cat-factory/kernel'
-import type { GitHubClient, GitHubRepoRef } from '@cat-factory/kernel'
+import type { GitHubClient, GitHubRepoRef, Paged } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
   CheckRunProjectionRepository,
@@ -124,10 +124,11 @@ export class GitHubSyncService {
   }
 
   /**
-   * The repos the signed-in user's PAT can reach (via `/user/repos`), and — as a side effect on
-   * a full browse — the refresh of their fail-closed access projection. Empty when no token is
-   * supplied or the client can't enumerate by token. A search filters the (bounded) PAT set in
-   * memory; a blank browse records the full enumeration so the redaction check stays current.
+   * The repos the signed-in user's PAT can reach (via `/user/repos`), and — on a blank browse-all
+   * — the refresh of their fail-closed access projection. Empty when no token is supplied, the
+   * client can't enumerate by token, or the token can't be used (expired/revoked/network): a
+   * personal-token failure degrades to App-only, it never fails the whole picker. A search filters
+   * the (bounded) PAT set in memory.
    */
   private async viewerPatRepos(
     workspaceId: string,
@@ -136,15 +137,27 @@ export class GitHubSyncService {
   ): Promise<GitHubRepo[]> {
     const { userToken, userId } = opts
     if (!userToken || !this.deps.githubClient.listReposForToken) return []
-    const { items } = await this.deps.githubClient.listReposForToken(userToken)
-    // Record the FULL enumeration as this user's accessible set (the redaction cache). Only on
-    // a browse-all: a search returns the same bounded PAT listing, so recording is still safe,
-    // but we key it off the full items either way (the client always enumerates the whole set).
-    if (userId && this.deps.userRepoAccessRepository) {
-      await this.deps.userRepoAccessRepository.replaceForUser(
-        userId,
-        items.map((r) => this.toAccessRecord(userId, r)),
-      )
+    // A stored PAT can be expired/revoked while still decrypting fine (or GitHub can be
+    // unreachable). Enumerating with it must NOT 500 the whole available-repos listing — the App
+    // repos still have to render — so degrade to App-only on any failure (mirrors the link path's
+    // `getRepoForToken` best-effort contract).
+    let page: Paged<GitHubRepo>
+    try {
+      page = await this.deps.githubClient.listReposForToken(userToken)
+    } catch {
+      return []
+    }
+    const { items, truncated } = page
+    // Refresh the fail-closed access cache only on a blank browse-all (the picker's initial
+    // full list), NOT on every search keystroke — a per-search refresh would delete+reinsert the
+    // user's whole recorded set on each request. A truncated enumeration is an incomplete prefix,
+    // so it can't safely REPLACE the set (that would drop repos beyond the page cap the user
+    // really can reach, then redact their own frames); record it additively instead. A complete
+    // enumeration replaces, so a repo the PAT can no longer reach stops granting visibility.
+    if (!query && userId && this.deps.userRepoAccessRepository) {
+      const records = items.map((r) => this.toAccessRecord(userId, r))
+      if (truncated) await this.deps.userRepoAccessRepository.recordAccessible(userId, records)
+      else await this.deps.userRepoAccessRepository.replaceForUser(userId, records)
     }
     if (!query) return items
     const q = query.toLowerCase()

@@ -13,6 +13,7 @@ import {
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
+import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -43,12 +44,7 @@ export function boardController(): Hono<AppEnv> {
       // Resolve the signed-in user's PAT so a repo only THEIR token can reach (beyond the App's
       // grant) still links — as a personal (`linkedVia:'user_pat'`) repo whose frame is redacted
       // for members without access. Best-effort: a decrypt failure degrades to App-only linking.
-      const userId = c.get('user')?.id
-      const userToken =
-        userId && container.userSecrets
-          ? ((await container.userSecrets.resolve(userId, 'github_pat').catch(() => null)) ??
-            undefined)
-          : undefined
+      const { userId, userToken } = await resolveViewerPat(c)
       const linked = await container.github.syncService.linkRepo(workspaceId, repoGithubId, {
         userId,
         userToken,

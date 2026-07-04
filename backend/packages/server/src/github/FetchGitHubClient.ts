@@ -291,7 +291,8 @@ export class FetchGitHubClient implements GitHubClient {
     const items: GitHubRepo[] = []
     let url: string | undefined =
       `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
-    for (let page = 0; url && page < MAX_PAGES; page++) {
+    let page = 0
+    for (; url && page < MAX_PAGES; page++) {
       const { json, next } = await this.requestWithToken(url, token)
       const repos = (json as gp.GhRepoPayload[] | null) ?? []
       for (const r of repos) {
@@ -299,7 +300,10 @@ export class FetchGitHubClient implements GitHubClient {
       }
       url = next
     }
-    return { items }
+    // A `next` link still present at the page cap means the token reaches more repos than we
+    // enumerated — flag it so the access-cache refresh records additively rather than replacing
+    // (a truncated REPLACE would drop reachable repos and fail-closed-redact the user's own frames).
+    return { items, truncated: Boolean(url) }
   }
 
   async getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {

@@ -35,6 +35,13 @@ export interface Paged<T> {
   /** `true` when GitHub answered 304 Not Modified (items will be empty). */
   notModified?: boolean
   rateLimit?: RateLimitSnapshot
+  /**
+   * `true` when the enumeration stopped at the client's page cap while more results still
+   * existed — so `items` is an incomplete prefix of the accessible set. Callers that persist
+   * the result as an authoritative "everything reachable" set (e.g. the fail-closed PAT-access
+   * cache) must NOT treat a truncated page as complete.
+   */
+  truncated?: boolean
 }
 
 /** A single observation of GitHub's rate-limit headers for one call. */
