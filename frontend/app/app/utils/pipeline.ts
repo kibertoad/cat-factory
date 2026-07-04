@@ -20,3 +20,33 @@ export function pipelineAllowedForFrame(
 ): boolean {
   return !pipelineHasVisualStep(pipeline) || frameAllowsVisualPipeline(frame, blocks)
 }
+
+// Launch-availability filters, the surface counterpart to the backend's start-origin gate (a
+// `'recurring'`-only pipeline can't be started as a one-off manual task, and a `'one-off'`-only
+// pipeline can't be attached to a schedule). `availability` absent ⇒ `'both'` (unrestricted), so
+// legacy/unset pipelines pass both. Composed with {@link pipelineAllowedForFrame} at each picker.
+
+/**
+ * Whether `pipeline` may be started as a MANUAL one-off task run (the board/inspector Run menus,
+ * the add-task modal, the task run-settings default). Excludes `'recurring'`-only pipelines the
+ * backend would refuse.
+ */
+export function pipelineAllowedForManualStart(
+  pipeline: Pipeline,
+  frame: Block | undefined,
+  blocks: readonly Block[],
+): boolean {
+  return pipeline.availability !== 'recurring' && pipelineAllowedForFrame(pipeline, frame, blocks)
+}
+
+/**
+ * Whether `pipeline` may be attached to a RECURRING schedule (the recurring-pipeline modal).
+ * Excludes `'one-off'`-only pipelines the backend would refuse.
+ */
+export function pipelineAllowedForSchedule(
+  pipeline: Pipeline,
+  frame: Block | undefined,
+  blocks: readonly Block[],
+): boolean {
+  return pipeline.availability !== 'one-off' && pipelineAllowedForFrame(pipeline, frame, blocks)
+}

@@ -80,7 +80,9 @@ function makeService(overrides: {
       get: async () => ({ id: WS }) as Workspace,
     } as unknown as RecurringPipelineServiceDependencies['workspaceRepository'],
     pipelineRepository: {
-      get: async () => ({ id: 'pl_1' }),
+      // A real Pipeline always carries agentKinds (schema default '[]'); the schedulable gate
+      // reads it, so the mock must too.
+      get: async () => ({ id: 'pl_1', agentKinds: ['coder'] }),
     } as unknown as RecurringPipelineServiceDependencies['pipelineRepository'],
     blockRepository: {
       get: async () => frame(),
