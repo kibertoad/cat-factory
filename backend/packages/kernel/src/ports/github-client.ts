@@ -374,13 +374,16 @@ export interface GitHubClient {
    * the result count. Used by the GitHub-issues task source's search box. `order`
    * overrides the default best-match ranking — `created-asc` sorts oldest-first
    * (the issue-intake pickup order), passed as the search API's `sort`/`order`
-   * params rather than in-query text.
+   * params rather than in-query text. `page` (1-based) selects a result page for
+   * the intake overscan to walk past a run of already-worked issues that fills the
+   * first page, instead of starving the result.
    */
   searchIssues(
     installationId: number,
     query: string,
     limit?: number,
     order?: 'created-asc',
+    page?: number,
   ): Promise<GitHubIssueSearchHit[]>
   /**
    * Code-search files visible to the installation. `query` is the raw GitHub

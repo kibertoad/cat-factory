@@ -255,13 +255,8 @@ export class RecurringPipelineService {
       assertSchedulable(pipeline)
     }
     const recurrence = patch.recurrence ?? existing.recurrence
-    // `issueIntake` is a tri-state patch: omitted = unchanged, null = clear, value = replace.
-    const issueIntake =
-      patch.issueIntake === undefined ? existing.issueIntake : (patch.issueIntake ?? undefined)
-    const { issueIntake: _prior, ...retained } = existing
     const updated: PipelineSchedule = {
-      ...retained,
-      ...(issueIntake ? { issueIntake } : {}),
+      ...existing,
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.pipelineId !== undefined ? { pipelineId: patch.pipelineId } : {}),
       ...(patch.recurrence !== undefined ? { recurrence } : {}),
@@ -270,6 +265,12 @@ export class RecurringPipelineService {
       ...(patch.recurrence !== undefined
         ? { nextRunAt: computeNextRun(this.clock.now(), recurrence) }
         : {}),
+    }
+    // `issueIntake` is a tri-state patch: omitted = unchanged (kept by `...existing`),
+    // null = clear (drop the optional key), value = replace.
+    if (patch.issueIntake !== undefined) {
+      if (patch.issueIntake) updated.issueIntake = patch.issueIntake
+      else delete updated.issueIntake
     }
     await this.schedules.upsert(workspaceId, updated)
     if (patch.name !== undefined) {

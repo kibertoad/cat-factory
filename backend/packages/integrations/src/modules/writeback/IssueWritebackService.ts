@@ -18,8 +18,7 @@ import {
   LINEAR_ISSUE_UPDATE_MUTATION,
   buildLinearCommentVariables,
   buildLinearStateUpdateVariables,
-  pickCompletedStateId,
-  pickStartedStateId,
+  pickStateIdByType,
 } from '../tracker/linear.writeback.logic.js'
 import type {
   FetchLike,
@@ -166,7 +165,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
       return
     }
     if (issue.source === 'linear') {
-      await this.transitionLinear(workspaceId, issue.externalId, pickCompletedStateId)
+      await this.transitionLinear(workspaceId, issue.externalId, 'completed')
     }
   }
 
@@ -193,7 +192,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
       return
     }
     if (issue.source === 'linear') {
-      await this.transitionLinear(workspaceId, issue.externalId, pickStartedStateId)
+      await this.transitionLinear(workspaceId, issue.externalId, 'started')
     }
   }
 
@@ -229,14 +228,15 @@ export class IssueWritebackService implements IssueWritebackProvider {
   private async transitionLinear(
     workspaceId: string,
     identifier: string,
-    pickStateId: (states: Parameters<typeof pickCompletedStateId>[0]) => string | null,
+    stateType: 'completed' | 'started',
   ): Promise<void> {
     const lookup = (await this.linearRequest(workspaceId, LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY, {
       id: identifier,
     })) as { issue?: { id?: string; team?: { states?: { nodes?: unknown[] } } } } | null
     const issueId = lookup?.issue?.id
-    const stateId = pickStateId(
-      (lookup?.issue?.team?.states?.nodes ?? []) as Parameters<typeof pickCompletedStateId>[0],
+    const stateId = pickStateIdByType(
+      (lookup?.issue?.team?.states?.nodes ?? []) as Parameters<typeof pickStateIdByType>[0],
+      stateType,
     )
     if (!issueId || !stateId) return
     await this.linearRequest(

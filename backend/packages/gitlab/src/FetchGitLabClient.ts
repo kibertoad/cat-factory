@@ -344,10 +344,13 @@ export class FetchGitLabClient implements VcsClient {
     connection: VcsConnectionRef,
     query: string,
     limit = 20,
+    order?: 'created-asc',
   ): Promise<GitHubIssueSearchHit[]> {
     const per = Math.min(Math.max(limit, 1), 100)
+    // Oldest-first (issue intake) via GitLab search's sort params.
+    const sort = order === 'created-asc' ? '&order_by=created_at&sort=asc' : ''
     const { json } = await this.request(
-      `/search?scope=issues&search=${encodeURIComponent(query)}&per_page=${per}`,
+      `/search?scope=issues&search=${encodeURIComponent(query)}&per_page=${per}${sort}`,
       { connection },
     )
     const items = (Array.isArray(json) ? json : []) as Array<{

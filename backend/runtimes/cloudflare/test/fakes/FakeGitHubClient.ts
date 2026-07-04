@@ -205,9 +205,17 @@ export class FakeGitHubClient implements GitHubClient {
   readonly searchIssuesCalls: { installationId: number; query: string }[] = []
   readonly searchCodeCalls: { installationId: number; query: string }[] = []
 
-  async searchIssues(installationId: number, query: string): Promise<GitHubIssueSearchHit[]> {
+  async searchIssues(
+    installationId: number,
+    query: string,
+    limit = 20,
+    _order?: 'created-asc',
+    page = 1,
+  ): Promise<GitHubIssueSearchHit[]> {
     this.searchIssuesCalls.push({ installationId, query })
-    return this.issueSearchHits
+    // Page the canned hits like the real search API so the intake overscan walk terminates.
+    const start = (page - 1) * limit
+    return this.issueSearchHits.slice(start, start + limit)
   }
 
   async searchCode(installationId: number, query: string): Promise<GitHubCodeSearchHit[]> {

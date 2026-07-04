@@ -18,10 +18,19 @@ function fakeClient(opts: {
   const searchOrders: (string | undefined)[] = []
   const issueCalls: string[] = []
   const client = {
-    async searchIssues(_installationId: number, query: string, _limit?: number, order?: string) {
+    async searchIssues(
+      _installationId: number,
+      query: string,
+      limit = 20,
+      order?: string,
+      page = 1,
+    ) {
       searchCalls.push(query)
       searchOrders.push(order)
-      return opts.hits ?? []
+      // Page the canned hits like the real search API so the intake overscan walk is exercised.
+      const all = opts.hits ?? []
+      const start = (page - 1) * limit
+      return all.slice(start, start + limit)
     },
     async getIssue(_installationId: number, ref: { owner: string; repo: string }, n: number) {
       issueCalls.push(`${ref.owner}/${ref.repo}#${n}`)
@@ -186,7 +195,7 @@ describe('GitHubIssuesProvider.searchIssues (issue intake)', () => {
     )
 
     expect(searchCalls).toEqual([
-      'repo:kibertoad/simple-service is:open type:"Bug" label:"triage" in:title crash',
+      'repo:kibertoad/simple-service is:open type:"Bug" label:"triage" in:title "crash"',
     ])
     expect(searchOrders).toEqual(['created-asc'])
     expect(results.map((r) => r.externalId)).toEqual([
@@ -204,6 +213,42 @@ describe('GitHubIssuesProvider.searchIssues (issue intake)', () => {
       {
         board: { githubRepo: 'kibertoad/simple-service' },
         excludeExternalIds: ['kibertoad/simple-service#1'],
+        limit: 1,
+      },
+      'ws1',
+    )
+
+    expect(results.map((r) => r.externalId)).toEqual(['kibertoad/simple-service#2'])
+  })
+
+  it('pages past a first page filled entirely with already-worked issues', async () => {
+    // 150 open matches, the oldest 100 already worked (they cluster at the front of the
+    // oldest-first results). With `per` capped at 100, page 1 is entirely excluded; the
+    // walk must fetch page 2 to find the first eligible issue instead of returning [].
+    const hits = Array.from({ length: 150 }, (_, i) => hit(i + 1))
+    const excludeExternalIds = hits.slice(0, 100).map((h) => `kibertoad/simple-service#${h.number}`)
+    const { client } = fakeClient({ hits })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      { board: { githubRepo: 'kibertoad/simple-service' }, excludeExternalIds, limit: 1 },
+      'ws1',
+    )
+
+    expect(results.map((r) => r.externalId)).toEqual(['kibertoad/simple-service#101'])
+  })
+
+  it('excludes case-insensitively (GitHub owner/repo are case-insensitive)', async () => {
+    const { client } = fakeClient({ hits: [hit(1), hit(2)] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      {
+        board: { githubRepo: 'kibertoad/simple-service' },
+        // Stored with different casing than the API's canonical `kibertoad/simple-service#1`.
+        excludeExternalIds: ['Kibertoad/Simple-Service#1'],
         limit: 1,
       },
       'ws1',

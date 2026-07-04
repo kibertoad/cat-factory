@@ -36,6 +36,10 @@ export interface GitHubIssuesProviderDependencies {
   installations: GitHubInstallationRepository
 }
 
+/** Bounded page walk for issue-intake overscan, so a run of already-worked issues at the
+ * front of the oldest-first results can't starve the pickup while eligible ones exist. */
+const INTAKE_MAX_PAGES = 5
+
 export class GitHubIssuesProvider implements TaskSourceProvider {
   readonly kind = 'github' as const
   readonly descriptor = GITHUB_ISSUES_DESCRIPTOR
@@ -172,27 +176,39 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
   ): Promise<TaskSearchResult[]> {
     const installation = await this.deps.installations.getByWorkspace(workspaceId)
     if (!installation) return []
-    const excluded = new Set(query.excludeExternalIds ?? [])
-    const overscan = Math.min(query.limit + excluded.size, 100)
-    const hits = await this.deps.githubClient.searchIssues(
-      installation.installationId,
-      githubIssuesLogic.buildGitHubIntakeQuery(query),
-      overscan,
-      'created-asc',
-    )
+    // Owner/repo are case-insensitive on GitHub, so normalize both sides — otherwise an
+    // already-worked issue stored with different casing than the API's canonical form
+    // slips past the filter and is re-picked.
+    const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toLowerCase()))
+    const searchText = githubIssuesLogic.buildGitHubIntakeQuery(query)
+    // Oldest-first, and the already-worked (excluded) issues ARE the oldest, so they
+    // cluster at the front. The exclusion list is the one predicate GitHub search can't
+    // express, so overscan by its size — and page through (bounded) so a first page that
+    // is entirely excluded can't starve the result while eligible issues exist beyond it.
+    const per = Math.min(query.limit + excluded.size, 100)
     const out: TaskSearchResult[] = []
-    for (const hit of hits) {
-      const externalId = githubIssuesLogic.githubIssueExternalId(hit)
-      if (excluded.has(externalId)) continue
-      out.push({
-        source: 'github',
-        externalId,
-        title: hit.title,
-        url: hit.url,
-        status: hit.state,
-        excerpt: '',
-      })
-      if (out.length >= query.limit) break
+    for (let page = 1; page <= INTAKE_MAX_PAGES && out.length < query.limit; page++) {
+      const hits = await this.deps.githubClient.searchIssues(
+        installation.installationId,
+        searchText,
+        per,
+        'created-asc',
+        page,
+      )
+      for (const hit of hits) {
+        const externalId = githubIssuesLogic.githubIssueExternalId(hit)
+        if (excluded.has(externalId.toLowerCase())) continue
+        out.push({
+          source: 'github',
+          externalId,
+          title: hit.title,
+          url: hit.url,
+          status: hit.state,
+          excerpt: '',
+        })
+        if (out.length >= query.limit) break
+      }
+      if (hits.length < per) break // a short page is the last page — stop paging
     }
     return out
   }

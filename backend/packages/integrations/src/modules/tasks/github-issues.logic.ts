@@ -184,7 +184,10 @@ export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
   parts.push('is:open')
   if (query.issueType) parts.push(`type:${quoteQualifierValue(query.issueType)}`)
   for (const label of query.labels ?? []) parts.push(`label:${quoteQualifierValue(label)}`)
-  if (query.titleFragment) parts.push(`in:title ${query.titleFragment.trim()}`)
+  // Quote the fragment as a literal phrase so a value that happens to contain a search
+  // qualifier (e.g. `crash state:closed`) is matched as title text, not parsed as an
+  // extra qualifier that would silently contradict `is:open` or widen the repo scope.
+  if (query.titleFragment) parts.push(`in:title ${quoteQualifierValue(query.titleFragment)}`)
   return parts.join(' ')
 }
 

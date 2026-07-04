@@ -156,7 +156,7 @@ describe('buildGitHubIntakeQuery', () => {
         limit: 5,
       }),
     ).toBe(
-      'repo:octo/app is:open type:"Bug" label:"triage" label:"needs repro" in:title crash on save',
+      'repo:octo/app is:open type:"Bug" label:"triage" label:"needs repro" in:title "crash on save"',
     )
   })
 

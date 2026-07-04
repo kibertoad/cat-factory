@@ -4,6 +4,7 @@
 '@cat-factory/integrations': minor
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
+'@cat-factory/gitlab': minor
 '@cat-factory/worker': minor
 '@cat-factory/node-server': minor
 ---
@@ -22,10 +23,13 @@ and persistence only.
   query wherever expressible — Jira compiles ONE JQL (`statusCategory != Done`, `issuetype`,
   `labels`, `summary ~`, `issuekey NOT IN`, `ORDER BY created ASC`; excluded ids validated
   against the key shape so a malformed id can't inject), GitHub compiles search qualifiers
-  (`repo:` `is:open` `type:` `label:` `in:title`) with the API's `created-asc` sort (a new
-  `order` param on `GitHubClient.searchIssues`) and filters the exclusion list from a bounded
-  overscan, Linear compiles a GraphQL `IssueFilter` (team, state type not completed/canceled,
-  per-label `labels.some`, `title.containsIgnoreCase`) asked for oldest-created-first.
+  (`repo:` `is:open` `type:` `label:` `in:title`, the title fragment quoted as a literal phrase
+  so it can't inject a qualifier) with the API's `created-asc` sort (a new `order` param on
+  `GitHubClient.searchIssues`, honoured by the GitLab-backed client too) and filters the
+  exclusion list case-insensitively from a bounded, paged overscan, Linear compiles a GraphQL
+  `IssueFilter` (team, state type not completed/canceled, per-label `labels.some`,
+  `title.containsIgnoreCase`) asked for oldest-created-first, also paged so a run of
+  already-worked issues at the front can't starve the pickup.
 - **`PipelineSchedule.issueIntake`** (contracts + both runtimes, kept symmetric): the
   schedule-scoped intake config (`source`, per-vendor `board` scope, `predicates`, the GitHub
   `inProgressLabel`) as a new `pipeline_schedules.issue_intake` JSON column — D1 migration
@@ -37,9 +41,10 @@ and persistence only.
 - **`IssueWritebackProvider.onIssuePickedUp`**: comments "Taken by cat-factory" (+ run link)
   on the block's linked issue(s) and marks them in-progress — Jira transitions into the
   `indeterminate` status category (`pickDoneTransition` generalized into
-  `pickTransitionByCategory`), Linear transitions to the team's `started` state (new
-  `pickStartedStateId`), GitHub applies the schedule's `inProgressLabel` (default
-  `in-progress`) via a new `GitHubClient.applyIssueLabel` that creates the label when absent.
+  `pickTransitionByCategory`), Linear transitions to the team's `started` state (the Linear
+  state pickers generalized into `pickStateIdByType`), GitHub applies the schedule's
+  `inProgressLabel` (default `in-progress`) via a new `GitHubClient.applyIssueLabel` that
+  creates the label — with the required colour — when absent.
   Best-effort per issue like the existing hooks, and deliberately NOT gated on the workspace
   writeback settings — claiming the issue is intake semantics. Wired in both facades.
 - **`TaskLinkService.replaceForBlock`** + `TaskRepository.unlinkAllFromBlock`: detach every

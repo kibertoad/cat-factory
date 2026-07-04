@@ -107,11 +107,19 @@ export const LINEAR_SEARCH_ISSUES_QUERY = `query SearchIssues($term: String!) {
  * wrong for a backlog larger than one page). Nodes carry `createdAt` so the
  * mapper can enforce the ordering deterministically regardless.
  */
-export const LINEAR_INTAKE_ISSUES_QUERY = `query IntakeIssues($filter: IssueFilter, $first: Int!) {
-  issues(filter: $filter, first: $first, sort: [{ createdAt: { order: Ascending } }]) {
+export const LINEAR_INTAKE_ISSUES_QUERY = `query IntakeIssues($filter: IssueFilter, $first: Int!, $after: String) {
+  issues(filter: $filter, first: $first, after: $after, sort: [{ createdAt: { order: Ascending } }]) {
     nodes { identifier title url createdAt state { name } }
+    pageInfo { hasNextPage endCursor }
   }
 }`
+
+/**
+ * Bounded page walk for issue-intake overscan: the already-worked (excluded) issues
+ * cluster at the front of the oldest-first results, so page through (bounded) rather
+ * than let a first page full of them starve the pickup.
+ */
+export const LINEAR_INTAKE_PAGE_CAP = 5
 
 /**
  * Compile an intake query's predicates onto a Linear `IssueFilter`: the team
@@ -136,8 +144,13 @@ export function buildLinearIntakeFilter(query: IssueIntakeQuery): Record<string,
 }
 
 /** One node of the intake `issues` connection (the slice we read). */
-interface LinearIntakeNode extends LinearSearchNode {
+export interface LinearIntakeNode extends LinearSearchNode {
   createdAt?: string
+}
+
+/** One page of the intake `issues` connection (nodes + the cursor for the overscan walk). */
+export interface LinearIntakePage {
+  issues?: { nodes?: LinearIntakeNode[]; pageInfo?: LinearPageInfo | null }
 }
 
 /**
