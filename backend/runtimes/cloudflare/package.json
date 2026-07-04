@@ -63,14 +63,14 @@
     "hono": "^4.12.27",
     "pino": "^10.3.1",
     "valibot": "^1.4.2",
-    "workers-ai-provider": "^3.2.1"
+    "workers-ai-provider": "^3.3.1"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
-    "@cloudflare/vitest-pool-workers": "^0.16.20",
-    "@cloudflare/workers-types": "^4.20260628.1",
+    "@cloudflare/vitest-pool-workers": "^0.18.0",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9",
-    "wrangler": "^4.105.0"
+    "wrangler": "^4.107.0"
   }
 }

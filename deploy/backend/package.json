@@ -17,8 +17,8 @@
     "@cat-factory/worker": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260628.1",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "7.0.1-rc",
-    "wrangler": "^4.105.0"
+    "wrangler": "^4.107.0"
   }
 }
