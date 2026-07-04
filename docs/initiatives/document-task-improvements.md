@@ -59,15 +59,38 @@ Upgrade the per-kind guidance from a one-line structure hint to a real template 
   Woven into the `doc-outliner` prompt (outline must cover the required sections) and the
   `doc-writer` prompt (start from the skeleton). Deployment-overridable through the same
   public seam pattern as `registerPromptFragment` (a `registerDocTemplate(kind, template)`
-  registry — see the registry-DI initiative before adding another module-global Map).
+  registry — see the registry-DI initiative before adding another module-global Map). This
+  code-defined skeleton is the **fallback** — see the workspace-linked override below.
+- **Workspace-linked template override**: a workspace may instead point a `DocKind` at a
+  real document it already owns — most commonly a Markdown file living in one of its own
+  GitHub repos (e.g. `docs/templates/rfc.md`) — and have that become the effective template
+  for the kind, in place of the built-in skeleton. This reuses the **existing `documents`
+  integration end-to-end and adds no new fetch/content machinery**: the file is read through
+  the already-shipped `github` `DocumentSourceKind` (`GitHubDocsProvider`, blob-URL/raw-URL/
+  `owner/repo:path` ref parsing, installation-scoped `GitHubClient.getFileContent`) exactly
+  like any other linked doc, and its body reaches the outliner/writer through the same
+  `DocumentContentResolver` / `linkedContextSection` materialisation path a task-context link
+  already uses. Because the mechanism is source-agnostic, the same override works unchanged
+  for a template that instead lives in Confluence/Notion/Figma/Zeplin/Linear — GitHub is just
+  the expected common case, not a special-cased path.
 - **Exemplar links**: per-kind "good example" document URLs the author agents are pointed
   at. Two tiers: built-in curated exemplars (public classics per kind) + per-workspace
-  overrides. Workspace exemplars ride the EXISTING linked-context path — an exemplar is a
-  `SourceDocument` link (the `documents` integration) tagged as an exemplar for a kind — so
-  no new content-fetch machinery; the writer receives the exemplar body via
+  overrides. Workspace exemplars ride the SAME existing linked-context path as the template
+  override above — no new content-fetch machinery; the writer receives the exemplar body via
   `linkedContextSection`/materialised context like any linked doc.
-- The required-section list from the template is ALSO the input to the WS4 quality gate
-  (single source of truth — don't duplicate the section list in the gate).
+- **One shared linking primitive, two roles.** A template link and an exemplar link are the
+  same kind of thing — "a `SourceDocument`, scoped to a workspace + `DocKind` rather than to
+  one block" — so they should NOT become two parallel tables/paths. Model it as a `role`
+  discriminator (`'template' | 'exemplar'`) on a workspace+`DocKind`-scoped link, sitting
+  alongside (not replacing) the existing block-scoped `linkedBlockId` anchor on `documents` /
+  `sourceDocumentSchema`. `role: 'template'` is singular per kind (linking a new one replaces
+  the prior override; unlinking falls back to the built-in skeleton); `role: 'exemplar'` stays
+  multi-valued (additive list). Both resolve through the one `DocumentLinkService` /
+  `DocumentRepository` read path — the only new surface is the `role`/`docKind` tagging, not a
+  second fetch/registry mechanism.
+- The required-section list from the template (built-in or workspace-linked) is ALSO the
+  input to the WS4 quality gate (single source of truth — don't duplicate the section list
+  in the gate).
 
 ### WS2 — universal stylistic fragments (anti-LLM-isms, concise & actionable)
 
@@ -153,17 +176,19 @@ two: backend loop, then UI).
 | #   | Work item                                                                                                                    | Workstream | Status | PR  |
 | --- | ---------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | --- |
 | 0   | Tracker document (this file)                                                                                                 | —          | done   | (this PR) |
-| 1   | Per-kind Markdown template registry + weave into outliner/writer prompts (+ prompt version bumps)                            | WS1        | todo   |     |
-| 2   | Built-in curated exemplar links per kind + per-workspace exemplar links via the documents integration                        | WS1        | todo   |     |
-| 3   | `style.anti-llmisms` + `style.concise-actionable` fragments (new `collections/style.ts`)                                     | WS2        | todo   |     |
-| 4   | `doc-aware` trait + engine fragment folding for doc kinds; default-on selection for document tasks                           | WS2        | todo   |     |
-| 5   | Style fragments as review criteria for `doc-reviewer`                                                                        | WS2        | todo   |     |
-| 6   | Kind-specific `taskTypeFields` (contracts) + `docBriefSection` folding                                                       | WS3        | todo   |     |
-| 7   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                      | WS3        | todo   |     |
-| 8   | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                            | WS4        | todo   |     |
-| 9   | Insert gate into `pl_document`/`pl_document_quick` + catalog version bump + conformance assertion                            | WS4        | todo   |     |
-| 10  | Interactive session backend: parked decision-wait loop + iteration cap + persistence (D1 ⇄ Drizzle) + conformance             | WS5        | todo   |     |
-| 11  | Interactive session UI window via the result-view seam + i18n                                                                | WS5        | todo   |     |
+| 1   | Per-kind Markdown template registry (built-in fallback) + weave into outliner/writer prompts (+ prompt version bumps)        | WS1        | todo   |     |
+| 2   | `role`-tagged (`template`/`exemplar`) workspace+`DocKind` document link, reusing the documents integration's link/read path (`DocumentLinkService`/`DocumentRepository`, incl. the existing `github` doc source) — no new fetch machinery | WS1        | todo   |     |
+| 3   | Workspace-linked template override resolution: outliner/writer prefer the `role:'template'` link's body over the built-in skeleton when one is linked for the kind                                                          | WS1        | todo   |     |
+| 4   | Built-in curated exemplar links per kind, surfaced alongside the `role:'exemplar'` workspace links from item 2                                                                                                                | WS1        | todo   |     |
+| 5   | `style.anti-llmisms` + `style.concise-actionable` fragments (new `collections/style.ts`)                                     | WS2        | todo   |     |
+| 6   | `doc-aware` trait + engine fragment folding for doc kinds; default-on selection for document tasks                           | WS2        | todo   |     |
+| 7   | Style fragments as review criteria for `doc-reviewer`                                                                        | WS2        | todo   |     |
+| 8   | Kind-specific `taskTypeFields` (contracts) + `docBriefSection` folding                                                       | WS3        | todo   |     |
+| 9   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                      | WS3        | todo   |     |
+| 10  | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                            | WS4        | todo   |     |
+| 11  | Insert gate into `pl_document`/`pl_document_quick` + catalog version bump + conformance assertion                            | WS4        | todo   |     |
+| 12  | Interactive session backend: parked decision-wait loop + iteration cap + persistence (D1 ⇄ Drizzle) + conformance             | WS5        | todo   |     |
+| 13  | Interactive session UI window via the result-view seam + i18n                                                                | WS5        | todo   |     |
 
 ## Conventions & gotchas carried between iterations
 
@@ -181,7 +206,15 @@ two: backend loop, then UI).
   module-global registry — new registries should follow the app-owned pattern.
 - **Single source of truth for per-kind sections**: the WS1 template feeds BOTH the
   outliner/writer prompts AND the WS4 gate's required-section check. Don't let the gate
-  grow its own section list.
+  grow its own section list. When a `role:'template'` link overrides the built-in skeleton,
+  its required sections (not the code-defined ones) become that source of truth for the
+  kind, for both the prompts and the gate.
+- **Templates and exemplars are ONE linking primitive, not two.** Both are a `SourceDocument`
+  scoped to a workspace + `DocKind` (as opposed to the existing block-scoped link), tagged
+  with a `role`. Reuse the `documents` integration's provider registry, link service, and
+  repository as-is — GitHub repo documents work via the already-shipped `github`
+  `DocumentSourceKind`, so this needs no new provider, no new fetch path, and no bespoke
+  GitHub-only code. The only new surface is the `role`/`docKind` scoping on the link itself.
 - **Fragment folding is trait-gated** (`code-aware` today). WS2 extends the trait mechanism
   (`doc-aware`); do not special-case doc kinds inside the prompt builders.
 - **Editing a versioned prompt means bumping its number** (`agents/kinds/versions.ts` rule);
@@ -204,8 +237,10 @@ two: backend loop, then UI).
 
 - Reverse documentation (`documenter` / `business-documenter` / `blueprints`) — separate
   track; only the forward-authoring pipeline is in scope.
-- The external-document import integration (Confluence/Notion/…) — used as-is for exemplar
-  links in WS1, not modified.
+- The external-document import integration (Confluence/Notion/GitHub/…) — its provider
+  registry, fetch/link services, and repositories are reused as-is for both template and
+  exemplar links in WS1; the only new surface is the `role`/`docKind` scoping tag on a link,
+  not a new source, fetch path, or GitHub-specific mechanism.
 - LLM-graded style scoring inside the quality gate (the deterministic gate ships first;
   AI quality already has the `doc-reviewer` loop).
 - Migrating the built-in doc kinds' rendering into the manifest pre/post-op model — that's
