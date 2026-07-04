@@ -80,6 +80,22 @@ describe('document agent kinds', () => {
     expect(prompt).toContain('product stakeholders')
   })
 
+  it("weaves the docKind template's required sections into the outliner prompt", () => {
+    const prompt = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), {})
+    // The PRD template's required sections must be named as things the outline has to cover.
+    expect(prompt).toContain('MUST cover these required sections')
+    expect(prompt).toContain('Acceptance Criteria')
+    expect(prompt).toContain('Success Metrics')
+  })
+
+  it('embeds the docKind template skeleton in the writer prompt', () => {
+    const prompt = userPromptFor(ctx(), { materialized: true })
+    expect(prompt).toContain('template skeleton')
+    // The skeleton is titled from the block and carries the required section headings.
+    expect(prompt).toContain('# Billing Service PRD')
+    expect(prompt).toContain('## Problem & Goals')
+  })
+
   it('honours an explicit targetPath override', () => {
     const prompt = userPromptFor(
       ctx({
