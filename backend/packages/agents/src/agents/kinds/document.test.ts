@@ -142,6 +142,47 @@ describe('document agent kinds', () => {
     expect(prompt).toContain('Document kind: rfc')
   })
 
+  it("folds the task's kind-specific fields into the brief as required section content", () => {
+    const prompt = userPromptFor(
+      ctx({
+        block: {
+          ...ctx().block,
+          taskTypeFields: {
+            docKind: 'prd',
+            targetUsers: 'self-serve SMB admins',
+            successMetrics: 'activation rate > 40%',
+          },
+        },
+      }),
+      { materialized: true },
+    )
+    // The PRD-specific fields are labelled and marked as required content for the writer.
+    expect(prompt).toContain('Author-provided prd specifics')
+    expect(prompt).toContain('Target users: self-serve SMB admins')
+    expect(prompt).toContain('Success metrics: activation rate > 40%')
+  })
+
+  it('omits a kind-specific field the author left blank, and the section when none are set', () => {
+    // Only the filled field appears — a blank one is not emitted as an empty bullet.
+    const partial = userPromptFor(
+      ctx({
+        block: {
+          ...ctx().block,
+          taskTypeFields: { docKind: 'adr', consideredOptions: 'A vs B vs C' },
+        },
+      }),
+      { materialized: true },
+    )
+    expect(partial).toContain('Considered options: A vs B vs C')
+    expect(partial).not.toContain('Decision drivers:')
+    // No specifics set ⇒ no "Author-provided … specifics" line at all.
+    const none = userPromptFor(
+      ctx({ block: { ...ctx().block, taskTypeFields: { docKind: 'adr' } } }),
+      { materialized: true },
+    )
+    expect(none).not.toContain('specifics')
+  })
+
   it('the container-coding writer is NOT told to put its answer in the reply (it commits)', () => {
     // FINAL_ANSWER_IN_REPLY is for inline/explore deliverable-is-the-reply kinds; the writer's
     // product is a pushed commit, so it must not get that directive.

@@ -141,8 +141,88 @@ export const taskTypeFieldsSchema = v.object({
   ),
   /** Document: freeform hints on the sections / structure the author should produce. */
   outlineHints: v.optional(v.pipe(v.string(), v.maxLength(4000))),
+
+  // --- Per-`DocKind` specific fields (see DOC_KIND_FIELDS) -------------------
+  // Shown on the create-task form only for the relevant kind and folded into the author
+  // agents' brief as required content for that kind's matching section. All optional and
+  // sparse, so a new field never needs a migration (the whole point of this bag).
+  //
+  /** PRD: who the product is for and the jobs they are trying to do. */
+  targetUsers: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** PRD: the measurable outcomes that indicate the product is working. */
+  successMetrics: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** RFC: the alternative approaches weighed and why they were ruled out. */
+  alternativesConsidered: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** RFC: migration / rollout concerns to address. */
+  rolloutConcerns: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** ADR: the forces and constraints driving the decision. */
+  decisionDrivers: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** ADR: the options evaluated, each with its trade-offs. */
+  consideredOptions: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** Runbook: the trigger or situation this runbook applies to. */
+  whenToUse: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** Runbook: who to contact and how to escalate when the procedure fails. */
+  escalationPath: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** Research: the question or hypothesis the research sets out to answer. */
+  researchQuestion: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** Research: the options to weigh against each other. */
+  optionsToCompare: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+  /** API: the endpoints / surface in scope for the reference. */
+  apiSurface: v.optional(v.pipe(v.string(), v.maxLength(2000))),
 })
 export type TaskTypeFields = v.InferOutput<typeof taskTypeFieldsSchema>
+
+/** A kind-specific document field key on {@link taskTypeFieldsSchema}. */
+export type DocKindFieldKey =
+  | 'targetUsers'
+  | 'successMetrics'
+  | 'alternativesConsidered'
+  | 'rolloutConcerns'
+  | 'decisionDrivers'
+  | 'consideredOptions'
+  | 'whenToUse'
+  | 'escalationPath'
+  | 'researchQuestion'
+  | 'optionsToCompare'
+  | 'apiSurface'
+
+/** Descriptor for a kind-specific document field: the key + whether it wants a multi-line input. */
+export interface DocKindFieldSpec {
+  readonly key: DocKindFieldKey
+  /** A multi-line field renders as a textarea in the form; single-line renders as an input. */
+  readonly multiline: boolean
+}
+
+/**
+ * Which kind-specific fields the create-task form shows — and the author agents fold into the
+ * brief — for each {@link DocKind}. A kind absent from the map has only the shared quartet
+ * (`docKind`/`audience`/`targetPath`/`outlineHints`). This is the SINGLE SOURCE OF TRUTH for
+ * both the conditional inputs in `AddTaskModal.vue` and the prompt fold in `document.ts`, so
+ * the two can't drift.
+ */
+export const DOC_KIND_FIELDS: Partial<Record<DocKind, readonly DocKindFieldSpec[]>> = {
+  prd: [
+    { key: 'targetUsers', multiline: true },
+    { key: 'successMetrics', multiline: true },
+  ],
+  rfc: [
+    { key: 'alternativesConsidered', multiline: true },
+    { key: 'rolloutConcerns', multiline: true },
+  ],
+  adr: [
+    { key: 'decisionDrivers', multiline: true },
+    { key: 'consideredOptions', multiline: true },
+  ],
+  runbook: [
+    { key: 'whenToUse', multiline: true },
+    { key: 'escalationPath', multiline: true },
+  ],
+  research: [
+    { key: 'researchQuestion', multiline: false },
+    { key: 'optionsToCompare', multiline: true },
+  ],
+  api: [{ key: 'apiSurface', multiline: true }],
+}
 
 export const agentStateSchema = v.picklist(['pending', 'working', 'waiting_decision', 'done'])
 export type AgentState = v.InferOutput<typeof agentStateSchema>

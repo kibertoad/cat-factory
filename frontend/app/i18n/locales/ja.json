@@ -151,6 +151,49 @@
       "targetPathPlaceholder": "例: docs/rfcs/0001-foo.md",
       "outlineHints": "アウトラインのヒント",
       "outlineHintsPlaceholder": "ドキュメントがカバーすべきセクションや要点",
+      "docFields": {
+        "targetUsers": {
+          "label": "対象ユーザー",
+          "placeholder": "ドキュメントの対象者と、その人が行うタスク"
+        },
+        "successMetrics": {
+          "label": "成功指標",
+          "placeholder": "機能していることを示す測定可能な成果"
+        },
+        "alternativesConsidered": {
+          "label": "検討した代替案",
+          "placeholder": "検討した他のアプローチと却下した理由"
+        },
+        "rolloutConcerns": {
+          "label": "展開時の懸念",
+          "placeholder": "対処すべき移行・展開のリスク"
+        },
+        "decisionDrivers": {
+          "label": "意思決定の要因",
+          "placeholder": "意思決定を左右する要因と制約"
+        },
+        "consideredOptions": {
+          "label": "検討した選択肢",
+          "placeholder": "評価した各選択肢とそのトレードオフ"
+        },
+        "whenToUse": {
+          "label": "使用するタイミング",
+          "placeholder": "このランブックが適用されるトリガーや状況"
+        },
+        "escalationPath": {
+          "label": "エスカレーション経路",
+          "placeholder": "失敗時の連絡先とエスカレーション方法"
+        },
+        "researchQuestion": { "label": "リサーチの問い", "placeholder": "答えるべき問いや仮説" },
+        "optionsToCompare": {
+          "label": "比較する選択肢",
+          "placeholder": "互いに比較検討する選択肢"
+        },
+        "apiSurface": {
+          "label": "API のサーフェス",
+          "placeholder": "対象となるエンドポイントや範囲"
+        }
+      },
       "optional": "任意",
       "pipeline": "パイプライン",
       "chooseAtRunTime": "実行時に選択",

@@ -151,6 +151,52 @@
       "targetPathPlaceholder": "np. docs/rfcs/0001-foo.md",
       "outlineHints": "Wskazówki do konspektu",
       "outlineHintsPlaceholder": "Sekcje lub punkty, które dokument powinien obejmować",
+      "docFields": {
+        "targetUsers": {
+          "label": "Użytkownicy docelowi",
+          "placeholder": "Dla kogo jest dokument i jakie zadania wykonują"
+        },
+        "successMetrics": {
+          "label": "Metryki sukcesu",
+          "placeholder": "Mierzalne wyniki potwierdzające, że to działa"
+        },
+        "alternativesConsidered": {
+          "label": "Rozważane alternatywy",
+          "placeholder": "Inne podejścia i powody ich odrzucenia"
+        },
+        "rolloutConcerns": {
+          "label": "Kwestie wdrożenia",
+          "placeholder": "Ryzyka migracji i wdrożenia do rozważenia"
+        },
+        "decisionDrivers": {
+          "label": "Czynniki decyzji",
+          "placeholder": "Siły i ograniczenia kształtujące decyzję"
+        },
+        "consideredOptions": {
+          "label": "Rozważane opcje",
+          "placeholder": "Ocenione opcje wraz z ich kompromisami"
+        },
+        "whenToUse": {
+          "label": "Kiedy stosować",
+          "placeholder": "Wyzwalacz lub sytuacja, w której obowiązuje ten runbook"
+        },
+        "escalationPath": {
+          "label": "Ścieżka eskalacji",
+          "placeholder": "Z kim się kontaktować i jak eskalować w razie awarii"
+        },
+        "researchQuestion": {
+          "label": "Pytanie badawcze",
+          "placeholder": "Pytanie lub hipoteza do rozstrzygnięcia"
+        },
+        "optionsToCompare": {
+          "label": "Opcje do porównania",
+          "placeholder": "Opcje do porównania między sobą"
+        },
+        "apiSurface": {
+          "label": "Powierzchnia API",
+          "placeholder": "Endpointy lub zakres objęty dokumentem"
+        }
+      },
       "optional": "opcjonalne",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Wybierz przy uruchomieniu",

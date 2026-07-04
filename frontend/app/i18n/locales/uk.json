@@ -151,6 +151,52 @@
       "targetPathPlaceholder": "напр. docs/rfcs/0001-foo.md",
       "outlineHints": "Підказки для плану",
       "outlineHintsPlaceholder": "Розділи або пункти, які має охопити документ",
+      "docFields": {
+        "targetUsers": {
+          "label": "Цільові користувачі",
+          "placeholder": "Для кого документ і які завдання вони виконують"
+        },
+        "successMetrics": {
+          "label": "Метрики успіху",
+          "placeholder": "Вимірювані результати, що підтверджують працездатність"
+        },
+        "alternativesConsidered": {
+          "label": "Розглянуті альтернативи",
+          "placeholder": "Інші підходи та причини їх відхилення"
+        },
+        "rolloutConcerns": {
+          "label": "Питання розгортання",
+          "placeholder": "Ризики міграції та розгортання, які слід врахувати"
+        },
+        "decisionDrivers": {
+          "label": "Чинники рішення",
+          "placeholder": "Сили та обмеження, що визначають рішення"
+        },
+        "consideredOptions": {
+          "label": "Розглянуті варіанти",
+          "placeholder": "Оцінені варіанти з їхніми компромісами"
+        },
+        "whenToUse": {
+          "label": "Коли застосовувати",
+          "placeholder": "Тригер або ситуація, до якої застосовний цей runbook"
+        },
+        "escalationPath": {
+          "label": "Шлях ескалації",
+          "placeholder": "До кого звертатися та як ескалювати в разі збою"
+        },
+        "researchQuestion": {
+          "label": "Дослідницьке питання",
+          "placeholder": "Питання або гіпотеза, на яку слід відповісти"
+        },
+        "optionsToCompare": {
+          "label": "Варіанти для порівняння",
+          "placeholder": "Варіанти для зважування між собою"
+        },
+        "apiSurface": {
+          "label": "Поверхня API",
+          "placeholder": "Кінцеві точки або поверхня в межах обсягу"
+        }
+      },
       "optional": "необов’язково",
       "pipeline": "Конвеєр",
       "chooseAtRunTime": "Обрати під час запуску",

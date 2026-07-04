@@ -11,8 +11,14 @@
 // button is disabled with a hint. Linking needs the block id,
 // so chosen items are staged locally and import-and-linked once the task is created
 // (see useContextLinking) — the same context the agents see for every step of the run.
-import type { CreateTaskType, DocKind, TaskSourceKind, TaskTypeFields } from '~/types/domain'
-import { DOC_KINDS } from '~/types/domain'
+import type {
+  CreateTaskType,
+  DocKind,
+  DocKindFieldKey,
+  TaskSourceKind,
+  TaskTypeFields,
+} from '~/types/domain'
+import { DOC_KINDS, DOC_KIND_FIELDS } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
 import { mergePresetOptionLabel, mergePresetThresholds } from '~/utils/mergePreset'
@@ -97,6 +103,40 @@ const docKind = ref<DocKind | ''>('')
 const docAudience = ref('')
 const docTargetPath = ref('')
 const docOutlineHints = ref('')
+// Per-kind specific fields (see DOC_KIND_FIELDS). Held in one keyed record; only the fields
+// for the selected kind are shown and submitted, so a value from a previously-selected kind is
+// never sent. The catalog keys below keep the labels/placeholders i18n and drift-guarded.
+const docKindFieldValues = reactive<Partial<Record<DocKindFieldKey, string>>>({})
+const docKindFields = computed(() => (docKind.value ? (DOC_KIND_FIELDS[docKind.value] ?? []) : []))
+// Exhaustive Record<DocKindFieldKey, key> of catalog keys — the initiative's drift guard for a
+// dynamic enum→key lookup (a missing enum member is a compile error here; a locale that omits a
+// key falls back via `te()` rather than leaking a raw key). Do NOT inline as bare template keys.
+const DOC_FIELD_LABEL_KEYS: Record<DocKindFieldKey, string> = {
+  targetUsers: 'board.addTask.docFields.targetUsers.label',
+  successMetrics: 'board.addTask.docFields.successMetrics.label',
+  alternativesConsidered: 'board.addTask.docFields.alternativesConsidered.label',
+  rolloutConcerns: 'board.addTask.docFields.rolloutConcerns.label',
+  decisionDrivers: 'board.addTask.docFields.decisionDrivers.label',
+  consideredOptions: 'board.addTask.docFields.consideredOptions.label',
+  whenToUse: 'board.addTask.docFields.whenToUse.label',
+  escalationPath: 'board.addTask.docFields.escalationPath.label',
+  researchQuestion: 'board.addTask.docFields.researchQuestion.label',
+  optionsToCompare: 'board.addTask.docFields.optionsToCompare.label',
+  apiSurface: 'board.addTask.docFields.apiSurface.label',
+}
+const DOC_FIELD_PLACEHOLDER_KEYS: Record<DocKindFieldKey, string> = {
+  targetUsers: 'board.addTask.docFields.targetUsers.placeholder',
+  successMetrics: 'board.addTask.docFields.successMetrics.placeholder',
+  alternativesConsidered: 'board.addTask.docFields.alternativesConsidered.placeholder',
+  rolloutConcerns: 'board.addTask.docFields.rolloutConcerns.placeholder',
+  decisionDrivers: 'board.addTask.docFields.decisionDrivers.placeholder',
+  consideredOptions: 'board.addTask.docFields.consideredOptions.placeholder',
+  whenToUse: 'board.addTask.docFields.whenToUse.placeholder',
+  escalationPath: 'board.addTask.docFields.escalationPath.placeholder',
+  researchQuestion: 'board.addTask.docFields.researchQuestion.placeholder',
+  optionsToCompare: 'board.addTask.docFields.optionsToCompare.placeholder',
+  apiSurface: 'board.addTask.docFields.apiSurface.placeholder',
+}
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 
 function buildTypeFields(): TaskTypeFields | undefined {
@@ -121,6 +161,11 @@ function buildTypeFields(): TaskTypeFields | undefined {
     if (docAudience.value.trim()) f.audience = docAudience.value.trim()
     if (docTargetPath.value.trim()) f.targetPath = docTargetPath.value.trim()
     if (docOutlineHints.value.trim()) f.outlineHints = docOutlineHints.value.trim()
+    // Only the selected kind's fields are read, so a stale value for another kind is dropped.
+    for (const spec of docKindFields.value) {
+      const value = docKindFieldValues[spec.key]?.trim()
+      if (value) f[spec.key] = value
+    }
     return Object.keys(f).length ? f : undefined
   }
   return undefined
@@ -336,6 +381,8 @@ watch(open, (isOpen) => {
   docAudience.value = ''
   docTargetPath.value = ''
   docOutlineHints.value = ''
+  for (const key of Object.keys(docKindFieldValues) as DocKindFieldKey[])
+    delete docKindFieldValues[key]
   mergePresetId.value = ''
   modelPresetId.value = ''
   pipelineId.value = ''
@@ -607,6 +654,27 @@ async function add() {
                 v-model="docOutlineHints"
                 :rows="2"
                 :placeholder="t('board.addTask.outlineHintsPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <!-- Kind-specific fields — only those relevant to the selected docKind are shown. -->
+            <UFormField
+              v-for="spec in docKindFields"
+              :key="spec.key"
+              :label="t(DOC_FIELD_LABEL_KEYS[spec.key])"
+              :hint="t('board.addTask.optional')"
+            >
+              <UTextarea
+                v-if="spec.multiline"
+                v-model="docKindFieldValues[spec.key]"
+                :rows="2"
+                :placeholder="t(DOC_FIELD_PLACEHOLDER_KEYS[spec.key])"
+                class="w-full"
+              />
+              <UInput
+                v-else
+                v-model="docKindFieldValues[spec.key]"
+                :placeholder="t(DOC_FIELD_PLACEHOLDER_KEYS[spec.key])"
                 class="w-full"
               />
             </UFormField>
