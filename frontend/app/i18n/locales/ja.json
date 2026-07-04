@@ -251,7 +251,11 @@
       "dragTask": "タスクをドラッグ",
       "dragToResize": "ドラッグしてサイズ変更",
       "addFirstTask": "最初のタスクを追加",
-      "createInitiativeTitle": "イニシアチブを作成"
+      "createInitiativeTitle": "イニシアチブを作成",
+      "accessDenied": {
+        "title": "アクセスが拒否されました",
+        "hint": "このサービスの基盤となるリポジトリにアクセスする権限がありません。"
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "判断が必要",
@@ -2494,7 +2498,8 @@
       "repoLabel": {
         "private": " (プライベート)",
         "monorepo": " · モノレポ",
-        "onBoard": " · すでにボード上"
+        "onBoard": " · すでにボード上",
+        "personal": " · 個人（自分のトークン）"
       },
       "monorepoLabel": "これはモノレポです (複数のサービスをホストしています)",
       "monorepoDescription": "1つのリポジトリから複数のサービスを追加し、それぞれをサブディレクトリに固定します。",

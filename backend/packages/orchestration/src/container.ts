@@ -112,6 +112,7 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
+  UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
@@ -383,6 +384,11 @@ export interface CoreDependencies {
   issueProjectionRepository?: IssueProjectionRepository
   commitProjectionRepository?: CommitProjectionRepository
   checkRunProjectionRepository?: CheckRunProjectionRepository
+  /**
+   * The per-user "repos my PAT can reach" projection. When wired, the repo picker expands with
+   * the viewer's PAT-reachable repos (recording their access for the board redaction). Optional.
+   */
+  userRepoAccessRepository?: UserRepoAccessRepository
   webhookVerifier?: WebhookVerifier
   /**
    * Bounds the initial commit backfill window (see GitHubSyncService). The worker
@@ -1141,6 +1147,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     issueProjectionRepository,
     commitProjectionRepository,
     checkRunProjectionRepository,
+    userRepoAccessRepository: deps.userRepoAccessRepository,
     clock: deps.clock,
     commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
   })

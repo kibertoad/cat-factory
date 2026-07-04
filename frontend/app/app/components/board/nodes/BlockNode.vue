@@ -201,8 +201,32 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
+  <!-- ===================== Redacted: repo access denied ===================== -->
+  <!-- This service frame is backed by a repo linked via another member's personal access
+       token that the signed-in user can't reach. The server scrubbed its contents; the SPA
+       shows only the internal id + a "Permission denied" placeholder (never the repo). -->
   <div
-    v-if="block"
+    v-if="block?.accessDenied"
+    class="w-56 overflow-hidden rounded-xl border border-slate-700 bg-slate-900/90 shadow-xl backdrop-blur"
+    :data-block-id="block.id"
+    data-testid="frame-access-denied"
+  >
+    <div class="flex items-center gap-2 border-b border-slate-800 px-3 py-2">
+      <span class="i-lucide-lock h-4 w-4 shrink-0 text-slate-400" />
+      <span class="truncate text-sm font-semibold text-slate-200">{{
+        t('board.frame.accessDenied.title')
+      }}</span>
+    </div>
+    <div class="px-3 py-3">
+      <p class="text-[11px] leading-snug text-slate-400">
+        {{ t('board.frame.accessDenied.hint') }}
+      </p>
+      <code class="mt-2 block truncate font-mono text-[11px] text-slate-500">{{ block.id }}</code>
+    </div>
+  </div>
+
+  <div
+    v-else-if="block"
     class="relative"
     :data-block-id="block.id"
     @pointerenter="enterFrame(block.id)"

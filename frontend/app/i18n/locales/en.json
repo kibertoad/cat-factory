@@ -281,7 +281,11 @@
       "dragTask": "Drag task",
       "dragToResize": "Drag to resize",
       "addFirstTask": "Add the first task",
-      "createInitiativeTitle": "Create initiative"
+      "createInitiativeTitle": "Create initiative",
+      "accessDenied": {
+        "title": "Permission denied",
+        "hint": "You don't have access to the repository backing this service."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decision needed",
@@ -2557,7 +2561,8 @@
       "repoLabel": {
         "private": " (private)",
         "monorepo": " · monorepo",
-        "onBoard": " · already on board"
+        "onBoard": " · already on board",
+        "personal": " · personal (your token)"
       },
       "monorepoLabel": "This is a monorepo (hosts more than one service)",
       "monorepoDescription": "Add several services from one repo, each pinned to a subdirectory.",

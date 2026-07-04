@@ -27,7 +27,6 @@ function repo(
     installationId: 42,
     defaultBranch: 'main',
     private: false,
-    blockId: null,
     syncedAt: 0,
     ...partial,
   }
@@ -123,11 +122,11 @@ describe('buildResolveRepoTarget — monorepo service directories', () => {
     expect(target).toMatchObject({ owner: 'acme', name: 'platform' })
   })
 
-  it('falls back to the legacy block_id link (no directory) when no service is wired', async () => {
+  it('resolves a whole-repo service (no directory) via its Service link', async () => {
     const resolve = harness({
-      repos: [repo({ githubId: 1, owner: 'acme', name: 'platform', blockId: 'frame' })],
+      repos: [repo({ githubId: 1, owner: 'acme', name: 'platform', isMonorepo: false })],
       blocks: [block('frame', null, 'frame'), block('task', 'frame', 'task')],
-      services: [],
+      services: [service('frame', 1, null)],
     })
     const target = await resolve('ws', 'task')
     expect(target).toMatchObject({ owner: 'acme', name: 'platform' })

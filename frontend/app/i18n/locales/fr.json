@@ -251,7 +251,11 @@
       "dragTask": "Faire glisser la tâche",
       "dragToResize": "Glisser pour redimensionner",
       "addFirstTask": "Ajouter la première tâche",
-      "createInitiativeTitle": "Creer une initiative"
+      "createInitiativeTitle": "Creer une initiative",
+      "accessDenied": {
+        "title": "Autorisation refusée",
+        "hint": "Vous n'avez pas accès au dépôt sur lequel repose ce service."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Décision requise",
@@ -2481,7 +2485,8 @@
       "repoLabel": {
         "private": " (privé)",
         "monorepo": " · monorepo",
-        "onBoard": " · déjà sur le tableau"
+        "onBoard": " · déjà sur le tableau",
+        "personal": " · personnel (votre jeton)"
       },
       "monorepoLabel": "Ceci est un monorepo (héberge plusieurs services)",
       "monorepoDescription": "Ajoutez plusieurs services depuis un même dépôt, chacun rattaché à un sous-répertoire.",

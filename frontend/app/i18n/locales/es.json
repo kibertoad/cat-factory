@@ -251,7 +251,11 @@
       "dragTask": "Arrastrar tarea",
       "dragToResize": "Arrastra para cambiar el tamaño",
       "addFirstTask": "Añade la primera tarea",
-      "createInitiativeTitle": "Crear iniciativa"
+      "createInitiativeTitle": "Crear iniciativa",
+      "accessDenied": {
+        "title": "Permiso denegado",
+        "hint": "No tienes acceso al repositorio que respalda este servicio."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decisión necesaria",
@@ -2481,7 +2485,8 @@
       "repoLabel": {
         "private": " (privado)",
         "monorepo": " · monorepo",
-        "onBoard": " · ya en el tablero"
+        "onBoard": " · ya en el tablero",
+        "personal": " · personal (tu token)"
       },
       "monorepoLabel": "Es un monorepo (aloja más de un servicio)",
       "monorepoDescription": "Añade varios servicios desde un repositorio, cada uno fijado a un subdirectorio.",

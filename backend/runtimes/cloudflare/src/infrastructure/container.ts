@@ -135,6 +135,7 @@ import {
 } from './repositories/D1PersonalSubscriptionRepository'
 import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
 import { D1UserSecretRepository } from './repositories/D1UserSecretRepository'
+import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1ProviderModelCatalogRepository } from './repositories/D1ProviderModelCatalogRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -1522,6 +1523,7 @@ function selectGitHubDeps(
     issueProjectionRepository: new D1IssueProjectionRepository({ db }),
     commitProjectionRepository: new D1CommitProjectionRepository({ db }),
     checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
+    userRepoAccessRepository: new D1UserRepoAccessRepository({ db }),
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
     // Bound the initial backfill to the commit retention horizon (0 = full).
     commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -2395,6 +2397,8 @@ export function buildContainer(
     localModelEndpoints,
     // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
+    userRepoAccess: new D1UserRepoAccessRepository({ db }),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     gateways: {

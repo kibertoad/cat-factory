@@ -70,8 +70,8 @@ function rowToRepo(row: typeof githubRepos.$inferSelect): GitHubRepo {
     name: row.name,
     defaultBranch: row.default_branch,
     private: bool(row.private),
-    blockId: row.block_id,
     isMonorepo: bool(row.is_monorepo),
+    linkedVia: row.linked_via === 'user_pat' ? 'user_pat' : 'app',
     syncedAt: row.synced_at,
   }
 }
@@ -82,7 +82,7 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
 
   async upsertMany(workspaceId: string, repos: GitHubRepo[]): Promise<void> {
     if (repos.length === 0) return
-    // `block_id` and `is_monorepo` are board-owned (set via linkBlock/setMonorepo),
+    // `is_monorepo` and `linked_via` are link-owned (set via setMonorepo / at link time),
     // not sync — the update set deliberately omits them so sync never clobbers them.
     for (const batch of chunks(
       dedupeByKey(repos, (r) => String(r.githubId)),
@@ -100,6 +100,7 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
             default_branch: repo.defaultBranch,
             private: intBool(repo.private),
             is_monorepo: intBool(repo.isMonorepo ?? false),
+            linked_via: repo.linkedVia ?? 'app',
             synced_at: repo.syncedAt,
             deleted_at: null,
           })),
@@ -177,13 +178,6 @@ export class DrizzleRepoProjectionRepository implements RepoProjectionRepository
           ? base
           : and(base, notInArray(githubRepos.github_id, seenGithubIds)),
       )
-  }
-
-  async linkBlock(workspaceId: string, githubId: number, blockId: string | null): Promise<void> {
-    await this.db
-      .update(githubRepos)
-      .set({ block_id: blockId })
-      .where(and(eq(githubRepos.workspace_id, workspaceId), eq(githubRepos.github_id, githubId)))
   }
 
   async setMonorepo(workspaceId: string, githubId: number, isMonorepo: boolean): Promise<void> {
