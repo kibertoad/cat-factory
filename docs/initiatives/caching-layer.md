@@ -68,11 +68,22 @@ The pilot validated the pattern below with four corrections a later slice must c
   writes invalidate via the coarse `invalidateAll()` (rare management actions; enumerating
   the account's workspaces would need a new `WorkspaceRepository` port method whose only
   consumer is invalidation — over-invalidation is safe and cheaper).
-- **`isEntryStillCurrentFn` requires an ASYNC cache tier in layered-loader 14.5.x** (the
-  probe only fires inside the async cache's refresh window; the constructor throws on an
-  in-memory-only loader). The staleness-checker plan for the git-backed slices (2, 4)
-  therefore needs in-memory refresh-window support in layered-loader first (raise
-  upstream), or an app-level probe — re-validate before starting slice 2.
+- **In-memory refresh-ahead works today; only the `isEntryStillCurrentFn` probe is
+  async-tier-gated in layered-loader 14.5.x.** An in-memory hit inside
+  `inMemoryCache.ttlLeftBeforeRefreshInMsecs` already fires a background FULL datasource
+  reload that re-seeds the entry (no expiry gap, no read-path latency spike) — so an
+  in-memory-only loader can have refresh-ahead now, it just always pays the full refetch.
+  The cheap-probe path (probe → `resetTtlFromGroup` TTL bump instead of refetch) runs only
+  in the async-HIT branch, keyed off the async entry's expiration, and the constructor
+  asserts `asyncCache.resetTtlFromGroup` — so a no-op/always-miss async stub does NOT
+  unlock it (it never hits, so the probe never fires). Two real options for slices 2/4:
+  (a) an in-process `GroupCache` adapter in the ASYNC slot holding the durable copy behind
+  a short-TTL in-memory front — the probe machinery then runs verbatim, but probe cadence
+  is gated by front-tier misses AND peer notifications evict only front tiers, so this
+  shape is safe ONLY for probe-driven git-backed caches, never invalidation-driven ones;
+  or (b) upstream layered-loader support for running the probe from the in-memory
+  refresh-ahead branch (bump = re-`setForGroup` of the same value, which already resets
+  the TTL) — the cleaner fix. Decide when slice 2 starts.
 - **CI has no Redis service**, so the notification path is covered by fake-bus tests: the
   caching package's two-`AppCaches` test (fake publisher/consumer pair) and
   `runtimes/node/test/cacheNotifications.spec.ts`, which drives the REAL layered-loader
