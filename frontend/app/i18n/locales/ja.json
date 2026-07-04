@@ -198,7 +198,20 @@
       "submit": "繰り返しパイプラインを追加",
       "addFailedTitle": "繰り返しパイプラインを追加できませんでした",
       "onDemand": "オンデマンド（手動のみ）",
-      "onDemandHint": "スケジュールはなく、手動で実行したときのみ動作します。毎回ユーザーが立ち会うため、タスクは個人利用のサブスクリプションモデルを使用できます。"
+      "onDemandHint": "スケジュールはなく、手動で実行したときのみ動作します。毎回ユーザーが立ち会うため、タスクは個人利用のサブスクリプションモデルを使用できます。",
+      "intake": "課題の取り込み",
+      "intakeHint": "各実行はトラッカーから条件に一致する未解決の課題を1件選び、最後まで対応します。",
+      "intakeNoSources": "課題を取り込むには、まずタスクソースを接続してください。",
+      "intakeGithubRepo": "リポジトリ",
+      "intakeGithubRepoPlaceholder": "owner/name",
+      "intakeTitleFragment": "タイトルに含む",
+      "intakeTitleFragmentPlaceholder": "例: crash",
+      "intakeLabels": "ラベル",
+      "intakeLabelsPlaceholder": "カンマ区切り",
+      "intakeIssueType": "課題タイプ",
+      "intakeIssueTypePlaceholder": "bug",
+      "intakeInProgressLabel": "進行中ラベル",
+      "intakeInProgressLabelPlaceholder": "in-progress"
     },
     "failure": {
       "containerFailedToStart": "コンテナの起動に失敗しました",

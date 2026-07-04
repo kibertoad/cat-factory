@@ -126,6 +126,7 @@ import type { InitiativeRepository, RequirementReviewRepository } from '@cat-fac
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import type {
+  BugIntakeService,
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
 } from '@cat-factory/integrations'
@@ -389,6 +390,13 @@ export interface ExecutionServiceDependencies {
    */
   issueWriteback?: IssueWritebackProvider
   /**
+   * Optional: the recurring `bug-intake` step's read-and-claim helper. When wired, a `bug-intake`
+   * step pulls one matching open issue from the schedule's configured tracker board, claims it, and
+   * seeds the reused block from it; absent (no task sources wired) → the step is a no-op that
+   * completes the run without touching the block, so the engine works unchanged.
+   */
+  bugIntakeService?: BugIntakeService
+  /**
    * Optional: the LLM observability sink. When wired, each emit rolls the per-run
    * model-call aggregates onto the matching pipeline steps (`step.metrics`) so the
    * board shows tokens / output-limit headroom / transport-vs-execution latency
@@ -570,6 +578,7 @@ export class ExecutionService {
     mergePresetRepository,
     ticketTrackerProvider,
     issueWriteback,
+    bugIntakeService,
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
@@ -774,6 +783,7 @@ export class ExecutionService {
       environmentProvisioning,
       ticketTrackerProvider,
       issueWriteback,
+      bugIntakeService,
       notificationService,
       blueprintReconciler,
       initiativeService,

@@ -264,12 +264,12 @@ type IssueSeed = {
 }
 
 /** Seed the new task's title from the issue (keyed for traceability). */
-function issueTaskTitle(issue: IssueSeed): string {
+export function issueTaskTitle(issue: IssueSeed): string {
   return `${issue.externalId}: ${issue.title}`
 }
 
 /** Seed the new task's description: a source reference line + the issue body. */
-function issueTaskDescription(issue: IssueSeed): string {
+export function issueTaskDescription(issue: IssueSeed): string {
   const reference = `Imported from ${issue.url}`
   const body = issue.description.trim() || (issue.excerpt ?? '').trim()
   return body ? `${reference}\n\n${body}` : reference

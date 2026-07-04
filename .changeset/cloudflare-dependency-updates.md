@@ -1,6 +1,6 @@
 ---
-"@cat-factory/worker": patch
-"@cat-factory/provider-cloudflare": patch
+'@cat-factory/worker': patch
+'@cat-factory/provider-cloudflare': patch
 ---
 
 Update Cloudflare dependencies to the latest release-age-compliant versions:

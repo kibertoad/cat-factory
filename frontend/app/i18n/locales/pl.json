@@ -198,7 +198,20 @@
       "submit": "Dodaj cykliczny pipeline",
       "addFailedTitle": "Nie udało się dodać cyklicznego pipeline’u",
       "onDemand": "Na żądanie (tylko ręcznie)",
-      "onDemandHint": "Uruchamia się tylko po ręcznym wyzwoleniu, bez harmonogramu. Ponieważ za każdym razem jesteś obecny, jego zadanie może korzystać z modelu subskrypcji do użytku indywidualnego."
+      "onDemandHint": "Uruchamia się tylko po ręcznym wyzwoleniu, bez harmonogramu. Ponieważ za każdym razem jesteś obecny, jego zadanie może korzystać z modelu subskrypcji do użytku indywidualnego.",
+      "intake": "Pobieranie zgłoszeń",
+      "intakeHint": "Każde uruchomienie wybiera jedno pasujące otwarte zgłoszenie z trackera i realizuje je od początku do końca.",
+      "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
+      "intakeGithubRepo": "Repozytorium",
+      "intakeGithubRepoPlaceholder": "właściciel/nazwa",
+      "intakeTitleFragment": "Tytuł zawiera",
+      "intakeTitleFragmentPlaceholder": "np. crash",
+      "intakeLabels": "Etykiety",
+      "intakeLabelsPlaceholder": "oddzielone przecinkami",
+      "intakeIssueType": "Typ zgłoszenia",
+      "intakeIssueTypePlaceholder": "bug",
+      "intakeInProgressLabel": "Etykieta w toku",
+      "intakeInProgressLabelPlaceholder": "in-progress"
     },
     "failure": {
       "containerFailedToStart": "Nie udało się uruchomić kontenera",

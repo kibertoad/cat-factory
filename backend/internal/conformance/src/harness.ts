@@ -15,6 +15,7 @@ import type {
   ResolveRunRepoContext,
   RunRepoContext,
   Service,
+  TaskSourceProvider,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -363,4 +364,14 @@ export interface ConformanceAppOptions {
    * absent ⇒ the facade's model-derived reviewer (a pass-through with no model wired).
    */
   testerQualityReviewer?: TesterQualityReviewer
+  /**
+   * Override the facade's default fake task-source providers with pre-seeded ones, so the suite
+   * can drive the recurring `bug-intake` step against a controlled issue backlog — intake pickup
+   * (a matching issue is imported, linked and seeds the block) and the no-match no-op (the run
+   * completes with every remaining step skipped) — on EVERY runtime. Each facade harness threads
+   * this into its `taskSourceProviders` core dep in place of its built-in fakes; the suite holds
+   * the same {@link FakeTaskSourceProvider} instance to seed issues + inspect the recorded intake
+   * query. Absent → the facade's default fakes.
+   */
+  taskSourceProviders?: TaskSourceProvider[]
 }
