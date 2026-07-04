@@ -58,13 +58,13 @@ token})` + `writeCheckoutFile(project, relPath, content)`, mirroring the optiona
 
 ## Per-slice checklist
 
-| #   | Slice                                                                                                                                                          | Status         | PR     |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------ |
-| 0   | Tracker doc                                                                                                                                                    | ✅ done        | (this) |
-| 1   | **PILOT**: contracts flag + shared mode-aware predicates + `ComposeRuntime.checkout` (local impl) + `req.clone` sync seam + provider build branch + unit tests | 🔄 in progress |        |
-| 2   | Content-aware autodetection (`findCompose`/`composeRecommendation` set `composeBuild`)                                                                         | ⬜ todo        |        |
-| 3   | UI: `build` describeConfig field + `InfraHandlersConfigurator` compose form + i18n parity                                                                      | ⬜ todo        |        |
-| 4   | Conformance (fake-runtime checkout/build recording + build-path assertion) + docs                                                                              | ⬜ todo        |        |
+| #   | Slice                                                                                                                                                          | Status  | PR     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------ |
+| 0   | Tracker doc                                                                                                                                                    | ✅ done | (this) |
+| 1   | **PILOT**: contracts flag + shared mode-aware predicates + `ComposeRuntime.checkout` (local impl) + `req.clone` sync seam + provider build branch + unit tests | ✅ done |        |
+| 2   | Content-aware autodetection (`findCompose`/`composeRecommendation` set `composeBuild`)                                                                         | ✅ done |        |
+| 3   | UI: `build` describeConfig field + `InfraHandlersConfigurator` compose form + i18n parity                                                                      | ⬜ todo |        |
+| 4   | Conformance (fake-runtime checkout/build recording + build-path assertion) + docs                                                                              | ⬜ todo |        |
 
 ## Conventions / gotchas carried between iterations
 

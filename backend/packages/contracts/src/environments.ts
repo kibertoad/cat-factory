@@ -968,7 +968,7 @@ export type ProvisioningDetectionConfidence = v.InferOutput<
 
 /** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
 export const provisioningDetectionNoteSchema = v.object({
-  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`. */
+  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`. */
   field: v.string(),
   confidence: provisioningDetectionConfidenceSchema,
   /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
@@ -1060,7 +1060,7 @@ export type ProvisioningManifestRootCandidate = v.InferOutput<
  * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice), and
  * `composeServiceCandidates` (which compose service). Each note's `field` is one of
  * `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` |
- * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`.
+ * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`.
  */
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),

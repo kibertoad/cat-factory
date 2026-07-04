@@ -23,3 +23,7 @@ facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentReque
 `clone` target resolved on the synchronous provision path (reusing the deploy clone-target seam).
 Build mode registers only on the docker-family local runtime — the documented runtime-bound
 exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
+
+Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
+recommended in build-from-source mode (previously it was recommended blindly and then failed at
+provision time).
