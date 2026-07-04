@@ -2,6 +2,7 @@ import type { AgentRunContext, DocKind } from '@cat-factory/kernel'
 import { CONTEXT_BUDGET, estimateTokens } from '@cat-factory/kernel'
 import type { AgentKindDefinition } from './registry.js'
 import { registerAgentKinds } from './registry.js'
+import { DOC_AWARE_TRAIT } from './traits.js'
 import { linkedContextSection } from '../prompts/standard.js'
 import {
   docTemplateFor,
@@ -230,6 +231,9 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     systemPrompt: DOC_RESEARCHER_SYSTEM_PROMPT,
     userPrompt: docResearcherUserPrompt,
     agent: { surface: 'inline' },
+    // Doc-aware: the engine folds the task's writing-style fragments (anti-LLM-isms,
+    // concise & actionable) into the prompt, exactly as `code-aware` folds tech fragments.
+    traits: [DOC_AWARE_TRAIT],
     webResearchHint:
       'gather current prior art, standards and references for the document being written',
     presentation: {
@@ -246,6 +250,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     systemPrompt: DOC_OUTLINER_SYSTEM_PROMPT,
     userPrompt: docOutlinerUserPrompt,
     agent: { surface: 'inline' },
+    traits: [DOC_AWARE_TRAIT],
     presentation: {
       label: 'Doc Outliner',
       icon: 'i-lucide-list-tree',
@@ -263,6 +268,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     // writes the Markdown, pushes the work branch and opens the PR (coder-like). Its companion
     // `doc-reviewer` loops it back for rework below threshold.
     agent: { surface: 'container-coding', clone: { branch: 'work' } },
+    traits: [DOC_AWARE_TRAIT],
     presentation: {
       label: 'Doc Writer',
       icon: 'i-lucide-file-pen-line',
@@ -280,6 +286,7 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
     // back (no new PR), fixer-like. The human gate's revision feedback is threaded in by
     // `withRevision` (catalog.ts), so the editor addresses it on this pass.
     agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    traits: [DOC_AWARE_TRAIT],
     presentation: {
       label: 'Doc Finalizer',
       icon: 'i-lucide-file-check-2',

@@ -16,6 +16,7 @@ import {
   DOC_WRITER_KIND,
 } from './document.js'
 import { registeredAgentStep, registeredKindRequiresContainer } from './registry.js'
+import { DOC_AWARE_TRAIT, hasTrait } from './traits.js'
 
 // Importing the package registers the document kinds as a side effect; ./document is imported
 // transitively here, so the registry is populated.
@@ -52,6 +53,21 @@ describe('document agent kinds', () => {
     expect(registeredKindRequiresContainer(DOC_WRITER_KIND)).toBe(true)
     expect(registeredKindRequiresContainer(DOC_FINALIZER_KIND)).toBe(true)
     expect(registeredKindRequiresContainer(DOC_RESEARCHER_KIND)).toBe(false)
+  })
+
+  it('marks every document-authoring kind (incl. the reviewer) doc-aware for style folding', () => {
+    // The `doc-aware` trait is what makes the engine fold the task's writing-style fragments
+    // (anti-LLM-isms, concise & actionable) into these kinds' prompts — the doc analogue of
+    // `code-aware`. The reviewer carries it too, so the same bodies become its review criteria.
+    for (const kind of [
+      DOC_RESEARCHER_KIND,
+      DOC_OUTLINER_KIND,
+      DOC_WRITER_KIND,
+      DOC_FINALIZER_KIND,
+      DOC_REVIEWER_KIND,
+    ]) {
+      expect(hasTrait(kind, DOC_AWARE_TRAIT)).toBe(true)
+    }
   })
 
   it('makes doc-reviewer a companion of doc-writer', () => {
