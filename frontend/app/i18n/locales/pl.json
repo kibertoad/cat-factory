@@ -251,7 +251,11 @@
       "dragTask": "Przeciągnij zadanie",
       "dragToResize": "Przeciągnij, aby zmienić rozmiar",
       "addFirstTask": "Dodaj pierwsze zadanie",
-      "createInitiativeTitle": "Utworz inicjatywe"
+      "createInitiativeTitle": "Utworz inicjatywe",
+      "accessDenied": {
+        "title": "Brak uprawnień",
+        "hint": "Nie masz dostępu do repozytorium powiązanego z tą usługą."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Wymagana decyzja",
@@ -2481,7 +2485,8 @@
       "repoLabel": {
         "private": " (prywatne)",
         "monorepo": " · monorepo",
-        "onBoard": " · już na tablicy"
+        "onBoard": " · już na tablicy",
+        "personal": " · osobiste (Twój token)"
       },
       "monorepoLabel": "To jest monorepo (zawiera więcej niż jedną usługę)",
       "monorepoDescription": "Dodaj kilka usług z jednego repozytorium, każdą przypiętą do podkatalogu.",

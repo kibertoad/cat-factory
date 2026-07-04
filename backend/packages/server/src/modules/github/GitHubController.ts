@@ -37,6 +37,27 @@ const unavailable = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'unavailable', message: 'GitHub integration is not configured' } }, 503)
 
 /**
+ * Resolve the signed-in user's id + decrypted GitHub PAT (if they stored one), so the repo
+ * picker/link can expand with — and attribute — repos only their personal token can reach.
+ * Both absent (no user, or no stored PAT) ⇒ the App-only behaviour. Best-effort: a decrypt
+ * failure degrades to no token rather than failing the request.
+ */
+async function resolveViewerPat<E extends AppEnv>(
+  c: Context<E>,
+): Promise<{ userId?: string; userToken?: string }> {
+  const userId = c.get('user')?.id
+  if (!userId) return {}
+  const userSecrets = c.get('container').userSecrets
+  if (!userSecrets) return { userId }
+  try {
+    const token = await userSecrets.resolve(userId, 'github_pat')
+    return token ? { userId, userToken: token } : { userId }
+  } catch {
+    return { userId }
+  }
+}
+
+/**
  * Workspace-scoped GitHub endpoints: connection management, projection reads
  * (served from the local DB — fast and rate-limit-free), resync triggers, and repo
  * writes. Mounted under `/workspaces/:workspaceId`. Runtime-neutral: the async resync
@@ -104,9 +125,11 @@ export function githubController(): Hono<AppEnv> {
   buildHonoRoute(app, listGitHubAvailableReposContract, async (c) => {
     const github = requireGitHub(c)
     if (!github) return unavailable(c)
+    const viewer = await resolveViewerPat(c)
     return c.json(
       await github.syncService.listAvailableRepos(param(c, 'workspaceId'), {
         q: c.req.valid('query').q,
+        ...viewer,
       }),
       200,
     )

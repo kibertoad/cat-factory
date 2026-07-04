@@ -10,6 +10,8 @@ import type {
   RepoProjectionRepository,
   SyncCursor,
   SyncCursorKind,
+  UserRepoAccessRecord,
+  UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import type { GitHubAvailableRepo, GitHubRepo, RepoTreeEntry } from '@cat-factory/kernel'
 
@@ -35,6 +37,13 @@ export interface GitHubSyncServiceDependencies {
   commitProjectionRepository: CommitProjectionRepository
   checkRunProjectionRepository: CheckRunProjectionRepository
   clock: Clock
+  /**
+   * The per-user "repos my PAT can reach" projection. When wired, browsing the picker with a
+   * personal token records the viewer's PAT-reachable repos here (the fail-closed cache the
+   * board redaction reads), and linking a personal repo records the linker's access. Optional:
+   * a facade without it wired keeps the App-only behaviour.
+   */
+  userRepoAccessRepository?: UserRepoAccessRepository
   /**
    * Bounds the initial commit backfill: when a repo has no commit cursor yet
    * (its first sync), commits are listed only from `now - commitBackfillHorizonMs`
@@ -62,7 +71,7 @@ export class GitHubSyncService {
    */
   async listAvailableRepos(
     workspaceId: string,
-    opts: { q?: string } = {},
+    opts: { q?: string; userId?: string; userToken?: string } = {},
   ): Promise<GitHubAvailableRepo[]> {
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) return []
@@ -75,13 +84,20 @@ export class GitHubSyncService {
     // expose far more repos than the enumeration cap, so a match beyond it would be
     // silently dropped — the exact "no results for a repo I have access to" bug. Without
     // a query, browse the whole accessible set (the repo-link panel's browse-all).
-    const items = query
+    const appRepos = query
       ? await this.deps.githubClient.searchInstallationRepos(installation.installationId, query, {
           owner: installation.accountLogin || undefined,
           ownerType: installation.targetType,
         })
       : (await this.deps.githubClient.listInstallationRepos(installation.installationId)).items
-    return items.map((r) => ({
+
+    // Expand with repos the signed-in user's own PAT can reach beyond the App's grant — even
+    // on the hosted facades. The App repos win on a github-id collision (they're shared, so a
+    // repo reachable both ways is NOT personal). Personal-only repos are badged so the user
+    // knows linking one makes a frame others may not see.
+    const personalRepos = await this.viewerPatRepos(workspaceId, opts, query)
+    const appIds = new Set(appRepos.map((r) => r.githubId))
+    const merged: GitHubAvailableRepo[] = appRepos.map((r) => ({
       githubId: r.githubId,
       owner: r.owner,
       name: r.name,
@@ -89,7 +105,62 @@ export class GitHubSyncService {
       private: r.private,
       linked: tracked.has(r.githubId),
       isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
+      personal: false,
     }))
+    for (const r of personalRepos) {
+      if (appIds.has(r.githubId)) continue
+      merged.push({
+        githubId: r.githubId,
+        owner: r.owner,
+        name: r.name,
+        defaultBranch: r.defaultBranch,
+        private: r.private,
+        linked: tracked.has(r.githubId),
+        isMonorepo: tracked.get(r.githubId)?.isMonorepo ?? false,
+        personal: true,
+      })
+    }
+    return merged
+  }
+
+  /**
+   * The repos the signed-in user's PAT can reach (via `/user/repos`), and — as a side effect on
+   * a full browse — the refresh of their fail-closed access projection. Empty when no token is
+   * supplied or the client can't enumerate by token. A search filters the (bounded) PAT set in
+   * memory; a blank browse records the full enumeration so the redaction check stays current.
+   */
+  private async viewerPatRepos(
+    workspaceId: string,
+    opts: { q?: string; userId?: string; userToken?: string },
+    query: string | undefined,
+  ): Promise<GitHubRepo[]> {
+    const { userToken, userId } = opts
+    if (!userToken || !this.deps.githubClient.listReposForToken) return []
+    const { items } = await this.deps.githubClient.listReposForToken(userToken)
+    // Record the FULL enumeration as this user's accessible set (the redaction cache). Only on
+    // a browse-all: a search returns the same bounded PAT listing, so recording is still safe,
+    // but we key it off the full items either way (the client always enumerates the whole set).
+    if (userId && this.deps.userRepoAccessRepository) {
+      await this.deps.userRepoAccessRepository.replaceForUser(
+        userId,
+        items.map((r) => this.toAccessRecord(userId, r)),
+      )
+    }
+    if (!query) return items
+    const q = query.toLowerCase()
+    return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q))
+  }
+
+  private toAccessRecord(userId: string, repo: GitHubRepo): UserRepoAccessRecord {
+    return {
+      userId,
+      repoGithubId: repo.githubId,
+      owner: repo.owner,
+      name: repo.name,
+      defaultBranch: repo.defaultBranch,
+      private: repo.private,
+      syncedAt: this.deps.clock.now(),
+    }
   }
 
   /**
@@ -159,7 +230,11 @@ export class GitHubSyncService {
    * caller surfaces a "grant the App access" hint. Backs the "add an existing
    * repo as a board service" flow, where the workspace may not link the repo yet.
    */
-  async linkRepo(workspaceId: string, repoGithubId: number): Promise<GitHubRepo | null> {
+  async linkRepo(
+    workspaceId: string,
+    repoGithubId: number,
+    opts: { userId?: string; userToken?: string } = {},
+  ): Promise<GitHubRepo | null> {
     const existing = await this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
     if (existing) return existing
     const installation = await this.deps.githubInstallationRepository.getByWorkspace(workspaceId)
@@ -170,12 +245,49 @@ export class GitHubSyncService {
     // realtime search surfaced from beyond that window would be unlinkable (returned null →
     // a spurious "grant the App access" 409) even though the App can access it.
     const match = await this.deps.githubClient.getRepoById(installationId, repoGithubId)
-    if (!match) return null
-    const repo: GitHubRepo = { ...match, installationId, syncedAt: this.deps.clock.now() }
+    if (match) {
+      const repo: GitHubRepo = {
+        ...match,
+        installationId,
+        linkedVia: 'app',
+        syncedAt: this.deps.clock.now(),
+      }
+      await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
+      // Full pass: the org cursor may already be advanced, so bypass it to populate this
+      // newly-linked workspace.
+      await this.syncRepo(repo, { full: true })
+      return this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
+    }
+    // The App can't reach it — try the linking user's own PAT. If it can, project the repo as
+    // a PERSONAL repo (attributed to the workspace installation so `resolveRepoTarget` resolves
+    // it, but marked `user_pat`), record the linker's access, and SKIP the App-based sync (the
+    // App token can't read its branches/PRs). Runs against it use the initiator's PAT (already
+    // wired via the PAT-preferring token mint).
+    return this.linkPersonalRepo(workspaceId, repoGithubId, installationId, opts)
+  }
+
+  private async linkPersonalRepo(
+    workspaceId: string,
+    repoGithubId: number,
+    installationId: number,
+    opts: { userId?: string; userToken?: string },
+  ): Promise<GitHubRepo | null> {
+    const { userToken, userId } = opts
+    if (!userToken || !this.deps.githubClient.getRepoForToken) return null
+    const personal = await this.deps.githubClient.getRepoForToken(userToken, repoGithubId)
+    if (!personal) return null
+    const repo: GitHubRepo = {
+      ...personal,
+      installationId,
+      linkedVia: 'user_pat',
+      syncedAt: this.deps.clock.now(),
+    }
     await this.deps.repoProjectionRepository.upsertMany(workspaceId, [repo])
-    // Full pass: the org cursor may already be advanced, so bypass it to populate this
-    // newly-linked workspace.
-    await this.syncRepo(repo, { full: true })
+    if (userId && this.deps.userRepoAccessRepository) {
+      await this.deps.userRepoAccessRepository.recordAccessible(userId, [
+        this.toAccessRecord(userId, repo),
+      ])
+    }
     return this.deps.repoProjectionRepository.get(workspaceId, repoGithubId)
   }
 

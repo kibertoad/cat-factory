@@ -100,7 +100,6 @@ describe('GitHub projections (Postgres)', () => {
         name: 'demo',
         defaultBranch: 'main',
         private: false,
-        blockId: null,
         isMonorepo: false,
         syncedAt: 1000,
       },
@@ -213,7 +212,6 @@ describe('GitHub projections (Postgres)', () => {
       name: `r${githubId}`,
       defaultBranch: 'main',
       private: false,
-      blockId: null,
       isMonorepo: false,
       syncedAt: 1000,
     })

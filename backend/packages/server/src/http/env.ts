@@ -4,6 +4,7 @@ import type {
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  UserRepoAccessRepository,
   VcsIdentityRegistry,
   VcsWebhookSink,
 } from '@cat-factory/kernel'
@@ -134,6 +135,14 @@ export interface ServerContainer extends Core {
    * (needs ENCRYPTION_KEY). Drives the user-secret controller and `ResolveUserGitHubToken`.
    */
   userSecrets?: UserSecretService
+  /**
+   * The per-USER "repos my personal access token can reach" projection. Present only when the
+   * facade wired GitHub (needs an installation-backed projection). Drives (a) the fail-closed
+   * board redaction — a service frame backed by a `linkedVia:'user_pat'` repo is hidden from
+   * members not recorded here — and (b) the repo-picker/link expansion, which records a user's
+   * PAT-reachable repos when they enumerate them. See `UserRepoAccessRepository`.
+   */
+  userRepoAccess?: UserRepoAccessRepository
   /**
    * The per-WORKSPACE OpenRouter dynamic-catalog store. Present only when the facade wired
    * the OpenRouter-catalog repository + the API-key pool (needs ENCRYPTION_KEY). Drives the

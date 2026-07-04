@@ -251,7 +251,11 @@
       "dragTask": "גרור משימה",
       "dragToResize": "גרור לשינוי גודל",
       "addFirstTask": "הוסף את המשימה הראשונה",
-      "createInitiativeTitle": "יצירת יוזמה"
+      "createInitiativeTitle": "יצירת יוזמה",
+      "accessDenied": {
+        "title": "הגישה נדחתה",
+        "hint": "אין לך גישה למאגר שעליו מבוסס שירות זה."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "נדרשת החלטה",
@@ -2492,7 +2496,8 @@
       "repoLabel": {
         "private": " (פרטי)",
         "monorepo": " · מונורפו",
-        "onBoard": " · כבר על הלוח"
+        "onBoard": " · כבר על הלוח",
+        "personal": " · אישי (הטוקן שלך)"
       },
       "monorepoLabel": "זהו מונורפו (מארח יותר משירות אחד)",
       "monorepoDescription": "הוסף כמה שירותים ממאגר אחד, כל אחד מוצמד לתת-ספרייה.",

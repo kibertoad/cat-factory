@@ -356,6 +356,10 @@ export type {
   RunInitiatorScope,
 } from './user-secret-repositories.js'
 export type {
+  UserRepoAccessRecord,
+  UserRepoAccessRepository,
+} from './user-repo-access-repositories.js'
+export type {
   ProviderModelCatalogRecord,
   ProviderModelCatalogRepository,
 } from './provider-model-catalog-repositories.js'

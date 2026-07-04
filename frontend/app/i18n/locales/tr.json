@@ -251,7 +251,11 @@
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
       "addFirstTask": "İlk görevi ekle",
-      "createInitiativeTitle": "Girisim olustur"
+      "createInitiativeTitle": "Girisim olustur",
+      "accessDenied": {
+        "title": "İzin reddedildi",
+        "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -2494,7 +2498,8 @@
       "repoLabel": {
         "private": " (özel)",
         "monorepo": " · monorepo",
-        "onBoard": " · zaten panoda"
+        "onBoard": " · zaten panoda",
+        "personal": " · kişisel (kendi belirteciniz)"
       },
       "monorepoLabel": "Bu bir monorepo (birden fazla servis barındırır)",
       "monorepoDescription": "Tek depodan, her biri bir alt dizine sabitlenmiş birkaç servis ekleyin.",

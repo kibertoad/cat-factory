@@ -40,14 +40,27 @@ export function boardController(): Hono<AppEnv> {
     const workspaceId = param(c, 'workspaceId')
     const { repoGithubId } = c.req.valid('json')
     if (container.github) {
-      const linked = await container.github.syncService.linkRepo(workspaceId, repoGithubId)
+      // Resolve the signed-in user's PAT so a repo only THEIR token can reach (beyond the App's
+      // grant) still links — as a personal (`linkedVia:'user_pat'`) repo whose frame is redacted
+      // for members without access. Best-effort: a decrypt failure degrades to App-only linking.
+      const userId = c.get('user')?.id
+      const userToken =
+        userId && container.userSecrets
+          ? ((await container.userSecrets.resolve(userId, 'github_pat').catch(() => null)) ??
+            undefined)
+          : undefined
+      const linked = await container.github.syncService.linkRepo(workspaceId, repoGithubId, {
+        userId,
+        userToken,
+      })
       if (!linked) {
         return c.json(
           {
             error: {
               code: 'repo_not_accessible',
               message:
-                'The GitHub App cannot access this repository yet. Grant it access, then try again.',
+                'Neither the GitHub App nor your personal access token can reach this repository. ' +
+                'Grant the App access (or add a PAT that can), then try again.',
             },
           },
           409,

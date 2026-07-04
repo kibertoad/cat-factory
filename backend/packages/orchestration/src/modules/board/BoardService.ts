@@ -343,9 +343,13 @@ export class BoardService {
     const directory = normalizeServiceDirectory(input.directory)
     // A monorepo can back SEVERAL service frames (one per subdirectory), so the
     // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
-    // service MUST name its subdirectory so execution can scope agents to it.
-    if (repo.blockId && !repo.isMonorepo) {
-      throw new ValidationError('This repository is already linked to a board service')
+    // service MUST name its subdirectory so execution can scope agents to it. The link
+    // is the account-owned Service, so a duplicate is detected via `getByRepo`.
+    if (!repo.isMonorepo && this.serviceRepository) {
+      const existing = await this.serviceRepository.getByRepo(repo.installationId, repo.githubId)
+      if (existing) {
+        throw new ValidationError('This repository is already linked to a board service')
+      }
     }
     if (repo.isMonorepo && !directory) {
       throw new ValidationError('Select a service directory for this monorepo')
@@ -388,12 +392,6 @@ export class BoardService {
       directory: directory ?? null,
     })
     await this.blockRepository.insert(workspaceId, block, serviceId)
-    // A monorepo's repo backs several frames, so the projection's single `block_id`
-    // link can't represent it — the Service mapping (read by resolveRepoTarget) is
-    // authoritative there. Keep the legacy link only for a whole-repo service.
-    if (!repo.isMonorepo) {
-      await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
-    }
     await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
@@ -914,17 +912,6 @@ export class BoardService {
     const doomed = descendantIds(blocks, id)
 
     await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
-    // Unlink any repo backing a doomed service frame so the repo becomes
-    // addable again (otherwise its github_repos.block_id dangles to a deleted
-    // block: the repo shows "already on board" yet nothing renders it).
-    if (this.repoProjectionRepository) {
-      const repos = await this.repoProjectionRepository.list(homeWorkspaceId)
-      for (const repo of repos) {
-        if (repo.blockId && doomed.has(repo.blockId)) {
-          await this.repoProjectionRepository.linkBlock(homeWorkspaceId, repo.githubId, null)
-        }
-      }
-    }
     // Drop the account-owned service (and every workspace's mount of it) for any doomed
     // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
     // org catalog (mountable, badged, yet rendering nothing) on other boards.

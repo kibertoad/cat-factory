@@ -161,11 +161,10 @@ export class E2eRepoBootstrapper {
     return this.forWorkspace(handle.workspaceId).stopBootstrap(handle)
   }
 
-  linkRepoToBlock(
+  projectBootstrappedRepo(
     workspaceId: string,
-    outcome: Parameters<FakeRepoBootstrapper['linkRepoToBlock']>[1],
-    blockId: string,
+    outcome: Parameters<FakeRepoBootstrapper['projectBootstrappedRepo']>[1],
   ) {
-    return this.forWorkspace(workspaceId).linkRepoToBlock(workspaceId, outcome, blockId)
+    return this.forWorkspace(workspaceId).projectBootstrappedRepo(workspaceId, outcome)
   }
 }

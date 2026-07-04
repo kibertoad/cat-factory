@@ -670,8 +670,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   //
   // Deliberately EXCLUDED (a later "GitHub sync + repo-write" slice): the projection WRITE
   // surface — `upsertMany` (the sync/webhook ingest; the mothership owns GitHub sync, since the
-  // App + webhooks live there), the board-linkage writes `repoProjectionRepository.linkBlock` /
-  // `setMonorepo`, the sync cursors (`getCursor`/`setCursor`, keyed on installationId not
+  // App + webhooks live there), the board-linkage write `repoProjectionRepository.setMonorepo`,
+  // the sync cursors (`getCursor`/`setCursor`, keyed on installationId not
   // workspaceId), and `tombstoneMissing`. `repoProjectionRepository.get` stays off too: it backs
   // only `GitHubService.resolve` for the repo-WRITE endpoints (create-branch / open-PR /
   // merge / comment), and exposing it alone would let create-branch/open-PR perform the real
