@@ -120,8 +120,9 @@ export class LayeredEventPropagator implements LocalEventSink {
  * when `REDIS_URL` is set (multi-node deployment); otherwise returns the bare-hub layer with no
  * adapters and no extra dependency — the default for local mode and single-replica Node, which
  * never set `REDIS_URL`. Configurable via `REDIS_REALTIME_CHANNEL` (the pub/sub channel, default
- * `cat-factory:realtime`) and `REALTIME_NODE_ID` (this node's id for echo suppression, default a
- * random uuid).
+ * `cat-factory:realtime`) and `REALTIME_NODE_ID` (an optional readable prefix for this node's
+ * echo-suppression id — a per-process random suffix is always appended, so it is safe to set the
+ * same value on every replica).
  */
 export function buildRealtimePropagator(
   hub: NodeRealtimeHub,

@@ -220,6 +220,73 @@ describe('RedisWebSocketPropagator', () => {
 
     expect(received).toEqual([])
   })
+
+  it('still propagates across replicas that share the same REALTIME_NODE_ID', async () => {
+    // A per-process random suffix is appended to the configured id, so two replicas given the
+    // SAME REALTIME_NODE_ID still get distinct effective ids — cross-node delivery keeps working
+    // and each node still drops only its OWN echo (the shared-id footgun is neutralised).
+    const bus = new FakeBus()
+    const nodeA = makeNode(bus, 'shared')
+    const nodeB = makeNode(bus, 'shared')
+
+    const onA: RealtimeMessage[] = []
+    const onB: RealtimeMessage[] = []
+    await nodeA.start((m) => onA.push(m))
+    await nodeB.start((m) => onB.push(m))
+
+    nodeA.publish({ workspaceId: 'ws_a', payload: '{"type":"board"}' })
+    await new Promise((r) => setTimeout(r, 5))
+
+    expect(onB).toEqual([
+      { workspaceId: 'ws_a', payload: '{"type":"board"}', originConnectionId: undefined },
+    ])
+    expect(onA).toEqual([])
+  })
+
+  it('does not reject or hang when the subscribe fails (bus down at boot)', async () => {
+    // A down bus must never wedge boot: start() fires the subscribe without awaiting it, so a
+    // rejection is logged, not thrown or hung on.
+    const node = new RedisWebSocketPropagator({
+      url: 'redis://fake',
+      log: silentLog,
+      connect: async () => ({
+        publish: async () => 1,
+        subscribe: async () => {
+          throw new Error('bus down')
+        },
+        on: () => {},
+        quit: async () => 'OK',
+        disconnect: () => {},
+      }),
+    })
+    nodes.push(node)
+    await expect(node.start(() => {})).resolves.toBeUndefined()
+  })
+
+  it('closes an already-opened client when a later connect fails during start', async () => {
+    // The publisher opens first; if the subscriber connect throws, start() must release the
+    // publisher before rethrowing (else its reconnect timer leaks and keeps the process alive).
+    let quitCalls = 0
+    const node = new RedisWebSocketPropagator({
+      url: 'redis://fake',
+      log: silentLog,
+      connect: async (_url, role) => {
+        if (role === 'subscriber') throw new Error('connect failed')
+        return {
+          publish: async () => 1,
+          subscribe: async () => 1,
+          on: () => {},
+          quit: async () => {
+            quitCalls++
+            return 'OK'
+          },
+          disconnect: () => {},
+        }
+      },
+    })
+    await expect(node.start(() => {})).rejects.toThrow('connect failed')
+    expect(quitCalls).toBe(1)
+  })
 })
 
 /** A minimal `ws`-shaped stub the hub can register + send to. */
