@@ -33,9 +33,10 @@ jobs:
       #   backendCode — backend source OR a root build/dependency input changed. Gates the
       #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
       #                 docs-only PR leaves it false so those lanes skip.
-      #   code        — ANY real source changed (backend, frontend, or a root build input),
-      #                 i.e. NOT a docs-/prose-only diff. Gates the cross-stack lanes
-      #                 (`test-units`, `test-e2e`); a docs-only PR runs no tests at all.
+      #   code        — ANY real source changed (backend, frontend, a `deploy/*` example, or
+      #                 a root build input), i.e. NOT a docs-/prose-only diff. Gates the
+      #                 cross-stack lanes (`test-units`, `test-e2e`); a docs-only PR runs no
+      #                 tests at all. (On non-PR events both flags are forced true — see `scope`.)
       backendCode: ${{ steps.scope.outputs.backendCode }}
       code: ${{ steps.scope.outputs.code }}
     steps:
@@ -128,6 +129,16 @@ jobs:
             frontendSrc:
               - 'frontend/**'
               - '!**/*.md'
+            # Example deployments (`deploy/*`) — the assembled-product wiring. `test-e2e`
+            # builds and serves `deploy/frontend` as its real SPA (Playwright's webServer
+            # runs `pnpm --filter @cat-factory/deploy-frontend run build && ... preview`), so a
+            # deploy-only change must still run the cross-stack lanes. Kept a SEPARATE filter
+            # (not another positive on `frontendSrc`): under `predicate-quantifier: every`
+            # multiple positives are AND-ed, so `frontend/**` AND `deploy/**` would match
+            # nothing. Markdown excluded so a deploy README edit stays docs-only.
+            deploySrc:
+              - 'deploy/**'
+              - '!**/*.md'
 
       # Fold the two paths-filter steps into the coarse lane flags the jobs gate on. Kept in a
       # shell step (not inline `if:` expressions) so each job's condition stays a single,
@@ -137,18 +148,27 @@ jobs:
         env:
           BACKEND_SRC: ${{ steps.src.outputs.backendSrc }}
           FRONTEND_SRC: ${{ steps.src.outputs.frontendSrc }}
+          DEPLOY_SRC: ${{ steps.src.outputs.deploySrc }}
           ROOT_BUILD: ${{ steps.filter.outputs.rootBuild }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           backend=false
           code=false
           if [ "$BACKEND_SRC" = 'true' ] || [ "$ROOT_BUILD" = 'true' ]; then backend=true; fi
-          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ]; then code=true; fi
+          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ]; then code=true; fi
+          # Change-gating only makes sense against a PR base. On non-PR events (a push to
+          # `main`, or a manual `workflow_dispatch`) paths-filter diffs against the default
+          # branch, so a dispatch on `main` — HEAD == base tip — yields an EMPTY diff and every
+          # filter reads false. Don't let that skip the whole suite green: on any non-PR event
+          # run everything, matching the pre-gating behaviour (these lanes had no change gate).
+          if [ "$EVENT_NAME" != 'pull_request' ]; then backend=true; code=true; fi
           {
             echo "backendCode=$backend"
             echo "code=$code"
           } >> "$GITHUB_OUTPUT"
           echo "backendCode=$backend | code=$code" \
-            "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC rootBuild=$ROOT_BUILD)"
+            "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
+            "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
 
   lint:
     name: Lint & format
