@@ -9,6 +9,7 @@
 import { computed } from 'vue'
 import type { ConsensusContribution, ConsensusSession } from '~/types/consensus'
 import CopyButton from '~/components/common/CopyButton.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 import { agentKindMeta } from '~/utils/catalog'
 
 const { t, n } = useI18n()
@@ -171,11 +172,12 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                   class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300"
                   >{{ t('consensus.confidence', { pct: pct(session.confidence) }) }}</span
                 >
+                <CopyButton :text="session.synthesis" class="ms-auto -my-1" />
               </div>
-              <pre
-                class="whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
-                >{{ session.synthesis }}</pre
-              >
+              <MarkdownProse
+                :text="session.synthesis"
+                class="rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
+              />
               <ul v-if="session.dissent?.length" class="mt-2 space-y-1">
                 <li
                   v-for="(d, i) in session.dissent"
@@ -237,8 +239,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                         })
                       }}</span
                     >
+                    <CopyButton :text="c.text" :class="topScore(c) ? '-my-1' : 'ms-auto -my-1'" />
                   </div>
-                  <pre class="whitespace-pre-wrap text-sm text-slate-300">{{ c.text }}</pre>
+                  <MarkdownProse :text="c.text" class="text-sm text-slate-300" />
                   <div v-if="c.scores?.length" class="mt-2 flex flex-wrap gap-1.5">
                     <span
                       v-for="s in c.scores"

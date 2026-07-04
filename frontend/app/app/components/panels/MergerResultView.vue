@@ -10,6 +10,7 @@ import { computed } from 'vue'
 import type { MergeAxis, MergeDecision } from '@cat-factory/contracts'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -221,9 +222,10 @@ const reasonText = computed(() => {
                 >
                   {{ t('panels.mergerResult.rationale') }}
                 </h3>
-                <p class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">
-                  {{ decision.assessment.rationale }}
-                </p>
+                <MarkdownProse
+                  :text="decision.assessment.rationale"
+                  class="text-[13px] leading-relaxed text-slate-300"
+                />
               </template>
               <p v-else class="text-[13px] italic leading-relaxed text-slate-500">
                 {{ t('panels.mergerResult.noAssessment') }}
@@ -231,12 +233,11 @@ const reasonText = computed(() => {
             </template>
 
             <!-- Pre-structured runs kept only the raw prose output. -->
-            <p
+            <MarkdownProse
               v-else-if="step?.output"
-              class="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300"
-            >
-              {{ step.output }}
-            </p>
+              :text="step.output"
+              class="text-[13px] leading-relaxed text-slate-300"
+            />
             <div
               v-else
               class="flex h-full flex-col items-center justify-center gap-2 text-center text-slate-400"

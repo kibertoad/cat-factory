@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseOutputOutline, sliceSource } from '~/utils/agentOutput'
+import { parseOutputOutline, renderMarkdown, sliceSource } from '~/utils/agentOutput'
 
 describe('parseOutputOutline', () => {
   it('splits on headings and builds a ToC', () => {
@@ -72,6 +72,49 @@ describe('parseOutputOutline', () => {
   it('tolerates empty / nullish input', () => {
     expect(parseOutputOutline('').sections).toHaveLength(0)
     expect(parseOutputOutline(undefined as unknown as string).sections).toHaveLength(0)
+  })
+})
+
+describe('renderMarkdown', () => {
+  it('renders inline marks and preserves single newlines as breaks', () => {
+    const html = renderMarkdown('see **bold** and _em_\nnext line')
+    expect(html).toContain('<strong>bold</strong>')
+    expect(html).toContain('<em>em</em>')
+    expect(html).toContain('<br')
+  })
+
+  it('renders lists and fenced code', () => {
+    const html = renderMarkdown(['- a', '- b', '', '```', 'const x = 1', '```'].join('\n'))
+    expect(html).toContain('<ul')
+    expect(html).toContain('<li>a</li>')
+    expect(html).toContain('<pre>')
+    expect(html).toContain('const x = 1')
+  })
+
+  it('escapes raw HTML rather than injecting it (html: false)', () => {
+    const html = renderMarkdown('<img src=x onerror=alert(1)>')
+    expect(html).not.toContain('<img')
+    expect(html).toContain('&lt;img')
+  })
+
+  it('decorates links to open safely in a new tab', () => {
+    const html = renderMarkdown('[site](https://example.com)')
+    expect(html).toContain('href="https://example.com"')
+    expect(html).toContain('target="_blank"')
+    expect(html).toContain('rel="noopener noreferrer"')
+  })
+
+  it('does not create a link for javascript: URLs', () => {
+    const html = renderMarkdown('[x](javascript:alert(1))')
+    expect(html).not.toContain('<a ')
+    expect(html).not.toContain('href')
+  })
+
+  it('renders empty string for empty / nullish input', () => {
+    expect(renderMarkdown('')).toBe('')
+    expect(renderMarkdown('   ')).toBe('')
+    expect(renderMarkdown(null)).toBe('')
+    expect(renderMarkdown(undefined)).toBe('')
   })
 })
 
