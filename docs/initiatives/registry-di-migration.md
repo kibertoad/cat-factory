@@ -60,7 +60,7 @@ The pilot — the environment-backend + runner-backend registries — is the tem
 | Step resolvers         | kernel                        | `domain/step-resolver-registry.ts`             | ⬜ todo                                                                                             |         |
 | Pipelines              | kernel                        | `domain/pipeline-registry.ts`                  | ⬜ todo                                                                                             |         |
 | VCS providers          | kernel                        | `domain/vcs-registry.ts`                       | ⬜ todo                                                                                             |         |
-| Agent kinds            | agents                        | `agents/kinds/registry.ts`                     | ⬜ todo                                                                                             |         |
+| Agent kinds            | agents                        | `agents/kinds/registry.ts`                     | 📝 planned (spec: [`agent-kind-registry-di.md`](./agent-kind-registry-di.md))                       |         |
 | Agent traits           | agents                        | `agents/kinds/traits.ts`                       | ⬜ todo                                                                                             |         |
 | Model providers        | agents                        | `providers/registry.ts`                        | ✅ already instance-based (`CompositeModelProvider`)                                                |         |
 
