@@ -20,6 +20,12 @@ consume through the kernel `AppCaches` port, implemented on
 - **Invalidate after commit, at every write site.** The consuming service calls
   `invalidate`/`invalidateGroup` (or the coarse `invalidateAll` for rare wide-blast
   writes) after the DB write commits; layered-loader publishes to peers automatically.
+- **Staleness probes for git-backed caches.** A profile with `ttlLeftBeforeRefreshInMsecs`
+  turns on preemptive in-memory refresh (layered-loader ≥ 14.5.3): an entry hit inside the
+  window runs the caller's per-read `isStillCurrent` probe (a sha/hash compare, strictly
+  cheaper than the load) in the background — TTL bump when the source hasn't moved, full
+  background reload otherwise. DB-backed invalidation-driven caches leave the window unset:
+  a DB read as a probe saves nothing over the DB read as the load.
 - **Deep imports keep ioredis out of every runtime but Node.** layered-loader's root
   index eagerly loads its Redis modules (and `ioredis`), so this package deep-imports
   only the in-memory machinery. The Redis notification classes are loaded dynamically

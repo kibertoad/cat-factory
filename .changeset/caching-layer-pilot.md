@@ -35,3 +35,10 @@ app-level caching seam and adopt it for the per-dispatch fragment-catalog resolv
   invalidation bus. Documented in the caching package README.
 - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
   catalog on all three runtimes (Worker/Node/local).
+- Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+  in-memory `isEntryStillCurrentFn` support: a cache profile may set
+  `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+  `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+  the probe reports the source unmoved, and fall back to a full background reload
+  otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+  `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.

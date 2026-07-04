@@ -32,6 +32,16 @@ export interface GroupCacheProfile {
   maxGroups: number
   /** LRU bound on entries within one group. */
   maxItemsPerGroup: number
+  /**
+   * Preemptive-refresh window for git-backed caches (layered-loader ≥ 14.5.3
+   * supports it in-memory-only): an entry hit with less than this much TTL left
+   * refreshes in the background — via the caller's cheap `isStillCurrent` probe
+   * (TTL bump when the source hasn't moved) when one is passed to `get`, else a
+   * full background reload. Unset ⇒ entries simply expire at `ttlInMsecs`
+   * (correct for the invalidation-driven DB-backed caches, where a probe would
+   * cost as much as the load).
+   */
+  ttlLeftBeforeRefreshInMsecs?: number
 }
 
 /** One profile entry per named cache in the kernel {@link AppCaches} bag. */
@@ -86,10 +96,14 @@ export interface CreateAppCachesOptions {
   logger?: Logger
 }
 
-/** The load params threaded through the loader; the caller supplies the load per read. */
+/**
+ * The load params threaded through the loader; the caller supplies the load —
+ * and, for probe-refreshed caches, the staleness probe — per read.
+ */
 interface GroupLoadParams<T> {
   key: string
   load: () => Promise<T>
+  isStillCurrent?: (cached: T) => Promise<boolean>
 }
 
 class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
@@ -110,6 +124,9 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
             ttlInMsecs: profile.ttlInMsecs,
             maxGroups: profile.maxGroups,
             maxItemsPerGroup: profile.maxItemsPerGroup,
+            ...(profile.ttlLeftBeforeRefreshInMsecs
+              ? { ttlLeftBeforeRefreshInMsecs: profile.ttlLeftBeforeRefreshInMsecs }
+              : {}),
           }
         : false,
       // The read-through source: each `get` carries its own load closure, so the
@@ -123,6 +140,19 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
         },
       ],
       cacheKeyFromLoadParamsResolver: (params) => params.key,
+      // The staleness probe rides the per-read load params, like the load itself.
+      // Wired only when the profile configures a refresh window (layered-loader
+      // rejects a probe with no window to fire in); a read that passed no probe
+      // reports stale, degrading to the default full background reload. A null
+      // cached value (resolved-but-empty) is re-loaded rather than probed.
+      ...(profile.enabled && profile.ttlLeftBeforeRefreshInMsecs
+        ? {
+            isEntryStillCurrentFn: (cached: T | null, params: GroupLoadParams<T>) =>
+              cached !== null && params.isStillCurrent
+                ? params.isStillCurrent(cached)
+                : Promise.resolve(false),
+          }
+        : {}),
       // A notification pair only makes sense with an in-memory tier to invalidate
       // (layered-loader rejects the combination outright).
       ...(profile.enabled && notifications
@@ -135,11 +165,16 @@ class LayeredGroupCacheHandle<T> implements GroupCacheHandle<T> {
     })
   }
 
-  async get(key: string, group: string, load: () => Promise<T>): Promise<T> {
+  async get(
+    key: string,
+    group: string,
+    load: () => Promise<T>,
+    isStillCurrent?: (cached: T) => Promise<boolean>,
+  ): Promise<T> {
     // The data source always resolves to the load's result, and load errors
     // propagate (throwIfLoadError defaults on) — so a non-value here is impossible
     // unless T itself includes null.
-    return (await this.loader.get({ key, load }, group)) as T
+    return (await this.loader.get({ key, load, isStillCurrent }, group)) as T
   }
 
   invalidate(key: string, group: string): Promise<void> {

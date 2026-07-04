@@ -285,9 +285,12 @@ importers:
         specifier: workspace:*
         version: link:../kernel
       layered-loader:
-        specifier: ^14.4.1
-        version: 14.5.2
+        specifier: ^14.5.3
+        version: 14.5.3
     devDependencies:
+      '@types/node':
+        specifier: ^26.0.1
+        version: 26.0.1
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
@@ -873,8 +876,8 @@ importers:
         specifier: ^4.12.27
         version: 4.12.27
       layered-loader:
-        specifier: ^14.4.1
-        version: 14.5.2
+        specifier: ^14.5.3
+        version: 14.5.3
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -6542,8 +6545,8 @@ packages:
   launch-editor@2.14.1:
     resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
 
-  layered-loader@14.5.2:
-    resolution: {integrity: sha512-0GjKJsPDAxSw+vNwNjWwBD2mhcDXgoqDTQRhxxC5YEJsv7GuEPPvc5Qj/9kGxVazEE3kr4JGNxm5DdCUtn0olQ==}
+  layered-loader@14.5.3:
+    resolution: {integrity: sha512-f8pUUs8OUEbF29AsPyIBfF92cdMgrK5Cz//1AyvA2t6SCr53bQWibZTNeteBkq6e14+RB9kBXg54MvLXk5cg2A==}
     engines: {node: '>=22'}
 
   lazystream@1.0.1:
@@ -14073,7 +14076,7 @@ snapshots:
       picocolors: 1.1.1
       shell-quote: 1.8.4
 
-  layered-loader@14.5.2:
+  layered-loader@14.5.3:
     dependencies:
       ioredis: 5.11.1
       toad-cache: 3.7.4

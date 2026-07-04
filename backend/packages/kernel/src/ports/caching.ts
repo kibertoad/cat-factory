@@ -17,7 +17,20 @@ import type { ResolvedCatalogEntry } from './fragment-repositories.js'
  * drop every entry for that workspace in a single `invalidateGroup` call.
  */
 export interface GroupCacheHandle<T> {
-  get(key: string, group: string, load: () => Promise<T>): Promise<T>
+  /**
+   * `isStillCurrent` is the optional cheap staleness probe for git-backed caches
+   * (a sha/hash compare, strictly cheaper than `load`): when the cache's profile
+   * configures a preemptive-refresh window, an entry entering that window runs
+   * the probe in the background and gets its TTL bumped on `true` instead of
+   * paying the full reload. Omitted (or no window configured) ⇒ entries in the
+   * window fall back to a full background reload.
+   */
+  get(
+    key: string,
+    group: string,
+    load: () => Promise<T>,
+    isStillCurrent?: (cached: T) => Promise<boolean>,
+  ): Promise<T>
   /** Drop one entry (and broadcast the eviction to peer replicas, when wired). */
   invalidate(key: string, group: string): Promise<void>
   /** Drop every entry in a group (one workspace, typically). */

@@ -68,22 +68,18 @@ The pilot validated the pattern below with four corrections a later slice must c
   writes invalidate via the coarse `invalidateAll()` (rare management actions; enumerating
   the account's workspaces would need a new `WorkspaceRepository` port method whose only
   consumer is invalidation — over-invalidation is safe and cheaper).
-- **In-memory refresh-ahead works today; only the `isEntryStillCurrentFn` probe is
-  async-tier-gated in layered-loader 14.5.x.** An in-memory hit inside
-  `inMemoryCache.ttlLeftBeforeRefreshInMsecs` already fires a background FULL datasource
-  reload that re-seeds the entry (no expiry gap, no read-path latency spike) — so an
-  in-memory-only loader can have refresh-ahead now, it just always pays the full refetch.
-  The cheap-probe path (probe → `resetTtlFromGroup` TTL bump instead of refetch) runs only
-  in the async-HIT branch, keyed off the async entry's expiration, and the constructor
-  asserts `asyncCache.resetTtlFromGroup` — so a no-op/always-miss async stub does NOT
-  unlock it (it never hits, so the probe never fires). Two real options for slices 2/4:
-  (a) an in-process `GroupCache` adapter in the ASYNC slot holding the durable copy behind
-  a short-TTL in-memory front — the probe machinery then runs verbatim, but probe cadence
-  is gated by front-tier misses AND peer notifications evict only front tiers, so this
-  shape is safe ONLY for probe-driven git-backed caches, never invalidation-driven ones;
-  or (b) upstream layered-loader support for running the probe from the in-memory
-  refresh-ahead branch (bump = re-`setForGroup` of the same value, which already resets
-  the TTL) — the cleaner fix. Decide when slice 2 starts.
+- **The in-memory staleness probe is fully supported since layered-loader `14.5.3`**
+  (upstreamed per `docs/proposals/layered-loader-in-memory-staleness-probe.md`; earlier
+  14.5.x hard-gated `isEntryStillCurrentFn` on an async cache tier). The seam exposes it
+  ready for slices 2/4: a cache profile sets `ttlLeftBeforeRefreshInMsecs`, and the OWNING
+  service passes its cheap probe per read — `handle.get(key, group, load, isStillCurrent)`
+  — mirroring how the load closure rides the read. An entry hit inside the window probes in
+  the background: TTL bump on `true` (no refetch), full background reload on `false`/throw,
+  and a read that passes no probe (or a profile with no window) degrades to the blind
+  background reload. Covered by the caching package's probe tests. Note `layered-loader` is
+  listed (unversioned) in `minimumReleaseAgeExclude` — it is maintainer-owned, same trust
+  class as `@cat-factory/*`, so releases like 14.5.3 install without waiting out the
+  supply-chain age gate.
 - **CI has no Redis service**, so the notification path is covered by fake-bus tests: the
   caching package's two-`AppCaches` test (fake publisher/consumer pair) and
   `runtimes/node/test/cacheNotifications.spec.ts`, which drives the REAL layered-loader

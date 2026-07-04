@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ResolvedCatalogEntry } from '@cat-factory/kernel'
 import { AbstractNotificationConsumer } from 'layered-loader/dist/lib/notifications/AbstractNotificationConsumer.js'
 import type { InMemoryGroupCache } from 'layered-loader/dist/lib/memory/InMemoryGroupCache.js'
@@ -130,6 +130,95 @@ describe('createAppCaches (bare in-memory)', () => {
     await caches.fragmentCatalog.get('k', 'ws1', load)
     await caches.fragmentCatalog.get('k', 'ws1', load)
     expect(loads).toBe(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The staleness probe on in-memory-only loaders (layered-loader ≥ 14.5.3): an
+// entry hit inside the preemptive-refresh window runs the caller's cheap
+// `isStillCurrent` probe in the background — TTL bump on true (no reload),
+// full background reload on false, blind reload when no probe was passed.
+// ---------------------------------------------------------------------------
+
+describe('staleness probe (preemptive in-memory refresh)', () => {
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  // Wide margins so scheduler jitter can't flake the window checks: entries
+  // enter the refresh window 150ms after a load (600 - 450) and expire at 600ms.
+  const PROBED_PROFILE = {
+    fragmentCatalog: {
+      enabled: true,
+      ttlInMsecs: 600,
+      maxGroups: 10,
+      maxItemsPerGroup: 4,
+      ttlLeftBeforeRefreshInMsecs: 450,
+    },
+  }
+
+  it('bumps the TTL on a current probe instead of re-running the load', async () => {
+    const caches = createAppCaches({ profile: PROBED_PROFILE })
+    let loads = 0
+    let probes = 0
+    const load = async () => {
+      loads += 1
+      return [entry('a')]
+    }
+    const stillCurrent = async () => {
+      probes += 1
+      return true
+    }
+    await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    await sleep(250) // inside the refresh window (≈350ms TTL left < 450)
+    await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    await vi.waitFor(() => expect(probes).toBe(1))
+    // Probe said current → TTL bumped, no reload; the entry outlives its
+    // ORIGINAL 600ms expiry without ever re-running the load.
+    await sleep(250) // ≈500ms after first load; original expiry would be 600ms
+    const served = await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    expect(served.map((e) => e.id)).toEqual(['a'])
+    expect(loads).toBe(1)
+  })
+
+  it('falls back to a full background reload when the probe reports stale', async () => {
+    const caches = createAppCaches({ profile: PROBED_PROFILE })
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      return [entry(`v${loads}`)]
+    }
+    const stillCurrent = async () => false
+    await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    await sleep(250) // enter the window
+    const inWindow = await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    expect(inWindow.map((e) => e.id)).toEqual(['v1']) // reader never blocks on the refresh
+    await vi.waitFor(() => expect(loads).toBe(2)) // background reload ran
+    const refreshed = await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    expect(refreshed.map((e) => e.id)).toEqual(['v2'])
+  })
+
+  it('a read without a probe degrades to the blind background reload', async () => {
+    const caches = createAppCaches({ profile: PROBED_PROFILE })
+    let loads = 0
+    const load = async () => {
+      loads += 1
+      return [entry('a')]
+    }
+    await caches.fragmentCatalog.get('k', 'ws1', load)
+    await sleep(250) // enter the window
+    await caches.fragmentCatalog.get('k', 'ws1', load)
+    await vi.waitFor(() => expect(loads).toBe(2))
+  })
+
+  it('a profile without a refresh window never probes (probe arg is inert)', async () => {
+    const caches = createAppCaches() // default profile: no ttlLeftBeforeRefreshInMsecs
+    let probes = 0
+    const load = async () => [entry('a')]
+    const stillCurrent = async () => {
+      probes += 1
+      return true
+    }
+    await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    await caches.fragmentCatalog.get('k', 'ws1', load, stillCurrent)
+    expect(probes).toBe(0)
   })
 })
 
