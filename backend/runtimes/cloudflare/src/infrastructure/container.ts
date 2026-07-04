@@ -574,6 +574,14 @@ function buildAppRegistry(
  * live in `@cat-factory/server` so the Worker and Node service can't drift). This
  * wrapper just binds the D1 repositories. Shared by the container executor, the CI
  * status provider and the PR merger.
+ *
+ * No `repoProjectionCache` is threaded here (unlike the Node facade, which caches the
+ * whole-projection re-list per workspace — caching-layer slice 3): the repo projection
+ * is our own mutable D1 state, and the Worker's isolate-safe profile makes that cache
+ * pass-through (no cross-isolate invalidation bus), so an in-isolate TTL would serve
+ * stale repos after a write on another isolate. Reading live IS the isolate-safe
+ * behaviour. The shared GitHub sync/webhook services still receive the (pass-through)
+ * handle via `createGitHubModule`, so their invalidation code path stays symmetric.
  */
 function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
   return buildSharedResolveRepoTarget({

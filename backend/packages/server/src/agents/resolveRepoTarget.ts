@@ -2,6 +2,8 @@ import {
   ValidationError,
   type BlockRepository,
   type GitHubInstallationRepository,
+  type GitHubRepo,
+  type GroupCacheHandle,
   type RepoProjectionRepository,
   type ServiceRepository,
 } from '@cat-factory/kernel'
@@ -21,6 +23,16 @@ export interface ResolveRepoTargetDependencies {
    * pins. Every facade wires it whenever GitHub is configured.
    */
   serviceRepository: Pick<ServiceRepository, 'getByFrameBlock'>
+  /**
+   * Read-through cache for the workspace's whole repo projection
+   * (`AppCaches.repoProjection`, docs/initiatives/caching-layer.md slice 3), grouped
+   * AND keyed by workspace id. The unbounded `repoProjectionRepository.list` re-list
+   * this resolver runs on every dispatch and poll tick reads through it; the
+   * projection's write paths (GitHub sync/webhook, repo link/monorepo-flag, bootstrap)
+   * invalidate the workspace group after they commit. Absent (tests / the Worker's
+   * pass-through profile) ⇒ every resolve lists live.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
 }
 
 /**
@@ -41,12 +53,25 @@ export interface ResolveRepoTargetDependencies {
  * because each wires its own resolver).
  */
 export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): ResolveRepoTarget {
-  const { installationRepository, repoProjectionRepository, blockRepository, serviceRepository } =
-    deps
+  const {
+    installationRepository,
+    repoProjectionRepository,
+    blockRepository,
+    serviceRepository,
+    repoProjectionCache,
+  } = deps
   return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
-    const repos = await repoProjectionRepository.list(workspaceId)
+    // The whole-projection re-list is the hot, unbounded read here — cache it per
+    // workspace. The installation lookup above and the block ancestry walk below stay
+    // live (both cheap / tree-depth-bounded), so a reparent or service repo-link
+    // change needs no cache invalidation; only the projection's own writes do.
+    const repos = repoProjectionCache
+      ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
+          repoProjectionRepository.list(workspaceId),
+        )
+      : await repoProjectionRepository.list(workspaceId)
     if (repos.length === 0) return null
     const reposByGithubId = new Map(repos.map((r) => [r.githubId, r]))
 

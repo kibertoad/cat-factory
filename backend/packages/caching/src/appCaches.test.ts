@@ -350,4 +350,47 @@ describe('profiles', () => {
     )
     expect(ISOLATE_SAFE_APP_CACHES_PROFILE.fragmentDocumentBody.enabled).toBe(true)
   })
+
+  it('makes the repo projection pass-through on the isolate-safe profile (mutable D1 state)', () => {
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.repoProjection).toEqual({
+      ...DEFAULT_APP_CACHES_PROFILE.repoProjection,
+      enabled: false,
+    })
+    expect(DEFAULT_APP_CACHES_PROFILE.repoProjection.enabled).toBe(true)
+  })
+})
+
+describe('repoProjection cache (slice 3)', () => {
+  const repos = (name: string) => [{ githubId: 1, owner: 'acme', name } as never]
+
+  it('reads through per workspace and invalidateGroup drops that group', async () => {
+    const caches = createAppCaches()
+    let calls = 0
+    const load = (name: string) => async () => {
+      calls++
+      return repos(name)
+    }
+
+    const first = await caches.repoProjection.get('ws1', 'ws1', load('a'))
+    await caches.repoProjection.get('ws1', 'ws1', load('a'))
+    expect((first[0] as { name: string }).name).toBe('a')
+    expect(calls).toBe(1) // second read served from cache
+
+    await caches.repoProjection.invalidateGroup('ws1')
+    const third = await caches.repoProjection.get('ws1', 'ws1', load('b'))
+    expect((third[0] as { name: string }).name).toBe('b')
+    expect(calls).toBe(2) // re-listed after invalidation
+  })
+
+  it('is pass-through under the isolate-safe profile (loads on every get)', async () => {
+    const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
+    let calls = 0
+    const load = async () => {
+      calls++
+      return repos('a')
+    }
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    await caches.repoProjection.get('ws1', 'ws1', load)
+    expect(calls).toBe(2)
+  })
 })

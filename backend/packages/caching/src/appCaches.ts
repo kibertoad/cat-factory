@@ -1,6 +1,7 @@
 import type {
   AppCaches,
   DocumentContent,
+  GitHubRepo,
   GroupCacheHandle,
   ResolvedCatalogEntry,
 } from '@cat-factory/kernel'
@@ -53,6 +54,7 @@ export interface GroupCacheProfile {
 export interface AppCachesProfile {
   fragmentCatalog: GroupCacheProfile
   fragmentDocumentBody: GroupCacheProfile
+  repoProjection: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -71,6 +73,10 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
     maxItemsPerGroup: 64,
     ttlLeftBeforeRefreshInMsecs: 60_000,
   },
+  // One repo-projection list per workspace, keyed by workspace id (so exactly one
+  // entry per group). Invalidation-driven — no version probe (a DB read as the probe
+  // would cost as much as the DB read as the load).
+  repoProjection: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 1 },
 }
 
 /**
@@ -89,6 +95,11 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
 export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   fragmentCatalog: { ...DEFAULT_APP_CACHES_PROFILE.fragmentCatalog, enabled: false },
   fragmentDocumentBody: { ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody },
+  // Pass-through: the repo projection is our own mutable D1 state, and a Worker
+  // isolate has no cross-isolate invalidation bus (unlike `fragmentDocumentBody`,
+  // whose external entries self-verify via a version probe). So the Worker reads it
+  // live every time, exactly like `fragmentCatalog`.
+  repoProjection: { ...DEFAULT_APP_CACHES_PROFILE.repoProjection, enabled: false },
 }
 
 /**
@@ -237,11 +248,21 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.fragmentDocumentBody,
     options,
   )
+  const repoProjection = buildGroupCache<GitHubRepo[]>(
+    'repo-projection',
+    profile.repoProjection,
+    options,
+  )
   return {
     fragmentCatalog,
     fragmentDocumentBody,
+    repoProjection,
     close: async () => {
-      await Promise.all([fragmentCatalog.close(), fragmentDocumentBody.close()])
+      await Promise.all([
+        fragmentCatalog.close(),
+        fragmentDocumentBody.close(),
+        repoProjection.close(),
+      ])
     },
   }
 }

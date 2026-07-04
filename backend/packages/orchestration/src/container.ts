@@ -1113,7 +1113,7 @@ function createServicesModule(deps: CoreDependencies): ServicesModule | undefine
  * Assemble the GitHub module when every dependency it needs is present;
  * otherwise return undefined so the feature stays cleanly opt-in.
  */
-function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
+function createGitHubModule(deps: CoreDependencies, caches: AppCaches): GitHubModule | undefined {
   const {
     githubClient,
     githubInstallationRepository,
@@ -1159,6 +1159,8 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     userRepoAccessRepository: deps.userRepoAccessRepository,
     clock: deps.clock,
     commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
+    // Drop a workspace's cached repo projection (slice 3) after any link/sync write.
+    repoProjectionCache: caches.repoProjection,
   })
   const webhookService = new WebhookService({
     githubInstallationRepository,
@@ -1169,6 +1171,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     commitProjectionRepository,
     checkRunProjectionRepository,
     clock: deps.clock,
+    repoProjectionCache: caches.repoProjection,
   })
   const service = new GitHubService({
     githubClient,
@@ -2356,7 +2359,7 @@ export function createCore(dependencies: CoreDependencies): Core {
       : undefined,
   })
 
-  const github = createGitHubModule(dependencies)
+  const github = createGitHubModule(dependencies, caches)
   const tasks = createTasksModule(dependencies, boardService)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
