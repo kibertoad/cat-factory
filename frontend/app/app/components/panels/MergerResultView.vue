@@ -65,6 +65,7 @@ const REASON_KEYS: Record<MergeDecision['reason'], string> = {
   no_rationale: 'panels.mergerResult.reason.no_rationale',
   no_assessment: 'panels.mergerResult.reason.no_assessment',
   merge_failed: 'panels.mergerResult.reason.merge_failed',
+  merge_partial: 'panels.mergerResult.reason.merge_partial',
 }
 const OUTCOME_KEYS: Record<MergeDecision['outcome'], string> = {
   auto_merged: 'panels.mergerResult.outcome.auto_merged',

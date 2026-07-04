@@ -850,7 +850,8 @@
         "auto_merge_disabled": "The {preset} preset sends every PR to a human, so this one is waiting for review.",
         "no_rationale": "The merger scored the PR but gave no rationale, so the verdict could not be trusted to auto-merge; the PR is waiting for a human to merge.",
         "no_assessment": "The merger did not return a parseable assessment, so the PR is waiting for a human to merge.",
-        "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge."
+        "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge.",
+        "merge_partial": "Some of the task's pull requests merged, but a later one could not, so the change is waiting for a human to finish or revert the multi-repo merge."
       },
       "scores": "Scores",
       "axis": {

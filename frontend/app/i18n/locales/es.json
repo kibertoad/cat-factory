@@ -807,7 +807,8 @@
         "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
         "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
         "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
-        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione."
+        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione.",
+        "merge_partial": "Algunas de las solicitudes de incorporación de la tarea se fusionaron, pero una posterior no pudo, por lo que el cambio espera a que una persona termine o revierta la fusión multirrepositorio."
       },
       "scores": "Puntuaciones",
       "axis": {

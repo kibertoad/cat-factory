@@ -807,7 +807,8 @@
         "auto_merge_disabled": "{preset} ön ayarı her PR'yi bir kişiye yönlendirir, bu yüzden bu PR inceleme bekliyor.",
         "no_rationale": "Birleştirici PR'yi puanladı ancak bir gerekçe vermedi, bu yüzden karara otomatik birleştirme için güvenilemedi; PR bir kişinin birleştirmesini bekliyor.",
         "no_assessment": "Birleştirici ayrıştırılabilir bir değerlendirme döndürmedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
-        "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor."
+        "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",
+        "merge_partial": "Görevin bazı pull request'leri birleştirildi ancak sonraki biri birleştirilemedi, bu yüzden değişiklik bir kişinin çoklu depo birleştirmesini tamamlamasını veya geri almasını bekliyor."
       },
       "scores": "Puanlar",
       "axis": {
