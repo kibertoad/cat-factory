@@ -151,7 +151,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
+import type { AppCaches, PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -635,6 +635,14 @@ export interface NodeContainerOptions {
    * falls back to the no-op publisher (no live push), exactly as before.
    */
   realtimeSink?: LocalEventSink
+  /**
+   * The app-owned cache bag (docs/initiatives/caching-layer.md). `start()` builds it once
+   * per process via `createAppCaches` — with the Redis-backed invalidation notification
+   * factory when `REDIS_URL` is set (multi-node), bare in-memory otherwise — and owns its
+   * shutdown. `createServer`/tests leave it unset and `createCore` builds bare in-memory
+   * defaults, so single-process coherence (write-site invalidation) still holds.
+   */
+  caches?: AppCaches
   /**
    * Override the shared HTTP provider the built-in `manifest` runner backend dispatches/tests
    * through (its OAuth cache reused), e.g. for tests. This is NOT the custom-kind seam: a
@@ -2323,6 +2331,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App/env token.
     runInitiatorScope: runWithInitiator,
+    // The process-wide cache bag from start() (Redis-notified invalidation when REDIS_URL
+    // is set). Absent ⇒ createCore builds bare in-memory defaults.
+    ...(options.caches ? { caches: options.caches } : {}),
     ...options.overrides,
   }
 

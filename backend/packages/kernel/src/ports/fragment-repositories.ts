@@ -3,6 +3,7 @@ import type {
   BlockType,
   DocumentSourceKind,
   FragmentOwnerKind,
+  FragmentTier,
 } from '../domain/types.js'
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,31 @@ export interface PromptFragmentRepository {
   ): Promise<void>
   /** Live fragments produced by a given source, for resync diffing/tombstoning. */
   listBySource(sourceId: string): Promise<PromptFragmentRecord[]>
+}
+
+/**
+ * A fragment after the three tiers are merged, carrying its winning tier — the
+ * unit of the resolved tenant catalog every agent run selects from. Lives in
+ * kernel (rather than the library service package) so the caching seam can name
+ * the fragment-catalog cache's value type without depending on the service layer.
+ */
+export interface ResolvedCatalogEntry {
+  id: string
+  version: string
+  title: string
+  category: string | null
+  summary: string
+  body: string
+  appliesTo: FragmentAppliesTo | null
+  tags: string[] | null
+  source: { sourceId: string; path: string; sha: string } | null
+  /** Living document provenance (Confluence/Notion/GitHub), when document-backed. */
+  documentRef: { source: DocumentSourceKind; externalId: string } | null
+  /** The workspace whose connection re-resolves a document-backed body at run time. */
+  docViaWorkspaceId: string | null
+  /** When the document-backed body was last resolved (epoch ms); null otherwise. */
+  resolvedAt: number | null
+  tier: FragmentTier
 }
 
 /** A repo a tier links as a source of Markdown guideline files (ADR 0006 §3). */

@@ -14,6 +14,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
+import { createAppCaches } from '@cat-factory/caching'
+import { buildCacheNotifications } from './cacheNotifications.js'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
@@ -172,7 +174,22 @@ export async function start(
   // engine writes through this sink; the HTTP upgrade listener still registers sockets on the
   // hub directly.
   const realtimePropagator = buildRealtimePropagator(realtimeHub, env, logger)
-  const container = buildContainer({ db, boss, env, repos, realtimeSink: realtimePropagator })
+  // The process-wide cache bag (caching initiative). In-memory only; when REDIS_URL is
+  // set (multi-node) each cache also broadcasts its invalidations to peers over its own
+  // Redis notification channel, mirroring the realtime propagator's gating. Built here
+  // (not in the container builder) so this process owns exactly one bag + its shutdown.
+  const caches = createAppCaches({
+    notificationPairFactory: await buildCacheNotifications(env, logger),
+    logger,
+  })
+  const container = buildContainer({
+    db,
+    boss,
+    env,
+    repos,
+    realtimeSink: realtimePropagator,
+    caches,
+  })
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.
   await realtimePropagator.start(logger)
@@ -302,6 +319,8 @@ export async function start(
     stopRealtime()
     // Release any cross-node propagation adapters (Redis connections); a no-op when none.
     await realtimePropagator.stop()
+    // Quit the cache-invalidation notification clients (a no-op for bare in-memory caches).
+    await caches.close()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()
