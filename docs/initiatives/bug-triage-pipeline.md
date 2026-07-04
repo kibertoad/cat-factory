@@ -31,8 +31,8 @@ checkouts, notably Phase F's investigator) are blocked on that merge, not just o
 code existing. See the Phase B row notes for details.
 
 **Update (2026-07-04):** Phases C and D are implemented, both stacked on the #752 branch
-(Phase C via [PR #761](https://github.com/kibertoad/cat-factory/pull/761), Phase D on
-`claude/bug-triage-initiative-en124b`) — so the whole stack lands when #752's conflict
+(Phase C via [PR #761](https://github.com/kibertoad/cat-factory/pull/761), Phase D via
+[PR #766](https://github.com/kibertoad/cat-factory/pull/766)) — so the whole stack lands when #752's conflict
 with `main` is resolved and the chain merges. Next up: Phase E (the `bug-intake` step +
 schedule validation + SPA intake section), which consumes Phase D's ports directly and,
 unlike F–H, does not need the multi-repo checkouts.
@@ -166,7 +166,8 @@ Notes carried forward (mirrored in the service-connections tracker's Phase 4 row
 
 ### Phase D — issue-intake foundations (design §3, ports + persistence)
 
-Implemented on `claude/bug-triage-initiative-en124b` (stacked on the #752 branch, like Phase C).
+Implemented in [PR #766](https://github.com/kibertoad/cat-factory/pull/766) (branch
+`claude/bug-triage-initiative-en124b`, stacked on the #752 branch and targeting it, like Phase C's #761).
 
 | Item                                                                                                        | Status |
 | ----------------------------------------------------------------------------------------------------------- | ------ |
