@@ -56,7 +56,7 @@ export interface GitHubSyncServiceDependencies {
   /**
    * The workspace repo-projection cache (`AppCaches.repoProjection`, slice 3). Every
    * method here that mutates a workspace's projected repos (link / monorepo-flag / the
-   * exact-set write + tombstone / the per-sync re-stamp) drops that workspace's group
+   * exact-set write + tombstone / the link-time full re-stamp) drops that workspace's group
    * after the write so the block→repo resolver re-lists fresh. Absent (tests / the
    * Worker's pass-through profile) ⇒ the invalidations are no-ops.
    */
@@ -505,14 +505,20 @@ export class GitHubSyncService {
       }
     }
 
-    // Stamp the repo row as freshly synced for every workspace that links it. This can
-    // change resolver-visible fields (owner/name/defaultBranch), so drop each fanned-out
-    // workspace's cached projection.
+    // Stamp the repo row as freshly synced for every workspace that links it. On an
+    // incremental resync (`full` false — the queue consumer / periodic reconcile) the
+    // `repo` came from the stored projection, so only `syncedAt` changes — not a field the
+    // resolver reads — and there is nothing to invalidate. A `full` pass runs only at link
+    // time (linkRepo / setLinkedRepos) with freshly-FETCHED metadata, which can differ from
+    // what ANOTHER workspace sharing this repo has cached, so drop each fanned-out
+    // workspace's group then. (The triggering workspace's own group was already dropped by
+    // the link/set caller.) Gating on `full` keeps the frequent resync path from churning
+    // the cache the durable poll ticks are meant to hit.
     const now = this.deps.clock.now()
     await fanOut((ws) =>
       this.deps.repoProjectionRepository.upsertMany(ws, [{ ...repo, syncedAt: now }]),
     )
-    for (const ws of workspaces) await this.invalidateRepoProjection(ws)
+    if (full) for (const ws of workspaces) await this.invalidateRepoProjection(ws)
   }
 
   /** Resync a single tracked repo by its GitHub id (used by the queue consumer). */

@@ -41,6 +41,10 @@ export {
   type NodeContainerOptions,
 } from './container.js'
 export { loadNodeConfig } from './config.js'
+// Re-exported so the local facade can pass a `cachesProfile` override to `start()` (it makes
+// the repo projection pass-through — its `link-repo` CLI writes the projection out-of-process
+// with no invalidation bus). It imports only from `@cat-factory/node-server`.
+export { DEFAULT_APP_CACHES_PROFILE, type AppCachesProfile } from '@cat-factory/caching'
 export { createNodeGateways } from './gateways.js'
 export { createNodeModelProviderResolver } from './modelProvider.js'
 

@@ -14,7 +14,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
-import { createAppCaches } from '@cat-factory/caching'
+import { type AppCachesProfile, createAppCaches } from '@cat-factory/caching'
 import { buildCacheNotifications } from './cacheNotifications.js'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
@@ -143,6 +143,14 @@ export async function start(
      * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
      */
     host?: string
+    /**
+     * Per-cache profile overrides merged over the default profile. A sibling facade passes
+     * this to opt a cache out where its coherence assumptions don't hold: local mode makes
+     * the repo projection pass-through because its `link-repo` CLI writes the projection
+     * out-of-process and local mode has no cross-process invalidation bus (the same reason
+     * the Worker's isolate-safe profile passes it through). Omitted ⇒ the default profile.
+     */
+    cachesProfile?: Partial<AppCachesProfile>
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
@@ -181,6 +189,7 @@ export async function start(
   const caches = createAppCaches({
     notificationPairFactory: await buildCacheNotifications(env, logger),
     logger,
+    ...(options.cachesProfile ? { profile: options.cachesProfile } : {}),
   })
   const container = buildContainer({
     db,

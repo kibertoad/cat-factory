@@ -15,6 +15,8 @@ import type {
   Clock,
   ExecutionEventPublisher,
   ExecutionRepository,
+  GitHubRepo,
+  GroupCacheHandle,
   InitiativeRepository,
   RepoProjectionRepository,
   ServiceFragmentDefaultsRepository,
@@ -48,6 +50,15 @@ export interface BoardServiceDependencies {
    * repo to the new service frame; absent → that path reports unavailable.
    */
   repoProjectionRepository?: RepoProjectionRepository
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, caching-layer
+   * slice 3). {@link BoardService.addServiceFromRepo} flips a repo's monorepo flag
+   * directly on the projection (a resolver-visible field), so it must drop the
+   * workspace's group afterwards — exactly as `GitHubSyncService.setRepoMonorepo` does
+   * for the same write on the GitHub-connect path. Absent (tests / the Worker's
+   * pass-through profile) ⇒ the invalidation is a no-op.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   /**
    * In-org shared services. When wired, every new top-level frame is registered as
    * an account-owned {@link Service} and mounted onto the creating workspace, so it
@@ -110,6 +121,7 @@ export class BoardService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly repoProjectionRepository?: RepoProjectionRepository
+  private readonly repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
@@ -123,6 +135,7 @@ export class BoardService {
     idGenerator,
     clock,
     repoProjectionRepository,
+    repoProjectionCache,
     serviceRepository,
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
@@ -135,6 +148,7 @@ export class BoardService {
     this.idGenerator = idGenerator
     this.clock = clock
     this.repoProjectionRepository = repoProjectionRepository
+    this.repoProjectionCache = repoProjectionCache
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
@@ -336,6 +350,10 @@ export class BoardService {
     if (input.isMonorepo !== undefined && input.isMonorepo !== repo.isMonorepo) {
       await this.repoProjectionRepository.setMonorepo(workspaceId, repo.githubId, input.isMonorepo)
       repo.isMonorepo = input.isMonorepo
+      // The monorepo flag decides whether `resolveRepoTarget` hands agents the service
+      // subdirectory, so drop the cached projection or a warmed entry keeps serving the
+      // old flag until its TTL — the agent would run at the repo root instead of the pin.
+      await this.repoProjectionCache?.invalidateGroup(workspaceId)
     }
     // Normalise the requested service subdirectory to a clean, SAFE relative path:
     // strip slashes/`.` and reject any `..` segment, so a stored directory can never

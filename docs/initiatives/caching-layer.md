@@ -264,19 +264,33 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
     same shape as slice 1). The installation lookup (one cheap read) and the block ancestry
     walk (bounded by tree depth ≤3: task→module→frame) stay live, so **reparent and
     service-link changes need NO cache invalidation** — the entire invalidation surface is the
-    projection's own writes, fully enumerable in three shared services.
+    projection's own writes, fully enumerable across the GitHub sync/webhook services plus the
+    board + bootstrap monorepo/link writes.
   - **Every projection-write site has a `workspaceId` in scope** (a method param, or the
     fan-out loop var in `syncRepo`/the webhook tombstone), so invalidation is always a per-ws
     `invalidateGroup` — no coarse `invalidateAll` needed. The wired sites:
     `GitHubSyncService.{setRepoMonorepo,linkRepo,linkPersonalRepo,setLinkedRepos,syncRepo}`,
-    `WebhookService.handleInstallation` (installation_repositories removed), and
+    `BoardService.addServiceFromRepo` (the monorepo-flag write on the import-existing-repo
+    path — it writes `setMonorepo` directly, NOT via `GitHubSyncService`, so it carries its own
+    invalidation), `WebhookService.handleInstallation` (installation_repositories removed), and
     `ContainerRepoBootstrapper.projectBootstrappedRepo`. The push/check_run webhook events
     write OTHER projection tables the resolver never lists, so they do NOT invalidate it.
+  - **`syncRepo` invalidates only on a `full` (link-time) pass.** An incremental resync
+    (`full` false — queue consumer / periodic reconcile) re-stamps the STORED repo row, so only
+    `syncedAt` changes (not a resolver-visible field) and invalidating would just churn the
+    per-workspace entry the durable poll ticks reuse. A `full` pass carries freshly-FETCHED
+    metadata that a workspace SHARING the repo may hold stale, so it still drops each
+    fanned-out workspace's group.
   - **`GitHubSyncService`/`WebhookService` are wired in the SHARED composition root**
-    (`orchestration/createGitHubModule`), so both runtimes get the invalidation uniformly;
-    only the resolver read + the bootstrapper are per-facade. On the Worker the cache is
-    pass-through (mutable D1 state, isolate-safe), so its resolver reads live and its
-    invalidations are no-ops — correct, not a gap (same class as `fragmentCatalog`).
+    (`orchestration/createGitHubModule`), and `BoardService` gets the same handle from
+    `createCore`, so both runtimes get the invalidation uniformly; only the resolver read + the
+    bootstrapper are per-facade. On the Worker the cache is pass-through (mutable D1 state,
+    isolate-safe), so its resolver reads live and its invalidations are no-ops — correct, not a
+    gap (same class as `fragmentCatalog`). **Local mode is pass-through too:** it seeds the
+    projection via the out-of-process `link-repo` CLI and runs single-node with no invalidation
+    bus, so an in-memory TTL'd entry could serve a pre-link projection — `startLocal` passes a
+    `cachesProfile` that disables `repoProjection` (same isolate-safe reasoning as the Worker).
+    So the cache is active on the multi-node-capable Node facade only.
   - **Cross-runtime conformance is deferred (documented, like the pilot's real-ioredis test).**
     The conformance harness runs with GitHub OFF (no installation), so `resolveRepoTarget`
     short-circuits to `null` and an HTTP write-then-read coherence test à la slice 1 isn't

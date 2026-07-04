@@ -79,10 +79,9 @@ describe('GitHubSyncService — repoProjection cache invalidation (slice 3)', ()
     expect(invalidated).toEqual(['ws'])
   })
 
-  it('syncRepo invalidates every workspace it fans the re-stamp out to', async () => {
-    const { handle, invalidated } = fakeCache()
+  const syncRepoDeps = (handle: GroupCacheHandle<GitHubRepo[]>) => {
     const empty = { items: [] as never[] }
-    const deps = {
+    return {
       githubInstallationRepository: {
         listWorkspacesForInstallation: async () => ['ws-a', 'ws-b'],
       },
@@ -107,9 +106,21 @@ describe('GitHubSyncService — repoProjection cache invalidation (slice 3)', ()
       clock: { now: () => 0 },
       repoProjectionCache: handle,
     } as unknown as GitHubSyncServiceDependencies
+  }
 
-    await new GitHubSyncService(deps).syncRepo(repo(1, 'platform'))
+  it('syncRepo invalidates every fanned-out workspace on a full (link-time) pass', async () => {
+    const { handle, invalidated } = fakeCache()
+    // A full pass carries freshly-fetched metadata that a sharing workspace may have stale.
+    await new GitHubSyncService(syncRepoDeps(handle)).syncRepo(repo(1, 'platform'), { full: true })
     expect(invalidated).toEqual(['ws-a', 'ws-b'])
+  })
+
+  it('syncRepo does NOT invalidate on an incremental resync (only syncedAt re-stamped)', async () => {
+    const { handle, invalidated } = fakeCache()
+    // full=false: the repo came from the stored projection, so no resolver-visible field
+    // changes — invalidating would only churn the cache the poll ticks reuse.
+    await new GitHubSyncService(syncRepoDeps(handle)).syncRepo(repo(1, 'platform'))
+    expect(invalidated).toEqual([])
   })
 
   it('is a no-op when no cache is wired (tests / Worker pass-through)', async () => {
