@@ -41,6 +41,22 @@ export interface ComposeRuntime {
   writeProjectFile(project: string, fileName: string, content: string): Promise<string>
   /** Best-effort removal of a project's scratch dir after teardown. Optional. */
   cleanupProject?(project: string): Promise<void>
+  /**
+   * Build-from-source mode only: shallow-clone the PR repo into a per-project working tree so
+   * `build:` contexts / in-checkout bind mounts / relative `env_file`s resolve, and return the
+   * checkout's absolute host path. Optional — a runtime that can't clone (no daemon / the
+   * conformance fake) omits it, and the provider fails build mode deterministically.
+   */
+  checkout?(
+    project: string,
+    target: { cloneUrl: string; ref: string; token?: string },
+  ): Promise<{ dir: string }>
+  /**
+   * Build-from-source mode only: write the rewritten compose file INTO the checkout (beside the
+   * original, so relative paths still resolve) at `relPath` under the project's checkout dir;
+   * returns its absolute host path. Optional, paired with {@link checkout}.
+   */
+  writeCheckoutFile?(project: string, relPath: string, content: string): Promise<string>
 }
 
 /** The flat per-workspace config, read off `manifest.providerConfig`. */
@@ -66,6 +82,15 @@ export interface ComposeEnvironmentConfig {
   envTemplate?: Record<string, string>
   /** Fallback TTL (ms) after which the env is swept + torn down. */
   defaultTtlMs?: number
+  /**
+   * Build-from-source mode: clone the PR head into a working tree and `docker compose build`
+   * the stack's images from its Dockerfiles instead of pulling pre-built images. Unlocks
+   * `build:`, in-checkout bind mounts, and relative `env_file`s (still refuses `privileged`
+   * and host-escaping mounts). Absent/false ⇒ the checkout-free image-pull path (v1).
+   */
+  build?: boolean
+  /** Build-mode only: bound (ms) for `docker compose build`, separate from the `up --wait` bound. */
+  buildTimeoutMs?: number
 }
 
 const DEFAULT_COMPOSE_PATH = 'docker-compose.yml'
@@ -74,6 +99,17 @@ function optionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+/**
+ * Coerce a config value to a boolean. The descriptor-driven connect form writes booleans as the
+ * strings `'true'`/`'false'` (the generic overlay stringifies everything), so accept both a real
+ * boolean and the string forms; anything else ⇒ false.
+ */
+function optionalBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'true'
+  return false
 }
 
 /**
@@ -113,7 +149,19 @@ export function parseComposeEnvConfig(manifest: EnvironmentManifest): ComposeEnv
     imageTemplate: optionalString(raw.imageTemplate),
     envTemplate,
     defaultTtlMs: resolveTtlMs(raw.ttlMinutes, manifest.defaultTtlMs),
+    build: optionalBoolean(raw.build),
+    buildTimeoutMs: resolveBuildTimeoutMs(raw.buildTimeoutMinutes),
   }
+}
+
+/**
+ * Resolve the build-mode `docker compose build` timeout (ms) from the connect form's
+ * `buildTimeoutMinutes` (a string). A blank/invalid/non-positive value ⇒ undefined (the provider
+ * falls back to its default build bound).
+ */
+function resolveBuildTimeoutMs(rawBuildTimeoutMinutes: unknown): number | undefined {
+  const minutes = Number(optionalString(rawBuildTimeoutMinutes))
+  return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60_000) : undefined
 }
 
 /**
@@ -287,7 +335,36 @@ function isRelativePath(path: string): boolean {
   return !path.startsWith('/') && !/^[a-zA-Z]:[\\/]/.test(path)
 }
 
-function bindMountSource(volume: unknown): string | null {
+/** True when a service declares a `build:` (a build context / long-form build object). */
+export function hasBuildDirective(service: unknown): boolean {
+  return !!service && typeof service === 'object' && (service as ComposeService).build !== undefined
+}
+
+/**
+ * True when a bind-mount source would resolve OUTSIDE the cloned checkout — an absolute path, a
+ * `~` home ref, a Windows drive path, or a relative path whose normalized form pops above the
+ * checkout root (`../` escape). These stay refused even in build mode (host-filesystem escape);
+ * only in-checkout relatives (`./x`, `x`, `x/y`) are allowed. A named/anonymous volume is never a
+ * bind source (callers only pass the result of {@link bindMountSource}, which is already null for
+ * those), so this only ever judges a real host-path source.
+ */
+export function escapesCheckout(source: string): boolean {
+  if (source.startsWith('/') || source.startsWith('~') || /^[a-zA-Z]:[\\/]/.test(source))
+    return true
+  let depth = 0
+  for (const segment of source.split(/[\\/]+/)) {
+    if (segment === '' || segment === '.') continue
+    if (segment === '..') {
+      depth -= 1
+      if (depth < 0) return true // escaped above the checkout root
+    } else {
+      depth += 1
+    }
+  }
+  return false
+}
+
+export function bindMountSource(volume: unknown): string | null {
   if (typeof volume === 'string') {
     const segments = volume.split(':')
     if (segments.length < 2) return null // anonymous volume (`/data`) — a container path, not a host bind
@@ -309,19 +386,32 @@ function bindMountSource(volume: unknown): string | null {
 
 /**
  * Collect references this backend cannot honor or must refuse, so a provision fails fast with a
- * clear reason instead of silently mis-mounting / over-privileging. The compose file is read
- * checkout-free (no repo on disk), so anything resolved against the repo working tree is broken,
- * and the stack runs on the operator's shared host daemon, so host access is a safety concern:
- *  - `build:` — needs the source tree (image-based stacks only).
- *  - host bind mounts — resolve against an empty scratch dir; also expose the host filesystem.
- *  - relative `env_file` — points into the absent repo tree.
+ * clear reason instead of silently mis-mounting / over-privileging. The stack runs on the
+ * operator's shared host daemon, so host access is a safety concern in BOTH modes.
+ *
+ * **Image mode** (`opts.build` absent/false — the checkout-free default): the compose file is read
+ * with no repo on disk, so anything resolved against the repo working tree is broken —
+ *  - `build:` — needs the source tree (image-based stacks only);
+ *  - ANY host bind mount — resolves against an empty scratch dir; also exposes the host filesystem;
+ *  - relative `env_file` — points into the absent repo tree;
  *  - `privileged: true` — refused on the shared host daemon.
+ *
+ * **Build mode** (`opts.build === true`): the PR head is cloned into a working tree, so `build:`
+ * contexts, IN-CHECKOUT relative bind mounts, and relative `env_file`s all resolve and are allowed.
+ * Still refused, because they escape the checkout or the daemon's safety envelope —
+ *  - a host-escaping bind source (absolute / `~` / `../` above the checkout root, per
+ *    {@link escapesCheckout});
+ *  - `privileged: true` (unchanged).
  */
-export function collectUnsupportedComposeRefs(doc: ComposeDoc): string[] {
+export function collectUnsupportedComposeRefs(
+  doc: ComposeDoc,
+  opts?: { build?: boolean },
+): string[] {
+  const build = opts?.build === true
   const issues: string[] = []
   for (const [name, service] of Object.entries(servicesOf(doc))) {
     if (!service || typeof service !== 'object') continue
-    if (service.build !== undefined) {
+    if (!build && service.build !== undefined) {
       issues.push(
         `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
       )
@@ -331,19 +421,26 @@ export function collectUnsupportedComposeRefs(doc: ComposeDoc): string[] {
     }
     for (const volume of asArray(service.volumes)) {
       const source = bindMountSource(volume)
-      if (source !== null) {
+      if (source === null) continue
+      if (!build) {
         issues.push(
           `service '${name}' bind-mounts a host path ('${source}') — unsupported (no repo on disk; use a named volume)`,
         )
+      } else if (escapesCheckout(source)) {
+        issues.push(
+          `service '${name}' bind-mounts a path outside the checkout ('${source}') — refused (host-filesystem escape)`,
+        )
       }
     }
-    for (const entry of asArray(service.env_file)) {
-      const path =
-        typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
-      if (typeof path === 'string' && isRelativePath(path)) {
-        issues.push(
-          `service '${name}' reads a relative env_file ('${path}') — unsupported (no repo on disk)`,
-        )
+    if (!build) {
+      for (const entry of asArray(service.env_file)) {
+        const path =
+          typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
+        if (typeof path === 'string' && isRelativePath(path)) {
+          issues.push(
+            `service '${name}' reads a relative env_file ('${path}') — unsupported (no repo on disk)`,
+          )
+        }
       }
     }
   }
@@ -369,6 +466,7 @@ export function prepareComposeProject(
   renderedText: string,
   service: string,
   port: number,
+  opts?: { build?: boolean },
 ): PreparedCompose {
   let parsed: unknown
   try {
@@ -388,7 +486,9 @@ export function prepareComposeProject(
   if (!servicesOf(doc)[service]) {
     return { content: renderedText, issues: [`compose file has no service named '${service}'`] }
   }
-  const issues = collectUnsupportedComposeRefs(doc)
+  const issues = collectUnsupportedComposeRefs(doc, opts)
+  // Isolation applies in BOTH modes: force host ports ephemeral so concurrent per-PR stacks never
+  // collide, and guarantee the probed service publishes its port for `docker compose port`.
   neutralizeHostPorts(doc)
   ensureServicePublishes(doc, service, port)
   return { content: stringify(doc), issues }
@@ -471,6 +571,19 @@ export function classifyComposePs(output: string): EnvironmentStatus {
     }
   }
   return anyPending ? 'provisioning' : 'ready'
+}
+
+/**
+ * The POSIX directory portion of a repo-relative compose path (`''` for a root-level file):
+ * `docker-compose.yml` → `''`, `deploy/docker-compose.yml` → `deploy`. Pure string work (no
+ * `node:path`, so the integrations package stays runtime-neutral). Build mode writes the rewritten
+ * compose here (beside the original inside the checkout) and passes `<checkout>/<dir>` as
+ * `--project-directory`, so relative build contexts / bind mounts / env_files resolve as authored.
+ */
+export function composeFileDir(composePath: string): string {
+  const normalized = composePath.replace(/\\/g, '/').replace(/^\.\//, '')
+  const idx = normalized.lastIndexOf('/')
+  return idx <= 0 ? '' : normalized.slice(0, idx)
 }
 
 /** A short tail of command output, for a deterministic-failure `lastError`. */

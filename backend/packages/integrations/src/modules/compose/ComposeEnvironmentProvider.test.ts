@@ -6,9 +6,14 @@ import type { ComposeExecResult, ComposeRuntime } from './compose-environment.lo
 
 type Script = (args: string[]) => ComposeExecResult
 
-function fakeRuntime(script: Script) {
+function fakeRuntime(script: Script, opts: { withCheckout?: boolean } = {}) {
   const calls: string[][] = []
   const written: { project: string; fileName: string; content: string }[] = []
+  const checkouts: {
+    project: string
+    target: { cloneUrl: string; ref: string; token?: string }
+  }[] = []
+  const checkoutFiles: { project: string; relPath: string; content: string }[] = []
   const runtime: ComposeRuntime = {
     async compose(args) {
       calls.push(args)
@@ -18,8 +23,20 @@ function fakeRuntime(script: Script) {
       written.push({ project, fileName, content })
       return `/tmp/${project}/${fileName}`
     },
+    ...(opts.withCheckout
+      ? {
+          async checkout(project, target) {
+            checkouts.push({ project, target })
+            return { dir: `/tmp/${project}/checkout` }
+          },
+          async writeCheckoutFile(project, relPath, content) {
+            checkoutFiles.push({ project, relPath, content })
+            return `/tmp/${project}/checkout/${relPath}`
+          },
+        }
+      : {}),
   }
-  return { runtime, calls, written }
+  return { runtime, calls, written, checkouts, checkoutFiles }
 }
 
 function fakeRunRepo(files: Record<string, string>): RunRepoContext {
@@ -198,6 +215,126 @@ describe('ComposeEnvironmentProvider', () => {
     )
     expect(env.status).toBe('ready')
     expect(env.url).toBe('http://localhost:5000')
+  })
+
+  describe('build-from-source mode', () => {
+    const buildManifest = {
+      ...manifest,
+      providerConfig: { service: 'web', port: '8080', build: 'true' },
+    }
+    const buildReq = (overrides: Partial<ProvisionEnvironmentRequest> = {}) =>
+      baseReq({
+        manifest: buildManifest,
+        runRepo: fakeRunRepo({
+          // A build-based stack: builds its image, in-checkout bind, relative env_file.
+          'docker-compose.yml':
+            'services:\n  web:\n    build: .\n    volumes:\n      - ./init:/init\n    env_file:\n      - ./.env\n',
+        }),
+        clone: { cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 'ghs_secret' },
+        ...overrides,
+      })
+
+    it('clones the PR head, builds, then ups, and resolves the URL', async () => {
+      const { runtime, calls, checkouts, checkoutFiles } = fakeRuntime(
+        (args) => {
+          if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:49155', stderr: '' }
+          return { code: 0, stdout: '', stderr: '' }
+        },
+        { withCheckout: true },
+      )
+      const provider = new ComposeEnvironmentProvider(runtime)
+      const env = await provider.provision(buildReq())
+
+      expect(env.status).toBe('ready')
+      expect(env.url).toBe('http://localhost:49155')
+      // Cloned the PR head branch with the resolved token.
+      expect(checkouts).toHaveLength(1)
+      expect(checkouts[0]!.target).toEqual({
+        cloneUrl: 'https://github.com/acme/shop.git',
+        ref: 'feature/x', // inputs.branch wins over clone.ref
+        token: 'ghs_secret',
+      })
+      // Wrote the rewritten compose beside the original inside the checkout (root-level here).
+      expect(checkoutFiles).toHaveLength(1)
+      expect(checkoutFiles[0]!.relPath).toBe('cat-factory.compose.yaml')
+      // build ran BEFORE up, both scoped with --project-directory into the checkout.
+      const buildIdx = calls.findIndex((a) => a.includes('build'))
+      const upIdx = calls.findIndex((a) => a.includes('up'))
+      expect(buildIdx).toBeGreaterThanOrEqual(0)
+      expect(buildIdx).toBeLessThan(upIdx)
+      expect(calls[buildIdx]).toContain('--project-directory')
+      expect(calls[buildIdx]).toContain('/tmp/cf-env-shop-42/checkout')
+    })
+
+    it('places the rewritten compose in the compose file’s own subdirectory', async () => {
+      const { runtime, checkoutFiles, calls } = fakeRuntime(
+        (args) => {
+          if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:5001', stderr: '' }
+          return { code: 0, stdout: '', stderr: '' }
+        },
+        { withCheckout: true },
+      )
+      const provider = new ComposeEnvironmentProvider(runtime)
+      const env = await provider.provision(
+        buildReq({
+          manifest: {
+            ...buildManifest,
+            providerConfig: {
+              service: 'web',
+              port: '8080',
+              build: 'true',
+              composePath: 'deploy/docker-compose.yml',
+            },
+          },
+          runRepo: fakeRunRepo({
+            'deploy/docker-compose.yml': 'services:\n  web:\n    build: ..\n',
+          }),
+        }),
+      )
+      expect(env.status).toBe('ready')
+      expect(checkoutFiles[0]!.relPath).toBe('deploy/cat-factory.compose.yaml')
+      const build = calls.find((a) => a.includes('build'))!
+      expect(build).toContain('/tmp/cf-env-shop-42/checkout/deploy')
+    })
+
+    it('fails clearly when the runtime cannot clone + build (no checkout capability)', async () => {
+      const { runtime, calls } = fakeRuntime(() => ({ code: 0, stdout: '', stderr: '' }))
+      const provider = new ComposeEnvironmentProvider(runtime)
+      const env = await provider.provision(buildReq())
+      expect(env.status).toBe('failed')
+      expect(env.error).toContain('Docker-capable runtime')
+      // Never reached the daemon.
+      expect(calls).toHaveLength(0)
+    })
+
+    it('fails clearly when no clone target is available', async () => {
+      const { runtime, calls } = fakeRuntime(() => ({ code: 0, stdout: '', stderr: '' }), {
+        withCheckout: true,
+      })
+      const provider = new ComposeEnvironmentProvider(runtime)
+      const env = await provider.provision(buildReq({ clone: undefined }))
+      expect(env.status).toBe('failed')
+      expect(env.error).toContain('repo clone target')
+      expect(calls).toHaveLength(0)
+    })
+
+    it('surfaces a build failure and tears down for a clean retry', async () => {
+      const { runtime, calls } = fakeRuntime(
+        (args) => {
+          if (args.includes('build'))
+            return { code: 1, stdout: '', stderr: 'ERROR: failed to solve: dockerfile' }
+          return { code: 0, stdout: '', stderr: '' }
+        },
+        { withCheckout: true },
+      )
+      const provider = new ComposeEnvironmentProvider(runtime)
+      const env = await provider.provision(buildReq())
+      expect(env.status).toBe('failed')
+      expect(env.error).toContain('failed to solve')
+      // No `up` after a failed build; a teardown ran for a clean retry.
+      expect(calls.some((a) => a.includes('up'))).toBe(false)
+      expect(calls.some((a) => a.includes('down'))).toBe(true)
+    })
   })
 
   it('testConnection reports reachable only when the daemon answers (not just the CLI)', async () => {

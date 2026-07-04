@@ -4,7 +4,10 @@ import {
   classifyComposePs,
   collectUnsupportedComposeRefs,
   composeConfigToManifest,
+  composeFileDir,
   ensureServicePublishes,
+  escapesCheckout,
+  hasBuildDirective,
   neutralizeHostPorts,
   parseComposeEnvConfig,
   parseComposePsRows,
@@ -179,6 +182,98 @@ describe('collectUnsupportedComposeRefs', () => {
   it('passes a clean image-based stack', () => {
     const doc = parse('services:\n  web:\n    image: nginx\n    volumes:\n      - cache:/cache\n')
     expect(collectUnsupportedComposeRefs(doc)).toEqual([])
+  })
+
+  describe('build mode ({ build: true })', () => {
+    it('allows build:, in-checkout relative binds, and relative env_files (the checkout resolves them)', () => {
+      const doc = parse(
+        [
+          'services:',
+          '  web:',
+          '    build: .',
+          '    volumes:',
+          '      - ./src:/app', // in-checkout relative bind — allowed in build mode
+          '      - db-data:/var/lib/data', // named volume — allowed
+          '    env_file:',
+          '      - ./.env', // relative env_file — allowed in build mode
+          'volumes:',
+          '  db-data: {}',
+        ].join('\n'),
+      )
+      expect(collectUnsupportedComposeRefs(doc, { build: true })).toEqual([])
+    })
+
+    it('still refuses privileged and a host-escaping bind mount', () => {
+      const doc = parse(
+        [
+          'services:',
+          '  web:',
+          '    build: .',
+          '    volumes:',
+          '      - /etc:/host-etc', // absolute host path — escapes the checkout
+          '      - ../secrets:/s', // ../ escapes above the checkout root
+          '  sidecar:',
+          '    image: busybox',
+          '    privileged: true',
+        ].join('\n'),
+      )
+      const issues = collectUnsupportedComposeRefs(doc, { build: true })
+      expect(issues.some((i) => i.includes('/host-etc') || i.includes("'/etc'"))).toBe(true)
+      expect(issues.some((i) => i.includes('../secrets'))).toBe(true)
+      expect(issues.some((i) => i.includes('privileged'))).toBe(true)
+      // build: is NOT flagged in build mode.
+      expect(issues.some((i) => i.includes('uses build:'))).toBe(false)
+    })
+  })
+})
+
+describe('hasBuildDirective', () => {
+  it('detects a short- and long-form build, ignores an image-only service', () => {
+    expect(hasBuildDirective({ build: '.' })).toBe(true)
+    expect(hasBuildDirective({ build: { context: './app' } })).toBe(true)
+    expect(hasBuildDirective({ image: 'nginx' })).toBe(false)
+    expect(hasBuildDirective(null)).toBe(false)
+    expect(hasBuildDirective('nope')).toBe(false)
+  })
+})
+
+describe('escapesCheckout', () => {
+  it('flags absolute, home, drive, and ../-escaping sources; allows in-checkout relatives', () => {
+    expect(escapesCheckout('/etc')).toBe(true)
+    expect(escapesCheckout('~/x')).toBe(true)
+    expect(escapesCheckout('C:/x')).toBe(true)
+    expect(escapesCheckout('../secrets')).toBe(true)
+    expect(escapesCheckout('a/../../b')).toBe(true) // pops above root
+    expect(escapesCheckout('./src')).toBe(false)
+    expect(escapesCheckout('src')).toBe(false)
+    expect(escapesCheckout('a/b/c')).toBe(false)
+    expect(escapesCheckout('a/../b')).toBe(false) // stays at/below root
+  })
+})
+
+describe('composeFileDir', () => {
+  it('returns the POSIX directory portion, empty for a root-level file', () => {
+    expect(composeFileDir('docker-compose.yml')).toBe('')
+    expect(composeFileDir('./docker-compose.yml')).toBe('')
+    expect(composeFileDir('deploy/docker-compose.yml')).toBe('deploy')
+    expect(composeFileDir('a/b/compose.yaml')).toBe('a/b')
+    expect(composeFileDir('deploy\\compose.yaml')).toBe('deploy')
+  })
+})
+
+describe('parseComposeEnvConfig — build mode', () => {
+  it('coerces the build flag + buildTimeoutMinutes from their string forms', () => {
+    const config = parseComposeEnvConfig(
+      manifestWith({ service: 'web', port: '8080', build: 'true', buildTimeoutMinutes: '20' }),
+    )
+    expect(config.build).toBe(true)
+    expect(config.buildTimeoutMs).toBe(20 * 60_000)
+  })
+
+  it('defaults build to false and leaves buildTimeoutMs undefined', () => {
+    const config = parseComposeEnvConfig(manifestWith({ service: 'web', port: '8080' }))
+    expect(config.build).toBe(false)
+    expect(config.buildTimeoutMs).toBeUndefined()
   })
 })
 

@@ -228,7 +228,13 @@ export class EnvironmentProvisioningService {
       resolved.manifest,
       resolved.resolveSecret,
     )
-    const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
+    const req = await this.buildProvisionRequest(
+      args,
+      resolved.manifest,
+      resolved.resolveSecret,
+      undefined,
+      { resolveClone: true },
+    )
     return this.provisionSync(args, resolved, req)
   }
 
@@ -257,6 +263,7 @@ export class EnvironmentProvisioningService {
       resolved.manifest,
       resolved.resolveSecret,
       deploy,
+      { resolveClone: true },
     )
     let job: DeployProvisionJob | null = null
     try {
@@ -411,6 +418,7 @@ export class EnvironmentProvisioningService {
     manifest: EnvironmentManifest,
     resolveSecret: SecretResolver,
     deploy?: DeployProvisionInputs,
+    opts?: { resolveClone?: boolean },
   ): Promise<ProvisionEnvironmentRequest> {
     const { workspaceId } = args
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a manifest can
@@ -434,12 +442,27 @@ export class EnvironmentProvisioningService {
       repoBlockId && this.deps.resolveRunRepoContext
         ? await this.deps.resolveRunRepoContext(workspaceId, repoBlockId)
         : null
+    // Clone target for a SYNCHRONOUS provider that needs a working tree (the Docker Compose
+    // build-from-source mode). Reuse the async deploy inputs' already-resolved clone when present
+    // (same `resolveDeployCloneTarget` seam) so we never mint a second token; otherwise resolve it
+    // here when `opts.resolveClone` asks (the provision paths that may run a sync build). Left
+    // absent for `finalizeProvision`, which only maps a view and must not mint a clone token.
+    const clone =
+      deploy?.clone ??
+      (opts?.resolveClone && this.deps.resolveDeployCloneTarget && repoBlockId
+        ? ((await this.deps.resolveDeployCloneTarget(
+            workspaceId,
+            repoBlockId,
+            args.context?.branch,
+          )) ?? undefined)
+        : undefined)
     return {
       manifest,
       inputs,
       ...(args.context ? { provisionContext: args.context } : {}),
       resolveSecret,
       ...(runRepo ? { runRepo } : {}),
+      ...(clone ? { clone } : {}),
       ...(this.deps.resolveRepoFilesForWorkspace
         ? {
             resolveRepoFiles: (coords) =>

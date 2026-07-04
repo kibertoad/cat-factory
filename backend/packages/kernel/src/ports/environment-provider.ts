@@ -108,6 +108,15 @@ export interface ProvisionEnvironmentRequest {
    * (the synchronous REST `provision()` path runs).
    */
   deploy?: DeployProvisionInputs
+  /**
+   * Clone coordinates (HTTPS URL + short-lived token + ref) for a SYNCHRONOUS provider that
+   * needs a working tree — the Docker Compose backend's build-from-source mode clones the PR
+   * head so `build:` contexts, in-checkout bind mounts, and relative `env_file`s resolve.
+   * Resolved by the provisioning service (the same `resolveDeployCloneTarget` the async deploy
+   * path uses) when a repo-bound block is known. Absent ⇒ no clone was resolvable (no VCS
+   * connection / block-less manual provision); a build-mode provision then fails deterministically.
+   */
+  clone?: DeployCloneTarget
 }
 
 export interface EnvironmentStatusRequest {

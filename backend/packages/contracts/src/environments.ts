@@ -565,6 +565,13 @@ export const serviceProvisioningSchema = v.object({
   composePath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** `docker-compose`: the compose stack is for local development only (advisory). */
   localDevOnly: v.optional(v.boolean()),
+  /**
+   * `docker-compose`: build the stack's images from the repo's Dockerfiles instead of
+   * pulling pre-built images (advisory; the load-bearing switch is the workspace handler's
+   * `providerConfig.build`). When set, the PR head is cloned into a working tree so `build:`
+   * contexts, in-checkout bind mounts, and relative `env_file`s resolve.
+   */
+  composeBuild: v.optional(v.boolean()),
   /** `custom`: the custom-manifest-type id this service produces (matched to a remote-custom handler). */
   manifestId: v.optional(manifestIdSchema),
   /** `custom`: optional path to the custom manifest within the repo. */
