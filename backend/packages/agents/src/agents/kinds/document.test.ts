@@ -80,6 +80,38 @@ describe('document agent kinds', () => {
     expect(prompt).toContain('product stakeholders')
   })
 
+  it("weaves the docKind template's required sections into the outliner prompt", () => {
+    const prompt = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), {})
+    // The PRD template's required sections must be named as things the outline has to cover.
+    expect(prompt).toContain('MUST cover these required sections')
+    expect(prompt).toContain('Acceptance Criteria')
+    expect(prompt).toContain('Success Metrics')
+  })
+
+  it('embeds the docKind template skeleton in the writer prompt', () => {
+    const prompt = userPromptFor(ctx(), { materialized: true })
+    expect(prompt).toContain('template skeleton')
+    // The skeleton is titled from the block and carries the required section headings.
+    expect(prompt).toContain('# Billing Service PRD')
+    expect(prompt).toContain('## Problem & Goals')
+  })
+
+  it('does not repeat the section list in the brief when fuller template guidance follows', () => {
+    // The writer/outliner already receive the skeleton / outline guidance, so the brief names
+    // just the kind ("produce a product requirements document.") rather than re-listing every
+    // section ("… document: Overview, Problem & Goals, …"). The researcher, which gets ONLY the
+    // brief, keeps the full section list.
+    const writer = userPromptFor(ctx(), { materialized: true })
+    const outliner = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), {})
+    const researcher = userPromptFor(ctx({ agentKind: DOC_RESEARCHER_KIND }), {})
+    expect(writer).toContain('produce a product requirements document.')
+    expect(writer).not.toContain('a product requirements document:')
+    expect(outliner).not.toContain('a product requirements document:')
+    // The researcher's brief still spells out the sections (it has no other structure guidance).
+    expect(researcher).toContain('a product requirements document: ')
+    expect(researcher).toContain('Acceptance Criteria')
+  })
+
   it('honours an explicit targetPath override', () => {
     const prompt = userPromptFor(
       ctx({
