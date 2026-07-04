@@ -1,19 +1,30 @@
 import type { Block, Initiative, InitiativePlanDraft } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
+  activeItemCount,
+  allItemsSettled,
   applyAnalysis,
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
   applyPlanDraft,
+  applyRevertClaim,
+  applySpawnClaim,
   assertInitiativeShapeAllowed,
   coerceInterviewOutput,
   deriveCurrentPhase,
+  effectiveMaxConcurrent,
+  eligibleItemsToSpawn,
   initiativeProgress,
   initiativeSlug,
   interviewAtCap,
+  itemDependenciesMet,
+  phaseIsHalted,
+  reconcileItem,
+  selectInitiativePipeline,
   validatePlanDraft,
 } from './initiative.logic.js'
+import type { InitiativeExecutionPolicy, InitiativeItem } from '@cat-factory/kernel'
 
 const block = (level: Block['level']): Block => ({
   id: 'blk-1',
@@ -364,5 +375,225 @@ describe('interview state transitions', () => {
     expect(applyAnalysis(emptyEntity(), '  The codebase is layered.  ').analysisSummary).toBe(
       'The codebase is layered.',
     )
+  })
+})
+
+// ---- Execution loop (slice 3) ---------------------------------------------
+
+const item = (overrides: Partial<InitiativeItem> & Pick<InitiativeItem, 'id'>): InitiativeItem => ({
+  phaseId: 'p1',
+  title: `Item ${overrides.id}`,
+  description: '',
+  dependsOn: [],
+  status: 'pending',
+  ...overrides,
+})
+
+const executing = (overrides: Partial<Initiative> = {}): Initiative => ({
+  ...emptyEntity(),
+  status: 'executing',
+  phases: [
+    { id: 'p1', title: 'Phase one', goal: '' },
+    { id: 'p2', title: 'Phase two', goal: '' },
+  ],
+  policy: {
+    maxConcurrent: 2,
+    rules: [],
+    defaultPipelineId: 'pl_full',
+    onMissingEstimate: 'default',
+  },
+  ...overrides,
+})
+
+const est = (complexity: number, risk: number, impact: number) => ({
+  complexity,
+  risk,
+  impact,
+  rationale: '',
+})
+
+const policy = (overrides: Partial<InitiativeExecutionPolicy> = {}): InitiativeExecutionPolicy => ({
+  maxConcurrent: 2,
+  rules: [],
+  defaultPipelineId: 'pl_full',
+  onMissingEstimate: 'default',
+  ...overrides,
+})
+
+describe('selectInitiativePipeline', () => {
+  it('honours an explicit per-item pipeline override', () => {
+    expect(selectInitiativePipeline({ pipelineId: 'pl_custom' }, policy())).toBe('pl_custom')
+  })
+
+  it('falls back to the default when no rule matches', () => {
+    const p = policy({ rules: [{ pipelineId: 'pl_heavy', minRisk: 0.8 }] })
+    expect(selectInitiativePipeline({ estimate: est(0.9, 0.1, 0.1) }, p)).toBe('pl_full')
+  })
+
+  it('picks the FIRST rule whose ANY axis is met (OR across axes)', () => {
+    const p = policy({
+      rules: [
+        { pipelineId: 'pl_mid', minComplexity: 0.5 },
+        { pipelineId: 'pl_heavy', minRisk: 0.5 },
+      ],
+    })
+    // risk clears the second rule, but complexity clears the first — first match wins.
+    expect(selectInitiativePipeline({ estimate: est(0.6, 0.6, 0) }, p)).toBe('pl_mid')
+    // only risk clears → second rule.
+    expect(selectInitiativePipeline({ estimate: est(0.1, 0.6, 0) }, p)).toBe('pl_heavy')
+  })
+
+  it('applies onMissingEstimate for an item with no estimate', () => {
+    const p = policy({
+      rules: [{ pipelineId: 'pl_weak' }, { pipelineId: 'pl_strong', minRisk: 0.9 }],
+    })
+    expect(selectInitiativePipeline({}, p)).toBe('pl_full') // default
+    expect(selectInitiativePipeline({}, policy({ ...p, onMissingEstimate: 'strongest' }))).toBe(
+      'pl_strong',
+    )
+  })
+})
+
+describe('eligibleItemsToSpawn + phase sequencing', () => {
+  it('returns pending items in the current phase whose deps are met', () => {
+    const init = executing({
+      items: [
+        item({ id: 'a', status: 'done' }),
+        item({ id: 'b', dependsOn: ['a'] }),
+        item({ id: 'c', dependsOn: ['b'] }), // blocked by pending b
+        item({ id: 'd', phaseId: 'p2' }), // later phase — not yet
+      ],
+    })
+    expect(eligibleItemsToSpawn(init).map((i) => i.id)).toEqual(['b'])
+  })
+
+  it('halts the whole phase when it holds a blocked item (no new spawns)', () => {
+    const init = executing({
+      items: [item({ id: 'a', status: 'blocked' }), item({ id: 'b' })],
+    })
+    expect(phaseIsHalted(init, 'p1')).toBe(true)
+    expect(eligibleItemsToSpawn(init)).toEqual([])
+    // …and a blocked item keeps its phase current, so phase 2 never starts either.
+    expect(deriveCurrentPhase(init)?.id).toBe('p1')
+  })
+
+  it('advances to the next phase only once the current phase fully settles', () => {
+    const init = executing({
+      items: [
+        item({ id: 'a', status: 'done' }),
+        item({ id: 'b', status: 'skipped' }),
+        item({ id: 'c', phaseId: 'p2' }),
+      ],
+    })
+    expect(deriveCurrentPhase(init)?.id).toBe('p2')
+    expect(eligibleItemsToSpawn(init).map((i) => i.id)).toEqual(['c'])
+  })
+
+  it('respects a per-phase concurrency cap clamped by the policy cap', () => {
+    const init = executing({
+      phases: [{ id: 'p1', title: 'P1', goal: '', maxConcurrent: 1 }],
+      policy: policy({ maxConcurrent: 3 }),
+      items: [item({ id: 'a' })],
+    })
+    expect(effectiveMaxConcurrent(init, deriveCurrentPhase(init))).toBe(1)
+  })
+
+  it('counts only active (in_progress/pr_open) items against the cap', () => {
+    const init = executing({
+      items: [
+        item({ id: 'a', status: 'in_progress' }),
+        item({ id: 'b', status: 'pr_open' }),
+        item({ id: 'c', status: 'done' }),
+        item({ id: 'd' }),
+      ],
+    })
+    expect(activeItemCount(init)).toBe(2)
+  })
+
+  it('treats a done/skipped dependency as satisfied and a pending one as not', () => {
+    const init = executing({
+      items: [item({ id: 'a', status: 'done' }), item({ id: 'b', status: 'skipped' })],
+    })
+    expect(itemDependenciesMet(init, item({ id: 'x', dependsOn: ['a', 'b'] }))).toBe(true)
+    expect(itemDependenciesMet(init, item({ id: 'y', dependsOn: ['a', 'z-pending'] }))).toBe(true) // missing dep ⇒ satisfied
+    const withPending = executing({ items: [item({ id: 'a' })] })
+    expect(itemDependenciesMet(withPending, item({ id: 'y', dependsOn: ['a'] }))).toBe(false)
+  })
+})
+
+describe('reconcileItem', () => {
+  const spawned = item({ id: 'a', status: 'in_progress', blockId: 'blk-a' })
+
+  it('maps a done block → done + copies the PR link', () => {
+    const b = {
+      ...block('task'),
+      id: 'blk-a',
+      status: 'done' as const,
+      pullRequest: { url: 'u', number: 3 },
+    }
+    expect(reconcileItem(spawned, b)).toMatchObject({ status: 'done', pr: { url: 'u', number: 3 } })
+  })
+
+  it('maps a pr_ready block → pr_open', () => {
+    const b = { ...block('task'), id: 'blk-a', status: 'pr_ready' as const }
+    expect(reconcileItem(spawned, b).status).toBe('pr_open')
+  })
+
+  it('maps a blocked block → blocked + a note', () => {
+    const b = { ...block('task'), id: 'blk-a', status: 'blocked' as const }
+    const out = reconcileItem(spawned, b)
+    expect(out.status).toBe('blocked')
+    expect(out.note).toBeTruthy()
+  })
+
+  it('leaves a settled item untouched but reverts an orphaned active item to pending', () => {
+    // A settled/non-active item is never touched, even with no block (replay-safe).
+    expect(reconcileItem(item({ id: 'a', status: 'done' }), undefined)).toMatchObject({
+      status: 'done',
+    })
+    // An ACTIVE item whose block vanished (crash between claim and insert, or a deleted block)
+    // reverts to `pending` so the next spawn re-materialises it — it must not hold a slot forever.
+    expect(reconcileItem(spawned, undefined)).toMatchObject({ status: 'pending', blockId: null })
+  })
+})
+
+describe('spawn claim / revert + completion', () => {
+  it('claims a pending item and is a no-op on an already-claimed one', () => {
+    const init = executing({ items: [item({ id: 'a' })] })
+    const claimed = applySpawnClaim(init, 'a', 'blk-new')
+    expect(claimed.items![0]).toMatchObject({ status: 'in_progress', blockId: 'blk-new' })
+    // A second claim (different block id) must NOT overwrite the winner's claim.
+    const again = applySpawnClaim(claimed, 'a', 'blk-other')
+    expect(again.items![0]!.blockId).toBe('blk-new')
+  })
+
+  it('reverts only a claim we own (matched by our block id)', () => {
+    const init = executing({
+      items: [item({ id: 'a', status: 'in_progress', blockId: 'blk-mine' })],
+    })
+    expect(applyRevertClaim(init, 'a', 'blk-mine').items![0]).toMatchObject({
+      status: 'pending',
+      blockId: null,
+    })
+    // A different block id (someone else's claim) is left alone.
+    expect(applyRevertClaim(init, 'a', 'blk-theirs').items![0]!.status).toBe('in_progress')
+  })
+
+  it('allItemsSettled only when every item is done/skipped (empty ⇒ not settled)', () => {
+    expect(allItemsSettled(executing({ items: [] }))).toBe(false)
+    expect(
+      allItemsSettled(
+        executing({
+          items: [item({ id: 'a', status: 'done' }), item({ id: 'b', status: 'skipped' })],
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      allItemsSettled(
+        executing({
+          items: [item({ id: 'a', status: 'done' }), item({ id: 'b', status: 'blocked' })],
+        }),
+      ),
+    ).toBe(false)
   })
 })

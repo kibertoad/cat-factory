@@ -28,7 +28,12 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
-import { validatePipelineShape, type PipelineShape } from '../pipelines/pipelineShape.js'
+import {
+  assertPipelineLaunchable,
+  validatePipelineShape,
+  type PipelineShape,
+  type RunOrigin,
+} from '../pipelines/pipelineShape.js'
 import { shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
@@ -327,6 +332,13 @@ export interface ExecutionServiceDependencies {
    */
   initiativeInterviewService?: InitiativeInterviewService
   /**
+   * Best-effort poke of the initiative execution loop (slice 3): called after a spawned task's
+   * PR merges (`finalizeMerge`), so its owning initiative reconciles + advances immediately
+   * rather than on the next cron sweep. Threaded through to the {@link RunStateMachine} for the
+   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired.
+   */
+  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  /**
    * Optional: raises human-actionable notifications (a PR needs a merge decision,
    * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
    * transition the block but no notification surfaces (tests).
@@ -484,6 +496,7 @@ export class ExecutionService {
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
+  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -562,6 +575,7 @@ export class ExecutionService {
     resolveRunRepoContext,
     assertAgentBackendConfigured,
     runInitiatorScope,
+    pokeInitiativeLoop,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -586,6 +600,7 @@ export class ExecutionService {
       kaizenScheduler,
       subscriptionActivations: subscriptionActivationRepository,
       llmObservability,
+      pokeInitiativeLoop,
     })
     this.agentExecutor = agentExecutor
     this.workRunner = workRunner
@@ -780,6 +795,7 @@ export class ExecutionService {
     this.mergePresetRepository = mergePresetRepository
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
+    this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.inlineHarnessRef = inlineHarnessRef
@@ -1258,6 +1274,14 @@ export class ExecutionService {
      * outside the domain Core); absent for non-individual runs.
      */
     activate?: (executionId: string) => Promise<void>,
+    /**
+     * How this run is being launched: a `'manual'` one-off task (default) or a `'recurring'`
+     * schedule fire ({@link RecurringPipelineService.fire}). Gates the pipeline's declared
+     * `availability` — a `'recurring'`-only pipeline can't be started manually and vice versa
+     * (see {@link assertPipelineLaunchable}). A retry/restart re-drives an already-validated
+     * run, so it never re-checks this.
+     */
+    origin: RunOrigin = 'manual',
   ): Promise<ExecutionInstance> {
     await this.requireWorkspace(workspaceId)
     const block = await this.requireBlock(workspaceId, blockId)
@@ -1266,6 +1290,11 @@ export class ExecutionService {
       'Pipeline',
       pipelineId,
     )
+
+    // Launch-constraint gate (start-only, NOT part of the shared retry re-validation): reject a
+    // manual start of a recurring-only pipeline (or a scheduled fire of a one-off-only one), and
+    // a bug-intake pipeline that isn't recurring. Before any side effects.
+    assertPipelineLaunchable(pipeline.agentKinds, pipeline.availability, origin, pipeline.enabled)
 
     // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
     // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry
@@ -2176,6 +2205,10 @@ export class ExecutionService {
       if (block.autoStartDependents) {
         await this.autoStartDependents(workspaceId, blockId).catch(() => {})
       }
+      // A spawned initiative task's PR merging pokes its owning initiative's loop so it
+      // reconciles the item + spawns the next wave immediately (the manual-merge path, which
+      // doesn't emit a terminal run event). Fire-and-forget; the sweep is the backstop.
+      if (block.initiativeId) this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
     }
   }
 

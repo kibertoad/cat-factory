@@ -22,6 +22,7 @@ export type {
   ExecutionInstance,
   ExecutionStatus,
   Pipeline,
+  PipelineAvailability,
   PipelineStep,
   Position,
   PromptFragment,

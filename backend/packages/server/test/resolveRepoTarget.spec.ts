@@ -236,7 +236,7 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
     // No separate peer checkout — the co-located service rides the primary's repo.
     expect(checkouts).toHaveLength(1)
     expect(checkouts[0]).toMatchObject({ primary: true, target: { name: 'mono' } })
-    expect(checkouts[0].involved).toEqual([
+    expect(checkouts[0]!.involved).toEqual([
       { frameId: 'framePeer', serviceDirectory: 'packages/peer' },
     ])
   })
@@ -252,7 +252,7 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
     })
     const { checkouts } = await resolve('ws', 'taskLogin', ['frameOrphan'])
     expect(checkouts).toHaveLength(1)
-    expect(checkouts[0].primary).toBe(true)
+    expect(checkouts[0]!.primary).toBe(true)
   })
 
   it('throws when the PRIMARY block is under no repo-linked service', async () => {

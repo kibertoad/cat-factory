@@ -196,7 +196,9 @@
       "linearTeamId": "Linear takım kimliği",
       "footerHint": "Servisin içine tek bir yinelenen görev eklenir; her çalıştırma bir öncekinin yerini alır. Çalıştırma geçmişi inceleme panelinde görünür.",
       "submit": "Yinelenen pipeline ekle",
-      "addFailedTitle": "Yinelenen pipeline eklenemedi"
+      "addFailedTitle": "Yinelenen pipeline eklenemedi",
+      "onDemand": "İstek üzerine (yalnızca manuel)",
+      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir."
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",
@@ -438,7 +440,9 @@
         "skipped": "Atlandı"
       },
       "updateFailed": "Zamanlama güncellenemedi",
-      "runNowFailed": "Şimdi çalıştırılamadı"
+      "runNowFailed": "Şimdi çalıştırılamadı",
+      "onDemand": "İstek üzerine",
+      "onDemandHint": "Yalnızca manuel. Siz tetiklediğinizde çalışır ve bireysel kullanımlı bir abonelik modeli kullanabilir."
     },
     "fragments": {
       "serviceTitle": "Servis en iyi uygulamaları",
@@ -1294,6 +1298,7 @@
         "visual_confirmation_ready": "Okundu işaretle",
         "human_review": "Okundu işaretle",
         "followup_pending": "Okundu işaretle",
+        "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle"
       },
       "toast": {
@@ -2562,7 +2567,8 @@
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
       "human_test_ready": "İnsan testine hazır",
-      "visual_confirmation_ready": "Görsel onaya hazır"
+      "visual_confirmation_ready": "Görsel onaya hazır",
+      "initiative": "Girisim guncellemeleri"
     },
     "role": {
       "engineering": "Mühendislik",
@@ -4034,6 +4040,9 @@
     "inspector": {
       "runPlanning": "Planlamayi calistir",
       "answerPlanning": "Planlama sorularini yanitla",
+      "pause": "Duraklat",
+      "resume": "Devam et",
+      "cancel": "Girisimi iptal et",
       "hint": "Planlama hatti kod tabanini inceler, onay icin cok asamali plani hazirlar ve ardindan izleyici belgesini depoya kaydeder."
     },
     "planning": {

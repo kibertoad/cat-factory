@@ -41,6 +41,7 @@ function makeRegistry(): {
   registry: PersistenceRegistry
   resolveAccountId: DispatchOptions['resolveAccountId']
   resolveBlockAccountId: NonNullable<DispatchOptions['resolveBlockAccountId']>
+  resolveBlockAccountIds: NonNullable<DispatchOptions['resolveBlockAccountIds']>
   resolveServiceAccountIds: NonNullable<DispatchOptions['resolveServiceAccountIds']>
 } {
   const workspaces = new Map<string, Workspace & { accountId: string }>([
@@ -89,7 +90,7 @@ function makeRegistry(): {
       },
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
     },
-    // Entity-id-keyed (findById) + cross-service (listByServices) board-composition reads.
+    // Entity-id-keyed (findById/findByIds) + cross-service (listByServices) board-composition reads.
     blockRepository: {
       findById: async (blockId: string) => {
         const home = blocks.get(blockId)
@@ -97,6 +98,16 @@ function makeRegistry(): {
           ? { workspaceId: home.workspaceId, serviceId: null, block: { id: blockId } }
           : null
       },
+      // The batched form (the `blockList` scope's resolver reads this): a missing block is simply
+      // absent from the result, so the `blockList` rule fails closed on it. Shape mirrors the real
+      // repo: `Array<{ workspaceId, block: { id } }>`.
+      findByIds: async (ids: string[]) =>
+        ids
+          .map((id) => {
+            const home = blocks.get(id)
+            return home ? { workspaceId: home.workspaceId, block: { id } } : null
+          })
+          .filter(Boolean),
       listByServices: async (ids: string[]) => ids.map((svc) => ({ svc })),
     },
     serviceRepository: {
@@ -105,6 +116,10 @@ function makeRegistry(): {
       listByAccount: async (accountId: string) => [{ accountId }],
       // The single-service read behind the org-catalog mount flow (`service` scope kind).
       get: async (id: string) => services.get(id) ?? null,
+      // The batched board-composition read keyed on frame BLOCK ids (`blockList` scope): echoes
+      // each frame block id so the round-trip can assert the call reached the bound blocks.
+      listByFrameBlocks: async (frameBlockIds: string[]) =>
+        frameBlockIds.map((frameBlockId) => ({ frameBlockId })),
     },
     accountRepository: {
       get: async (id: string) => ({ id, name: id }),
@@ -322,6 +337,56 @@ function makeRegistry(): {
     issueProjectionRepository: {
       listByWorkspace: async (ws: string) => [{ ws }],
     },
+    // The self-hosted runner-backend connection surface: `getByWorkspace`/`softDelete` echo the
+    // workspaceId (arg0); the record-based `upsert` binds on the record's `workspaceId` FIELD.
+    runnerPoolConnectionRepository: {
+      getByWorkspace: async (ws: string) => ({ ws }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+    },
+    // The binary-artifact METADATA surface (visual-confirmation gate). Point reads echo the
+    // workspaceId (arg0); the record-based `insert` binds on the record's `workspaceId` FIELD; the
+    // void `delete` resolves. `listOlderThan` is wired but sweeper-only (absent from the allow-list).
+    binaryArtifactMetadataStore: {
+      get: async (ws: string) => ({ ws }),
+      listByExecution: async (ws: string) => [{ ws }],
+      countByExecution: async (_ws: string) => 0,
+      listByBlock: async (ws: string) => [{ ws }],
+      insert: async () => undefined,
+      delete: async () => undefined,
+      listOlderThan: async () => [],
+    },
+    // The prompt-fragment library management surface, keyed by an (ownerKind, ownerId) PAIR. Each
+    // read echoes the pair so the round-trip can assert the whole bound owner reached the repo;
+    // the void writes resolve. `listBySource` is wired but sourceId-keyed (absent from the allow-list).
+    promptFragmentRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      get: async (ownerKind: string, ownerId: string, fragmentId: string) => ({
+        ownerKind,
+        ownerId,
+        fragmentId,
+      }),
+      upsert: async () => undefined,
+      softDelete: async () => undefined,
+      listBySource: async () => [],
+    },
+    // The fragment-source library: owner-keyed list + record-based upsert. `get` is wired but
+    // sourceId-keyed (absent from the allow-list — the repo-sync management the mothership owns).
+    fragmentSourceRepository: {
+      listByOwner: async (ownerKind: string, ownerId: string) => [{ ownerKind, ownerId }],
+      upsert: async () => undefined,
+      get: async (id: string) => ({ id }),
+    },
+    // The account onboarding reads: each echoes the accountId (arg0) so the round-trip can assert
+    // the call reached the bound account. `create` is wired but admin-gated (absent from the allow-list).
+    invitationRepository: {
+      listByAccount: async (accountId: string) => [{ accountId }],
+      create: async () => undefined,
+    },
+    emailConnectionRepository: {
+      getByAccount: async (accountId: string) => ({ accountId }),
+      upsert: async () => undefined,
+    },
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>
@@ -337,6 +402,18 @@ function makeRegistry(): {
       } | null
       const ws = found?.workspaceId
       return typeof ws === 'string' ? resolveAccountId(ws) : undefined
+    },
+    // The batched form (the `blockList` scope): one `findByIds` resolves every frame block's home
+    // workspace, then each workspace's account. A block absent from the read is absent from the map,
+    // so the rule fails closed on it.
+    resolveBlockAccountIds: async (blockIds) => {
+      const found = (await registry.blockRepository!.findByIds!(blockIds)) as Array<{
+        workspaceId: string
+        block: { id: string }
+      }>
+      const map = new Map<string, string | null | undefined>()
+      for (const entry of found) map.set(entry.block.id, await resolveAccountId(entry.workspaceId))
+      return map
     },
     resolveServiceAccountIds: async (ids) => {
       const services = (await registry.serviceRepository!.listByIds!(ids)) as Array<{
@@ -1487,5 +1564,348 @@ describe('VCS / GitHub projection read surface (workspace-scoped)', () => {
       /not callable/,
     )
     await expect(repos.githubInstallationRepository!.listActive!()).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('self-hosted runner-backend connection surface (workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The runner-pool settings panel's connect/rotate/disconnect (`RunnerPoolConnectionService`):
+  // `getByWorkspace`/`softDelete` take the workspaceId as arg0 (the `workspace` rule); the
+  // record-based `upsert(record)` binds on the record's `workspaceId` FIELD (the `workspaceField`
+  // rule). The credentials ride a sealed `secretsCipher` blob, so no plaintext crosses the API.
+  const WORKSPACE_METHODS: Array<{ method: string; args: unknown[]; echoes?: boolean }> = [
+    { method: 'getByWorkspace', args: [], echoes: true },
+    { method: 'softDelete', args: [0] },
+  ]
+
+  for (const { method, args, echoes } of WORKSPACE_METHODS) {
+    it(`forwards runnerPoolConnectionRepository.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry().runnerPoolConnectionRepository![method]!(
+        'ws_in',
+        ...args,
+      )
+      if (echoes) expect(result).toMatchObject({ ws: 'ws_in' })
+      else expect(result).toBeUndefined()
+    })
+
+    it(`rejects runnerPoolConnectionRepository.${method} for an out-of-scope workspace (404)`, async () => {
+      await expect(
+        remoteRegistry().runnerPoolConnectionRepository![method]!('ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  it('forwards runnerPoolConnectionRepository.upsert when the record targets an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().runnerPoolConnectionRepository!.upsert!({ workspaceId: 'ws_in' }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects runnerPoolConnectionRepository.upsert when the record targets an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().runnerPoolConnectionRepository!.upsert!({ workspaceId: 'ws_out' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects runnerPoolConnectionRepository.upsert when the record has no workspaceId field (404)', async () => {
+    await expect(
+      remoteRegistry().runnerPoolConnectionRepository!.upsert!({}),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+describe('binary-artifact metadata surface (visual-confirmation gate, workspace-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The artifact controllers + visual-confirmation gate reads (`ArtifactController` /
+  // `HarnessArtifactController`). Point reads/deletes take the workspaceId as arg0 (the `workspace`
+  // rule); `args` are the trailing arguments after it. Value-returning reads (`echoes: true`) echo
+  // the workspaceId (an object or an array of one); the numeric `countByExecution` and the void
+  // `delete` are asserted separately below.
+  const WORKSPACE_METHODS: Array<{ method: string; args: unknown[] }> = [
+    { method: 'get', args: ['art_1'] },
+    { method: 'listByExecution', args: ['ex_1'] },
+    { method: 'listByBlock', args: ['blk_1'] },
+  ]
+
+  for (const { method, args } of WORKSPACE_METHODS) {
+    it(`forwards binaryArtifactMetadataStore.${method} for an in-scope workspace`, async () => {
+      const result = await remoteRegistry().binaryArtifactMetadataStore![method]!('ws_in', ...args)
+      expect(Array.isArray(result) ? result[0] : result).toMatchObject({ ws: 'ws_in' })
+    })
+
+    it(`rejects binaryArtifactMetadataStore.${method} for an out-of-scope workspace (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry().binaryArtifactMetadataStore![method]!('ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  it('forwards binaryArtifactMetadataStore.countByExecution (numeric result) for an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.countByExecution!('ws_in', 'ex_1'),
+    ).resolves.toBe(0)
+  })
+
+  it('forwards binaryArtifactMetadataStore.delete (void) for an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.delete!('ws_in', 'art_1'),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects binaryArtifactMetadataStore.delete for an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.delete!('ws_out', 'art_1'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The record-based `insert(record)` binds on the record's `workspaceId` FIELD (the
+  // `workspaceField` rule): a metadata row can only ever land in an in-scope workspace.
+  it('forwards binaryArtifactMetadataStore.insert when the record targets an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.insert!({ workspaceId: 'ws_in' }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects binaryArtifactMetadataStore.insert when the record targets an out-of-scope workspace (404)', async () => {
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.insert!({ workspaceId: 'ws_out' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('still refuses the sweeper-only retention reads (listOlderThan off the allow-list)', async () => {
+    // `listOlderThan`/`deleteOlderThan` are the retention sweep — mothership-internal, never remote.
+    await expect(
+      remoteRegistry().binaryArtifactMetadataStore!.listOlderThan!('ws_in', 0),
+    ).rejects.toThrow(/not callable/)
+  })
+})
+
+describe('service board-composition read surface (blockList-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // `serviceRepository.listByFrameBlocks(frameBlockIds)` binds via the `blockList` scope kind: arg0
+  // is an array of frame BLOCK ids, each resolved to its home workspace's account server-side
+  // (block → workspace → account). blk_in homes in ws_in (ACCOUNT); blk_out in ws_out
+  // (OTHER_ACCOUNT). EVERY id must resolve in-scope, so a missing/out-of-scope frame fails closed.
+  it('forwards listByFrameBlocks when every frame block is in scope', async () => {
+    const result = (await remoteRegistry().serviceRepository!.listByFrameBlocks!([
+      'blk_in',
+    ])) as Array<{ frameBlockId: string }>
+    expect(result[0]).toMatchObject({ frameBlockId: 'blk_in' })
+  })
+
+  it('rejects listByFrameBlocks when any frame block is out of scope (404)', async () => {
+    await expect(
+      remoteRegistry().serviceRepository!.listByFrameBlocks!(['blk_in', 'blk_out']),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('rejects listByFrameBlocks for an unknown frame block (fails closed)', async () => {
+    await expect(
+      remoteRegistry().serviceRepository!.listByFrameBlocks!(['blk_missing']),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  it('allows listByFrameBlocks with an empty list (no block to scope)', async () => {
+    await expect(remoteRegistry().serviceRepository!.listByFrameBlocks!([])).resolves.toBeDefined()
+  })
+})
+
+describe('prompt-fragment library management surface (owner-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The owner-keyed reads bind on an (ownerKind, ownerId) PAIR (the `owner` rule): `workspace`
+  // resolves the workspace's account, `account` IS the accountId. `args` are the trailing arguments
+  // after the pair. Each is exercised with BOTH owner kinds, in and out of scope.
+  const OWNER_READS: Array<{ repo: string; method: string; args: unknown[] }> = [
+    { repo: 'promptFragmentRepository', method: 'listByOwner', args: [] },
+    { repo: 'promptFragmentRepository', method: 'get', args: ['frag_1'] },
+    { repo: 'fragmentSourceRepository', method: 'listByOwner', args: [] },
+  ]
+
+  for (const { repo, method, args } of OWNER_READS) {
+    it(`forwards ${repo}.${method} for a workspace owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('workspace', 'ws_in', ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'workspace', ownerId: 'ws_in' })
+    })
+
+    it(`forwards ${repo}.${method} for an account owner in scope`, async () => {
+      const result = await remoteRegistry()[repo]![method]!('account', ACCOUNT, ...args)
+      const echoed = Array.isArray(result) ? result[0] : result
+      expect(echoed).toMatchObject({ ownerKind: 'account', ownerId: ACCOUNT })
+    })
+
+    it(`rejects ${repo}.${method} for a workspace owner out of scope (404, no leak)`, async () => {
+      // ws_out belongs to OTHER_ACCOUNT; the token is scoped to ACCOUNT only.
+      await expect(
+        remoteRegistry()[repo]![method]!('workspace', 'ws_out', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an account owner out of scope (404, no leak)`, async () => {
+      await expect(
+        remoteRegistry()[repo]![method]!('account', OTHER_ACCOUNT, ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.${method} for an unknown owner kind (fails closed)`, async () => {
+      // A kind the rule doesn't recognise can't be scope-bound, so it is refused (never reaches the repo).
+      await expect(
+        remoteRegistry()[repo]![method]!('user', 'usr_x', ...args),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  // The `softDelete` (void owner-keyed write): forwards in scope, rejected out of scope.
+  it('forwards promptFragmentRepository.softDelete for an in-scope owner', async () => {
+    await expect(
+      remoteRegistry().promptFragmentRepository!.softDelete!('account', ACCOUNT, 'frag_1', 0),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects promptFragmentRepository.softDelete for an out-of-scope owner (404)', async () => {
+    await expect(
+      remoteRegistry().promptFragmentRepository!.softDelete!('workspace', 'ws_out', 'frag_1', 0),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  // The record-based `upsert(record)` binds on the record's `(ownerKind, ownerId)` FIELDS (the
+  // `ownerField` rule): a fragment/source row can only ever land under an in-scope owner.
+  const UPSERTS = ['promptFragmentRepository', 'fragmentSourceRepository']
+
+  for (const repo of UPSERTS) {
+    it(`forwards ${repo}.upsert when the record targets an in-scope workspace owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'workspace', ownerId: 'ws_in' }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`forwards ${repo}.upsert when the record targets an in-scope account owner`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'account', ownerId: ACCOUNT }),
+      ).resolves.toBeUndefined()
+    })
+
+    it(`rejects ${repo}.upsert when the record targets an out-of-scope owner (404)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'workspace', ownerId: 'ws_out' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has no owner fields (404, fail-closed)`, async () => {
+      await expect(remoteRegistry()[repo]!.upsert!({})).rejects.toMatchObject({ code: 'not_found' })
+    })
+
+    it(`rejects ${repo}.upsert when the record has an unknown owner kind (404, fail-closed)`, async () => {
+      await expect(
+        remoteRegistry()[repo]!.upsert!({ ownerKind: 'user', ownerId: 'usr_x' }),
+      ).rejects.toMatchObject({ code: 'not_found' })
+    })
+  }
+
+  it('still refuses the sourceId-keyed sync reads (off the allow-list)', async () => {
+    // `promptFragmentRepository.listBySource` + `fragmentSourceRepository.get` are the repo-sync
+    // reads the mothership owns — never remotely callable from a mothership node.
+    await expect(remoteRegistry().promptFragmentRepository!.listBySource!('src_1')).rejects.toThrow(
+      /not callable/,
+    )
+    await expect(remoteRegistry().fragmentSourceRepository!.get!('src_1')).rejects.toThrow(
+      /not callable/,
+    )
+  })
+})
+
+describe('account onboarding read surface (account-scoped)', () => {
+  function remoteRegistry(accountIds = [ACCOUNT]) {
+    const { registry, ...resolvers } = makeRegistry()
+    const client = inProcessClient({
+      registry,
+      ...resolvers,
+      scope: { accountIds, userId: USER },
+    })
+    return createRemoteRepositoryRegistry(client) as unknown as Record<
+      string,
+      Record<string, (...args: unknown[]) => Promise<unknown>>
+    >
+  }
+
+  // The two member-level account reads the SPA's account/members + email-settings panels drive.
+  // arg0 is an accountId → the `account` rule (reject out-of-scope as 404). Each stub echoes the
+  // accountId, proving the call reached the bound account.
+  const READS: Array<{ repo: string; method: string }> = [
+    { repo: 'invitationRepository', method: 'listByAccount' },
+    { repo: 'emailConnectionRepository', method: 'getByAccount' },
+  ]
+
+  for (const { repo, method } of READS) {
+    it(`forwards ${repo}.${method} for an in-scope account`, async () => {
+      const result = await remoteRegistry()[repo]![method]!(ACCOUNT)
+      expect(Array.isArray(result) ? result[0] : result).toMatchObject({ accountId: ACCOUNT })
+    })
+
+    it(`rejects ${repo}.${method} for an out-of-scope account (404, no leak)`, async () => {
+      await expect(remoteRegistry()[repo]![method]!(OTHER_ACCOUNT)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  it('still refuses the admin-gated account writes (invite create / email connect off the allow-list)', async () => {
+    // `invitationRepository.create` (inviting members) and `emailConnectionRepository.upsert`
+    // (connecting a provider) are admin-gated in the service layer; the RPC bypasses `requireAdmin`
+    // and the token scopes accounts not roles, so they MUST stay off — never remotely callable.
+    await expect(
+      remoteRegistry().invitationRepository!.create!({ accountId: ACCOUNT }),
+    ).rejects.toThrow(/not callable/)
+    await expect(
+      remoteRegistry().emailConnectionRepository!.upsert!({ accountId: ACCOUNT }),
+    ).rejects.toThrow(/not callable/)
   })
 })

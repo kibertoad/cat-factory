@@ -63,12 +63,12 @@ Locked product decisions:
 
 ## Slice checklist
 
-| Slice                                                                                                                                                                                                                                                                             | Scope                                                        | Status  | PR        |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------- | --------- |
-| 1. Foundation: contracts + persistence + block level + planning-pipeline skeleton (`planner` → gate → `committer`) + Create Initiative button + read-only tracker window                                                                                                          | contracts/kernel/agents/orchestration/server/worker/node/app | ✅ done | (this PR) |
-| 2. Interactive planning: `initiative-interviewer` park/answer/resume loop (model: `ReviewGateController`), `initiative-analyst`, planning window Q&A UI, statuses `planning → awaiting_approval → executing`                                                                      | engine + server + app                                        | ✅ done | (this PR) |
-| 3. Execution loop: `InitiativeLoopService` (tick + `runDue` in BOTH cron seams + terminal pokes in `RunStateMachine.emitInstance` / `mergePr`), JIT spawning with estimate→pipeline rules, reconcile + PR links + tracker re-commit, pause/cancel, `initiative` notification type | engine + both runtimes + app                                 | ⬜ todo | —         |
-| 4. Follow-ups & polish: harvest child-run follow-ups + failure deviations into the tracker, promote-to-item, policy/item editing in the inspector, docs                                                                                                                           | engine + app                                                 | ⬜ todo | —         |
+| Slice                                                                                                                                                                                                                                                                                                           | Scope                                                        | Status  | PR        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------- | --------- |
+| 1. Foundation: contracts + persistence + block level + planning-pipeline skeleton (`planner` → gate → `committer`) + Create Initiative button + read-only tracker window                                                                                                                                        | contracts/kernel/agents/orchestration/server/worker/node/app | ✅ done | (this PR) |
+| 2. Interactive planning: `initiative-interviewer` park/answer/resume loop (model: `ReviewGateController`), `initiative-analyst`, planning window Q&A UI, statuses `planning → awaiting_approval → executing`                                                                                                    | engine + server + app                                        | ✅ done | (this PR) |
+| 3. Execution loop: `InitiativeLoopService` (tick + `runDue` in BOTH cron seams + terminal pokes in `RunStateMachine.emitInstance` / `ExecutionService.finalizeMerge`), JIT spawning with estimate→pipeline rules, reconcile + PR links + tracker re-commit, pause/cancel/resume, `initiative` notification type | engine + both runtimes + app                                 | ✅ done | (this PR) |
+| 4. Follow-ups & polish: harvest child-run follow-ups + failure deviations into the tracker, promote-to-item, policy/item editing in the inspector, docs                                                                                                                                                         | engine + app                                                 | ⬜ todo | —         |
 
 ## Conventions & gotchas carried between iterations
 
@@ -127,6 +127,46 @@ Locked product decisions:
   `analysisSummary` — best-effort (never fails the run). The interviewer/analyst/planner prompts
   read the entity through the agent context (`AgentContextBuilder.resolveInitiativeContext`, wired
   with the initiative repo), so each step is grounded in the prior steps' findings.
+
+### Slice-3 (execution loop) specifics
+
+- **`InitiativeLoopService.tick` is CLAIM-FIRST to avoid orphan double-spawns.** The block id is
+  pre-generated and written onto the item (`applySpawnClaim` → `in_progress` + `blockId`) via the
+  entity CAS BEFORE the task block is inserted or its run started. A concurrent ticker that lost
+  the CAS observes the winner's claim (the transform is a pending-only no-op) and creates nothing.
+  An in-process `Set<initiativeId>` re-entrancy guard serialises a cron sweep and a terminal poke
+  in one process; the CAS is the cross-process backstop. If `executionService.start` throws, the
+  claim is rolled back: a `task_limit_reached` `ConflictError` reverts the item to `pending` (retry
+  next sweep) and STOPS the tick's remaining spawns; any other error blocks the item + notifies.
+- **`listExecuting()` returns `{ workspaceId, initiative }[]`, not `Initiative[]`** — the entity
+  carries no workspace id, so the sweeper read pairs each one with its workspace (mirrors
+  `PipelineScheduleRepository.listDue`). Both facades + the conformance suite assert the pairing.
+- **Terminal pokes are late-bound.** The loop depends on `executionService.start`, so it is built
+  AFTER the engine; the engine's poke reaches it through a mutable `pokeInitiativeLoop` closure set
+  once the loop exists (in `container.ts`). `RunStateMachine.emitInstance` pokes on a terminal
+  child run; `ExecutionService.finalizeMerge` pokes on a merge (the manual-merge path emits no
+  terminal run event). Both fire-and-forget, keyed off the settled block's `initiativeId`.
+- **"Halt the phase, notify" is the blocked-item policy.** A `blocked` item is non-terminal, so
+  `deriveCurrentPhase` keeps its phase current (the initiative never advances past it) AND
+  `phaseIsHalted` stops new spawns in that phase — a human retries/skips the item to unstick it.
+  In-flight siblings finish. Each newly-blocked item records ONE deviation (the active→blocked
+  transition only happens once, so replays don't duplicate) and raises the `initiative` card.
+- **The tracker re-commit is best-effort + hash-short-circuited**, reusing `commitInitiativeTracker`
+  - `markExecuting` (which stamps `doc` without changing an already-`executing` status). It resolves
+    the repo via the same `resolveRunRepoContext` seam the committer uses; a GitHub-unwired workspace
+    simply skips the mirror (the DB entity stays the source of truth). NEVER commit before the DB CAS.
+- **Spawned task blocks are parented under the initiative's service FRAME** (structural containment,
+  `parentId`), linked to the initiative via `initiativeId` (epic-style membership) — NEVER
+  `autoStartDependents` (the loop owns sequencing). The item's planner `estimate` is stamped onto
+  `block.estimate` so downstream estimate-gated steps see it; the pipeline is chosen by
+  `selectInitiativePipeline` (item override → first policy rule matching any axis → default /
+  `strongest`). `defaultPipelineId` + rule/item pipeline ids are validated at ingest
+  (`InitiativeService.assertPipelinesExist`, fails the planning run loudly); a pipeline deleted
+  AFTER ingest is caught at spawn (deviation + notification, never a throw in the sweep).
+- **The loop logic is runtime-neutral** (orchestration), so its behaviour is covered by
+  orchestration unit tests (`initiative.logic.test.ts` + `InitiativeLoopService.test.ts`); the
+  cross-runtime conformance suite covers only the PERSISTED loop state (item blockId/pr/blocked +
+  deviations + `paused`, and the `listExecuting` workspace pairing), which is the drift risk.
 
 ## Out of scope
 

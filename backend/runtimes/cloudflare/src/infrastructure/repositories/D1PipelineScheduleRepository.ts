@@ -24,6 +24,7 @@ interface ScheduleRow {
   window_end_hour: number | null
   timezone: string
   enabled: number
+  on_demand: number
   last_run_at: number | null
   next_run_at: number
   created_at: number
@@ -56,6 +57,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
     template: row.template as ScheduleTemplate,
     name: row.name,
     recurrence,
+    onDemand: row.on_demand === 1,
     enabled: row.enabled === 1,
     lastRunAt: row.last_run_at,
     nextRunAt: row.next_run_at,
@@ -149,7 +151,7 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
     const { results } = await this.db
       .prepare(
         `SELECT * FROM pipeline_schedules
-           WHERE enabled = 1 AND next_run_at <= ?
+           WHERE enabled = 1 AND on_demand = 0 AND next_run_at <= ?
            ORDER BY next_run_at ASC`,
       )
       .bind(asOf)
@@ -164,8 +166,8 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
         `INSERT INTO pipeline_schedules
            (workspace_id, id, service_id, block_id, frame_id, pipeline_id, template, name,
             interval_hours, weekdays, window_start_hour, window_end_hour, timezone, enabled,
-            last_run_at, next_run_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            on_demand, last_run_at, next_run_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            service_id = excluded.service_id,
            block_id = excluded.block_id,
@@ -179,6 +181,7 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
            window_end_hour = excluded.window_end_hour,
            timezone = excluded.timezone,
            enabled = excluded.enabled,
+           on_demand = excluded.on_demand,
            last_run_at = excluded.last_run_at,
            next_run_at = excluded.next_run_at`,
       )
@@ -197,6 +200,7 @@ export class D1PipelineScheduleRepository implements PipelineScheduleRepository 
         r.windowEndHour,
         r.timezone,
         schedule.enabled ? 1 : 0,
+        schedule.onDemand ? 1 : 0,
         schedule.lastRunAt,
         schedule.nextRunAt,
         schedule.createdAt,

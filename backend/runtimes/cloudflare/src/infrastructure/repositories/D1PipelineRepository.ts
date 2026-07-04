@@ -33,7 +33,7 @@ export class D1PipelineRepository implements PipelineRepository {
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, labels, archived, builtin, version, public) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO pipelines (workspace_id, id, name, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, labels, archived, builtin, version, public, availability) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         workspaceId,
@@ -52,6 +52,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.builtin ? 1 : null,
         pipeline.version ?? null,
         pipeline.public ? 1 : null,
+        pipeline.availability ?? null,
       )
       .run()
   }
@@ -62,7 +63,7 @@ export class D1PipelineRepository implements PipelineRepository {
     // `version` IS rewritten so a reseed bumps the stored copy to the current catalog version.
     await this.db
       .prepare(
-        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, follow_ups = ?, tester_quality = ?, labels = ?, archived = ?, version = ?, public = ? WHERE workspace_id = ? AND id = ?',
+        'UPDATE pipelines SET name = ?, agent_kinds = ?, gates = ?, thresholds = ?, enabled = ?, consensus = ?, gating = ?, follow_ups = ?, tester_quality = ?, labels = ?, archived = ?, version = ?, public = ?, availability = ? WHERE workspace_id = ? AND id = ?',
       )
       .bind(
         pipeline.name,
@@ -78,6 +79,7 @@ export class D1PipelineRepository implements PipelineRepository {
         pipeline.archived ? 1 : null,
         pipeline.version ?? null,
         pipeline.public ? 1 : null,
+        pipeline.availability ?? null,
         workspaceId,
         pipeline.id,
       )

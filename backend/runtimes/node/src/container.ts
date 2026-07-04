@@ -2421,6 +2421,28 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // secrets-delegation slice), like the environment registry above.
     dependencies.customManifestTypeRepository =
       remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
+    // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
+    // by `selectNodeFragmentLibraryDeps`) — its management surface (list/create/update/delete
+    // fragments + list/link sources) is served remotely so the library panels are functional in
+    // mothership mode; rows carry no secrets, and the RPC allow-list gates each method by its
+    // `(ownerKind, ownerId)` scope. Repo-SYNC (the source service's GitHub reads) stays
+    // db-direct/off — the mothership owns GitHub sync.
+    //
+    // Route only when the library is ALREADY configured (`config.fragmentLibrary.enabled` — else
+    // these are absent). UNLIKE the document/task/env repos above (whose modules need extra deps,
+    // so setting the repo alone leaves the module off), the fragment module assembles from
+    // `promptFragmentRepository` ALONE — so unconditionally setting it would spuriously turn the
+    // module ON and force fragment resolution on EVERY run against a mothership that may not wire
+    // the repo. Overriding in place preserves the "module only when configured" gate while swapping
+    // the (db-less, broken) Drizzle repo for the remote one.
+    if (dependencies.promptFragmentRepository) {
+      dependencies.promptFragmentRepository =
+        remoteRepos.promptFragmentRepository as CoreDependencies['promptFragmentRepository']
+    }
+    if (dependencies.fragmentSourceRepository) {
+      dependencies.fragmentSourceRepository =
+        remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
+    }
   }
 
   return {
@@ -2446,6 +2468,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repositories: {
       ...dependencies,
       agentRunRepository: repos.agentRunRepository,
+      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+      // local; only the metadata is proxied.
+      binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.

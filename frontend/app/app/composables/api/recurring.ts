@@ -21,7 +21,7 @@ import type { ApiContext, Position } from './context'
 type CreateScheduleBody = NonNullable<SendParams<typeof createScheduleContract>['body']>
 
 /** Recurring (scheduled) pipelines + the in-org shared-service mount catalog. */
-export function recurringApi({ send, ws }: ApiContext) {
+export function recurringApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
   return {
     // ---- recurring pipelines (scheduled runs against a service) -----------
     listRecurringPipelines: (workspaceId: string) =>
@@ -46,8 +46,13 @@ export function recurringApi({ send, ws }: ApiContext) {
         pathParams: { scheduleId: id },
       }),
 
-    runScheduleNow: (workspaceId: string, id: string) =>
-      send(runScheduleNowContract, { pathPrefix: ws(workspaceId), pathParams: { scheduleId: id } }),
+    // On-demand schedules may target an individual-usage model, so run-now carries the
+    // initiator's personal password (like a manual start) — prompted + retried on a 428.
+    runScheduleNow: (workspaceId: string, id: string, password?: string) =>
+      sendWith(pwHeaders(password), runScheduleNowContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { scheduleId: id },
+      }),
 
     // ---- in-org shared services (mount/unmount + org catalog) -------------
     // The services this workspace mounts, and the org catalog it can mount from. A 503

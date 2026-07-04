@@ -84,3 +84,36 @@ export const proceedInitiativePlanningContract = defineApiContract({
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
 })
+
+// ---- Execution loop controls (slice 3) -------------------------------------
+// Human controls over an executing initiative's loop. Each returns the updated initiative so
+// the SPA patches its cache (the live `initiative` event carries the same entity). `null` is
+// returned only when the block has no initiative (unchanged/no-op transitions still echo the
+// current entity).
+
+/** Pause an executing initiative — the loop stops spawning; in-flight tasks finish naturally. */
+export const pauseInitiativeContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative/pause`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: v.nullable(initiativeSchema), ...errorResponses },
+})
+
+/** Resume a paused initiative back to executing (the next sweep picks it up). */
+export const resumeInitiativeContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative/resume`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: v.nullable(initiativeSchema), ...errorResponses },
+})
+
+/** Cancel an initiative — the loop stops spawning further work (in-flight tasks are left to finish). */
+export const cancelInitiativeContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: blockIdParams,
+  pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative/cancel`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: v.nullable(initiativeSchema), ...errorResponses },
+})

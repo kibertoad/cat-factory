@@ -1,11 +1,14 @@
 import {
   answerInitiativeQuestionContract,
+  cancelInitiativeContract,
   continueInitiativePlanningContract,
   createInitiativeContract,
   getInitiativeByBlockContract,
   getInitiativeContract,
   listInitiativesContract,
+  pauseInitiativeContract,
   proceedInitiativePlanningContract,
+  resumeInitiativeContract,
 } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
@@ -53,5 +56,15 @@ export function initiativeApi({ send, ws }: ApiContext) {
         pathPrefix: ws(workspaceId),
         pathParams: { blockId },
       }),
+
+    // Execution-loop controls (slice 3): pause / resume / cancel an executing initiative.
+    pauseInitiative: (workspaceId: string, blockId: string) =>
+      send(pauseInitiativeContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    resumeInitiative: (workspaceId: string, blockId: string) =>
+      send(resumeInitiativeContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    cancelInitiative: (workspaceId: string, blockId: string) =>
+      send(cancelInitiativeContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
   }
 }

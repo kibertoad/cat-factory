@@ -132,6 +132,28 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     }
   }
 
+  /** True while a loop control (pause/resume/cancel) is in flight. */
+  const controlling = ref(false)
+
+  /** Pause / resume / cancel an executing initiative's loop. Applies the returned entity. */
+  async function control(blockId: string, action: 'pause' | 'resume' | 'cancel') {
+    if (!workspace.workspaceId) throw new Error('No active workspace')
+    controlling.value = true
+    try {
+      const call =
+        action === 'pause'
+          ? api.pauseInitiative
+          : action === 'resume'
+            ? api.resumeInitiative
+            : api.cancelInitiative
+      const updated = await call(workspace.workspaceId, blockId)
+      if (updated) upsert(updated)
+      return updated
+    } finally {
+      controlling.value = false
+    }
+  }
+
   function reset() {
     byBlock.value = {}
   }
@@ -142,6 +164,7 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     all,
     creating,
     resuming,
+    controlling,
     forBlock,
     hydrate,
     upsert,
@@ -150,6 +173,7 @@ export const useInitiativesStore = defineStore('initiatives', () => {
     answerQuestion,
     continuePlanning,
     proceedPlanning,
+    control,
     reset,
   }
 })

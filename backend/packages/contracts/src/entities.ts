@@ -593,8 +593,20 @@ export const pipelineSchema = v.object({
    * pipeline for the first public entry.
    */
   public: v.optional(v.boolean()),
+  /**
+   * How this pipeline may be LAUNCHED: `'one-off'` (only as a manual task), `'recurring'`
+   * (only attached to a schedule), or `'both'`. Absent means `'both'` — pre-1.0, no
+   * migration/back-fill, so existing rows read as unrestricted. Enforced server-side in
+   * {@link ExecutionService.start} (via the run `origin`) and in `RecurringPipelineService`,
+   * and used by the SPA pickers to filter the offered pipelines. A `bug-intake` step is
+   * meaningless without a schedule, so a pipeline carrying one must be `'recurring'`.
+   */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
+export type PipelineAvailability = NonNullable<Pipeline['availability']>
 
 export const decisionSchema = v.object({
   id: v.string(),

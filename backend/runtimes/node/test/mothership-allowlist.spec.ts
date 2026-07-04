@@ -107,12 +107,15 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     linkIdentity: 'onboarding',
     listIdentities: 'pending',
   },
+  // `listByAccount` is now allow-listed (the account members panel's pending-invite read,
+  // member-level). The lifecycle WRITES `create`/`setStatus` are admin-gated (inviting/revoking
+  // members), and `get`/`findByTokenHash` are the pre-auth accept-invite lookups (never a
+  // scoped-token call) — all stay mothership-internal.
   invitationRepository: {
-    create: 'pending',
+    create: 'admin',
     get: 'pending',
     findByTokenHash: 'pending',
-    listByAccount: 'pending',
-    setStatus: 'pending',
+    setStatus: 'admin',
   },
   passwordResetTokenRepository: {
     create: 'pending',
@@ -122,7 +125,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     consume: 'pending',
     deleteExpired: 'sweeper',
   },
-  emailConnectionRepository: { getByAccount: 'pending', upsert: 'pending', softDelete: 'pending' },
+  // `getByAccount` is now allow-listed (the email-settings panel's member-level read; the record's
+  // provider key rides a SEALED `apiKeyCipher` blob, so no plaintext crosses the machine API).
+  // `upsert`/`softDelete` (connect/disconnect) are admin-gated → stay mothership-internal.
+  emailConnectionRepository: { upsert: 'admin', softDelete: 'admin' },
   // `countActiveInternal` (the public API's initiative-start concurrency backstop, a
   // workspace-scoped SQL COUNT) is org/durable and REMOTE-eligible, but proxying the public-API
   // path is a later mothership slice, so it stays pending until then, like `listByService`.
@@ -149,13 +155,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listByExecution: 'pending',
     deleteOlderThan: 'sweeper',
   },
+  // The visual-confirmation gate's artifact METADATA surface is now allow-listed (insert/get/
+  // listByExecution/countByExecution/listByBlock/delete — the controllers + gate reads/writes);
+  // only the retention sweep stays mothership-internal (the mothership owns durable-state
+  // retention). The blob BYTES never cross the machine API — they live in the per-account backend.
   binaryArtifactMetadataStore: {
-    insert: 'pending',
-    get: 'pending',
-    listByExecution: 'pending',
-    countByExecution: 'pending',
-    listByBlock: 'pending',
-    delete: 'pending',
     listOlderThan: 'sweeper',
     deleteOlderThan: 'sweeper',
   },
@@ -176,10 +180,10 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `put` is now allow-listed (the tracker-settings editor); `get` was already remote.
   trackerSettingsRepository: {},
   serviceRepository: {
-    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock` are allow-listed (the org-catalog mount
-    // flow + board composition + run-path frame resolution). The remaining CRUD + `getByRepo`
-    // (the GitHub-sync repo→service link) stay off the SPA path — a later slice.
-    listByFrameBlocks: 'pending',
+    // `get`/`listByIds`/`listByAccount`/`getByFrameBlock`/`listByFrameBlocks` are allow-listed (the
+    // org-catalog mount flow + board composition + run-path frame resolution + the batched
+    // duplicate-service / frame-deletion read). The remaining CRUD + `getByRepo` (the GitHub-sync
+    // repo→service link) stay off the SPA path — a later slice.
     getByRepo: 'pending',
     insert: 'pending',
     update: 'pending',
@@ -262,11 +266,12 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     softDelete: 'pending',
   },
   serviceFrameRepository: { getByFrameBlock: 'pending' },
-  runnerPoolConnectionRepository: {
-    getByWorkspace: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
-  },
+  // The whole self-hosted runner-backend connection surface is now remote (the runner-pool
+  // settings panel's connect/rotate/disconnect): getByWorkspace/softDelete via the `workspace`
+  // rule, the record-based `upsert` via the `workspaceField` rule. Its credentials ride a SEALED
+  // `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key), so no plaintext
+  // crosses the machine API — the same precedent as the observability / environment connections.
+  runnerPoolConnectionRepository: {},
   documentRepository: { upsert: 'pending', listByWorkspace: 'pending', linkBlock: 'pending' },
   documentConnectionRepository: {
     decodeCredentials: 'helper',
@@ -298,18 +303,19 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     upsert: 'local',
     remove: 'local',
   },
+  // `listByOwner`/`upsert` are now allow-listed (the fragment-source library's list + link, owner
+  // scoped). The `sourceId`-keyed `get`/`updateSyncState`/`softDelete` back the repo-SYNC management
+  // the mothership owns (its source service needs a GitHub client a mothership node lacks) — they
+  // stay pending until a GitHub-sync-in-mothership slice adds a source→owner resolver.
   fragmentSourceRepository: {
-    listByOwner: 'pending',
     get: 'pending',
-    upsert: 'pending',
     updateSyncState: 'pending',
     softDelete: 'pending',
   },
+  // `listByOwner`/`get`/`upsert`/`softDelete` are now allow-listed (the prompt-fragment library
+  // management surface, owner scoped, member-level, no secrets). The `sourceId`-keyed `listBySource`
+  // is the repo-sync fan-out read (mothership-owned sync) — stays pending.
   promptFragmentRepository: {
-    listByOwner: 'pending',
-    get: 'pending',
-    upsert: 'pending',
-    softDelete: 'pending',
     listBySource: 'pending',
   },
   notificationRepository: {},

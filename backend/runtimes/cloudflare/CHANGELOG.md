@@ -1,5 +1,182 @@
 # @cat-factory/worker
 
+## 0.61.0
+
+### Minor Changes
+
+- 1d738f7: feat(recurring): on-demand (manual-only) recurring tasks that can use individual-usage subscriptions
+
+  A recurring pipeline can now be flagged **on-demand**: it has no cadence and is never
+  fired by the sweeper — it runs ONLY when a person triggers it via "run now". Because a
+  human is present at every fire, an on-demand schedule's block MAY target an individual-usage
+  subscription model (Claude / Codex / GLM), unlocked per run-now with the initiator's personal
+  password exactly like a manual task start. A cadence schedule still refuses individual-usage
+  models (no one is present to unlock them unattended).
+
+  - New `onDemand` flag on `PipelineSchedule` + `createScheduleSchema` (recurrence is now
+    optional — an on-demand schedule needs none). Persisted as an `on_demand` column on both
+    runtimes (D1 migration `0037` ⇄ Drizzle), with `listDue` filtering `on_demand = 0` so the
+    sweeper skips them. Cross-runtime conformance asserts the flag round-trips and run-now fires.
+  - `RecurringPipelineService.fire` exempts on-demand schedules from the individual-usage
+    refusal and threads the run-now initiator + credential-activation closure into the run;
+    the run-now controller resolves the personal-credential gate (428 when a password is needed).
+  - Frontend: an "on-demand" toggle in the add-recurring modal (hides the cadence editor), an
+    on-demand inspector view (no cadence/pause, just run-now), and run-now now rides the cached
+    personal password through the credential modal. i18n in all 8 locales.
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/orchestration@0.66.0
+  - @cat-factory/server@0.77.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/consensus@0.8.27
+  - @cat-factory/gates@0.2.82
+  - @cat-factory/gitlab@0.6.6
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/prompt-fragments@0.9.52
+  - @cat-factory/spend@0.10.86
+  - @cat-factory/provider-cloudflare@0.7.132
+  - @cat-factory/observability-langfuse@0.7.125
+
+## 0.60.0
+
+### Minor Changes
+
+- 47a2975: Initiatives slice 3 — the execution loop.
+
+  An approved initiative plan now RUNS: a new `InitiativeLoopService` drives each `executing`
+  initiative — reconciling its spawned tasks, spawning the next wave just-in-time, and completing
+  the initiative once every tracker item settles.
+
+  - **The loop** (`orchestration/modules/initiative/InitiativeLoopService.ts`): per-initiative
+    `tick` = reconcile (fold each spawned task block's status back onto its item — done + PR link /
+    `pr_open` / `blocked` + deviation, one batched block read, no N+1) → complete (all items settled
+    → initiative + anchor block `done`, tracker re-commit, notify) → spawn (create task blocks for
+    the eligible `pending` items — current phase, deps met, phase not halted — up to the concurrency
+    cap, each pipeline chosen by the policy's estimate→pipeline rules). Spawning is CLAIM-FIRST (a
+    rev-CAS write records the pre-generated block id before any side effect), so a concurrent ticker
+    never orphans a double-spawn. A per-service task-limit conflict leaves the item `pending` for the
+    next sweep; a missing pipeline (deleted after ingest) records a deviation + notification and
+    blocks the item — the sweep never throws.
+  - **Blocked = halt the phase, notify.** A blocked item stops new spawns in its phase (and keeps the
+    phase current, so the initiative never advances past it) and raises the new `initiative`
+    notification type; in-flight siblings finish. A human retries/skips the item to unblock.
+  - **Both cron seams + terminal pokes.** `runDue` is wired into the Worker `scheduled` handler and a
+    Node one-minute interval sweeper (symmetric). A settling child run pokes its owning initiative's
+    loop immediately (`RunStateMachine.emitInstance` on a terminal run, `ExecutionService.finalizeMerge`
+    on a merge), so work advances without waiting for the next sweep.
+  - **Controls.** Pause / resume / cancel endpoints + `InitiativeService` CAS transitions; the sweep
+    skips a non-`executing` initiative. The tracker window gains a live progress bar and the inspector
+    the loop controls (`initiative.inspector.pause/resume/cancel`, all locales).
+  - **`listExecuting()` now returns `{ workspaceId, initiative }[]`** (the entity carries no workspace
+    id) — mirrored in the D1 + Drizzle repos and asserted, with the persisted loop-state round-trip,
+    by the cross-runtime conformance suite.
+
+  No new persistence (the `initiatives` table already exists on both facades) — so no D1/Drizzle
+  migration and no executor-harness image bump.
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/integrations@0.60.0
+  - @cat-factory/orchestration@0.65.0
+  - @cat-factory/server@0.76.0
+  - @cat-factory/agents@0.30.1
+  - @cat-factory/consensus@0.8.26
+  - @cat-factory/gates@0.2.81
+  - @cat-factory/gitlab@0.6.5
+  - @cat-factory/prompt-fragments@0.9.51
+  - @cat-factory/spend@0.10.85
+  - @cat-factory/observability-langfuse@0.7.124
+  - @cat-factory/provider-cloudflare@0.7.131
+
+## 0.59.2
+
+### Patch Changes
+
+- 0477068: Mothership mode: widen the persistence-RPC allow-list to four more repository surfaces (the
+  prompt-fragment library + two account-onboarding reads) so mothership-mode local nodes can drive
+  them against a hosted mothership. Adds two new scope rules, `owner` (an `(ownerKind, ownerId)`
+  positional pair) and `ownerField` (the same as record fields on `upsert`), which resolve a
+  `workspace` owner to its account and take an `account` owner as the accountId directly — so a
+  machine token scoped to one account can never read/write another tenant's rows.
+
+  - `promptFragmentRepository` — the tenant-scoped prompt-fragment library management surface
+    (`listByOwner`/`get`/`softDelete` via the `owner` rule, `upsert` via `ownerField`). Rows carry no
+    secrets and both tiers are member-level (account-tier routes guard on `requireMember`, not
+    `requireAdmin`). The `sourceId`-keyed `listBySource` (repo-sync fan-out) stays mothership-internal.
+  - `fragmentSourceRepository` — the fragment-source library list + link (`listByOwner` via `owner`,
+    `upsert` via `ownerField`). The `sourceId`-keyed `get`/`updateSyncState`/`softDelete` stay off —
+    they back the repo-sync the mothership owns (its source service needs a GitHub client a mothership
+    node lacks). Node routes both fragment repos through the `pickRepoSource`/`if (remoteRepos)` seam
+    ONLY when the library is configured, so the module isn't spuriously turned on in mothership mode.
+  - `invitationRepository.listByAccount` — the account members panel's pending-invite read (member-level,
+    `account` rule). Invite `create`/`setStatus` (admin-gated) + the pre-auth `findByTokenHash`/`get`
+    accept-invite lookups stay off.
+  - `emailConnectionRepository.getByAccount` — the email-settings panel read (member-level, `account`
+    rule). Its provider key rides a sealed `apiKeyCipher` blob (the repo never decrypts), so no
+    plaintext crosses the machine API. Connect/disconnect (`upsert`/`softDelete`, admin-gated) stay off.
+
+- Updated dependencies [0477068]
+  - @cat-factory/server@0.75.2
+
+## 0.59.1
+
+### Patch Changes
+
+- 4a59f45: Mothership mode: widen the persistence-RPC allow-list to three more repository surfaces so
+  mothership-mode local nodes can drive them against a hosted mothership.
+
+  - `runnerPoolConnectionRepository` (whole repo) — the self-hosted runner-backend connection
+    settings panel (`getByWorkspace`/`softDelete` via the `workspace` rule, the record-based
+    `upsert` via `workspaceField`). Credentials ride a sealed `secretsCipher` blob, so no plaintext
+    crosses the machine API (the observability/environment-connection precedent).
+  - `binaryArtifactMetadataStore` (metadata surface) — the visual-confirmation gate's artifact
+    metadata (`insert` via `workspaceField`; `get`/`listByExecution`/`countByExecution`/`listByBlock`/
+    `delete` via `workspace`). The blob BYTES stay per-account local; only the metadata is proxied,
+    and the retention sweep stays mothership-internal. It is folded into both facades' reflected
+    `repositories` registry (it isn't a `CoreDependencies` member).
+  - `serviceRepository.listByFrameBlocks` — the batched board-composition / frame-deletion read, via
+    the `blockList` scope kind.
+
+- Updated dependencies [4a59f45]
+  - @cat-factory/server@0.75.1
+
+## 0.59.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/orchestration@0.64.0
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+  - @cat-factory/integrations@0.59.0
+  - @cat-factory/agents@0.30.0
+  - @cat-factory/server@0.75.0
+  - @cat-factory/consensus@0.8.25
+  - @cat-factory/gates@0.2.80
+  - @cat-factory/gitlab@0.6.4
+  - @cat-factory/prompt-fragments@0.9.50
+  - @cat-factory/spend@0.10.84
+  - @cat-factory/observability-langfuse@0.7.123
+  - @cat-factory/provider-cloudflare@0.7.130
+
 ## 0.58.2
 
 ### Patch Changes

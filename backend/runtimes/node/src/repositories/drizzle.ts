@@ -455,6 +455,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
       builtin: pipeline.builtin ? 1 : null,
       version: pipeline.version ?? null,
       public: pipeline.public ? 1 : null,
+      availability: pipeline.availability ?? null,
     })
   }
 
@@ -478,6 +479,7 @@ class DrizzlePipelineRepository implements PipelineRepository {
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,
         public: pipeline.public ? 1 : null,
+        availability: pipeline.availability ?? null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
@@ -1912,6 +1914,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
     template: row.template as ScheduleTemplate,
     name: row.name,
     recurrence,
+    onDemand: row.on_demand === 1,
     enabled: row.enabled === 1,
     lastRunAt: row.last_run_at,
     nextRunAt: row.next_run_at,
@@ -1960,6 +1963,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
       window_end_hour: r.windowEndHour,
       timezone: r.timezone,
       enabled: schedule.enabled ? 1 : 0,
+      on_demand: schedule.onDemand ? 1 : 0,
       last_run_at: schedule.lastRunAt,
       next_run_at: schedule.nextRunAt,
       created_at: schedule.createdAt,
@@ -2024,7 +2028,13 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     const rows = await this.db
       .select()
       .from(pipelineSchedules)
-      .where(and(eq(pipelineSchedules.enabled, 1), lt(pipelineSchedules.next_run_at, asOf + 1)))
+      .where(
+        and(
+          eq(pipelineSchedules.enabled, 1),
+          eq(pipelineSchedules.on_demand, 0),
+          lt(pipelineSchedules.next_run_at, asOf + 1),
+        ),
+      )
       .orderBy(pipelineSchedules.next_run_at)
     return rows.map((row) => ({ workspaceId: row.workspace_id, schedule: rowToSchedule(row) }))
   }
@@ -2049,6 +2059,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
           window_end_hour: values.window_end_hour,
           timezone: values.timezone,
           enabled: values.enabled,
+          on_demand: values.on_demand,
           last_run_at: values.last_run_at,
           next_run_at: values.next_run_at,
         },
@@ -3122,13 +3133,18 @@ export class DrizzleInitiativeRepository implements InitiativeRepository {
     return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
   }
 
-  async listExecuting(): Promise<Initiative[]> {
+  async listExecuting(): Promise<Array<{ workspaceId: string; initiative: Initiative }>> {
     const rows = await this.db
       .select()
       .from(initiatives)
       .where(eq(initiatives.status, 'executing'))
       .orderBy(asc(initiatives.created_at))
-    return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
+    return rows
+      .map((row) => {
+        const initiative = rowToInitiative(row)
+        return initiative ? { workspaceId: row.workspace_id, initiative } : null
+      })
+      .filter((r): r is { workspaceId: string; initiative: Initiative } => r !== null)
   }
 
   async insert(workspaceId: string, initiative: Initiative): Promise<void> {

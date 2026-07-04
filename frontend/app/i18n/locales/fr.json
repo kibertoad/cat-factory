@@ -196,7 +196,9 @@
       "linearTeamId": "ID d’équipe Linear",
       "footerHint": "Une seule tâche récurrente est ajoutée dans le service ; chaque exécution remplace la précédente. Son historique d’exécutions est visible dans l’inspecteur.",
       "submit": "Ajouter la pipeline récurrente",
-      "addFailedTitle": "Impossible d’ajouter la pipeline récurrente"
+      "addFailedTitle": "Impossible d’ajouter la pipeline récurrente",
+      "onDemand": "À la demande (manuel uniquement)",
+      "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel."
     },
     "failure": {
       "containerFailedToStart": "Le conteneur n’a pas pu démarrer",
@@ -438,7 +440,9 @@
         "skipped": "Ignoré"
       },
       "updateFailed": "Impossible de mettre à jour la planification",
-      "runNowFailed": "Impossible d'exécuter maintenant"
+      "runNowFailed": "Impossible d'exécuter maintenant",
+      "onDemand": "À la demande",
+      "onDemandHint": "Manuel uniquement. S'exécute lorsque vous le déclenchez et peut utiliser un modèle d'abonnement à usage individuel."
     },
     "fragments": {
       "serviceTitle": "Bonnes pratiques du service",
@@ -1294,6 +1298,7 @@
         "visual_confirmation_ready": "Marquer comme lu",
         "human_review": "Marquer comme lu",
         "followup_pending": "Marquer comme lu",
+        "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu"
       },
       "toast": {
@@ -2549,7 +2554,8 @@
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
       "human_test_ready": "Pret pour les tests humains",
-      "visual_confirmation_ready": "Pret pour la confirmation visuelle"
+      "visual_confirmation_ready": "Pret pour la confirmation visuelle",
+      "initiative": "Mises a jour de l'initiative"
     },
     "role": {
       "engineering": "Ingenierie",
@@ -4021,6 +4027,9 @@
     "inspector": {
       "runPlanning": "Lancer la planification",
       "answerPlanning": "Repondre aux questions de planification",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "cancel": "Annuler l'initiative",
       "hint": "Le pipeline de planification explore le code, redige le plan multiphase pour approbation, puis valide le document de suivi dans le depot."
     },
     "planning": {

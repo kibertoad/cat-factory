@@ -1,5 +1,79 @@
 # @cat-factory/local-server
 
+## 0.41.4
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/orchestration@0.66.0
+  - @cat-factory/server@0.77.0
+  - @cat-factory/node-server@0.67.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/gitlab@0.6.6
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.3
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/integrations@0.60.0
+  - @cat-factory/orchestration@0.65.0
+  - @cat-factory/server@0.76.0
+  - @cat-factory/node-server@0.66.0
+  - @cat-factory/agents@0.30.1
+  - @cat-factory/gitlab@0.6.5
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.2
+
+### Patch Changes
+
+- Updated dependencies [0477068]
+  - @cat-factory/server@0.75.2
+  - @cat-factory/node-server@0.65.2
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.1
+
+### Patch Changes
+
+- Updated dependencies [4a59f45]
+  - @cat-factory/server@0.75.1
+  - @cat-factory/node-server@0.65.1
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/orchestration@0.64.0
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+  - @cat-factory/integrations@0.59.0
+  - @cat-factory/agents@0.30.0
+  - @cat-factory/server@0.75.0
+  - @cat-factory/node-server@0.65.0
+  - @cat-factory/executor-harness@1.34.4
+  - @cat-factory/gitlab@0.6.4
+
 ## 0.40.8
 
 ### Patch Changes

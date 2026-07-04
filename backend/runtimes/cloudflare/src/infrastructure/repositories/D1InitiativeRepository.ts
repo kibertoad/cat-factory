@@ -56,11 +56,16 @@ export class D1InitiativeRepository implements InitiativeRepository {
     return (results ?? []).map(rowToInitiative).filter((i): i is Initiative => i !== null)
   }
 
-  async listExecuting(): Promise<Initiative[]> {
+  async listExecuting(): Promise<Array<{ workspaceId: string; initiative: Initiative }>> {
     const { results } = await this.db
       .prepare("SELECT * FROM initiatives WHERE status = 'executing' ORDER BY created_at")
       .all<InitiativeRow>()
-    return (results ?? []).map(rowToInitiative).filter((i): i is Initiative => i !== null)
+    return (results ?? [])
+      .map((row) => {
+        const initiative = rowToInitiative(row)
+        return initiative ? { workspaceId: row.workspace_id, initiative } : null
+      })
+      .filter((r): r is { workspaceId: string; initiative: Initiative } => r !== null)
   }
 
   async insert(workspaceId: string, initiative: Initiative): Promise<void> {

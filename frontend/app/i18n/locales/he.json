@@ -196,7 +196,9 @@
       "linearTeamId": "מזהה צוות Linear",
       "footerHint": "משימה מחזורית אחת נוספת בתוך השירות; כל ריצה מחליפה את הקודמת. היסטוריית הריצות שלה מוצגת במפקח.",
       "submit": "הוסף צינור מחזורי",
-      "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי"
+      "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי",
+      "onDemand": "לפי דרישה (ידני בלבד)",
+      "onDemandHint": "רץ רק כשאתה מפעיל אותו, ללא תזמון. מכיוון שאתה נוכח בכל פעם, המשימה יכולה להשתמש במודל מנוי לשימוש אישי."
     },
     "failure": {
       "containerFailedToStart": "מכל הקונטיינר נכשל בהפעלה",
@@ -438,7 +440,9 @@
         "skipped": "דולג"
       },
       "updateFailed": "לא ניתן לעדכן את לוח הזמנים",
-      "runNowFailed": "לא ניתן להריץ עכשיו"
+      "runNowFailed": "לא ניתן להריץ עכשיו",
+      "onDemand": "לפי דרישה",
+      "onDemandHint": "ידני בלבד. רץ כשאתה מפעיל אותו, ויכול להשתמש במודל מנוי לשימוש אישי."
     },
     "fragments": {
       "serviceTitle": "מומלצות עבודה לשירות",
@@ -1294,6 +1298,7 @@
         "visual_confirmation_ready": "סמן כנקרא",
         "human_review": "סמן כנקרא",
         "followup_pending": "סמן כנקרא",
+        "initiative": "סמן כנקרא",
         "markRead": "סמן כנקרא"
       },
       "toast": {
@@ -2560,7 +2565,8 @@
       "clarity_review": "סקירת בהירות",
       "release_regression": "רגרסיית שחרור",
       "human_test_ready": "מוכן לבדיקה אנושית",
-      "visual_confirmation_ready": "מוכן לאישור חזותי"
+      "visual_confirmation_ready": "מוכן לאישור חזותי",
+      "initiative": "עדכוני יוזמה"
     },
     "role": {
       "engineering": "הנדסה",
@@ -4032,6 +4038,9 @@
     "inspector": {
       "runPlanning": "הרצת תכנון",
       "answerPlanning": "מענה על שאלות התכנון",
+      "pause": "השהה",
+      "resume": "המשך",
+      "cancel": "ביטול היוזמה",
       "hint": "צינור התכנון חוקר את הקוד, מנסח את התוכנית הרב-שלבית לאישור, ואז שומר את מסמך המעקב במאגר."
     },
     "planning": {
