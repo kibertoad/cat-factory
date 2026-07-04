@@ -63,7 +63,7 @@ token})` + `writeCheckoutFile(project, relPath, content)`, mirroring the optiona
 | 0   | Tracker doc                                                                                                                                                    | ✅ done | (this) |
 | 1   | **PILOT**: contracts flag + shared mode-aware predicates + `ComposeRuntime.checkout` (local impl) + `req.clone` sync seam + provider build branch + unit tests | ✅ done |        |
 | 2   | Content-aware autodetection (`findCompose`/`composeRecommendation` set `composeBuild`)                                                                         | ✅ done |        |
-| 3   | UI: `build` describeConfig field + `InfraHandlersConfigurator` compose form + i18n parity                                                                      | ⬜ todo |        |
+| 3   | UI: `build` describeConfig field (renders in the connect form) + i18n parity (7 locales)                                                                      | ✅ done |        |
 | 4   | Conformance (fake-runtime checkout/build recording + build-path assertion) + docs                                                                              | ⬜ todo |        |
 
 ## Conventions / gotchas carried between iterations
@@ -93,3 +93,9 @@ token})` + `writeCheckoutFile(project, relPath, content)`, mirroring the optiona
 Private-registry auth for build-mode base images (gap 8); a PR-close/merge teardown webhook
 (gap 7 — envs still teardown via the TTL sweep / on-demand / gate-close); build mode on the
 Worker or plain-Node facades (no local daemon).
+
+The compose config (service / port / image source) surfaces through the descriptor-driven
+provider connect form (`describeConfig` → `ProviderConnectionTab.vue`); the per-type
+`InfraHandlersConfigurator` keeps its connection-less info block (docker-compose is served by the
+runtime's local Docker), now pointing at the service's environment settings. A dedicated per-type
+compose form there remains an optional follow-up.

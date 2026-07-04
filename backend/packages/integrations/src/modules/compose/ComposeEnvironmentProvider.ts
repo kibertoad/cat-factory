@@ -240,7 +240,24 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         label: 'Container port',
         required: true,
         placeholder: '8080',
-        help: 'The in-container port to publish to an ephemeral host port + probe. Image-based stacks only (v1) — a service that builds from source is not yet supported.',
+        help: 'The in-container port to publish to an ephemeral host port + probe.',
+      },
+      {
+        key: 'build',
+        label: 'Image source',
+        type: 'select',
+        default: 'false',
+        options: [
+          { value: 'false', label: 'Pull pre-built images' },
+          { value: 'true', label: 'Build from source (clone the PR head)' },
+        ],
+        help: 'Build from source clones the PR head into a working tree and runs `docker compose build`, so `build:` contexts, in-checkout bind mounts, and relative env_files resolve. Requires a Docker-capable (local) deployment.',
+      },
+      {
+        key: 'buildTimeoutMinutes',
+        label: 'Build timeout (minutes)',
+        default: '15',
+        help: 'Build-from-source only: how long `docker compose build` may run before it is aborted (separate from the startup health-wait).',
       },
       { key: 'scheme', label: 'URL scheme', default: 'http' },
       {

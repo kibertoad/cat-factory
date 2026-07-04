@@ -1612,9 +1612,10 @@
         "kubernetes": "אשכול Kubernetes",
         "kubernetesDesc": "הקצה מרחב שמות לכל PR באשכול Kubernetes שאתה מפעיל.",
         "environment-provider": "ספק HTTP מותאם",
-        "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך."
+        "environment-providerDesc": "הקצה סביבות ארעיות דרך ממשק ניהול HTTP משלך.",
+        "composeDesc": "מריץ את קובץ docker-compose.yml של המאגר עצמו על דימון Docker מקומי ככתובת ה-URL של הבוחן. מתאים בעיקר לאפליקציות מקומיות מבוססות Compose. תומך בתמונות בנויות מראש או בבנייה מקוד המקור; דורש דימון Docker, ולכן פריסות מקומיות בלבד."
       },
-      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של זמן הריצה: אין צורך בחיבור (הקונטיינר של הריצה חייב לתמוך ב-Docker-in-Docker).",
+      "dockerComposeInfo": "שירותי Docker Compose עולים על ה-Docker המקומי של סביבת הריצה: אין צורך בחיבור (מכולת ההרצה חייבת לתמוך ב-Docker-in-Docker). הגדר את השירות, הפורט ומקור התמונה (משיכת תמונה בנויה מראש או בנייה מקוד המקור) בהגדרות הסביבה של השירות.",
       "engine": {
         "local-k3s": "k3s מקומי",
         "remote-kubernetes": "Kubernetes מרוחק"

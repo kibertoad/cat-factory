@@ -3,6 +3,7 @@
 '@cat-factory/kernel': minor
 '@cat-factory/integrations': minor
 '@cat-factory/local-server': minor
+'@cat-factory/app': patch
 ---
 
 Docker Compose ephemeral envs: opt-in build-from-source mode.
@@ -27,3 +28,6 @@ exception. Build timeout is separate from the health-wait bound (`buildTimeoutMi
 Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
 recommended in build-from-source mode (previously it was recommended blindly and then failed at
 provision time).
+
+The compose environment connect form gains an "Image source" selector (pull pre-built vs build
+from source) and a build-timeout field; the misleading "image-based stacks only" copy is removed.
