@@ -1,7 +1,8 @@
 ---
 '@cat-factory/prompt-fragments': minor
 '@cat-factory/agents': minor
-'@cat-factory/orchestration': patch
+'@cat-factory/orchestration': minor
+'@cat-factory/app': patch
 ---
 
 Universal writing-style fragments for document-authoring tasks (WS2 of the
@@ -24,3 +25,8 @@ A new document task is pre-seeded with both style fragments (default-on,
 user-removable like any block pin) via `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, seeded
 onto the task's `fragmentIds` in `BoardService.addTask` — the selection default lives
 at task creation, not hard-coded in a prompt.
+
+The fragment "add" pickers (service, task, and workspace-default) now render their
+options as labelled per-category sections instead of one flat list, so the catalog
+stays navigable now that a block can pin across two tracks at once — the technical
+collections (Node / React / …) and the Writing-style fragments.
