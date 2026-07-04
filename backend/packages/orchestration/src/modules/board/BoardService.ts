@@ -34,6 +34,7 @@ import {
   tasksOf,
   wouldCreateCycle,
 } from './board.logic.js'
+import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -445,6 +446,13 @@ export class BoardService {
     // Small per-type form fields (bug severity / repro, spike timebox, …), when given.
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
+    }
+    // A document task starts with the universal writing-style fragments pre-selected
+    // (default-on, user-removable like any block pin). These fold into the `doc-aware`
+    // authoring/review kinds via the engine's fragment path — the selection default lives
+    // here, at task creation, not hard-coded in a prompt.
+    if (taskType === 'document') {
+      block.fragmentIds = [...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS]
     }
     // Optional epic membership at creation (the epic-import spawn path passes this so
     // every child task joins the epic it was imported under).

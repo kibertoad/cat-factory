@@ -33,6 +33,19 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
           'Ground every comment in what the files actually contain. Make no commits.',
         ]
       : []),
+    // The document reviewer carries `doc-aware`, so the engine folds the task's
+    // writing-style fragments (anti-LLM-isms, concise & actionable) into this prompt under
+    // "Follow these standards while doing the work". For a REVIEWER, those standards are the
+    // criteria to hold the draft to — make that explicit so the same bodies serve as both
+    // the writer's instruction and the reviewer's check.
+    ...(kind === 'doc-reviewer'
+      ? [
+          '',
+          'Any writing standards included below are the CRITERIA the document must meet: hold the',
+          'draft to them and flag every violation (LLM tells, filler, hedging, passive or vague',
+          'recommendations, bullet inflation) in your rating and comments.',
+        ]
+      : []),
     // The spec-writer only TRANSLATES the task requirements it was given into a spec
     // increment; inventing, completing, or deciding requirements is the requirements
     // step's job, not its. So judge only what the writer controls — fidelity to the

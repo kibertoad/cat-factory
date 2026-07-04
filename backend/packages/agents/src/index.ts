@@ -51,11 +51,13 @@ export {
   defineStructuredOutput,
 } from './agents/kinds/structured-output.js'
 // Agent capability traits (standard + custom). `code-aware` gates the engine's folding
-// of the service's best-practice fragments; `spec-aware` appends the in-repo-spec guidance.
+// of the service's best-practice fragments; `doc-aware` folds the document-task writing
+// style fragments the same way; `spec-aware` appends the in-repo-spec guidance.
 export {
   type AgentTrait,
   type AgentTraitDefinition,
   CODE_AWARE_TRAIT,
+  DOC_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
   SPEC_AWARE_GUIDANCE,

@@ -60,8 +60,11 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextB
     fragmentResolver: {
       resolveBodiesForRun: async (_ws: string, ids: string[]) =>
         ids
-          .filter((id) => id === 'node.best-practices')
-          .map((id) => ({ id, body: 'STANDARD-BODY' })),
+          .filter((id) => id === 'node.best-practices' || id.startsWith('style.'))
+          .map((id) => ({
+            id,
+            body: id === 'node.best-practices' ? 'STANDARD-BODY' : 'STYLE-BODY',
+          })),
     },
     ...over,
   })
@@ -104,6 +107,51 @@ describe('AgentContextBuilder fragment resolution', () => {
     const context = await builder.buildContext('ws1', instance([s]), s, true, TASK)
     expect(context.block.resolvedFragments).toBeUndefined()
     expect(s.selectedFragmentIds).toBeUndefined()
+  })
+
+  it('folds the block style pins into a doc-aware kind (doc-outliner) without a code-aware trait', async () => {
+    // A document task under a doc frame with no service fragments: the doc-aware kind still
+    // gets the block's own style pins folded, proving the fold gate accepts `doc-aware`.
+    const docFrame = {
+      id: 'doc_frame',
+      title: 'Handbook',
+      type: 'document',
+      description: '',
+      level: 'frame',
+      parentId: null,
+    } as unknown as Block
+    const docTask = {
+      id: 'doc_task',
+      title: 'Onboarding guide',
+      type: 'document',
+      description: '',
+      level: 'task',
+      parentId: 'doc_frame',
+      fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
+    } as unknown as Block
+    const blocks = new Map<string, Block>([
+      [docFrame.id, docFrame],
+      [docTask.id, docTask],
+    ])
+    const builder = makeBuilder({
+      blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
+    })
+    const s = step({ agentKind: 'doc-outliner' })
+    const context = await builder.buildContext('ws1', instance([s]), s, true, docTask)
+    expect(context.block.resolvedFragments).toEqual([
+      { id: 'style.anti-llmisms', body: 'STYLE-BODY' },
+      { id: 'style.concise-actionable', body: 'STYLE-BODY' },
+    ])
+    expect(s.selectedFragmentIds).toEqual(['style.anti-llmisms', 'style.concise-actionable'])
+  })
+
+  it('folds fragments into the doc-reviewer companion (doc-aware) so style guidance is its criteria', async () => {
+    const s = step({ agentKind: 'doc-reviewer' })
+    const context = await makeBuilder().buildContext('ws1', instance([s]), s, true, TASK)
+    expect(context.block.resolvedFragments).toEqual([
+      { id: 'node.best-practices', body: 'STANDARD-BODY' },
+    ])
+    expect(s.selectedFragmentIds).toEqual(['node.best-practices'])
   })
 
   it('clears a stale selectedFragmentIds when the step is re-dispatched as a non-code-aware kind', async () => {
