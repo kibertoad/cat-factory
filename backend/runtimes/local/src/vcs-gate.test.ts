@@ -44,8 +44,9 @@ describe('GitLab-backed engine VCS client drives the gate / merge / branch-updat
 
   it('reads green CI for the `ci` gate', async () => {
     const report = await new GitHubCiStatusProvider(deps(new FakeVcsClient())).getStatus('w', 'b')
-    expect(report.headSha).toBe('headsha')
-    expect(report.checks).toEqual([
+    expect(report.repos).toHaveLength(1)
+    expect(report.repos[0]!.headSha).toBe('headsha')
+    expect(report.repos[0]!.checks).toEqual([
       { name: 'build', status: 'completed', conclusion: 'success', url: null },
     ])
   })
@@ -94,7 +95,10 @@ describe('GitLab-backed engine VCS client drives the gate / merge / branch-updat
 
   it('merges the PR for real via the merger', async () => {
     const vcs = new FakeVcsClient()
-    await new GitHubPullRequestMerger(deps(vcs)).mergeForBlock('w', 'b')
+    const outcome = await new GitHubPullRequestMerger(deps(vcs)).mergePullRequests('w', 'b', [
+      { ref: { url: '', number: 7, branch: 'feat' } },
+    ])
+    expect(outcome.failed).toBeNull()
     expect(vcs.calls.merged).toEqual([7])
   })
 })

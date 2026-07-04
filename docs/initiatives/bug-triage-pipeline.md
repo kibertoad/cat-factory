@@ -130,13 +130,32 @@ through `runMultiRepoCoding` — that path is covered only by
 
 ### Phase C — multi-PR gates + merger (= service-connections Phase 4; update that tracker too)
 
-| Item                                                                                                   | Status |
-| ------------------------------------------------------------------------------------------------------ | ------ |
-| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | todo   |
-| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | todo   |
-| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | todo   |
-| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | todo   |
-| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | todo   |
+Implemented in **PR #761** (branched off #752 for the multi-repo checkouts, targets #752). Kept
+to the "Phase B only for harness edits" convention — **zero harness changes / no image bump**: the
+ci-fixer fans out by reusing the existing `runMultiRepoCoding` sibling-checkout path via a widened
+`peerRepos` job body (the `coder`-only multi-repo dispatch gate now also fires for `ci-fixer`).
+
+| Item                                                                                                   | Status                                     |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                       |
+| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | done (detection + `conflictTarget`; see †) |
+| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (merge-all; combined-diff, see ‡)     |
+| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                       |
+| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate cross-runtime; §)       |
+
+Notes carried forward (mirrored in the service-connections tracker's Phase 4 rows):
+
+- **† Conflict-resolver peer targeting** — the conflicts gate detects conflicts across every PR and
+  stashes the first conflicted repo on `step.gate.conflictTarget`; dispatching the resolver AT a
+  peer repo is a follow-up. A peer-only conflict now fast-fails to the manual-resolution give-up
+  (the gate returns `escalatable: false` so the engine doesn't burn the attempt budget on the
+  own-repo resolver that can't reach it) rather than looping the wrong resolver. Relevant to
+  Phase F/G, which reuse the gate helpers.
+- **‡ Merger combined-diff** — the engine merges ALL PRs in provider-before-consumer order, but the
+  `merger` agent still scores the own-repo diff only (scoring the combined sibling-workspace diff
+  needs a harness bump — deferred to keep this phase harness-free).
+- **§** — multi-repo CI aggregation runs on both runtimes in conformance; merge-all ordering +
+  provider fan-out are unit-tested (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`).
 
 ### Phase D — issue-intake foundations (design §3, ports + persistence)
 

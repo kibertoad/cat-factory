@@ -2824,6 +2824,12 @@ export class RunDispatcher {
       gate.probe(workspaceId, block.id, gateState),
     )
     step.gate.headSha = probe.headSha
+    // Multi-repo (service-connections phase 4): the CI / conflicts gates aggregate across every
+    // PR the task opened; persist the per-repo head shas (and, for the conflicts gate, which repo
+    // conflicted) so the run-detail UI can group checks by service and the conflict-resolver can
+    // target the conflicted repo.
+    step.gate.headShas = probe.headShas ?? null
+    step.gate.conflictTarget = probe.conflictTarget ?? null
     // Persist the precheck outcome so the run-detail UI can surface why the gate is
     // looping (the failing checks / conflict reason) — detail that was previously fed
     // only to the helper agent and then discarded.
@@ -2847,7 +2853,10 @@ export class RunDispatcher {
     }
 
     // probe.status === 'fail'.
-    const canEscalate = isAsyncAgentExecutor(this.agentExecutor)
+    // A gate can decline escalation for a failure its helper can't fix (e.g. the conflicts
+    // gate on a PEER-repo conflict it has no resolver for) — go straight to give-up instead
+    // of burning the attempt budget on a helper that can't touch the problem.
+    const canEscalate = isAsyncAgentExecutor(this.agentExecutor) && probe.escalatable !== false
     if (canEscalate && step.gate.attempts < step.gate.maxAttempts) {
       return this.dispatchGateHelper(
         workspaceId,

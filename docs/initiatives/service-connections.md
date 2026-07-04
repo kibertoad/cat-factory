@@ -64,13 +64,33 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
 
 ### Phase 4 — gates + merger generalization (design in the doc, §Phase 4)
 
-| Item                                                                                                   | Status |
-| ------------------------------------------------------------------------------------------------------ | ------ |
-| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | todo   |
-| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | todo   |
-| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | todo   |
-| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | todo   |
-| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | todo   |
+Implemented in **PR #761** (branch off #752). **Zero harness edits** (per the bug-triage
+tracker convention): the ci-fixer reuses the existing `runMultiRepoCoding` sibling-checkout
+harness path via a widened `peerRepos` job body — no runner-image bump. `step.gate.headShas` /
+`conflictTarget` ride the existing gate-state JSON (no migration).
+
+| Item                                                                                                   | Status                                     |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                       |
+| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | done (detection + `conflictTarget`; see †) |
+| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (merge-all; combined-diff, see ‡)     |
+| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                       |
+| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate cross-runtime; §)       |
+
+- **† Conflict-resolver peer-repo targeting.** The conflicts gate now probes mergeability across
+  every PR and records the first conflicted repo on `step.gate.conflictTarget`. Dispatching the
+  single-repo conflict-resolver AT a peer repo (vs the own repo) is a follow-up: a peer-only
+  conflict fast-fails to the "resolve manually" give-up — the gate returns `escalatable: false`
+  so the engine skips the own-repo resolver (which can't reach the peer) instead of burning the
+  whole attempt budget on it — rather than auto-resolving. The own-repo conflict path is unchanged.
+- **‡ Merger combined-diff.** The engine merges ALL PRs (`orderPrsForMerge`), but the `merger`
+  agent still scores only the own-repo diff (unchanged harness — zero-harness-edit rule). Scoring
+  the combined sibling-workspace diff needs a harness bump and is a follow-up.
+- **§ Merge-all conformance.** Multi-repo CI aggregation + ci-fixer escalation is asserted on both
+  runtimes in the conformance suite; the merge-all ordering + provider fan-out are unit-tested
+  (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`). A full merge-all conformance case
+  needs a fake `PullRequestMerger` wired through the harness (the merger isn't a gate provider) — a
+  follow-up.
 
 ## Conventions & gotchas carried between iterations
 

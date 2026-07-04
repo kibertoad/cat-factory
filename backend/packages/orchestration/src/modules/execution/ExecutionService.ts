@@ -14,6 +14,7 @@ import type {
   IssueWritebackProvider,
 } from '@cat-factory/kernel'
 import {
+  allPullRequests,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   frameAllowsVisualPipeline,
   isLocalRunner,
@@ -75,7 +76,8 @@ import { StepGraph } from './StepGraph.js'
 import { RunStateMachine, type KaizenScheduler } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { inferTechnicalLabel } from './technical.logic.js'
-import { MergeResolver } from './MergeResolver.js'
+import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
+import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import {
   BrainstormActions,
@@ -493,6 +495,7 @@ export class ExecutionService {
   // so the constructor forwards the destructured params straight to those collaborators.
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly prMerger?: PullRequestMerger
+  private readonly notifications?: NotificationService
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
@@ -792,6 +795,7 @@ export class ExecutionService {
     )
     this.workspaceSettingsService = workspaceSettingsService
     this.prMerger = pullRequestMerger
+    this.notifications = notificationService
     this.mergePresetRepository = mergePresetRepository
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
@@ -2168,24 +2172,57 @@ export class ExecutionService {
   }
 
   /**
-   * Merge a block's PR for real, then mark it `done`. The remote merge happens
-   * FIRST (via the {@link PullRequestMerger} port) and only on its success does the
-   * block flip to `done` — so `done` provably means "merged", not a board-only
-   * status. When no merger is wired (tests) this degrades to the old board-only
-   * flip. Throws if the remote merge fails so callers can fall back to a manual
-   * merge / review notification.
+   * Merge a block's PR(s) for real, then mark it `done`. The remote merge happens FIRST (via
+   * the {@link PullRequestMerger} port) and only on its success does the block flip to `done`
+   * — so `done` provably means "merged", not a board-only status. When no merger is wired
+   * (tests) this degrades to the old board-only flip.
+   *
+   * Multi-repo (service-connections phase 4): a cross-service task opens one PR per changed
+   * repo. All of them are merged in provider-before-consumer order (see {@link orderPrsForMerge}),
+   * stopping at the first failure. A COMPLETE failure (nothing merged) THROWS so the caller
+   * falls back to a review notification, exactly as the single-repo path did. A PARTIAL failure
+   * (some merged, then one failed — cross-repo merges are non-atomic) leaves the block `blocked`
+   * and raises an enumerated `merge_review` notification, and is reported to the caller as
+   * `partial` so it labels the decision without raising a second card.
    */
-  private async finalizeMerge(workspaceId: string, blockId: string): Promise<void> {
+  private async finalizeMerge(workspaceId: string, blockId: string): Promise<FinalizeMergeResult> {
     const block = await this.blockRepository.get(workspaceId, blockId)
-    if (!block) return
+    if (!block) return { kind: 'merged' }
     // Idempotent under durable-driver replays: a crash between the real merge and the
     // instance persist re-runs the merger resolver, and re-merging an already-merged PR
     // throws — which the resolver's fall-through would then misread as a failed merge
     // and downgrade the block to `pr_ready`. `done` already means "merged"; keep it.
-    if (block.status === 'done') return
-    if (this.prMerger && block.pullRequest) {
-      // Throws on a blocked/failed merge — the caller decides what to do next.
-      await this.prMerger.mergeForBlock(workspaceId, blockId)
+    if (block.status === 'done') return { kind: 'merged' }
+    // Same idempotency guard for a PARTIALLY-merged multi-repo task: the first pass merged some
+    // PRs, then one failed, so it left the block `blocked` and raised the enumerated card. A
+    // durable-driver replay must NOT re-run the merge — re-merging the already-merged PRs throws
+    // (GitHub 405) and would be misread as a TOTAL failure (`merged.length === 0` → throw → the
+    // resolver downgrades the block to `pr_ready` + raises a SECOND card). The merger step only
+    // ever enters `finalizeMerge` on an already-`blocked` block on such a replay (the manual
+    // `mergePr` path gates on `pr_ready`), so return the already-recorded partial outcome.
+    if (block.status === 'blocked') return { kind: 'partial', merged: [], unmerged: [] }
+    // Merge every PR the task opened (own-service + peers) — not just `block.pullRequest`, since a
+    // multi-repo task can have changed ONLY peer repos (own service untouched, no own PR).
+    const ordered = orderPrsForMerge(
+      allPullRequests(block).map((p) => ({
+        ...(p.repo ? { repo: p.repo } : {}),
+        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ref: p.ref,
+      })),
+    )
+    if (this.prMerger && ordered.length > 0) {
+      const outcome = await this.prMerger.mergePullRequests(workspaceId, blockId, ordered)
+      if (outcome.failed) {
+        // Nothing merged → behave like the old single-PR throw so the caller raises a review.
+        if (outcome.merged.length === 0) throw new Error(outcome.failed.error)
+        // Partial: leave the block blocked and enumerate the split for a human to finish/revert.
+        const label = (e: { repo?: string }): string => e.repo ?? 'own service'
+        const merged = outcome.merged.map(label)
+        const unmerged = [outcome.failed.entry, ...outcome.skipped].map(label)
+        await this.blockRepository.update(workspaceId, blockId, { status: 'blocked' })
+        await this.raisePartialMergeNotification(workspaceId, block, merged, unmerged)
+        return { kind: 'partial', merged, unmerged }
+      }
     }
     await this.blockRepository.update(workspaceId, blockId, { status: 'done', progress: 1 })
     // Best-effort writeback: comment + close the task's linked tracker issue(s) as
@@ -2210,6 +2247,36 @@ export class ExecutionService {
       // doesn't emit a terminal run event). Fire-and-forget; the sweep is the backstop.
       if (block.initiativeId) this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
     }
+    return { kind: 'merged' }
+  }
+
+  /**
+   * Raise the `merge_review` card for a PARTIALLY-merged multi-repo task: some PRs merged, then
+   * an intermediate one failed. Cross-repo merges can't be atomic, so the human finishes or
+   * reverts the split by hand; the card enumerates which repos merged vs are still open.
+   */
+  private async raisePartialMergeNotification(
+    workspaceId: string,
+    block: Block,
+    merged: string[],
+    unmerged: string[],
+  ): Promise<void> {
+    if (!this.notifications) return
+    await this.notifications.raise(workspaceId, {
+      type: 'merge_review',
+      blockId: block.id,
+      executionId: block.executionId ?? null,
+      title: `Finish the multi-repo merge for "${block.title}"`,
+      body:
+        `Merged ${merged.length} PR(s) (${merged.join(', ')}) but could not merge ` +
+        `${unmerged.length} more (${unmerged.join(', ')}). Cross-repo merges aren't atomic — ` +
+        `merge the rest or revert the merged PR(s) by hand.`,
+      payload: {
+        mergedRepos: merged,
+        unmergedRepos: unmerged,
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+      },
+    })
   }
 
   /**

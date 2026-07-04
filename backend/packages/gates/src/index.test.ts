@@ -49,8 +49,13 @@ describe('typed provider registry (the gate wiring seam)', () => {
   it('a gate reads its provider through ctx.requireProvider, not a module global', async () => {
     wireCiStatusProvider({
       getStatus: async () => ({
-        headSha: 'sha',
-        checks: [{ name: 'build', status: 'completed', conclusion: 'success', url: null }],
+        repos: [
+          {
+            repo: 'o/r',
+            headSha: 'sha',
+            checks: [{ name: 'build', status: 'completed', conclusion: 'success', url: null }],
+          },
+        ],
       }),
     })
     // The stub context delegates getProvider/requireProvider to the real registry, so the
@@ -81,13 +86,18 @@ describe('ci gate', () => {
     let green = true
     wireCiStatusProvider({
       getStatus: async () => ({
-        headSha: 'sha',
-        checks: [
+        repos: [
           {
-            name: 'build',
-            status: 'completed',
-            conclusion: green ? 'success' : 'failure',
-            url: null,
+            repo: 'o/r',
+            headSha: 'sha',
+            checks: [
+              {
+                name: 'build',
+                status: 'completed',
+                conclusion: green ? 'success' : 'failure',
+                url: null,
+              },
+            ],
           },
         ],
       }),
@@ -106,12 +116,56 @@ describe('conflicts gate', () => {
   it('passes on a mergeable PR and fails on a conflict', async () => {
     let verdict: 'mergeable' | 'conflicted' = 'mergeable'
     wireMergeabilityProvider({
-      getMergeability: async () => ({ headSha: 'sha', verdict }),
+      getMergeability: async () => ({ repos: [{ repo: 'o/r', headSha: 'sha', verdict }] }),
     })
     const gate = conflictsGate(stubGateContext())
     expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('pass')
     verdict = 'conflicted'
-    expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('fail')
+    const failed = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
+    expect(failed.status).toBe('fail')
+    // Single-repo: the own repo is the implicit target, so no `conflictTarget` and the fixer
+    // is escalatable as usual.
+    expect(failed.conflictTarget).toBeUndefined()
+    expect(failed.escalatable).toBeUndefined()
+  })
+
+  it('escalates an OWN-repo conflict but declines a PEER-repo conflict (single-repo resolver only)', async () => {
+    // Multi-repo: own PR is mergeable, the peer PR conflicts. The single-repo conflict-resolver
+    // can only touch the own repo, so a peer conflict must NOT escalate (it would burn the whole
+    // attempt budget on a container that can't reach the conflicted repo); the gate records the
+    // peer as the conflict target and declines escalation.
+    wireMergeabilityProvider({
+      getMergeability: async () => ({
+        repos: [
+          { repo: 'o/own', headSha: 'ownsha', verdict: 'mergeable' },
+          { repo: 'o/peer', frameId: 'frm_peer', headSha: 'peersha', verdict: 'conflicted' },
+        ],
+      }),
+    })
+    const gate = conflictsGate(stubGateContext())
+    const probe = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
+    expect(probe.status).toBe('fail')
+    expect(probe.escalatable).toBe(false)
+    expect(probe.conflictTarget).toEqual({ repo: 'o/peer', frameId: 'frm_peer' })
+    expect(probe.headSha).toBe('peersha')
+    expect(probe.headShas).toEqual({ 'o/own': 'ownsha', 'o/peer': 'peersha' })
+  })
+
+  it('escalates a conflict on the OWN repo of a multi-repo task', async () => {
+    wireMergeabilityProvider({
+      getMergeability: async () => ({
+        repos: [
+          { repo: 'o/own', headSha: 'ownsha', verdict: 'conflicted' },
+          { repo: 'o/peer', frameId: 'frm_peer', headSha: 'peersha', verdict: 'mergeable' },
+        ],
+      }),
+    })
+    const gate = conflictsGate(stubGateContext())
+    const probe = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
+    expect(probe.status).toBe('fail')
+    // The own repo IS resolvable by the single-repo resolver → escalate as normal.
+    expect(probe.escalatable).toBeUndefined()
+    expect(probe.conflictTarget).toEqual({ repo: 'o/own' })
   })
 })
 
