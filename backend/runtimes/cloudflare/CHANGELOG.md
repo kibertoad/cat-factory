@@ -1,5 +1,17 @@
 # @cat-factory/worker
 
+## 0.63.4
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/prompt-fragments@0.10.0
+  - @cat-factory/agents@0.33.0
+  - @cat-factory/orchestration@0.70.0
+  - @cat-factory/server@0.79.4
+  - @cat-factory/consensus@0.8.33
+  - @cat-factory/provider-cloudflare@0.7.139
+
 ## 0.63.3
 
 ### Patch Changes
