@@ -49,8 +49,13 @@ describe('typed provider registry (the gate wiring seam)', () => {
   it('a gate reads its provider through ctx.requireProvider, not a module global', async () => {
     wireCiStatusProvider({
       getStatus: async () => ({
-        headSha: 'sha',
-        checks: [{ name: 'build', status: 'completed', conclusion: 'success', url: null }],
+        repos: [
+          {
+            repo: 'o/r',
+            headSha: 'sha',
+            checks: [{ name: 'build', status: 'completed', conclusion: 'success', url: null }],
+          },
+        ],
       }),
     })
     // The stub context delegates getProvider/requireProvider to the real registry, so the
@@ -81,13 +86,18 @@ describe('ci gate', () => {
     let green = true
     wireCiStatusProvider({
       getStatus: async () => ({
-        headSha: 'sha',
-        checks: [
+        repos: [
           {
-            name: 'build',
-            status: 'completed',
-            conclusion: green ? 'success' : 'failure',
-            url: null,
+            repo: 'o/r',
+            headSha: 'sha',
+            checks: [
+              {
+                name: 'build',
+                status: 'completed',
+                conclusion: green ? 'success' : 'failure',
+                url: null,
+              },
+            ],
           },
         ],
       }),
@@ -106,7 +116,7 @@ describe('conflicts gate', () => {
   it('passes on a mergeable PR and fails on a conflict', async () => {
     let verdict: 'mergeable' | 'conflicted' = 'mergeable'
     wireMergeabilityProvider({
-      getMergeability: async () => ({ headSha: 'sha', verdict }),
+      getMergeability: async () => ({ repos: [{ repo: 'o/r', headSha: 'sha', verdict }] }),
     })
     const gate = conflictsGate(stubGateContext())
     expect((await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})).status).toBe('pass')

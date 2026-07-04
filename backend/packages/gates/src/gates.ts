@@ -10,20 +10,20 @@ import type {
   ReleaseSignal,
 } from '@cat-factory/kernel'
 import {
-  aggregateCi,
+  aggregateRepoCi,
   CI_AGENT_KIND,
   CI_FIXER_AGENT_KIND,
   classifyReleaseHealth,
   CONFLICT_RESOLVER_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
   DEFAULT_MERGE_PRESET,
-  describeFailingChecks,
+  describeFailingRepos,
   describeRegressedSignals,
   FIXER_AGENT_KIND,
   HUMAN_REVIEW_AGENT_KIND,
   isCiGreen,
   isProviderWired,
-  listFailingChecks,
+  listFailingChecksAcrossRepos,
   ON_CALL_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
   renderReleaseEvidence,
@@ -69,24 +69,38 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
   wired: () => isProviderWired(CI_STATUS_PROVIDER),
   unwiredOutput: 'CI gate skipped (no CI status provider configured).',
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
+    // Aggregate across EVERY PR the task opened (own-service + peer-service repos on a
+    // multi-repo block): a red check in ANY repo fails the gate, and the ci-fixer runs
+    // once across all sibling checkouts (see the widened peerRepos dispatch).
     const report = await ctx.requireProvider(CI_STATUS_PROVIDER).getStatus(workspaceId, blockId)
-    const verdict = aggregateCi(report.checks)
+    const repos = report.repos
+    const verdict = aggregateRepoCi(repos)
+    const multi = repos.length > 1
+    const headSha = repos[0]?.headSha ?? null
+    const headShas = Object.fromEntries(
+      repos.filter((r) => r.headSha).map((r) => [r.repo, r.headSha as string]),
+    )
+    const totalChecks = repos.reduce((n, r) => n + r.checks.length, 0)
     if (isCiGreen(verdict)) {
       return {
         status: 'pass',
-        headSha: report.headSha,
+        headSha,
+        ...(multi ? { headShas } : {}),
         passOutput:
           verdict === 'none'
-            ? 'CI gate passed: no checks configured for the PR head.'
-            : `CI gate passed: ${report.checks.length} check(s) green.`,
+            ? 'CI gate passed: no checks configured for the PR head(s).'
+            : multi
+              ? `CI gate passed: ${totalChecks} check(s) green across ${repos.length} repos.`
+              : `CI gate passed: ${totalChecks} check(s) green.`,
       }
     }
-    if (verdict === 'pending') return { status: 'pending', headSha: report.headSha }
+    if (verdict === 'pending') return { status: 'pending', headSha, ...(multi ? { headShas } : {}) }
     return {
       status: 'fail',
-      headSha: report.headSha,
-      failureSummary: describeFailingChecks(report.checks),
-      failingChecks: listFailingChecks(report.checks),
+      headSha,
+      ...(multi ? { headShas } : {}),
+      failureSummary: describeFailingRepos(repos),
+      failingChecks: listFailingChecksAcrossRepos(repos),
     }
   },
   // Surface the failing-check summary to the fixer as resolved context.
@@ -123,23 +137,50 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
   attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
+    // Mergeability is probed PER PR across the task's own + peer repos. Any PR still
+    // computing → keep polling; the FIRST conflicted PR (own-service or a peer) is the
+    // single-repo conflict-resolver's target — a git conflict is per-repo textual, so the
+    // resolver stays single-repo (unlike the ci-fixer).
     const report = await ctx
       .requireProvider(MERGEABILITY_PROVIDER)
       .getMergeability(workspaceId, blockId)
-    // No PR resolved, or it merges cleanly → nothing to do; advance.
-    if (report.headSha === null || report.verdict === 'mergeable') {
+    const withPr = report.repos.filter((r) => r.headSha !== null)
+    // No PR resolved anywhere → nothing to gate; advance.
+    if (withPr.length === 0) {
       return {
         status: 'pass',
-        headSha: report.headSha,
-        passOutput:
-          report.headSha === null
-            ? 'Conflict gate passed: no open PR to gate.'
-            : 'Conflict gate passed: the PR merges cleanly with its base.',
+        headSha: null,
+        passOutput: 'Conflict gate passed: no open PR to gate.',
       }
     }
-    // GitHub still computing mergeability → keep polling.
-    if (report.verdict === 'unknown') return { status: 'pending', headSha: report.headSha }
-    return { status: 'fail', headSha: report.headSha }
+    const multi = report.repos.length > 1
+    const headSha = report.repos[0]?.headSha ?? null
+    const headShas = Object.fromEntries(withPr.map((r) => [r.repo, r.headSha as string]))
+    // Any PR GitHub is still computing → keep polling.
+    if (withPr.some((r) => r.verdict === 'unknown')) {
+      return { status: 'pending', headSha, ...(multi ? { headShas } : {}) }
+    }
+    const conflicted = withPr.find((r) => r.verdict === 'conflicted')
+    if (!conflicted) {
+      return {
+        status: 'pass',
+        headSha,
+        ...(multi ? { headShas } : {}),
+        passOutput: multi
+          ? `Conflict gate passed: all ${withPr.length} PRs merge cleanly with their base.`
+          : 'Conflict gate passed: the PR merges cleanly with its base.',
+      }
+    }
+    return {
+      status: 'fail',
+      headSha: conflicted.headSha,
+      ...(multi ? { headShas } : {}),
+      conflictTarget: {
+        repo: conflicted.repo,
+        ...(conflicted.frameId ? { frameId: conflicted.frameId } : {}),
+      },
+      ...(multi ? { failureSummary: `${conflicted.repo} conflicts with its base.` } : {}),
+    }
   },
   onExhausted: async ({ step }) => ({
     error:

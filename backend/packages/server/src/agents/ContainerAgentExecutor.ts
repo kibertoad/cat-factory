@@ -319,11 +319,20 @@ function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
 
 /**
  * The built-in implementer ("Coder") kind. The multi-repo coding fan-out
- * (service-connections phase 3) applies ONLY to this kind: it is the step that makes the
- * cross-service change. The in-place fixers / conflict-resolver stay single-repo (phase 4
- * generalizes the gates + merger); read-only and structured kinds never fan out.
+ * (service-connections phase 3) started ONLY on this kind: it is the step that makes the
+ * cross-service change.
  */
 const IMPLEMENTER_AGENT_KIND = 'coder'
+
+/**
+ * The kinds that fan out across the task's connected repos as sibling checkouts
+ * (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes those
+ * SAME work branches to fix red CI across every repo in one container (a cross-repo contract
+ * break is exactly what a single-repo fixer can't fix). The conflict-resolver stays SINGLE-repo
+ * (a git conflict is per-repo textual — handled by targeting the conflicted repo, not fan-out);
+ * read-only / structured kinds never fan out.
+ */
+const MULTI_REPO_FANOUT_KINDS: ReadonlySet<string> = new Set([IMPLEMENTER_AGENT_KIND, 'ci-fixer'])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
 function contextFileName(base: string, used: Set<string>): string {
@@ -983,19 +992,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(webSearchEnabled ? { webSearch: true } : {}),
     }
 
-    // Multi-repo coding (service-connections phase 3): when the IMPLEMENTER runs on a task
-    // with connected involved services, resolve every involved repo and fan the coding out —
-    // peer repos as sibling checkouts (one PR each) plus a prompt section naming the layout.
-    // A service co-located in the primary's own repo (same monorepo) has no separate checkout;
-    // it rides the own-service PR and is named in the section so the agent edits its subtree.
-    // Any involved service present ⇒ the coder works at the repo ROOT (not just its own
-    // service subdir) so it can reach every involved subtree; `commonForKind` swaps `repo`.
+    // Multi-repo coding (service-connections phases 3–4): when the implementer OR the ci-fixer
+    // runs on a task with connected involved services, resolve every involved repo and fan the
+    // work out — peer repos as sibling checkouts plus a prompt section naming the layout. The
+    // coder opens one PR per changed repo; the ci-fixer resumes those same work branches to fix
+    // red CI across all of them (jobBody drops the peer `pr` on the fixer path). A service
+    // co-located in the primary's own repo (same monorepo) has no separate checkout; it rides
+    // the own-service PR and is named in the section so the agent edits its subtree. Any involved
+    // service present ⇒ the agent works at the repo ROOT (not just its own service subdir) so it
+    // can reach every involved subtree; `commonForKind` swaps `repo`.
     let peerRepos: { repo: Record<string, unknown>; frameId?: string }[] | undefined
     let multiRepoSection: string | undefined
     let commonForKind = common
     const involvedServices = context.involvedServices ?? []
     if (
-      context.agentKind === IMPLEMENTER_AGENT_KIND &&
+      MULTI_REPO_FANOUT_KINDS.has(context.agentKind) &&
       involvedServices.length > 0 &&
       this.deps.resolveRepoTargets
     ) {

@@ -222,27 +222,28 @@ export function buildRegisteredAgentBody(
       title: `${context.block.title} (${context.pipelineName})`,
       body: prBody(context),
     }
-    // Multi-repo fan-out (service-connections phase 3): only on the implementer path (`!onPr`),
-    // clone each connected involved-service repo as a sibling and open the SAME work branch +
-    // an equivalent PR in it. The fixers (`onPr`) stay single-repo (phase 4 generalizes them).
-    const peerRepos =
-      !onPr && parts.peerRepos?.length
-        ? parts.peerRepos.map((p) => ({
-            repo: p.repo,
-            ...(p.frameId ? { frameId: p.frameId } : {}),
-            newBranch: workBranch,
-            pr,
-          }))
-        : undefined
+    // Multi-repo fan-out (service-connections phases 3–4): clone each connected involved-service
+    // repo as a sibling. The implementer (`!onPr`) opens the SAME work branch + an equivalent PR
+    // in each; the ci-fixer (`onPr`) RESUMES those same peer work branches to push fixes onto the
+    // existing peer PRs (no new PR — so no `pr` on its peer legs). The peer set is gated upstream
+    // to the coder + ci-fixer kinds (see MULTI_REPO_FANOUT_KINDS); the conflict-resolver never
+    // reaches here with peers set (it stays single-repo, targeting the one conflicted repo).
+    const peerRepos = parts.peerRepos?.length
+      ? parts.peerRepos.map((p) => ({
+          repo: p.repo,
+          ...(p.frameId ? { frameId: p.frameId } : {}),
+          newBranch: workBranch,
+          ...(onPr ? {} : { pr }),
+        }))
+      : undefined
     return {
       kind: 'agent',
       body: {
         ...common,
         mode: 'coding',
-        systemPrompt:
-          !onPr && parts.multiRepoSection
-            ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
-            : roleSystemPrompt,
+        systemPrompt: parts.multiRepoSection
+          ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
+          : roleSystemPrompt,
         userPrompt,
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
         ...(onPr ? {} : { newBranch: workBranch }),

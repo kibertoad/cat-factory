@@ -215,6 +215,9 @@ export const mergeDecisionSchema = v.object({
    *  - `no_assessment`: review; the merger produced no parseable assessment at all.
    *  - `merge_failed`: review; within threshold but the real merge threw (e.g. branch
    *    protection / conflict), so it fell through to human review.
+   *  - `merge_partial`: review; a MULTI-REPO task auto-merged some of its PRs but an
+   *    intermediate merge failed (cross-repo merges are non-atomic), so the block is left
+   *    blocked with a notification enumerating the merged vs unmerged repos.
    */
   reason: v.picklist([
     'within_thresholds',
@@ -223,6 +226,7 @@ export const mergeDecisionSchema = v.object({
     'no_rationale',
     'no_assessment',
     'merge_failed',
+    'merge_partial',
   ]),
   /** The merger's assessment (absent only when it produced no parseable one). */
   assessment: v.optional(mergeAssessmentSchema),

@@ -45,6 +45,20 @@ export interface GateProbe {
   status: 'pass' | 'pending' | 'fail'
   /** The PR head commit the precheck ran against, or null when there is no open PR. */
   headSha: string | null
+  /**
+   * Per-PR head commits for a MULTI-REPO block (own-service + peer repos), keyed by
+   * repo full name (owner/name). Present only when the block has peer PRs; a single-repo
+   * block leaves it undefined and callers read the scalar {@link headSha}. Persisted onto
+   * `step.gate.headShas` so the run-detail UI can show which repo each check belongs to.
+   */
+  headShas?: Record<string, string>
+  /**
+   * For the conflicts gate on a `fail`: which of the block's repos conflicted (own-service
+   * or a peer), so the engine dispatches the single-repo conflict-resolver at that repo.
+   * Absent ⇒ the block's own-service repo. The CI gate leaves it undefined (its fixer runs
+   * across all repos).
+   */
+  conflictTarget?: { repo: string; frameId?: string; branch?: string }
   /** Step output recorded on `pass` (a short human-readable reason). */
   passOutput?: string
   /** A summary of what failed on `fail` — fed to the helper agent and the give-up error. */
@@ -54,7 +68,7 @@ export interface GateProbe {
    * this from the red check runs; the conflicts gate leaves it undefined). Persisted
    * onto `step.gate` so the run-detail UI can list each failing check.
    */
-  failingChecks?: { name: string; conclusion: string | null; url?: string | null }[]
+  failingChecks?: { name: string; conclusion: string | null; url?: string | null; repo?: string }[]
 }
 
 /** The relevant outcome of a finished gate-helper job, for recording an attempt. */

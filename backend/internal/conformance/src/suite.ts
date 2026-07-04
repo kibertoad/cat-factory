@@ -1901,14 +1901,42 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
             const green = greens[Math.min(i, greens.length - 1)] ?? true
             i += 1
             return {
-              headSha: 'sha',
-              checks: [
+              repos: [
                 {
-                  name: 'build',
-                  status: 'completed',
-                  conclusion: green ? 'success' : 'failure',
-                  url: null,
+                  repo: 'o/r',
+                  headSha: 'sha',
+                  checks: [
+                    {
+                      name: 'build',
+                      status: 'completed',
+                      conclusion: green ? 'success' : 'failure',
+                      url: null,
+                    },
+                  ],
                 },
+              ],
+            }
+          },
+        }
+      }
+
+      // A multi-repo (service-connections phase 4) fake CI provider: the task opened an
+      // own-service PR AND one peer PR, and the gate aggregates the verdict across BOTH. Each
+      // repo's greenness is supplied per probe (a queue; last entry repeats) so a test can drive
+      // "peer red → own green" then "both green".
+      const makeFakeMultiRepoCi = (rounds: [boolean, boolean][]): CiStatusProvider => {
+        let i = 0
+        return {
+          getStatus: async () => {
+            const [ownGreen, peerGreen] = rounds[Math.min(i, rounds.length - 1)] ?? [true, true]
+            i += 1
+            const checks = (green: boolean, name: string) => [
+              { name, status: 'completed', conclusion: green ? 'success' : 'failure', url: null },
+            ]
+            return {
+              repos: [
+                { repo: 'o/own', headSha: 'ownsha', checks: checks(ownGreen, 'own-build') },
+                { repo: 'o/peer', headSha: 'peersha', checks: checks(peerGreen, 'peer-build') },
               ],
             }
           },
@@ -1977,6 +2005,58 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         // Tester attempt's concerns, surfaced per-runtime.
         expect(attempt?.instructions).toBeTruthy()
         expect(attempt?.failingChecks?.map((c) => c.name)).toEqual(['build'])
+      })
+
+      it('aggregates CI across a multi-repo task: a red PEER PR escalates, both green advances', async () => {
+        // Service-connections phase 4: a cross-service task opens one PR per changed repo, and the
+        // CI gate aggregates the verdict across ALL of them. Here the OWN PR is green but a PEER
+        // PR is red on the first probe → the gate must NOT advance (a red peer fails the gate),
+        // escalate the ci-fixer once, then advance when the re-probe sees both green. The per-repo
+        // head shas are persisted on the gate state so the UI can group checks by service.
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'ci-fixer'],
+            pooledContainer: true,
+            pullRequest: {
+              url: 'https://github.com/o/own/pull/1',
+              number: 1,
+              branch: 'feat/login',
+            },
+          },
+          // round 1: own green, peer RED → fail+escalate; round 2: both green → advance
+          {
+            gateProviders: {
+              ciStatus: makeFakeMultiRepoCi([
+                [true, false],
+                [true, true],
+              ]),
+            },
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        // The red PEER PR fails the aggregate verdict → one ci-fixer attempt.
+        expect(step.gate?.attempts).toBe(1)
+        // Both repos' heads are tracked on the multi-repo gate state.
+        expect(step.gate?.headShas).toMatchObject({ 'o/own': 'ownsha', 'o/peer': 'peersha' })
+        // The failing round names the failing peer check (with its repo).
+        const failing = step.gate?.attemptLog?.[0]?.failingChecks ?? []
+        expect(failing.map((c) => c.name)).toContain('peer-build')
+        expect(failing.find((c) => c.name === 'peer-build')?.repo).toBe('o/peer')
       })
     })
 

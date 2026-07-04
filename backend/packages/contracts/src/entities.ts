@@ -819,6 +819,11 @@ export const gateFailingCheckSchema = v.object({
    * failed run's logs. Null when GitHub didn't report one.
    */
   url: v.optional(v.nullable(v.string())),
+  /**
+   * The repo (owner/name) this check belongs to, on a MULTI-REPO block — so the UI can group
+   * failing checks by service. Absent on a single-repo block (there is only the own repo).
+   */
+  repo: v.optional(v.string()),
 })
 export type GateFailingCheck = v.InferOutput<typeof gateFailingCheckSchema>
 
@@ -870,8 +875,30 @@ export const gateStepStateSchema = v.object({
   attempts: v.number(),
   /** Ceiling on attempts, resolved from the task's merge preset at step start. */
   maxAttempts: v.number(),
-  /** The PR head commit being gated, once resolved. */
+  /** The PR head commit being gated, once resolved (the own-service PR on a multi-repo block). */
   headSha: v.optional(v.nullable(v.string())),
+  /**
+   * Per-PR head commits for a MULTI-REPO block (service-connections phase 4), keyed by repo
+   * full name (owner/name) — own-service PR plus each peer-service PR. Set by the CI /
+   * conflicts gates whose precheck aggregates across every PR the task opened. Absent for a
+   * single-repo block (the scalar {@link headSha} is the only head).
+   */
+  headShas: v.optional(v.nullable(v.record(v.string(), v.string()))),
+  /**
+   * The repo the conflicts gate's most recent `fail` verdict found conflicted, so the
+   * single-repo conflict-resolver is dispatched at THAT repo (own-service or a peer) rather
+   * than always the own-service one. Absent ⇒ the own-service repo. Only the conflicts gate
+   * sets it (the CI-fixer runs across all repos, so the CI gate leaves it undefined).
+   */
+  conflictTarget: v.optional(
+    v.nullable(
+      v.object({
+        repo: v.string(),
+        frameId: v.optional(v.string()),
+        branch: v.optional(v.string()),
+      }),
+    ),
+  ),
   /**
    * The most recent precheck verdict, so the UI can show why the gate is looping
    * (failing → a helper is fixing) vs idle-passing. Set on every probe.

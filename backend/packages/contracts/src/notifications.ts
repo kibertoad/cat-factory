@@ -118,6 +118,14 @@ export const notificationPayloadSchema = v.object({
   targetUserId: v.optional(v.nullable(v.string())),
   /** Why the initiative loop raised the card, on an `initiative` notification. */
   initiativeReason: v.optional(v.picklist(['item_blocked', 'complete'])),
+  /**
+   * On a `merge_review` raised for a PARTIALLY-merged multi-repo task (service-connections
+   * phase 4): the repos whose PRs DID merge before an intermediate merge failed. Cross-repo
+   * merges cannot be atomic, so the human finishes or reverts the split by hand.
+   */
+  mergedRepos: v.optional(v.array(v.string())),
+  /** The repos whose PRs are still UNMERGED after a partial multi-repo merge (see {@link mergedRepos}). */
+  unmergedRepos: v.optional(v.array(v.string())),
 })
 export type NotificationPayload = v.InferOutput<typeof notificationPayloadSchema>
 
