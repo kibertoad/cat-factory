@@ -130,7 +130,7 @@ through `runMultiRepoCoding` — that path is covered only by
 
 ### Phase C — multi-PR gates + merger (= service-connections Phase 4; update that tracker too)
 
-Implemented in **PR #TBD** (branched off #752 for the multi-repo checkouts, targets #752). Kept
+Implemented in **PR #761** (branched off #752 for the multi-repo checkouts, targets #752). Kept
 to the "Phase B only for harness edits" convention — **zero harness changes / no image bump**: the
 ci-fixer fans out by reusing the existing `runMultiRepoCoding` sibling-checkout path via a widened
 `peerRepos` job body (the `coder`-only multi-repo dispatch gate now also fires for `ci-fixer`).

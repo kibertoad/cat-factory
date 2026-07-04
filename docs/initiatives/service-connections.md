@@ -64,7 +64,7 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
 
 ### Phase 4 — gates + merger generalization (design in the doc, §Phase 4)
 
-Implemented in **PR #TBD** (branch off #752). **Zero harness edits** (per the bug-triage
+Implemented in **PR #761** (branch off #752). **Zero harness edits** (per the bug-triage
 tracker convention): the ci-fixer reuses the existing `runMultiRepoCoding` sibling-checkout
 harness path via a widened `peerRepos` job body — no runner-image bump. `step.gate.headShas` /
 `conflictTarget` ride the existing gate-state JSON (no migration).
