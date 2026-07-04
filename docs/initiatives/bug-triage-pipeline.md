@@ -212,9 +212,10 @@ Notes for Phase E (which consumes all of this):
 
 ### Phase E — `bug-intake` step (design §3, engine + SPA)
 
-Implemented on branch `claude/bug-triage-phase-2-hyi9pg` (branched off the #752 branch for the
-Phase D foundations it consumes, and targeting it, like Phase C's #761 / Phase D's #766). Zero
-harness changes / no image bump — the step is backend TypeScript over the Phase D ports.
+Implemented in [PR #770](https://github.com/kibertoad/cat-factory/pull/770) (branch
+`claude/bug-triage-phase-2-hyi9pg`, branched off the #752 branch for the Phase D foundations it
+consumes, and targeting it, like Phase C's #761 / Phase D's #766). Zero harness changes / no
+image bump — the step is backend TypeScript over the Phase D ports.
 
 | Item                                                                                          | Status |
 | --------------------------------------------------------------------------------------------- | ------ |
