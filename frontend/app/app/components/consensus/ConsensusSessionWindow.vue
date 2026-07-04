@@ -9,11 +9,13 @@
 import { computed } from 'vue'
 import type { ConsensusContribution, ConsensusSession } from '~/types/consensus'
 import CopyButton from '~/components/common/CopyButton.vue'
+import { agentKindMeta } from '~/utils/catalog'
 
 const { t, n } = useI18n()
 
 const board = useBoardStore()
 const consensus = useConsensusStore()
+const models = useModelsStore()
 
 const { open, blockId, close } = useResultView('consensus-session', {
   onOpen: (id) => {
@@ -114,7 +116,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
               <span v-if="block" class="font-normal text-slate-400">— {{ block.title }}</span>
             </h2>
             <p v-if="session" class="text-xs text-slate-500">
-              {{ session.agentKind }} ·
+              {{ agentKindMeta(session.agentKind).label }} ·
               {{
                 t(
                   'consensus.participantCount',
@@ -201,7 +203,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                     t('consensus.expert', { letter: String.fromCharCode(65 + i) })
                   }}</span>
                   <span class="text-slate-400"> · {{ p.role }}</span>
-                  <span v-if="p.modelId" class="ms-1 text-slate-500">({{ p.modelId }})</span>
+                  <span v-if="p.modelId" class="ms-1 text-slate-500"
+                    >({{ models.labelForRef(p.modelId) ?? p.modelId }})</span
+                  >
                 </div>
               </div>
             </section>
