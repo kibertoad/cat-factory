@@ -124,9 +124,11 @@ async function startLocalMothership(
     'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
   )
   // Shared with the engine's event publisher (wired inside the container) and the HTTP
-  // server's WebSocket upgrade listener below, exactly as the Node `start()` does.
+  // server's WebSocket upgrade listener below, exactly as the Node `start()` does. Local
+  // mode is always single-node, so the bare hub IS the real-time sink — no cross-node
+  // propagator (Redis) is wired here.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildLocalContainer({ env, realtimeHub })
+  const container = buildLocalContainer({ env, realtimeSink: realtimeHub })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
   validateRegistrationsOnce({
