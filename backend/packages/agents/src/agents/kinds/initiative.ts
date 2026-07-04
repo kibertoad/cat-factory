@@ -1,6 +1,5 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
-import type { AgentKindDefinition } from './registry.js'
-import { registerAgentKinds } from './registry.js'
+import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
 // The `initiative-breakdown` agent kind — the first agent reachable from the PUBLIC API.
@@ -57,12 +56,9 @@ export const INITIATIVE_AGENT_KINDS: AgentKindDefinition[] = [
 ]
 
 /**
- * Register the initiative kind. Idempotent (the registry replaces by kind), so calling it
- * explicitly and importing this module for its side effect are safe to combine.
+ * Register the initiative kind on the given registry. Called by `defaultAgentKindRegistry()`;
+ * idempotent (the registry replaces by kind).
  */
-export function registerInitiativeAgents(): void {
-  registerAgentKinds(INITIATIVE_AGENT_KINDS)
+export function registerInitiativeAgents(registry: AgentKindRegistry): void {
+  registry.registerAll(INITIATIVE_AGENT_KINDS)
 }
-
-// Side-effect registration: importing `@cat-factory/agents` registers this first-class kind.
-registerInitiativeAgents()

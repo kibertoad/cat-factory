@@ -22,12 +22,14 @@ import {
 } from '@cat-factory/contracts'
 import {
   BINARY_STORAGE_TRAIT,
+  bugInvestigation,
   companionFor,
   companionTargets,
   hasTrait,
   isCompanionKind,
   isInlineModelStep,
 } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
 import {
   assertPipelineLaunchable,
@@ -158,6 +160,12 @@ export interface ExecutionServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
   agentExecutor: AgentExecutor
+  /**
+   * The app-owned agent-kind registry, threaded through to the trait/inline-surface checks
+   * and a registered kind's pre/post-op hooks. `createCore` defaults it to
+   * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
+   */
+  agentKindRegistry: AgentKindRegistry
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService
@@ -459,6 +467,8 @@ export class ExecutionService {
   /** The async instance/block state-machine spine (persist/emit/park/advance/finalize/fail). */
   private readonly runStateMachine: RunStateMachine
   private readonly agentExecutor: AgentExecutor
+  /** App-owned agent-kind registry (custom-kind traits/inline-surface + pre/post-op hooks). */
+  private readonly agentKindRegistry: AgentKindRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
@@ -588,6 +598,7 @@ export class ExecutionService {
     assertAgentBackendConfigured,
     runInitiatorScope,
     pokeInitiativeLoop,
+    agentKindRegistry,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -615,6 +626,7 @@ export class ExecutionService {
       pokeInitiativeLoop,
     })
     this.agentExecutor = agentExecutor
+    this.agentKindRegistry = agentKindRegistry
     this.workRunner = workRunner
     this.events = executionEventPublisher
     this.board = boardService
@@ -627,6 +639,7 @@ export class ExecutionService {
       workspaceRepository,
       blockRepository,
       accountRepository,
+      agentKindRegistry,
       documents: documentRepository,
       documentUrlResolver,
       tasks: taskRepository,
@@ -760,6 +773,7 @@ export class ExecutionService {
       blockRepository,
       executionRepository,
       agentExecutor,
+      agentKindRegistry,
       workRunner,
       events: executionEventPublisher,
       idGenerator,
@@ -1044,7 +1058,8 @@ export class ExecutionService {
     workspaceId: string,
     agentKinds: readonly string[],
   ): Promise<void> {
-    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT))) return
+    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT, this.agentKindRegistry)))
+      return
     const resolve = this.resolveBinaryArtifactStore
     if (!resolve) return
     const store = await resolve(workspaceId)
@@ -1092,7 +1107,10 @@ export class ExecutionService {
     if (block.modelId) {
       // A block-level pin applies to every step; it must satisfy an inline step too when the
       // pipeline has one.
-      check(block.modelId, agentKinds.some(isInlineModelStep))
+      check(
+        block.modelId,
+        agentKinds.some((kind) => isInlineModelStep(kind, this.agentKindRegistry)),
+      )
     } else if (this.resolveWorkspaceModelDefault) {
       // Independent per-kind resolutions on the start path — run them concurrently.
       const ids = await Promise.all(
@@ -1100,7 +1118,9 @@ export class ExecutionService {
           this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
         ),
       )
-      agentKinds.forEach((kind, i) => check(ids[i], isInlineModelStep(kind)))
+      agentKinds.forEach((kind, i) =>
+        check(ids[i], isInlineModelStep(kind, this.agentKindRegistry)),
+      )
     }
     if (unconfigured.size > 0) {
       throw new ConflictError(
@@ -1918,27 +1938,78 @@ export class ExecutionService {
    */
   private buildClarityKind(): ReviewKind<ClarityReview> {
     const require = (): ClarityReviewService => {
-      if (!this.clarityReviewService?.enabled) {
+      if (!this.clarityReviewService) {
         throw new ConflictError('The clarity reviewer is not configured')
       }
       return this.clarityReviewService
     }
     return {
       agentKind: CLARITY_REVIEW_AGENT_KIND,
+      // Enabled whenever the clarity STORE is wired — the bug-triage seed/auto-pass path is
+      // deterministic (driven by the upstream investigator's structured triage) and needs no
+      // reviewer model, so the gate must activate even with no model configured. The LLM
+      // review/incorporate/re-review paths still resolve their own model (and degrade gracefully
+      // when unwired: no investigation + no model ⇒ the review closure auto-passes).
       entityName: 'Clarity review',
-      enabled: () => !!this.clarityReviewService?.enabled,
+      enabled: () => !!this.clarityReviewService,
       getForBlock: (ws, blockId) => require().getForBlock(ws, blockId),
-      review: async (ws, block, preset) =>
-        require().review(ws, block.id, {
-          maxIterations: preset.maxRequirementIterations,
-          concernThreshold: preset.maxRequirementConcernAllowed,
-          investigation: await this.investigationForBlock(ws, block.id),
-        }),
-      reReview: (ws, reviewId, preset) =>
-        require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+      review: async (ws, block, preset) => {
+        const svc = require()
+        const structured = await this.structuredInvestigationForBlock(ws, block.id)
+        let review: ClarityReview
+        if (structured) {
+          // An upstream structured `bug-investigator`: seed the gate from its triage — NO reviewer
+          // LLM. `clear` → auto-pass; `needs_clarification` → one blocking finding per question.
+          // The investigator explicitly asked for clarification, so those questions ALWAYS park
+          // for a human — the requirements-review concern tolerance (`maxRequirementConcernAllowed`,
+          // which governs the requirements reviewer, not bug triage) must not silently auto-pass
+          // them — hence a fixed `none` threshold here rather than the preset's.
+          review = await svc.seedReview(ws, block.id, {
+            clarity: structured.clarity,
+            questions: structured.questions,
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: 'none',
+          })
+        } else if (!svc.enabled) {
+          // No structured investigation and no reviewer model: nothing to review against, so
+          // auto-pass (equivalent to the old pass-through when the reviewer wasn't configured).
+          review = await svc.seedReview(ws, block.id, {
+            clarity: 'clear',
+            questions: [],
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+          })
+        } else {
+          review = await svc.review(ws, block.id, {
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+            investigation: await this.investigationForBlock(ws, block.id),
+          })
+        }
+        // Whenever the gate parks with open questions — from the deterministic seed OR the LLM
+        // reviewer — best-effort echo them onto the linked tracker issue (answers still arrive
+        // in-app). A settled/auto-passed review echoes nothing; a tracker outage never fails the run.
+        await this.echoClarityQuestions(ws, block.id, review)
+        return review
+      },
+      reReview: async (ws, reviewId, preset) => {
+        const svc = require()
+        // No reviewer model wired: a re-review can't run, so settle the loop (converge) instead of
+        // throwing — the deterministic seed path can reach a park with no model configured.
+        if (!svc.enabled) return svc.markIncorporated(ws, reviewId)
+        return svc.reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed })
+      },
       incorporate: async (ws, blockId, reviewId, feedback) => {
+        const svc = require()
+        // No reviewer model: can't LLM-fold the answers into a clarified report, so settle the
+        // review as-is (the run advances on the raw report + the recorded answers) instead of
+        // throwing — keeps the model-free seed path resolvable.
+        if (!svc.enabled) {
+          await svc.markIncorporated(ws, reviewId)
+          return
+        }
         const investigation = await this.investigationForBlock(ws, blockId)
-        await require().incorporate(ws, reviewId, { feedback, investigation })
+        await svc.incorporate(ws, reviewId, { feedback, investigation })
       },
       markIncorporated: (ws, reviewId) => require().markIncorporated(ws, reviewId),
       markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
@@ -2116,6 +2187,56 @@ export class ExecutionService {
     if (!block?.executionId) return undefined
     const instance = await this.executionRepository.get(workspaceId, block.executionId)
     return instance ? this.investigationFor(instance) : undefined
+  }
+
+  /**
+   * The latest `bug-investigator` step's STRUCTURED triage on a run — its `clarity` verdict +
+   * `questions` — parsed leniently from `step.custom`. Drives the clarity gate's seed/auto-pass
+   * (see {@link buildClarityKind}): a structured investigator upstream means the gate seeds its
+   * findings from `questions` (or auto-passes on `clarity === 'clear'`) instead of running its
+   * own reviewer LLM. Undefined when no investigator ran or its result wasn't structured (an
+   * older prose investigator, or an unparseable reply) — the gate then falls back to the LLM path.
+   */
+  private structuredInvestigationFor(
+    instance: ExecutionInstance,
+  ): { clarity: 'clear' | 'needs_clarification'; questions: string[] } | undefined {
+    for (let i = instance.steps.length - 1; i >= 0; i--) {
+      const s = instance.steps[i]!
+      if (s.agentKind !== BUG_INVESTIGATOR_AGENT_KIND || s.custom === undefined) continue
+      const parsed = bugInvestigation.safeParse(s.custom)
+      if (!parsed) return undefined
+      return { clarity: parsed.clarity, questions: parsed.questions }
+    }
+    return undefined
+  }
+
+  /** Resolve a block's structured investigator triage via its current execution. */
+  private async structuredInvestigationForBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ clarity: 'clear' | 'needs_clarification'; questions: string[] } | undefined> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return undefined
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    return instance ? this.structuredInvestigationFor(instance) : undefined
+  }
+
+  /**
+   * Best-effort echo of a parked clarity review's open questions onto the block's linked tracker
+   * issue (see {@link IssueWritebackProvider.postQuestions}). Fires for BOTH the deterministic
+   * investigator seed and the LLM reviewer, so identical human-parked states behave the same. A
+   * settled/auto-passed review (status `incorporated`) or one with no open items echoes nothing,
+   * and a tracker outage never fails the run.
+   */
+  private async echoClarityQuestions(
+    workspaceId: string,
+    blockId: string,
+    review: ClarityReview,
+  ): Promise<void> {
+    if (!this.issueWriteback || review.status === 'incorporated') return
+    const questions = review.items.filter((i) => i.status === 'open').map((i) => i.detail)
+    if (questions.length === 0) return
+    await this.issueWriteback.postQuestions(workspaceId, blockId, questions).catch(() => {})
   }
 
   // The clarity / human-testing / visual-confirmation gate-window actions now live on the

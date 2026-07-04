@@ -1,7 +1,7 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
 import type { ToolSet } from 'ai'
-import { registeredWebResearchHint } from '../kinds/registry.js'
+import type { AgentKindRegistry } from '../kinds/registry.js'
 
 // Provider-hosted web search for the INLINE agents (architect / researcher), which
 // run a single `generateText` call via the AI SDK rather than going through the Pi
@@ -64,11 +64,15 @@ const GENERIC_WEB_RESEARCH_HINT =
  * harness's own conservative framing: search is for things that change or that the
  * agent is unsure of, not a reflex, and never a substitute for reading the code.
  */
-export function webResearchGuidanceFor(kind: string, opts: { fetch?: boolean } = {}): string {
+export function webResearchGuidanceFor(
+  kind: string,
+  registry: AgentKindRegistry,
+  opts: { fetch?: boolean } = {},
+): string {
   // A proprietary/custom kind's own hint wins (it knows its job; the shared library
   // doesn't); then the built-in defaults; then the generic fallback.
   const hint =
-    registeredWebResearchHint(kind) ?? BUILTIN_WEB_RESEARCH_HINTS[kind] ?? GENERIC_WEB_RESEARCH_HINT
+    registry.webResearchHint(kind) ?? BUILTIN_WEB_RESEARCH_HINTS[kind] ?? GENERIC_WEB_RESEARCH_HINT
   const tools = opts.fetch
     ? '`web_search` (titled result snippets for a query) and `web_fetch` (read a URL as text)'
     : 'a `web_search` tool'

@@ -1,4 +1,5 @@
 import type { AgentKind, ConsensusStrategy } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { assignAgentTraits, registerAgentTrait, traitsFor } from '@cat-factory/agents'
 import { TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
 
@@ -61,14 +62,17 @@ export function registerConsensusTraits(
 }
 
 /** The consensus strategies a kind is eligible for, derived from its traits. */
-export function consensusStrategiesFor(kind: AgentKind): ConsensusStrategy[] {
-  const traits = traitsFor(kind)
+export function consensusStrategiesFor(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): ConsensusStrategy[] {
+  const traits = traitsFor(kind, registry)
   return (Object.keys(STRATEGY_TRAIT) as ConsensusStrategy[]).filter((s) =>
     traits.has(STRATEGY_TRAIT[s]),
   )
 }
 
 /** Whether a kind is eligible for at least one consensus strategy. */
-export function isConsensusEligible(kind: AgentKind): boolean {
-  return consensusStrategiesFor(kind).length > 0
+export function isConsensusEligible(kind: AgentKind, registry: AgentKindRegistry): boolean {
+  return consensusStrategiesFor(kind, registry).length > 0
 }

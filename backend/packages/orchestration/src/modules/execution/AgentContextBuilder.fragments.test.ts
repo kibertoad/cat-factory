@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 
 // The best-practice fragment fold is trait-driven: only a `code-aware` kind receives
 // the service's selected fragments. Gate/tester steps dispatch their helpers off the
@@ -57,6 +58,7 @@ function makeBuilder(over: Partial<AgentContextBuilderDeps> = {}): AgentContextB
     workspaceRepository: { get: async () => null } as never,
     blockRepository: { get: async (_ws: string, id: string) => blocks.get(id) ?? null } as never,
     accountRepository: { get: async () => null } as never,
+    agentKindRegistry: defaultAgentKindRegistry(),
     fragmentResolver: {
       resolveBodiesForRun: async (_ws: string, ids: string[]) =>
         ids

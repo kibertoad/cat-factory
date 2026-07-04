@@ -1,5 +1,7 @@
 import {
   AiAgentExecutor,
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
   LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
@@ -663,6 +665,14 @@ export interface NodeContainerOptions {
    */
   backendRegistries?: BackendRegistries
   /**
+   * The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
+   * Rides its OWN option (not the integrations `BackendRegistries` bundle) since it's owned by
+   * `@cat-factory/agents`. Defaults to `defaultAgentKindRegistry()`. The SAME instance is
+   * threaded into the executors, `createCore`, and the ServerContainer's snapshot projection;
+   * the conformance suite injects a pre-loaded one to assert the seam is symmetric.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
    * tags the per-run container vs the runner pool separately) sets this so
@@ -780,6 +790,7 @@ function buildNodeContainerExecutor(
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>,
+  agentKindRegistry: AgentKindRegistry,
   mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
@@ -904,6 +915,7 @@ function buildNodeContainerExecutor(
     llmTraceSink: buildLangfuseSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    agentKindRegistry,
   })
 }
 
@@ -1334,6 +1346,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     customManifestTypeRegistry,
     userSecretKindRegistry,
   } = options.backendRegistries ?? createBackendRegistries()
+  // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds
+  // are visible) else the built-ins-only default. The SAME instance flows to the executors,
+  // createCore and the ServerContainer snapshot projection.
+  const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
@@ -1478,6 +1494,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
+    agentKindRegistry,
   })
 
   // Persistence the container-execution path needs (built from the same db). The
@@ -1676,6 +1693,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     resolveRepoTargets,
     resolveTransport,
     resolveWorkspaceModelDefault,
+    agentKindRegistry,
     options.mintInstallationToken,
     subscriptions,
     personalSubscriptions,
@@ -1692,7 +1710,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // route to the container (and fail loudly when its prerequisites are unconfigured).
   // Optionally wrapped with the consensus mechanism below (after the event publisher
   // is built, so live consensus pushes ride the same hub).
-  const standardAgentExecutor = new CompositeAgentExecutor(inline, container)
+  const standardAgentExecutor = new CompositeAgentExecutor(inline, container, agentKindRegistry)
 
   // GitHub-issue tracker: file the tech-debt pipeline's issue through the workspace's
   // own GitHub App installation (per-tenant), resolving the service's repo from the
@@ -1986,6 +2004,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
         sessionRepository: repos.consensusSessionRepository,
         ...(executionEventPublisher ? { eventPublisher: executionEventPublisher } : {}),
+        agentKindRegistry,
       }))
     : standardAgentExecutor
 
@@ -2109,6 +2128,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
+    // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
+    // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
+    agentKindRegistry,
     // The code-defined custom provision-type catalog, merged with the workspace rows by
     // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
     // per-service provisioning picker.

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentKind, AgentRunContext } from '@cat-factory/kernel'
-import { userPromptFor } from '@cat-factory/agents'
+import { defaultAgentKindRegistry, userPromptFor } from '@cat-factory/agents'
+
+const registry = defaultAgentKindRegistry()
 
 // Regression guard: linked extra-context (documents + tracker issues) must reach
 // EVERY agent step's user prompt — not only the generic roles. The four standard
@@ -54,7 +56,7 @@ describe('linked context in agent prompts', () => {
   // The standard phases are the code-producing ones; they matter most.
   for (const kind of ['architect', 'coder', 'reviewer', 'tester-api'] as AgentKind[]) {
     it(`includes linked docs and issues for the standard "${kind}" phase`, () => {
-      const prompt = userPromptFor(contextFor(kind))
+      const prompt = userPromptFor(contextFor(kind), registry)
       expect(prompt).toContain('Linked context documents')
       expect(prompt).toContain('Export PRD')
       expect(prompt).toContain('Export must be UTF-8.')
@@ -65,7 +67,7 @@ describe('linked context in agent prompts', () => {
   }
 
   it('includes linked docs and issues for a generic agent kind', () => {
-    const prompt = userPromptFor(contextFor('documenter' as AgentKind))
+    const prompt = userPromptFor(contextFor('documenter' as AgentKind), registry)
     expect(prompt).toContain('Linked context documents')
     expect(prompt).toContain('Export PRD')
     expect(prompt).toContain('Linked tracker issues')
@@ -76,14 +78,14 @@ describe('linked context in agent prompts', () => {
     const ctx = contextFor('coder' as AgentKind)
     delete ctx.block.contextDocs
     delete ctx.block.contextTasks
-    const prompt = userPromptFor(ctx)
+    const prompt = userPromptFor(ctx, registry)
     expect(prompt).not.toContain('Linked context documents')
     expect(prompt).not.toContain('Linked tracker issues')
   })
 
   // Container kinds get a summary index pointing at the on-disk files, NOT the bodies.
   it('renders a summary index pointing at .cat-context when materialized', () => {
-    const prompt = userPromptFor(contextFor('coder' as AgentKind), { materialized: true })
+    const prompt = userPromptFor(contextFor('coder' as AgentKind), registry, { materialized: true })
     expect(prompt).toContain('.cat-context/')
     expect(prompt).toContain('Export PRD')
     expect(prompt).toContain('[PROJ-42]')

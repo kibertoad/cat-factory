@@ -1,4 +1,4 @@
-import { registeredAgentTuning } from './registry.js'
+import type { AgentKindRegistry } from './registry.js'
 
 // Per-agent-kind execution tuning the backend folds into a container dispatch's job
 // body, so a kind whose normal working pattern differs from the default isn't killed
@@ -51,6 +51,6 @@ const BUILTIN_AGENT_TUNING: Record<string, AgentTuning> = {
  * every knob). Returns the override object as-is — the dispatcher spreads it into the
  * job body and the harness clamps each value.
  */
-export function agentTuningFor(kind: string): AgentTuning | undefined {
-  return registeredAgentTuning(kind) ?? BUILTIN_AGENT_TUNING[kind]
+export function agentTuningFor(kind: string, registry: AgentKindRegistry): AgentTuning | undefined {
+  return registry.tuning(kind) ?? BUILTIN_AGENT_TUNING[kind]
 }

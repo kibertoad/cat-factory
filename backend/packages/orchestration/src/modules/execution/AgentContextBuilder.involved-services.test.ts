@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
 import { AgentContextBuilder, type AgentContextBuilderDeps } from './AgentContextBuilder.js'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 
 // Service-connections Phase 2: a task's `involvedServiceIds` resolve into `context.involvedServices`
 // (title + connection description + the peer's live ephemeral env URL), read-time stale-filtered.
@@ -77,6 +78,7 @@ function makeBuilder(
   const deps: Partial<AgentContextBuilderDeps> = {
     workspaceRepository: { get: async () => null } as never,
     accountRepository: { get: async () => null } as never,
+    agentKindRegistry: defaultAgentKindRegistry(),
     blockRepository: {
       get: async (_ws: string, id: string) => byId.get(id) ?? null,
       listByWorkspace: async () => blocks,

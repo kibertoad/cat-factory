@@ -1,3 +1,4 @@
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
 import type { TesterQualityReviewer } from '@cat-factory/orchestration'
@@ -356,6 +357,14 @@ export interface ConformanceAppOptions {
    * Worker's `buildContainer` overrides). Absent → the facade's default built-in-only registry.
    */
   backendRegistries?: BackendRegistries
+  /**
+   * Inject the app-owned agent-kind registry, pre-loaded with a CUSTOM kind, so the suite can
+   * assert a deployment-registered kind resolves identically on EVERY runtime (its prompt +
+   * pre/post-op hooks + snapshot projection) — replacing the old module-global registration.
+   * Each facade harness threads the SAME instance into its container build AND the shared
+   * {@link FakeAgentExecutor}. Absent → the facade's default built-ins-only registry.
+   */
+  agentKindRegistry?: AgentKindRegistry
   /**
    * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
    * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an

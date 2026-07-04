@@ -402,8 +402,26 @@ export async function runCodingAgent(
 }
 
 /** Sanitise an owner/name into a safe single path segment for a sibling checkout directory. */
-function safeDirSegment(value: string): string {
+export function safeDirSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
+}
+
+/**
+ * A stateful sibling-directory allocator: returns a unique directory name per repo
+ * (owner-prefixed on a name collision, then a numeric suffix as a last resort), so two repos
+ * named the same never clobber each other. Shared by the coding + read-only explore multi-repo
+ * fan-outs so the claim scheme can't drift between them.
+ */
+export function makeDirClaimer(): (repo: Pick<RepoSpec, 'name' | 'owner'>) => string {
+  const usedDirs = new Set<string>()
+  return (repo) => {
+    let seg = safeDirSegment(repo.name)
+    if (usedDirs.has(seg)) seg = safeDirSegment(`${repo.owner}-${repo.name}`)
+    let unique = seg
+    for (let i = 2; usedDirs.has(unique); i++) unique = `${seg}-${i}`
+    usedDirs.add(unique)
+    return unique
+  }
 }
 
 /** One repository participating in a multi-repo run: where to clone it + what to do after. */
@@ -449,17 +467,9 @@ export async function runMultiRepoCoding(
   const peers: PeerRepoSpec[] = job.peerRepos ?? []
   const primaryWorkBranch = job.pushBranch ?? job.newBranch ?? job.branch
 
-  // Assign a unique sibling directory per repo (owner-prefixed on a name collision, then a
-  // numeric suffix as a last resort) so two repos named the same never clobber each other.
-  const usedDirs = new Set<string>()
-  const claimDir = (repo: RepoSpec): string => {
-    let seg = safeDirSegment(repo.name)
-    if (usedDirs.has(seg)) seg = safeDirSegment(`${repo.owner}-${repo.name}`)
-    let unique = seg
-    for (let i = 2; usedDirs.has(unique); i++) unique = `${seg}-${i}`
-    usedDirs.add(unique)
-    return unique
-  }
+  // Assign a unique sibling directory per repo so two repos named the same never clobber
+  // each other (shared allocator with the read-only explore fan-out).
+  const claimDir = makeDirClaimer()
   const legs: RepoLeg[] = [
     {
       repo: job.repo,
@@ -479,7 +489,9 @@ export async function runMultiRepoCoding(
         dirName: claimDir(peer.repo),
         dir: '',
         cloneBranch: peer.repo.baseBranch,
-        workBranch: peer.newBranch,
+        // Coding peers always carry `newBranch` (the backend sets the shared work branch);
+        // fall back to the primary's for the type (read-only peers never reach this path).
+        workBranch: peer.newBranch ?? primaryWorkBranch,
         ghToken: peer.ghToken ?? job.ghToken,
         ...(peer.pr ? { pr: peer.pr } : {}),
         ...(peer.frameId ? { frameId: peer.frameId } : {}),

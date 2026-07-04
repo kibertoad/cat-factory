@@ -1,6 +1,7 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
+import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import { catFactoryObservability } from '../../providers/instrumented.js'
 import { type AgentRouting, resolveAgentConfig, resolveInlineModelRef } from './routing.js'
@@ -57,6 +58,12 @@ export interface AiAgentExecutorDependencies {
    * Absent ⇒ inline agents make a plain one-shot completion, exactly as before.
    */
   webSearch?: InlineWebSearchOptions
+  /**
+   * The app-owned agent-kind registry the inline prompt builders read (custom kinds'
+   * prompts / web-research hints). Defaults to a fresh {@link defaultAgentKindRegistry}
+   * (built-ins only) when a facade doesn't inject one.
+   */
+  agentKindRegistry?: AgentKindRegistry
 }
 
 /**
@@ -78,6 +85,7 @@ export class AiAgentExecutor implements AgentExecutor {
   ) => Promise<string | undefined>
   private readonly runsInline?: (ref: ModelRef) => boolean
   private readonly webSearch?: InlineWebSearchOptions
+  private readonly agentKindRegistry: AgentKindRegistry
 
   constructor({
     modelProviderResolver,
@@ -87,6 +95,7 @@ export class AiAgentExecutor implements AgentExecutor {
     resolveWorkspaceModelDefault,
     runsInline,
     webSearch,
+    agentKindRegistry,
   }: AiAgentExecutorDependencies) {
     if (!modelProviderResolver && !modelProvider) {
       throw new Error('AiAgentExecutor requires a modelProviderResolver or a modelProvider')
@@ -98,6 +107,7 @@ export class AiAgentExecutor implements AgentExecutor {
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.runsInline = runsInline
     this.webSearch = webSearch
+    this.agentKindRegistry = agentKindRegistry ?? defaultAgentKindRegistry()
   }
 
   /** Resolve the model provider for a run's scope (per-scope DB pool, else the static one). */
@@ -160,7 +170,7 @@ export class AiAgentExecutor implements AgentExecutor {
 
     // Base role prompt, then fold in the best-practice fragments selected for the
     // block — the engine-resolved tenant catalog when present, else the manual ids.
-    const baseSystem = config.system ?? systemPromptFor(context.agentKind)
+    const baseSystem = config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry)
     const composed = composeBlockSystemPrompt(baseSystem, context.block)
 
     // Provider-hosted web search for the allow-listed design/research kinds, when
@@ -174,13 +184,13 @@ export class AiAgentExecutor implements AgentExecutor {
     // Inline tool is web_search only (no web_fetch); the per-kind hint is resolved
     // from the registry/catalog so a custom kind gets its own nudge.
     const system = tools
-      ? `${composed}${webResearchGuidanceFor(context.agentKind, { fetch: false })}`
+      ? `${composed}${webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, { fetch: false })}`
       : composed
 
     const { text, usage } = await generateText({
       model,
       system,
-      prompt: userPromptFor(context),
+      prompt: userPromptFor(context, this.agentKindRegistry),
       temperature: config.temperature,
       maxOutputTokens: config.maxOutputTokens,
       ...(tools ? { tools } : {}),

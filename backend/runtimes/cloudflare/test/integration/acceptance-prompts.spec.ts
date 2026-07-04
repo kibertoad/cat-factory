@@ -5,9 +5,17 @@ import {
   composeSystemPrompt,
   isAcceptanceKind,
   phaseForKind,
-  systemPromptFor,
-  userPromptFor,
+  systemPromptFor as _systemPromptFor,
+  defaultAgentKindRegistry,
+  userPromptFor as _userPromptFor,
 } from '@cat-factory/agents'
+
+// App-owned DI: a fresh registry (built-ins pre-loaded) injected into the prompt fns so
+// every existing call site keeps its original arity.
+const _agentKindRegistry = defaultAgentKindRegistry()
+const systemPromptFor = (kind: string) => _systemPromptFor(kind, _agentKindRegistry)
+const userPromptFor = (ctx: AgentRunContext, opts?: { materialized?: boolean }) =>
+  _userPromptFor(ctx, _agentKindRegistry, opts)
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 

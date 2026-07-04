@@ -197,6 +197,8 @@ import { InitiativeLoopService } from './modules/initiative/InitiativeLoopServic
 import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
   FragmentLibraryService,
   FragmentSourceService,
   type ResolveFragmentInstallationId,
@@ -252,6 +254,15 @@ export interface CoreDependencies {
    * tests.
    */
   agentExecutor: AgentExecutor
+  /**
+   * The app-owned agent-kind registry (built-ins + any a deployment registered by
+   * reference). Optional + defaulted to `defaultAgentKindRegistry()` so existing
+   * construction sites (tests, harnesses) don't break; each facade injects the SAME
+   * instance it threads into its executors so custom kinds resolve consistently
+   * everywhere. Read by the engine (traits / inline-surface / pre-post-op hooks) and
+   * re-exposed on {@link Core} for the HTTP layer's snapshot projection.
+   */
+  agentKindRegistry?: AgentKindRegistry
   /**
    * Optional: resolve a block's run repo (installation + repo + default branch) bound to
    * a checkout-free {@link RepoFiles}, so a registered custom kind's pre/post-op hooks
@@ -1029,6 +1040,12 @@ export interface Core {
   pipelineService: PipelineService
   executionService: ExecutionService
   spendService: SpendService
+  /**
+   * The app-owned agent-kind registry the engine resolved (the facade's injected instance,
+   * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot
+   * projection reads the SAME instance the engine + executors use.
+   */
+  agentKindRegistry: AgentKindRegistry
   /**
    * The real-time event publisher the engine pushes transitions through. Exposed so
    * the runtime-neutral LLM proxy can push a compact `llmCall` activity event per
@@ -1947,7 +1964,10 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
  * the per-scope provider resolver, the routing default ref, and the block-model resolver
  * — so a Sandbox cell (and the judge) resolves its catalog id exactly like a pipeline step.
  */
-function createSandboxModule(deps: CoreDependencies): SandboxModule | undefined {
+function createSandboxModule(
+  deps: CoreDependencies,
+  agentKindRegistry: AgentKindRegistry,
+): SandboxModule | undefined {
   const {
     sandboxPromptVersionRepository,
     sandboxFixtureRepository,
@@ -1973,6 +1993,7 @@ function createSandboxModule(deps: CoreDependencies): SandboxModule | undefined 
     workspaceRepository: deps.workspaceRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    agentKindRegistry,
   }
   const defaultModelRef = deps.requirementReviewModel ?? deps.documentPlannerModel
   const service = new SandboxService({ ...repositories, defaultModelRef })
@@ -2144,6 +2165,10 @@ function createRecurringModule(
 }
 
 export function createCore(dependencies: CoreDependencies): Core {
+  // Resolve the app-owned agent-kind registry ONCE: the facade's injected instance (so a
+  // deployment's custom kinds are visible) else a fresh built-ins-only registry. The SAME
+  // instance is threaded into the engine and re-exposed on `Core` for the HTTP snapshot.
+  const agentKindRegistry = dependencies.agentKindRegistry ?? defaultAgentKindRegistry()
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
   // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every
@@ -2262,7 +2287,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
-  const sandbox = createSandboxModule(dependencies)
+  const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
@@ -2336,6 +2361,7 @@ export function createCore(dependencies: CoreDependencies): Core {
 
   const executionService = new ExecutionService({
     ...dependencies,
+    agentKindRegistry,
     workRunner,
     executionEventPublisher,
     boardService,
@@ -2441,6 +2467,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     pipelineService,
     executionService,
     spendService,
+    agentKindRegistry,
     executionEventPublisher,
     ...(llmObservability ? { llmObservability } : {}),
     ...(dependencies.agentContextObservability

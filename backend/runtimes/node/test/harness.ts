@@ -16,6 +16,7 @@ import {
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
 } from '@cat-factory/conformance'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type { ExecutionInstance, Service, WorkspaceSnapshot } from '@cat-factory/kernel'
@@ -126,17 +127,24 @@ export function makeConformanceApp(
     deployJobClient?: CoreDependencies['deployJobClient']
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
+    agentKindRegistry?: AgentKindRegistry
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     taskSourceProviders?: CoreDependencies['taskSourceProviders']
   },
 ): ConformanceApp {
+  // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
+  // (so it detects the custom kind's structured output) and the container (prompts + snapshot).
+  const agentExecutorOptions: FakeAgentOptions = {
+    ...agentOptions,
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
+  }
   // Record emitted run snapshots so the suite can assert intermediate transitions
   // (e.g. the model present on the first "spinning up container" emit).
   const recorder = new RecordingEventPublisher()
   const overrides: Partial<CoreDependencies> = {
     agentExecutor: agentOptions?.asyncKinds?.length
-      ? new AsyncFakeAgentExecutor(agentOptions)
-      : new FakeAgentExecutor(agentOptions),
+      ? new AsyncFakeAgentExecutor(agentExecutorOptions)
+      : new FakeAgentExecutor(agentExecutorOptions),
     workRunner: new NoopWorkRunner(),
     bootstrapRunner: new NoopBootstrapRunner(),
     // A deterministic bootstrapper so the suite can drive the dispatch→poll→finalise
@@ -201,6 +209,9 @@ export function makeConformanceApp(
     // Inject the app-owned backend registries (pre-loaded with custom kinds in the custom-backend
     // suite) so a registered custom backend is resolved by reference, exactly like a real deployment.
     ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),
+    // Inject the app-owned agent-kind registry (pre-loaded with a custom kind in the custom-kind
+    // suite) so the container resolves it by reference — the SAME instance the fake executor got.
+    ...(opts?.agentKindRegistry ? { agentKindRegistry: opts.agentKindRegistry } : {}),
   })
   const app = createApp(container, TEST_ENV)
 

@@ -26,8 +26,10 @@ import {
 } from '@cat-factory/kernel'
 import { resolveInstanceTypeId } from '@cat-factory/contracts'
 import {
+  type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
+  defaultAgentKindRegistry,
   isProxyableProvider,
   isReadOnlyAgentKind,
   webResearchGuidanceFor,
@@ -325,14 +327,23 @@ function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
 const IMPLEMENTER_AGENT_KIND = 'coder'
 
 /**
- * The kinds that fan out across the task's connected repos as sibling checkouts
- * (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes those
- * SAME work branches to fix red CI across every repo in one container (a cross-repo contract
- * break is exactly what a single-repo fixer can't fix). The conflict-resolver stays SINGLE-repo
- * (a git conflict is per-repo textual — handled by targeting the conflicted repo, not fan-out);
- * read-only / structured kinds never fan out.
+ * The PRE-REGISTRY built-in kinds that fan out across the task's connected repos as sibling
+ * checkouts (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes
+ * those SAME work branches to fix red CI across every repo in one container (a cross-repo
+ * contract break is exactly what a single-repo fixer can't fix). The conflict-resolver stays
+ * SINGLE-repo (a git conflict is per-repo textual — handled by targeting the conflicted repo,
+ * not fan-out).
+ *
+ * These two are not yet migrated to the agent-kind registry, so they can't declare
+ * `fanOutMultiRepo` on a definition — hence this small allow-list. Registry-backed kinds (the
+ * read-only `bug-investigator`, and any custom cross-service explore kind a deployment registers)
+ * opt in via {@link AgentKindRegistry.fansOutMultiRepo} instead of being added here — so a new
+ * fan-out kind is a registry flag, not another entry in this Set.
  */
-const MULTI_REPO_FANOUT_KINDS: ReadonlySet<string> = new Set([IMPLEMENTER_AGENT_KIND, 'ci-fixer'])
+const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
+  IMPLEMENTER_AGENT_KIND,
+  'ci-fixer',
+])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
 function contextFileName(base: string, used: Set<string>): string {
@@ -529,6 +540,13 @@ export interface ContainerAgentExecutorDependencies {
    * `storeAgentContext` setting); absent ⇒ nothing is captured.
    */
   agentContextObservability?: AgentContextRecorder
+  /**
+   * The app-owned agent-kind registry: threaded into the job-body builders so a
+   * registered kind's system/user prompt, tuning and web-research hint resolve off the
+   * SAME instance the rest of the app uses. Defaults to a fresh
+   * {@link defaultAgentKindRegistry} (built-ins only) when a facade doesn't inject one.
+   */
+  agentKindRegistry?: AgentKindRegistry
 }
 
 /** Poll cadence for the non-durable `run()` fallback (the durable driver sleeps between polls itself). */
@@ -575,8 +593,12 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   /** Resolves which model + subscription path a step runs on (routing policy). */
   private readonly modelRouter: ModelRouter
 
+  /** The app-owned agent-kind registry the job-body builders read (custom-kind prompts/tuning). */
+  private readonly agentKindRegistry: AgentKindRegistry
+
   constructor(private readonly deps: ContainerAgentExecutorDependencies) {
     this.jobs = new RunnerJobClient(deps.resolveTransport)
+    this.agentKindRegistry = deps.agentKindRegistry ?? defaultAgentKindRegistry()
     this.modelRouter = new ModelRouter({
       agentRouting: deps.agentRouting,
       resolveBlockModel: deps.resolveBlockModel,
@@ -959,7 +981,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // Per-kind execution tuning (loosen-only progress-guard knobs) the harness applies
     // over its env/built-in defaults, so a kind whose normal pattern differs (e.g. a
     // research-heavy or retry-heavy kind) isn't killed mid-progress. Absent ⇒ defaults.
-    const tuning = agentTuningFor(context.agentKind)
+    const tuning = agentTuningFor(context.agentKind, this.agentKindRegistry)
     // Private-registry auth for the checkout's installs. Resolved per dispatch (like
     // ghToken) and spread into `common`, so every kind with a checkout gets it.
     const packageRegistries = (await this.deps.resolvePackageRegistries?.(workspaceId)) ?? []
@@ -988,7 +1010,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // analysis/… and any custom container kind resolves its own).
     const webSearchEnabled = (await this.deps.resolveWebSearchEnabled?.(workspaceId)) ?? false
     const webTools = {
-      webToolsGuidance: webResearchGuidanceFor(context.agentKind, { fetch: true }),
+      webToolsGuidance: webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, {
+        fetch: true,
+      }),
       ...(webSearchEnabled ? { webSearch: true } : {}),
     }
 
@@ -1005,11 +1029,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     let multiRepoSection: string | undefined
     let commonForKind = common
     const involvedServices = context.involvedServices ?? []
-    if (
-      MULTI_REPO_FANOUT_KINDS.has(context.agentKind) &&
-      involvedServices.length > 0 &&
-      this.deps.resolveRepoTargets
-    ) {
+    const fansOutMultiRepo =
+      MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
+      this.agentKindRegistry.fansOutMultiRepo(context.agentKind)
+    if (fansOutMultiRepo && involvedServices.length > 0 && this.deps.resolveRepoTargets) {
       const { checkouts } = await this.deps.resolveRepoTargets(
         workspaceId,
         blockId,
@@ -1042,15 +1065,19 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
 
-    const { body, kind } = buildKindBody(promptContext, {
-      common: commonForKind,
-      webTools,
-      repo,
-      workBranch,
-      workBranchReady,
-      ...(peerRepos ? { peerRepos } : {}),
-      ...(multiRepoSection ? { multiRepoSection } : {}),
-    })
+    const { body, kind } = buildKindBody(
+      promptContext,
+      {
+        common: commonForKind,
+        webTools,
+        repo,
+        workBranch,
+        workBranchReady,
+        ...(peerRepos ? { peerRepos } : {}),
+        ...(multiRepoSection ? { multiRepoSection } : {}),
+      },
+      this.agentKindRegistry,
+    )
     return {
       subscriptionTokenId,
       body,

@@ -68,13 +68,11 @@ import {
   isCompanionKind,
   isContainerBackedCompanion,
   moduleSlug,
-  registeredAgentStep,
-  registeredPostOps,
-  registeredPreOps,
   runRepoOps,
   specPostOp,
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
 import type {
   BugIntakeOutcome,
@@ -87,11 +85,13 @@ import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
+import { renderInvestigationDigest } from './bugInvestigation.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
+  BUG_INVESTIGATOR_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
   HUMAN_TEST_AGENT_KIND,
@@ -236,6 +236,8 @@ export interface RunDispatcherDeps {
   blockRepository: BlockRepository
   executionRepository: ExecutionRepository
   agentExecutor: AgentExecutor
+  /** App-owned agent-kind registry: a registered kind's step spec + pre/post-op hooks. */
+  agentKindRegistry: AgentKindRegistry
   workRunner: WorkRunner
   events: ExecutionEventPublisher
   idGenerator: IdGenerator
@@ -296,6 +298,7 @@ export class RunDispatcher {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
   private readonly agentExecutor: AgentExecutor
+  private readonly agentKindRegistry: AgentKindRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly idGenerator: IdGenerator
@@ -347,6 +350,7 @@ export class RunDispatcher {
     this.blockRepository = deps.blockRepository
     this.executionRepository = deps.executionRepository
     this.agentExecutor = deps.agentExecutor
+    this.agentKindRegistry = deps.agentKindRegistry
     this.workRunner = deps.workRunner
     this.events = deps.events
     this.idGenerator = deps.idGenerator
@@ -2264,12 +2268,12 @@ export class RunDispatcher {
     step: PipelineStep,
     context: AgentRunContext,
   ): Promise<void> {
-    const ops = registeredPreOps(step.agentKind)
+    const ops = this.agentKindRegistry.preOps(step.agentKind)
     if (ops.length === 0) return
     const runRepo = await this.resolveRunRepo(workspaceId, block.id)
     if (!runRepo) return
     const branch = await this.resolveRepoOpBranch(
-      registeredAgentStep(step.agentKind),
+      this.agentKindRegistry.agentStep(step.agentKind),
       block,
       runRepo,
     )
@@ -2307,7 +2311,7 @@ export class RunDispatcher {
     isFinalStep: boolean,
     result: AgentRunResult,
   ): Promise<void> {
-    const registered = registeredPostOps(step.agentKind)
+    const registered = this.agentKindRegistry.postOps(step.agentKind)
     const builtIn = this.builtInPostOps(step.agentKind)
     if (registered.length === 0 && builtIn.length === 0) return
     const block = await this.blockRepository.get(workspaceId, instance.blockId)
@@ -2324,7 +2328,7 @@ export class RunDispatcher {
     // Registered (custom) kinds resolve their branch from their declared clone target.
     if (registered.length > 0) {
       const branch = await this.resolveRepoOpBranch(
-        registeredAgentStep(step.agentKind),
+        this.agentKindRegistry.agentStep(step.agentKind),
         block,
         runRepo,
       )
@@ -2807,6 +2811,21 @@ export class RunDispatcher {
       // whether the single-actor estimator or the consensus ranked-scoring variant produced
       // the JSON. Running at the post-completion slot keeps the summary in `step.output`
       // before the approval gate reads it as the proposal.
+      // A `bug-investigator` step returns its STRUCTURED triage as `result.custom` (kept on
+      // `step.custom` for the generic-structured view + the clarity gate's structured read).
+      // Render a prose digest into `step.output` at the post-completion slot so downstream
+      // steps (estimator / repro-test / coder) read the investigation via `priorOutputs`
+      // (which carries only `step.output`), and the clarity gate's investigation-prose context
+      // sees it too. An unparseable result leaves the agent's raw reply on `step.output`.
+      {
+        kind: BUG_INVESTIGATOR_AGENT_KIND,
+        phase: 'post-completion',
+        applies: (result) => result.custom !== undefined,
+        resolve: async ({ result }) => {
+          const digest = renderInvestigationDigest(result.custom)
+          if (digest) return { output: digest }
+        },
+      },
       {
         kind: TASK_ESTIMATOR_AGENT_KIND,
         phase: 'post-completion',

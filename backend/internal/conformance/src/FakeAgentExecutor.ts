@@ -10,7 +10,11 @@ import type {
   TestReport,
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
-import { isCompanionKind, registeredAgentStep } from '@cat-factory/agents'
+import {
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
+  isCompanionKind,
+} from '@cat-factory/agents'
 
 export interface FakeAgentOptions {
   /** Confidence reported on the final step (drives auto-merge vs PR). Default 1. */
@@ -172,6 +176,13 @@ export interface FakeAgentOptions {
    * fix, and re-runs correctly WITH it. Default false (per-run container, fresh each round).
    */
   pooledContainer?: boolean
+  /**
+   * The app-owned agent-kind registry the fake reads to detect a structured `container-explore`
+   * kind (built-in `bug-investigator` or a registered CUSTOM kind) so it returns `result.custom`.
+   * The custom-kind conformance case injects the SAME instance the container was built with;
+   * omitted ⇒ a fresh {@link defaultAgentKindRegistry} (built-ins only).
+   */
+  agentKindRegistry?: AgentKindRegistry
 }
 
 /**
@@ -183,7 +194,12 @@ export interface FakeAgentOptions {
  * behaviour on the Cloudflare Worker and the Node service.
  */
 export class FakeAgentExecutor implements AgentExecutor {
-  constructor(private readonly options: FakeAgentOptions = {}) {}
+  /** The agent-kind registry backing the structured-output detection (defaults to built-ins). */
+  protected readonly agentKindRegistry: AgentKindRegistry
+
+  constructor(private readonly options: FakeAgentOptions = {}) {
+    this.agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
+  }
 
   /** Count of companion grading calls so far, to walk `companionRatings` in order. */
   private companionCalls = 0
@@ -325,7 +341,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     // parsed JSON as `custom` — exactly what the generic manifest-driven `agent` dispatch
     // surfaces — so the engine's registered post-op (render + commit via RepoFiles) runs
     // without a container. Detected from the registry, so the shared fake needs no per-kind id.
-    if (registeredAgentStep(context.agentKind)?.output?.kind === 'structured') {
+    if (this.agentKindRegistry.agentStep(context.agentKind)?.output?.kind === 'structured') {
       return {
         output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
         model: 'fake',

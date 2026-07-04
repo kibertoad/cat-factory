@@ -23,6 +23,8 @@ import {
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -350,6 +352,7 @@ function selectAgentExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  agentKindRegistry: AgentKindRegistry,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
   agentContextObservability?: AgentContextRecorder,
@@ -365,6 +368,7 @@ function selectAgentExecutor(
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
+    agentKindRegistry,
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private
@@ -378,6 +382,7 @@ function selectAgentExecutor(
     db,
     clock,
     resolveTransport,
+    agentKindRegistry,
     subscriptions,
     personalSubscriptions,
     agentContextObservability,
@@ -394,7 +399,7 @@ function selectAgentExecutor(
 
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
   // container.
-  return new CompositeAgentExecutor(inline, container)
+  return new CompositeAgentExecutor(inline, container, agentKindRegistry)
 }
 
 /** Truthy env flag (`true`/`1`/`yes`). */
@@ -415,6 +420,7 @@ function maybeWrapConsensus(
   config: AppConfig,
   db: D1Database,
   eventPublisher: ExecutionEventPublisher | undefined,
+  agentKindRegistry: AgentKindRegistry,
 ): AgentExecutor {
   if (!isTruthy(env.CONSENSUS_ENABLED)) return standard
   registerConsensusTraits()
@@ -426,6 +432,7 @@ function maybeWrapConsensus(
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     sessionRepository: new D1ConsensusSessionRepository({ db }),
     ...(eventPublisher ? { eventPublisher } : {}),
+    agentKindRegistry,
   })
 }
 
@@ -1329,6 +1336,7 @@ function buildContainerExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  agentKindRegistry: AgentKindRegistry,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
   agentContextObservability?: AgentContextRecorder,
@@ -1451,6 +1459,7 @@ function buildContainerExecutor(
     llmTraceSink: buildLangfuseSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    agentKindRegistry,
   })
 }
 
@@ -2067,6 +2076,11 @@ export function buildContainer(
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
   const userSecretKindRegistry =
     overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
+  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
+  // The SAME instance is threaded into the executors, createCore, the boot-time
+  // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
+  // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
+  const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
@@ -2257,6 +2271,7 @@ export function buildContainer(
           db,
           clock,
           resolveTransport,
+          agentKindRegistry,
           subscriptions,
           personalSubscriptions,
           agentContextObservability,
@@ -2265,7 +2280,9 @@ export function buildContainer(
         config,
         db,
         eventPublisher,
+        agentKindRegistry,
       ),
+    agentKindRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
     spendPricing: config.spend,

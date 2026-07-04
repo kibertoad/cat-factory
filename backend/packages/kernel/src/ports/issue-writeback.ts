@@ -31,4 +31,15 @@ export interface IssueWritebackProvider {
     blockId: string,
     info: { runUrl?: string; inProgressLabel?: string },
   ): Promise<void>
+  /**
+   * The bug-triage clarification gate (`clarity-review`) parked for a human because the
+   * investigator flagged the report as unclear — echo the open questions as a comment on
+   * the block's linked tracker issue(s) so the reporter sees the ask where they filed the
+   * bug. This is an ECHO only: answers still arrive in-app (the clarity window); there is
+   * no tracker-side reply polling. Best-effort like the other hooks (a tracker outage never
+   * fails the run) and, like {@link onIssuePickedUp}, NOT gated on the workspace writeback
+   * settings — asking the reporter for the detail needed to fix their bug is intake
+   * semantics, not an optional courtesy. A no-op when the block has no linked issue.
+   */
+  postQuestions(workspaceId: string, blockId: string, questions: string[]): Promise<void>
 }

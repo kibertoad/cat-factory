@@ -251,18 +251,49 @@ Notes for Phase F/G/H (which build on this step):
 
 ### Phase F — investigation + clarification (design §4–5)
 
-**Blocked on Phase B merging** (needs `peerRepos`/`resolveRepoTargets`), and note
-PR #752's fan-out is currently gated to `IMPLEMENTER_AGENT_KIND` (`'coder'`) only
-(`ContainerAgentExecutor`) — this phase must extend that gate to include
-`bug-investigator`, not assume `peerRepos` is already wired for every container kind.
+Implemented on branch `claude/bug-triaging-initiative-tif4vb`, stacked on the #752 branch (for
+the multi-repo checkouts it extends) and targeting it, like Phases C/D/E. **Harness change +
+image bump** (`1.34.5` → `1.34.6`): the read-only multi-repo explore path is a genuine new
+harness capability (the explore mode dropped `peerRepos` — it only ever cloned one repo), so
+unlike Phases C–E this phase is NOT harness-free. Pins synced via `pnpm sync:image-tags`.
 
 | Item                                                                                                     | Status |
 | -------------------------------------------------------------------------------------------------------- | ------ |
-| `bug-investigator` → structured `container-explore` kind (same id) + valibot schema + peerRepos checkout | todo   |
-| Post-completion resolver: prose digest → `step.output`, structured → `step.custom`                       | todo   |
-| `clarity-review` seeding from investigator `questions` + auto-pass on `clarity === 'clear'`              | todo   |
-| `IssueWritebackProvider.postQuestions` tracker comment on park (best-effort)                             | todo   |
-| Conformance: clear → no park; needs_clarification → park + resume on answer                              | todo   |
+| `bug-investigator` → structured `container-explore` kind (same id) + valibot schema + peerRepos checkout | done   |
+| Post-completion resolver: prose digest → `step.output`, structured → `step.custom`                       | done   |
+| `clarity-review` seeding from investigator `questions` + auto-pass on `clarity === 'clear'`              | done   |
+| `IssueWritebackProvider.postQuestions` tracker comment on park (best-effort)                             | done   |
+| Conformance: clear → no park; needs_clarification → park + resume on answer                              | done   |
+
+Notes for Phase G/H (which build on this):
+
+- **`bug-investigator` is a registered kind now**, not a ROLES entry — it self-registers from
+  `@cat-factory/agents` (`agents/kinds/bug-investigator.ts`), exporting the lenient
+  `bugInvestigation` valibot schema (`clarity` / `summary` / `rootCauseHypotheses` /
+  `affectedRepos` / `suggestedReproductions` / `questions`). Its read-only guardrail +
+  final-answer-in-reply directives auto-append (the `applySurfaceDirectives` seam), so the
+  registered `systemPrompt` is just the core role. Phase G's `repro-test` copies this shape.
+- **The digest resolver is a BUILT-IN inline resolver** in `RunDispatcher.buildStepResolverRegistry`
+  (`phase: 'post-completion'`, `renderInvestigationDigest`), NOT a `registerStepResolver` call —
+  it is a platform kind, so it lives with the other built-in resolvers (merger / blueprints /
+  task-estimator), not the public seam. The digest is how the investigation reaches downstream
+  container steps: `priorOutputs` carries only `step.output`, so the structured `step.custom`
+  alone would be invisible to the estimator / repro-test / coder.
+- **The clarity seed is model-independent** — `ClarityReviewService.seedReview` builds the review
+  from the investigator's structured triage with `model: null` and no LLM call, sharing the base
+  `persistInitialReview` dispose/notify tail. So the clarity gate's `enabled()` is now
+  **store-based** (`!!clarityReviewService`), not model-based: it activates whenever the store is
+  wired, and the LLM review/incorporate/re-review paths degrade gracefully when no model is wired
+  (no investigation + no model ⇒ the gate auto-passes, the old pass-through). This is why the
+  conformance park/resume test works with NO reviewer model.
+- **The multi-repo fan-out gate** (`MULTI_REPO_FANOUT_KINDS` in `ContainerAgentExecutor`) now
+  includes `bug-investigator`. Phase G's `repro-test` (a `container-coding` kind) must be added
+  too when a bug spans repos — but it rides the EXISTING coding `runMultiRepoCoding` path (opens
+  PRs), NOT the new read-only `runMultiRepoExplore` one.
+- **The read-only harness path** (`runMultiRepoExplore` in `executor-harness/src/agent.ts`) is
+  deliberately simpler than `runMultiRepoCoding`: clone siblings, run once at root, parse the
+  result — no work branches, no push, no PR. The explore result-parsing is now shared with the
+  single-repo path via `finalizeExploreResult`.
 
 ### Phase G — `repro-test` agent (design §7–8)
 
@@ -313,18 +344,19 @@ also needs adding to the (currently `coder`-only) multi-repo fan-out gate from P
   the same PR (the locale-parity CI gate).
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
   with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
-- **Phase B's multi-repo fan-out (PR #752) is gated to the `coder` kind only** — dropping
-  `serviceDirectory` scoping and building `peerRepos`/the multi-repo prompt section fires
-  only for `IMPLEMENTER_AGENT_KIND`. Phases F and G (`bug-investigator`,
-  `repro-test`) are container kinds that also want sibling checkouts for a
-  multi-service bug, so each must widen that gate rather than assume `peerRepos` is
-  already wired for every kind — check `ContainerAgentExecutor` when Phase F/G start.
-- **The harness's multi-repo path (`runMultiRepoCoding`) is deliberately simpler than the
-  single-repo `runCodingAgent`** (per PR #752 / service-connections.md's carried-forward
-  notes): no mid-run checkpoints, no warm pool, no follow-up streaming. `bug-investigator`
-  and `repro-test` will run through this same simpler path once multi-repo, not the
-  richer single-repo one — don't design Phase F/G around checkpoint/streaming behaviour
-  that only exists on the single-repo side.
+- **The multi-repo fan-out gate (`MULTI_REPO_FANOUT_KINDS` in `ContainerAgentExecutor`) now
+  covers `coder`, `ci-fixer` AND `bug-investigator`** (Phase F widened it). Phase G's
+  `repro-test` (a `container-coding` kind) must be added too when a bug spans repos. Note the
+  investigator is READ-ONLY: Phase F also had to teach the HARNESS to clone peers in explore
+  mode (`runMultiRepoExplore`) — the coding fan-out (`runMultiRepoCoding`) opens PRs and was
+  the only multi-repo path before. `repro-test` rides the EXISTING coding path (it commits),
+  so it needs no new harness path — just the gate entry.
+- **The harness's multi-repo paths are deliberately simpler than the single-repo ones**: the
+  coding fan-out (`runMultiRepoCoding`, per PR #752) has no mid-run checkpoints / warm pool /
+  follow-up streaming, and the read-only explore fan-out (`runMultiRepoExplore`, Phase F) just
+  clones siblings + runs once at root + parses (no branches/push/PR). `repro-test` will run
+  through the coding path once multi-repo — don't design Phase G around checkpoint/streaming
+  behaviour that only exists on the single-repo side.
 - Phase 4 of service-connections (= Phase C here) must also extend the gate-helper agents
   (`ci-fixer`, `conflict-resolver`) to emit `peerRepos` — PR #752 only wired the `coder`
   path; the `ci`/`conflicts` gates' helper dispatch (`onPr`) doesn't yet know about peers.
