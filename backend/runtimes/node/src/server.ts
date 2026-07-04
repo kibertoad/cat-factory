@@ -26,6 +26,7 @@ import { startScheduleSweeper } from './recurring.js'
 import { startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
+import { buildRealtimePropagator } from './propagator.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
 import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
@@ -162,10 +163,19 @@ export async function start(
   // The per-workspace real-time subscriber registry. Created here (not in the container
   // builder) because it must be shared between the engine's event publisher — wired
   // inside the container — and the HTTP server's WebSocket upgrade listener attached
-  // below. The local facade's builder forwards this option to buildNodeContainer
+  // below. The local facade's builder forwards these options to buildNodeContainer
   // unchanged, so local mode gets live updates too.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildContainer({ db, boss, env, repos, realtimeHub })
+  // Wrap the hub in the layered propagator: when REDIS_URL is set (a multi-node deployment)
+  // events also fan to peer nodes over Redis pub/sub so a browser on any node sees them; with
+  // no bus configured (local mode, single replica) it is the bare hub with zero overhead. The
+  // engine writes through this sink; the HTTP upgrade listener still registers sockets on the
+  // hub directly.
+  const realtimePropagator = buildRealtimePropagator(realtimeHub, env, logger)
+  const container = buildContainer({ db, boss, env, repos, realtimeSink: realtimePropagator })
+  // Connect the cross-node adapters (a no-op when none are configured) so peer events start
+  // reaching this node's browsers.
+  await realtimePropagator.start(logger)
 
   // Validate the registered extensions (gates / agent kinds) once, before serving — every
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
@@ -290,6 +300,8 @@ export async function start(
     stopKaizenSweeper()
     stopGitHubReconcile()
     stopRealtime()
+    // Release any cross-node propagation adapters (Redis connections); a no-op when none.
+    await realtimePropagator.stop()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()

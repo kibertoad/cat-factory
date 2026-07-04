@@ -13,7 +13,27 @@ export {
 // Real-time WebSocket transport pieces, re-exported so the local facade's mothership boot
 // (which does NOT call `start()`, since there is no Postgres/pg-boss) can stand up the same
 // per-workspace hub + `ws` upgrade listener the standard Node boot does.
-export { NodeRealtimeHub, attachRealtime } from './realtime.js'
+export {
+  NodeRealtimeHub,
+  NodeEventPublisher,
+  attachRealtime,
+  type LocalEventSink,
+} from './realtime.js'
+// The layered cross-node real-time propagator (Redis today; more adapters later). A multi-node
+// Node deployment sets REDIS_URL and every browser sees every event regardless of which node
+// produced it; single-node / local mode wires none of this.
+export {
+  LayeredEventPropagator,
+  buildRealtimePropagator,
+  type RealtimeMessage,
+  type WebSocketPropagator,
+  type PropagatorLogger,
+} from './propagator.js'
+export {
+  RedisWebSocketPropagator,
+  DEFAULT_REALTIME_CHANNEL,
+  type RedisWebSocketPropagatorOptions,
+} from './redisPropagator.js'
 export {
   buildNodeContainer,
   buildNodeResolveTransport,

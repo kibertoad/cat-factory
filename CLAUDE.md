@@ -1086,8 +1086,19 @@ differentiators behind the shared kernel ports + the `container.gateways` seam.
   can't upgrade from a Hono `Response`, and the SPA speaks raw WebSocket — not socket.io —
   so this keeps the client unchanged across runtimes). The ticket mint/verify is the
   shared `@cat-factory/server` `auth/wsTicket.ts` used by both the Worker's
-  `EventsController` and this upgrade handler. Single-process only for now (a
-  multi-replica deployment would front the hub with Postgres LISTEN/NOTIFY).
+  `EventsController` and this upgrade handler. **Multi-node is supported** via a layered
+  cross-node propagator (`runtimes/node/src/propagator.ts`): `NodeEventPublisher` writes
+  through a narrow `LocalEventSink` seam that both the bare `NodeRealtimeHub` and the
+  `LayeredEventPropagator` implement, so a horizontally-scaled deployment fans every event
+  to the local hub AND to peer nodes over a pluggable adapter — **Redis pub/sub today**
+  (`RedisWebSocketPropagator`, `runtimes/node/src/redisPropagator.ts`; the opt-in `ioredis`
+  dependency is dynamically imported only when `REDIS_URL` is set), a future Postgres
+  LISTEN/NOTIFY or NATS adapter implementing the same `WebSocketPropagator` port. With no
+  bus configured (single replica, and **local mode**, which is always single-node) the layer
+  is exactly the bare hub — zero overhead, no extra dependency. The Worker facade needs none
+  of this: its `WorkspaceEventsHub` Durable Object is globally addressed (one per workspace
+  across the deployment), so cross-node propagation is inherent — a genuine Node-only concern,
+  not a facade-parity gap.
   **Container agent steps** (coder/mocker/tester/playwright/blueprints/ci-fixer/
   conflict-resolver/merger) run via the **same** shared `CompositeAgentExecutor` +
   `ContainerAgentExecutor` the Worker uses (now in `@cat-factory/server`),
