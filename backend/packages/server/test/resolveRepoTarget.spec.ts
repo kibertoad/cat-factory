@@ -27,7 +27,6 @@ function repo(
     installationId: 42,
     defaultBranch: 'main',
     private: false,
-    blockId: null,
     syncedAt: 0,
     ...partial,
   }
@@ -123,11 +122,11 @@ describe('buildResolveRepoTarget — monorepo service directories', () => {
     expect(target).toMatchObject({ owner: 'acme', name: 'platform' })
   })
 
-  it('falls back to the legacy block_id link (no directory) when no service is wired', async () => {
+  it('resolves a whole-repo service (no directory) via its Service link', async () => {
     const resolve = harness({
-      repos: [repo({ githubId: 1, owner: 'acme', name: 'platform', blockId: 'frame' })],
+      repos: [repo({ githubId: 1, owner: 'acme', name: 'platform', isMonorepo: false })],
       blocks: [block('frame', null, 'frame'), block('task', 'frame', 'task')],
-      services: [],
+      services: [service('frame', 1, null)],
     })
     const target = await resolve('ws', 'task')
     expect(target).toMatchObject({ owner: 'acme', name: 'platform' })
@@ -178,14 +177,15 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
   it('resolves the primary plus one distinct peer checkout per involved service repo', async () => {
     const resolve = multiHarness({
       repos: [
-        repo({ githubId: 1, owner: 'acme', name: 'auth', blockId: 'frameAuth' }),
-        repo({ githubId: 2, owner: 'acme', name: 'email', blockId: 'frameEmail' }),
+        repo({ githubId: 1, owner: 'acme', name: 'auth' }),
+        repo({ githubId: 2, owner: 'acme', name: 'email' }),
       ],
       blocks: [
         block('frameAuth', null, 'frame'),
         block('taskLogin', 'frameAuth', 'task'),
         block('frameEmail', null, 'frame'),
       ],
+      services: [service('frameAuth', 1, null), service('frameEmail', 2, null)],
     })
     const { checkouts } = await resolve('ws', 'taskLogin', ['frameEmail'])
     expect(checkouts).toHaveLength(2)
@@ -200,7 +200,7 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
   it('DEDUPES two involved services sharing one monorepo into a single checkout with both subdirs', async () => {
     const resolve = multiHarness({
       repos: [
-        repo({ githubId: 1, owner: 'acme', name: 'own', blockId: 'frameOwn' }),
+        repo({ githubId: 1, owner: 'acme', name: 'own' }),
         repo({ githubId: 2, owner: 'acme', name: 'mono', isMonorepo: true }),
       ],
       blocks: [
@@ -209,7 +209,11 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
         block('frameA', null, 'frame'),
         block('frameB', null, 'frame'),
       ],
-      services: [service('frameA', 2, 'packages/a'), service('frameB', 2, 'packages/b')],
+      services: [
+        service('frameOwn', 1, null),
+        service('frameA', 2, 'packages/a'),
+        service('frameB', 2, 'packages/b'),
+      ],
     })
     const { checkouts } = await resolve('ws', 'taskX', ['frameA', 'frameB'])
     // One primary + ONE peer checkout for the shared monorepo (not two).
@@ -243,12 +247,13 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
 
   it('SKIPS an involved service with no linked repo (provisions an env but is not coded)', async () => {
     const resolve = multiHarness({
-      repos: [repo({ githubId: 1, owner: 'acme', name: 'auth', blockId: 'frameAuth' })],
+      repos: [repo({ githubId: 1, owner: 'acme', name: 'auth' })],
       blocks: [
         block('frameAuth', null, 'frame'),
         block('taskLogin', 'frameAuth', 'task'),
         block('frameOrphan', null, 'frame'),
       ],
+      services: [service('frameAuth', 1, null)],
     })
     const { checkouts } = await resolve('ws', 'taskLogin', ['frameOrphan'])
     expect(checkouts).toHaveLength(1)
@@ -257,7 +262,7 @@ describe('buildResolveRepoTargets — multi-repo resolution', () => {
 
   it('throws when the PRIMARY block is under no repo-linked service', async () => {
     const resolve = multiHarness({
-      repos: [repo({ githubId: 1, owner: 'acme', name: 'auth', blockId: 'other' })],
+      repos: [repo({ githubId: 1, owner: 'acme', name: 'auth' })],
       blocks: [block('frameAuth', null, 'frame'), block('taskLogin', 'frameAuth', 'task')],
     })
     await expect(resolve('ws', 'taskLogin', [])).rejects.toThrow(/not under a service linked/)

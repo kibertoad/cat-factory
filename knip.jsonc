@@ -96,7 +96,11 @@
     "backend/runtimes/node": {
       "entry": ["src/main.ts", "src/**/*.test.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": ["@cat-factory/prompt-fragments"],
+      // `layered-loader` is loaded via the OPAQUE dynamic import in
+      // cacheNotifications.ts (`import('layered-loader' as string)`, gated on
+      // REDIS_URL — the cast deliberately hides its Redis modules from the TS
+      // build graph), so knip sees no static import.
+      "ignoreDependencies": ["@cat-factory/prompt-fragments", "layered-loader"],
     },
     "backend/runtimes/local": {
       "entry": ["src/main.ts", "src/link-repo.ts", "src/**/*.test.ts", "test/**/*.ts"],

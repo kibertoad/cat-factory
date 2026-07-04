@@ -261,7 +261,11 @@
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
       "addFirstTask": "İlk görevi ekle",
-      "createInitiativeTitle": "Girisim olustur"
+      "createInitiativeTitle": "Girisim olustur",
+      "accessDenied": {
+        "title": "İzin reddedildi",
+        "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -1625,9 +1629,9 @@
         "environment-provider": "Özel HTTP sağlayıcısı",
         "environment-providerDesc": "Geçici ortamları kendi HTTP yönetim API'niz aracılığıyla sağlayın.",
         "compose": "Docker Compose önizleme ortamı",
-        "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker daemon üzerinde Tester'ın URL'si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Yalnızca imaj tabanlı stack'ler; bir Docker daemon gerektirir, bu nedenle yalnızca yerel dağıtımlar içindir."
+        "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker arka plan hizmetinde Test Edici URL’si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Önceden oluşturulmuş imgeleri veya kaynaktan derlemeyi destekler; bir Docker arka plan hizmeti gerektirir, bu nedenle yalnızca yerel dağıtımlarda çalışır."
       },
-      "dockerComposeInfo": "Docker Compose servisleri çalışma zamanının yerel Docker'ında ayağa kalkar: bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker'ı desteklemelidir).",
+      "dockerComposeInfo": "Docker Compose hizmetleri çalışma zamanının yerel Docker’ında ayağa kalkar: bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker’ı desteklemelidir). Hizmeti, bağlantı noktasını ve imge kaynağını (önceden oluşturulmuş imge çekme veya kaynaktan derleme) hizmetin ortam ayarlarında yapılandırın.",
       "engine": {
         "local-k3s": "Yerel k3s",
         "remote-kubernetes": "Uzak Kubernetes"
@@ -2505,7 +2509,8 @@
       "repoLabel": {
         "private": " (özel)",
         "monorepo": " · monorepo",
-        "onBoard": " · zaten panoda"
+        "onBoard": " · zaten panoda",
+        "personal": " · kişisel (kendi belirteciniz)"
       },
       "monorepoLabel": "Bu bir monorepo (birden fazla servis barındırır)",
       "monorepoDescription": "Tek depodan, her biri bir alt dizine sabitlenmiş birkaç servis ekleyin.",

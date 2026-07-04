@@ -291,7 +291,11 @@
       "dragTask": "Drag task",
       "dragToResize": "Drag to resize",
       "addFirstTask": "Add the first task",
-      "createInitiativeTitle": "Create initiative"
+      "createInitiativeTitle": "Create initiative",
+      "accessDenied": {
+        "title": "Permission denied",
+        "hint": "You don't have access to the repository backing this service."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decision needed",
@@ -1671,9 +1675,9 @@
         "environment-provider": "Custom HTTP provider",
         "environment-providerDesc": "Provision ephemeral environments through your own HTTP management API. Best when you already have bespoke preview-env tooling.",
         "compose": "Docker Compose preview env",
-        "composeDesc": "Stand the repo's own docker-compose.yml up on a local Docker daemon as the Tester's URL. Best for local Compose-based apps. Image-based stacks only; needs a Docker daemon, so local deployments only."
+        "composeDesc": "Stand the repo's own docker-compose.yml up on a local Docker daemon as the Tester's URL. Best for local Compose-based apps. Supports pre-built images or building from source; needs a Docker daemon, so local deployments only."
       },
-      "dockerComposeInfo": "Docker Compose services stand up on the runtime's local Docker: no connection needed (the run's container must support Docker-in-Docker).",
+      "dockerComposeInfo": "Docker Compose services stand up on the runtime's local Docker: no connection needed (the run's container must support Docker-in-Docker). Configure the service, port, and image source (pull pre-built or build from source) on the service's environment settings.",
       "engine": {
         "local-k3s": "Local k3s",
         "remote-kubernetes": "Remote Kubernetes"
@@ -2568,7 +2572,8 @@
       "repoLabel": {
         "private": " (private)",
         "monorepo": " · monorepo",
-        "onBoard": " · already on board"
+        "onBoard": " · already on board",
+        "personal": " · personal (your token)"
       },
       "monorepoLabel": "This is a monorepo (hosts more than one service)",
       "monorepoDescription": "Add several services from one repo, each pinned to a subdirectory.",

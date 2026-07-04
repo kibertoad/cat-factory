@@ -17,12 +17,11 @@ export interface ResolveRepoTargetDependencies {
   repoProjectionRepository: Pick<RepoProjectionRepository, 'list'>
   blockRepository: Pick<BlockRepository, 'get'>
   /**
-   * Resolves the {@link Service} owning a frame block, used to find which repo a
-   * frame targets AND (for a monorepo) the subdirectory the service pins. Optional:
-   * a facade/test without in-org services wired falls back to the repo-projection
-   * `block_id` link (one whole-repo service per repo, no subdirectory).
+   * Resolves the {@link Service} owning a frame block — the SOLE repo↔frame linkage: it
+   * yields which repo a frame targets AND (for a monorepo) the subdirectory the service
+   * pins. Every facade wires it whenever GitHub is configured.
    */
-  serviceRepository?: Pick<ServiceRepository, 'getByFrameBlock'>
+  serviceRepository: Pick<ServiceRepository, 'getByFrameBlock'>
 }
 
 /** A repo the projection lists, plus the monorepo subdirectory a service pins in it (or null). */
@@ -31,31 +30,26 @@ interface ResolvedRepo {
   directory: string | null
 }
 
-/** The projection indexed for lookup: by GitHub id (service link) and by legacy block link. */
+/** The projection indexed for lookup by GitHub id (the service→repo link). */
 interface RepoIndex {
   byGithubId: Map<number, GitHubRepo>
-  byBlock: Map<string, GitHubRepo>
 }
 
 function indexRepos(repos: GitHubRepo[]): RepoIndex {
   return {
     byGithubId: new Map(repos.map((r) => [r.githubId, r])),
-    byBlock: new Map(repos.filter((r) => r.blockId).map((r) => [r.blockId as string, r])),
   }
 }
 
 /**
- * Walk up a block's ancestry to the enclosing service frame and resolve its repo. Two
- * linkage mechanisms, checked in this order at each level:
- *  1. The account-owned {@link Service} for the frame (`getByFrameBlock`) → its
- *     `repoGithubId`. The only mechanism that supports a MONOREPO (several frames each
- *     owning a service pinned to a different subdirectory of the SAME repo), and the only
- *     one carrying the per-service `directory`.
- *  2. The legacy repo-projection `block_id` link (one whole-repo service per repo).
- * Returns undefined when nothing in the chain is linked (the caller decides whether that
- * is fatal — a throw for the primary, a skip for an involved peer). Shared verbatim by
- * the singular {@link buildResolveRepoTarget} and plural {@link buildResolveRepoTargets}
- * so the security-sensitive walk can't drift.
+ * Walk up a block's ancestry to the enclosing service frame and resolve its repo via the
+ * account-owned {@link Service} for that frame (`getByFrameBlock` → `repoGithubId`). This is
+ * the SOLE linkage: the only mechanism that supports a MONOREPO (several frames each owning a
+ * service pinned to a different subdirectory of the SAME repo), and the only one carrying the
+ * per-service `directory`. Returns undefined when nothing in the chain is linked (the caller
+ * decides whether that is fatal — a throw for the primary, a skip for an involved peer).
+ * Shared verbatim by the singular {@link buildResolveRepoTarget} and plural
+ * {@link buildResolveRepoTargets} so the security-sensitive walk can't drift.
  */
 async function walkToRepo(
   deps: Pick<ResolveRepoTargetDependencies, 'blockRepository' | 'serviceRepository'>,
@@ -66,13 +60,11 @@ async function walkToRepo(
   let cursor: string | null = blockId
   const seen = new Set<string>()
   while (cursor && !seen.has(cursor)) {
-    const service = await deps.serviceRepository?.getByFrameBlock(cursor)
+    const service = await deps.serviceRepository.getByFrameBlock(cursor)
     if (service?.repoGithubId != null) {
       const repo = index.byGithubId.get(service.repoGithubId)
       if (repo) return { repo, directory: service.directory ?? null }
     }
-    const linked = index.byBlock.get(cursor)
-    if (linked) return { repo: linked, directory: null }
     seen.add(cursor)
     const block = await deps.blockRepository.get(workspaceId, cursor)
     cursor = block?.parentId ?? null
@@ -100,8 +92,8 @@ function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarge
 /**
  * Resolve the repo linked to a running block's enclosing service, shared verbatim by
  * both runtime facades (Worker D1 + Node Drizzle/Postgres). Repos are linked at the
- * service-frame level (see `linkBlock`), but execution runs at the task/module level,
- * so we walk up the block's ancestry to find the frame's repo.
+ * service-frame level (via the account-owned {@link ServiceRepository}), but execution
+ * runs at the task/module level, so we walk up the block's ancestry to find the frame's repo.
  *
  * There is deliberately NO "first repo" fallback: a workspace can have many repos, and
  * guessing silently pushes work into the wrong one (this is how a simple-service task
@@ -170,10 +162,11 @@ export type ResolveRepoTargets = (
 export interface ResolveRepoTargetsDependencies extends ResolveRepoTargetDependencies {
   /**
    * The batched form of {@link ResolveRepoTargetDependencies.serviceRepository} — resolving
-   * N involved frames' repos in ONE query rather than a point-read per frame. Falls back to
-   * the legacy `block_id` link when a frame has no wired service.
+   * N involved frames' repos in ONE query rather than a point-read per frame. Required (the
+   * `Service` is the SOLE repo↔frame linkage), so an involved frame with no linked service
+   * simply resolves no repo and is skipped for coding.
    */
-  serviceRepository?: Pick<ServiceRepository, 'getByFrameBlock' | 'listByFrameBlocks'>
+  serviceRepository: Pick<ServiceRepository, 'getByFrameBlock' | 'listByFrameBlocks'>
 }
 
 /**
@@ -227,9 +220,7 @@ export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): R
     // Resolve every involved frame's service in one batch (frames ARE service frame blocks,
     // so no ancestry walk is needed — the frame's own service names its repo + directory).
     const uniqueFrameIds = [...new Set(involvedFrameIds)]
-    const services = serviceRepository?.listByFrameBlocks
-      ? await serviceRepository.listByFrameBlocks(uniqueFrameIds)
-      : []
+    const services = await serviceRepository.listByFrameBlocks(uniqueFrameIds)
     const serviceByFrame = new Map(services.map((s) => [s.frameBlockId, s]))
 
     for (const frameId of uniqueFrameIds) {
@@ -240,9 +231,7 @@ export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): R
               repo: index.byGithubId.get(service.repoGithubId)!,
               directory: service.directory ?? null,
             }
-          : index.byBlock.has(frameId)
-            ? { repo: index.byBlock.get(frameId)!, directory: null }
-            : undefined
+          : undefined
       // An involved frame with no linked repo is skipped for coding (deliberate asymmetry:
       // it may still have provisioned an environment in phase 2).
       if (!resolved) continue

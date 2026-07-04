@@ -261,7 +261,11 @@
       "dragTask": "Przeciągnij zadanie",
       "dragToResize": "Przeciągnij, aby zmienić rozmiar",
       "addFirstTask": "Dodaj pierwsze zadanie",
-      "createInitiativeTitle": "Utworz inicjatywe"
+      "createInitiativeTitle": "Utworz inicjatywe",
+      "accessDenied": {
+        "title": "Brak uprawnień",
+        "hint": "Nie masz dostępu do repozytorium powiązanego z tą usługą."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Wymagana decyzja",
@@ -2115,9 +2119,10 @@
       "testEnvBackend": {
         "label": "Gdzie działają środowiska testowe",
         "local-compose": "docker-compose w kontenerze",
-        "environment-provider": "Dostawca środowisk"
+        "environment-provider": "Dostawca środowisk",
+        "composeDesc": "Uruchamia własny plik docker-compose.yml repozytorium na lokalnym demonie Dockera jako adres URL Testera. Najlepsze dla lokalnych aplikacji opartych na Compose. Obsługuje gotowe obrazy lub budowanie ze źródeł; wymaga demona Dockera, więc tylko wdrożenia lokalne."
       },
-      "dockerComposeInfo": "Usługi Docker Compose są uruchamiane na lokalnym Dockerze środowiska uruchomieniowego: połączenie nie jest potrzebne (kontener uruchomienia musi obsługiwać Docker-in-Docker).",
+      "dockerComposeInfo": "Usługi Docker Compose uruchamiają się na lokalnym Dockerze środowiska uruchomieniowego: połączenie nie jest potrzebne (kontener uruchomienia musi obsługiwać Docker-in-Docker). Skonfiguruj usługę, port i źródło obrazu (pobranie gotowego lub budowanie ze źródeł) w ustawieniach środowiska usługi.",
       "engine": {
         "local-k3s": "Lokalny k3s",
         "remote-kubernetes": "Zdalny Kubernetes"
@@ -2492,7 +2497,8 @@
       "repoLabel": {
         "private": " (prywatne)",
         "monorepo": " · monorepo",
-        "onBoard": " · już na tablicy"
+        "onBoard": " · już na tablicy",
+        "personal": " · osobiste (Twój token)"
       },
       "monorepoLabel": "To jest monorepo (zawiera więcej niż jedną usługę)",
       "monorepoDescription": "Dodaj kilka usług z jednego repozytorium, każdą przypiętą do podkatalogu.",

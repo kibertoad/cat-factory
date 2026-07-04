@@ -261,7 +261,11 @@
       "dragTask": "Arrastrar tarea",
       "dragToResize": "Arrastra para cambiar el tamaño",
       "addFirstTask": "Añade la primera tarea",
-      "createInitiativeTitle": "Crear iniciativa"
+      "createInitiativeTitle": "Crear iniciativa",
+      "accessDenied": {
+        "title": "Permiso denegado",
+        "hint": "No tienes acceso al repositorio que respalda este servicio."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decisión necesaria",
@@ -2115,9 +2119,10 @@
       "testEnvBackend": {
         "label": "Dónde se ejecutan los entornos de prueba",
         "local-compose": "docker-compose en contenedor",
-        "environment-provider": "Proveedor de entornos"
+        "environment-provider": "Proveedor de entornos",
+        "composeDesc": "Levanta el docker-compose.yml del propio repositorio en un daemon de Docker local como URL del Tester. Ideal para apps locales basadas en Compose. Admite imágenes prediseñadas o compilación desde el código fuente; requiere un daemon de Docker, por lo que solo en despliegues locales."
       },
-      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no hace falta conexión (el contenedor de la ejecución debe admitir Docker-in-Docker).",
+      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no se necesita conexión (el contenedor de la ejecución debe admitir Docker-in-Docker). Configura el servicio, el puerto y el origen de la imagen (usar prediseñada o compilar desde el código fuente) en los ajustes de entorno del servicio.",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes remoto"
@@ -2492,7 +2497,8 @@
       "repoLabel": {
         "private": " (privado)",
         "monorepo": " · monorepo",
-        "onBoard": " · ya en el tablero"
+        "onBoard": " · ya en el tablero",
+        "personal": " · personal (tu token)"
       },
       "monorepoLabel": "Es un monorepo (aloja más de un servicio)",
       "monorepoDescription": "Añade varios servicios desde un repositorio, cada uno fijado a un subdirectorio.",

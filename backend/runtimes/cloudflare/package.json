@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/worker",
-  "version": "0.62.0",
+  "version": "0.63.1",
   "description": "Reusable Cloudflare Worker library (Hono + D1) exposing the Agent Architecture Board core: the `createApp()` Hono factory, the default fetch/scheduled/queue handler, and the Durable Object + Workflow classes. Deployments (see deploy/backend) supply the wrangler.toml + config and re-export these.",
   "repository": {
     "type": "git",
@@ -45,6 +45,7 @@
     "@ai-sdk/openai": "^3.0.77",
     "@ai-sdk/openai-compatible": "^2.0.54",
     "@cat-factory/agents": "workspace:*",
+    "@cat-factory/caching": "workspace:*",
     "@cat-factory/consensus": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/gates": "workspace:*",

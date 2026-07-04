@@ -44,10 +44,12 @@ export {
   type ContentStorageResolutionHarness,
 } from './content-storage-resolution-suite.js'
 export { defineAgentContextSuite } from './agent-context-suite.js'
+export { defineCacheSuite } from './cache-suite.js'
 export { defineBrainstormSuite } from './brainstorm-suite.js'
 export { defineInitiativeSuite } from './initiative-suite.js'
 export { defineKaizenSuite } from './kaizen-suite.js'
 export { defineProvisioningLogSuite } from './provisioning-log-suite.js'
+export { defineUserRepoAccessSuite } from './user-repo-access-suite.js'
 export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { definePasswordResetTokenSuite } from './password-reset-suite.js'
 export { CONFORMANCE_DRIVE_CONFIG, driveWorkspace } from './drive.js'

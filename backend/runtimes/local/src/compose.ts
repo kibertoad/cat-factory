@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { promisify } from 'node:util'
 import type { ComposeRuntime } from '@cat-factory/integrations'
 
@@ -9,6 +9,8 @@ const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 16 * 1024 * 1024
 // Fallback bound when the provider passes no `timeoutMs`, so a wedged daemon can't hang forever.
 const DEFAULT_TIMEOUT_MS = 60_000
+// Bound for the git clone in build mode (a shallow single-ref fetch is fast; guard a wedged remote).
+const CLONE_TIMEOUT_MS = 120_000
 
 // The local-mode host implementation of the integrations `ComposeRuntime` seam: run
 // `docker compose <args>` via `execFile` (bounded by `timeoutMs`) and persist each project's
@@ -60,6 +62,51 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
       const dir = projectDir(project)
       await mkdir(dir, { recursive: true })
       const path = join(dir, fileName)
+      await writeFile(path, content, 'utf8')
+      return path
+    },
+    async checkout(project, target) {
+      // Build mode: shallow-clone the PR head into a working tree UNDER the project scratch dir
+      // (so the existing `cleanupProject` reaps it on teardown). Mirrors the deploy-harness clone:
+      // init + `fetch --depth 1 origin <ref>` + detached checkout (so a raw SHA ref works too), and
+      // the token is passed to git via GIT_ASKPASS — never on argv.
+      const dir = join(projectDir(project), 'checkout')
+      await rm(dir, { recursive: true, force: true }).catch(() => {})
+      await mkdir(dir, { recursive: true })
+      // Embed only the `x-access-token` username (no secret) in the remote URL.
+      const authUrl = target.cloneUrl.replace(/^https:\/\//, 'https://x-access-token@')
+      const env = { ...process.env, GIT_TERMINAL_PROMPT: '0' } as Record<string, string>
+      if (target.token) {
+        const askpass = join(projectDir(project), 'git-askpass.sh')
+        await writeFile(askpass, '#!/bin/sh\nexec printf %s "$GIT_ASKPASS_TOKEN"\n', 'utf8')
+        await chmod(askpass, 0o700)
+        env.GIT_ASKPASS = askpass
+        env.GIT_ASKPASS_TOKEN = target.token
+      }
+      const git = async (args: string[]) => {
+        try {
+          await execFileAsync('git', args, {
+            maxBuffer: MAX_BUFFER,
+            timeout: CLONE_TIMEOUT_MS,
+            env,
+          })
+        } catch (err) {
+          const e = err as { stderr?: string; message?: string }
+          // Redact the token from any surfaced message (defensive — it's not on argv, but be safe).
+          const raw = (e.stderr || e.message || 'git failed').trim()
+          const msg = target.token ? raw.split(target.token).join('***') : raw
+          throw new Error(msg)
+        }
+      }
+      await git(['init', '--quiet', dir])
+      await git(['-C', dir, 'remote', 'add', 'origin', authUrl])
+      await git(['-C', dir, 'fetch', '--depth', '1', 'origin', target.ref])
+      await git(['-C', dir, 'checkout', '--quiet', '--detach', 'FETCH_HEAD'])
+      return { dir }
+    },
+    async writeCheckoutFile(project, relPath, content) {
+      const path = join(projectDir(project), 'checkout', relPath)
+      await mkdir(dirname(path), { recursive: true })
       await writeFile(path, content, 'utf8')
       return path
     },

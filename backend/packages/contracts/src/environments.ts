@@ -565,6 +565,13 @@ export const serviceProvisioningSchema = v.object({
   composePath: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(500))),
   /** `docker-compose`: the compose stack is for local development only (advisory). */
   localDevOnly: v.optional(v.boolean()),
+  /**
+   * `docker-compose`: build the stack's images from the repo's Dockerfiles instead of
+   * pulling pre-built images (advisory; the load-bearing switch is the workspace handler's
+   * `providerConfig.build`). When set, the PR head is cloned into a working tree so `build:`
+   * contexts, in-checkout bind mounts, and relative `env_file`s resolve.
+   */
+  composeBuild: v.optional(v.boolean()),
   /** `custom`: the custom-manifest-type id this service produces (matched to a remote-custom handler). */
   manifestId: v.optional(manifestIdSchema),
   /** `custom`: optional path to the custom manifest within the repo. */
@@ -961,7 +968,7 @@ export type ProvisioningDetectionConfidence = v.InferOutput<
 
 /** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
 export const provisioningDetectionNoteSchema = v.object({
-  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`. */
+  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`. */
   field: v.string(),
   confidence: provisioningDetectionConfidenceSchema,
   /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
@@ -1053,7 +1060,7 @@ export type ProvisioningManifestRootCandidate = v.InferOutput<
  * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice), and
  * `composeServiceCandidates` (which compose service). Each note's `field` is one of
  * `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` |
- * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService`.
+ * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`.
  */
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),

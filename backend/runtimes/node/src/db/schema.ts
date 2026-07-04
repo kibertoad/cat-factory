@@ -1724,9 +1724,8 @@ export const githubInstallations = pgTable(
 )
 
 // Projection of a workspace's GitHub repositories (mirror of D1 migration 0004).
-// `block_id` links a repo to a board service frame and is owned by the board link
-// (never overwritten by sync). The container executor resolves a run's target repo
-// from the service frame the block sits under.
+// The container executor resolves a run's target repo from the service frame the block
+// sits under (via the account-owned `Service`, not any repo→block column).
 export const githubRepos = pgTable(
   'github_repos',
   {
@@ -1737,10 +1736,13 @@ export const githubRepos = pgTable(
     name: text('name').notNull(),
     default_branch: text('default_branch'),
     private: integer('private').notNull().default(0),
-    block_id: text('block_id'),
-    // Whether the repo is a monorepo hosting several services (board-owned, like
-    // block_id — sync preserves it). See contracts `GitHubRepo.isMonorepo`.
+    // Whether the repo is a monorepo hosting several services (link-owned — sync
+    // preserves it). See contracts `GitHubRepo.isMonorepo`.
     is_monorepo: integer('is_monorepo').notNull().default(0),
+    // How the repo entered the projection: 'app' (shared GitHub App installation, visible
+    // to every member) or 'user_pat' (reachable only via the linker's personal token).
+    // Link-owned — sync preserves it. See contracts `GitHubRepo.linkedVia`.
+    linked_via: text('linked_via').notNull().default('app'),
     etag: text('etag'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
@@ -1748,6 +1750,27 @@ export const githubRepos = pgTable(
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.github_id] }),
     index('idx_gh_repos_install').on(t.installation_id),
+  ],
+)
+
+// Per-user "repos my personal access token can reach" projection (mirror of D1). The
+// fail-closed cache the board redaction checks so a frame backed by a `user_pat` repo is
+// hidden from members who can't reach it, without a live GitHub call per snapshot. See the
+// kernel `UserRepoAccessRepository` port.
+export const githubUserRepoAccess = pgTable(
+  'github_user_repo_access',
+  {
+    user_id: text('user_id').notNull(),
+    repo_github_id: bigint('repo_github_id', { mode: 'number' }).notNull(),
+    owner: text('owner').notNull(),
+    name: text('name').notNull(),
+    default_branch: text('default_branch'),
+    private: integer('private').notNull().default(0),
+    synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.user_id, t.repo_github_id] }),
+    index('idx_gh_user_repo_access_repo').on(t.repo_github_id),
   ],
 )
 

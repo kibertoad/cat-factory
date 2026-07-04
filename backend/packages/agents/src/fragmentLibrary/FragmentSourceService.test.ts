@@ -95,6 +95,7 @@ function makeService(github: ReturnType<typeof fakeGitHub>) {
   const sources = new FakeSourceRepo()
   let installationCalls = 0
   let seq = 0
+  const invalidations: { ownerKind: string; ownerId: string }[] = []
   const service = new FragmentSourceService({
     fragmentSourceRepository: sources,
     promptFragmentRepository: fragments,
@@ -105,8 +106,11 @@ function makeService(github: ReturnType<typeof fakeGitHub>) {
     },
     idGenerator: { next: (p?: string) => `${p ?? 'id'}_${++seq}` },
     clock: { now: () => 1_000_000 + seq++ },
+    invalidateCatalog: async (ownerKind, ownerId) => {
+      invalidations.push({ ownerKind, ownerId })
+    },
   })
-  return { service, fragments, installations: () => installationCalls }
+  return { service, fragments, installations: () => installationCalls, invalidations }
 }
 
 const EXPLICIT_ID_FILE = (id: string) =>
@@ -132,6 +136,24 @@ describe('FragmentSourceService.sync', () => {
     })
     sourceId = source.id
     await harness.service.sync('workspace', 'ws1', sourceId)
+  })
+
+  it('invalidates the tier catalog when a sync changes fragments, but not on a no-op resync', async () => {
+    // The beforeEach sync upserted two fragments — one invalidation.
+    expect(harness.invalidations).toEqual([{ ownerKind: 'workspace', ownerId: 'ws1' }])
+
+    // Nothing changed upstream: the resync must not churn peers' cached catalogs.
+    await harness.service.sync('workspace', 'ws1', sourceId)
+    expect(harness.invalidations).toHaveLength(1)
+
+    // A file removal tombstones → invalidates again.
+    delete github.files['guidelines/logging.md']
+    await harness.service.sync('workspace', 'ws1', sourceId)
+    expect(harness.invalidations).toHaveLength(2)
+
+    // Unlink tombstones the survivors → invalidates again.
+    await harness.service.unlink('workspace', 'ws1', sourceId)
+    expect(harness.invalidations).toHaveLength(3)
   })
 
   it('keeps an explicit-id fragment live (and preserves createdAt) when its file is RENAMED', async () => {

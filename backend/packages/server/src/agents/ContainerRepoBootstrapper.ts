@@ -326,16 +326,16 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   }
 
   /**
-   * After a successful run: record the bootstrapped repo in the local projection
-   * (a brand-new repo may not be there yet) and link it to the board frame, so
-   * tasks dropped on that service resolve to (and are implemented against) it.
+   * After a successful run: record the bootstrapped repo in the local projection (a
+   * brand-new repo may not be there yet) and return its identity, so the caller binds
+   * the board frame's account-owned {@link Service} to it (tasks dropped on that service
+   * then resolve to, and are implemented against, it).
    */
-  async linkRepoToBlock(
+  async projectBootstrappedRepo(
     workspaceId: string,
     outcome: BootstrapRepoOutcome,
-    blockId: string,
-  ): Promise<void> {
-    const log = logger.child({ workspaceId, blockId })
+  ): Promise<{ installationId: number; githubId: number }> {
+    const log = logger.child({ workspaceId })
     const installation = await this.deps.installationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) {
       throw new Error(`Workspace '${workspaceId}' is not connected to GitHub`)
@@ -345,11 +345,11 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       repo: outcome.name,
     })
     await this.deps.repoRepository.upsertMany(workspaceId, [repo])
-    await this.deps.repoRepository.linkBlock(workspaceId, repo.githubId, blockId)
     log.info(
       { repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId },
-      'bootstrap: linked repo to service frame',
+      'bootstrap: projected repo for service frame',
     )
+    return { installationId: installation.installationId, githubId: repo.githubId }
   }
 
   /** Construct the success outcome from the installation + the recorded job's repo name. */

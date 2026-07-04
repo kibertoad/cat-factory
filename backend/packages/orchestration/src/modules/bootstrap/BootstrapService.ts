@@ -546,9 +546,18 @@ export class BootstrapService {
     await this.stopContainer(workspaceId, jobId)
     if (record.blockId) {
       // Best-effort: a failure to link must not flip a successful run to failed —
-      // the repo is bootstrapped; the projection reconciles on the next sync.
+      // the repo is bootstrapped; the projection reconciles on the next sync. Project
+      // the new repo, then bind the frame's account-owned Service to it (the sole
+      // repo↔frame linkage `resolveRepoTarget` reads).
       try {
-        await bootstrapper.linkRepoToBlock(workspaceId, outcome, record.blockId)
+        const projected = await bootstrapper.projectBootstrappedRepo(workspaceId, outcome)
+        const service = await this.deps.serviceRepository?.getByFrameBlock(record.blockId)
+        if (service) {
+          await this.deps.serviceRepository?.update(service.id, {
+            installationId: projected.installationId,
+            repoGithubId: projected.githubId,
+          })
+        }
       } catch {
         // swallow — see above
       }

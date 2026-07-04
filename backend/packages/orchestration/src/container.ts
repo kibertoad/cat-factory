@@ -9,6 +9,8 @@ import type {
   RunRepoContext,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { createAppCaches } from '@cat-factory/caching'
+import type { AppCaches } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
@@ -112,6 +114,7 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
+  UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
@@ -384,6 +387,11 @@ export interface CoreDependencies {
   issueProjectionRepository?: IssueProjectionRepository
   commitProjectionRepository?: CommitProjectionRepository
   checkRunProjectionRepository?: CheckRunProjectionRepository
+  /**
+   * The per-user "repos my PAT can reach" projection. When wired, the repo picker expands with
+   * the viewer's PAT-reachable repos (recording their access for the board redaction). Optional.
+   */
+  userRepoAccessRepository?: UserRepoAccessRepository
   webhookVerifier?: WebhookVerifier
   /**
    * Bounds the initial commit backfill window (see GitHubSyncService). The worker
@@ -644,6 +652,15 @@ export interface CoreDependencies {
   // fragments additionally need `fragmentSourceRepository`, the `githubClient`
   // (above) and an installation resolver. `fragmentSelector` is optional within
   // the module: absent → the deterministic matcher; present → the LLM selector.
+  /**
+   * The app-owned cache bag (docs/initiatives/caching-layer.md). A facade builds
+   * it once per process via `createAppCaches` — Node threads in the Redis-backed
+   * invalidation notifications in multi-node deployments, the Worker passes the
+   * isolate-safe profile. Absent (tests / harnesses) ⇒ `createCore` builds bare
+   * in-memory defaults, whose coherence the services' own invalidation calls keep.
+   */
+  caches?: AppCaches
+
   promptFragmentRepository?: PromptFragmentRepository
   fragmentSourceRepository?: FragmentSourceRepository
   fragmentSelector?: FragmentSelector
@@ -1148,6 +1165,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     issueProjectionRepository,
     commitProjectionRepository,
     checkRunProjectionRepository,
+    userRepoAccessRepository: deps.userRepoAccessRepository,
     clock: deps.clock,
     commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
   })
@@ -1811,6 +1829,7 @@ function createClarityModule(
 function createFragmentLibraryModule(
   deps: CoreDependencies,
   documentContentResolver: DocumentContentResolver | undefined,
+  caches: AppCaches,
 ): FragmentLibraryModule | undefined {
   const { promptFragmentRepository } = deps
   if (!promptFragmentRepository) return undefined
@@ -1824,6 +1843,7 @@ function createFragmentLibraryModule(
     // one the document-source module built from this deployment's providers.
     documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
     documentFragmentTtlMs: deps.documentFragmentTtlMs,
+    catalogCache: caches.fragmentCatalog,
   })
 
   const sourceService =
@@ -1835,6 +1855,10 @@ function createFragmentLibraryModule(
           resolveInstallationId: deps.resolveFragmentInstallationId,
           idGenerator: deps.idGenerator,
           clock: deps.clock,
+          // A sync/unlink mutates the same catalog the library caches — route its
+          // invalidation through the library so the eviction policy stays in one place.
+          invalidateCatalog: (ownerKind, ownerId) =>
+            libraryService.invalidateCatalogTier(ownerKind, ownerId),
         })
       : undefined
 
@@ -2215,7 +2239,16 @@ export function createCore(dependencies: CoreDependencies): Core {
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = createDocumentsModule(dependencies, boardService)
-  const fragmentLibrary = createFragmentLibraryModule(dependencies, documents?.contentResolver)
+  // The cache bag the caching-initiative slices read through. A facade passes its
+  // own (Redis-notified on multi-node Node, isolate-safe on the Worker); tests and
+  // harnesses fall back to bare in-memory loaders, so the cached path — including
+  // the services' write-site invalidation — is exercised everywhere.
+  const caches = dependencies.caches ?? createAppCaches()
+  const fragmentLibrary = createFragmentLibraryModule(
+    dependencies,
+    documents?.contentResolver,
+    caches,
+  )
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired

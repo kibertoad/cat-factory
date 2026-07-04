@@ -21,17 +21,25 @@ export const githubRepoSchema = v.object({
   name: v.string(),
   defaultBranch: v.nullable(v.string()),
   private: v.boolean(),
-  /** Optional link to a board block this repo backs. */
-  blockId: v.nullable(v.string()),
   /**
    * Whether this repo is a monorepo hosting more than one service. When true the
    * board lets several service frames target the same repo, each pinned to its own
    * subdirectory (carried on the {@link Service}), and that subdirectory is fed to
-   * every agent working on the service. Owned by the board (set explicitly), so —
-   * like `blockId` — sync never overwrites it. Absent/false ⇒ a plain single-service
-   * repo (the historical behaviour).
+   * every agent working on the service. Owned by the board (set explicitly), so
+   * sync never overwrites it. Absent/false ⇒ a plain single-service repo (the
+   * historical behaviour).
    */
   isMonorepo: v.optional(v.boolean()),
+  /**
+   * How this repo entered the workspace's projection:
+   *  - `'app'` (default) — reachable through the workspace's shared GitHub App
+   *    installation, so every workspace member sees and can operate on it.
+   *  - `'user_pat'` — reachable ONLY through the personal access token of the user
+   *    who linked it (the App installation isn't granted it). Its board frame is
+   *    redacted for members who can't reach it with their own PAT (fail closed).
+   * Owned by the link, so sync never overwrites it. Absent ⇒ `'app'`.
+   */
+  linkedVia: v.optional(v.picklist(['app', 'user_pat'])),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
 })
@@ -177,6 +185,13 @@ export const githubAvailableRepoSchema = v.object({
   linked: v.boolean(),
   /** Whether the (linked) repo is flagged as a monorepo. False for unlinked repos. */
   isMonorepo: v.optional(v.boolean(), false),
+  /**
+   * True when this repo is surfaced ONLY through the signed-in user's personal access token
+   * (the workspace's GitHub App can't reach it). Linking it makes a `linkedVia:'user_pat'`
+   * service whose frame is hidden from members without their own access. The picker badges
+   * these so the user knows the difference. Absent/false ⇒ an App-reachable repo.
+   */
+  personal: v.optional(v.boolean(), false),
 })
 export type GitHubAvailableRepo = v.InferOutput<typeof githubAvailableRepoSchema>
 

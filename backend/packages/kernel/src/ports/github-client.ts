@@ -35,6 +35,13 @@ export interface Paged<T> {
   /** `true` when GitHub answered 304 Not Modified (items will be empty). */
   notModified?: boolean
   rateLimit?: RateLimitSnapshot
+  /**
+   * `true` when the enumeration stopped at the client's page cap while more results still
+   * existed — so `items` is an incomplete prefix of the accessible set. Callers that persist
+   * the result as an authoritative "everything reachable" set (e.g. the fail-closed PAT-access
+   * cache) must NOT treat a truncated page as complete.
+   */
+  truncated?: boolean
 }
 
 /** A single observation of GitHub's rate-limit headers for one call. */
@@ -274,6 +281,23 @@ export interface GitHubClient {
    * would be unlinkable even though search surfaced it.
    */
   getRepoById(installationId: number, repoGithubId: number): Promise<GitHubRepo | null>
+  /**
+   * List every repository an explicit **personal access token** can reach (`GET /user/repos`),
+   * the PAT analogue of {@link listInstallationRepos} (which is App-only and 403s for a PAT).
+   * Backs the "expand the picker with repos my own PAT can access, beyond the workspace App's
+   * grant" flow on the hosted facades. The returned rows are flagged `linkedVia:'user_pat'`
+   * (personal, not App-reachable). Optional: only the `fetch`-based GitHub adapter implements
+   * it; a GitLab/other client omits it and the expansion is simply skipped.
+   */
+  listReposForToken?(token: string): Promise<Paged<GitHubRepo>>
+  /**
+   * Point-read a single repository by numeric id using an explicit **personal access token**
+   * (`GET /repositories/{id}`), or `null` when the token can't access it — the token-keyed
+   * counterpart of {@link getRepoById}, used to link a repo the workspace App can't see but
+   * the user's PAT can. The row is flagged `linkedVia:'user_pat'`. Optional (see
+   * {@link GitHubClient.listReposForToken}).
+   */
+  getRepoForToken?(token: string, repoGithubId: number): Promise<GitHubRepo | null>
   /**
    * Whether the installation actually has **push (write)** access to a repo. GitHub
    * returns the token's *effective* `permissions` on the repo payload, so a public

@@ -14,6 +14,7 @@ import type {
   ResyncRequest,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useServicesStore } from '~/stores/services'
 
 /**
  * GitHub integration state: the workspace's App installation, the projected
@@ -62,9 +63,14 @@ export const useGitHubStore = defineStore('github', () => {
     return repos.value.find((r) => r.githubId === repoGithubId)
   }
 
-  /** The repo linked to a board block (its backing service repo), if any. */
+  /**
+   * The repo backing a board service frame, if any — resolved through the account-owned
+   * Service bound to the frame (the sole repo↔frame linkage; the projection carries no
+   * repo→block column).
+   */
   function repoForBlock(blockId: string): GitHubRepo | undefined {
-    return repos.value.find((r) => r.blockId === blockId)
+    const service = useServicesStore().serviceByFrameBlock[blockId]
+    return service?.repoGithubId != null ? repoFor(service.repoGithubId) : undefined
   }
 
   function pullsForRepo(repoGithubId: number): GitHubPullRequest[] {

@@ -1,5 +1,5 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import type { AgentKind, BlockType, DocumentSourceKind, FragmentTier } from '@cat-factory/kernel'
+import type { FragmentTier, ResolvedCatalogEntry } from '@cat-factory/kernel'
 import type { FragmentSelectionContext, SelectableFragment } from '@cat-factory/kernel'
 import type { PromptFragmentRecord } from '@cat-factory/kernel'
 
@@ -7,25 +7,10 @@ import type { PromptFragmentRecord } from '@cat-factory/kernel'
 // (ADR 0006 §1, §5). No I/O — the service hands in the three tiers and the
 // candidate set; everything here is unit-testable.
 
-/** A fragment after the three tiers are merged, carrying its winning tier. */
-export interface ResolvedCatalogEntry {
-  id: string
-  version: string
-  title: string
-  category: string | null
-  summary: string
-  body: string
-  appliesTo: { blockTypes?: BlockType[]; agentKinds?: AgentKind[] } | null
-  tags: string[] | null
-  source: { sourceId: string; path: string; sha: string } | null
-  /** Living document provenance (Confluence/Notion/GitHub), when document-backed. */
-  documentRef: { source: DocumentSourceKind; externalId: string } | null
-  /** The workspace whose connection re-resolves a document-backed body at run time. */
-  docViaWorkspaceId: string | null
-  /** When the document-backed body was last resolved (epoch ms); null otherwise. */
-  resolvedAt: number | null
-  tier: FragmentTier
-}
+// The merged-entry shape lives in kernel (`ResolvedCatalogEntry`) so the caching
+// seam can name the fragment-catalog cache's value type; re-exported here for the
+// existing import sites.
+export type { ResolvedCatalogEntry }
 
 /** Built-in catalog fragment → resolved entry at the `builtin` tier. */
 function builtinToEntry(fragment: PromptFragment): ResolvedCatalogEntry {
