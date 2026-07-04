@@ -8,7 +8,6 @@ import type {
   AgentJob,
   AgentResult,
   InfraSetupRecord,
-  RepoSpec,
   ServiceInfraSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
@@ -29,10 +28,10 @@ import {
 } from './git.js'
 import type { PiRunStats, RunDiagnostics } from './pi.js'
 import {
+  makeDirClaimer,
   noChangesReason,
   runCodingAgent,
   runMultiRepoCoding,
-  safeDirSegment,
 } from './coding-agent.js'
 import {
   acquireRepoCheckout,
@@ -637,16 +636,8 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
   const peers = job.peerRepos ?? []
 
   // Unique sibling directory per repo (owner-prefixed on a name collision), so two repos
-  // named the same never clobber each other — same claim scheme as the coding fan-out.
-  const usedDirs = new Set<string>()
-  const claimDir = (repo: RepoSpec): string => {
-    let seg = safeDirSegment(repo.name)
-    if (usedDirs.has(seg)) seg = safeDirSegment(`${repo.owner}-${repo.name}`)
-    let unique = seg
-    for (let i = 2; usedDirs.has(unique); i++) unique = `${seg}-${i}`
-    usedDirs.add(unique)
-    return unique
-  }
+  // named the same never clobber each other — shared claim scheme with the coding fan-out.
+  const claimDir = makeDirClaimer()
   const legs = [
     { repo: job.repo, cloneBranch: job.branch, ghToken: job.ghToken },
     ...peers.map((peer) => ({
@@ -658,22 +649,25 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
 
   return withWorkspace('explore-multi', async (root) => {
     // Clone phase: every repo (read-only) into its sibling dir under the workspace root. No
-    // work branch, no resume — the investigator only reads.
+    // work branch, no resume — the investigator only reads — so the legs are independent and
+    // clone in parallel (wall-clock is the slowest single clone, not the sum).
     opts.onPhase?.('clone')
-    for (const leg of legs) {
-      const dir = join(root, leg.dirName)
-      await mkdir(dir, { recursive: true })
-      logger.info('multi-repo-explore: cloning', {
-        repo: leg.dirName,
-        cloneBranch: leg.cloneBranch,
-      })
-      await cloneRepo({
-        repo: { ...leg.repo, baseBranch: leg.cloneBranch },
-        ghToken: leg.ghToken,
-        dir,
-        signal: opts.signal,
-      })
-    }
+    await Promise.all(
+      legs.map(async (leg) => {
+        const dir = join(root, leg.dirName)
+        await mkdir(dir, { recursive: true })
+        logger.info('multi-repo-explore: cloning', {
+          repo: leg.dirName,
+          cloneBranch: leg.cloneBranch,
+        })
+        await cloneRepo({
+          repo: { ...leg.repo, baseBranch: leg.cloneBranch },
+          ghToken: leg.ghToken,
+          dir,
+          signal: opts.signal,
+        })
+      }),
+    )
 
     opts.onPhase?.('agent')
     logger.info('multi-repo-explore: running agent', { repos: legs.map((l) => l.dirName) })

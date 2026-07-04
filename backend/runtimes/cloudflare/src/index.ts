@@ -70,7 +70,12 @@ export {
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
 
-const app = createApp()
+// One app-owned agent-kind registry, shared by every per-request container (via the
+// `createApp` override) AND the boot-time validation below — so the check validates the SAME
+// instance the engine uses, matching the Node/local facades. A deployment injecting custom
+// kinds registers them on this instance (or overrides it) before the first request.
+const agentKindRegistry = defaultAgentKindRegistry()
+const app = createApp({ overrides: { agentKindRegistry } })
 
 /** Compact, log-friendly shape for an unknown caught value. */
 function errInfo(error: unknown): { message: string; stack?: string } {
@@ -127,7 +132,7 @@ export default {
   // it off the hot path (the Worker rebuilds its container per request, but this never re-runs).
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     validateRegistrationsOnce({
-      agentKindRegistry: defaultAgentKindRegistry(),
+      agentKindRegistry,
       onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
     })
     return app.fetch(request, env, ctx)

@@ -94,6 +94,9 @@ export const BUG_INVESTIGATOR_AGENT_KINDS: AgentKindDefinition[] = [
     // Read-only checkout of the primary repo's base branch (+ any peer repos as siblings,
     // wired by the executor's multi-repo fan-out). `agent.output` is derived from the schema.
     agent: { surface: 'container-explore', clone: { branch: 'base' } },
+    // A cross-service bug may live in a connected service other than the one it was filed
+    // against, so fan out over every involved-service repo (read-only sibling checkouts).
+    fanOutMultiRepo: true,
     structuredOutput: bugInvestigation,
     presentation: {
       label: 'Bug Investigator',

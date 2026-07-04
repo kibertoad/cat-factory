@@ -1,7 +1,13 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { serve } from '@hono/node-server'
-import { NodeRealtimeHub, createApp, serveAppWithRealtime, start } from '@cat-factory/node-server'
+import {
+  type AgentKindRegistry,
+  NodeRealtimeHub,
+  createApp,
+  serveAppWithRealtime,
+  start,
+} from '@cat-factory/node-server'
 import { logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { applyLocalDefaults } from './config.js'
@@ -36,6 +42,13 @@ export async function startLocal(
   options: {
     env?: NodeJS.ProcessEnv
     host?: string
+    /**
+     * App-owned DI seam for custom agent kinds — a deployment news a
+     * `defaultAgentKindRegistry()`, registers its own kinds on it, and passes it here.
+     * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
+     * Absent → the built-in-only default.
+     */
+    agentKindRegistry?: AgentKindRegistry
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
@@ -90,12 +103,13 @@ export async function startLocal(
   // state lives on the mothership and runs are driven by the in-process work runner. Take the
   // dedicated boot path instead of the Node facade's `start()` (which requires Postgres).
   if (isMothershipMode(localized)) {
-    return startLocalMothership(localized, options.host)
+    return startLocalMothership(localized, options.host, options.agentKindRegistry)
   }
 
   return start({
     env,
     host: options.host,
+    agentKindRegistry: options.agentKindRegistry,
     buildContainer: (o) => buildLocalContainer(o),
   })
 }
@@ -118,6 +132,7 @@ export async function startLocal(
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host?: string,
+  agentKindRegistry?: AgentKindRegistry,
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   logger.info(
     { mothership: env.LOCAL_MOTHERSHIP_URL },
@@ -128,7 +143,7 @@ async function startLocalMothership(
   // mode is always single-node, so the bare hub IS the real-time sink — no cross-node
   // propagator (Redis) is wired here.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildLocalContainer({ env, realtimeSink: realtimeHub })
+  const container = buildLocalContainer({ env, realtimeSink: realtimeHub, agentKindRegistry })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
   validateRegistrationsOnce({

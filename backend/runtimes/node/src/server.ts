@@ -136,6 +136,13 @@ export async function start(
      */
     buildContainer?: (options: NodeContainerOptions) => ServerContainer
     /**
+     * App-owned DI seam for custom agent kinds (mirroring the Worker's `buildContainer`
+     * override): a deployment news a `defaultAgentKindRegistry()`, registers its own kinds on
+     * it by reference, and passes it here. Forwarded to `buildNodeContainer` (and, via the
+     * local facade's builder, to `buildLocalContainer`). Absent → the built-in-only default.
+     */
+    agentKindRegistry?: NodeContainerOptions['agentKindRegistry']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -189,6 +196,7 @@ export async function start(
     repos,
     realtimeSink: realtimePropagator,
     caches,
+    agentKindRegistry: options.agentKindRegistry,
   })
   // Connect the cross-node adapters (a no-op when none are configured) so peer events start
   // reaching this node's browsers.

@@ -327,20 +327,22 @@ function buildRepoSpec(repo: RepoTarget, origin: RepoOrigin) {
 const IMPLEMENTER_AGENT_KIND = 'coder'
 
 /**
- * The kinds that fan out across the task's connected repos as sibling checkouts
- * (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes those
- * SAME work branches to fix red CI across every repo in one container (a cross-repo contract
- * break is exactly what a single-repo fixer can't fix). The `bug-investigator` is READ-ONLY: it
- * gets the same sibling checkouts so it can trace a cross-service bug through every involved
- * repo (the fault often lives in a service other than the one the report names), but it opens no
- * PR — the harness's read-only multi-repo explore path just clones the peers to read them (see
- * `runMultiRepoExplore`). The conflict-resolver stays SINGLE-repo (a git conflict is per-repo
- * textual — handled by targeting the conflicted repo, not fan-out).
+ * The PRE-REGISTRY built-in kinds that fan out across the task's connected repos as sibling
+ * checkouts (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes
+ * those SAME work branches to fix red CI across every repo in one container (a cross-repo
+ * contract break is exactly what a single-repo fixer can't fix). The conflict-resolver stays
+ * SINGLE-repo (a git conflict is per-repo textual — handled by targeting the conflicted repo,
+ * not fan-out).
+ *
+ * These two are not yet migrated to the agent-kind registry, so they can't declare
+ * `fanOutMultiRepo` on a definition — hence this small allow-list. Registry-backed kinds (the
+ * read-only `bug-investigator`, and any custom cross-service explore kind a deployment registers)
+ * opt in via {@link AgentKindRegistry.fansOutMultiRepo} instead of being added here — so a new
+ * fan-out kind is a registry flag, not another entry in this Set.
  */
-const MULTI_REPO_FANOUT_KINDS: ReadonlySet<string> = new Set([
+const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
   IMPLEMENTER_AGENT_KIND,
   'ci-fixer',
-  'bug-investigator',
 ])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
@@ -1027,11 +1029,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     let multiRepoSection: string | undefined
     let commonForKind = common
     const involvedServices = context.involvedServices ?? []
-    if (
-      MULTI_REPO_FANOUT_KINDS.has(context.agentKind) &&
-      involvedServices.length > 0 &&
-      this.deps.resolveRepoTargets
-    ) {
+    const fansOutMultiRepo =
+      MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
+      this.agentKindRegistry.fansOutMultiRepo(context.agentKind)
+    if (fansOutMultiRepo && involvedServices.length > 0 && this.deps.resolveRepoTargets) {
       const { checkouts } = await this.deps.resolveRepoTargets(
         workspaceId,
         blockId,

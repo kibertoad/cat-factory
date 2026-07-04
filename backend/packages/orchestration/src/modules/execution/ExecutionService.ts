@@ -1956,45 +1956,60 @@ export class ExecutionService {
       review: async (ws, block, preset) => {
         const svc = require()
         const structured = await this.structuredInvestigationForBlock(ws, block.id)
-        // An upstream structured `bug-investigator`: seed the gate from its triage (auto-pass on
-        // `clear`, one finding per question on `needs_clarification`) — NO reviewer LLM. On a
-        // clarification park, best-effort echo the questions onto the linked tracker issue.
+        let review: ClarityReview
         if (structured) {
-          const review = await svc.seedReview(ws, block.id, {
+          // An upstream structured `bug-investigator`: seed the gate from its triage — NO reviewer
+          // LLM. `clear` → auto-pass; `needs_clarification` → one blocking finding per question.
+          // The investigator explicitly asked for clarification, so those questions ALWAYS park
+          // for a human — the requirements-review concern tolerance (`maxRequirementConcernAllowed`,
+          // which governs the requirements reviewer, not bug triage) must not silently auto-pass
+          // them — hence a fixed `none` threshold here rather than the preset's.
+          review = await svc.seedReview(ws, block.id, {
             clarity: structured.clarity,
             questions: structured.questions,
             maxIterations: preset.maxRequirementIterations,
-            concernThreshold: preset.maxRequirementConcernAllowed,
+            concernThreshold: 'none',
           })
-          if (review.status !== 'incorporated' && structured.questions.length > 0) {
-            await this.issueWriteback
-              ?.postQuestions(ws, block.id, structured.questions)
-              .catch(() => {})
-          }
-          return review
-        }
-        // No structured investigation. Run the reviewer LLM when a model is wired; otherwise
-        // there is nothing to review against, so auto-pass (equivalent to the old pass-through
-        // when the reviewer wasn't configured).
-        if (!svc.enabled) {
-          return svc.seedReview(ws, block.id, {
+        } else if (!svc.enabled) {
+          // No structured investigation and no reviewer model: nothing to review against, so
+          // auto-pass (equivalent to the old pass-through when the reviewer wasn't configured).
+          review = await svc.seedReview(ws, block.id, {
             clarity: 'clear',
             questions: [],
             maxIterations: preset.maxRequirementIterations,
             concernThreshold: preset.maxRequirementConcernAllowed,
           })
+        } else {
+          review = await svc.review(ws, block.id, {
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+            investigation: await this.investigationForBlock(ws, block.id),
+          })
         }
-        return svc.review(ws, block.id, {
-          maxIterations: preset.maxRequirementIterations,
-          concernThreshold: preset.maxRequirementConcernAllowed,
-          investigation: await this.investigationForBlock(ws, block.id),
-        })
+        // Whenever the gate parks with open questions — from the deterministic seed OR the LLM
+        // reviewer — best-effort echo them onto the linked tracker issue (answers still arrive
+        // in-app). A settled/auto-passed review echoes nothing; a tracker outage never fails the run.
+        await this.echoClarityQuestions(ws, block.id, review)
+        return review
       },
-      reReview: (ws, reviewId, preset) =>
-        require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+      reReview: async (ws, reviewId, preset) => {
+        const svc = require()
+        // No reviewer model wired: a re-review can't run, so settle the loop (converge) instead of
+        // throwing — the deterministic seed path can reach a park with no model configured.
+        if (!svc.enabled) return svc.markIncorporated(ws, reviewId)
+        return svc.reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed })
+      },
       incorporate: async (ws, blockId, reviewId, feedback) => {
+        const svc = require()
+        // No reviewer model: can't LLM-fold the answers into a clarified report, so settle the
+        // review as-is (the run advances on the raw report + the recorded answers) instead of
+        // throwing — keeps the model-free seed path resolvable.
+        if (!svc.enabled) {
+          await svc.markIncorporated(ws, reviewId)
+          return
+        }
         const investigation = await this.investigationForBlock(ws, blockId)
-        await require().incorporate(ws, reviewId, { feedback, investigation })
+        await svc.incorporate(ws, reviewId, { feedback, investigation })
       },
       markIncorporated: (ws, reviewId) => require().markIncorporated(ws, reviewId),
       markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
@@ -2204,6 +2219,24 @@ export class ExecutionService {
     if (!block?.executionId) return undefined
     const instance = await this.executionRepository.get(workspaceId, block.executionId)
     return instance ? this.structuredInvestigationFor(instance) : undefined
+  }
+
+  /**
+   * Best-effort echo of a parked clarity review's open questions onto the block's linked tracker
+   * issue (see {@link IssueWritebackProvider.postQuestions}). Fires for BOTH the deterministic
+   * investigator seed and the LLM reviewer, so identical human-parked states behave the same. A
+   * settled/auto-passed review (status `incorporated`) or one with no open items echoes nothing,
+   * and a tracker outage never fails the run.
+   */
+  private async echoClarityQuestions(
+    workspaceId: string,
+    blockId: string,
+    review: ClarityReview,
+  ): Promise<void> {
+    if (!this.issueWriteback || review.status === 'incorporated') return
+    const questions = review.items.filter((i) => i.status === 'open').map((i) => i.detail)
+    if (questions.length === 0) return
+    await this.issueWriteback.postQuestions(workspaceId, blockId, questions).catch(() => {})
   }
 
   // The clarity / human-testing / visual-confirmation gate-window actions now live on the

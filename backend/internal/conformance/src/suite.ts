@@ -1682,6 +1682,16 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           // A read-only container-explore step returning structured JSON (surfaced as
           // `result.custom`) — exactly the generic manifest-driven `agent` dispatch.
           agent: { surface: 'container-explore', output: { kind: 'structured' } },
+          // Presentation makes it a first-class palette block, so the workspace snapshot's
+          // custom-kind projection advertises it (the snapshot assertion below).
+          presentation: {
+            label: 'Conformance Auditor',
+            icon: 'i-lucide-shield-check',
+            color: '#10b981',
+            description: 'Audits the service for compliance.',
+            category: 'review',
+            resultView: 'generic-structured',
+          },
           // PRE-op: read a baseline artifact (no checkout). Proves pre-ops run + are bound
           // to the resolved branch.
           preOps: [

@@ -46,6 +46,15 @@ export interface AgentKindDefinition {
    */
   requiresContainer?: boolean
   /**
+   * When true this container kind fans out across the block's connected involved-service
+   * repos: the executor resolves the peer checkouts and threads them (+ the multi-repo
+   * prompt section) into the dispatch, so the harness clones the primary repo PLUS every
+   * peer as sibling checkouts. Used by cross-service kinds (e.g. the read-only
+   * `bug-investigator`). Defaults to false (single-repo). Only meaningful for a container
+   * kind — see {@link AgentKindRegistry.fansOutMultiRepo}.
+   */
+  fanOutMultiRepo?: boolean
+  /**
    * Optional one-clause reason this kind should reach for web search, phrased to
    * complete "Use it mainly to …" (e.g. "verify the vendor's current API contract
    * before generating a client"). When web search is enabled for the deployment, this
@@ -172,6 +181,15 @@ export class AgentKindRegistry {
     if (definition.requiresContainer === true) return true
     const surface = definition.agent?.surface
     return surface === 'container-explore' || surface === 'container-coding'
+  }
+
+  /**
+   * Whether a registered kind fans out across the block's connected involved-service repos
+   * (see {@link AgentKindDefinition.fanOutMultiRepo}). False for built-in / unregistered kinds —
+   * the executor keeps a small allow-list for the pre-registry built-ins (`coder` / `ci-fixer`).
+   */
+  fansOutMultiRepo(kind: AgentKind): boolean {
+    return this.registry.get(kind)?.fanOutMultiRepo === true
   }
 
   /** A registered kind's system prompt, or undefined when the kind is not registered. */
