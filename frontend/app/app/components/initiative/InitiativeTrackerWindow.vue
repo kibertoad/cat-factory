@@ -10,6 +10,8 @@
 import { computed, reactive, ref } from 'vue'
 import type { InitiativeFollowUp, InitiativeItem } from '~/types/domain'
 import {
+  INITIATIVE_FOLLOWUP_STATUS_CHIPS,
+  INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS,
   INITIATIVE_ITEM_STATUS_CHIPS,
   INITIATIVE_ITEM_STATUS_LABEL_KEYS,
   INITIATIVE_STATUS_LABEL_KEYS,
@@ -308,7 +310,7 @@ async function savePolicy() {
                       </td>
                       <td class="px-3 py-2 align-top">
                         <UBadge
-                          :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status] as any"
+                          :color="INITIATIVE_ITEM_STATUS_CHIPS[item.status]"
                           variant="subtle"
                           size="sm"
                         >
@@ -449,17 +451,11 @@ async function savePolicy() {
                       <span v-if="f.detail" class="text-slate-400"> — {{ f.detail }}</span>
                     </div>
                     <UBadge
-                      :color="
-                        f.status === 'open'
-                          ? 'warning'
-                          : f.status === 'promoted'
-                            ? 'success'
-                            : 'neutral'
-                      "
+                      :color="INITIATIVE_FOLLOWUP_STATUS_CHIPS[f.status]"
                       variant="subtle"
                       size="sm"
                     >
-                      {{ t(`initiative.followUpStatus.${f.status}`) }}
+                      {{ t(INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS[f.status]) }}
                     </UBadge>
                   </div>
                   <!-- Triage actions for an open follow-up (only while executing) -->

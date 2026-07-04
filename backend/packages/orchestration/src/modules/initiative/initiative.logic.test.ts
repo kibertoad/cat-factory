@@ -838,16 +838,62 @@ describe('applyItemEdit', () => {
       /unknown item/,
     )
   })
+
+  it('rejects a re-scoped dependency that would introduce a cycle', () => {
+    // Two pending items where b already depends on a; editing a to depend on b closes the loop.
+    const twoItems: Initiative = {
+      ...executingEntity(),
+      items: [
+        { id: 'a', phaseId: 'p1', title: 'A', description: '', dependsOn: [], status: 'pending' },
+        {
+          id: 'b',
+          phaseId: 'p1',
+          title: 'B',
+          description: '',
+          dependsOn: ['a'],
+          status: 'pending',
+        },
+      ],
+    }
+    expect(() => applyItemEdit(twoItems, 'a', { dependsOn: ['b'] })).toThrowError(/cycle/)
+  })
+
+  it('refuses to curate an item on a non-executing initiative', () => {
+    const done: Initiative = { ...blockedEntity(), status: 'done' }
+    expect(() => applyItemEdit(done, 'a', { action: 'retry' })).toThrowError(/executing/)
+  })
 })
 
 describe('applyPolicyEdit', () => {
+  const policy: InitiativeExecutionPolicy = {
+    maxConcurrent: 5,
+    rules: [],
+    defaultPipelineId: 'pl_quick',
+    onMissingEstimate: 'default',
+  }
+
   it('replaces the policy', () => {
-    const policy: InitiativeExecutionPolicy = {
-      maxConcurrent: 5,
-      rules: [],
-      defaultPipelineId: 'pl_quick',
-      onMissingEstimate: 'default',
-    }
     expect(applyPolicyEdit(executingEntity(), policy).policy).toEqual(policy)
+  })
+
+  it('refuses to edit the policy of a non-executing initiative', () => {
+    expect(() => applyPolicyEdit({ ...executingEntity(), status: 'paused' }, policy)).toThrowError(
+      /executing/,
+    )
+  })
+})
+
+describe('curation status guard', () => {
+  const fuId = harvestFollowUpId('blk-child-a', 'fu-1')
+  // Harvest itself is loop-driven and unguarded, so seed a follow-up then settle the initiative;
+  // the human triage transforms are the ones gated on `executing`.
+  const settled: Initiative = {
+    ...applyRunHarvest(executingEntity(), extractRunHarvest(runInstance()), 1),
+    status: 'cancelled',
+  }
+
+  it('refuses promote/dismiss once the initiative is no longer executing', () => {
+    expect(() => applyPromoteFollowUp(settled, fuId, { phaseId: 'p1' })).toThrowError(/executing/)
+    expect(() => applyDismissFollowUp(settled, fuId)).toThrowError(/executing/)
   })
 })

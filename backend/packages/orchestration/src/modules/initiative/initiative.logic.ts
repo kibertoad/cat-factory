@@ -55,6 +55,30 @@ export function assertInitiativeShapeAllowed(block: Block, agentKinds: readonly 
 }
 
 /**
+ * Assert the item dependency graph is acyclic (DFS with a visiting set). Shared by the
+ * plan-draft validation and the mid-flight item edit ({@link applyItemEdit}) so a re-scoped
+ * `dependsOn` can't smuggle a cycle past the trust boundary — two mutually-dependent items
+ * would each fail {@link itemDependenciesMet} forever, deadlocking the phase (and the whole
+ * initiative, which can then never settle). Throws {@link ValidationError} on the first cycle.
+ */
+function assertAcyclicItems(
+  items: ReadonlyArray<{ id: string; dependsOn?: readonly string[] }>,
+): void {
+  const deps = new Map(items.map((i) => [i.id, i.dependsOn ?? []]))
+  const done = new Set<string>()
+  const visiting = new Set<string>()
+  const visit = (id: string): void => {
+    if (done.has(id)) return
+    if (visiting.has(id)) throw new ValidationError(`Dependency cycle through item '${id}'`)
+    visiting.add(id)
+    for (const dep of deps.get(id) ?? []) visit(dep)
+    visiting.delete(id)
+    done.add(id)
+  }
+  for (const id of deps.keys()) if (id) visit(id)
+}
+
+/**
  * Validate a plan draft's internal references: unique phase/item ids, every item
  * pointing at a declared phase, dependencies pointing at declared items, and an
  * acyclic dependency graph. Throws {@link ValidationError} on the first violation.
@@ -89,19 +113,8 @@ export function validatePlanDraft(draft: InitiativePlanDraft): void {
       }
     }
   }
-  // Cycle check over the dependency edges (DFS with a visiting set).
-  const deps = new Map(draft.items.map((i) => [i.id ?? '', i.dependsOn ?? []]))
-  const done = new Set<string>()
-  const visiting = new Set<string>()
-  const visit = (id: string): void => {
-    if (done.has(id)) return
-    if (visiting.has(id)) throw new ValidationError(`Dependency cycle through item '${id}'`)
-    visiting.add(id)
-    for (const dep of deps.get(id) ?? []) visit(dep)
-    visiting.delete(id)
-    done.add(id)
-  }
-  for (const id of deps.keys()) if (id) visit(id)
+  // Cycle check over the dependency edges (shared with the mid-flight item edit).
+  assertAcyclicItems(draft.items.map((i) => ({ id: i.id ?? '', dependsOn: i.dependsOn })))
 }
 
 /** Assign a unique slug-derived id, suffixing `-2`, `-3`, … on collision. */
@@ -574,6 +587,22 @@ export function itemIsActive(item: InitiativeItem): boolean {
 const clampTitle = (s: string): string => s.trim().slice(0, INITIATIVE_TITLE_MAX)
 const clampProse = (s: string): string => s.trim().slice(0, INITIATIVE_PROSE_MAX)
 
+/**
+ * Guard: mid-flight human curation (promote / dismiss / item edit / policy edit) is only valid
+ * while the initiative is still `executing` — the same status gate `pause`/`resume`/`cancel`
+ * enforce and the tracker UI's `editable` reflects. Checked inside the CAS transform (on the
+ * freshly-read entity) so a concurrent cancel/pause can't be raced past. Curating a settled
+ * (`done`/`cancelled`) or not-yet-approved initiative would append items the loop never spawns
+ * and flip completion invariants on an already-terminal entity.
+ */
+function assertCurationAllowed(initiative: Initiative): void {
+  if (initiative.status !== 'executing') {
+    throw new ConflictError(
+      `Initiative is ${initiative.status}; curation is only allowed while it is executing`,
+    )
+  }
+}
+
 /** One forward-looking follow-up lifted off a settling child run, before it becomes a tracker entry. */
 export interface HarvestedFollowUp {
   /** Stable id of the child run's follow-up item — the harvest id derives from it, for idempotency. */
@@ -683,6 +712,7 @@ export function applyPromoteFollowUp(
   followUpId: string,
   input: PromoteInitiativeFollowUpInput,
 ): Initiative {
+  assertCurationAllowed(initiative)
   const followUp = (initiative.followUps ?? []).find((f) => f.id === followUpId)
   if (!followUp) throw new ValidationError(`Unknown follow-up '${followUpId}'`)
   if (followUp.status !== 'open') return initiative
@@ -715,6 +745,7 @@ export function applyPromoteFollowUp(
 
 /** Dismiss an `open` follow-up (waved off, not worth an item). A no-op once already settled. */
 export function applyDismissFollowUp(initiative: Initiative, followUpId: string): Initiative {
+  assertCurationAllowed(initiative)
   const followUp = (initiative.followUps ?? []).find((f) => f.id === followUpId)
   if (!followUp) throw new ValidationError(`Unknown follow-up '${followUpId}'`)
   if (followUp.status !== 'open') return initiative
@@ -738,6 +769,7 @@ export function applyItemEdit(
   itemId: string,
   input: UpdateInitiativeItemInput,
 ): Initiative {
+  assertCurationAllowed(initiative)
   const item = (initiative.items ?? []).find((i) => i.id === itemId)
   if (!item) throw new ValidationError(`Unknown item '${itemId}'`)
 
@@ -786,10 +818,11 @@ export function applyItemEdit(
     next = { ...next, status: 'pending', blockId: null, note: undefined }
   }
 
-  return {
-    ...initiative,
-    items: (initiative.items ?? []).map((i) => (i.id === itemId ? next : i)),
-  }
+  const items = (initiative.items ?? []).map((i) => (i.id === itemId ? next : i))
+  // A re-scoped `dependsOn` must keep the graph acyclic — same guard the plan draft enforces,
+  // so an edit can't introduce a mutual dependency that would deadlock the phase.
+  if (input.dependsOn) assertAcyclicItems(items)
+  return { ...initiative, items }
 }
 
 /** Replace the execution policy (concurrency + pipeline rules). Pipeline-id existence is validated
@@ -798,5 +831,6 @@ export function applyPolicyEdit(
   initiative: Initiative,
   policy: InitiativeExecutionPolicy,
 ): Initiative {
+  assertCurationAllowed(initiative)
   return { ...initiative, policy }
 }
