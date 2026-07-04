@@ -59,7 +59,8 @@
     },
     "@clear": {
       "description": "Verb meaning empty / reset a stored value (a config, a saved connection), NOT the adjective 'transparent / obvious'. Used as a destructive-action button label."
-    }
+    },
+    "undo": "Undo"
   },
   "nav": {
     "menu": "Navigation menu",
@@ -95,7 +96,9 @@
       "moveFailed": "Could not move",
       "deleteFailed": "Could not delete",
       "linkFailed": "Could not link tasks",
-      "recurringDeleteFailed": "Could not delete recurring pipeline"
+      "recurringDeleteFailed": "Could not delete recurring pipeline",
+      "deleted": "Deleted \"{name}\"",
+      "moved": "Moved \"{name}\""
     },
     "repoTypes": {
       "service": "Service",
@@ -214,7 +217,9 @@
       "linearTeamId": "Linear team id",
       "footerHint": "A single recurring task is added inside the service; each run replaces the last. Its run history is visible in the inspector.",
       "submit": "Add recurring pipeline",
-      "addFailedTitle": "Could not add recurring pipeline"
+      "addFailedTitle": "Could not add recurring pipeline",
+      "onDemand": "On-demand (manual only)",
+      "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model."
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",
@@ -225,7 +230,13 @@
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "showDetail": "Show detail",
-      "retrying": "Retrying…"
+      "retrying": "Retrying…",
+      "history": {
+        "previousErrors": "{count} previous error | {count} previous errors",
+        "@previousErrors": {
+          "description": "Count-based tally of a run's earlier failed attempts, rendered as e.g. '3 previous errors' (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+        }
+      }
     },
     "stop": {
       "label": "Stop",
@@ -269,7 +280,12 @@
       "dragService": "Drag service",
       "dragTask": "Drag task",
       "dragToResize": "Drag to resize",
-      "addFirstTask": "Add the first task"
+      "addFirstTask": "Add the first task",
+      "createInitiativeTitle": "Create initiative",
+      "accessDenied": {
+        "title": "Permission denied",
+        "hint": "You don't have access to the repository backing this service."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decision needed",
@@ -424,6 +440,8 @@
   },
   "inspector": {
     "container": {
+      "title": "Contents",
+      "hint": "The modules and tasks inside this block. Click an entry to select it on the board.",
       "modules": "Modules ({count})",
       "taskCount": "{count} task | {count} tasks",
       "allTasks": "All tasks ({count})",
@@ -434,6 +452,7 @@
     },
     "epicChildren": {
       "title": "Epic tasks",
+      "hint": "All tasks assigned to this epic, grouped by the service and module they live in. An epic only groups tasks; it does not run anything itself.",
       "doneCount": "{done}/{total} done",
       "empty": "No tasks belong to this epic yet. Import an epic's children, or set a task's epic.",
       "unassigned": "Unassigned"
@@ -468,10 +487,13 @@
         "skipped": "Skipped"
       },
       "updateFailed": "Could not update schedule",
-      "runNowFailed": "Could not run now"
+      "runNowFailed": "Could not run now",
+      "onDemand": "On-demand",
+      "onDemandHint": "Manual only. Runs when you trigger it, and may use an individual-usage subscription model."
     },
     "fragments": {
       "serviceTitle": "Service best practices",
+      "serviceHint": "Programming standards for the whole service. The content of each selected fragment is added to the prompt of every code-aware agent working on tasks under this service.",
       "serviceEmpty": "None. Code-aware agents on this service follow their default guidance.",
       "manageBoard": "Manage this board's fragment library…",
       "manageAccount": "Manage account fragments…"
@@ -479,14 +501,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "How to build, serve, and mock this frontend for a self-contained UI test. Bindings below link it to the backend services it calls.",
+      "detect": {
+        "title": "Detect from repo",
+        "button": "Detect",
+        "hint": "Read the linked repo and propose a config to review before applying. Nothing is saved until you apply.",
+        "error": "Couldn't read the repo. Check the frontend is linked to a connected repository.",
+        "none": "Nothing frontend-shaped was detected. Set the frontend directory (for a monorepo) or fill the fields in manually.",
+        "apply": "Apply",
+        "dismiss": "Dismiss",
+        "confidenceHigh": "sure",
+        "confidenceLow": "guess"
+      },
+      "groups": {
+        "build": "Build",
+        "serve": "Serve",
+        "mocking": "Mocking",
+        "envInjection": "Env injection",
+        "bindings": "Backend bindings",
+        "preview": "Preview"
+      },
       "packageManager": "Package manager",
+      "directory": "Frontend directory",
+      "directoryHint": "The frontend app's subfolder in the repo (a monorepo, e.g. frontend/). Leave empty if the app is at the repo root.",
       "installCommand": "Install command",
       "buildScript": "Build script",
       "outputDir": "Output directory",
       "serveMode": "Serve mode",
       "serveStatic": "Static",
       "serveCommand": "Command",
-      "serveModeHint": "Static serves the build output directory; Command runs a package.json script (e.g. preview).",
+      "serveStaticDesc": "serves the built output directory as static files. Cheapest for a UI test of a fully built app.",
+      "serveCommandDesc": "runs a package.json script (e.g. preview) to serve the app, for builds that need a running server.",
+      "serveEnvAxisNote": "Separate from Env injection (build-time vs runtime) below, which controls how backend URLs reach the app, not how it is served.",
       "serveScript": "Serve script",
       "servePort": "Serve port",
       "mockMappingsPath": "Mock mappings path",
@@ -515,10 +560,25 @@
           "failed": "Failed",
           "stopped": "Not running"
         }
+      },
+      "resolved": {
+        "title": "Resolves to",
+        "duplicateWarning": "Used on more than one binding, so only the last applies: {vars}.",
+        "serviceOffline": "{service}: no live environment (mocked)",
+        "mock": "Mock (WireMock)"
       }
+    },
+    "serviceConnections": {
+      "title": "Service connections",
+      "hint": "The other services this one uses, e.g. a service that sends its emails. Connections draw edges on the board, and tasks can mark a connected service as directly involved.",
+      "descriptionPlaceholder": "How this service uses it, e.g. sends emails via it",
+      "remove": "Remove connection",
+      "empty": "No connections. Add one to link this service to another service it uses.",
+      "usedBy": "Used by"
     },
     "releaseHealth": {
       "title": "Post-release health",
+      "sectionHint": "After this service's changes merge and ship, a gate watches the mapped monitors and SLOs for a while. On a regression it starts an on-call agent to investigate; nothing is reverted automatically.",
       "clear": "Clear",
       "connectPrompt": "Connect an observability integration to watch this service after releases.",
       "connectFirst": "Connect an observability integration first",
@@ -535,6 +595,7 @@
     },
     "testConfig": {
       "title": "Test infrastructure",
+      "hint": "How a test environment is stood up for this service when a pipeline needs to run it: no infrastructure, a Docker Compose file, Kubernetes manifests, or a custom manifest type.",
       "provisionType": "Provision type",
       "provisionTypeHint": "How this service stands up its environment for the Tester. The workspace configures how each type is handled (the engine + connection).",
       "provisionTypes": {
@@ -618,11 +679,13 @@
     },
     "agentConfig": {
       "title": "Agent configuration",
+      "hint": "Options contributed by the agents in this task's pipeline. Each option stays editable until its agent starts, then it is locked for that run.",
       "inherited": "inherited from service",
       "frozen": "Frozen: the agent has started"
     },
     "dependencies": {
       "title": "Depends on",
+      "hint": "Tasks that must merge before this one can run. The Run control stays locked until every dependency is done.",
       "merged": "Merged",
       "notMerged": "Not merged yet",
       "empty": "No dependencies. Can run any time.",
@@ -634,11 +697,14 @@
     },
     "estimate": {
       "title": "Estimate",
+      "hint": "Produced by the task estimator agent: how complex, risky, and impactful this task looks. Used to decide whether consensus (multi-run) steps are worth running.",
       "complexity": "Complexity",
       "risk": "Risk",
       "impact": "Impact"
     },
     "execution": {
+      "title": "Execution",
+      "hint": "The live run of this task's pipeline: each agent step, its progress, and the resulting pull request.",
       "stage": {
         "incorporating": "Incorporating…",
         "reviewing": "Re-reviewing…",
@@ -692,12 +758,18 @@
       "mergePr": "Merge PR"
     },
     "structure": {
+      "title": "Structure",
+      "hint": "Where this task lives in its service and which coding standards its agents follow.",
       "module": "Module",
       "modulePlaceholder": "e.g. Sessions (created on implement if new)",
+      "moduleHint": "The service module this task belongs to. Type a name; a module that does not exist yet is created when the task is implemented.",
       "bestPractices": "Best practices",
-      "bestPracticesEmpty": "None. Agents follow their default guidance."
+      "bestPracticesEmpty": "None. Agents follow their default guidance.",
+      "bestPracticesHint": "Best-practice fragments folded into the prompts of this task's agents, on top of the service-level standards."
     },
     "runSettings": {
+      "title": "Run settings",
+      "hint": "How this task's pipeline runs: which pipeline starts, which merge and model policies apply, and what happens around the run.",
       "unassigned": "Unassigned",
       "workspaceDefault": "Workspace default",
       "workspaceDefaultParen": "(workspace default)",
@@ -716,10 +788,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "No default. Pick a pipeline when you run this task.",
+      "pipelineHint": "The pipeline the Run button starts by default: the sequence of agent steps (for example spec, code, test, merge) executed for this task.",
       "mergePolicy": "Merge policy",
       "mergePresetDetail": "{name}: auto-merge when complexity ≤ {complexity}, risk ≤ {risk}, impact ≤ {impact}; up to {attempts} CI-fix attempts.",
       "mergePresetEmpty": "No preset configured. The merger raises a review notification for every PR.",
+      "mergePolicyHint": "Decides when a finished pull request merges automatically instead of waiting for a human review, and how many CI-fix attempts a run gets.",
       "modelPreset": "Model preset",
+      "modelPresetHint": "Decides which AI model each agent step runs on.",
       "modelPresetBase": "base {model}",
       "modelPresetOverrides": ", {count} override | , {count} overrides",
       "modelPresetEmpty": "No preset configured. Agents run on the deployment's default routing.",
@@ -740,7 +815,11 @@
       "responsibleProduct": "Responsible product",
       "responsibleEmpty": "Unassigned. Set a product owner to notify them when requirement review flags this task.",
       "autoStartDependents": "Auto-start dependents",
-      "autoStartHint": "When this task merges, automatically start the tasks that depend on it (once their other dependencies are also done)."
+      "autoStartHint": "When this task merges, automatically start the tasks that depend on it (once their other dependencies are also done).",
+      "involvedServices": "Involved services",
+      "involvedServicesHint": "Connected services directly involved in this task: each spins up as an ephemeral environment alongside this task's own service, and the coding agent may change their repositories too.",
+      "involvedServicesEmpty": "No connected services. Connect services on the service frame to select them here.",
+      "involvedServiceStale": "No longer connected to this task's service; it is dropped on the next change."
     }
   },
   "panels": {
@@ -917,7 +996,8 @@
         "recurring": {
           "title": "Delete this recurring pipeline?",
           "body": "\"{name}\", its schedule and its run history will be removed. This can't be undone."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" and the {count} item inside it will be removed. This can't be undone. | \"{name}\" and the {count} items inside it will be removed. This can't be undone."
       },
       "titlePlaceholder": "Title…",
       "reworkedRequirements": "Reworked requirements",
@@ -1274,6 +1354,7 @@
         "visual_confirmation_ready": "Mark read",
         "human_review": "Mark read",
         "followup_pending": "Mark read",
+        "initiative": "Mark read",
         "markRead": "Mark read"
       }
     },
@@ -1450,6 +1531,7 @@
         "documents": "Documents",
         "taskTrackers": "Task trackers",
         "observability": "Observability",
+        "development": "Development",
         "personal": "Personal (only you)"
       },
       "items": {
@@ -1486,6 +1568,10 @@
         "observability": {
           "label": "Post-release health",
           "description": "Watch monitors and SLOs after a release ships (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Private package registries",
+          "description": "npm and GitHub Packages tokens agents use to install private dependencies."
         },
         "githubPat": {
           "label": "My GitHub token",
@@ -1578,9 +1664,9 @@
         "environment-provider": "Custom HTTP provider",
         "environment-providerDesc": "Provision ephemeral environments through your own HTTP management API. Best when you already have bespoke preview-env tooling.",
         "compose": "Docker Compose preview env",
-        "composeDesc": "Stand the repo's own docker-compose.yml up on a local Docker daemon as the Tester's URL. Best for local Compose-based apps. Image-based stacks only; needs a Docker daemon, so local deployments only."
+        "composeDesc": "Stand the repo's own docker-compose.yml up on a local Docker daemon as the Tester's URL. Best for local Compose-based apps. Supports pre-built images or building from source; needs a Docker daemon, so local deployments only."
       },
-      "dockerComposeInfo": "Docker Compose services stand up on the runtime's local Docker: no connection needed (the run's container must support Docker-in-Docker).",
+      "dockerComposeInfo": "Docker Compose services stand up on the runtime's local Docker: no connection needed (the run's container must support Docker-in-Docker). Configure the service, port, and image source (pull pre-built or build from source) on the service's environment settings.",
       "engine": {
         "local-k3s": "Local k3s",
         "remote-kubernetes": "Remote Kubernetes"
@@ -1983,6 +2069,31 @@
       },
       "connectionNoun": "the observability connection",
       "incidentNoun": "the incident provider"
+    },
+    "packageRegistries": {
+      "title": "Private package registries",
+      "intro": "Connect the private registries your repositories install from. Agents receive them when they check out a repository, so private dependencies resolve during installs. Tokens are write-only: to change one, remove the entry and add it again.",
+      "entryNoun": "registry entry",
+      "list": {
+        "heading": "Connected registries",
+        "tokenTail": "token …{tail}",
+        "remove": "Remove entry"
+      },
+      "add": {
+        "heading": "Add a registry",
+        "vendor": "Registry",
+        "host": "The token is sent only to {host}.",
+        "scopes": "Package scopes",
+        "scopesHelp": "Comma-separated npm scopes",
+        "token": "Access token",
+        "save": "Add registry"
+      },
+      "toast": {
+        "loadFailed": "Could not load package registries",
+        "added": "Registry added",
+        "addFailed": "Could not add the registry",
+        "removeFailed": "Could not remove the registry entry"
+      }
     },
     "localMode": {
       "title": "Local mode",
@@ -2450,7 +2561,8 @@
       "repoLabel": {
         "private": " (private)",
         "monorepo": " · monorepo",
-        "onBoard": " · already on board"
+        "onBoard": " · already on board",
+        "personal": " · personal (your token)"
       },
       "monorepoLabel": "This is a monorepo (hosts more than one service)",
       "monorepoDescription": "Add several services from one repo, each pinned to a subdirectory.",
@@ -2521,7 +2633,8 @@
       "clarity_review": "Clarity review",
       "release_regression": "Release regression",
       "human_test_ready": "Ready for human testing",
-      "visual_confirmation_ready": "Ready for visual confirmation"
+      "visual_confirmation_ready": "Ready for visual confirmation",
+      "initiative": "Initiative updates"
     },
     "role": {
       "engineering": "Engineering",
@@ -2599,6 +2712,7 @@
     },
     "taskDocs": {
       "heading": "Context documents",
+      "hint": "Documents attached to this task as context. Their content is given to the agents that work on the task.",
       "attach": "Attach",
       "importPage": "Import a page…",
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
@@ -2619,6 +2733,7 @@
     },
     "contextIssues": {
       "title": "Context issues",
+      "hint": "Tracker issues attached to this task as context. Their content is given to the agents that work on the task.",
       "attach": "Attach",
       "attached": "Issue attached",
       "attachFailed": "Could not attach",
@@ -2706,6 +2821,10 @@
       "consensusRevertTooltip": "Consensus enabled. Click to revert to a single agent.",
       "followUpEnableTooltip": "Follow-up companion disabled. Click to enable (Coder surfaces loose ends / questions).",
       "followUpDisableTooltip": "Follow-up companion enabled. Coder surfaces loose ends / side-tasks / questions; click to disable.",
+      "testerQualityEnableTooltip": "Test quality companion disabled. Click to enable (audits the report for coverage and loops the Tester on gaps).",
+      "testerQualityDisableTooltip": "Test quality companion enabled. Audits the report for coverage before greenlight and loops the Tester on gaps; click to disable.",
+      "testerQualityLabel": "Test quality companion",
+      "testerQualityGateTooltip": "Only run the quality audit when the task estimate clears a threshold (needs a Task Estimator earlier)",
       "moveUp": "Move step up",
       "moveDown": "Move step down",
       "removeStep": "Remove this step from the pipeline",
@@ -2900,6 +3019,8 @@
     },
     "attemptsHeading": "{helper} attempts",
     "attempt": "Attempt {number}",
+    "attemptInstructions": "Handed to {helper}",
+    "attemptReport": "{helper} report",
     "outcome": {
       "completed": "completed",
       "failed": "failed"
@@ -2973,6 +3094,9 @@
       "findings": "Findings",
       "open": "Open",
       "answered": "Answered",
+      "recommendations": "Recommendations",
+      "recsGenerating": "Generating",
+      "recsToReview": "To review",
       "model": "Model"
     },
     "actions": {
@@ -3396,6 +3520,15 @@
       "failed": "Failed",
       "addressed": "Addressing"
     },
+    "quality": {
+      "heading": "Coverage review",
+      "reruns": "Quality-driven Tester re-runs",
+      "rerunCount": "{attempts}/{max} re-runs",
+      "exceeded": "Budget spent",
+      "adequate": "Coverage adequate",
+      "inadequate": "Coverage gaps found",
+      "gaps": "Gaps to close"
+    },
     "empty": {
       "title": "No test report yet.",
       "hint": "The report appears once the Tester finishes a pass. While it runs, the step shows live progress on the board."
@@ -3704,19 +3837,23 @@
       "connectFirst": "Connect a document source (Confluence, Notion or GitHub) under Integrations first.",
       "refPlaceholder": "Page id or URL (e.g. a Confluence/Notion page or GitHub file URL)",
       "tagsPlaceholder": "Tags, comma-separated (optional)",
-      "link": "Link as living fragment"
+      "link": "Link as living fragment",
+      "githubBrowseHint": "Browse the repo and pick the file to link."
     },
     "sources": {
       "metaSynced": "synced · ref {ref}",
       "metaNever": "never synced · ref {ref}",
-      "changes": "{count} change | {count} changes",
+      "changes": "Changes",
       "empty": "No linked guideline repos. Link one below to import its Markdown files as fragments.",
       "linkTitle": "Link a guideline repo",
       "ownerPlaceholder": "owner",
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dir path (e.g. guidelines)",
       "refPlaceholder": "ref (default HEAD)",
-      "link": "Link & sync"
+      "link": "Link & sync",
+      "browseHint": "Browse the repo and pick the directory of Markdown guidelines (or link the whole repo).",
+      "selectedDir": "Directory:",
+      "wholeRepo": "Whole repository (root)."
     },
     "toast": {
       "added": "Fragment added",
@@ -3731,7 +3868,7 @@
       "linkSourceFailed": "Could not link source",
       "synced": "Synced: {updated} updated, {removed} removed",
       "syncFailed": "Could not sync source",
-      "changesAvailable": "{count} change available | {count} changes available",
+      "changesAvailable": "Changes available",
       "upToDate": "Up to date",
       "checkSourceFailed": "Could not check source",
       "sourceUnlinked": "Source unlinked",
@@ -3740,7 +3877,8 @@
     "confirmRemove": {
       "title": "Delete this fragment?",
       "body": "\"{name}\" will be removed. This can't be undone."
-    }
+    },
+    "unavailable": "The prompt-fragment library isn't enabled for this deployment."
   },
   "sandbox": {
     "title": "Sandbox: prompt and model testing",
@@ -3948,6 +4086,86 @@
       "bootstrapFailed": "Could not bootstrap",
       "saveArchFailed": "Could not save reference architecture",
       "deleteFailed": "Could not delete"
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Create initiative",
+      "inFrame": "New initiative in {frame}",
+      "titleField": "Title",
+      "titlePlaceholder": "e.g. Migrate the API to the new auth model",
+      "goalField": "Goal",
+      "goalPlaceholder": "Describe the goal, constraints and rough scope. The planner refines this into a multi-phase plan.",
+      "hint": "Nothing runs yet: after creating, run the Initiative Planning pipeline on the block. It analyses the codebase and drafts the multi-phase plan for your approval.",
+      "submit": "Create initiative",
+      "failedTitle": "Could not create the initiative"
+    },
+    "status": {
+      "planning": "Planning",
+      "awaiting_approval": "Awaiting approval",
+      "executing": "Executing",
+      "paused": "Paused",
+      "done": "Done",
+      "cancelled": "Cancelled"
+    },
+    "itemStatus": {
+      "pending": "Pending",
+      "in_progress": "In progress",
+      "pr_open": "PR open",
+      "done": "Done",
+      "blocked": "Blocked",
+      "skipped": "Skipped"
+    },
+    "card": {
+      "kind": "Initiative",
+      "progress": "{done}/{total} items done",
+      "openTracker": "Open tracker"
+    },
+    "tracker": {
+      "title": "Initiative tracker",
+      "subtitle": "Phases, work items, decisions and progress of this initiative",
+      "empty": "No initiative found for this block.",
+      "goal": "Goal",
+      "constraints": "Constraints",
+      "nonGoals": "Non-goals",
+      "analysis": "Codebase analysis",
+      "noPlan": "No plan yet. Run the Initiative Planning pipeline to draft the multi-phase plan.",
+      "phase": "Phase: {title}",
+      "colItem": "Item",
+      "colStatus": "Status",
+      "colPr": "PR",
+      "dependsOn": "Depends on: {items}",
+      "prLink": "PR",
+      "policy": "Execution policy",
+      "maxConcurrent": "Max concurrent tasks: {count}",
+      "defaultPipeline": "Default pipeline:",
+      "axisComplexity": "complexity >= {value}",
+      "axisRisk": "risk >= {value}",
+      "axisImpact": "impact >= {value}",
+      "axisNever": "never matches (no thresholds)",
+      "decisions": "Decisions",
+      "deviations": "Deviations",
+      "followUps": "Follow-ups",
+      "caveats": "Known caveats"
+    },
+    "inspector": {
+      "runPlanning": "Run planning",
+      "answerPlanning": "Answer planning questions",
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancel": "Cancel initiative",
+      "hint": "The planning pipeline explores the codebase, drafts the multi-phase plan for approval, then commits the tracker document to the repository."
+    },
+    "planning": {
+      "title": "Plan the initiative",
+      "subtitle": "Answer the planner's questions so it can scope the initiative",
+      "intro": "The planner is scoping this initiative. Answer its questions to shape the goal and constraints, then continue — or proceed to plan with what it has.",
+      "empty": "No initiative found for this block.",
+      "converged": "No questions are pending. The planner has what it needs and is drafting the plan.",
+      "answerPlaceholder": "Your answer",
+      "hint": "Continue lets the planner ask follow-ups; Proceed plans with the answers so far.",
+      "proceed": "Proceed to plan",
+      "continue": "Continue"
     }
   }
 }

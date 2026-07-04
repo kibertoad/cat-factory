@@ -1,10 +1,11 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
-import { writebackOverrideSchema } from './entities.js'
+import { testerQualityConfigSchema, writebackOverrideSchema } from './entities.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
 import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
   blockTypeSchema,
@@ -171,6 +172,13 @@ export const updateBlockSchema = v.partial(
     // for a self-contained UI test + its backend bindings (which double as board links).
     // See docs/initiatives/frontend-preview-ui-testing.md.
     frontendConfig: frontendConfigSchema,
+    // Service-level (frame, `type: 'service'`): the service's directed connections to the
+    // other services it uses (consumer→provider edges); an empty array clears them.
+    serviceConnections: serviceConnectionsSchema,
+    // Task-level: the connected service frames directly involved in this task beyond its
+    // own service; an empty array clears the selection. Capped like `serviceConnections`
+    // so the write-gate's per-id cross-home resolve stays a bounded loop, not data-sized.
+    involvedServiceIds: v.pipe(v.array(v.pipe(v.string(), v.maxLength(120))), v.maxLength(50)),
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),
@@ -234,8 +242,28 @@ export const createPipelineSchema = v.object({
    * chain or it is rejected. Optional.
    */
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  /**
+   * Per-step Follow-up companion toggle, parallel to {@link agentKinds}. Only meaningful on a
+   * `coder` step; `false` disables the companion there. `null`/`true`/omitted ⇒ enabled (the
+   * default). Optional.
+   */
+  followUps: v.optional(v.array(v.nullable(v.boolean()))),
+  /**
+   * Per-step test quality-control companion config, parallel to {@link agentKinds}. Only
+   * meaningful on a Tester step; `null`/omitted ⇒ enabled with no gating (the default), an
+   * entry with `enabled: false` disables it, and an entry with `gating` makes it conditional
+   * on the task estimate. Optional.
+   */
+  testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   /** Free-form organizational labels for the library. Optional. */
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  /**
+   * How the pipeline may be launched: `'one-off'` / `'recurring'` / `'both'`. Omitted ⇒
+   * `'both'` (unrestricted). A pipeline carrying a `bug-intake` step must be `'recurring'`.
+   */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type CreatePipelineInput = v.InferOutput<typeof createPipelineSchema>
 
@@ -252,7 +280,13 @@ export const updatePipelineSchema = v.object({
   enabled: v.optional(v.array(v.boolean())),
   consensus: v.optional(v.array(v.nullable(consensusStepConfigSchema))),
   gating: v.optional(v.array(v.nullable(stepGatingSchema))),
+  followUps: v.optional(v.array(v.nullable(v.boolean()))),
+  testerQuality: v.optional(v.array(v.nullable(testerQualityConfigSchema))),
   labels: v.optional(v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(40)))),
+  /** Change how the pipeline may be launched (see {@link createPipelineSchema}). Optional. */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type UpdatePipelineInput = v.InferOutput<typeof updatePipelineSchema>
 

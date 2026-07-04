@@ -25,6 +25,7 @@ export function useWorkspaceStream() {
   const clarity = useClarityStore()
   const brainstorm = useBrainstormStore()
   const kaizen = useKaizenStore()
+  const initiatives = useInitiativesStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -103,6 +104,10 @@ export function useWorkspaceStream() {
       // run cache (so an open run window shows scheduled→running→complete live) and the
       // Kaizen screen history. Never surfaced on the board.
       kaizen.upsert(event.grading)
+    } else if (event.type === 'initiative') {
+      // An initiative changed (created, plan ingested, an item settled) — patch the cache
+      // so an open tracker window / the board card reflects the transition live.
+      initiatives.upsert(event.initiative)
     }
   }
 

@@ -509,9 +509,44 @@ export function seedPipelines(): Pipeline[] {
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
+    {
+      // The Initiative Planning pipeline — the ONLY pipeline runnable on an
+      // `initiative`-level block (and initiative blocks accept no other; see the
+      // engine's runnable guard). The INTERVIEWER interviews the human on goals /
+      // constraints (an inline park/answer/resume gate driven by its own controller,
+      // NOT a `gates[]` human gate — hence `false` at its index); the ANALYST reads
+      // the repo and writes a codebase analysis; the PLANNER — grounded in both —
+      // emits the multi-phase plan as structured output; the HUMAN GATE after it
+      // (index 2) holds the run until the plan is approved; the committer then persists
+      // the plan (the `initiatives` entity + the in-repo tracker under
+      // `docs/initiatives/<slug>/`) and arms the execution loop.
+      id: 'pl_initiative',
+      name: 'Plan initiative',
+      agentKinds: [
+        'initiative-interviewer',
+        'initiative-analyst',
+        'initiative-planner',
+        'initiative-committer',
+      ],
+      gates: [false, false, true, false],
+      // Slice 2 added the interviewer + analyst in front of the planner; bump the
+      // catalog version so workspaces on the v1 shape get the reseed offer.
+      version: 2,
+    },
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
+    // The first PUBLIC-API pipeline: a single inline `initiative-breakdown` step that
+    // decomposes an initiative brief into a structured plan. `public: true` exposes it to
+    // external callers via `POST /api/v1/initiatives`; being inline (no container / no repo)
+    // it runs headlessly and persists its result to the DB, never touching GitHub. The kind
+    // itself is registered in @cat-factory/agents (like every other kind referenced here).
+    {
+      id: 'pl_initiative_breakdown',
+      name: 'Break down initiative',
+      agentKinds: ['initiative-breakdown'],
+      public: true,
+    },
     {
       // FORWARD document authoring: turn a brief (+ linked PRDs/RFCs/issues) into a polished
       // in-repo Markdown document shipped as a PR. Unlike the reverse-documentation kinds
@@ -570,6 +605,12 @@ export function seedPipelines(): Pipeline[] {
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
 export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
+
+/** Pipeline id of the built-in public "break down an initiative" pipeline (public API). */
+export const INITIATIVE_BREAKDOWN_PIPELINE_ID = 'pl_initiative_breakdown'
+
+/** Pipeline id of the Initiative Planning pipeline (initiative blocks only). */
+export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'

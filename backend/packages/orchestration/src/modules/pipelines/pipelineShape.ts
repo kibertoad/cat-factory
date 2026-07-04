@@ -1,6 +1,22 @@
 import { ValidationError } from '@cat-factory/kernel'
-import type { StepGating } from '@cat-factory/kernel'
+import type { PipelineAvailability, StepGating, TesterQualityConfig } from '@cat-factory/kernel'
 import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@cat-factory/agents'
+import { isTesterKind } from '../execution/ci.logic.js'
+
+/**
+ * How a run was LAUNCHED, threaded into {@link ExecutionService.start} so the launch-constraint
+ * gate can reject a `'manual'` start of a `'recurring'`-only pipeline (and vice versa). A retry
+ * or restart re-drives an already-validated run, so it passes no origin and the gate is skipped.
+ */
+export type RunOrigin = 'manual' | 'recurring'
+
+/**
+ * The `bug-intake` engine step pulls one issue from the schedule's configured tracker board, so
+ * it is meaningless without a schedule — a pipeline carrying it must be `'recurring'`. Kept as a
+ * bare literal here (the kind itself is registered later, in the bug-triage engine phase); this
+ * structural guard only needs the identifier.
+ */
+const BUG_INTAKE_AGENT_KIND = 'bug-intake'
 
 /**
  * Structural validation shared by the pipeline builder (save) and the execution engine
@@ -20,16 +36,22 @@ import { companionTargets, isCompanionKind, TASK_ESTIMATOR_AGENT_KIND } from '@c
  *    only kind it is safe to skip — skipping a producer would starve its downstream steps),
  *    must set at least one axis threshold (or it would always skip), and needs a
  *    `task-estimator` to have run before it (or the gate has nothing to consult).
+ *  - {@link assertValidTesterQualityGating}: the test quality-control companion's optional
+ *    estimate gate lives on the Tester step itself (not a companion row), so it is validated
+ *    separately — but under the same "threshold set + estimator earlier" rules, since a
+ *    QC gate with no estimator would silently never gate.
  */
 export interface PipelineShape {
   agentKinds: string[]
   enabled?: boolean[]
   gating?: (StepGating | null)[]
+  testerQuality?: (TesterQualityConfig | null)[]
 }
 
 export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidCompanionPlacement(pipeline.agentKinds, pipeline.enabled)
   assertValidGating(pipeline.agentKinds, pipeline.enabled, pipeline.gating)
+  assertValidTesterQualityGating(pipeline.agentKinds, pipeline.enabled, pipeline.testerQuality)
 }
 
 /**
@@ -107,5 +129,88 @@ export function assertValidGating(
         `Step '${kind}' is gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
       )
     }
+  }
+}
+
+/**
+ * Validate every ENABLED Tester step whose test quality-control companion carries an enabled
+ * estimate gate. The QC gate lives on the Tester step itself (not a companion), so it is
+ * checked here rather than in {@link assertValidGating} (which is companion-only). The same two
+ * safety rules apply as for step gating: at least one axis threshold must be set (or the gate
+ * would never fire), and an enabled `task-estimator` must run earlier (or the gate has no
+ * estimate to consult). The QC companion being enabled/disabled itself imposes no requirement —
+ * only an enabled GATE does.
+ */
+export function assertValidTesterQualityGating(
+  agentKinds: string[],
+  enabled?: boolean[],
+  testerQuality?: (TesterQualityConfig | null)[],
+): void {
+  if (!testerQuality) return
+  const isEnabled = (i: number) => enabled?.[i] !== false
+  for (let i = 0; i < agentKinds.length; i++) {
+    const qc = testerQuality[i]
+    const g = qc?.gating
+    if (!g?.enabled || !isEnabled(i)) continue
+    const kind = agentKinds[i]
+    if (kind === undefined || !isTesterKind(kind)) continue
+    if (g.minComplexity === undefined && g.minRisk === undefined && g.minImpact === undefined) {
+      throw new ValidationError(
+        `Step '${kind}' has an estimate-gated test quality companion but sets no threshold — set at least one of complexity / risk / impact, or the gate would always skip the review.`,
+      )
+    }
+    const hasEstimator = agentKinds
+      .slice(0, i)
+      .some((k, j) => k === TASK_ESTIMATOR_AGENT_KIND && isEnabled(j))
+    if (!hasEstimator) {
+      throw new ValidationError(
+        `Step '${kind}' has a test quality companion gated on the task estimate but no enabled '${TASK_ESTIMATOR_AGENT_KIND}' step runs before it. Add a task-estimator earlier in the pipeline.`,
+      )
+    }
+  }
+}
+
+/**
+ * Enforce a pipeline's launch constraints (design §2 of the bug-triage pipeline):
+ *
+ *  - A `bug-intake` step is meaningless without a schedule, so a pipeline carrying one must be
+ *    `'recurring'`. `availability` absent means `'both'` (unrestricted), so an unset pipeline
+ *    with a `bug-intake` step is rejected too.
+ *  - When an `origin` is supplied (a fresh launch), it must match the pipeline's `availability`:
+ *    a `'recurring'`-only pipeline can't be started as a one-off manual task, and a `'one-off'`-
+ *    only pipeline can't be fired from a schedule.
+ *
+ * This is a LAUNCH-time gate (builder save + run start + schedule attach), NOT part of the
+ * shared retry/restart re-validation: those re-drive stored steps of an already-validated run,
+ * so they pass no `origin` and skip the check entirely (an unset `availability` on the pipeline
+ * definition is still meaningful at start, but a retry never reaches here).
+ *
+ * The `bug-intake` requirement is evaluated over the ENABLED subset (like every other check in
+ * this file): a DISABLED `bug-intake` step never runs, so it imposes no recurring requirement.
+ */
+export function assertPipelineLaunchable(
+  agentKinds: string[],
+  availability: PipelineAvailability | undefined,
+  origin?: RunOrigin,
+  enabled?: boolean[],
+): void {
+  const effective: PipelineAvailability = availability ?? 'both'
+  const hasEnabledBugIntake = agentKinds.some(
+    (kind, i) => kind === BUG_INTAKE_AGENT_KIND && enabled?.[i] !== false,
+  )
+  if (hasEnabledBugIntake && effective !== 'recurring') {
+    throw new ValidationError(
+      `A pipeline with a '${BUG_INTAKE_AGENT_KIND}' step must be recurring — it pulls its work from a schedule's tracker board, so it cannot run as a one-off.`,
+    )
+  }
+  if (origin === 'manual' && effective === 'recurring') {
+    throw new ValidationError(
+      'This pipeline can only run on a recurring schedule; it cannot be started as a one-off task.',
+    )
+  }
+  if (origin === 'recurring' && effective === 'one-off') {
+    throw new ValidationError(
+      'This pipeline can only run as a one-off task; it cannot be attached to a recurring schedule.',
+    )
   }
 }

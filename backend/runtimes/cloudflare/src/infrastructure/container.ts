@@ -43,8 +43,10 @@ import {
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ApiKeyService,
+  PublicApiKeyService,
   LocalModelEndpointService,
   UserSecretService,
+  type UserSecretKindRegistry,
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
   PersonalSubscriptionService,
@@ -78,8 +80,13 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
+  PACKAGE_REGISTRY_CIPHER_INFO,
+  resolvePackageRegistriesForDispatch,
+  LlmObservabilityService,
+  makeHarnessCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
+import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
@@ -103,6 +110,7 @@ import {
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
+  type JobPackageRegistrySpec,
   type MintInstallationToken,
   type PersistenceRegistry,
   type ServerContainer,
@@ -129,12 +137,14 @@ import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
 import { D1ProviderApiKeyRepository } from './repositories/D1ProviderApiKeyRepository'
+import { D1PublicApiKeyRepository } from './repositories/D1PublicApiKeyRepository'
 import {
   D1PersonalSubscriptionRepository,
   D1SubscriptionActivationRepository,
 } from './repositories/D1PersonalSubscriptionRepository'
 import { D1LocalModelEndpointRepository } from './repositories/D1LocalModelEndpointRepository'
 import { D1UserSecretRepository } from './repositories/D1UserSecretRepository'
+import { D1UserRepoAccessRepository } from './repositories/D1UserRepoAccessRepository'
 import { D1ProviderModelCatalogRepository } from './repositories/D1ProviderModelCatalogRepository'
 import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
 import { CompositeAgentExecutor } from './ai/CompositeAgentExecutor'
@@ -192,6 +202,7 @@ import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/co
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
+import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
 import {
   D1SandboxPromptVersionRepository,
@@ -202,6 +213,7 @@ import {
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
+import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1AccountSettingsRepository } from './repositories/D1AccountSettingsRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
@@ -570,6 +582,14 @@ function buildAppRegistry(
  * live in `@cat-factory/server` so the Worker and Node service can't drift). This
  * wrapper just binds the D1 repositories. Shared by the container executor, the CI
  * status provider and the PR merger.
+ *
+ * No `repoProjectionCache` is threaded here (unlike the Node facade, which caches the
+ * whole-projection re-list per workspace — caching-layer slice 3): the repo projection
+ * is our own mutable D1 state, and the Worker's isolate-safe profile makes that cache
+ * pass-through (no cross-isolate invalidation bus), so an in-isolate TTL would serve
+ * stale repos after a write on another isolate. Reading live IS the isolate-safe
+ * behaviour. The shared GitHub sync/webhook services still receive the (pass-through)
+ * handle via `createGitHubModule`, so their invalidation code path stays symmetric.
  */
 function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
   return buildSharedResolveRepoTarget({
@@ -642,6 +662,7 @@ function selectMergeLifecycleDeps(
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
+    initiativeRepository: new D1InitiativeRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present)
   // and Slack (when the integration is enabled) implement the same NotificationChannel
@@ -726,6 +747,44 @@ function selectReleaseHealthDeps(
     releaseHealthConfigRepository,
     observabilitySecretCipher,
   }
+}
+
+/**
+ * Wire the per-workspace private package-registry integration (npm private orgs, GitHub
+ * Packages). Wired whenever the shared encryption key is present (the cipher must exist
+ * to seal/unseal); a workspace with no entries is a no-op. The decrypted entries reach
+ * agent containers via the executor's `resolvePackageRegistries` seam.
+ */
+function selectPackageRegistryDeps(env: Env, db: D1Database): Partial<CoreDependencies> {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return {}
+  return {
+    packageRegistryConnectionRepository: new D1PackageRegistryConnectionRepository({ db }),
+    packageRegistrySecretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: PACKAGE_REGISTRY_CIPHER_INFO,
+    }),
+  }
+}
+
+/**
+ * The agent executor / bootstrapper `resolvePackageRegistries` seam: decrypt the
+ * workspace's private-registry entries onto the job body at dispatch. Built over the
+ * same repo + cipher the management API uses; undefined when the encryption key is
+ * absent (no registry auth is forwarded).
+ */
+function buildResolvePackageRegistries(
+  env: Env,
+  db: D1Database,
+): ((workspaceId: string) => Promise<JobPackageRegistrySpec[]>) | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  const repository = new D1PackageRegistryConnectionRepository({ db })
+  const cipher = new WebCryptoSecretCipher({
+    masterKeyBase64: encryptionKey,
+    info: PACKAGE_REGISTRY_CIPHER_INFO,
+  })
+  return (workspaceId) => resolvePackageRegistriesForDispatch(repository, cipher, workspaceId)
 }
 
 /**
@@ -1120,6 +1179,27 @@ function buildApiKeyService(env: Env, db: D1Database, clock: Clock): ApiKeyServi
 }
 
 /**
+ * Build the INBOUND public-API key store (external callers → `/api/v1`), or undefined when no
+ * ENCRYPTION_KEY is configured. The key uses ENCRYPTION_KEY as the HMAC pepper for its one-way
+ * secret hash (not the SecretCipher — a public-API key is verified, never decrypted). Shared by
+ * the key-management controller and the public API's in-controller authentication.
+ */
+function buildPublicApiKeyService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): PublicApiKeyService | undefined {
+  const pepper = env.ENCRYPTION_KEY?.trim()
+  if (!pepper) return undefined
+  return new PublicApiKeyService({
+    repository: new D1PublicApiKeyRepository({ db }),
+    pepper,
+    idGenerator: new CryptoIdGenerator(),
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude), or undefined when
  * no ENCRYPTION_KEY is configured. Uses the system SecretCipher (master key, scoped
  * info) for the outer layer and the password-derived PersonalSecretCipher for the inner
@@ -1177,6 +1257,10 @@ function buildUserSecretService(
   env: Env,
   db: D1Database,
   clock: Clock,
+  // The app-owned secret-kind registry. Optional: the resolve-only throwaway services (the
+  // PAT resolver) never consult the kind registry, so they omit it (default); only the
+  // container-wired service that serves describe/test needs the injected instance.
+  userSecretKindRegistry?: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   if (!masterKeyBase64) return undefined
@@ -1184,6 +1268,7 @@ function buildUserSecretService(
     userSecretRepository: new D1UserSecretRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
+    ...(userSecretKindRegistry ? { userSecretKindRegistry } : {}),
   })
 }
 
@@ -1249,6 +1334,19 @@ function buildContainerExecutor(
 
   const registry = buildAppRegistry(env, config, db, clock)
   const resolveRepoTarget = buildResolveRepoTarget(db)
+  // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
+  // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
+  // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
+  // A standalone service over the required telemetry DB (the proxy path builds its own
+  // from the same table; both are stateless writers).
+  const recordHarnessCalls = makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: new D1LlmCallMetricRepository({ db: requireTelemetryDb(env) }),
+      idGenerator: new CryptoIdGenerator(),
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+    }),
+  )
   // Prefer the run initiator's per-user PAT (when stored) over the App token, so the
   // container's clone/push/PR is attributed to them. Falls back to the App token.
   const resolveUserGitHubToken = buildResolveUserGitHubToken(env, db, clock)
@@ -1263,6 +1361,7 @@ function buildContainerExecutor(
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
   const webSearchSettings = buildAccountSettings(env, db, clock)
   const resolveWebSearchEnabled = webSearchSettings
     ? async (workspaceId: string): Promise<boolean> => {
@@ -1310,6 +1409,9 @@ function buildContainerExecutor(
             subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
+    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
+    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
+    recordHarnessCalls,
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions
@@ -1325,6 +1427,9 @@ function buildContainerExecutor(
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (see resolver above).
     ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    // Decrypt the workspace's private-registry entries onto the job body (rendered by
+    // the harness into ~/.npmrc), so private dependencies resolve on install.
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to Langfuse (when configured) as child spans under
     // the run trace — the same sink the LLM proxy fans generations out to.
@@ -1435,6 +1540,7 @@ function selectGitHubDeps(
     issueProjectionRepository: new D1IssueProjectionRepository({ db }),
     commitProjectionRepository: new D1CommitProjectionRepository({ db }),
     checkRunProjectionRepository: new D1CheckRunProjectionRepository({ db }),
+    userRepoAccessRepository: new D1UserRepoAccessRepository({ db }),
     webhookVerifier: new WebCryptoWebhookVerifier(env.GITHUB_WEBHOOK_SECRET!),
     // Bound the initial backfill to the commit retention horizon (0 = full).
     commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -1753,6 +1859,10 @@ function selectRepoBootstrapper(
     apiBase: config.github.apiBase,
   })
 
+  // The scaffolder installs dependencies too — forward the workspace's
+  // private-registry entries exactly as the implementation executor does.
+  const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
+
   return new ContainerRepoBootstrapper({
     resolveTransport,
     installationRepository,
@@ -1766,6 +1876,7 @@ function selectRepoBootstrapper(
     model: resolveAgentConfig(config.agents.routing, 'architect').ref,
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     githubApiBase: config.github.apiBase,
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
   })
 }
 
@@ -1939,6 +2050,8 @@ export function buildContainer(
     overrides.runnerBackendRegistry ?? defaultRegistries.runnerBackendRegistry
   const customManifestTypeRegistry =
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
+  const userSecretKindRegistry =
+    overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
@@ -2023,13 +2136,16 @@ export function buildContainer(
   // API-key controller, the model-provider resolver, and the LLM proxy key lease.
   const apiKeys = buildApiKeyService(env, db, clock)
 
+  // The inbound public-API key store — drives the public `/api/v1` surface's authentication.
+  const publicApiKeys = buildPublicApiKeyService(env, db, clock)
+
   // The per-user locally-run model endpoints store (Ollama / LM Studio / …) — shared by
   // the local-runner controller, the per-user model catalog, and the LLM proxy.
   const localModelEndpoints = buildLocalModelEndpointService(env, db, clock)
 
   // The per-user generic secret store (a GitHub PAT today) — shared by the user-secret
   // controller; also backs the run-initiator PAT resolver used by the executor + gates.
-  const userSecrets = buildUserSecretService(env, db, clock)
+  const userSecrets = buildUserSecretService(env, db, clock, userSecretKindRegistry)
 
   // The per-workspace OpenRouter dynamic-catalog store — shared by the catalog controller,
   // the per-workspace model catalog's dynamic OpenRouter entries, and the spend overlay.
@@ -2171,6 +2287,7 @@ export function buildContainer(
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
     ...selectIncidentEnrichmentDeps(env, db),
+    ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
@@ -2184,6 +2301,15 @@ export function buildContainer(
     ...selectDeployDeps(env, config, db, clock),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
+    // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
+    // cross-isolate invalidation bus (and no Redis), so caches of mutable
+    // cross-instance state — the fragment catalog today — are configured
+    // pass-through rather than TTL'd (a stale-serving cache would be a correctness
+    // bug, not an optimization; see @cat-factory/caching's README). Distributed
+    // invalidation is a genuine Node-only concern, not a facade-parity gap: the
+    // Worker's cross-instance state already lives in globally-addressed DOs / D1.
+    // Pass-through handles are stateless, so the per-request build costs nothing.
+    caches: createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE }),
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
@@ -2266,6 +2392,12 @@ export function buildContainer(
     repositories: {
       ...dependencies,
       agentRunRepository,
+      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+      // local; only the metadata is proxied.
+      binaryArtifactMetadataStore: new D1BinaryArtifactMetadataStore({ db }),
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
@@ -2286,6 +2418,8 @@ export function buildContainer(
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (the `AI` binding).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
@@ -2295,6 +2429,8 @@ export function buildContainer(
     localModelEndpoints,
     // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion).
+    userRepoAccess: new D1UserRepoAccessRepository({ db }),
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
     gateways: {

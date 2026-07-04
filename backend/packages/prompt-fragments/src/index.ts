@@ -3,6 +3,7 @@ import { acceptanceFragments } from './collections/acceptance.js'
 import { designFragments } from './collections/design.js'
 import { nodeFragments } from './collections/node.js'
 import { reactFragments } from './collections/react.js'
+import { styleFragments } from './collections/style.js'
 
 // Source of truth for the best-practice prompt fragment catalog. Collections are
 // authored per topic (one module each) and merged here into a single registry.
@@ -20,7 +21,12 @@ export const FRAGMENTS: PromptFragment[] = [
   ...reactFragments,
   ...acceptanceFragments,
   ...designFragments,
+  ...styleFragments,
 ]
+
+// Re-export the document-task style defaults so the board service can seed a new document
+// task's fragment selection from the same source of truth the catalog is built from.
+export { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from './collections/style.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(

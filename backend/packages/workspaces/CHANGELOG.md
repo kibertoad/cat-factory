@@ -1,5 +1,232 @@
 # @cat-factory/workspaces
 
+## 0.11.10
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.11.9
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.11.8
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
+## 0.11.7
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+
+## 0.11.6
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+
+## 0.11.5
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+
+## 0.11.4
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/kernel@0.79.1
+
+## 0.11.3
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+
+## 0.11.2
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+
+## 0.11.1
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/contracts@0.89.0
+  - @cat-factory/kernel@0.77.0
+
+## 0.11.0
+
+### Minor Changes
+
+- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
+  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
+  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
+  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
+  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
+
+  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
+    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
+    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
+    key is shown once on create.
+  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
+    external runs never appear in the UI.
+  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+
+## 0.10.28
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+
+## 0.10.27
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+
+## 0.10.26
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+
+## 0.10.25
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+
+## 0.10.24
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/kernel@0.71.0
+
+## 0.10.23
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+
+## 0.10.22
+
+### Patch Changes
+
+- Updated dependencies [0d51638]
+  - @cat-factory/kernel@0.70.1
+
+## 0.10.21
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+
+## 0.10.20
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/kernel@0.69.8
+
+## 0.10.19
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+  - @cat-factory/kernel@0.69.7
+
+## 0.10.18
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/kernel@0.69.6
+
+## 0.10.17
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/kernel@0.69.5
+
+## 0.10.16
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/kernel@0.69.4
+
+## 0.10.15
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/kernel@0.69.3
+
+## 0.10.14
+
+### Patch Changes
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/contracts@0.80.1
+
+## 0.10.13
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/kernel@0.69.1
+
 ## 0.10.12
 
 ### Patch Changes

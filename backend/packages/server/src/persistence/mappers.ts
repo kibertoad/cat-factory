@@ -5,15 +5,18 @@ import type {
   ExecutionInstance,
   Pipeline,
   PipelineStep,
+  ResolvedFrontendBinding,
   Workspace,
 } from '@cat-factory/contracts'
 import {
   agentFailureKindSchema,
+  agentFailureSchema,
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
+  resolvedFrontendBindingSchema,
 } from '@cat-factory/contracts'
-import { array, string, type GenericSchema } from 'valibot'
+import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
 
 /** Contract for `blocks.depends_on`: a JSON array of block-id strings. */
@@ -57,6 +60,8 @@ export interface BlockRow {
   parent_id: string | null
   /** Task-level: membership link to an `epic`-level block (independent of parent_id). */
   epic_id?: string | null
+  /** Task-level: membership link to an `initiative`-level block (loop-spawned tasks). */
+  initiative_id?: string | null
   /** Task-level: preceding-task auto-start toggle (0/1); null ⇒ off. */
   auto_start_dependents?: number | null
   confidence: number | null
@@ -77,6 +82,10 @@ export interface BlockRow {
   instance_size: string | null
   /** Frontend-frame-level: serialized FrontendConfig (build/serve/mock + backend bindings), JSON object. */
   frontend_config?: string | null
+  /** Service-frame-level: directed consumer→provider service connections, JSON array. */
+  service_connections?: string | null
+  /** Task-level: connected service frames directly involved in the task, JSON array of ids. */
+  involved_service_ids?: string | null
   created_by: string | null
   responsible_product_user_id: string | null
   /** Task-level: the task-estimator's triage (complexity/risk/impact), JSON object. */
@@ -90,6 +99,8 @@ export interface BlockRow {
   /** Task-level: per-task issue-tracker writeback overrides ('on'/'off'); null ⇒ inherit. */
   tracker_comment_on_pr_open?: string | null
   tracker_resolve_on_merge?: string | null
+  /** Headless marker: 1 ⇒ a public-API "initiative" anchor block excluded from the board; null ⇒ normal. */
+  internal?: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +373,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   scalarField('parentId'),
   // Epic membership; an empty string / null detaches the task from its epic.
   optField('epicId', { clearOnEmpty: true }),
+  // Initiative membership (loop-spawned tasks); empty/null detaches.
+  optField('initiativeId', { clearOnEmpty: true }),
   optBoolIntField('autoStartDependents'),
   optField('confidence'),
   optField('moduleName'),
@@ -416,6 +429,45 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   optField('instanceSize'),
   // Frontend-frame-level config (build/serve/mock + backend bindings) — a JSON object.
   optJsonField('frontendConfig'),
+  // Service-frame connections (consumer→provider edges). Patch treats an empty array as
+  // "clear them" (length check), mirroring `serviceFragmentIds`.
+  {
+    read: (row, out) => {
+      if (row.service_connections != null)
+        out.serviceConnections = JSON.parse(row.service_connections as string)
+    },
+    insert: (b, out) => {
+      out.service_connections = b.serviceConnections?.length
+        ? JSON.stringify(b.serviceConnections)
+        : null
+    },
+    patch: (p, out) => {
+      if (p.serviceConnections !== undefined) {
+        out.service_connections = p.serviceConnections?.length
+          ? JSON.stringify(p.serviceConnections)
+          : null
+      }
+    },
+  },
+  // A task's involved connected services. Patch treats an empty array as "clear it".
+  {
+    read: (row, out) => {
+      if (row.involved_service_ids != null)
+        out.involvedServiceIds = JSON.parse(row.involved_service_ids as string)
+    },
+    insert: (b, out) => {
+      out.involved_service_ids = b.involvedServiceIds?.length
+        ? JSON.stringify(b.involvedServiceIds)
+        : null
+    },
+    patch: (p, out) => {
+      if (p.involvedServiceIds !== undefined) {
+        out.involved_service_ids = p.involvedServiceIds?.length
+          ? JSON.stringify(p.involvedServiceIds)
+          : null
+      }
+    },
+  },
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
   // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
   legacyUserIdField('createdBy'),
@@ -442,6 +494,8 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
   // Per-task writeback overrides; an empty string clears it (back to inheriting the workspace setting).
   optField('trackerCommentOnPrOpen', { clearOnEmpty: true }),
   optField('trackerResolveOnMerge', { clearOnEmpty: true }),
+  // Headless public-API "initiative" anchor: 1/0 column, set once at insert (never patched).
+  optBoolIntField('internal'),
 ]
 
 const blockMapper = makeEntityMapper<Block, BlockPatch, BlockRow>(blockFields)
@@ -476,12 +530,23 @@ export interface PipelineRow {
   consensus?: string | null
   /** Nullable JSON array of per-step estimate gating (migration 0003). */
   gating?: string | null
+  /** Nullable JSON array of per-step Follow-up companion toggles (migration 0032). */
+  follow_ups?: string | null
+  /** Nullable JSON array of per-step test quality-control companion configs (migration 0032). */
+  tester_quality?: string | null
   /** Nullable JSON array of organizational labels (migration 0003). */
   labels?: string | null
   /** Truthy (1) when the pipeline is archived / hidden from the default view (migration 0003). */
   archived?: number | boolean | null
   /** Monotonic seed version for a built-in pipeline (migration 0017); null on custom/legacy rows. */
   version?: number | null
+  /** Truthy (1) when the pipeline is callable via the public API (migration 0034). */
+  public?: number | boolean | null
+  /**
+   * How the pipeline may be launched: `'one-off'` / `'recurring'` / `'both'` (migration 0037).
+   * NULL/absent ⇒ unrestricted (`'both'`).
+   */
+  availability?: string | null
 }
 
 export function rowToPipeline(row: PipelineRow): Pipeline {
@@ -494,10 +559,16 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.enabled ? { enabled: JSON.parse(row.enabled) as boolean[] } : {}),
     ...(row.consensus ? { consensus: JSON.parse(row.consensus) as Pipeline['consensus'] } : {}),
     ...(row.gating ? { gating: JSON.parse(row.gating) as Pipeline['gating'] } : {}),
+    ...(row.follow_ups ? { followUps: JSON.parse(row.follow_ups) as Pipeline['followUps'] } : {}),
+    ...(row.tester_quality
+      ? { testerQuality: JSON.parse(row.tester_quality) as Pipeline['testerQuality'] }
+      : {}),
     ...(row.labels ? { labels: JSON.parse(row.labels) as string[] } : {}),
     ...(row.archived ? { archived: true } : {}),
     ...(row.builtin ? { builtin: true } : {}),
     ...(row.version != null ? { version: row.version } : {}),
+    ...(row.public ? { public: true } : {}),
+    ...(row.availability ? { availability: row.availability as Pipeline['availability'] } : {}),
   }
 }
 
@@ -531,6 +602,14 @@ interface ExecutionDetail {
   currentStep: number
   /** Internal user id of the run's initiator (individual-usage credential ownership). */
   initiatedBy: string | null
+  /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
+  failureHistory?: AgentFailure[]
+  /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
+  createdAt?: number
+  /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
+  notes?: string[]
+  /** Frontend bindings resolved once at run start (see {@link ExecutionInstance.frontendBindings}). */
+  frontendBindings?: ResolvedFrontendBinding[]
 }
 
 // ---------------------------------------------------------------------------
@@ -556,19 +635,50 @@ export function isKnownAgentFailureKind(kind: string): boolean {
   return KNOWN_FAILURE_KINDS.has(kind)
 }
 
+/**
+ * Whether a decoded value is a usable {@link AgentFailure}. Validated against the FULL
+ * wire schema, not just `kind`/`message`: the SPA re-validates the whole snapshot against
+ * `agentFailureSchema` (both the `failure` field and the `failureHistory` array), so a
+ * structurally-incomplete record — a removed legacy kind, OR a known kind missing
+ * `occurredAt`/`detail`/`hint`/`lastSubtasks` — would brick the entire workspace snapshot
+ * decode if surfaced. Dropping it here keeps the run readable (its `status`/`error` still
+ * describe what happened) and, for the history, means a retry can't make a bad record
+ * permanent. (`is()` rejects removed kinds too, since the picklist no longer lists them —
+ * subsuming the old `isKnownAgentFailureKind` check.)
+ */
+function isUsableFailure(o: unknown): o is AgentFailure {
+  return is(agentFailureSchema, o)
+}
+
 /** Parse the JSON-encoded structured failure column, tolerating null/garbage. */
 function parseAgentFailure(raw: string | null): AgentFailure | null {
   if (!raw) return null
   try {
     const o = JSON.parse(raw) as AgentFailure
-    // LEGACY: drop a failure carrying a removed kind (see the LEGACY FAILURE-KIND REPAIR note).
-    if (o && typeof o.kind === 'string' && typeof o.message === 'string') {
-      return isKnownAgentFailureKind(o.kind) ? o : null
-    }
+    if (isUsableFailure(o)) return o
   } catch {
     // fall through
   }
   return null
+}
+
+/**
+ * The prior-attempts failure trail packed into `detail`. Tolerant like
+ * {@link parseAgentFailure}: a non-array, or an entry that doesn't fully match the wire
+ * schema (removed legacy kind, or a structurally-incomplete record), is dropped rather
+ * than bricking the whole snapshot decode.
+ */
+function parseFailureHistory(list: unknown): AgentFailure[] {
+  return Array.isArray(list) ? list.filter(isUsableFailure) : []
+}
+
+/**
+ * The run-start resolved frontend bindings packed into `detail`. Tolerant like the failure
+ * parsers: a non-array, or an entry that doesn't match the wire schema, is dropped rather than
+ * bricking the whole snapshot decode (the SPA re-validates the full snapshot).
+ */
+function parseFrontendBindings(list: unknown): ResolvedFrontendBinding[] {
+  return Array.isArray(list) ? list.filter((b) => is(resolvedFrontendBindingSchema, b)) : []
 }
 
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
@@ -614,9 +724,25 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       id: row.id,
     }),
     failure: parseAgentFailure(row.failure),
+    // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
+    // no dedicated column); a run that never failed-then-retried simply has none.
+    failureHistory: parseFailureHistory(detail.failureHistory),
+    // Run-start advisories ride in `detail` too (only present for a frontend UI-test run that
+    // had something to flag); tolerate a non-array-of-strings by dropping it.
+    ...(Array.isArray(detail.notes) && detail.notes.every((n) => typeof n === 'string')
+      ? { notes: detail.notes }
+      : {}),
+    // The run-start resolved bindings ride in `detail` too (only a frontend UI-test run has
+    // them); a frozen snapshot so the SPA projects what the run drove against. Drop malformed.
+    ...(() => {
+      const frontendBindings = parseFrontendBindings(detail.frontendBindings)
+      return frontendBindings.length ? { frontendBindings } : {}
+    })(),
     // LEGACY: drop a pre-#94 numeric initiator id to null (see the LEGACY USER-ID REPAIR
     // note; after 2026-07-15 revert to `detail.initiatedBy ?? null`).
     initiatedBy: legacyUserId(detail.initiatedBy),
+    // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
+    ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
     // Optimistic-concurrency token; a legacy row without the column reads as 0.
     rev: row.rev ?? 0,
   }
@@ -632,5 +758,13 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
+    // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
+    // never failed don't carry an empty array on every write.
+    failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
+    ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
+    // Likewise only persist run-start notes when there is something to flag.
+    notes: instance.notes?.length ? instance.notes : undefined,
+    // The resolved bindings are stamped once at start; only a frontend run carries any.
+    frontendBindings: instance.frontendBindings?.length ? instance.frontendBindings : undefined,
   } satisfies ExecutionDetail)
 }

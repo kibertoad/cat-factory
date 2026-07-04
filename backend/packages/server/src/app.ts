@@ -23,6 +23,7 @@ import { workspaceSettingsController } from './modules/settings/WorkspaceSetting
 import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
 import { mothershipConnectController } from './modules/localSettings/MothershipConnectController.js'
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
+import { packageRegistriesController } from './modules/packageRegistries/PackageRegistriesController.js'
 import { previewController } from './modules/preview/PreviewController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
 import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
@@ -42,6 +43,7 @@ import { humanReviewController } from './modules/humanReview/HumanReviewControll
 import { consensusController } from './modules/consensus/ConsensusController.js'
 import { clarityReviewController } from './modules/clarity/ClarityReviewController.js'
 import { brainstormController } from './modules/brainstorm/BrainstormController.js'
+import { initiativeController } from './modules/initiatives/InitiativeController.js'
 import { webSearchProxyController } from './modules/webSearch/WebSearchProxyController.js'
 import { runnerPoolController } from './modules/runners/RunnerPoolController.js'
 import { provisioningLogController } from './modules/provisioningLogs/ProvisioningLogController.js'
@@ -63,6 +65,8 @@ import {
 } from './modules/tasks/TaskSourceController.js'
 import { workspaceController } from './modules/workspaces/WorkspaceController.js'
 import { persistenceController } from './modules/persistence/PersistenceController.js'
+import { publicApiController } from './modules/publicApi/PublicApiController.js'
+import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 
 /**
  * Mount the runtime-neutral controllers onto a facade's Hono app, preserving the
@@ -92,6 +96,9 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // facade attached its repository registry. Mounted on both facades so either can be a
   // mothership.
   app.route('/', persistenceController())
+  // The PUBLIC external API (`/api/v1/*`): key-authenticated in-controller (its `/api` prefix
+  // bypasses the session gate), for external systems to run a public inline pipeline headlessly.
+  app.route('/', publicApiController())
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())
@@ -125,6 +132,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', provisioningLogController())
   app.route('/workspaces/:workspaceId', vendorCredentialController())
   app.route('/workspaces/:workspaceId', workspaceApiKeyController())
+  app.route('/workspaces/:workspaceId', publicApiKeyController())
   app.route('/workspaces/:workspaceId', bootstrapController())
   app.route('/workspaces/:workspaceId', agentRunController())
   // Binary-artifact API (screenshots + reference uploads) for the visual-confirmation
@@ -139,11 +147,13 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', consensusController())
   app.route('/workspaces/:workspaceId', clarityReviewController())
   app.route('/workspaces/:workspaceId', brainstormController())
+  app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
   app.route('/workspaces/:workspaceId', sandboxController())
   app.route('/workspaces/:workspaceId', workspaceSettingsController())
   app.route('/workspaces/:workspaceId', releaseHealthController())
+  app.route('/workspaces/:workspaceId', packageRegistriesController())
   // Browsable frontend preview (local/node); 503 on the Worker (frontendPreview unsupported).
   app.route('/workspaces/:workspaceId', previewController())
   app.route('/workspaces/:workspaceId', incidentEnrichmentController())

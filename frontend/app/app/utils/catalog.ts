@@ -313,6 +313,15 @@ export function isConsensusEligibleKind(kind: string): boolean {
 }
 
 /**
+ * Whether an agent kind is one of the Tester gate kinds (API or UI). Mirrors the backend
+ * `isTesterKind`; used by the pipeline builder to surface the test quality-control companion
+ * toggle only on Tester steps.
+ */
+export function isTesterKind(kind: string): boolean {
+  return kind === 'tester-api' || kind === 'tester-ui'
+}
+
+/**
  * Display metadata for the engine-driven "system" kinds — the gate/automation
  * steps (blueprint mapper, conflicts gate + resolver, CI gate + fixer, merger)
  * that appear in seeded pipelines and run timelines but are NOT user-addable
@@ -334,6 +343,48 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     icon: 'i-lucide-map',
     color: '#22d3ee',
     description: 'Maps the repository into the service → modules blueprint.',
+  },
+  // The Initiative Planning pipeline's two steps. Only runnable on an initiative
+  // block (pl_initiative — enforced by the engine), so they are display-metadata
+  // system kinds, never palette archetypes.
+  'initiative-interviewer': {
+    kind: 'initiative-interviewer',
+    label: 'Initiative Interviewer',
+    icon: 'i-lucide-messages-square',
+    color: '#818cf8',
+    description:
+      'Interviews you on the goals, scope and constraints of the initiative, then synthesizes the agreed brief the analyst and planner build on.',
+    // Opens the dedicated planning Q&A window (answer / continue / proceed) while parked.
+    resultView: 'initiative-planning',
+  },
+  'initiative-analyst': {
+    kind: 'initiative-analyst',
+    label: 'Initiative Analyst',
+    icon: 'i-lucide-microscope',
+    color: '#818cf8',
+    description:
+      'Explores the codebase and writes an analysis (architecture, touch points, risks) that grounds the plan. Makes no changes.',
+    resultView: 'initiative-tracker',
+  },
+  'initiative-planner': {
+    kind: 'initiative-planner',
+    label: 'Initiative Planner',
+    icon: 'i-lucide-milestone',
+    color: '#818cf8',
+    description:
+      "Explores the codebase and drafts the initiative's multi-phase plan (items, estimates, concurrency + pipeline policy) for approval.",
+    // Opens the dedicated tracker window (phases / items / policy) instead of the
+    // generic prose step-detail panel.
+    resultView: 'initiative-tracker',
+  },
+  'initiative-committer': {
+    kind: 'initiative-committer',
+    label: 'Initiative Committer',
+    icon: 'i-lucide-git-commit-horizontal',
+    color: '#818cf8',
+    description:
+      'Persists the approved plan and commits the in-repo tracker (docs/initiatives/<slug>/), arming the execution loop. Runs no model.',
+    resultView: 'initiative-tracker',
   },
   // A read-only repository audit that emits a prioritized findings report. Not a palette
   // archetype (it is only seeded into the recurring tech-debt pipeline), so it lives here
@@ -470,6 +521,7 @@ export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
   ...[
     'spec-writer',
     'blueprints',
+    'initiative-planner',
     'conflict-resolver',
     'ci-fixer',
     'fixer',

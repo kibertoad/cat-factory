@@ -42,6 +42,7 @@ import type {
   DeployCloneTarget,
   EnvironmentProvider,
   GateProbe,
+  Notification,
   PullRequestReviewProvider,
   PullRequestReviewSnapshot,
   RepoFiles,
@@ -59,6 +60,7 @@ import {
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
+import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -246,6 +248,38 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(a.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
         expect(b.blocks.find((x) => x.id === 'blk_auth')).toBeTruthy()
       })
+
+      it('returns blocks in insertion order on every store, stable across updates', async () => {
+        // Parity pin: D1 lists blocks `ORDER BY rowid` (insertion order); the Postgres
+        // store must match via its `seq` column. Enough fat rows to span several heap
+        // pages + an update to the FIRST one make the drift observable: without an
+        // ORDER BY, Postgres relocates the updated row's new tuple version to a later
+        // page, so a bare heap read returns it out of insertion order.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const filler = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(12)
+        const createdIds: string[] = []
+        for (let i = 0; i < 40; i++) {
+          const res = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+            title: `Ordered task ${i}`,
+            description: filler,
+          })
+          expect(res.status).toBe(201)
+          createdIds.push(res.body.id)
+        }
+        const updated = await call('PATCH', `/workspaces/${wsId}/blocks/${createdIds[0]}`, {
+          title: 'Ordered task 0, renamed',
+          description: `${filler} Updated so the row version moves in the heap.`,
+        })
+        expect(updated.status).toBe(200)
+
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const createdSet = new Set(createdIds)
+        const listed = snapshot.body.blocks.map((b) => b.id).filter((id) => createdSet.has(id))
+        expect(listed).toEqual(createdIds)
+      })
     })
 
     describe('execution optimistic concurrency (compareAndSwap)', () => {
@@ -301,11 +335,96 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
       })
     })
 
-    describe('agent_runs sweeper read primitives (listStale + liveRunIds)', () => {
-      // The stale-run sweeper reads these two `agent_runs` primitives to recover/flag orphaned
-      // runs (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local
-      // orphaned-container reap). Assert they behave identically on D1 and Postgres so a facade
-      // can't silently drift the recovery path.
+    describe('one live execution run per block (insertLive)', () => {
+      // Two concurrent starts (double-click, recurring-vs-manual, notification-vs-human retry)
+      // must never create two live runs for one block. `insertLive` enforces it atomically via
+      // the partial unique index; asserted at the repository layer so D1 and Postgres are proven
+      // to reject the second live insert identically.
+      it('refuses a second live run for a block until the first goes terminal', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const run = (id: string, status: ExecutionInstance['status']): ExecutionInstance => ({
+          id,
+          blockId: 'blk_live',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status,
+          initiatedBy: null,
+        })
+
+        // The first live insert lands (and gets a fresh rev).
+        const first = run('exec_live_a', 'running')
+        expect(await repo.insertLive(workspace.id, first)).toBe(true)
+        expect(first.rev).toBe(0)
+
+        // A second live insert for the SAME block — WITHOUT a delete between — is refused with
+        // NO write (the concurrent double-start guard). The block keeps exactly the first run.
+        expect(await repo.insertLive(workspace.id, run('exec_live_b', 'running'))).toBe(false)
+        expect((await repo.getByBlock(workspace.id, 'blk_live'))?.id).toBe('exec_live_a')
+
+        // The index is partial: a `paused`/`blocked` run is still LIVE, so it too blocks a second.
+        first.status = 'paused'
+        await repo.upsert(workspace.id, first)
+        expect(await repo.insertLive(workspace.id, run('exec_live_c', 'running'))).toBe(false)
+
+        // Once the first run reaches a terminal state it leaves the partial index, freeing the
+        // block for a fresh live run (the retry-after-failure path). `insertLive` also atomically
+        // clears the terminal row in the SAME write, so the block keeps EXACTLY one row (the new
+        // live one) — the board's by-block projection never sees a stale terminal alongside it.
+        first.status = 'done'
+        await repo.upsert(workspace.id, first)
+        expect(await repo.insertLive(workspace.id, run('exec_live_d', 'running'))).toBe(true)
+        expect((await repo.getByBlock(workspace.id, 'blk_live'))?.id).toBe('exec_live_d')
+        // The superseded terminal run was cleaned up in the same transaction.
+        expect(await repo.get(workspace.id, 'exec_live_a')).toBeNull()
+      })
+
+      it('supersedes the caller’s own prior LIVE run via replaceId (retry/restart)', async () => {
+        // `restart` tears its source run down and replaces it while that source is still LIVE
+        // (running/paused/blocked). It passes the source id as `replaceId` so `insertLive`
+        // removes THAT specific row and inserts the new one atomically — WITHOUT an unconditional
+        // delete that would let a concurrent start wipe the winner. Proven on both runtimes.
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+        const run = (id: string, status: ExecutionInstance['status']): ExecutionInstance => ({
+          id,
+          blockId: 'blk_rep',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status,
+          initiatedBy: null,
+        })
+
+        const source = run('exec_src', 'running')
+        expect(await repo.insertLive(workspace.id, source)).toBe(true)
+
+        // Without replaceId, a second live insert is refused — the source is still live.
+        expect(await repo.insertLive(workspace.id, run('exec_other', 'running'))).toBe(false)
+        expect((await repo.getByBlock(workspace.id, 'blk_rep'))?.id).toBe('exec_src')
+
+        // WITH replaceId pointing at the live source, the insert supersedes it and lands.
+        expect(
+          await repo.insertLive(workspace.id, run('exec_restart', 'running'), {
+            replaceId: 'exec_src',
+          }),
+        ).toBe(true)
+        expect((await repo.getByBlock(workspace.id, 'blk_rep'))?.id).toBe('exec_restart')
+        expect(await repo.get(workspace.id, 'exec_src')).toBeNull()
+      })
+    })
+
+    describe('agent_runs sweeper read primitives (listStale + liveRunIds + listPausedExecutions)', () => {
+      // The stale-run sweeper reads these `agent_runs` primitives to recover/flag orphaned runs
+      // (`listStale` → the re-drive + hard-stall path; `liveRunIds` → the local orphaned-container
+      // reap; `listPausedExecutions` → the Node/local budget-freed auto-resume). Assert they behave
+      // identically on D1 and Postgres so a facade can't silently drift the recovery path.
       it('listStale carries updatedAt (running only) and liveRunIds filters terminal runs', async () => {
         const app = harness.makeApp()
         const runs = app.agentRunRepository()
@@ -361,6 +480,131 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(live.has('exec_sweep_failed')).toBe(false)
         expect(live.has('exec_sweep_missing')).toBe(false)
         expect(await runs.liveRunIds([])).toEqual([])
+
+        // `listPausedExecutions` returns ONLY the spend-paused execution rows (the Node/local
+        // auto-resume candidates) — never running/blocked/terminal ones.
+        const pausedIds = new Set((await runs.listPausedExecutions()).map((r) => r.id))
+        expect(pausedIds.has('exec_sweep_paused')).toBe(true)
+        expect(pausedIds.has('exec_sweep_running')).toBe(false)
+        expect(pausedIds.has('exec_sweep_blocked')).toBe(false)
+        expect(pausedIds.has('exec_sweep_done')).toBe(false)
+        expect(pausedIds.has('exec_sweep_failed')).toBe(false)
+      })
+    })
+
+    describe('public API (break down an initiative)', () => {
+      it('authenticates a public-API key, runs a public inline pipeline headlessly, persists a retrievable result, and hides the anchor block', async () => {
+        const { call, createOrgWorkspace, drive } = harness.makeApp()
+        // Account-scoped: public-API keys are only minted for an account-owning workspace, so use a
+        // seeded ORG workspace (the seed brings the built-in `pl_initiative_breakdown` pipeline).
+        const { workspace } = await createOrgWorkspace({ seed: true })
+        const wsId = workspace.id
+
+        // Mint an inbound public-API key (needs ENCRYPTION_KEY, which both harnesses configure).
+        const created = await call<{ key: { id: string }; secret: string }>(
+          'POST',
+          `/workspaces/${wsId}/public-api-keys`,
+          { label: 'external' },
+        )
+        expect(created.status).toBe(201)
+        const secret = created.body.secret
+        expect(secret).toMatch(/^cf_live_/)
+        const auth = { authorization: `Bearer ${secret}` }
+
+        // A missing key is refused; a valid key starts the run.
+        expect(
+          (
+            await call('POST', '/api/v1/initiatives', {
+              pipelineId: 'pl_initiative_breakdown',
+              input: 'x',
+            })
+          ).status,
+        ).toBe(401)
+        const started = await call<{ jobId: string; status: string }>(
+          'POST',
+          '/api/v1/initiatives',
+          { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
+          auth,
+        )
+        expect(started.status).toBe(202)
+        const jobId = started.body.jobId
+
+        // Drive the run to completion and read back the DB-persisted result.
+        await drive(wsId)
+        const job = await call<{ status: string; result: { output: string } | null }>(
+          'GET',
+          `/api/v1/jobs/${jobId}`,
+          undefined,
+          auth,
+        )
+        expect(job.status).toBe(200)
+        expect(job.body.status).toBe('succeeded')
+        expect(job.body.result?.output).toBeTruthy()
+
+        // The headless anchor block AND its execution are excluded from the board snapshot on both
+        // stores — neither the hidden block nor the external run's brief/output reaches the SPA.
+        const board = await call<{
+          blocks: { title: string; internal?: boolean }[]
+          executions: { id: string }[]
+        }>('GET', `/workspaces/${wsId}`)
+        expect(board.body.blocks.some((b) => b.internal)).toBe(false)
+        expect(board.body.blocks.some((b) => b.title === 'Build a cat feeder service')).toBe(false)
+        expect(board.body.executions.some((e) => e.id === jobId)).toBe(false)
+
+        // A key can read ONLY the initiative runs it created, never an arbitrary board run in the
+        // same workspace: start the SAME public pipeline on a NORMAL seeded task, and the key gets
+        // a 404 (its anchor block isn't internal), even though the run exists and shares the scope.
+        const normalStart = await call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: 'pl_initiative_breakdown',
+        })
+        expect(normalStart.status).toBe(201)
+        const normalExec = (await drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect((await call('GET', `/api/v1/jobs/${normalExec.id}`, undefined, auth)).status).toBe(
+          404,
+        )
+
+        // Concurrency backstop (both stores): a workspace may only have 5 initiative runs in
+        // flight; leaving them undriven, the 6th start is refused with 429.
+        for (let i = 0; i < 5; i++) {
+          expect(
+            (
+              await call(
+                'POST',
+                '/api/v1/initiatives',
+                { pipelineId: 'pl_initiative_breakdown', input: `run ${i}` },
+                auth,
+              )
+            ).status,
+          ).toBe(202)
+        }
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_initiative_breakdown', input: 'overflow' },
+              auth,
+            )
+          ).status,
+        ).toBe(429)
+        await drive(wsId) // let the in-flight runs finish so none dangle
+
+        // A non-public pipeline id is refused; a revoked key no longer authenticates.
+        expect(
+          (
+            await call(
+              'POST',
+              '/api/v1/initiatives',
+              { pipelineId: 'pl_blueprint', input: 'x' },
+              auth,
+            )
+          ).status,
+        ).toBe(400)
+        expect(
+          (await call('DELETE', `/workspaces/${wsId}/public-api-keys/${created.body.key.id}`))
+            .status,
+        ).toBe(204)
+        expect((await call('GET', `/api/v1/jobs/${jobId}`, undefined, auth)).status).toBe(401)
       })
     })
 
@@ -418,6 +662,45 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         })
         const res = await call('POST', `/workspaces/${wsId}/pipelines/${custom.body.id}/reseed`)
         expect(res.status).toBe(422)
+      })
+
+      it('round-trips the per-step companion toggles (followUps + testerQuality) on every store', async () => {
+        // The pipeline builder's two per-step companion toggles live on their own JSON columns
+        // (D1/Drizzle `follow_ups` + `tester_quality`), so a custom pipeline that opts a Coder
+        // step OUT of the Follow-up companion and configures a Tester step's QC companion (an
+        // estimate gate) must survive the store round-trip identically — otherwise the builder
+        // toggle silently reverts to the default on the next load.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Toggles',
+          agentKinds: ['task-estimator', 'coder', 'tester-api'],
+          // Coder opts out of the Follow-up companion; the Tester's QC companion is gated on the
+          // task estimate (an estimator runs earlier, so the gate is valid).
+          followUps: [null, false, null],
+          testerQuality: [
+            null,
+            null,
+            { enabled: true, gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' } },
+          ],
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.followUps?.[1]).toBe(false)
+        expect(created.body.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
+
+        // A fresh snapshot read re-hydrates both columns from the store, identically on D1 ⇄ Postgres.
+        const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+        expect(stored.followUps?.[1]).toBe(false)
+        expect(stored.testerQuality?.[2]).toEqual({
+          enabled: true,
+          gating: { enabled: true, minRisk: 0.6, onMissingEstimate: 'run' },
+        })
       })
     })
 
@@ -736,6 +1019,59 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         )
       })
 
+      it('round-trips service connections + involved services (the JSON columns) on every store', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // A service frame's `serviceConnections` (consumer→provider edges) and a task's
+        // `involvedServiceIds` are JSON columns on the block, mirroring `frontend_config`.
+        // A runtime that forgot to map either column drops it on write — so this asserts
+        // both survive PATCH + a fresh snapshot read on D1 and Postgres. The seed has one
+        // service-type frame (blk_auth), so create the provider frame to connect to.
+        const provider = await call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 900, y: 900 },
+        })
+        const providerId = provider.body.id
+        expect(providerId).toBeTruthy()
+
+        const serviceConnections = [
+          { serviceBlockId: providerId, description: 'sends transactional email via it' },
+        ]
+        const patched = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceConnections,
+        })
+        expect(patched.status).toBe(200)
+        expect(patched.body.serviceConnections).toEqual(serviceConnections)
+
+        // The task may involve a connected neighbor (either direction); its own frame never.
+        const task = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          involvedServiceIds: [providerId],
+        })
+        expect(task.status).toBe(200)
+        expect(task.body.involvedServiceIds).toEqual([providerId])
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === 'blk_auth')?.serviceConnections).toEqual(
+          serviceConnections,
+        )
+        expect(snap.body.blocks.find((b) => b.id === 'task_login')?.involvedServiceIds).toEqual([
+          providerId,
+        ])
+
+        // Write-gate guards: a self-connection and an unconnected involved service are
+        // ValidationErrors (422 per the shared error handler).
+        const selfConn = await call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceConnections: [{ serviceBlockId: 'blk_auth' }],
+        })
+        expect(selfConn.status).toBe(422)
+        const unconnected = await call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          involvedServiceIds: ['blk_db'],
+        })
+        expect(unconnected.status).toBe(422)
+      })
+
       it('rejects a dependency edge that would create a cycle', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
@@ -777,6 +1113,73 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
           pipelineId: pipeline.body.id,
         })
         expect(blocked.status).toBe(409)
+      })
+
+      it('findByIds resolves blocks across workspaces in one batched read', async () => {
+        // The cross-workspace dependency gate resolves a dependent's foreign blockers via
+        // the batched `BlockRepository.findByIds` (never a point-read per id) — assert the
+        // batched read maps each block to its HOME workspace identically on every store.
+        const app = harness.makeApp()
+        const { workspace: wsA } = await app.createWorkspace()
+        const { workspace: wsB } = await app.createWorkspace()
+        const a = await app.call<Block>('POST', `/workspaces/${wsA.id}/blocks/blk_auth/tasks`, {
+          title: 'Home task',
+        })
+        const b = await app.call<Block>('POST', `/workspaces/${wsB.id}/blocks/blk_auth/tasks`, {
+          title: 'Foreign task',
+        })
+        const repo = app.blockRepository()
+        const found = await repo.findByIds([a.body.id, b.body.id, 'blk_does_not_exist'])
+        // Both blocks resolve with their home workspace; the unknown id is simply absent.
+        expect(found).toHaveLength(2)
+        const byId = new Map(found.map((f) => [f.block.id, f]))
+        expect(byId.get(a.body.id)?.workspaceId).toBe(wsA.id)
+        expect(byId.get(b.body.id)?.workspaceId).toBe(wsB.id)
+        expect(byId.get(a.body.id)?.block.title).toBe('Home task')
+        // Empty input short-circuits to an empty result.
+        expect(await repo.findByIds([])).toEqual([])
+      })
+    })
+
+    describe('notifications', () => {
+      it('escalateStaleOpen flips exactly the overdue open normal cards in one statement', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const repo = app.notificationRepository()
+        const card = (id: string, overrides: Partial<Notification>): Notification =>
+          ({
+            id,
+            type: 'merge_review',
+            status: 'open',
+            severity: 'normal',
+            blockId: null,
+            executionId: null,
+            title: id,
+            body: 'body',
+            payload: null,
+            createdAt: 1_000,
+            resolvedAt: null,
+            ...overrides,
+          }) as Notification
+        await repo.upsert(wsId, card('ntf_overdue', {}))
+        await repo.upsert(wsId, card('ntf_recent', { createdAt: 50_000 }))
+        await repo.upsert(wsId, card('ntf_already_urgent', { severity: 'urgent' }))
+        await repo.upsert(wsId, card('ntf_dismissed', { status: 'dismissed', resolvedAt: 2_000 }))
+
+        // Only the open, still-normal card past the cutoff flips — and is returned for
+        // re-delivery (the real-time inbox re-render).
+        const escalated = await repo.escalateStaleOpen(wsId, 10_000)
+        expect(escalated.map((n) => n.id)).toEqual(['ntf_overdue'])
+        expect(escalated[0]?.severity).toBe('urgent')
+
+        const open = await repo.listOpen(wsId)
+        const severityById = new Map(open.map((n) => [n.id, n.severity]))
+        expect(severityById.get('ntf_overdue')).toBe('urgent')
+        expect(severityById.get('ntf_recent')).toBe('normal')
+        expect(severityById.get('ntf_already_urgent')).toBe('urgent')
+        // Idempotent: a second sweep finds nothing left to flip.
+        expect(await repo.escalateStaleOpen(wsId, 10_000)).toEqual([])
       })
     })
 
@@ -1070,7 +1473,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
           const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
             name: 'Code + document',
-            agentKinds: ['coder', 'documenter'],
+            agentKinds: ['coder', 'documenter', 'doc-outliner'],
           })
           const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
             pipelineId: pipeline.body.id,
@@ -1083,7 +1486,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           expect(coder.output).toContain('[frags]test.svc-standard[/frags]')
           expect(coder.selectedFragmentIds).toEqual(['test.svc-standard'])
 
-          // The documenter is neither code-aware nor spec-aware: no service fragments.
+          // The doc-outliner is `doc-aware`: it folds the same service fragments (the
+          // document writing-style path is the doc analogue of code-aware).
+          const outliner = exec.steps.find((s) => s.agentKind === 'doc-outliner')!
+          expect(outliner.output).toContain('[frags]test.svc-standard[/frags]')
+          expect(outliner.selectedFragmentIds).toEqual(['test.svc-standard'])
+
+          // The documenter is neither code-aware, doc-aware nor spec-aware: no fragments.
           const documenter = exec.steps.find((s) => s.agentKind === 'documenter')!
           expect(documenter.output).toContain('[frags][/frags]')
           expect(documenter.selectedFragmentIds ?? []).toEqual([])
@@ -1489,7 +1898,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const step = exec.steps.find((s) => s.agentKind === 'ci')!
         expect(step.state).toBe('done')
         expect(step.gate?.attempts).toBe(1)
-        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
+        const attempt = step.gate?.attemptLog?.[0]
+        expect(attempt?.outcome).toBe('completed')
+        // The round records WHAT it was handed to fix (the failing-check summary + the
+        // structured red checks), not only that a round happened — the gate analogue of the
+        // Tester attempt's concerns, surfaced per-runtime.
+        expect(attempt?.instructions).toBeTruthy()
+        expect(attempt?.failingChecks?.map((c) => c.name)).toEqual(['build'])
       })
     })
 
@@ -2867,6 +3282,126 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(descriptor?.supportsTest).toBe(true)
         expect(descriptor?.configFields.find((f) => f.secret)?.key).toBe('token')
       })
+
+      it('resolves a deployment-registered custom kind through the injected app-owned registry — on every runtime', async () => {
+        // The secret-kind registry is app-owned (no module-global Map): a deployment
+        // registers a custom kind BY REFERENCE into the registry the harness injects via
+        // `makeApp({ backendRegistries })`, so the facade's UserSecretService describes it
+        // regardless of module identity — the migration's whole point. See
+        // `docs/initiatives/registry-di-migration.md`.
+        const backendRegistries = createBackendRegistries()
+        backendRegistries.userSecretKindRegistry.register({
+          kind: 'conformance-secret',
+          label: 'Conformance secret',
+          configFields: [{ key: 'token', label: 'Token', secret: true, required: true }],
+        })
+        const app = harness.makeApp(undefined, { backendRegistries })
+        const probe = app.userSecrets?.()
+        if (!probe) return
+
+        // The injected custom kind is describable...
+        const custom = probe.describe('conformance-secret')
+        expect(custom?.kind).toBe('conformance-secret')
+        expect(custom?.supportsTest).toBe(false)
+        expect(custom?.configFields.find((f) => f.secret)?.key).toBe('token')
+        // ...and the built-in still resolves off the SAME registry instance.
+        expect(probe.describe('github_pat')?.supportsTest).toBe(true)
+      })
+    })
+
+    describe('private package registries (per-workspace npm/GitHub-Packages auth)', () => {
+      it('adds, lists redacted, resolves decrypted for dispatch, and removes — identically per store', async () => {
+        const app = harness.makeApp()
+        // Facades without ENCRYPTION_KEY don't wire the store; nothing to assert there.
+        const probe = app.packageRegistries?.()
+        if (!probe) return
+        const { workspace } = await app.createWorkspace()
+        const base = `/workspaces/${workspace.id}/package-registries`
+
+        const empty = await app.call<{ entries: unknown[] }>('GET', base)
+        expect(empty.status).toBe(200)
+        expect(empty.body.entries).toEqual([])
+
+        // Add one entry per vendor. The list view is REDACTED: vendor + scopes + token
+        // tail only — the raw token must never appear on the wire.
+        const added = await app.call<{
+          entries: { id: string; vendor: string; scopes: string[]; tokenTail: string }[]
+        }>('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme'],
+          token: 'npm_secret_token_1234',
+        })
+        expect(added.status).toBe(200)
+        const listed = await app.call<{
+          entries: { id: string; vendor: string; scopes: string[]; tokenTail: string }[]
+        }>('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'github-packages',
+          scopes: ['@acme-internal', '@acme-tools'],
+          token: 'ghp_registry_secret_5678',
+        })
+        expect(listed.status).toBe(200)
+        expect(listed.body.entries).toHaveLength(2)
+        const [npmjs, ghp] = listed.body.entries
+        expect(npmjs?.vendor).toBe('npmjs')
+        expect(npmjs?.scopes).toEqual(['@acme'])
+        expect(npmjs?.tokenTail).toBe('1234')
+        expect(ghp?.vendor).toBe('github-packages')
+        expect(JSON.stringify(listed.body)).not.toContain('npm_secret_token_1234')
+        expect(JSON.stringify(listed.body)).not.toContain('ghp_registry_secret_5678')
+
+        // A second entry for an already-configured vendor is a 409: the harness renders one
+        // host-keyed `_authToken` per registry, so a duplicate would be silently dropped.
+        const dup = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['@acme-extra'],
+          token: 'npm_second_token_9999',
+        })
+        expect(dup.status).toBe(409)
+
+        // A malformed scope is rejected at the write boundary.
+        const bad = await app.call('POST', base, {
+          ecosystem: 'npm',
+          vendor: 'npmjs',
+          scopes: ['not-a-scope!'],
+          token: 'x_token_x',
+        })
+        expect(bad.status).toBeGreaterThanOrEqual(400)
+
+        // The dispatch path decrypts the sealed entries and derives the vendor host —
+        // this is what rides the container job body as `packageRegistries`.
+        const dispatch = await probe.resolveForDispatch(workspace.id)
+        expect(dispatch).toEqual([
+          {
+            ecosystem: 'npm',
+            host: 'registry.npmjs.org',
+            scopes: ['@acme'],
+            token: 'npm_secret_token_1234',
+          },
+          {
+            ecosystem: 'npm',
+            host: 'npm.pkg.github.com',
+            scopes: ['@acme-internal', '@acme-tools'],
+            token: 'ghp_registry_secret_5678',
+          },
+        ])
+        // A workspace with no connection dispatches nothing (no error).
+        const other = await app.createWorkspace()
+        expect(await probe.resolveForDispatch(other.workspace.id)).toEqual([])
+
+        // Remove both entries; the second removal deletes the row outright.
+        const firstId = listed.body.entries[0]?.id as string
+        const secondId = listed.body.entries[1]?.id as string
+        expect((await app.call('DELETE', `${base}/${firstId}`)).status).toBe(204)
+        // Removing an unknown entry 404s rather than silently succeeding.
+        expect((await app.call('DELETE', `${base}/${firstId}`)).status).toBe(404)
+        expect((await app.call('DELETE', `${base}/${secondId}`)).status).toBe(204)
+        const cleared = await app.call<{ entries: unknown[] }>('GET', base)
+        expect(cleared.body.entries).toEqual([])
+        expect(await probe.resolveForDispatch(workspace.id)).toEqual([])
+      })
     })
 
     describe('repo bootstrap', () => {
@@ -3391,9 +3926,18 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // facade that didn't open its env-connection store to the `compose` kind, diverges here.
         // Registered by reference with a fake runtime (never invoked on the connect/describe
         // paths) so the assertion needs no real daemon.
+        // The fake runtime carries the optional build-mode `checkout`/`writeCheckoutFile` seam too
+        // (recorded, never invoked on the connect/describe paths asserted here) — it composes the
+        // same way the real local runtime does, and the build config below must persist regardless.
+        const checkouts: { cloneUrl: string; ref: string }[] = []
         const fakeRuntime: ComposeRuntime = {
           compose: async () => ({ code: 0, stdout: '', stderr: '' }),
           writeProjectFile: async () => '',
+          checkout: async (_project, target) => {
+            checkouts.push({ cloneUrl: target.cloneUrl, ref: target.ref })
+            return { dir: '/tmp/checkout' }
+          },
+          writeCheckoutFile: async () => '',
         }
         const backendRegistries = createBackendRegistries()
         backendRegistries.environmentBackendRegistry.register(
@@ -3410,7 +3954,15 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           auth: { type: 'none' },
           provision: { method: 'POST', pathTemplate: '' },
           response: {},
-          providerConfig: { service: 'web', port: '8080', composePath: 'docker-compose.yml' },
+          // Build-from-source config: the `build` flag + build timeout must survive the manifest
+          // JSON column round-trip identically on both stores (D1 ⇄ Drizzle).
+          providerConfig: {
+            service: 'web',
+            port: '8080',
+            composePath: 'docker-compose.yml',
+            build: 'true',
+            buildTimeoutMinutes: '20',
+          },
         }
         const registered = await call<{ kind: string; providerId: string; secretKeys: string[] }>(
           'POST',
@@ -3425,11 +3977,13 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const got = await call<{
           connection: {
             kind: string
-            config?: { manifest?: { providerConfig?: { service?: string } } }
+            config?: { manifest?: { providerConfig?: { service?: string; build?: string } } }
           } | null
         }>('GET', `${base}/connection`)
         expect(got.body.connection?.kind).toBe('compose')
         expect(got.body.connection?.config?.manifest?.providerConfig?.service).toBe('web')
+        // The build-mode flag round-trips through the store on every facade.
+        expect(got.body.connection?.config?.manifest?.providerConfig?.build).toBe('true')
 
         // Advertised in the snapshot so the SPA lists it (with its when-to-use guidance).
         const snap = await call<{ environmentBackendKinds?: { kind: string }[] }>(
@@ -3440,15 +3994,19 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           expect.arrayContaining(['compose']),
         )
 
-        // The descriptor-driven connect form exposes the flat fields (service + port required).
+        // The descriptor-driven connect form exposes the flat fields (service + port required) +
+        // the build-from-source selector, so the build toggle ships on every facade's connect UI.
         const descr = await call<{ kind: string; configFields: { key: string }[] }>(
           'GET',
           `${base}/provider?kind=compose`,
         )
         expect(descr.status).toBe(200)
         expect(descr.body.configFields.map((f) => f.key)).toEqual(
-          expect.arrayContaining(['service', 'port']),
+          expect.arrayContaining(['service', 'port', 'build']),
         )
+        // Registering + describing a build-mode connection must never clone (a clone only happens
+        // when a run actually provisions the env).
+        expect(checkouts).toHaveLength(0)
       })
 
       it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {
@@ -4315,6 +4873,83 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(testerStep.test?.lastReport?.greenlight).toBe(true)
       })
 
+      it('loops the Tester via the quality-control companion until coverage is adequate, then completes', async () => {
+        // Both reports greenlight with no concerns, so the FIXER never runs — but the QC reviewer
+        // judges the first report's coverage inadequate (it claims three areas but records one
+        // outcome), so the engine loops the Tester for a focused additional pass on its OWN budget,
+        // then the second report's coverage is adequate and the run advances. Drives the full QC
+        // loop — inject a deterministic reviewer, audit → re-run → audit → conclude — on EVERY
+        // runtime, asserting the verdicts + counters persist identically through the step JSON.
+        const shallow = {
+          greenlight: true,
+          summary: 'happy path only',
+          tested: ['login', 'logout', 'session refresh'],
+          outcomes: [{ name: 'login', status: 'passed' as const }],
+          concerns: [],
+        }
+        const thorough = {
+          greenlight: true,
+          summary: 'covered every area',
+          tested: ['login', 'logout', 'session refresh'],
+          outcomes: [
+            { name: 'login', status: 'passed' as const },
+            { name: 'logout', status: 'passed' as const },
+            { name: 'session refresh', status: 'passed' as const },
+          ],
+          concerns: [],
+        }
+        const reviewer = new FakeTesterQualityReviewer([
+          {
+            adequate: false,
+            gaps: ['logout not exercised', 'session refresh not exercised'],
+            feedback:
+              'Only the happy path was checked; two claimed areas have no recorded outcome.',
+          },
+          { adequate: true, gaps: [], feedback: 'Every listed area now has a recorded outcome.' },
+        ])
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'tester-api'],
+            asyncPolls: 1,
+            testReports: [shallow, thorough],
+            pullRequest: { url: 'https://gh/pr/2', number: 2, branch: 'cat-factory/task_login' },
+          },
+          { testerQualityReviewer: reviewer },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Code + test + QC',
+          agentKinds: ['coder', 'tester-api'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+
+        const testerStep = exec.steps.find((s) => s.agentKind === 'tester-api')!
+        expect(testerStep.state).toBe('done')
+        // The QC companion looped the Tester exactly once, on its OWN budget — the fixer never ran.
+        expect(testerStep.testerQuality?.attempts).toBe(1)
+        expect(testerStep.test?.attempts).toBe(0)
+        // Two QC verdicts recorded (inadequate → adequate); the round-trip through the step JSON
+        // is identical on D1 and Drizzle.
+        expect(testerStep.testerQuality?.verdicts.map((v) => v.adequate)).toEqual([false, true])
+        expect(testerStep.testerQuality?.verdicts[0]?.gaps.length).toBeGreaterThan(0)
+        expect(testerStep.testerQuality?.exceeded).toBeFalsy()
+        // The final, adequate report is the one that concluded the step.
+        expect(testerStep.test?.lastReport?.summary).toBe('covered every area')
+        // The reviewer audited exactly two reports (the shallow one, then the thorough re-run).
+        expect(reviewer.calls).toHaveLength(2)
+        expect(reviewer.calls.map((c) => c.adequate)).toEqual([false, true])
+      })
+
       it('persists the tester docker-compose stand-up record on both stores', async () => {
         // The in-container compose stand-up (local-infra tester) is captured by the harness and
         // surfaced on the Tester step so the test window can show WHY local infra failed to come
@@ -4598,6 +5233,238 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
             },
           )
           expect(started.status).toBe(201)
+        },
+      )
+
+      it.skipIf(harness.name === 'mothership')(
+        'fans a deployer out over the task own + involved-service frames, keying each env by frame',
+        async () => {
+          // Service-connections Phase 2 (multi-env provisioning): a task that names an involved
+          // connected service provisions an ephemeral env for BOTH its own service frame AND the
+          // involved one, all under the task `block_id` but keyed by distinct `frame_id`. This
+          // asserts the cross-runtime facts a facade could diverge on:
+          //   (1) TWO env records are persisted for one task, keyed by their service FRAME — the
+          //       per-`(block_id, frame_id)` supersede that stops the fan-out clobbering itself
+          //       (a facade keying by block alone would end with ONE), and
+          //   (2) both round-trip the `frame_id` column through each store's registry repo
+          //       (D1 ⇄ Drizzle), so a downstream tester's peer-env resolution (which indexes live
+          //       handles by frame id) can reach each.
+          let provisioned = 0
+          const provider = {
+            provision: async () => {
+              provisioned += 1
+              return {
+                externalId: `env-${provisioned}`,
+                status: 'ready',
+                url: `https://env-${provisioned}.example`,
+                expiresAt: null,
+                access: null,
+                fields: {},
+              }
+            },
+            status: async () => ({ status: 'ready' }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // One workspace-wide connection gives the legacy single-connection provision path its
+          // manifest, so every frame's deployer reaches the injected provider.
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: { method: 'POST', pathTemplate: '/environments' },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // A second service frame (the involved peer), connected to the seeded `blk_auth`.
+          const peer = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+            type: 'service',
+            position: { x: 900, y: 900 },
+          })
+          const peerId = peer.body.id
+          const connected = await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+            serviceConnections: [{ serviceBlockId: peerId, description: 'sends its mail via it' }],
+          })
+          expect(connected.status).toBe(200)
+          // The task under `blk_auth` marks the peer as directly involved.
+          const involved = await app.call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+            involvedServiceIds: [peerId],
+          })
+          expect(involved.body.involvedServiceIds).toEqual([peerId])
+
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy',
+            agentKinds: ['deployer'],
+          })
+          const started = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: deployPipeline.body.id },
+          )
+          expect(started.status).toBe(201)
+          const runs = await app.drive(wsId)
+          const run = runs.find((r) => r.blockId === 'task_login')!
+          expect(run.status).toBe('done')
+
+          // BOTH frames were provisioned, keyed by distinct frame ids under the one task block.
+          const envs = await app.call<
+            {
+              blockId: string | null
+              frameId?: string | null
+              status: string
+              url: string | null
+            }[]
+          >('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(2)
+          const byFrame = new Map(envs.body.map((e) => [e.frameId, e]))
+          expect(new Set(byFrame.keys())).toEqual(new Set(['blk_auth', peerId]))
+          for (const env of envs.body) {
+            expect(env.blockId).toBe('task_login')
+            expect(env.status).toBe('ready')
+            expect(env.url).toMatch(/^https:\/\/env-\d\.example$/)
+          }
+          // The two envs carry DISTINCT urls (each frame got its own provision), so a peer-env
+          // resolution keyed by frame id resolves the right one.
+          expect(byFrame.get('blk_auth')!.url).not.toBe(byFrame.get(peerId)!.url)
+        },
+      )
+
+      it.skipIf(harness.name === 'mothership')(
+        'injects the derived frontend origins into the deployer provision and stamps run-start notes',
+        async () => {
+          // Slice 6b (frontend-preview-ui-testing): the REVERSE of a frontend's backend bindings —
+          // the browser origins a bound service's ephemeral env must accept (CORS) — is derived by
+          // reading the frontend frame's `frontend_config` and passed to the deployer as
+          // `inputs.frontendOrigins` (which an operator's manifest folds in via
+          // `{{input.frontendOrigins}}`; the render itself is unit-tested in 6a). This pins the
+          // cross-runtime half: a facade that dropped/mismapped `frontend_config` would derive NO
+          // origins. It ALSO asserts the run-start `notes` (the resolved-binding advisories) round-
+          // trip through each store's `agent_runs.detail` JSON (D1 ⇄ Drizzle).
+          let capturedFrontendOrigins: string | undefined
+          const provider = {
+            provision: async (req: { inputs: Record<string, string> }) => {
+              capturedFrontendOrigins = req.inputs.frontendOrigins
+              return {
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+                expiresAt: null,
+                access: null,
+                fields: {},
+              }
+            },
+            status: async () =>
+              ({
+                externalId: 'auth-env-1',
+                status: 'ready',
+                url: 'https://auth-live.example',
+              }) as never,
+            teardown: async () => ({ status: 'torn_down' }) as never,
+          }
+          const app = harness.makeApp(undefined, {
+            environmentProvider: provider as unknown as EnvironmentProvider,
+            resolveBinaryArtifactStore: STORAGE_ON,
+          })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // A manifest connection gives the deployer a provider to reach; its `bodyTemplate` is
+          // where the operator folds the derived origins into the backend's CORS allow-list.
+          const manifest = {
+            providerId: 'acme-envs',
+            label: 'Acme Ephemeral Envs',
+            baseUrl: 'https://envs.test/api',
+            auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+            provision: {
+              method: 'POST',
+              pathTemplate: '/environments',
+              bodyTemplate: '{"cors":"{{input.frontendOrigins}}"}',
+            },
+            response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+          }
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          // Bind the frontend frame to the auth service BEFORE provisioning, so the deployer
+          // derives the frontend's origin. A duplicate env var (mock, then `service` LAST so the
+          // live binding wins the resolution) makes the run-start note deterministic.
+          const patched = await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_frontend`, {
+            frontendConfig: {
+              backendBindings: [
+                { envVar: 'PUB_API_URL', source: { kind: 'mock' } },
+                { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_auth' } },
+              ],
+            },
+          })
+          expect(patched.status).toBe(200)
+
+          // Provision the auth service's live env via a deployer on a task inside its frame.
+          const deployPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy auth',
+            agentKinds: ['deployer'],
+          })
+          const startDeploy = await app.call(
+            'POST',
+            `/workspaces/${wsId}/blocks/task_login/executions`,
+            { pipelineId: deployPipeline.body.id },
+          )
+          expect(startDeploy.status).toBe(201)
+          await app.drive(wsId)
+
+          // The derived origin (the frontend's default serve port) reached the provider — proving
+          // each store read `frontend_config` to compute `frontendOriginsForService`.
+          expect(capturedFrontendOrigins).toBe('http://localhost:4173')
+
+          // A UI-tester run against the frontend now starts (blk_auth is live) and carries the
+          // duplicate-env-var run-start note.
+          const task = await app.call<Block>(
+            'POST',
+            `/workspaces/${wsId}/blocks/blk_frontend/tasks`,
+            { title: 'Exercise the dashboard' },
+          )
+          const uiPipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Build + UI test',
+            agentKinds: ['coder', 'tester-ui'],
+          })
+          const started = await app.call<{
+            id: string
+            notes?: string[]
+            frontendBindings?: { envVar: string; serviceUrl?: string }[]
+          }>('POST', `/workspaces/${wsId}/blocks/${task.body.id}/executions`, {
+            pipelineId: uiPipeline.body.id,
+          })
+          expect(started.status).toBe(201)
+          expect(started.body.notes?.some((n) => n.includes('PUB_API_URL'))).toBe(true)
+          // The bindings resolved once at start are stamped on the run as a frozen snapshot: the
+          // (last-wins) `service` binding resolved to blk_auth's live env URL.
+          expect(started.body.frontendBindings).toContainEqual({
+            envVar: 'PUB_API_URL',
+            serviceUrl: 'https://auth-live.example',
+          })
+
+          // Re-read from the store (fresh snapshot): the note AND the frozen bindings persisted in
+          // `agent_runs.detail` identically on D1 and Postgres.
+          const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+          const persisted = snapshot.body.executions.find((e) => e.id === started.body.id)
+          expect(persisted?.notes?.some((n) => n.includes('only the last binding'))).toBe(true)
+          expect(persisted?.frontendBindings).toContainEqual({
+            envVar: 'PUB_API_URL',
+            serviceUrl: 'https://auth-live.example',
+          })
         },
       )
 
@@ -5575,6 +6442,130 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(decision.thresholds?.presetName).toBeTruthy()
       })
 
+      it('never auto-merges a task pinned to a "human review only" preset, even on a credible within-threshold assessment', async () => {
+        // The "Manual review only" built-in preset (`autoMergeEnabled: false`) is the
+        // human-review-only policy: a task pinned to it must ALWAYS route its PR to a human,
+        // regardless of how low the assessment scores are. This drives the full task-threshold
+        // wiring end-to-end — `block.mergePresetId` → `resolveMergePreset` repository lookup →
+        // `MergeResolver` — which the resolver unit test can't (it injects the preset directly).
+        // A maximally-mergeable assessment (0/0/0 + a real rationale) would auto-merge under the
+        // default preset; here it must NOT, proving the pinned preset — not the default — governs.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0,
+            risk: 0,
+            impact: 0,
+            rationale: 'Trivial, well-tested change.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        // Listing the catalog lazily seeds the built-ins so `mp_manual_review` is a real row the
+        // task can pin (the resolver reads it back via the repository, which does not self-seed).
+        const presets = await app.call<MergeThresholdPreset[]>(
+          'GET',
+          `/workspaces/${wsId}/merge-presets`,
+        )
+        expect(presets.body.some((p) => p.id === 'mp_manual_review')).toBe(true)
+        // Pin the human-review-only preset on the task.
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          mergePresetId: 'mp_manual_review',
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        // Human review only: the PR is left open for a human — never auto-merged.
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
+        // The recorded decision names the pinned preset and the disabled-auto-merge reason so the
+        // SPA banner is precise (distinct from an over-threshold `exceeded_thresholds`).
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          thresholds?: { presetName?: string; autoMergeEnabled?: boolean }
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('auto_merge_disabled')
+        expect(decision.thresholds?.presetName).toBe('Manual review only')
+        expect(decision.thresholds?.autoMergeEnabled).toBe(false)
+      })
+
+      it('routes to human review when a task pinned to a strict preset gets an over-threshold assessment', async () => {
+        // The auto-merge ceilings a task's PICKED preset carries must actually gate the merge —
+        // not just the workspace default. Pin a custom strict preset (low ceilings) and return an
+        // assessment that clears the default's ceilings but exceeds the strict one's: the merge
+        // must be blocked, proving the pinned preset's thresholds — resolved via the repository —
+        // are the ones compared, and the exceeded axes are reported precisely.
+        const app = harness.makeApp({
+          confidence: 1,
+          mergeAssessment: {
+            complexity: 0.45,
+            risk: 0.1,
+            impact: 0.45,
+            rationale: 'Touches several modules with moderate coupling.',
+          },
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const strict = await app.call<MergeThresholdPreset>(
+          'POST',
+          `/workspaces/${wsId}/merge-presets`,
+          {
+            name: 'Strict',
+            maxComplexity: 0.3,
+            maxRisk: 0.3,
+            maxImpact: 0.3,
+            ciMaxAttempts: 10,
+            maxRequirementIterations: 6,
+            maxRequirementConcernAllowed: 'none',
+          },
+        )
+        expect(strict.status).toBe(201)
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          mergePresetId: strict.body.id,
+        })
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + merger',
+          agentKinds: ['coder', 'merger'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        const ticked = await app.drive(wsId)
+        const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const task = snap.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('pr_ready')
+        expect(task.status).not.toBe('done')
+        const exec = ticked.find((e) => e.blockId === 'task_login')!
+        const decision = exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+          outcome?: string
+          reason?: string
+          exceededAxes?: string[]
+          thresholds?: { presetName?: string }
+        }
+        expect(decision.outcome).toBe('awaiting_review')
+        expect(decision.reason).toBe('exceeded_thresholds')
+        // complexity (0.45) and impact (0.45) clear the default (0.5) but exceed the strict 0.3;
+        // risk (0.1) is within — so only the two breaching axes are reported.
+        expect(decision.exceededAxes?.sort()).toEqual(['complexity', 'impact'])
+        expect(decision.thresholds?.presetName).toBe('Strict')
+      })
+
       it('parks for a human when a companion spends its rework budget (no longer fails)', async () => {
         // Below the threshold the companion loops the producer back for automatic rework;
         // once the budget is spent the run no longer fails — it PARKS on the shared
@@ -5841,6 +6832,57 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(archivedBuiltin.status).toBe(200)
         expect(archivedBuiltin.body.archived).toBe(true)
         expect(archivedBuiltin.body.builtin).toBe(true)
+      })
+
+      it('round-trips pipeline launch availability through create, update, and clone', async () => {
+        // `availability` gates HOW a pipeline may be launched (one-off / recurring / both). It is
+        // a plain persisted column on BOTH stores — a facade that forgot to map it would silently
+        // drop the field on save (the exact gap this asserts against), leaving the launch gate
+        // inert after a DB round-trip.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const created = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Recurring only',
+          agentKinds: ['coder'],
+          availability: 'recurring',
+        })
+        expect(created.status).toBe(201)
+        expect(created.body.availability).toBe('recurring')
+
+        // Re-read from the store (not the create echo) — this is where a dropped column shows up.
+        const afterCreate = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterCreate.body.find((p) => p.id === created.body.id)?.availability).toBe(
+          'recurring',
+        )
+
+        const updated = await app.call<Pipeline>(
+          'PATCH',
+          `/workspaces/${wsId}/pipelines/${created.body.id}`,
+          { availability: 'both' },
+        )
+        expect(updated.status).toBe(200)
+        expect(updated.body.availability).toBe('both')
+        const afterUpdate = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterUpdate.body.find((p) => p.id === created.body.id)?.availability).toBe('both')
+
+        // A clone preserves the source's availability.
+        const source = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'One-off only',
+          agentKinds: ['coder'],
+          availability: 'one-off',
+        })
+        expect(source.status).toBe(201)
+        const cloned = await app.call<Pipeline>(
+          'POST',
+          `/workspaces/${wsId}/pipelines/${source.body.id}/clone`,
+          {},
+        )
+        expect(cloned.status).toBe(201)
+        expect(cloned.body.availability).toBe('one-off')
+        const afterClone = await app.call<Pipeline[]>('GET', `/workspaces/${wsId}/pipelines`)
+        expect(afterClone.body.find((p) => p.id === cloned.body.id)?.availability).toBe('one-off')
       })
 
       it('reviews the spec-writer with its companion and reworks it without a human gate', async () => {
@@ -6180,6 +7222,51 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         ).body.blocks.find((b) => b.id === 'task_login')!
         expect(task.status).toBe('blocked')
       })
+
+      it('refuses to approve a rejected gate — a stale approve cannot resurrect a failed run', async () => {
+        // The reject/approve race regression: approve used to read once and blind-write,
+        // so an approve landing after a reject advanced the already-failed run back to
+        // life. It now re-validates under optimistic concurrency and must conflict.
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Gated',
+          agentKinds: ['architect', 'coder'],
+          gates: [true, false],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: gated.body.id,
+        })
+
+        const blocked = await app.drive(wsId)
+        const exec = blocked.find((e) => e.blockId === 'task_login')!
+        const approvalId = exec.steps[0]!.approval!.id
+
+        const rejected = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/reject`,
+          { reason: 'wrong direction' },
+        )
+        expect(rejected.status).toBe(200)
+        expect(rejected.body.status).toBe('failed')
+
+        const approve = await app.call(
+          'POST',
+          `/workspaces/${wsId}/executions/${exec.id}/steps/${approvalId}/approve`,
+          {},
+        )
+        expect(approve.status).toBe(409)
+
+        // The run stays failed and the task stays blocked — nothing was resurrected.
+        const snapshot = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+        const run = snapshot.executions.find((e) => e.id === exec.id)!
+        expect(run.status).toBe('failed')
+        expect(run.steps[0]!.approval?.status).toBe('rejected')
+        const task = snapshot.blocks.find((b) => b.id === 'task_login')!
+        expect(task.status).toBe('blocked')
+      })
     })
   })
 }
@@ -6277,6 +7364,49 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
         )
         expect(again.status).toBe(200)
+      })
+
+      it('persists an on-demand schedule (no cadence) and fires it via run-now', async () => {
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'On-demand inline',
+          agentKinds: ['architect'],
+        })
+        // No `recurrence` on the body — an on-demand schedule needs none.
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Manual pass',
+            onDemand: true,
+          },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.onDemand).toBe(true)
+
+        // The flag round-trips through the store on both runtimes.
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(
+          snapshot.body.recurringPipelines?.find((s) => s.id === created.body.id)?.onDemand,
+        ).toBe(true)
+
+        // Manual run-now still fires it (the credential gate is a no-op with no individual model).
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+        const runs = await app.call<ScheduleRun[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/runs`,
+        )
+        expect(runs.body).toHaveLength(1)
+        expect(runs.body[0]!.executionId).toBeTruthy()
       })
 
       it('reads and writes the workspace tracker selection', async () => {

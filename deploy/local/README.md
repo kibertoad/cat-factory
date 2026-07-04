@@ -359,8 +359,11 @@ per-run path. A stale dependency cache is the residual risk — clear it by tigh
 Set `LOCAL_NATIVE_AGENTS=claude-code,codex` (a comma-separated **allow-list** of the
 subscription harnesses to run natively) to run those agents as a **host process** driving
 your OWN already-installed `claude` / `codex` CLI with its ambient login — no leased
-credential. Requires `LOCAL_HARNESS_ENTRY` (the path to the executor-harness server entry
-to run with `node`).
+credential. That's the only required setting: the harness server it spawns
+(`node <entry>`) defaults to the `@cat-factory/executor-harness` package that ships as a
+dependency of `@cat-factory/local-server`, so a fresh install works out of the box — just
+like an unset `LOCAL_HARNESS_IMAGE` falls back to the pinned recommended image. Set
+`LOCAL_HARNESS_ENTRY` only to override it with a custom or source-checkout build.
 
 Only a step whose model maps to a **listed harness's NATIVE vendor** goes native: that is
 Anthropic's own `claude` (for `claude-code`) and OpenAI's `codex`. A step pinned to a

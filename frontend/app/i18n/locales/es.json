@@ -50,7 +50,8 @@
       "revoked": "{name} revocado",
       "cleared": "{name} borrado",
       "destroyed": "{name} destruido"
-    }
+    },
+    "undo": "Deshacer"
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -80,7 +81,9 @@
       "moveFailed": "No se pudo mover",
       "deleteFailed": "No se pudo eliminar",
       "linkFailed": "No se pudieron vincular las tareas",
-      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente"
+      "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente",
+      "deleted": "\"{name}\" eliminado",
+      "moved": "\"{name}\" movido"
     },
     "repoTypes": {
       "service": "Servicio",
@@ -193,7 +196,9 @@
       "linearTeamId": "ID del equipo de Linear",
       "footerHint": "Se añade una única tarea recurrente dentro del servicio; cada ejecución reemplaza a la anterior. Su historial de ejecuciones es visible en el inspector.",
       "submit": "Añadir pipeline recurrente",
-      "addFailedTitle": "No se pudo añadir la pipeline recurrente"
+      "addFailedTitle": "No se pudo añadir la pipeline recurrente",
+      "onDemand": "Bajo demanda (solo manual)",
+      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual."
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
@@ -204,7 +209,10 @@
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
       "showDetail": "Mostrar detalle",
-      "retrying": "Reintentando…"
+      "retrying": "Reintentando…",
+      "history": {
+        "previousErrors": "{count} error anterior | {count} errores anteriores"
+      }
     },
     "stop": {
       "label": "Detener",
@@ -242,7 +250,12 @@
       "dragService": "Arrastrar servicio",
       "dragTask": "Arrastrar tarea",
       "dragToResize": "Arrastra para cambiar el tamaño",
-      "addFirstTask": "Añade la primera tarea"
+      "addFirstTask": "Añade la primera tarea",
+      "createInitiativeTitle": "Crear iniciativa",
+      "accessDenied": {
+        "title": "Permiso denegado",
+        "hint": "No tienes acceso al repositorio que respalda este servicio."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Decisión necesaria",
@@ -384,6 +397,8 @@
   },
   "inspector": {
     "container": {
+      "title": "Contenido",
+      "hint": "Los módulos y tareas dentro de este bloque. Haz clic en una entrada para seleccionarla en el tablero.",
       "modules": "Módulos ({count})",
       "taskCount": "{count} tarea | {count} tareas",
       "allTasks": "Todas las tareas ({count})",
@@ -394,6 +409,7 @@
     },
     "epicChildren": {
       "title": "Tareas de la épica",
+      "hint": "Todas las tareas asignadas a esta épica, agrupadas por el servicio y el módulo donde viven. Una épica solo agrupa tareas; no ejecuta nada por sí misma.",
       "doneCount": "{done}/{total} completadas",
       "empty": "Aún no hay tareas en esta épica. Importa las hijas de una épica o asigna la épica de una tarea.",
       "unassigned": "Sin asignar"
@@ -428,10 +444,13 @@
         "skipped": "Omitida"
       },
       "updateFailed": "No se pudo actualizar la programación",
-      "runNowFailed": "No se pudo ejecutar ahora"
+      "runNowFailed": "No se pudo ejecutar ahora",
+      "onDemand": "Bajo demanda",
+      "onDemandHint": "Solo manual. Se ejecuta cuando lo activas y puede usar un modelo de suscripción de uso individual."
     },
     "fragments": {
       "serviceTitle": "Buenas prácticas del servicio",
+      "serviceHint": "Estándares de programación para todo el servicio. El contenido de cada fragmento seleccionado se añade al prompt de cada agente que conoce el código y trabaja en tareas de este servicio.",
       "serviceEmpty": "Ninguna. Los agentes que conocen el código en este servicio siguen su guía predeterminada.",
       "manageBoard": "Gestionar la biblioteca de fragmentos de este tablero…",
       "manageAccount": "Gestionar los fragmentos de la cuenta…"
@@ -439,14 +458,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "Cómo compilar, servir y simular este frontend para una prueba de interfaz autónoma. Las vinculaciones de abajo lo conectan con los servicios de backend a los que llama.",
+      "detect": {
+        "title": "Detectar del repositorio",
+        "button": "Detectar",
+        "hint": "Lee el repositorio vinculado y propone una configuración para revisar antes de aplicar. No se guarda nada hasta que la apliques.",
+        "error": "No se pudo leer el repositorio. Comprueba que el frontend esté vinculado a un repositorio conectado.",
+        "none": "No se detectó nada con forma de frontend. Indica el directorio del frontend (para un monorepo) o rellena los campos manualmente.",
+        "apply": "Aplicar",
+        "dismiss": "Descartar",
+        "confidenceHigh": "seguro",
+        "confidenceLow": "estimación"
+      },
+      "groups": {
+        "build": "Compilación",
+        "serve": "Servicio",
+        "mocking": "Simulación",
+        "envInjection": "Inyección de entorno",
+        "bindings": "Vinculaciones de backend",
+        "preview": "Vista previa"
+      },
       "packageManager": "Gestor de paquetes",
+      "directory": "Directorio del frontend",
+      "directoryHint": "La subcarpeta de la app frontend en el repositorio (un monorepo, p. ej. frontend/). Déjalo vacío si la app está en la raíz del repositorio.",
       "installCommand": "Comando de instalación",
       "buildScript": "Script de compilación",
       "outputDir": "Directorio de salida",
       "serveMode": "Modo de servicio",
       "serveStatic": "Estático",
       "serveCommand": "Comando",
-      "serveModeHint": "Estático sirve el directorio de salida de la compilación; Comando ejecuta un script de package.json (p. ej. preview).",
+      "serveStaticDesc": "sirve el directorio de salida compilado como archivos estáticos. Lo más económico para una prueba de interfaz de una app ya compilada.",
+      "serveCommandDesc": "ejecuta un script de package.json (p. ej. preview) para servir la app, para compilaciones que necesitan un servidor en ejecución.",
+      "serveEnvAxisNote": "Distinto de la Inyección de entorno (en compilación vs. en tiempo de ejecución) de abajo, que controla cómo llegan las URL del backend a la app, no cómo se sirve.",
       "serveScript": "Script de servicio",
       "servePort": "Puerto de servicio",
       "mockMappingsPath": "Ruta de asignaciones de simulación",
@@ -475,10 +517,25 @@
           "failed": "Error",
           "stopped": "No iniciada"
         }
+      },
+      "resolved": {
+        "title": "Se resuelve a",
+        "duplicateWarning": "Usado en más de un binding, por lo que solo se aplica el último: {vars}.",
+        "serviceOffline": "{service}: sin entorno activo (simulado)",
+        "mock": "Mock (WireMock)"
       }
+    },
+    "serviceConnections": {
+      "title": "Conexiones de servicios",
+      "hint": "Los otros servicios que este utiliza, p. ej. un servicio que envía sus correos. Las conexiones dibujan aristas en el tablero, y las tareas pueden marcar un servicio conectado como directamente involucrado.",
+      "descriptionPlaceholder": "Cómo lo usa este servicio, p. ej. envía correos a través de él",
+      "remove": "Eliminar conexión",
+      "empty": "Sin conexiones. Añade una para vincular este servicio con otro servicio que utiliza.",
+      "usedBy": "Usado por"
     },
     "releaseHealth": {
       "title": "Salud posterior al lanzamiento",
+      "sectionHint": "Cuando los cambios de este servicio se fusionan y publican, una verificación vigila durante un tiempo los monitores y SLO configurados. Ante una regresión inicia un agente de guardia para investigar; nada se revierte automáticamente.",
       "clear": "Limpiar",
       "connectPrompt": "Conecta una integración de observabilidad para vigilar este servicio tras los lanzamientos.",
       "connectFirst": "Conecta primero una integración de observabilidad",
@@ -495,6 +552,7 @@
     },
     "testConfig": {
       "title": "Infraestructura de pruebas",
+      "hint": "Cómo se levanta un entorno de prueba para este servicio cuando un pipeline necesita ejecutarlo: sin infraestructura, un archivo de Docker Compose, manifiestos de Kubernetes o un tipo de manifiesto personalizado.",
       "provisionType": "Tipo de aprovisionamiento",
       "provisionTypeHint": "Cómo este servicio levanta su entorno para el Tester. El espacio de trabajo configura cómo se gestiona cada tipo (el motor + la conexión).",
       "provisionTypes": {
@@ -578,11 +636,13 @@
     },
     "agentConfig": {
       "title": "Configuración del agente",
+      "hint": "Opciones aportadas por los agentes del pipeline de esta tarea. Cada opción se puede editar hasta que su agente arranca; después queda bloqueada para esa ejecución.",
       "inherited": "heredado del servicio",
       "frozen": "Congelado: el agente ya ha comenzado"
     },
     "dependencies": {
       "title": "Depende de",
+      "hint": "Tareas que deben fusionarse antes de que esta pueda ejecutarse. El control Ejecutar permanece bloqueado hasta que todas las dependencias estén completas.",
       "merged": "Fusionado",
       "notMerged": "Aún sin fusionar",
       "empty": "Sin dependencias. Puede ejecutarse en cualquier momento.",
@@ -594,11 +654,14 @@
     },
     "estimate": {
       "title": "Estimación",
+      "hint": "Producida por el agente estimador de tareas: cuán compleja, arriesgada e impactante parece esta tarea. Se usa para decidir si merecen la pena los pasos de consenso (multiejecución).",
       "complexity": "Complejidad",
       "risk": "Riesgo",
       "impact": "Impacto"
     },
     "execution": {
+      "title": "Ejecución",
+      "hint": "La ejecución en vivo del pipeline de esta tarea: cada paso de agente, su progreso y el pull request resultante.",
       "stage": {
         "incorporating": "Incorporando…",
         "reviewing": "Revisando de nuevo…",
@@ -652,12 +715,18 @@
       }
     },
     "structure": {
+      "title": "Estructura",
+      "hint": "Dónde vive esta tarea dentro de su servicio y qué estándares de código siguen sus agentes.",
       "module": "Módulo",
       "modulePlaceholder": "p. ej. Sesiones (creado al implementar si es nuevo)",
+      "moduleHint": "El módulo del servicio al que pertenece esta tarea. Escribe un nombre; un módulo que aún no existe se crea cuando la tarea se implementa.",
       "bestPractices": "Buenas prácticas",
-      "bestPracticesEmpty": "Ninguna. Los agentes siguen su guía predeterminada."
+      "bestPracticesEmpty": "Ninguna. Los agentes siguen su guía predeterminada.",
+      "bestPracticesHint": "Fragmentos de buenas prácticas incorporados a los prompts de los agentes de esta tarea, además de los estándares a nivel de servicio."
     },
     "runSettings": {
+      "title": "Ajustes de ejecución",
+      "hint": "Cómo se ejecuta el pipeline de esta tarea: qué pipeline arranca, qué políticas de fusión y de modelo se aplican y qué ocurre alrededor de la ejecución.",
       "unassigned": "Sin asignar",
       "workspaceDefault": "Predeterminado del espacio de trabajo",
       "workspaceDefaultParen": "(predeterminado del espacio de trabajo)",
@@ -676,10 +745,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "Sin predeterminado. Elige un pipeline cuando ejecutes esta tarea.",
+      "pipelineHint": "El pipeline que el botón Ejecutar inicia por defecto: la secuencia de pasos de agente (por ejemplo especificación, código, pruebas, fusión) que se ejecuta para esta tarea.",
       "mergePolicy": "Política de fusión",
       "mergePresetDetail": "{name}: fusión automática cuando complejidad ≤ {complexity}, riesgo ≤ {risk}, impacto ≤ {impact}; hasta {attempts} intentos de corrección de CI.",
       "mergePresetEmpty": "No hay preajuste configurado. El fusionador genera una notificación de revisión para cada PR.",
+      "mergePolicyHint": "Decide cuándo un pull request terminado se fusiona automáticamente en lugar de esperar una revisión humana, y cuántos intentos de arreglo de CI tiene una ejecución.",
       "modelPreset": "Preajuste de modelo",
+      "modelPresetHint": "Decide con qué modelo de IA se ejecuta cada paso de agente.",
       "modelPresetBase": "base {model}",
       "modelPresetOverrides": ", {count} anulación | , {count} anulaciones",
       "modelPresetEmpty": "No hay preajuste configurado. Los agentes se ejecutan con el enrutamiento predeterminado del despliegue.",
@@ -700,7 +772,11 @@
       "responsibleProduct": "Producto responsable",
       "responsibleEmpty": "Sin asignar. Define un responsable de producto para notificarle cuando la revisión de requisitos marque esta tarea.",
       "autoStartDependents": "Iniciar dependientes automáticamente",
-      "autoStartHint": "Cuando esta tarea se fusione, inicia automáticamente las tareas que dependen de ella (una vez que sus otras dependencias también estén completas)."
+      "autoStartHint": "Cuando esta tarea se fusione, inicia automáticamente las tareas que dependen de ella (una vez que sus otras dependencias también estén completas).",
+      "involvedServices": "Servicios involucrados",
+      "involvedServicesHint": "Servicios conectados directamente involucrados en esta tarea: cada uno se levanta como un entorno efímero junto al servicio propio de la tarea, y el agente de código puede modificar también sus repositorios.",
+      "involvedServicesEmpty": "No hay servicios conectados. Conecta servicios en el marco del servicio para seleccionarlos aquí.",
+      "involvedServiceStale": "Ya no está conectado al servicio de esta tarea; se eliminará con el próximo cambio."
     }
   },
   "panels": {
@@ -895,7 +971,8 @@
         "recurring": {
           "title": "¿Eliminar este pipeline recurrente?",
           "body": "Se eliminarán \"{name}\", su programación y su historial de ejecución. Esta acción no se puede deshacer."
-        }
+        },
+        "containerBodyWithCount": "Se eliminará \"{name}\" y el {count} elemento que contiene. Esta acción no se puede deshacer. | Se eliminará \"{name}\" y los {count} elementos que contiene. Esta acción no se puede deshacer."
       }
     }
   },
@@ -1225,6 +1302,7 @@
         "visual_confirmation_ready": "Marcar como leída",
         "human_review": "Marcar como leída",
         "followup_pending": "Marcar como leída",
+        "initiative": "Marcar como leída",
         "markRead": "Marcar como leída"
       },
       "toast": {
@@ -1400,6 +1478,7 @@
         "documents": "Documentos",
         "taskTrackers": "Rastreadores de tareas",
         "observability": "Observabilidad",
+        "development": "Desarrollo",
         "personal": "Personal (solo tú)"
       },
       "items": {
@@ -1436,6 +1515,10 @@
         "observability": {
           "label": "Salud posterior al lanzamiento",
           "description": "Vigila los monitores y SLO después de publicar una versión (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Registros privados de paquetes",
+          "description": "Tokens de npm y GitHub Packages que los agentes usan para instalar dependencias privadas."
         },
         "githubPat": {
           "label": "Mi token de GitHub",
@@ -1816,6 +1899,31 @@
       "connectionNoun": "la conexión de observabilidad",
       "incidentNoun": "el proveedor de incidencias"
     },
+    "packageRegistries": {
+      "title": "Registros privados de paquetes",
+      "intro": "Conecta los registros privados desde los que instalan tus repositorios. Los agentes los reciben al hacer checkout de un repositorio, de modo que las dependencias privadas se resuelven durante la instalación. Los tokens son de solo escritura: para cambiar uno, elimina la entrada y vuelve a agregarla.",
+      "entryNoun": "entrada de registro",
+      "list": {
+        "heading": "Registros conectados",
+        "tokenTail": "token …{tail}",
+        "remove": "Eliminar entrada"
+      },
+      "add": {
+        "heading": "Agregar un registro",
+        "vendor": "Registro",
+        "host": "El token solo se envía a {host}.",
+        "scopes": "Ámbitos de paquetes",
+        "scopesHelp": "Ámbitos de npm separados por comas",
+        "token": "Token de acceso",
+        "save": "Agregar registro"
+      },
+      "toast": {
+        "loadFailed": "No se pudieron cargar los registros de paquetes",
+        "added": "Registro agregado",
+        "addFailed": "No se pudo agregar el registro",
+        "removeFailed": "No se pudo eliminar la entrada del registro"
+      }
+    },
     "localMode": {
       "title": "Modo local",
       "intro": "Ajustes del ejecutor de contenedores local, almacenados en el despliegue de esta máquina (reemplazó las variables de entorno {poolVars} / {harnessVars}). Guardar redimensiona el grupo en caliente en vivo, sin necesidad de reiniciar; las ejecuciones en curso conservan el contenedor que ya tienen.",
@@ -2000,9 +2108,10 @@
       "testEnvBackend": {
         "label": "Dónde se ejecutan los entornos de prueba",
         "local-compose": "docker-compose en contenedor",
-        "environment-provider": "Proveedor de entornos"
+        "environment-provider": "Proveedor de entornos",
+        "composeDesc": "Levanta el docker-compose.yml del propio repositorio en un daemon de Docker local como URL del Tester. Ideal para apps locales basadas en Compose. Admite imágenes prediseñadas o compilación desde el código fuente; requiere un daemon de Docker, por lo que solo en despliegues locales."
       },
-      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no hace falta conexión (el contenedor de la ejecución debe admitir Docker-in-Docker).",
+      "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no se necesita conexión (el contenedor de la ejecución debe admitir Docker-in-Docker). Configura el servicio, el puerto y el origen de la imagen (usar prediseñada o compilar desde el código fuente) en los ajustes de entorno del servicio.",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes remoto"
@@ -2377,7 +2486,8 @@
       "repoLabel": {
         "private": " (privado)",
         "monorepo": " · monorepo",
-        "onBoard": " · ya en el tablero"
+        "onBoard": " · ya en el tablero",
+        "personal": " · personal (tu token)"
       },
       "monorepoLabel": "Es un monorepo (aloja más de un servicio)",
       "monorepoDescription": "Añade varios servicios desde un repositorio, cada uno fijado a un subdirectorio.",
@@ -2450,7 +2560,8 @@
       "clarity_review": "Revision de claridad",
       "release_regression": "Regresion de version",
       "human_test_ready": "Listo para pruebas humanas",
-      "visual_confirmation_ready": "Listo para confirmacion visual"
+      "visual_confirmation_ready": "Listo para confirmacion visual",
+      "initiative": "Actualizaciones de la iniciativa"
     },
     "role": {
       "engineering": "Ingenieria",
@@ -2528,6 +2639,7 @@
     },
     "taskDocs": {
       "heading": "Documentos de contexto",
+      "hint": "Documentos adjuntos a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
       "attach": "Adjuntar",
       "importPage": "Importar una página…",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
@@ -2548,6 +2660,7 @@
     },
     "contextIssues": {
       "title": "Incidencias de contexto",
+      "hint": "Incidencias del tracker adjuntas a esta tarea como contexto. Su contenido se entrega a los agentes que trabajan en la tarea.",
       "attach": "Adjuntar",
       "attached": "Incidencia adjuntada",
       "attachFailed": "No se pudo adjuntar",
@@ -2632,6 +2745,10 @@
       "consensusRevertTooltip": "Consenso activado. Haz clic para volver a un solo agente.",
       "followUpEnableTooltip": "Compañero de seguimiento desactivado. Haz clic para activarlo (Coder detecta cabos sueltos / preguntas).",
       "followUpDisableTooltip": "Compañero de seguimiento activado. Coder detecta cabos sueltos / subtareas / preguntas; haz clic para desactivarlo.",
+      "testerQualityEnableTooltip": "Compañero de calidad de pruebas desactivado. Haz clic para activarlo (audita la cobertura del informe y reitera el Tester ante lagunas).",
+      "testerQualityDisableTooltip": "Compañero de calidad de pruebas activado. Audita la cobertura del informe antes de la aprobación y reitera el Tester ante lagunas; haz clic para desactivarlo.",
+      "testerQualityLabel": "Compañero de calidad de pruebas",
+      "testerQualityGateTooltip": "Ejecutar la auditoría de calidad solo cuando la estimación de la tarea supere un umbral (requiere un Estimador de Tareas antes)",
       "moveUp": "Subir el paso",
       "moveDown": "Bajar el paso",
       "removeStep": "Quitar este paso del pipeline",
@@ -2807,6 +2924,8 @@
     },
     "attemptsHeading": "Intentos de {helper}",
     "attempt": "Intento {number}",
+    "attemptInstructions": "Entregado a {helper}",
+    "attemptReport": "Informe de {helper}",
     "outcome": {
       "completed": "completado",
       "failed": "fallido"
@@ -2880,6 +2999,9 @@
       "findings": "Hallazgos",
       "open": "Abiertos",
       "answered": "Respondidos",
+      "recommendations": "Recomendaciones",
+      "recsGenerating": "Generando",
+      "recsToReview": "Por revisar",
       "model": "Modelo"
     },
     "actions": {
@@ -3273,6 +3395,15 @@
       "failed": "Falló",
       "addressed": "Abordando"
     },
+    "quality": {
+      "heading": "Revisión de cobertura",
+      "reruns": "Reejecuciones del Tester impulsadas por calidad",
+      "rerunCount": "{attempts}/{max} reejecuciones",
+      "exceeded": "Presupuesto agotado",
+      "adequate": "Cobertura adecuada",
+      "inadequate": "Se encontraron lagunas de cobertura",
+      "gaps": "Lagunas por cerrar"
+    },
     "empty": {
       "title": "Aún no hay informe de pruebas.",
       "hint": "El informe aparece cuando el Tester termina una pasada. Mientras se ejecuta, el paso muestra el progreso en vivo en el tablero."
@@ -3572,19 +3703,23 @@
       "connectFirst": "Conecta primero una fuente de documentos (Confluence, Notion o GitHub) en Integraciones.",
       "refPlaceholder": "Id o URL de página (p. ej., una página de Confluence/Notion o la URL de un archivo de GitHub)",
       "tagsPlaceholder": "Etiquetas, separadas por comas (opcional)",
-      "link": "Vincular como fragmento vivo"
+      "link": "Vincular como fragmento vivo",
+      "githubBrowseHint": "Explora el repositorio y elige el archivo a enlazar."
     },
     "sources": {
       "metaSynced": "sincronizado · ref {ref}",
       "metaNever": "nunca sincronizado · ref {ref}",
-      "changes": "{count} cambio | {count} cambios",
+      "changes": "Cambios",
       "empty": "No hay repositorios de pautas vinculados. Vincula uno abajo para importar sus archivos Markdown como fragmentos.",
       "linkTitle": "Vincular un repositorio de pautas",
       "ownerPlaceholder": "propietario",
       "repoPlaceholder": "repositorio",
       "dirPlaceholder": "ruta del directorio (p. ej., guidelines)",
       "refPlaceholder": "ref (HEAD por defecto)",
-      "link": "Vincular y sincronizar"
+      "link": "Vincular y sincronizar",
+      "browseHint": "Explora el repositorio y elige el directorio de guías Markdown (o enlaza todo el repositorio).",
+      "selectedDir": "Directorio:",
+      "wholeRepo": "Repositorio completo (raíz)."
     },
     "toast": {
       "added": "Fragmento añadido",
@@ -3599,7 +3734,7 @@
       "linkSourceFailed": "No se pudo vincular el origen",
       "synced": "Sincronizado: {updated} actualizados, {removed} eliminados",
       "syncFailed": "No se pudo sincronizar el origen",
-      "changesAvailable": "{count} cambio disponible | {count} cambios disponibles",
+      "changesAvailable": "Cambios disponibles",
       "upToDate": "Al día",
       "checkSourceFailed": "No se pudo comprobar el origen",
       "sourceUnlinked": "Origen desvinculado",
@@ -3608,7 +3743,8 @@
     "confirmRemove": {
       "title": "¿Eliminar este fragmento?",
       "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
-    }
+    },
+    "unavailable": "La biblioteca de fragmentos de prompt no está habilitada en esta implementación."
   },
   "sandbox": {
     "title": "Sandbox: pruebas de prompts y modelos",
@@ -3832,6 +3968,86 @@
       "toast": {
         "reseedFailed": "No se pudo regenerar el preset de fusión"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Crear iniciativa",
+      "inFrame": "Nueva iniciativa en {frame}",
+      "titleField": "Titulo",
+      "titlePlaceholder": "p. ej. Migrar la API al nuevo modelo de autenticacion",
+      "goalField": "Objetivo",
+      "goalPlaceholder": "Describe el objetivo, las restricciones y el alcance aproximado. El planificador lo refina en un plan multifase.",
+      "hint": "Todavia no se ejecuta nada: tras crearla, ejecuta el pipeline de planificacion de iniciativas sobre el bloque. Analiza el codigo y redacta el plan multifase para tu aprobacion.",
+      "submit": "Crear iniciativa",
+      "failedTitle": "No se pudo crear la iniciativa"
+    },
+    "status": {
+      "planning": "Planificando",
+      "awaiting_approval": "Pendiente de aprobacion",
+      "executing": "En ejecucion",
+      "paused": "En pausa",
+      "done": "Completada",
+      "cancelled": "Cancelada"
+    },
+    "itemStatus": {
+      "pending": "Pendiente",
+      "in_progress": "En curso",
+      "pr_open": "PR abierta",
+      "done": "Completado",
+      "blocked": "Bloqueado",
+      "skipped": "Omitido"
+    },
+    "card": {
+      "kind": "Iniciativa",
+      "progress": "{done}/{total} elementos completados",
+      "openTracker": "Abrir seguimiento"
+    },
+    "tracker": {
+      "title": "Seguimiento de la iniciativa",
+      "subtitle": "Fases, elementos de trabajo, decisiones y progreso de esta iniciativa",
+      "empty": "No se encontro ninguna iniciativa para este bloque.",
+      "goal": "Objetivo",
+      "constraints": "Restricciones",
+      "nonGoals": "Fuera de alcance",
+      "analysis": "Analisis del codigo",
+      "noPlan": "Aun no hay plan. Ejecuta el pipeline de planificacion para redactar el plan multifase.",
+      "phase": "Fase: {title}",
+      "colItem": "Elemento",
+      "colStatus": "Estado",
+      "colPr": "PR",
+      "dependsOn": "Depende de: {items}",
+      "prLink": "PR",
+      "policy": "Politica de ejecucion",
+      "maxConcurrent": "Tareas concurrentes maximas: {count}",
+      "defaultPipeline": "Pipeline por defecto:",
+      "axisComplexity": "complejidad >= {value}",
+      "axisRisk": "riesgo >= {value}",
+      "axisImpact": "impacto >= {value}",
+      "axisNever": "nunca coincide (sin umbrales)",
+      "decisions": "Decisiones",
+      "deviations": "Desviaciones",
+      "followUps": "Seguimientos",
+      "caveats": "Advertencias conocidas"
+    },
+    "inspector": {
+      "runPlanning": "Ejecutar planificacion",
+      "answerPlanning": "Responder preguntas de planificacion",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "cancel": "Cancelar iniciativa",
+      "hint": "El pipeline de planificacion explora el codigo, redacta el plan multifase para su aprobacion y luego confirma el documento de seguimiento en el repositorio."
+    },
+    "planning": {
+      "title": "Planificar la iniciativa",
+      "subtitle": "Responde las preguntas del planificador para acotar la iniciativa",
+      "intro": "El planificador esta acotando esta iniciativa. Responde sus preguntas para definir el objetivo y las restricciones, luego continua, o procede a planificar con lo que tiene.",
+      "empty": "No se encontro ninguna iniciativa para este bloque.",
+      "converged": "No hay preguntas pendientes. El planificador tiene lo que necesita y esta redactando el plan.",
+      "answerPlaceholder": "Tu respuesta",
+      "hint": "Continuar permite al planificador hacer mas preguntas; Proceder planifica con las respuestas actuales.",
+      "proceed": "Proceder a planificar",
+      "continue": "Continuar"
     }
   }
 }

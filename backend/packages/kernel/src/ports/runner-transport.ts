@@ -39,6 +39,29 @@ export interface RunnerJobFollowUp {
   suggestedAction?: string
 }
 
+/**
+ * One model call a subscription harness (Claude Code / Codex) lifted from its CLI
+ * event stream, shaped so the backend can record it into the same `llm_call_metrics`
+ * telemetry the LLM proxy writes for the Pi harness. These harnesses talk direct to
+ * the vendor and bypass the proxy, so this is the only place their per-call bodies are
+ * observable. `promptText` is an OpenAI-style chat array (`[{role, content}, …]`)
+ * serialised as JSON, matching the proxy's shape; `responseText`/`reasoningText` are
+ * plain strings. Claude Code carries full request/response bodies; Codex is thinner
+ * (flat assistant text + per-turn tokens, no request transcript). See the harness's
+ * `HarnessCallMetric` (the JSON producer this mirrors).
+ */
+export interface HarnessCallMetric {
+  model?: string
+  promptText: string
+  messageCount: number
+  responseText: string
+  reasoningText: string
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  finishReason: string | null
+}
+
 /** The structured work product a finished job records. */
 export interface RunnerJobResult {
   prUrl?: string
@@ -74,6 +97,13 @@ export interface RunnerJobResult {
    * rotation) and the telemetry sink. Absent for the proxy-metered Pi harness.
    */
   usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * Per-model-call telemetry the harness lifted from the agent CLI's event stream
+   * (Claude Code / Codex), recorded by the backend into `llm_call_metrics` — the
+   * proxy-bypassing analogue of the per-call rows the LLM proxy writes for Pi. Absent
+   * for the proxy-metered Pi harness. See {@link HarnessCallMetric}.
+   */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /**

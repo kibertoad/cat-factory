@@ -152,8 +152,9 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
   // the populated `.env` the CLI writes for that provider.
   const tokenLines =
     provider === 'gitlab' ? ['# GITHUB_PAT=', 'GITLAB_PAT='] : ['GITHUB_PAT=', '# GITLAB_PAT=']
-  // Mirror the execution mode: native shows LOCAL_NATIVE_AGENTS + LOCAL_HARNESS_ENTRY active;
-  // pool shows them commented (with the warm-pool pointer to the UI).
+  // Mirror the execution mode: native shows LOCAL_NATIVE_AGENTS active (LOCAL_HARNESS_ENTRY is
+  // optional — it defaults to the bundled harness); pool shows them commented (with the
+  // warm-pool pointer to the UI).
   const nativeList = nativeHarnesses?.length ? nativeHarnesses.join(',') : 'claude-code,codex'
   const executionLines =
     executionMode === 'native'
@@ -162,15 +163,15 @@ export const localEnvExample = (input: LocalEnvExampleInput = {}): string => {
           '# (Claude via claude-code, ChatGPT via codex) run as a host process driving your own',
           '# installed CLI. Every other model still runs in a container (LOCAL_HARNESS_IMAGE).',
           `LOCAL_NATIVE_AGENTS=${nativeList}`,
-          '# REQUIRED for native mode: the executor-harness server entry path.',
-          'LOCAL_HARNESS_ENTRY=',
+          '# The harness server entry defaults to the bundled @cat-factory/executor-harness;',
+          '# uncomment only to point at a custom or source-checkout build.',
+          '# LOCAL_HARNESS_ENTRY=',
         ]
       : [
           '# Execution mode: PREWARMED DOCKER POOL — per-run containers from LOCAL_HARNESS_IMAGE.',
           '# Warm-pool sizing lives in the UI (Integrations > "Local mode"); recommended: size 3,',
-          '# pre-warm 1, idle 10m. To switch to native host agents instead, set these two:',
+          '# pre-warm 1, idle 10m. To switch to native host agents instead, set:',
           '# LOCAL_NATIVE_AGENTS=claude-code,codex',
-          '# LOCAL_HARNESS_ENTRY=',
         ]
   return `# Example env for the local-mode backend. Copy to \`.env\` (gitignored) and fill in.
 # \`cat-factory init\` generates a populated \`.env\` for you; this is the documented template

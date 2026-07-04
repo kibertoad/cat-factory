@@ -9,6 +9,8 @@ import type {
   RunRepoContext,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
+import { createAppCaches } from '@cat-factory/caching'
+import type { AppCaches } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import type { AccountRepository, MembershipRepository } from '@cat-factory/kernel'
 import type {
@@ -82,12 +84,14 @@ import type {
   ServiceFragmentDefaultsRepository,
   NotificationChannel,
   NotificationRepository,
+  InitiativeRepository,
   PipelineScheduleRepository,
   PullRequestMerger,
   BranchUpdater,
   ResolveBinaryArtifactStore,
   ObservabilityConnectionRepository,
   IncidentEnrichmentConnectionRepository,
+  PackageRegistryConnectionRepository,
   ReleaseHealthConfigRepository,
   TicketTrackerProvider,
   IssueWritebackProvider,
@@ -110,6 +114,7 @@ import type {
   IssueProjectionRepository,
   PullRequestProjectionRepository,
   RepoProjectionRepository,
+  UserRepoAccessRepository,
 } from '@cat-factory/kernel'
 import { BoardService } from './modules/board/BoardService.js'
 import { ExecutionService } from './modules/execution/ExecutionService.js'
@@ -156,12 +161,16 @@ import {
   type DeployJobClient,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
+  type UserSecretKindRegistry,
 } from '@cat-factory/integrations'
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
-import { TesterQualityReviewService } from './modules/execution/TesterQualityReviewService.js'
+import {
+  TesterQualityReviewService,
+  type TesterQualityReviewer,
+} from './modules/execution/TesterQualityReviewService.js'
 import { KaizenService } from './modules/kaizen/KaizenService.js'
 import { ClarityReviewService } from './modules/clarity/ClarityReviewService.js'
 import { BrainstormService } from './modules/brainstorm/BrainstormService.js'
@@ -171,6 +180,7 @@ import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
+import { PackageRegistryService } from './modules/packageRegistries/PackageRegistryService.js'
 import { PreviewService, type BuildPreviewJob } from './modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from './modules/incidentEnrichment/IncidentEnrichmentService.js'
 import type { AccountSettingsService } from '@cat-factory/integrations'
@@ -181,6 +191,9 @@ import {
 import { ServiceFragmentDefaultsService } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from './modules/recurring/RecurringPipelineService.js'
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
+import { InitiativeService } from './modules/initiative/InitiativeService.js'
+import { InitiativeLoopService } from './modules/initiative/InitiativeLoopService.js'
+import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
   FragmentLibraryService,
@@ -373,6 +386,11 @@ export interface CoreDependencies {
   issueProjectionRepository?: IssueProjectionRepository
   commitProjectionRepository?: CommitProjectionRepository
   checkRunProjectionRepository?: CheckRunProjectionRepository
+  /**
+   * The per-user "repos my PAT can reach" projection. When wired, the repo picker expands with
+   * the viewer's PAT-reachable repos (recording their access for the board redaction). Optional.
+   */
+  userRepoAccessRepository?: UserRepoAccessRepository
   webhookVerifier?: WebhookVerifier
   /**
    * Bounds the initial commit backfill window (see GitHubSyncService). The worker
@@ -528,6 +546,14 @@ export interface CoreDependencies {
    * `kubernetes` kinds (`defaultRunnerBackendRegistry()`).
    */
   runnerBackendRegistry?: RunnerBackendRegistry
+  /**
+   * The app-owned registry of per-user secret KINDS (a GitHub PAT built-in today). Carried on
+   * the dependency bag so each facade reads the SAME instance off `overrides` and threads it
+   * into its `UserSecretService` (an integrations service built directly by the facade, not by
+   * `createCore`). A deployment registers a custom kind by reference. Absent ⇒ a fresh registry
+   * with just the built-in `github_pat` kind (`defaultUserSecretKindRegistry()`).
+   */
+  userSecretKindRegistry?: UserSecretKindRegistry
   // URL/host safety policy for the RUNNER-POOL integration (the scheduler baseUrl).
   // Absent => strict. Scoped independently of `environmentUrlSafetyPolicy` so an
   // operator widening the env allow-list does not silently widen the pool's SSRF guard.
@@ -600,6 +626,14 @@ export interface CoreDependencies {
    */
   requirementReviewResolveModel?: (modelId: string | undefined) => ModelRef | undefined
   /**
+   * Override the test quality-control companion's inline reviewer. Normally `createCore`
+   * builds a {@link TesterQualityReviewService} from the model-provider deps; injecting a
+   * reviewer here replaces that (the cross-runtime conformance suite drives the full QC loop
+   * through a deterministic fake reviewer this way). Absent ⇒ the reviewer is built from the
+   * model deps, or is a pass-through when no model resolves.
+   */
+  testerQualityReviewer?: TesterQualityReviewer
+  /**
    * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as
    * an INLINE LLM call in this deployment — true only in local mode, where the developer's
    * ambient CLI login is driven as a host subprocess. Threaded into every inline service
@@ -617,6 +651,15 @@ export interface CoreDependencies {
   // fragments additionally need `fragmentSourceRepository`, the `githubClient`
   // (above) and an installation resolver. `fragmentSelector` is optional within
   // the module: absent → the deterministic matcher; present → the LLM selector.
+  /**
+   * The app-owned cache bag (docs/initiatives/caching-layer.md). A facade builds
+   * it once per process via `createAppCaches` — Node threads in the Redis-backed
+   * invalidation notifications in multi-node deployments, the Worker passes the
+   * isolate-safe profile. Absent (tests / harnesses) ⇒ `createCore` builds bare
+   * in-memory defaults, whose coherence the services' own invalidation calls keep.
+   */
+  caches?: AppCaches
+
   promptFragmentRepository?: PromptFragmentRepository
   fragmentSourceRepository?: FragmentSourceRepository
   fragmentSelector?: FragmentSelector
@@ -628,8 +671,6 @@ export interface CoreDependencies {
    * document as a fragment is rejected and run resolution uses cached bodies.
    */
   documentContentResolver?: DocumentContentResolver
-  /** Freshness window for a document-backed fragment body; defaults to 5 min. */
-  documentFragmentTtlMs?: number
 
   // ---- Notifications + merge lifecycle (optional; wired when configured) ----
   // The notifications subsystem (the in-app inbox + the board's human-action
@@ -687,6 +728,10 @@ export interface CoreDependencies {
   incidentEnrichmentConnectionRepository?: IncidentEnrichmentConnectionRepository
   /** Seals incident-enrichment creds at rest (domain tag 'cat-factory:incident-enrichment'). */
   incidentEnrichmentSecretCipher?: SecretCipher
+  /** Stores a workspace's private package-registry entries (sealed npm/GitHub Packages tokens). */
+  packageRegistryConnectionRepository?: PackageRegistryConnectionRepository
+  /** Seals registry tokens at rest (domain tag 'cat-factory:package-registries'). */
+  packageRegistrySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
@@ -735,6 +780,15 @@ export interface CoreDependencies {
    * service-level fragments, and `code-aware` agents only see the block's own pins.
    */
   serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+
+  // ---- Initiatives (optional; wired when the repository is present) ----------
+  /**
+   * Persistence for initiatives (the long-running multi-task work container).
+   * When present the initiatives module assembles: the create/read API, the
+   * planning pipeline's plan ingest, and the committer step's tracker mirror.
+   * Absent → the module is off and the initiative pipeline steps fail loudly.
+   */
+  initiativeRepository?: InitiativeRepository
 
   // ---- Recurring pipelines + issue tracker (optional; wired when configured) -
   // The recurring-pipeline feature (scheduled runs of a pipeline against a
@@ -866,6 +920,11 @@ export interface ReleaseHealthModule {
   service: ReleaseHealthService
 }
 
+/** The private package-registry settings service, present only when wired. */
+export interface PackageRegistriesModule {
+  service: PackageRegistryService
+}
+
 /** The browsable-frontend-preview service, present only when a preview transport is wired. */
 export interface PreviewModule {
   service: PreviewService
@@ -921,6 +980,13 @@ export interface RecurringModule {
   service: RecurringPipelineService
 }
 
+/** The initiatives feature's service + execution loop, present only when its repository is wired. */
+export interface InitiativesModule {
+  service: InitiativeService
+  /** The execution loop (slice 3): tick/runDue driven by the cron seams + terminal pokes. */
+  loop: InitiativeLoopService
+}
+
 /** The issue-tracker-settings feature's service, present only when its repository is wired. */
 export interface TrackerModule {
   service: TrackerSettingsService
@@ -929,9 +995,11 @@ export interface TrackerModule {
 /** The prompt-fragment library's services, present only when configured (ADR 0006). */
 export interface FragmentLibraryModule {
   /**
-   * Per-tier CRUD + the merged-catalog resolver. A management surface only: the run
-   * path no longer consumes it (service-scoped `serviceFragmentIds` folded into
-   * `code-aware` agents replaced the automatic per-run relevance selector).
+   * Per-tier CRUD + the merged-catalog resolver. The run path consumes it through
+   * `resolveBodiesForRun` (wired as the engine's `fragmentResolver`), so an already-
+   * selected id — a frame's `serviceFragmentIds` / a block pin — resolves against the
+   * merged tenant catalog (managed + document-backed fragments included). Only the
+   * automatic per-run relevance selector (`resolveForRun`) is retired from the run path.
    */
   libraryService: FragmentLibraryService
   /** Repo-sourced fragments; present only when the GitHub client + source repo are wired. */
@@ -991,6 +1059,8 @@ export interface Core {
   notifications?: NotificationsModule
   /** Present only when the Datadog connection + release-health config repos + cipher are wired. */
   releaseHealth?: ReleaseHealthModule
+  /** Present only when the package-registry connection repo + cipher are wired. */
+  packageRegistries?: PackageRegistriesModule
   /** Present only when a preview transport + job builder are wired (local/node — see CoreDependencies). */
   preview?: PreviewModule
   /** Present only when the incident-enrichment connection repo + cipher are wired. */
@@ -1011,6 +1081,8 @@ export interface Core {
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
   fragmentLibrary?: FragmentLibraryModule
+  /** Present only when the initiative repository is wired (see CoreDependencies). */
+  initiatives?: InitiativesModule
   /** Present only when the recurring-pipeline repository is wired (see CoreDependencies). */
   recurring?: RecurringModule
   /** Present only when the tracker-settings repository is wired (see CoreDependencies). */
@@ -1041,7 +1113,7 @@ function createServicesModule(deps: CoreDependencies): ServicesModule | undefine
  * Assemble the GitHub module when every dependency it needs is present;
  * otherwise return undefined so the feature stays cleanly opt-in.
  */
-function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
+function createGitHubModule(deps: CoreDependencies, caches: AppCaches): GitHubModule | undefined {
   const {
     githubClient,
     githubInstallationRepository,
@@ -1084,8 +1156,11 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     issueProjectionRepository,
     commitProjectionRepository,
     checkRunProjectionRepository,
+    userRepoAccessRepository: deps.userRepoAccessRepository,
     clock: deps.clock,
     commitBackfillHorizonMs: deps.commitBackfillHorizonMs,
+    // Drop a workspace's cached repo projection (slice 3) after any link/sync write.
+    repoProjectionCache: caches.repoProjection,
   })
   const webhookService = new WebhookService({
     githubInstallationRepository,
@@ -1096,6 +1171,7 @@ function createGitHubModule(deps: CoreDependencies): GitHubModule | undefined {
     commitProjectionRepository,
     checkRunProjectionRepository,
     clock: deps.clock,
+    repoProjectionCache: caches.repoProjection,
   })
   const service = new GitHubService({
     githubClient,
@@ -1462,6 +1538,7 @@ function createTesterQualityReviewer(
 function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
+  fragmentLibrary?: FragmentLibraryModule,
 ): RequirementsModule | undefined {
   const { requirementReviewRepository } = deps
   if (!requirementReviewRepository) return undefined
@@ -1503,7 +1580,9 @@ function createRequirementsModule(
     resolveRunRepoContext: deps.resolveRunRepoContext,
     // …and on the block's best-practice fragments (team/org standards), checked FIRST. Walk
     // the owning frame's service standards then union the block's own pins (same precedence
-    // as the agent context builder), resolved against the universal fragment pool.
+    // as the agent context builder), resolved against the merged tenant catalog when the
+    // fragment library is wired (so managed + document-backed fragments ground the review
+    // exactly like they reach a code-aware run), else the static universal pool.
     resolveBlockFragments: async (workspaceId: string, blockId: string) => {
       const block = await deps.blockRepository.get(workspaceId, blockId)
       if (!block) return []
@@ -1524,6 +1603,18 @@ function createRequirementsModule(
         current = await deps.blockRepository.get(workspaceId, current.parentId)
       }
       for (const id of block.fragmentIds ?? []) add(id)
+      if (fragmentLibrary) {
+        // Resolve the merged tenant catalog ONCE and reuse it for both the titles map and
+        // the body resolution (which would otherwise re-resolve the same catalog).
+        const catalog = await fragmentLibrary.libraryService.resolveCatalog(workspaceId)
+        const titles = new Map(catalog.map((e) => [e.id, e.title]))
+        const bodies = await fragmentLibrary.libraryService.resolveBodiesForRun(
+          workspaceId,
+          ids,
+          catalog,
+        )
+        return bodies.map(({ id, body }) => ({ id, title: titles.get(id) ?? id, body }))
+      }
       const out: { id: string; title: string; body: string }[] = []
       for (const id of ids) {
         const fragment = getFragment(id)
@@ -1713,6 +1804,7 @@ function createClarityModule(
 function createFragmentLibraryModule(
   deps: CoreDependencies,
   documentContentResolver: DocumentContentResolver | undefined,
+  caches: AppCaches,
 ): FragmentLibraryModule | undefined {
   const { promptFragmentRepository } = deps
   if (!promptFragmentRepository) return undefined
@@ -1725,7 +1817,8 @@ function createFragmentLibraryModule(
     // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
     // one the document-source module built from this deployment's providers.
     documentContentResolver: deps.documentContentResolver ?? documentContentResolver,
-    documentFragmentTtlMs: deps.documentFragmentTtlMs,
+    catalogCache: caches.fragmentCatalog,
+    documentBodyCache: caches.fragmentDocumentBody,
   })
 
   const sourceService =
@@ -1737,6 +1830,10 @@ function createFragmentLibraryModule(
           resolveInstallationId: deps.resolveFragmentInstallationId,
           idGenerator: deps.idGenerator,
           clock: deps.clock,
+          // A sync/unlink mutates the same catalog the library caches — route its
+          // invalidation through the library so the eviction policy stays in one place.
+          invalidateCatalog: (ownerKind, ownerId) =>
+            libraryService.invalidateCatalogTier(ownerKind, ownerId),
         })
       : undefined
 
@@ -1903,6 +2000,24 @@ function createReleaseHealthModule(deps: CoreDependencies): ReleaseHealthModule 
   return { service }
 }
 
+/** Assemble the package-registries module when its repo + cipher are present. */
+function createPackageRegistriesModule(
+  deps: CoreDependencies,
+): PackageRegistriesModule | undefined {
+  const { packageRegistryConnectionRepository, packageRegistrySecretCipher } = deps
+  if (!packageRegistryConnectionRepository || !packageRegistrySecretCipher) {
+    return undefined
+  }
+  const service = new PackageRegistryService({
+    packageRegistryConnectionRepository,
+    packageRegistrySecretCipher,
+    workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+    idGenerator: deps.idGenerator,
+  })
+  return { service }
+}
+
 /**
  * Assemble the browsable-frontend-preview module when its per-runtime transport + the facade's
  * job builder + the env registry are all wired (local/node with a host-port-publish runtime).
@@ -2002,10 +2117,21 @@ function createRecurringModule(
 export function createCore(dependencies: CoreDependencies): Core {
   const workRunner = dependencies.workRunner ?? new NoopWorkRunner()
   const executionEventPublisher = dependencies.executionEventPublisher ?? new NoopEventPublisher()
+  // The cache bag the caching-initiative slices read through. A facade passes its own
+  // (Redis-notified on multi-node Node, isolate-safe on the Worker); tests and harnesses
+  // fall back to bare in-memory loaders, so the cached path — including the services'
+  // write-site invalidation — is exercised everywhere. Built here (before the services that
+  // invalidate through it) so it can be threaded into all of them.
+  const caches = dependencies.caches ?? createAppCaches()
   // Pass the resolved publisher so board mutations push a coarse `boardChanged` to every
   // user on the workspace (and every board mounting a shared service) — both facades route
-  // here, so the wiring is symmetric by construction.
-  const boardService = new BoardService({ ...dependencies, executionEventPublisher })
+  // here, so the wiring is symmetric by construction. The repo-projection cache lets
+  // `addServiceFromRepo`'s monorepo-flag write invalidate the same group the resolver reads.
+  const boardService = new BoardService({
+    ...dependencies,
+    executionEventPublisher,
+    repoProjectionCache: caches.repoProjection,
+  })
   const workspaceService = new WorkspaceService(dependencies)
   const accountService = new AccountService({
     accountRepository: dependencies.accountRepository,
@@ -2068,6 +2194,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         clock: dependencies.clock,
         recordPrompts: dependencies.recordLlmPrompts ?? true,
         traceSink: dependencies.llmTraceSink,
+        workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
       })
     : undefined
   // The provisioning event log lives in a separate high-churn store. When its
@@ -2094,7 +2221,11 @@ export function createCore(dependencies: CoreDependencies): Core {
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = createDocumentsModule(dependencies, boardService)
-  const fragmentLibrary = createFragmentLibraryModule(dependencies, documents?.contentResolver)
+  const fragmentLibrary = createFragmentLibraryModule(
+    dependencies,
+    documents?.contentResolver,
+    caches,
+  )
 
   // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
   // board service + block repository (both always present), so it is wired
@@ -2113,24 +2244,74 @@ export function createCore(dependencies: CoreDependencies): Core {
   // enforced at start() (and the escalation sweep can read the waiting threshold).
   const settings = createWorkspaceSettingsModule(dependencies)
   const releaseHealth = createReleaseHealthModule(dependencies)
+  const packageRegistries = createPackageRegistriesModule(dependencies)
   const preview = createPreviewModule(dependencies)
   const incidentEnrichmentSettings = createIncidentEnrichmentModule(dependencies)
   const modelPresets = createModelPresetsModule(dependencies)
   const serviceFragmentDefaults = createServiceFragmentDefaultsModule(dependencies)
+  // Built before the execution engine so the planning pipeline's plan ingest + the
+  // committer step's tracker mirror can run through it.
+  const initiativeService = dependencies.initiativeRepository
+    ? new InitiativeService({
+        workspaceRepository: dependencies.workspaceRepository,
+        blockRepository: dependencies.blockRepository,
+        initiativeRepository: dependencies.initiativeRepository,
+        events: executionEventPublisher,
+        clock: dependencies.clock,
+        idGenerator: dependencies.idGenerator,
+        // Validate the plan's pipeline ids at ingest (fail a plan that names a missing pipeline
+        // loudly during planning, rather than surfacing it as a per-item spawn deviation later).
+        pipelineRepository: dependencies.pipelineRepository,
+      })
+    : undefined
+  // The interactive-planning interviewer's inline LLM (slice 2). Resolves its model exactly
+  // like the requirements reviewer — the routing default, honouring a block pin and the
+  // workspace's model preset for the `initiative-interviewer` kind — so it needs no dedicated
+  // facade wiring. `enabled` gates it: with no model provider the interviewer gate passes
+  // through and planning runs off the raw block description.
+  const initiativeInterviewService = new InitiativeInterviewService({
+    modelProviderResolver: dependencies.modelProviderResolver,
+    modelProvider: dependencies.modelProvider,
+    modelRef: dependencies.requirementReviewModel ?? dependencies.documentPlannerModel,
+    resolveBlockModel: dependencies.requirementReviewResolveModel,
+    ...(dependencies.inlineHarnessRef ? { runsInline: dependencies.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: dependencies.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            dependencies.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
-  const requirements = createRequirementsModule(dependencies, notifications?.service)
+  const requirements = createRequirementsModule(
+    dependencies,
+    notifications?.service,
+    fragmentLibrary,
+  )
   const clarity = createClarityModule(dependencies, notifications?.service)
   const brainstorm = createBrainstormModule(dependencies, notifications?.service)
   // Built before the execution engine so the engine's terminal hook can schedule a
   // post-run Kaizen grading for each completed agent step.
   const kaizen = createKaizenModule(dependencies)
 
+  // Late-bound so the engine's terminal hooks can poke the execution loop, which is built AFTER
+  // the engine (the loop depends on `executionService.start`). Fire-and-forget; a null ref (the
+  // loop unwired, or the settled block not part of an initiative) is a no-op.
+  let initiativeLoopRef: InitiativeLoopService | undefined
+  const pokeInitiativeLoop = (workspaceId: string, initiativeBlockId: string): void => {
+    void initiativeLoopRef?.pokeForInitiativeBlock(workspaceId, initiativeBlockId)
+  }
+
   const executionService = new ExecutionService({
     ...dependencies,
     workRunner,
     executionEventPublisher,
     boardService,
+    pokeInitiativeLoop,
     spendService,
     // Route runtime fragment-id resolution through the merged tenant catalog (so
     // managed + document-backed fragments reach a run), present only when the
@@ -2153,7 +2334,8 @@ export function createCore(dependencies: CoreDependencies): Core {
     // The test quality-control companion's inline reviewer, resolved like every other inline
     // review (block pin → workspace preset → routing default). Built only when a model
     // provider is available; absent → the Tester gate's QC step is a pass-through.
-    testerQualityReviewer: createTesterQualityReviewer(dependencies),
+    testerQualityReviewer:
+      dependencies.testerQualityReviewer ?? createTesterQualityReviewer(dependencies),
     clarityReviewService: clarity?.service,
     brainstormServices: brainstorm?.services,
     kaizenScheduler: kaizen?.service,
@@ -2161,6 +2343,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     environmentTeardown: environments?.teardownService,
     branchUpdater: dependencies.branchUpdater,
     blueprintReconciler,
+    initiativeService,
+    initiativeRepository: dependencies.initiativeRepository,
+    initiativeInterviewService,
     notificationService: notifications?.service,
     workspaceSettingsService: settings?.service,
     llmObservability,
@@ -2180,7 +2365,7 @@ export function createCore(dependencies: CoreDependencies): Core {
       : undefined,
   })
 
-  const github = createGitHubModule(dependencies)
+  const github = createGitHubModule(dependencies, caches)
   const tasks = createTasksModule(dependencies, boardService)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
@@ -2190,6 +2375,31 @@ export function createCore(dependencies: CoreDependencies): Core {
   )
   const tracker = createTrackerModule(dependencies)
   const recurring = createRecurringModule(dependencies, executionService)
+  // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
+  // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
+  // settling child run advances its owning initiative immediately. Present only when initiatives
+  // are wired; the cron/interval sweepers call `loop.runDue`.
+  const initiativeLoop =
+    initiativeService && dependencies.initiativeRepository
+      ? new InitiativeLoopService({
+          initiativeRepository: dependencies.initiativeRepository,
+          initiativeService,
+          blockRepository: dependencies.blockRepository,
+          pipelineRepository: dependencies.pipelineRepository,
+          executionService,
+          events: executionEventPublisher,
+          clock: dependencies.clock,
+          idGenerator: dependencies.idGenerator,
+          notificationService: notifications?.service,
+          resolveRunRepoContext: dependencies.resolveRunRepoContext,
+          serviceRepository: dependencies.serviceRepository,
+        })
+      : undefined
+  initiativeLoopRef = initiativeLoop
+  const initiatives =
+    initiativeService && initiativeLoop
+      ? { service: initiativeService, loop: initiativeLoop }
+      : undefined
   const services = createServicesModule(dependencies)
 
   return {
@@ -2226,6 +2436,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
+    ...(packageRegistries ? { packageRegistries } : {}),
     ...(preview ? { preview } : {}),
     ...(incidentEnrichmentSettings ? { incidentEnrichmentSettings } : {}),
     ...(dependencies.accountSettings
@@ -2234,6 +2445,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(modelPresets ? { modelPresets } : {}),
     ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
     ...(fragmentLibrary ? { fragmentLibrary } : {}),
+    ...(initiatives ? { initiatives } : {}),
     ...(recurring ? { recurring } : {}),
     ...(tracker ? { tracker } : {}),
     ...(services ? { services } : {}),

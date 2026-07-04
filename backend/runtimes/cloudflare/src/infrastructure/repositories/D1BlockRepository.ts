@@ -69,6 +69,29 @@ export class D1BlockRepository implements BlockRepository {
     }
   }
 
+  async findByIds(
+    blockIds: string[],
+  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>> {
+    if (blockIds.length === 0) return []
+    const out: Array<{ workspaceId: string; serviceId: string | null; block: Block }> = []
+    // Chunk the IN list to stay under D1's bound-parameter limit.
+    for (const chunk of chunkForIn(blockIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(`SELECT * FROM blocks WHERE id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<BlockRow & { workspace_id: string; service_id: string | null }>()
+      for (const row of results ?? []) {
+        out.push({
+          workspaceId: row.workspace_id,
+          serviceId: row.service_id ?? null,
+          block: rowToBlock(row),
+        })
+      }
+    }
+    return out
+  }
+
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
     const values = {
       workspace_id: workspaceId,
@@ -112,5 +135,15 @@ export class D1BlockRepository implements BlockRepository {
       .prepare(`DELETE FROM blocks WHERE workspace_id = ? AND id IN (${placeholders})`)
       .bind(workspaceId, ...ids)
       .run()
+  }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const row = await this.db
+      .prepare(
+        "SELECT COUNT(*) AS n FROM blocks WHERE workspace_id = ? AND internal = 1 AND status = 'in_progress'",
+      )
+      .bind(workspaceId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
   }
 }

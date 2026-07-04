@@ -24,9 +24,11 @@ import {
   type BackendRegistries,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
+  type UserSecretKindRegistry,
   HttpRunnerPoolProvider,
   NotionProvider,
   ApiKeyService,
+  PublicApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
   usdRateForSpendCurrency,
@@ -82,11 +84,17 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   createCore,
+  PACKAGE_REGISTRY_CIPHER_INFO,
+  resolvePackageRegistriesForDispatch,
+  type HarnessCallsRecordInput,
+  LlmObservabilityService,
+  makeHarnessCallRecorder,
   resolvePresetModelForKind,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   type AppConfig,
+  type JobPackageRegistrySpec,
   type MintInstallationToken,
   type ResolveRepoOrigin,
   type ResolveRepoTarget,
@@ -149,7 +157,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import type { PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
+import type { AppCaches, PreviewTransport, VcsIdentityRegistry } from '@cat-factory/kernel'
 import type { PgBoss } from 'pg-boss'
 import { loadNodeConfig } from './config.js'
 import type { DrizzleDb } from './db/client.js'
@@ -160,7 +168,7 @@ import { PgBossWorkRunner } from './execution/pgBossRunner.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode, createNodeModelProviderResolver } from './modelProvider.js'
 import { ConsensusAgentExecutor, registerConsensusTraits } from '@cat-factory/consensus'
-import { NodeEventPublisher, type NodeRealtimeHub } from './realtime.js'
+import { type LocalEventSink, NodeEventPublisher } from './realtime.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -175,12 +183,14 @@ import {
 } from './repositories/github.js'
 import { DrizzleProviderSubscriptionTokenRepository } from './repositories/providerSubscription.js'
 import { DrizzleProviderApiKeyRepository } from './repositories/providerApiKey.js'
+import { DrizzlePublicApiKeyRepository } from './repositories/publicApiKey.js'
 import {
   DrizzlePersonalSubscriptionRepository,
   DrizzleSubscriptionActivationRepository,
 } from './repositories/personalSubscription.js'
 import { DrizzleLocalModelEndpointRepository } from './repositories/localModelEndpoint.js'
 import { DrizzleUserSecretRepository } from './repositories/userSecret.js'
+import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
 import { DrizzleProviderModelCatalogRepository } from './repositories/providerModelCatalog.js'
 import { createDrizzleRepositories, createDrizzleSandboxDeps } from './repositories/drizzle.js'
 import { PostgresBinaryBlobBackend } from './storage/PostgresBinaryBlobBackend.js'
@@ -622,14 +632,23 @@ export interface NodeContainerOptions {
    */
   gateProviders?: GateProviderOverrides
   /**
-   * The real-time subscriber registry. When provided, the container wires a
+   * The real-time delivery sink. When provided, the container wires a
    * {@link NodeEventPublisher} (so the engine pushes execution/board/notification events
-   * to subscribed browsers) and composes an in-app notification channel. `start()`
-   * creates the hub and attaches it to the HTTP server via {@link attachRealtime};
-   * `createServer`/tests leave it unset and the engine falls back to the no-op publisher
-   * (no live push), exactly as before.
+   * to subscribed browsers) and composes an in-app notification channel. `start()` passes
+   * the layered propagator here (the local hub + any cross-node adapter such as Redis) and
+   * attaches the hub itself to the HTTP server via {@link attachRealtime}; a single-node /
+   * local boot passes the bare hub. `createServer`/tests leave it unset and the engine
+   * falls back to the no-op publisher (no live push), exactly as before.
    */
-  realtimeHub?: NodeRealtimeHub
+  realtimeSink?: LocalEventSink
+  /**
+   * The app-owned cache bag (docs/initiatives/caching-layer.md). `start()` builds it once
+   * per process via `createAppCaches` — with the Redis-backed invalidation notification
+   * factory when `REDIS_URL` is set (multi-node), bare in-memory otherwise — and owns its
+   * shutdown. `createServer`/tests leave it unset and `createCore` builds bare in-memory
+   * defaults, so single-process coherence (write-site invalidation) still holds.
+   */
+  caches?: AppCaches
   /**
    * Override the shared HTTP provider the built-in `manifest` runner backend dispatches/tests
    * through (its OAuth cache reused), e.g. for tests. This is NOT the custom-kind seam: a
@@ -772,6 +791,8 @@ function buildNodeContainerExecutor(
   agentContextObservability?: AgentContextObservabilityService,
   resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
   resolveRepoOrigin?: ResolveRepoOrigin,
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
+  recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
 ): AgentExecutor | null {
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
   // is this service's externally reachable base (the runner pool / local container
@@ -832,6 +853,9 @@ function buildNodeContainerExecutor(
             subscriptions.hasToken(workspaceId, vendor),
         }
       : {}),
+    // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
+    // into `llm_call_metrics` alongside the proxy-metered Pi rows.
+    ...(recordHarnessCalls ? { recordHarnessCalls } : {}),
     // Individual-usage harnesses (Claude) lease the run-initiator's OWN activated
     // personal credential; absent ⇒ such models fail loudly at dispatch.
     ...(personalSubscriptions
@@ -867,6 +891,9 @@ function buildNodeContainerExecutor(
     // the sandbox), but only for a run whose account has keys (resolved per run — see the
     // call site), so the tool is never advertised to a run where it would just fail.
     ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    // Decrypt the workspace's private-registry entries onto the job body (rendered by
+    // the harness into ~/.npmrc), so private dependencies resolve on install.
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab
     // origin so containers clone gitlab.com (or a self-managed host) and open MRs; absent ⇒
@@ -900,8 +927,12 @@ function selectNodeRepoBootstrapper(deps: {
     typeof ContainerRepoBootstrapper
   >[0]['bootstrapJobRepository']
   repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
+  repoProjectionCache?: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['repoProjectionCache']
   githubClient: GitHubClient | undefined
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
 }): ContainerRepoBootstrapper | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
   const sessionSecret = deps.config.auth.sessionSecret
@@ -919,12 +950,18 @@ function selectNodeRepoBootstrapper(deps: {
     installationRepository: deps.installationRepository,
     bootstrapJobRepository: deps.bootstrapJobRepository,
     repoRepository: deps.repoRepository,
+    ...(deps.repoProjectionCache ? { repoProjectionCache: deps.repoProjectionCache } : {}),
     githubClient: deps.githubClient,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     model: resolveAgentConfig(deps.config.agents.routing, 'architect').ref,
     proxyBaseUrl: `${publicUrl.replace(/\/+$/, '')}/v1`,
     githubApiBase: deps.config.github.apiBase,
+    // The scaffolder installs dependencies too — forward the workspace's
+    // private-registry entries exactly as the implementation executor does.
+    ...(deps.resolvePackageRegistries
+      ? { resolvePackageRegistries: deps.resolvePackageRegistries }
+      : {}),
   })
 }
 
@@ -1056,6 +1093,28 @@ function buildNodeApiKeyService(
 }
 
 /**
+ * Build the INBOUND public-API key store for the Node/local facade (Postgres-backed), or
+ * undefined when the shared ENCRYPTION_KEY is absent. Uses ENCRYPTION_KEY as the HMAC pepper for
+ * the one-way secret hash (a public-API key is verified, never decrypted). Mirrors the Worker's
+ * buildPublicApiKeyService.
+ */
+function buildNodePublicApiKeyService(
+  env: NodeJS.ProcessEnv,
+  db: DrizzleDb | undefined,
+  idGenerator: CoreDependencies['idGenerator'],
+  clock: Clock,
+): PublicApiKeyService | undefined {
+  const pepper = env.ENCRYPTION_KEY?.trim()
+  if (!pepper || !db) return undefined
+  return new PublicApiKeyService({
+    repository: new DrizzlePublicApiKeyRepository(db),
+    pepper,
+    idGenerator,
+    clock,
+  })
+}
+
+/**
  * Build the per-USER individual-usage subscription service (Claude) for the Node/local
  * facade (Postgres-backed), or undefined when the shared ENCRYPTION_KEY is absent.
  * Double-encrypts the credential (password layer inside the system layer). Mirrors the
@@ -1092,6 +1151,7 @@ function buildNodeUserSecretService(
   env: NodeJS.ProcessEnv,
   db: DrizzleDb | undefined,
   clock: Clock,
+  userSecretKindRegistry: UserSecretKindRegistry,
 ): UserSecretService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
   // No Postgres (mothership mode): the per-user secret store is not yet a local-sqlite
@@ -1101,6 +1161,7 @@ function buildNodeUserSecretService(
     userSecretRepository: new DrizzleUserSecretRepository(db),
     secretCipher: new WebCryptoSecretCipher({ masterKeyBase64, info: 'cat-factory:user-secret' }),
     clock,
+    userSecretKindRegistry,
   })
 }
 
@@ -1271,8 +1332,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // injected into the engine + surfaced on the container for the snapshot's backend-kind
   // selectors. A deployment registers a custom backend by reference; the conformance suite
   // injects a pre-loaded registry. Defaults to just the built-in `manifest`/`kubernetes` kinds.
-  const { environmentBackendRegistry, runnerBackendRegistry, customManifestTypeRegistry } =
-    options.backendRegistries ?? createBackendRegistries()
+  const {
+    environmentBackendRegistry,
+    runnerBackendRegistry,
+    customManifestTypeRegistry,
+    userSecretKindRegistry,
+  } = options.backendRegistries ?? createBackendRegistries()
 
   // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
   // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
@@ -1374,6 +1439,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     options.providerApiKeyRepository,
   )
+  // The inbound public-API key store — drives the public `/api/v1` surface's authentication.
+  const publicApiKeys = buildNodePublicApiKeyService(env, db, idGenerator, clock)
   // The per-user locally-run model endpoints store (Ollama / LM Studio / …), shared by
   // the local-runner controller, the per-user model catalog, the inline model provider,
   // and the LLM proxy.
@@ -1385,7 +1452,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   )
   // The per-user generic secret store (a GitHub PAT today), shared by the user-secret
   // controller and the run-initiator PAT resolver below.
-  const userSecrets = buildNodeUserSecretService(env, db, clock)
+  const userSecrets = buildNodeUserSecretService(env, db, clock, userSecretKindRegistry)
   // Resolve the run initiator's stored GitHub PAT (when set) — preferred over the
   // App/env token by the container push-token mint + the engine GitHub client.
   const resolveUserGitHubToken: ResolveUserGitHubToken | undefined = userSecrets
@@ -1460,6 +1527,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
     // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
     serviceRepository: repos.serviceRepository,
+    // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
+    // module + bootstrapper invalidate the same bag on every projection write.
+    repoProjectionCache: options.caches?.repoProjection,
   })
 
   // Best-effort recorder for the provisioning event log (its own Postgres schema).
@@ -1554,6 +1624,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     recordPrompts: config.observability.recordPrompts,
   })
+  // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
+  // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
+  // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
+  const recordHarnessCalls = makeHarnessCallRecorder(
+    new LlmObservabilityService({
+      llmCallMetricRepository: repos.llmCallMetricRepository,
+      idGenerator,
+      clock,
+      recordPrompts: config.observability.recordPrompts,
+    }),
+  )
   // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
   // its account actually has a usable upstream (else the tool would just fail/return
   // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
@@ -1575,6 +1656,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
       }
     : undefined
+  // Private package registries (npm private orgs, GitHub Packages): sealed per-workspace
+  // entries decrypted only at container dispatch, rendered by the harness into ~/.npmrc.
+  // The cipher is shared by the dispatch resolver here and the management service below.
+  const packageRegistryEncryptionKey = env.ENCRYPTION_KEY?.trim()
+  const packageRegistrySecretCipher = packageRegistryEncryptionKey
+    ? new WebCryptoSecretCipher({
+        masterKeyBase64: packageRegistryEncryptionKey,
+        info: PACKAGE_REGISTRY_CIPHER_INFO,
+      })
+    : undefined
+  const resolvePackageRegistries = packageRegistrySecretCipher
+    ? (workspaceId: string) =>
+        resolvePackageRegistriesForDispatch(
+          repos.packageRegistryConnectionRepository,
+          packageRegistrySecretCipher,
+          workspaceId,
+        )
+    : undefined
   const container = buildNodeContainerExecutor(
     env,
     config,
@@ -1590,6 +1689,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     agentContextObservability,
     resolveWebSearchEnabled,
     options.resolveRepoOrigin,
+    resolvePackageRegistries,
+    recordHarnessCalls,
   )
 
   // Always a composite: inline kinds run as one-shot LLM calls; repo-operating kinds
@@ -1796,6 +1897,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             'checkRunProjectionRepository',
             (d) => new DrizzleCheckRunProjectionRepository(d),
           ),
+          // Per-user PAT-reachable repo projection (picker expansion + redaction); Postgres-only,
+          // so absent in a no-DB mothership node (the picker keeps its App-only behaviour there).
+          userRepoAccessRepository: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
           webhookVerifier: new WebCryptoWebhookVerifier(config.github.webhookSecret),
           // Bound the initial backfill to the commit retention horizon (0 = full).
           commitBackfillHorizonMs: config.retention.commitMs || undefined,
@@ -1842,8 +1946,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     installationRepository: githubInstallationRepository,
     bootstrapJobRepository,
     repoRepository: repoProjectionRepository,
+    ...(options.caches?.repoProjection
+      ? { repoProjectionCache: options.caches.repoProjection }
+      : {}),
     githubClient,
     mintInstallationToken: bootstrapMintInstallationToken,
+    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
   })
 
   // Real-time push + notification delivery. When a realtime hub is wired (start()), the
@@ -1853,8 +1961,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // The in-app push is also a notification channel, composed alongside Slack (when
   // enabled) so a raised notification both lands in the inbox live AND fans to Slack.
   const slackDeps = selectNodeSlackDeps(config, db, repos)
-  const executionEventPublisher = options.realtimeHub
-    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeHub), {
+  const executionEventPublisher = options.realtimeSink
+    ? new FanOutEventPublisher(new NodeEventPublisher(options.realtimeSink), {
         workspaceMountRepository: repos.workspaceMountRepository,
       })
     : undefined
@@ -1920,6 +2028,14 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // env into a sealed per-workspace row, resolved + decrypted at enrichment time. Wired
   // whenever the shared ENCRYPTION_KEY is present (independent of the release-health gate).
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  // Per-workspace private package registries (npm private orgs, GitHub Packages): the
+  // management API over the same repo + cipher the dispatch resolver above rides.
+  const packageRegistryDeps: Partial<CoreDependencies> = packageRegistrySecretCipher
+    ? {
+        packageRegistryConnectionRepository: repos.packageRegistryConnectionRepository,
+        packageRegistrySecretCipher,
+      }
+    : {}
   const incidentEnrichmentDeps: Partial<CoreDependencies> = {}
   if (encryptionKey) {
     const incidentEnrichmentSecretCipher = new WebCryptoSecretCipher({
@@ -1987,6 +2103,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   const dependencies: CoreDependencies = {
     ...releaseHealthDeps,
     ...incidentEnrichmentDeps,
+    ...packageRegistryDeps,
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -2051,6 +2168,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     kaizenVerifiedComboRepository: repos.kaizenVerifiedComboRepository,
     clarityReviewRepository: repos.clarityReviewRepository,
     brainstormSessionRepository: repos.brainstormSessionRepository,
+    // Initiatives (the long-running multi-task work container). Wired unconditionally,
+    // mirroring the Worker's `selectMergeLifecycleDeps`, so the create/read API + the
+    // planning pipeline's ingest/committer steps work identically on both runtimes.
+    initiativeRepository: repos.initiativeRepository,
     // Merge threshold presets: the per-workspace auto-merge ceiling library a task's
     // merge gate resolves (block-pinned preset > workspace default). Wired
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
@@ -2236,6 +2357,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App/env token.
     runInitiatorScope: runWithInitiator,
+    // The process-wide cache bag from start() (Redis-notified invalidation when REDIS_URL
+    // is set). Absent ⇒ createCore builds bare in-memory defaults.
+    ...(options.caches ? { caches: options.caches } : {}),
     ...options.overrides,
   }
 
@@ -2293,9 +2417,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // these are on the board-load + run path even though the document/task INTEGRATIONS are opt-in.
   // The sub-helpers above (`selectNodeDocumentsDeps`/`selectNodeTasksDeps`) build them directly
   // over the absent `db`, so re-source the context-builder run-path repos from the remote registry —
-  // the connection/provider surfaces they also build stay db-direct (off the run path; a later
-  // integration slice remotes them). Routing is orthogonal to the allow-list: an un-allow-listed
-  // remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
+  // plus (below) the environment CONNECTION management surface. The document/task connection/provider
+  // surfaces they also build stay db-direct (a later integration slice remotes them — their
+  // credential rows would ship DECRYPTED over the RPC, an open secrets design point, unlike the
+  // sealed-blob environment connection here). Routing is orthogonal to the allow-list: an
+  // un-allow-listed remote method returns a clean `unknown_method`, never a `db`-undefined `TypeError`.
   if (remoteRepos) {
     dependencies.documentRepository =
       remoteRepos.documentRepository as CoreDependencies['documentRepository']
@@ -2311,6 +2437,36 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       remoteRepos.environmentRegistryRepository as CoreDependencies['environmentRegistryRepository']
     dependencies.environmentConnectionRepository =
       remoteRepos.environmentConnectionRepository as CoreDependencies['environmentConnectionRepository']
+    // The environments management panel also reads/edits the workspace's custom-manifest-type
+    // catalog (`EnvironmentConnectionService.listCustomTypes`/`upsertCustomType`), built directly
+    // over the absent `db` by `selectNodeEnvironmentsDeps`. Route it from the remote registry too so
+    // the connection + infra-handler management surface is functional (no secrets — just manifest
+    // metadata; the RPC allow-list gates its CRUD). Provisioning WRITES stay db-direct/off (a later
+    // secrets-delegation slice), like the environment registry above.
+    dependencies.customManifestTypeRepository =
+      remoteRepos.customManifestTypeRepository as CoreDependencies['customManifestTypeRepository']
+    // The prompt-fragment library (`FragmentLibraryService`, built directly over the absent `db`
+    // by `selectNodeFragmentLibraryDeps`) — its management surface (list/create/update/delete
+    // fragments + list/link sources) is served remotely so the library panels are functional in
+    // mothership mode; rows carry no secrets, and the RPC allow-list gates each method by its
+    // `(ownerKind, ownerId)` scope. Repo-SYNC (the source service's GitHub reads) stays
+    // db-direct/off — the mothership owns GitHub sync.
+    //
+    // Route only when the library is ALREADY configured (`config.fragmentLibrary.enabled` — else
+    // these are absent). UNLIKE the document/task/env repos above (whose modules need extra deps,
+    // so setting the repo alone leaves the module off), the fragment module assembles from
+    // `promptFragmentRepository` ALONE — so unconditionally setting it would spuriously turn the
+    // module ON and force fragment resolution on EVERY run against a mothership that may not wire
+    // the repo. Overriding in place preserves the "module only when configured" gate while swapping
+    // the (db-less, broken) Drizzle repo for the remote one.
+    if (dependencies.promptFragmentRepository) {
+      dependencies.promptFragmentRepository =
+        remoteRepos.promptFragmentRepository as CoreDependencies['promptFragmentRepository']
+    }
+    if (dependencies.fragmentSourceRepository) {
+      dependencies.fragmentSourceRepository =
+        remoteRepos.fragmentSourceRepository as CoreDependencies['fragmentSourceRepository']
+    }
   }
 
   return {
@@ -2336,6 +2492,12 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repositories: {
       ...dependencies,
       agentRunRepository: repos.agentRunRepository,
+      // The binary-artifact METADATA store (visual-confirmation gate screenshots/references) is
+      // not part of `CoreDependencies` (it's composed into `resolveBinaryArtifactStore`, not the
+      // engine's Core), so fold it into the reflected registry explicitly — else a mothership-mode
+      // node's artifact reads/writes come back `... is not wired`. The blob BYTES stay per-account
+      // local; only the metadata is proxied.
+      binaryArtifactMetadataStore: repos.binaryArtifactMetadataStore,
     } as unknown as PersistenceRegistry,
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
@@ -2365,6 +2527,8 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // The direct-provider API-key pool (account/workspace/user); present when the
     // shared ENCRYPTION_KEY is configured.
     apiKeys,
+    // The inbound public-API key store; present when the shared ENCRYPTION_KEY is configured.
+    publicApiKeys,
     // Whether the opt-in Cloudflare Workers AI lib is enabled (REST creds present).
     cloudflareModelsEnabled,
     // The direct-provider base-URL resolver the catalog uses to gate selectability on a
@@ -2374,6 +2538,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     localModelEndpoints,
     // The per-user generic secret store (GitHub PAT, …); present when ENCRYPTION_KEY is set.
     userSecrets,
+    // The per-user "repos my PAT can reach" projection (board redaction + picker expansion);
+    // Postgres-backed, so absent in the no-DB mothership node (redaction degrades to visible).
+    userRepoAccess: db ? new DrizzleUserRepoAccessRepository(db) : undefined,
     // The per-workspace OpenRouter dynamic-catalog store; present when the API-key pool is.
     openRouterCatalog,
   }

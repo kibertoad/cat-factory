@@ -228,7 +228,13 @@ export class EnvironmentProvisioningService {
       resolved.manifest,
       resolved.resolveSecret,
     )
-    const req = await this.buildProvisionRequest(args, resolved.manifest, resolved.resolveSecret)
+    const req = await this.buildProvisionRequest(
+      args,
+      resolved.manifest,
+      resolved.resolveSecret,
+      undefined,
+      { resolveClone: true },
+    )
     return this.provisionSync(args, resolved, req)
   }
 
@@ -257,6 +263,7 @@ export class EnvironmentProvisioningService {
       resolved.manifest,
       resolved.resolveSecret,
       deploy,
+      { resolveClone: true },
     )
     let job: DeployProvisionJob | null = null
     try {
@@ -411,27 +418,55 @@ export class EnvironmentProvisioningService {
     manifest: EnvironmentManifest,
     resolveSecret: SecretResolver,
     deploy?: DeployProvisionInputs,
+    opts?: { resolveClone?: boolean },
   ): Promise<ProvisionEnvironmentRequest> {
     const { workspaceId } = args
     // Expose the block id as `{{input.blockId}}` even on a manual provision, so a manifest can
     // template against it without the caller repeating it. The typed git/PR/repo context is
     // flattened into the same namespace. Explicit inputs win over the derived block id + context.
+    // A deployer step also passes `inputs.frontendOrigins` (comma-joined) — the browser origins
+    // of the `frontend` frames that bind this service — so a manifest can fold them into the
+    // backend's CORS allow-list via `{{input.frontendOrigins}}` (the reverse of the frontend's
+    // `backendBindings`). It is absent when no frontend binds the service.
     const inputs: Record<string, string> = {}
     if (args.blockId) inputs.blockId = args.blockId
     Object.assign(inputs, contextInputs(args.context))
     Object.assign(inputs, args.inputs)
     // A native adapter (the Kubernetes backend) reads manifests from the run repo (co-located)
-    // or a separate repo; resolve both seams when available.
+    // or a separate repo; resolve both seams when available. Resolve by the SERVICE FRAME being
+    // provisioned (`frameId`), not the task `blockId` — so an involved-service frame's env clones
+    // that peer's repo, not the task's own (the own frame resolves the same repo either way, since
+    // repos are linked at the frame level and the ancestry walk from the task reaches it).
+    const repoBlockId = args.frameId ?? args.blockId
     const runRepo =
-      args.blockId && this.deps.resolveRunRepoContext
-        ? await this.deps.resolveRunRepoContext(workspaceId, args.blockId)
+      repoBlockId && this.deps.resolveRunRepoContext
+        ? await this.deps.resolveRunRepoContext(workspaceId, repoBlockId)
         : null
+    // LAZY clone target for a SYNCHRONOUS provider that needs a working tree (Docker Compose
+    // build-from-source). Exposed as a memoized thunk so ONLY the build-mode provider that
+    // actually clones pays the token mint — image-mode compose / custom / k8s-sync provisions
+    // never invoke it, and `finalizeProvision` (no `resolveClone`) can't mint at all. Reuse the
+    // async deploy inputs' already-resolved clone when present so one provision never mints twice.
+    let clonePromise: Promise<DeployCloneTarget | undefined> | undefined
+    const clone = opts?.resolveClone
+      ? () =>
+          (clonePromise ??= (async () =>
+            deploy?.clone ??
+            (this.deps.resolveDeployCloneTarget && repoBlockId
+              ? ((await this.deps.resolveDeployCloneTarget(
+                  workspaceId,
+                  repoBlockId,
+                  args.context?.branch,
+                )) ?? undefined)
+              : undefined))())
+      : undefined
     return {
       manifest,
       inputs,
       ...(args.context ? { provisionContext: args.context } : {}),
       resolveSecret,
       ...(runRepo ? { runRepo } : {}),
+      ...(clone ? { clone } : {}),
       ...(this.deps.resolveRepoFilesForWorkspace
         ? {
             resolveRepoFiles: (coords) =>
@@ -456,10 +491,15 @@ export class EnvironmentProvisioningService {
     args: ProvisionArgs,
     ref: RunnerJobRef,
   ): Promise<DeployProvisionInputs | undefined> {
-    if (!this.deps.resolveDeployCloneTarget || !args.blockId) return undefined
+    // Clone the SERVICE FRAME's repo (`frameId`) — an involved-service frame provisions from that
+    // peer's repo, the own frame from its own. The ref is the task's PR branch when the context
+    // carries one (the own frame's deploy targets the PR); an involved frame passes no branch, so
+    // the clone target falls back to that repo's default branch.
+    const repoBlockId = args.frameId ?? args.blockId
+    if (!this.deps.resolveDeployCloneTarget || !repoBlockId) return undefined
     const clone = await this.deps.resolveDeployCloneTarget(
       args.workspaceId,
-      args.blockId,
+      repoBlockId,
       args.context?.branch,
     )
     if (!clone) return undefined
@@ -542,8 +582,8 @@ export class EnvironmentProvisioningService {
     engine: InfraEngine | null,
   ): Promise<EnvironmentHandle> {
     const { workspaceId } = args
-    // A block holds at most one live environment: supersede any prior one.
-    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
+    // A (block, frame) pair holds at most one live environment: supersede any prior one.
+    await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null, args.frameId ?? null)
 
     const now = this.deps.clock.now()
     const record = this.buildEnvironmentRecord({
@@ -601,8 +641,11 @@ export class EnvironmentProvisioningService {
     manifest: EnvironmentManifest,
     resolveSecret: SecretResolver,
   ): Promise<void> {
-    if (!provider.validateRepo || !this.deps.resolveRunRepoContext || !args.blockId) return
-    const bound = await this.deps.resolveRunRepoContext(args.workspaceId, args.blockId)
+    // Validate against the SERVICE FRAME's repo (`frameId`) — a peer frame's provision preflights
+    // that peer's repo, not the task's own (see resolveDeployInputs / buildProvisionRequest).
+    const repoBlockId = args.frameId ?? args.blockId
+    if (!provider.validateRepo || !this.deps.resolveRunRepoContext || !repoBlockId) return
+    const bound = await this.deps.resolveRunRepoContext(args.workspaceId, repoBlockId)
     if (!bound) return
     const gitRef = args.context?.branch ?? bound.baseBranch
     const config = stringifyProviderConfig(manifest.providerConfig)
@@ -742,8 +785,12 @@ export class EnvironmentProvisioningService {
    * The live environment provisioned for a block, with decrypted access — the
    * discovery entry point the execution engine calls to enrich tester context.
    */
-  async resolveForBlock(workspaceId: string, blockId: string): Promise<ResolvedEnvironment | null> {
-    const record = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+  async resolveForBlock(
+    workspaceId: string,
+    blockId: string,
+    frameId?: string,
+  ): Promise<ResolvedEnvironment | null> {
+    const record = await this.readRegistryRecord(workspaceId, blockId, frameId)
     // A browsable-preview row is not a provisioned environment — never resolve it as a block's
     // live env (e.g. for tester context enrichment); it is owned solely by the PreviewService.
     if (!record || record.provisionType === PREVIEW_PROVISION_TYPE) return null
@@ -761,10 +808,40 @@ export class EnvironmentProvisioningService {
    * lifecycle state + the exact error next to a consuming step (tester/coder).
    * Unlike {@link resolveForBlock} (which strips `id`/`lastError` for agent context).
    */
-  async getHandleForBlock(workspaceId: string, blockId: string): Promise<EnvironmentHandle | null> {
-    const record = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+  async getHandleForBlock(
+    workspaceId: string,
+    blockId: string,
+    frameId?: string,
+  ): Promise<EnvironmentHandle | null> {
+    const record = await this.readRegistryRecord(workspaceId, blockId, frameId)
     // Exclude a browsable-preview row (see resolveForBlock) — it is not a provisioned env.
     return record && record.provisionType !== PREVIEW_PROVISION_TYPE ? recordToHandle(record) : null
+  }
+
+  /**
+   * The registry record for a block, resolving the specific service frame's env when a `frameId`
+   * is known (a task may provision several — its own frame's plus each involved-service frame's).
+   * A frame-keyed read that misses falls back to the block's FRAME-LESS (manual / human-test) env —
+   * those are written with `frame_id = NULL`, so the exact-frame read wouldn't see one — but NOT to
+   * a sibling frame's env. The fallback reads the frame-less row DIRECTLY (`getFramelessByBlock`),
+   * not via {@link EnvironmentRegistryRepository.getByBlock}: the latter returns the newest across
+   * ALL frames, so a NEWER fan-out peer env under the same `block_id` would shadow the frame-less
+   * manual env and the fallback would miss it. No `frameId` ⇒ the block's newest, as before.
+   */
+  private async readRegistryRecord(
+    workspaceId: string,
+    blockId: string,
+    frameId?: string,
+  ): Promise<EnvironmentRecord | null> {
+    if (!frameId) return this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    const framed = await this.deps.environmentRegistryRepository.getByBlockAndFrame(
+      workspaceId,
+      blockId,
+      frameId,
+    )
+    return (
+      framed ?? this.deps.environmentRegistryRepository.getFramelessByBlock(workspaceId, blockId)
+    )
   }
 
   /**
@@ -774,8 +851,12 @@ export class EnvironmentProvisioningService {
    * registry projection only — real provider teardown is the teardown service's job (same as
    * the re-provision path, which also only supersedes the prior record here).
    */
-  async supersedeForBlock(workspaceId: string, blockId: string | null): Promise<void> {
-    await this.supersedePriorEnvironment(workspaceId, blockId)
+  async supersedeForBlock(
+    workspaceId: string,
+    blockId: string | null,
+    frameId: string | null = null,
+  ): Promise<void> {
+    await this.supersedePriorEnvironment(workspaceId, blockId, frameId)
   }
 
   private resolveExpiry(
@@ -805,13 +886,29 @@ export class EnvironmentProvisioningService {
     return { id: this.deps.idGenerator.next('env'), deletedAt: null, ...fields }
   }
 
-  /** A block holds at most one live environment: tombstone any prior one. No-op block-less. */
+  /**
+   * A (block, service frame) pair holds at most one live environment: tombstone any prior one.
+   * Keyed per `(blockId, frameId)` — NOT per block alone — because a single task can provision
+   * several environments (its own service frame's plus one per involved-service frame, the
+   * connections initiative), all sharing the task `blockId`; superseding by block alone would
+   * clobber a sibling frame's live env. When the frame is unknown (a manual / frame-less
+   * provision) it supersedes the block's FRAME-LESS env specifically (`getFramelessByBlock`), NOT
+   * the block's newest across all frames — else a manual re-provision would clobber a newer
+   * fan-out peer env sharing the `blockId`. No-op block-less.
+   */
   private async supersedePriorEnvironment(
     workspaceId: string,
     blockId: string | null,
+    frameId: string | null,
   ): Promise<void> {
     if (!blockId) return
-    const prior = await this.deps.environmentRegistryRepository.getByBlock(workspaceId, blockId)
+    const prior = frameId
+      ? await this.deps.environmentRegistryRepository.getByBlockAndFrame(
+          workspaceId,
+          blockId,
+          frameId,
+        )
+      : await this.deps.environmentRegistryRepository.getFramelessByBlock(workspaceId, blockId)
     if (prior) {
       await this.deps.environmentRegistryRepository.softDelete(
         workspaceId,
@@ -839,7 +936,7 @@ export class EnvironmentProvisioningService {
     engine: InfraEngine | null,
   ): Promise<void> {
     try {
-      await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null)
+      await this.supersedePriorEnvironment(workspaceId, args.blockId ?? null, args.frameId ?? null)
       const record = this.buildEnvironmentRecord({
         workspaceId,
         blockId: args.blockId ?? null,

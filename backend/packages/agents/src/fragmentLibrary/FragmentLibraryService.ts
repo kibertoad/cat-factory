@@ -1,15 +1,17 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import { FRAGMENTS, getFragment } from '@cat-factory/prompt-fragments'
+import { universalFragments } from '@cat-factory/prompt-fragments'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
+  DocumentContent,
   DocumentContentResolver,
+  DocumentSourceKind,
   FragmentOwnerKind,
   ResolvedFragment,
   UpdatePromptFragmentInput,
 } from '@cat-factory/kernel'
 import { ValidationError, buildExcerpt } from '@cat-factory/kernel'
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, GroupCacheHandle } from '@cat-factory/kernel'
 import type {
   FragmentSelector,
   FragmentResolver,
@@ -27,16 +29,19 @@ import {
 } from './fragment-catalog.js'
 import { slugFromPath } from './fragment-source.logic.js'
 
-/** Default freshness window for a document-backed fragment's live body (5 min). */
-export const DEFAULT_DOCUMENT_FRAGMENT_TTL_MS = 5 * 60 * 1000
-
 export interface FragmentLibraryServiceDependencies {
   promptFragmentRepository: PromptFragmentRepository
   workspaceRepository: WorkspaceRepository
   clock: Clock
   /** Relevance selector; defaults to the deterministic matcher when omitted. */
   selector?: FragmentSelector
-  /** Built-in catalog tier; overridable for tests. Defaults to the shipped FRAGMENTS. */
+  /**
+   * Built-in catalog tier; overridable for tests. Defaults to the UNIVERSAL pool —
+   * the shipped FRAGMENTS plus any deployment-registered fragments — read lazily per
+   * catalog resolve, so a `registerPromptFragment` override of a built-in id (and any
+   * extra registered fragment) is part of the merged tenant catalog and can be
+   * shadowed or tombstoned per tier like every other built-in.
+   */
   builtins?: PromptFragment[]
   /**
    * Live document reader for document-backed fragments. When absent the feature
@@ -44,35 +49,65 @@ export interface FragmentLibraryServiceDependencies {
    * uses each entry's last-resolved `body` unchanged.
    */
   documentContentResolver?: DocumentContentResolver
-  /** Freshness window for a document-backed body; defaults to {@link DEFAULT_DOCUMENT_FRAGMENT_TTL_MS}. */
-  documentFragmentTtlMs?: number
+  /**
+   * Read-through cache for the merged tenant catalog (`AppCaches.fragmentCatalog`,
+   * docs/initiatives/caching-layer.md slice 1), grouped by workspace id. This
+   * service owns its coherence: every fragment write below invalidates through
+   * {@link FragmentLibraryService.invalidateCatalogTier}. Absent (direct test
+   * construction) ⇒ every resolve loads from the repositories.
+   */
+  catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
+  /**
+   * Read-through cache for a document-backed fragment's live external body
+   * (`AppCaches.fragmentDocumentBody`, docs/initiatives/caching-layer.md slice 2),
+   * grouped by the connection workspace and keyed per document. Self-verifying: an
+   * entry entering its refresh window runs the source's cheap version probe and
+   * keeps the cached body when the page hasn't moved, so a run reads the body
+   * without blocking on a live page fetch. Absent (direct test construction) ⇒ a
+   * run serves the last-persisted body and does NOT re-resolve live (the durable
+   * `prompt_fragments.body`, refreshed only by an explicit create/refresh, is the
+   * fallback).
+   */
+  documentBodyCache?: GroupCacheHandle<DocumentContent>
 }
 
 /**
  * The fragment library's management service (ADR 0006). It owns the per-tier CRUD
  * (account / workspace) and resolves the merged catalog a workspace sees (built-in ∪
- * account ∪ workspace, override-by-id, tombstone-suppressed). It still implements
- * {@link FragmentResolver} (`resolveForRun`), but the execution engine NO LONGER
- * consumes it: fragment delivery is now the service-scoped `serviceFragmentIds` folded
- * into `code-aware` agents, so this is a management surface only.
+ * account ∪ workspace, override-by-id, tombstone-suppressed). The execution engine
+ * consumes it at run time through {@link resolveBodiesForRun} (wired as the engine's
+ * `fragmentResolver`), so managed and document-backed fragments actually reach a
+ * `code-aware` step; the automatic per-run relevance selector ({@link resolveForRun})
+ * is a management-surface leftover the run path no longer drives.
  */
 export class FragmentLibraryService implements FragmentResolver {
   private readonly repo: PromptFragmentRepository
   private readonly workspaces: WorkspaceRepository
   private readonly clock: Clock
   private readonly selector: FragmentSelector
-  private readonly builtins: PromptFragment[]
+  private readonly builtinsOverride?: PromptFragment[]
   private readonly documentResolver?: DocumentContentResolver
-  private readonly ttlMs: number
+  private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
+  private readonly documentBodyCache?: GroupCacheHandle<DocumentContent>
 
   constructor(deps: FragmentLibraryServiceDependencies) {
     this.repo = deps.promptFragmentRepository
     this.workspaces = deps.workspaceRepository
     this.clock = deps.clock
     this.selector = deps.selector ?? new DeterministicFragmentSelector()
-    this.builtins = deps.builtins ?? FRAGMENTS
+    this.builtinsOverride = deps.builtins
     this.documentResolver = deps.documentContentResolver
-    this.ttlMs = deps.documentFragmentTtlMs ?? DEFAULT_DOCUMENT_FRAGMENT_TTL_MS
+    this.catalogCache = deps.catalogCache
+    this.documentBodyCache = deps.documentBodyCache
+  }
+
+  /**
+   * The built-in tier: the injected test override, else the UNIVERSAL pool (shipped
+   * catalog + deployment-registered fragments), read lazily so registrations made at
+   * startup are seen regardless of construction order.
+   */
+  private builtins(): PromptFragment[] {
+    return this.builtinsOverride ?? universalFragments()
   }
 
   /** This tier's hand-authored/sourced fragments (raw, not merged), newest first. */
@@ -113,6 +148,7 @@ export class FragmentLibraryService implements FragmentResolver {
       deletedAt: null,
     }
     await this.repo.upsert(record)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
     return recordToWire(record)
   }
 
@@ -162,6 +198,8 @@ export class FragmentLibraryService implements FragmentResolver {
       deletedAt: null,
     }
     await this.repo.upsert(record)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
+    await this.invalidateDocumentBody(record)
     return recordToWire(record)
   }
 
@@ -205,6 +243,8 @@ export class FragmentLibraryService implements FragmentResolver {
       updatedAt: now,
     }
     await this.repo.upsert(next)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
+    await this.invalidateDocumentBody(next)
     return recordToWire(next)
   }
 
@@ -259,6 +299,8 @@ export class FragmentLibraryService implements FragmentResolver {
       throw new ValidationError('A fragment needs a summary and a body')
     }
     await this.repo.upsert(next)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
+    await this.invalidateDocumentBody(next)
     return recordToWire(next)
   }
 
@@ -272,6 +314,8 @@ export class FragmentLibraryService implements FragmentResolver {
     const existing = await this.repo.get(ownerKind, ownerId, fragmentId)
     if (existing) {
       await this.repo.softDelete(ownerKind, ownerId, fragmentId, now)
+      await this.invalidateCatalogTier(ownerKind, ownerId)
+      await this.invalidateDocumentBody(existing)
       return
     }
     await this.repo.upsert({
@@ -296,16 +340,48 @@ export class FragmentLibraryService implements FragmentResolver {
       updatedAt: now,
       deletedAt: now,
     })
+    await this.invalidateCatalogTier(ownerKind, ownerId)
   }
 
-  /** Resolve the merged catalog a workspace sees (built-in ∪ account ∪ workspace). */
+  /**
+   * Resolve the merged catalog a workspace sees (built-in ∪ account ∪ workspace).
+   * Served through the fragment-catalog cache when wired — this runs on every
+   * agent dispatch (and again on each poll tick that re-enters context assembly),
+   * so a hit skips the tenant reads + merge entirely. The key is just the
+   * workspace id (its account is resolved inside the load): a workspace never
+   * changes accounts, and keying by account would force an extra read per hit.
+   */
   async resolveCatalog(workspaceId: string): Promise<ResolvedCatalogEntry[]> {
+    if (!this.catalogCache) return this.loadCatalog(workspaceId)
+    return this.catalogCache.get(workspaceId, workspaceId, () => this.loadCatalog(workspaceId))
+  }
+
+  /** The uncached tenant merge {@link resolveCatalog} reads through the cache. */
+  private async loadCatalog(workspaceId: string): Promise<ResolvedCatalogEntry[]> {
     const accountId = await this.workspaces.accountOf(workspaceId)
     const [accountRows, workspaceRows] = await Promise.all([
       accountId ? this.repo.listByOwner('account', accountId, true) : Promise.resolve([]),
       this.repo.listByOwner('workspace', workspaceId, true),
     ])
-    return mergeCatalog(this.builtins, accountRows, workspaceRows)
+    return mergeCatalog(this.builtins(), accountRows, workspaceRows)
+  }
+
+  /**
+   * Drop the cached merged catalog for every workspace a tier write affects —
+   * called after each fragment write here (and by the source-sync service via its
+   * injected hook). A workspace-tier write is one group eviction; an account-tier
+   * write affects every workspace in the account, so it clears the whole cache
+   * (deliberately coarse — account writes are rare management actions, and
+   * enumerating the account's workspaces on every one would cost more than the
+   * repopulation it saves). Peers drop their entries via the notification bus.
+   */
+  async invalidateCatalogTier(ownerKind: FragmentOwnerKind, ownerId: string): Promise<void> {
+    if (!this.catalogCache) return
+    if (ownerKind === 'workspace') {
+      await this.catalogCache.invalidateGroup(ownerId)
+    } else {
+      await this.catalogCache.invalidateAll()
+    }
   }
 
   /** The merged catalog as wire {@link ResolvedFragment}s for the management UI. */
@@ -359,15 +435,23 @@ export class FragmentLibraryService implements FragmentResolver {
    * body is stale (older than the TTL), it live-fetches the page's current
    * content via the document resolver, persists the refreshed body, and uses it;
    * any fetch failure falls back to the last-resolved `body` so a run never
-   * blocks. Unknown ids are dropped; the result preserves the input order.
+   * blocks. Ids absent from the catalog are dropped — deliberately with NO static
+   * fallback: the built-in tier already includes every deployment-registered
+   * fragment, so a missing id is either stale or tier-tombstoned, and resolving it
+   * from the static pool anyway would defeat suppression (ADR 0006). The result
+   * preserves the input order.
+   *
+   * A caller that has already resolved the merged catalog (e.g. to also read titles)
+   * may pass it in to avoid a second resolve of the same tenant catalog.
    */
   async resolveBodiesForRun(
     workspaceId: string,
     ids: string[],
+    catalog?: ResolvedCatalogEntry[],
   ): Promise<{ id: string; body: string }[]> {
     if (ids.length === 0) return []
-    const catalog = await this.resolveCatalog(workspaceId)
-    const byId = new Map(catalog.map((e) => [e.id, e]))
+    const entries = catalog ?? (await this.resolveCatalog(workspaceId))
+    const byId = new Map(entries.map((e) => [e.id, e]))
 
     const out: { id: string; body: string }[] = []
     const seen = new Set<string>()
@@ -375,13 +459,7 @@ export class FragmentLibraryService implements FragmentResolver {
       if (seen.has(id)) continue
       seen.add(id)
       const entry = byId.get(id)
-      if (!entry) {
-        // Not in the tenant catalog — fall back to a deployment-registered
-        // built-in (the static pool), else drop the stale selection.
-        const builtin = getFragment(id)
-        if (builtin) out.push({ id, body: builtin.body })
-        continue
-      }
+      if (!entry) continue
       const body = entry.documentRef
         ? await this.resolveDocumentBody(workspaceId, entry)
         : entry.body
@@ -391,9 +469,14 @@ export class FragmentLibraryService implements FragmentResolver {
   }
 
   /**
-   * The live body for a document-backed catalog entry: re-fetch from the source
-   * when stale (and the resolver is wired), persisting the refresh; otherwise the
-   * cached body. Never throws — a failed fetch degrades to the cached body.
+   * The live body for a document-backed catalog entry, served through the
+   * document-body cache: on a cache miss it fetches from the source; an entry
+   * entering its refresh window runs the source's cheap version probe and keeps the
+   * cached body when the page hasn't moved (else a background reload). The read
+   * never blocks on a live fetch once warm, and a failed fetch degrades to the
+   * entry's last-persisted `body`. Without a cache wired the live re-resolve is
+   * off — the durable persisted body (refreshed only by an explicit create/refresh)
+   * is served as-is, since the freshness mechanism lives in the cache.
    */
   private async resolveDocumentBody(
     workspaceId: string,
@@ -401,36 +484,59 @@ export class FragmentLibraryService implements FragmentResolver {
   ): Promise<string> {
     const ref = entry.documentRef
     if (!ref || !this.documentResolver || entry.tier === 'builtin') return entry.body
-    const now = this.clock.now()
-    const fresh = entry.resolvedAt !== null && now - entry.resolvedAt < this.ttlMs
-    if (fresh) return entry.body
-    const ownerId =
-      entry.tier === 'account' ? await this.workspaces.accountOf(workspaceId) : workspaceId
-    if (!ownerId) return entry.body
-    // Re-read through the connection the fragment was linked/refreshed with — for an
-    // account-tier fragment that is a fixed workspace, not whichever workspace the run
-    // happens to be in (which may have no connection to this source). Pre-existing rows
-    // with no recorded workspace degrade to the run's own.
-    const viaWorkspaceId = entry.docViaWorkspaceId ?? workspaceId
+    if (!this.documentBodyCache) return entry.body
+    const resolver = this.documentResolver
+    // The connection workspace the body is cached + invalidated under. For a
+    // workspace-tier fragment that is its owning workspace (== the run's own). For an
+    // account-tier fragment it MUST be the recorded connection workspace, NOT the run's:
+    // the run can be any of the account's workspaces, so keying on it would fan the same
+    // document across N groups a later edit could never all invalidate. A legacy account
+    // row with none recorded can't be keyed stably, so it serves the durable persisted
+    // body — matching `invalidateDocumentBody`, which also skips it (best-effort).
+    const via = entry.docViaWorkspaceId ?? (entry.tier === 'account' ? null : workspaceId)
+    if (!via) return entry.body
     try {
-      const content = await this.documentResolver.fetch(viaWorkspaceId, ref.source, ref.externalId)
-      const existing = await this.repo.get(entry.tier, ownerId, entry.id)
-      if (existing) {
-        await this.repo.upsert({
-          ...existing,
-          title: content.title,
-          summary: buildExcerpt(content.body),
-          body: content.body,
-          docExternalId: content.externalId,
-          resolvedAt: now,
-          updatedAt: now,
-        })
-      }
+      const content = await this.documentBodyCache.get(
+        documentBodyKey(ref.source, ref.externalId),
+        via,
+        () => resolver.fetch(via, ref.source, ref.externalId),
+        async (cached) => {
+          // An empty version token means the source exposes no version to compare, so the
+          // probe can't confirm freshness — treat it as stale so the entry falls through
+          // to a real reload (bounded by the TTL) instead of being pinned forever.
+          if (!cached.version) return false
+          return (await resolver.probeVersion(via, ref.source, ref.externalId)) === cached.version
+        },
+      )
       return content.body
     } catch {
       return entry.body // source unreachable → last-resolved body keeps the run going
     }
   }
+
+  /**
+   * Drop a document-backed fragment's cached live body after an explicit write
+   * (create/refresh/edit/remove) so the next run re-resolves it immediately rather
+   * than waiting out the refresh window. Best-effort: the cache is self-verifying
+   * via the version probe, so a group we can't resolve (a legacy row with no
+   * recorded connection workspace) simply relies on the probe/TTL instead. Peers
+   * drop their entry via the notification bus.
+   */
+  private async invalidateDocumentBody(record: PromptFragmentRecord): Promise<void> {
+    if (!this.documentBodyCache || !record.docSource || record.docExternalId === null) return
+    const via =
+      record.docViaWorkspaceId ?? (record.ownerKind === 'workspace' ? record.ownerId : null)
+    if (!via) return
+    await this.documentBodyCache.invalidate(
+      documentBodyKey(record.docSource, record.docExternalId),
+      via,
+    )
+  }
+}
+
+/** The document-body cache key: one entry per source document, within a workspace group. */
+function documentBodyKey(source: DocumentSourceKind, externalId: string): string {
+  return `${source}:${externalId}`
 }
 
 function recordToWire(record: PromptFragmentRecord): PromptFragment {

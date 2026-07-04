@@ -88,4 +88,26 @@ describe('[local] PAT GitHub linking', () => {
     expect(calls.some((u) => u.includes('/user/repos'))).toBe(true)
     expect(calls.some((u) => u.includes('/installation/repositories'))).toBe(false)
   })
+
+  it('searches the picker by owner/name over the PAT repo listing (no global search)', async () => {
+    const calls = stubGitHub([
+      { id: 1, name: 'alpha' },
+      { id: 2, name: 'beta' },
+      { id: 3, name: 'alpha-utils' },
+    ])
+    const app = makeConformanceApp(db)
+    const ws = (await app.createWorkspace({ seed: false })) as WorkspaceSnapshot
+
+    const res = await app.call<GitHubAvailableRepo[]>(
+      'GET',
+      `/workspaces/${ws.workspace.id}/github/available-repos?q=alpha`,
+    )
+
+    expect(res.status).toBe(200)
+    expect(res.body.map((r) => r.name).sort()).toEqual(['alpha', 'alpha-utils'])
+    // A PAT can't scope GitHub's global repo search, so the picker filters the PAT's own
+    // `/user/repos` listing — never `/search/repositories`.
+    expect(calls.some((u) => u.includes('/user/repos'))).toBe(true)
+    expect(calls.some((u) => u.includes('/search/repositories'))).toBe(false)
+  })
 })

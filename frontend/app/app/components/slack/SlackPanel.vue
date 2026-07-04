@@ -31,6 +31,7 @@ const ROUTABLE = computed<{ type: NotificationType; label: string }[]>(() => [
   { type: 'release_regression', label: t('slack.routable.release_regression') },
   { type: 'human_test_ready', label: t('slack.routable.human_test_ready') },
   { type: 'visual_confirmation_ready', label: t('slack.routable.visual_confirmation_ready') },
+  { type: 'initiative', label: t('slack.routable.initiative') },
 ])
 
 /** Notification-role options for a mapped member (drives who gets @-mentioned). */
@@ -54,6 +55,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   visual_confirmation_ready: { enabled: false, channel: '' },
   human_review: { enabled: false, channel: '' },
   followup_pending: { enabled: false, channel: '' },
+  initiative: { enabled: false, channel: '' },
 })
 const mentionsEnabled = ref(false)
 const mapping = ref<SlackMemberMappingEntry[]>([])

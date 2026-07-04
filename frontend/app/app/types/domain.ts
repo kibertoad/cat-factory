@@ -33,10 +33,15 @@ export type {
   FrontendConfig,
   FrontendBackendBinding,
   FrontendBackendSource,
+  ResolvedFrontendBinding,
+  EnvironmentHandle,
+  ServiceConnection,
   FrontendBranch,
   FrontendPackageManager,
   FrontendServeMode,
   FrontendEnvInjection,
+  FrontendConfigRecommendation,
+  FrontendDetectionNote,
   AgentConfigOption,
   AgentConfigDescriptor,
   TestConcernSeverity,
@@ -129,3 +134,4 @@ export type * from './merge'
 export type * from './services'
 export type * from './recurring'
 export type * from './tracker'
+export type * from './initiative'

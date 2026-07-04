@@ -86,6 +86,10 @@ export const useUiStore = defineStore('ui', () => {
   // the frame opens it, scoped to that frame).
   const addRecurringFrameId = ref<string | null>(null)
 
+  // Create-initiative modal: the service frame a new initiative is being created
+  // under, or null when closed (mirrors the add-task flow).
+  const createInitiativeFrameId = ref<string | null>(null)
+
   // Repo-bootstrap modal (manage reference architectures + launch a bootstrap).
   const bootstrapOpen = ref(false)
 
@@ -153,6 +157,9 @@ export const useUiStore = defineStore('ui', () => {
   // today, pluggable). NB: distinct from `observabilityInstanceId` below, which is the
   // LLM per-call observability panel.
   const observabilityConnectionOpen = ref(false)
+  // Private package registries: the workspace's npm/GitHub-Packages entries agent
+  // containers install with. Opened from the Integrations hub.
+  const packageRegistriesOpen = ref(false)
   // The single tabbed Infrastructure window — a TOP-LEVEL navbar destination (no longer
   // reached via the Integrations hub). Two topical tabs: "Agent containers" (the execution
   // backend + self-hosted runner pool, plus the local-mode warm pool/checkout) and "Test
@@ -421,6 +428,12 @@ export const useUiStore = defineStore('ui', () => {
   function closeAddRecurring() {
     addRecurringFrameId.value = null
   }
+  function openCreateInitiative(frameId: string) {
+    createInitiativeFrameId.value = frameId
+  }
+  function closeCreateInitiative() {
+    createInitiativeFrameId.value = null
+  }
   function openBootstrap() {
     bootstrapOpen.value = true
   }
@@ -560,6 +573,13 @@ export const useUiStore = defineStore('ui', () => {
   }
   function closeObservabilityConnection() {
     observabilityConnectionOpen.value = false
+  }
+  function openPackageRegistries() {
+    resetHubReturn()
+    packageRegistriesOpen.value = true
+  }
+  function closePackageRegistries() {
+    packageRegistriesOpen.value = false
   }
   // Top-level navbar entry into the Infrastructure window. No hub-return marker (it isn't
   // reached from the Integrations hub), so the window shows no "Back to Integrations" control.
@@ -704,6 +724,15 @@ export const useUiStore = defineStore('ui', () => {
   function openServiceSpec(blockId: string) {
     resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
   }
+  // Open the initiative tracker window for an initiative block (board card / inspector).
+  function openInitiativeTracker(blockId: string) {
+    resultView.value = { view: 'initiative-tracker', blockId, instanceId: null, stepIndex: null }
+  }
+  // Open the interactive-planning Q&A window for an initiative block (inspector / card,
+  // when the interviewer has parked the planning run with pending questions).
+  function openInitiativePlanning(blockId: string) {
+    resultView.value = { view: 'initiative-planning', blockId, instanceId: null, stepIndex: null }
+  }
   // Open the Follow-up companion window for a run's Coder step (the blinking chip + the
   // `followup_pending` notification). Resolves the Coder step index from the run when not
   // given, so callers that only know the run can still open it.
@@ -773,6 +802,7 @@ export const useUiStore = defineStore('ui', () => {
     addTaskContainerId,
     addTaskPrefill,
     addRecurringFrameId,
+    createInitiativeFrameId,
     bootstrapOpen,
     addServiceOpen,
     githubOpen,
@@ -791,6 +821,7 @@ export const useUiStore = defineStore('ui', () => {
     accountSettingsTab,
     accountSettingsScrollTarget,
     observabilityConnectionOpen,
+    packageRegistriesOpen,
     infrastructureOpen,
     infrastructureTab,
     openInfrastructure,
@@ -845,6 +876,8 @@ export const useUiStore = defineStore('ui', () => {
     closeAddTask,
     openAddRecurring,
     closeAddRecurring,
+    openCreateInitiative,
+    closeCreateInitiative,
     openBootstrap,
     closeBootstrap,
     openAddService,
@@ -880,6 +913,8 @@ export const useUiStore = defineStore('ui', () => {
     setAccountSettingsTab,
     openObservabilityConnection,
     closeObservabilityConnection,
+    openPackageRegistries,
+    closePackageRegistries,
     openProviderConnection,
     closeProviderConnection,
     k3sSetupPrefill,
@@ -908,6 +943,8 @@ export const useUiStore = defineStore('ui', () => {
     openClarityReview,
     openBrainstorm,
     openServiceSpec,
+    openInitiativeTracker,
+    openInitiativePlanning,
     openFollowUps,
     closeRequirementReview,
     openStepDetail,

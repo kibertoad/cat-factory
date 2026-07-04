@@ -13,7 +13,12 @@ import type {
   SubscriptionActivationRepository,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  isAsyncAgentExecutor,
+  isInitiativeAgentKind,
+} from '@cat-factory/kernel'
 import { MERGER_AGENT_KIND } from './ci.logic.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { LlmObservabilityService } from '../observability/LlmObservabilityService.js'
@@ -76,6 +81,12 @@ export interface RunStateMachineDeps {
   kaizenScheduler?: KaizenScheduler
   subscriptionActivations?: SubscriptionActivationRepository
   llmObservability?: LlmObservabilityService
+  /**
+   * Best-effort poke of the initiative execution loop (slice 3): called when a spawned child
+   * run reaches a terminal state so its owning initiative reconciles immediately instead of
+   * waiting for the next cron sweep. Fire-and-forget; a no-op when initiatives are unwired.
+   */
+  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
 }
 
 /**
@@ -105,6 +116,7 @@ export class RunStateMachine {
   private readonly kaizenScheduler?: KaizenScheduler
   private readonly subscriptionActivations?: SubscriptionActivationRepository
   private readonly llmObservability?: LlmObservabilityService
+  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
 
   constructor(deps: RunStateMachineDeps) {
     this.executionRepository = deps.executionRepository
@@ -119,6 +131,7 @@ export class RunStateMachine {
     this.kaizenScheduler = deps.kaizenScheduler
     this.subscriptionActivations = deps.subscriptionActivations
     this.llmObservability = deps.llmObservability
+    this.pokeInitiativeLoop = deps.pokeInitiativeLoop
   }
 
   /** Persist the instance (the single write seam shared by the engine + controllers). */
@@ -171,7 +184,15 @@ export class RunStateMachine {
       this.attachStepMetrics(workspaceId, instance),
       this.blockRepository.get(workspaceId, instance.blockId),
     ])
-    await this.events.executionChanged(workspaceId, instance, block)
+    // A HEADLESS internal anchor block (a public-API "initiative" run) must NEVER reach the SPA:
+    // the snapshot read filters it, but the live push path would otherwise broadcast the external
+    // run's brief (block.description) + LLM output (instance.steps[].output) — and the hidden block
+    // itself — to every connected client. The engine/durable driver never consume this event (they
+    // drive by run id) and the public API polls the repository directly, so suppressing the push for
+    // an internal run is safe. Terminal-state cleanup below still runs (activation delete / Kaizen).
+    if (!block?.internal) {
+      await this.events.executionChanged(workspaceId, instance, block)
+    }
     // When a run reaches a terminal state, schedule a post-run Kaizen grading for each
     // completed agent step (the scheduler skips verified combos + already-graded steps).
     // Best-effort + idempotent: a failure here must never derail the emit, and a re-emit
@@ -189,6 +210,12 @@ export class RunStateMachine {
     // token copy doesn't linger to its TTL. Best-effort + idempotent — a missing repo or
     // a re-emit of an already-cleared run is a no-op, and a failure here must never
     // derail the emit.
+    // A spawned initiative task reaching a terminal state pokes its owning initiative's loop so
+    // it reconciles the item (and spawns the next wave) immediately, not on the next cron sweep.
+    // Fire-and-forget — the poke swallows its own errors and the sweep is the backstop.
+    if (block?.initiativeId && (instance.status === 'done' || instance.status === 'failed')) {
+      this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
+    }
     if (
       this.subscriptionActivations &&
       (instance.status === 'done' || instance.status === 'failed')
@@ -288,6 +315,51 @@ export class RunStateMachine {
   }
 
   /**
+   * The pure in-memory half of {@link advancePastResolvedGate}: stamp the gate step done
+   * and move the run cursor (final step → run `done`; else start the next step). No
+   * persistence and no external effects, so it is safe inside a {@link mutateInstance}
+   * callback (which may re-run the mutation on a CAS retry). Returns whether the gate
+   * was the final step.
+   */
+  advanceRunPastGate(instance: ExecutionInstance, stepIndex: number): boolean {
+    const step = instance.steps[stepIndex]!
+    this.stepGraph.finishStep(step)
+    step.progress = 1
+    const isFinalStep = stepIndex === instance.steps.length - 1
+    if (isFinalStep) {
+      instance.status = 'done'
+    } else {
+      instance.currentStep = stepIndex + 1
+      const next = instance.steps[instance.currentStep]
+      if (next) this.stepGraph.startStep(next)
+      if (instance.status === 'blocked') instance.status = 'running'
+    }
+    return isFinalStep
+  }
+
+  /**
+   * The side effects that follow an in-memory gate advance whose instance write already
+   * happened (via {@link mutateInstance}): the block status/progress writes, the durable
+   * driver's `approved` signal, and the emit. The instance itself is NOT re-persisted —
+   * the CAS write is the source of truth.
+   */
+  async settleAdvancedGate(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    stepIndex: number,
+  ): Promise<void> {
+    const decisionId = instance.steps[stepIndex]!.approval!.id
+    if (stepIndex === instance.steps.length - 1) {
+      await this.finalizeBlock(workspaceId, instance, undefined)
+      await this.stopRunContainer(workspaceId, instance)
+    } else {
+      await this.updateBlockProgress(workspaceId, instance, 'in_progress')
+    }
+    await this.workRunner.signalDecision(workspaceId, instance.id, decisionId, 'approved')
+    await this.emitInstance(workspaceId, instance)
+  }
+
+  /**
    * Finish a gate step whose decision a human resolved and advance the run: stamp the step
    * done, finalize the block (final step) or start the next, persist, signal the durable
    * driver that the decision is `approved`, and emit.
@@ -297,20 +369,12 @@ export class RunStateMachine {
     instance: ExecutionInstance,
     stepIndex: number,
   ): Promise<void> {
-    const step = instance.steps[stepIndex]!
-    const decisionId = step.approval!.id
-    this.stepGraph.finishStep(step)
-    step.progress = 1
-    const isFinalStep = stepIndex === instance.steps.length - 1
+    const decisionId = instance.steps[stepIndex]!.approval!.id
+    const isFinalStep = this.advanceRunPastGate(instance, stepIndex)
     if (isFinalStep) {
-      instance.status = 'done'
       await this.finalizeBlock(workspaceId, instance, undefined)
       await this.stopRunContainer(workspaceId, instance)
     } else {
-      instance.currentStep = stepIndex + 1
-      const next = instance.steps[instance.currentStep]
-      if (next) this.stepGraph.startStep(next)
-      if (instance.status === 'blocked') instance.status = 'running'
       await this.updateBlockProgress(workspaceId, instance, 'in_progress')
     }
     await this.executionRepository.upsert(workspaceId, instance)
@@ -337,6 +401,16 @@ export class RunStateMachine {
     if (!block || block.status === 'done') return
 
     if ((block.level ?? 'frame') !== 'task') {
+      // An initiative block's PLANNING run finishing means execution BEGINS, not that
+      // the initiative is done — the block stays `in_progress`, and the execution loop
+      // (a later slice) flips it terminal once every tracker item settles.
+      if (instance.steps.some((s) => isInitiativeAgentKind(s.agentKind))) {
+        await this.blockRepository.update(workspaceId, block.id, {
+          status: 'in_progress',
+          progress: 0,
+        })
+        return
+      }
       // A mapping-only run (just the `blueprints` step, e.g. kicked off after a
       // bootstrap) leaves the service frame `ready` and droppable rather than
       // marking the whole service "done".

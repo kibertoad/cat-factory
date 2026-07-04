@@ -4,16 +4,22 @@ import type {
   OrganizePipelineInput,
   UpdatePipelineInput,
 } from '@cat-factory/contracts'
-import type { ConsensusStepConfig, Pipeline, StepGating } from '@cat-factory/kernel'
-import { assertFound, seedPipelines, ValidationError } from '@cat-factory/kernel'
+import type {
+  ConsensusStepConfig,
+  Pipeline,
+  StepGating,
+  TesterQualityConfig,
+} from '@cat-factory/kernel'
+import { assertFound, ConflictError, seedPipelines, ValidationError } from '@cat-factory/kernel'
 import type {
   ObservabilityConnectionRepository,
   PipelineRepository,
+  PipelineScheduleRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import { validatePipelineShape } from './pipelineShape.js'
+import { assertPipelineLaunchable, validatePipelineShape } from './pipelineShape.js'
 
 /**
  * The post-release-health gate watches a released PR's observability signals, so it is
@@ -32,6 +38,13 @@ export interface PipelineServiceDependencies {
    * observability-gated step can never be added.
    */
   observabilityConnectionRepository?: ObservabilityConnectionRepository
+  /**
+   * Recurring schedules, used to reject an edit that would make a pipeline un-schedulable
+   * (`availability: 'one-off'`) while a schedule still points at it — the pipeline-edit dual of
+   * the schedule-attach gate. Absent (no recurring persistence wired) ⇒ the cross-check is
+   * skipped.
+   */
+  pipelineScheduleRepository?: PipelineScheduleRepository
 }
 
 /** Saved, reusable pipelines (the pipeline palette). */
@@ -40,17 +53,20 @@ export class PipelineService {
   private readonly pipelineRepository: PipelineRepository
   private readonly idGenerator: IdGenerator
   private readonly observabilityConnectionRepository?: ObservabilityConnectionRepository
+  private readonly pipelineScheduleRepository?: PipelineScheduleRepository
 
   constructor({
     workspaceRepository,
     pipelineRepository,
     idGenerator,
     observabilityConnectionRepository,
+    pipelineScheduleRepository,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
     this.idGenerator = idGenerator
     this.observabilityConnectionRepository = observabilityConnectionRepository
+    this.pipelineScheduleRepository = pipelineScheduleRepository
   }
 
   /**
@@ -92,7 +108,12 @@ export class PipelineService {
       agentKinds: input.agentKinds,
       enabled: input.enabled,
       gating: input.gating,
+      testerQuality: input.testerQuality,
     })
+    // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
+    // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted). Evaluated
+    // over the enabled subset — a disabled bug-intake step imposes no requirement.
+    assertPipelineLaunchable(input.agentKinds, input.availability, undefined, input.enabled)
     await this.assertObservabilityGatedStepAllowed(workspaceId, input.agentKinds, input.enabled)
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
@@ -103,7 +124,10 @@ export class PipelineService {
       ...alignedEnabled(input.agentKinds, input.enabled),
       ...alignedConsensus(input.agentKinds, input.consensus),
       ...alignedGating(input.agentKinds, input.gating),
+      ...alignedFollowUps(input.agentKinds, input.followUps),
+      ...alignedTesterQuality(input.agentKinds, input.testerQuality),
       ...normalizedLabels(input.labels),
+      ...(input.availability ? { availability: input.availability } : {}),
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
     return pipeline
@@ -128,7 +152,12 @@ export class PipelineService {
       agentKinds: source.agentKinds,
       enabled: source.enabled,
       gating: source.gating,
+      testerQuality: source.testerQuality,
     })
+    // Same launch-constraint guarantee create/update give: a clone preserves the source's
+    // agentKinds + availability, so re-check that the pair is launchable (e.g. a bug-intake step
+    // without `availability: 'recurring'` must not be propagated into an un-runnable copy).
+    assertPipelineLaunchable(source.agentKinds, source.availability, undefined, source.enabled)
     const pipeline: Pipeline = {
       id: this.idGenerator.next('pl'),
       name: input.name?.trim() || `${source.name} (copy)`,
@@ -138,7 +167,13 @@ export class PipelineService {
       ...(source.enabled ? { enabled: [...source.enabled] } : {}),
       ...(source.consensus ? { consensus: [...source.consensus] } : {}),
       ...(source.gating ? { gating: [...source.gating] } : {}),
+      ...(source.followUps ? { followUps: [...source.followUps] } : {}),
+      ...(source.testerQuality ? { testerQuality: [...source.testerQuality] } : {}),
       ...(source.labels ? { labels: [...source.labels] } : {}),
+      // Preserve the launch constraint: cloning the recurring-only bug-triage built-in keeps the
+      // copy recurring-only (else a manual start of the copy — bug-intake step and all — would slip
+      // the gate). A `'both'`/unset source clones to unrestricted.
+      ...(source.availability ? { availability: source.availability } : {}),
       // A clone is a fresh, active, editable copy — never `builtin`, never `archived`.
     }
     await this.pipelineRepository.insert(workspaceId, pipeline)
@@ -164,15 +199,37 @@ export class PipelineService {
     const enabled = input.enabled ?? existing.enabled
     const consensus = input.consensus ?? existing.consensus
     const gating = input.gating ?? existing.gating
+    const followUps = input.followUps ?? existing.followUps
+    const testerQuality = input.testerQuality ?? existing.testerQuality
     const labels = input.labels ?? existing.labels
+    const availability = input.availability ?? existing.availability
     assertSomeEnabled(agentKinds, enabled)
     // Re-validate the shape against the EFFECTIVE (enabled) chain — disabling a producer
-    // while leaving its companion on would orphan the companion, and adding gating without
-    // an estimator is illegal — so validate whenever the chain, enable flags, OR gating
-    // change, not just on a chain replacement.
-    if (input.agentKinds || input.enabled || input.gating) {
-      validatePipelineShape({ agentKinds, enabled, gating })
+    // while leaving its companion on would orphan the companion, and adding gating (step or
+    // tester-QC) without an estimator is illegal — so validate whenever the chain, enable
+    // flags, gating, OR tester-QC change, not just on a chain replacement.
+    if (input.agentKinds || input.enabled || input.gating || input.testerQuality) {
+      validatePipelineShape({ agentKinds, enabled, gating, testerQuality })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
+    }
+    // Re-check the launch constraint when the chain, the enable mask, or the availability
+    // changes — e.g. adding (or enabling) a `bug-intake` step, or relaxing a recurring pipeline
+    // that carries one to `'both'`. Evaluated over the enabled subset.
+    if (input.agentKinds || input.enabled || input.availability !== undefined) {
+      assertPipelineLaunchable(agentKinds, availability, undefined, enabled)
+    }
+    // Pipeline-edit dual of the schedule-attach gate (see RecurringPipelineService): making a
+    // pipeline one-off-only while a recurring schedule still points at it would silently fail
+    // every future fire (each throws at origin='recurring'). Reject the edit — the user detaches
+    // the schedule first. Only reachable when availability is actively changed to 'one-off'
+    // (a schedule can't have been attached to an already-one-off pipeline).
+    if (input.availability === 'one-off' && this.pipelineScheduleRepository) {
+      const schedules = await this.pipelineScheduleRepository.list(workspaceId)
+      if (schedules.some((s) => s.pipelineId === id)) {
+        throw new ConflictError(
+          'This pipeline is attached to a recurring schedule, so it cannot be made one-off. Detach the schedule first.',
+        )
+      }
     }
     const pipeline: Pipeline = {
       id: existing.id,
@@ -183,7 +240,10 @@ export class PipelineService {
       ...alignedEnabled(agentKinds, enabled),
       ...alignedConsensus(agentKinds, consensus),
       ...alignedGating(agentKinds, gating),
+      ...alignedFollowUps(agentKinds, followUps),
+      ...alignedTesterQuality(agentKinds, testerQuality),
       ...normalizedLabels(labels),
+      ...(availability ? { availability } : {}),
       // `archived` is organization-only state, mutated via `organize` — preserved here.
       ...(existing.archived ? { archived: true } : {}),
     }
@@ -304,6 +364,29 @@ function alignedGating(
 ): Pick<Pipeline, 'gating'> {
   return gating?.some((g) => g?.enabled)
     ? { gating: agentKinds.map((_, i) => gating[i] ?? null) }
+    : {}
+}
+
+// Keep the Follow-up companion toggles aligned to agentKinds; only persist when at least one
+// step explicitly opts OUT (the default is on, so a `false` is the only value worth storing).
+function alignedFollowUps(
+  agentKinds: string[],
+  followUps: (boolean | null)[] | undefined,
+): Pick<Pipeline, 'followUps'> {
+  return followUps?.some((f) => f === false)
+    ? { followUps: agentKinds.map((_, i) => followUps[i] ?? null) }
+    : {}
+}
+
+// Keep the test quality-control companion configs aligned to agentKinds; only persist when at
+// least one Tester step deviates from the default (companion disabled, or an estimate gate
+// configured) — the default (null/enabled, ungated) needs no array at all.
+function alignedTesterQuality(
+  agentKinds: string[],
+  testerQuality: (TesterQualityConfig | null)[] | undefined,
+): Pick<Pipeline, 'testerQuality'> {
+  return testerQuality?.some((q) => q?.enabled === false || q?.gating?.enabled)
+    ? { testerQuality: agentKinds.map((_, i) => testerQuality[i] ?? null) }
     : {}
 }
 

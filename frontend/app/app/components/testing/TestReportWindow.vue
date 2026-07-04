@@ -18,6 +18,7 @@ import ArtifactLightbox from '~/components/media/ArtifactLightbox.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepContainerStatus from '~/components/panels/StepContainerStatus.vue'
+import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 
@@ -47,12 +48,24 @@ const testState = computed(() => step.value?.test ?? null)
 // ended), newest first, so the otherwise-opaque fixer sub-jobs have a surface here.
 const fixerAttempts = computed(() => [...(testState.value?.attemptLog ?? [])].reverse())
 
+// Test quality-control companion state: the coverage audit the QC reviewer ran on each report
+// (before the greenlight/fixer decision) plus its loop budget. Verdicts newest-first, so the
+// most recent audit leads. Absent when the companion is disabled or never ran.
+const quality = computed(() => step.value?.testerQuality ?? null)
+const qualityVerdicts = computed(() => [...(quality.value?.verdicts ?? [])].reverse())
+
 // Infrastructure observability — parity with the Coder's generic step detail, so the
 // Tester window surfaces WHERE its job runs (the container lifecycle: spinning up /
 // running phase / id+url / errored), the ephemeral environment it tests against, and the
 // run's infrastructure attempts + logs (container/runner/env spin-up), not just the
 // report. The container/subtask signals already flow onto the step via the generic poll.
 const runFailed = computed(() => instance.value?.status === 'failed')
+// A terminal run (done/failed) can't spin more infra: the attempts drawer stops its
+// background live-polling (manual refresh stays available).
+const runLive = computed(() => {
+  const status = instance.value?.status
+  return status != null && status !== 'done' && status !== 'failed'
+})
 const stepEnvironment = computed(() => step.value?.environment ?? null)
 const executionId = computed(() => instance.value?.id ?? null)
 // The infra-attempts log drawer is opened on demand (it fetches the per-run log rows).
@@ -479,6 +492,7 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   v-if="showProvisioning"
                   class="mt-2"
                   :execution-id="executionId"
+                  :live="runLive"
                 />
               </div>
             </section>
@@ -501,30 +515,18 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   data-testid="tester-fixer-attempt"
                   class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
                 >
-                  <div class="flex items-center gap-2">
-                    <UIcon
-                      :name="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
-                      class="h-3.5 w-3.5 shrink-0"
-                      :class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
-                    />
-                    <span class="text-[13px] font-medium text-slate-200">
-                      {{ t('testing.fixerTimeline.attempt', { n: a.attempt }) }}
-                    </span>
-                    <UBadge
-                      :color="a.outcome === 'completed' ? 'neutral' : 'error'"
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{
-                        a.outcome === 'completed'
-                          ? t('testing.fixerTimeline.completed')
-                          : t('testing.fixerTimeline.failed')
-                      }}
-                    </UBadge>
-                    <span class="ms-auto text-[11px] text-slate-500">{{
-                      d(new Date(a.at), 'short')
-                    }}</span>
-                  </div>
+                  <AttemptEntryHeader
+                    :label="t('testing.fixerTimeline.attempt', { n: a.attempt })"
+                    :outcome="a.outcome"
+                    :outcome-label="
+                      a.outcome === 'completed'
+                        ? t('testing.fixerTimeline.completed')
+                        : t('testing.fixerTimeline.failed')
+                    "
+                    :at="a.at"
+                    :icon="a.outcome === 'completed' ? 'i-lucide-wrench' : 'i-lucide-circle-x'"
+                    :icon-class="a.outcome === 'completed' ? 'text-amber-300' : 'text-rose-400'"
+                  />
                   <p v-if="a.summary" class="mt-1 text-[12px] leading-snug text-slate-400">
                     {{ a.summary }}
                   </p>
@@ -544,6 +546,91 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                           >{{ SEVERITY_LABELS[c.severity] }}</span
                         >
                         <span class="truncate">{{ c.title }}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </li>
+              </ol>
+            </section>
+
+            <!-- Test quality-control companion: the coverage audit(s) the QC reviewer ran on
+                 the report before the greenlight/fixer decision. Each verdict says whether the
+                 report adequately covered what the task needed tested, with the gaps that
+                 looped the Tester for a focused additional pass. -->
+            <section
+              v-if="quality && qualityVerdicts.length"
+              data-testid="tester-quality"
+              class="space-y-2"
+            >
+              <div class="flex items-center gap-2">
+                <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t('testing.quality.heading') }}
+                </h3>
+                <span
+                  v-if="quality.attempts"
+                  class="text-[11px] text-slate-400"
+                  :title="t('testing.quality.reruns')"
+                >
+                  {{
+                    t('testing.quality.rerunCount', {
+                      attempts: quality.attempts,
+                      max: quality.maxAttempts,
+                    })
+                  }}
+                </span>
+                <UBadge
+                  v-if="quality.exceeded"
+                  color="warning"
+                  variant="subtle"
+                  size="sm"
+                  data-testid="tester-quality-exceeded"
+                >
+                  {{ t('testing.quality.exceeded') }}
+                </UBadge>
+              </div>
+              <ol class="space-y-2">
+                <li
+                  v-for="(vd, vi) in qualityVerdicts"
+                  :key="`qc${vi}`"
+                  data-testid="tester-quality-verdict"
+                  class="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2"
+                >
+                  <div class="flex items-center gap-2">
+                    <UIcon
+                      :name="vd.adequate ? 'i-lucide-shield-check' : 'i-lucide-shield-alert'"
+                      class="h-3.5 w-3.5 shrink-0"
+                      :class="vd.adequate ? 'text-emerald-400' : 'text-amber-300'"
+                    />
+                    <span class="text-[13px] font-medium text-slate-200">
+                      {{
+                        vd.adequate
+                          ? t('testing.quality.adequate')
+                          : t('testing.quality.inadequate')
+                      }}
+                    </span>
+                    <span v-if="vd.model" class="ms-auto font-mono text-[10px] text-slate-500">{{
+                      vd.model
+                    }}</span>
+                    <span class="text-[11px] text-slate-500" :class="{ 'ms-auto': !vd.model }">{{
+                      d(new Date(vd.at), 'short')
+                    }}</span>
+                  </div>
+                  <p v-if="vd.feedback" class="mt-1 text-[12px] leading-snug text-slate-400">
+                    {{ vd.feedback }}
+                  </p>
+                  <div v-if="vd.gaps.length" class="mt-1.5">
+                    <p class="text-[11px] text-slate-500">{{ t('testing.quality.gaps') }}</p>
+                    <ul class="mt-1 space-y-0.5">
+                      <li
+                        v-for="(gap, gi) in vd.gaps"
+                        :key="`qc${vi}-g${gi}`"
+                        class="flex items-start gap-1.5 text-[12px] text-slate-300"
+                      >
+                        <UIcon
+                          name="i-lucide-dot"
+                          class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400"
+                        />
+                        <span>{{ gap }}</span>
                       </li>
                     </ul>
                   </div>

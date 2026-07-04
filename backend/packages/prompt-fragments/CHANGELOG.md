@@ -1,5 +1,176 @@
 # @cat-factory/prompt-fragments
 
+## 0.10.0
+
+### Minor Changes
+
+- 8eaa3f2: Universal writing-style fragments for document-authoring tasks (WS2 of the
+  documentation-type task initiative). Two built-in fragments — `style.anti-llmisms`
+  (cut the machine-written tells: filler intensifiers, hedging, throat-clearing,
+  summary-that-restates, bullet inflation) and `style.concise-actionable` (lead with
+  the point, active voice, one idea per paragraph, every recommendation names an actor
+  and an action) — now guide the document-authoring agents.
+
+  They reach those agents through a new `doc-aware` capability trait, the document
+  analogue of `code-aware`: the `doc-researcher` / `doc-outliner` / `doc-writer` /
+  `doc-finalizer` kinds carry it on their definitions and the `doc-reviewer` companion
+  carries it too, so the execution engine folds the block's selected style fragments
+  into each one's system prompt via the same `AgentContextBuilder` path `code-aware`
+  uses — no parallel fragment path in the prompt builders. Because the reviewer sees
+  the same bodies, the style guidance is both the writer's instruction and the
+  reviewer's criteria (an explicit clause in the companion prompt says so).
+
+  A new document task is pre-seeded with both style fragments (default-on,
+  user-removable like any block pin) via `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, seeded
+  onto the task's `fragmentIds` in `BoardService.addTask` — the selection default lives
+  at task creation, not hard-coded in a prompt.
+
+  The fragment "add" pickers (service, task, and workspace-default) now render their
+  options as labelled per-category sections instead of one flat list, so the catalog
+  stays navigable now that a block can pin across two tracks at once — the technical
+  collections (Node / React / …) and the Writing-style fragments.
+
+## 0.9.55
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+
+## 0.9.54
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+
+## 0.9.53
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+
+## 0.9.52
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+
+## 0.9.51
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+
+## 0.9.50
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/contracts@0.90.0
+
+## 0.9.49
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/contracts@0.89.0
+
+## 0.9.48
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+
+## 0.9.47
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+
+## 0.9.46
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/contracts@0.86.0
+
+## 0.9.45
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+
+## 0.9.44
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+
+## 0.9.43
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+
+## 0.9.42
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+
+## 0.9.41
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+
+## 0.9.40
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+
+## 0.9.39
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+
+## 0.9.38
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+
+## 0.9.37
+
+### Patch Changes
+
+- Updated dependencies [d7f6e1c]
+  - @cat-factory/contracts@0.80.1
+
+## 0.9.36
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+
 ## 0.9.35
 
 ### Patch Changes

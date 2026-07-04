@@ -261,6 +261,26 @@ export function environmentSection(context: AgentRunContext): string {
 }
 
 /**
+ * Render the "involved services" section from the run context — the connected services directly
+ * involved in this task beyond its own (the connections initiative), each with the connection
+ * `description` prose explaining the relationship and (when live this run) the URL of its ephemeral
+ * environment. Empty string when the task names no (still-valid) involved services. Lets a
+ * cross-service test / change reason about the peer and reach its real environment.
+ */
+export function involvedServicesSection(context: AgentRunContext): string {
+  const involved = context.involvedServices
+  if (!involved?.length) return ''
+  const lines = ['', 'Involved connected services:']
+  for (const service of involved) {
+    const parts = [`- ${service.title}`]
+    if (service.description) parts.push(`— ${service.description}`)
+    if (service.envUrl) parts.push(`(live environment: ${service.envUrl})`)
+    lines.push(parts.join(' '))
+  }
+  return lines.join('\n')
+}
+
+/**
  * Directory in the agent's checkout where the harness materialises the full text of
  * each linked-context item (requirements / RFCs / PRDs / tracker issues), so a
  * container agent can read what it needs on demand rather than carrying every body in
@@ -363,6 +383,7 @@ export function renderStandardUserPrompt(
     USER_TEMPLATES[phase](toView(context)) +
     linkedContextSection(context, opts) +
     environmentSection(context) +
+    involvedServicesSection(context) +
     // Only the implementer (build) acts on the TECHNICAL marker — its system prompt carries
     // the matching rule. The architect/reviewer have no such rule, so don't change their prompt.
     (phase === 'build' ? technicalContextSection(context) : '')

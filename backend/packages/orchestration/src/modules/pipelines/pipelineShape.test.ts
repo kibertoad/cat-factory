@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
 import {
+  assertPipelineLaunchable,
   assertValidCompanionPlacement,
   assertValidGating,
+  assertValidTesterQualityGating,
   validatePipelineShape,
 } from './pipelineShape.js'
 
@@ -78,6 +80,109 @@ describe('validatePipelineShape', () => {
         null,
         null,
         { enabled: true, onMissingEstimate: 'run' },
+      ]),
+    ).toThrow()
+  })
+
+  describe('tester quality-control gating', () => {
+    it('requires an enabled task-estimator before a QC-gated Tester step', () => {
+      expect(() =>
+        assertValidTesterQualityGating(['coder', 'tester-api'], undefined, [
+          null,
+          { enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } },
+        ]),
+      ).toThrow()
+      expect(() =>
+        assertValidTesterQualityGating(['task-estimator', 'coder', 'tester-api'], undefined, [
+          null,
+          null,
+          { enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } },
+        ]),
+      ).not.toThrow()
+    })
+
+    it('rejects a QC gate that sets no axis threshold', () => {
+      expect(() =>
+        assertValidTesterQualityGating(['task-estimator', 'tester-api'], undefined, [
+          null,
+          { enabled: true, gating: { enabled: true, onMissingEstimate: 'run' } },
+        ]),
+      ).toThrow()
+    })
+
+    it('imposes no requirement when QC is enabled-but-ungated, disabled, or gate-disabled', () => {
+      // Enabled, no gating → nothing to validate.
+      expect(() =>
+        assertValidTesterQualityGating(['tester-api'], undefined, [{ enabled: true }]),
+      ).not.toThrow()
+      // A disabled Tester step with a QC gate imposes no requirement (it never runs).
+      expect(() =>
+        assertValidTesterQualityGating(
+          ['tester-api'],
+          [false],
+          [{ enabled: true, gating: { enabled: true, minRisk: 0.5, onMissingEstimate: 'run' } }],
+        ),
+      ).not.toThrow()
+      // A QC gate flagged disabled needs no estimator.
+      expect(() =>
+        assertValidTesterQualityGating(['tester-api'], undefined, [
+          { enabled: true, gating: { enabled: false, onMissingEstimate: 'run' } },
+        ]),
+      ).not.toThrow()
+    })
+  })
+})
+
+describe('assertPipelineLaunchable', () => {
+  it('requires a recurring pipeline for a bug-intake step (unset ⇒ both ⇒ rejected)', () => {
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], 'recurring')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], 'both')).toThrow()
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], 'one-off')).toThrow()
+    // Absent availability means 'both' → a bug-intake pipeline is still rejected.
+    expect(() => assertPipelineLaunchable(['bug-intake', 'coder'], undefined)).toThrow()
+    // No bug-intake step → any availability is fine.
+    expect(() => assertPipelineLaunchable(['coder'], undefined)).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring')).not.toThrow()
+  })
+
+  it('gates the launch origin against the pipeline availability', () => {
+    // A manual start of a recurring-only pipeline is refused; a scheduled fire of it is fine.
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring', 'manual')).toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring', 'recurring')).not.toThrow()
+    // A scheduled fire of a one-off-only pipeline is refused; a manual start of it is fine.
+    expect(() => assertPipelineLaunchable(['coder'], 'one-off', 'recurring')).toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'one-off', 'manual')).not.toThrow()
+    // 'both' / unset runs either way.
+    expect(() => assertPipelineLaunchable(['coder'], 'both', 'manual')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'both', 'recurring')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], undefined, 'manual')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], undefined, 'recurring')).not.toThrow()
+  })
+
+  it('skips the origin gate when no origin is supplied (retry/restart re-drive)', () => {
+    // A retry re-drives stored steps with no origin — the launch gate must not fire.
+    expect(() => assertPipelineLaunchable(['coder'], 'recurring')).not.toThrow()
+    expect(() => assertPipelineLaunchable(['coder'], 'one-off')).not.toThrow()
+  })
+
+  it('evaluates the bug-intake requirement over the enabled subset', () => {
+    // A DISABLED bug-intake step never runs, so it imposes no recurring requirement — the
+    // pipeline may be saved as 'both'/'one-off' (parity with every other check in this file).
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'both', undefined, [false, true]),
+    ).not.toThrow()
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'one-off', 'manual', [false, true]),
+    ).not.toThrow()
+    // An ENABLED bug-intake step (explicit true, or default when the mask omits it) still requires
+    // recurring.
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'both', undefined, [true, true]),
+    ).toThrow()
+    expect(() =>
+      assertPipelineLaunchable(['bug-intake', 'coder'], 'both', undefined, [
+        undefined as never,
+        true,
       ]),
     ).toThrow()
   })

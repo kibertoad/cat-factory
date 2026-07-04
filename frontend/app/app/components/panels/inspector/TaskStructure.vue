@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const props = defineProps<{ block: Block }>()
 
@@ -9,21 +12,25 @@ const ui = useUiStore()
 const accounts = useAccountsStore()
 const { t } = useI18n()
 
-type MenuItem = { label: string; icon?: string; onSelect: () => void }
+// The catalog is per-board and invalidated on a workspace switch, so (re)load it when the
+// task inspector mounts — mirrors ServiceFragments; ensureLoaded is a no-op while current.
+onMounted(() => fragments.ensureLoaded())
 
 // ---- best-practice prompt fragments ----------------------------------------
-// Selected fragments (resolved against the catalog; unknown ids are dropped).
+// Selected fragments, resolved against the catalog. An id the catalog no longer
+// resolves (removed/suppressed after selection) still renders — labelled by its
+// raw id — so it stays visible and removable.
 const selectedFragments = computed(() =>
-  (props.block.fragmentIds ?? [])
-    .map((id) => fragments.getFragment(id))
-    .filter((f): f is NonNullable<typeof f> => !!f),
+  (props.block.fragmentIds ?? []).map(
+    (id) => fragments.getFragment(id) ?? { id, title: id, summary: '' },
+  ),
 )
 
 // A trailing group that jumps from "attach a fragment" to authoring/editing the
 // library itself (board tier always; account tier when accounts are enabled).
 // Open to every member — managing fragments is not an admin-only action.
-const manageItems = computed<MenuItem[]>(() => {
-  const items: MenuItem[] = [
+const manageItems = computed<DropdownMenuItem[]>(() => {
+  const items: DropdownMenuItem[] = [
     {
       label: t('inspector.fragments.manageBoard'),
       icon: 'i-lucide-book-marked',
@@ -41,18 +48,18 @@ const manageItems = computed<MenuItem[]>(() => {
 })
 
 // Picker menu: fragments suitable for this block's type, not already selected,
-// grouped by category so the dropdown reads like the catalog, with the management
-// links appended as the final group.
-const fragmentMenu = computed<MenuItem[][]>(() => {
+// grouped into labelled per-category sections so the dropdown reads like the catalog,
+// with the management links appended as the final group.
+const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
   const selected = new Set(props.block.fragmentIds ?? [])
-  const groups = new Map<string, MenuItem[]>()
-  for (const f of fragments.forBlockType(props.block.type)) {
-    if (selected.has(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => addFragment(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.values(), manageItems.value]
+  return [
+    ...buildFragmentPickerGroups(
+      fragments.forBlockType(props.block.type),
+      (id) => selected.has(id),
+      addFragment,
+    ),
+    manageItems.value,
+  ]
 })
 
 function addFragment(id: string) {
@@ -70,7 +77,7 @@ function removeFragment(id: string) {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <InspectorSection :title="t('inspector.structure.title')" :hint="t('inspector.structure.hint')">
     <!-- module assignment -->
     <div>
       <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -83,6 +90,9 @@ function removeFragment(id: string) {
         :placeholder="t('inspector.structure.modulePlaceholder')"
         icon="i-lucide-package"
       />
+      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+        {{ t('inspector.structure.moduleHint') }}
+      </p>
     </div>
 
     <!-- best practices (prompt fragments) -->
@@ -118,6 +128,9 @@ function removeFragment(id: string) {
       <div v-else class="text-[11px] text-slate-500">
         {{ t('inspector.structure.bestPracticesEmpty') }}
       </div>
+      <p class="mt-1 text-[11px] leading-snug text-slate-500">
+        {{ t('inspector.structure.bestPracticesHint') }}
+      </p>
     </div>
-  </div>
+  </InspectorSection>
 </template>

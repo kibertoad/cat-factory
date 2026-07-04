@@ -97,6 +97,18 @@ export interface VcsClient {
     path: string,
     gitRef?: string,
   ): Promise<RepoFileContent | null>
+  /**
+   * The sha of the most recent commit that touched `path` on `gitRef` (the repo's
+   * default branch when `gitRef` is omitted or `'HEAD'`), or null when there is no
+   * such commit. The lightweight staleness probe the fragment library uses instead of
+   * listing the whole directory.
+   */
+  latestCommitSha(
+    connection: VcsConnectionRef,
+    ref: VcsRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<string | null>
   listPullRequests(
     connection: VcsConnectionRef,
     ref: VcsRepoRef,

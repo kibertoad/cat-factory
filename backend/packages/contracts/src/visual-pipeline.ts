@@ -1,3 +1,4 @@
+import { resolveFrontendServePort } from './frontend.js'
 import type { Block, Pipeline } from './entities.js'
 
 // ---------------------------------------------------------------------------
@@ -62,4 +63,46 @@ export function frameAllowsVisualPipeline(
         (bind) => bind.source.kind === 'service' && bind.source.serviceBlockId === frame.id,
       ),
   )
+}
+
+/**
+ * The browser origins of every `frontend` frame that binds `serviceFrameId` as a backend
+ * service — the origins that service's ephemeral env must accept (CORS; also OAuth callback
+ * hosts). It is the REVERSE of `FrontendConfig.backendBindings` (frontend→service) and mirrors
+ * `frameAllowsVisualPipeline`'s single-pass scan (never a per-frame point read): a deployer
+ * exposes the result as `{{input.frontendOrigins}}` so an operator's `secretInjections`
+ * `valueTemplate` / helm `--set` can fold it into the backend's CORS env var.
+ *
+ * Only a binding with a NON-EMPTY `envVar` counts: an empty-`envVar` row is filtered out of the
+ * injected env (the frontend never receives that backend's URL, so its browser never calls it,
+ * so no cross-origin request to allow). Each contributing frontend emits `http://localhost:<servePort>`
+ * — the port the app is ACTUALLY served on (`resolveFrontendServePort`, which sanitizes a
+ * reserved-port collision to the default), so the injected CORS origin can't drift from the served
+ * port. Deduped + sorted for a stable comma-join.
+ *
+ * This one origin covers BOTH self-contained UI-test paths a frontend can drive against the service:
+ *   - the `tester-ui` container, whose in-container browser serves the app at `localhost:<servePort>`, and
+ *   - the browsable PREVIEW (local Docker family), whose host port is now PINNED to the serve port
+ *     (`LocalPreviewTransport`), so a developer's browser reaches it at the same `localhost:<servePort>`.
+ * They share the origin, so a `previewEnabled` frontend needs no extra CORS entry. (Apple `container`
+ * reaches the preview at the VM's own IP — `http://<containerIP>:<servePort>` — which is not knowable
+ * ahead of provision, so that origin is never injected; only the localhost-pinnable Docker family is.)
+ */
+export function frontendOriginsForService(
+  serviceFrameId: string,
+  blocks: readonly Pick<Block, 'level' | 'type' | 'frontendConfig'>[],
+): string[] {
+  const origins = new Set<string>()
+  for (const b of blocks) {
+    if (b.level !== 'frame' || b.type !== 'frontend' || !b.frontendConfig) continue
+    const bindsService = b.frontendConfig.backendBindings.some(
+      (bind) =>
+        bind.source.kind === 'service' &&
+        bind.source.serviceBlockId === serviceFrameId &&
+        bind.envVar.trim().length > 0,
+    )
+    if (!bindsService) continue
+    origins.add(`http://localhost:${resolveFrontendServePort(b.frontendConfig.servePort)}`)
+  }
+  return [...origins].sort()
 }

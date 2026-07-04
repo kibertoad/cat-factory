@@ -3,7 +3,12 @@ import { computed, ref, watch } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
-import { agentKindMeta, companionForProducer, isConsensusEligibleKind } from '~/utils/catalog'
+import {
+  agentKindMeta,
+  companionForProducer,
+  isConsensusEligibleKind,
+  isTesterKind,
+} from '~/utils/catalog'
 import type { ConsensusStrategy } from '~/types/consensus'
 
 type DraftUnit = { index: number; kind: AgentKind; companionIndex: number | null }
@@ -146,15 +151,18 @@ function companionLabel(kind: string): string | null {
 }
 
 // Surfaced as an inline hint: a gated step needs a task-estimator before it (mirrors the
-// backend validation, which also rejects the save/start).
+// backend validation, which also rejects the save/start). Both the companion estimate gate
+// (`draftGating`) and the Tester QC companion's estimate gate (`draftTesterQuality[i].gating`)
+// count — either without a preceding estimator is rejected on save.
 const gatingNeedsEstimator = computed(() => {
   const kinds = pipelines.draft
+  const hasEstimatorBefore = (i: number) =>
+    kinds.slice(0, i).some((k, j) => k === 'task-estimator' && pipelines.draftEnabled[j] !== false)
   for (let i = 0; i < kinds.length; i++) {
-    if (!pipelines.draftGating[i]?.enabled || pipelines.draftEnabled[i] === false) continue
-    const hasEstimator = kinds
-      .slice(0, i)
-      .some((k, j) => k === 'task-estimator' && pipelines.draftEnabled[j] !== false)
-    if (!hasEstimator) return true
+    if (pipelines.draftEnabled[i] === false) continue
+    const gated =
+      pipelines.draftGating[i]?.enabled || pipelines.draftTesterQuality[i]?.gating?.enabled
+    if (gated && !hasEstimatorBefore(i)) return true
   }
   return false
 })
@@ -434,6 +442,30 @@ async function clone(p: Pipeline) {
                     "
                     @click="pipelines.toggleDraftFollowUps(unit.index)"
                   />
+                  <!-- Test quality-control companion: audits the Tester's report for coverage
+                     before the greenlight/fixer decision and loops the Tester on gaps (Tester
+                     steps only). Enabled by default. -->
+                  <UButton
+                    v-if="isTesterKind(unit.kind)"
+                    :icon="
+                      pipelines.draftTesterQuality[unit.index]?.enabled === false
+                        ? 'i-lucide-shield-off'
+                        : 'i-lucide-shield-check'
+                    "
+                    :color="
+                      pipelines.draftTesterQuality[unit.index]?.enabled === false
+                        ? 'neutral'
+                        : 'secondary'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :title="
+                      pipelines.draftTesterQuality[unit.index]?.enabled === false
+                        ? t('pipeline.builder.testerQualityEnableTooltip')
+                        : t('pipeline.builder.testerQualityDisableTooltip')
+                    "
+                    @click="pipelines.toggleDraftTesterQuality(unit.index)"
+                  />
                   <UButton
                     icon="i-lucide-chevron-up"
                     color="neutral"
@@ -640,6 +672,77 @@ async function clone(p: Pipeline) {
                       class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
                     />
                   </template>
+                </div>
+              </div>
+
+              <!-- Test quality-control companion config (shown when QC is enabled on a Tester
+                 step): an optional estimate gate so only heavy tasks get the coverage audit. -->
+              <div
+                v-if="
+                  isTesterKind(unit.kind) &&
+                  pipelines.draftTesterQuality[unit.index]?.enabled !== false
+                "
+                class="ms-6 space-y-2 rounded-md border border-sky-800/40 bg-sky-950/20 p-2 text-xs"
+              >
+                <div class="flex items-center gap-1.5">
+                  <UIcon name="i-lucide-shield-check" class="h-3.5 w-3.5 text-sky-400" />
+                  <span class="min-w-0 flex-1 truncate text-slate-200">
+                    {{ t('pipeline.builder.testerQualityLabel') }}
+                  </span>
+                  <UButton
+                    :icon="
+                      pipelines.draftTesterQuality[unit.index]?.gating?.enabled
+                        ? 'i-lucide-toggle-right'
+                        : 'i-lucide-toggle-left'
+                    "
+                    :color="
+                      pipelines.draftTesterQuality[unit.index]?.gating?.enabled
+                        ? 'success'
+                        : 'neutral'
+                    "
+                    variant="ghost"
+                    size="xs"
+                    :label="t('pipeline.builder.gateOnEstimate')"
+                    :title="t('pipeline.builder.testerQualityGateTooltip')"
+                    @click="pipelines.toggleDraftTesterQualityGating(unit.index)"
+                  />
+                </div>
+                <div
+                  v-if="pipelines.draftTesterQuality[unit.index]?.gating?.enabled"
+                  class="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-2"
+                >
+                  <span class="text-[10px] text-slate-500">{{
+                    t('pipeline.builder.runWhenAny')
+                  }}</span>
+                  <label class="text-slate-400">{{
+                    t('pipeline.builder.complexityThreshold')
+                  }}</label>
+                  <input
+                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minComplexity"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  />
+                  <label class="text-slate-400">{{ t('pipeline.builder.riskThreshold') }}</label>
+                  <input
+                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minRisk"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  />
+                  <label class="text-slate-400">{{ t('pipeline.builder.impactThreshold') }}</label>
+                  <input
+                    v-model.number="pipelines.draftTesterQuality[unit.index]!.gating!.minImpact"
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    class="w-14 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-slate-100"
+                  />
                 </div>
               </div>
             </li>

@@ -189,6 +189,14 @@ export {
   type EnvironmentTeardownServiceDependencies,
 } from './modules/environments/EnvironmentTeardownService.js'
 export * as environmentsLogic from './modules/environments/environments.logic.js'
+// The shared SSRF-safe fetch (per-hop redirect revalidation + response byte cap) used by
+// the policy-based providers; also reused by the server's web-search upstream.
+export {
+  type MakeHttpError,
+  DEFAULT_MAX_REDIRECTS,
+  readCappedText,
+  safeFetch,
+} from './modules/shared/safe-fetch.js'
 // The HTTP environment provider (a `fetch` shell around the manifest logic above),
 // promoted from the Worker infra so every facade composes the same provider.
 export {
@@ -325,6 +333,12 @@ export {
   type PoolScopeOpts,
 } from './modules/providers/ApiKeyService.js'
 export {
+  PublicApiKeyService,
+  type PublicApiKeyServiceDependencies,
+  type PublicApiKeyAuth,
+  type IssuedPublicApiKey,
+} from './modules/publicApi/PublicApiKeyService.js'
+export {
   PersonalSubscriptionService,
   type PersonalSubscriptionServiceDependencies,
   type LeasedPersonalToken,
@@ -342,9 +356,9 @@ export {
   type UserSecretServiceDependencies,
 } from './modules/providers/UserSecretService.js'
 export {
-  registerUserSecretKind,
-  getUserSecretKind,
-  listUserSecretKinds,
+  UserSecretKindRegistry,
+  defaultUserSecretKindRegistry,
+  githubPatUserSecretKind,
   type UserSecretKindHandler,
   type UserSecretTestInput,
 } from './modules/providers/userSecretKinds.js'

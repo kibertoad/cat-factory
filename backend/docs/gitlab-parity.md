@@ -7,7 +7,8 @@ the engine's gates/merger still consume). GitHub is the reference implementation
 
 This doc tracks the work that brings the GitLab provider to behavioural parity with GitHub
 across all three runtime facades (Cloudflare Worker, Node, local), and the conformance
-coverage that keeps them from drifting.
+coverage that keeps them from drifting. For a deployer-facing, feature-by-feature
+comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
 
 ## Status
 

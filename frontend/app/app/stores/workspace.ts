@@ -13,6 +13,7 @@ import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useModelPresetsStore } from '~/stores/modelPresets'
 import { useServiceFragmentDefaultsStore } from '~/stores/serviceFragmentDefaults'
 import { useRecurringPipelinesStore } from '~/stores/recurringPipelines'
+import { useInitiativesStore } from '~/stores/initiative'
 import { useServicesStore } from '~/stores/services'
 import { useAgentsStore } from '~/stores/agents'
 import { useTrackerStore } from '~/stores/tracker'
@@ -21,6 +22,7 @@ import { useClarityStore } from '~/stores/clarity'
 import { useBrainstormStore } from '~/stores/brainstorm'
 import { useConsensusStore } from '~/stores/consensus'
 import { useGitHubStore } from '~/stores/github'
+import { useFragmentsStore } from '~/stores/fragments'
 import { useProviderConnectionsStore } from '~/stores/providerConnections'
 
 /**
@@ -81,6 +83,11 @@ export const useWorkspaceStore = defineStore(
         useBrainstormStore().reset()
         useConsensusStore().reset()
         useGitHubStore().reset()
+        useInitiativesStore().reset()
+        // The fragment picker catalog is per-board (the merged tenant catalog), so drop
+        // it too — the next inspector open re-fetches it for the switched-to board rather
+        // than showing the previous board's (or a raw-id placeholder for) fragments.
+        useFragmentsStore().invalidate()
       }
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null
@@ -91,7 +98,7 @@ export const useWorkspaceStore = defineStore(
       else workspaces.value.unshift(snapshot.workspace)
       useBoardStore().hydrate(snapshot.blocks)
       usePipelinesStore().hydrate(snapshot.pipelines, snapshot.pipelineCatalogVersions)
-      useExecutionStore().hydrate(snapshot.executions)
+      useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
       useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
       useAgentRunsStore().hydrateEnvConfigRepair(snapshot.envConfigRepairJobs ?? [])
       useNotificationsStore().hydrate(snapshot.notifications ?? [])
@@ -104,6 +111,7 @@ export const useWorkspaceStore = defineStore(
       useModelPresetsStore().hydrate(snapshot.modelPresets ?? [])
       useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
+      useInitiativesStore().hydrate(snapshot.initiatives)
       useTrackerStore().hydrate(snapshot.trackerSettings)
       useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
       // Merge the deployment's registered custom agent kinds into the palette catalog so a

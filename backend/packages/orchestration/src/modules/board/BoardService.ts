@@ -7,7 +7,7 @@ import type {
   ReparentInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
-import type { Block, BlockType, Position } from '@cat-factory/kernel'
+import type { Block, BlockType, Position, ServiceConnection } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
@@ -15,6 +15,9 @@ import type {
   Clock,
   ExecutionEventPublisher,
   ExecutionRepository,
+  GitHubRepo,
+  GroupCacheHandle,
+  InitiativeRepository,
   RepoProjectionRepository,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
@@ -27,10 +30,13 @@ import {
   canReparent,
   descendantIds,
   gridSlot,
+  involvedServiceIdsError,
+  serviceConnectionsError,
   serviceOf,
   tasksOf,
   wouldCreateCycle,
 } from './board.logic.js'
+import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 
 export interface BoardServiceDependencies {
   workspaceRepository: WorkspaceRepository
@@ -44,6 +50,15 @@ export interface BoardServiceDependencies {
    * repo to the new service frame; absent → that path reports unavailable.
    */
   repoProjectionRepository?: RepoProjectionRepository
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, caching-layer
+   * slice 3). {@link BoardService.addServiceFromRepo} flips a repo's monorepo flag
+   * directly on the projection (a resolver-visible field), so it must drop the
+   * workspace's group afterwards — exactly as `GitHubSyncService.setRepoMonorepo` does
+   * for the same write on the GitHub-connect path. Absent (tests / the Worker's
+   * pass-through profile) ⇒ the invalidation is a no-op.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   /**
    * In-org shared services. When wired, every new top-level frame is registered as
    * an account-owned {@link Service} and mounted onto the creating workspace, so it
@@ -59,6 +74,14 @@ export interface BoardServiceDependencies {
    * → new frames start with no service-level fragments.
    */
   serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+  /**
+   * Initiative persistence, present only when the initiatives module is wired. Backs the
+   * cascade cleanup in {@link BoardService.removeBlock}: deleting an `initiative`-level block
+   * must also delete its 1:1 entity row, the same way a doomed service frame's account-owned
+   * service is reclaimed — otherwise the row survives as a phantom in the snapshot with its
+   * slug reserved forever. Absent → no initiatives exist, so nothing to clean up.
+   */
+  initiativeRepository?: InitiativeRepository
   /**
    * Real-time push. When wired, every successful board mutation emits a coarse
    * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
@@ -98,9 +121,11 @@ export class BoardService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly repoProjectionRepository?: RepoProjectionRepository
+  private readonly repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
+  private readonly initiativeRepository?: InitiativeRepository
   private readonly events?: ExecutionEventPublisher
 
   constructor({
@@ -110,9 +135,11 @@ export class BoardService {
     idGenerator,
     clock,
     repoProjectionRepository,
+    repoProjectionCache,
     serviceRepository,
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
+    initiativeRepository,
     executionEventPublisher,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -121,9 +148,11 @@ export class BoardService {
     this.idGenerator = idGenerator
     this.clock = clock
     this.repoProjectionRepository = repoProjectionRepository
+    this.repoProjectionCache = repoProjectionCache
     this.serviceRepository = serviceRepository
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
+    this.initiativeRepository = initiativeRepository
     this.events = executionEventPublisher
   }
 
@@ -321,6 +350,10 @@ export class BoardService {
     if (input.isMonorepo !== undefined && input.isMonorepo !== repo.isMonorepo) {
       await this.repoProjectionRepository.setMonorepo(workspaceId, repo.githubId, input.isMonorepo)
       repo.isMonorepo = input.isMonorepo
+      // The monorepo flag decides whether `resolveRepoTarget` hands agents the service
+      // subdirectory, so drop the cached projection or a warmed entry keeps serving the
+      // old flag until its TTL — the agent would run at the repo root instead of the pin.
+      await this.repoProjectionCache?.invalidateGroup(workspaceId)
     }
     // Normalise the requested service subdirectory to a clean, SAFE relative path:
     // strip slashes/`.` and reject any `..` segment, so a stored directory can never
@@ -329,9 +362,13 @@ export class BoardService {
     const directory = normalizeServiceDirectory(input.directory)
     // A monorepo can back SEVERAL service frames (one per subdirectory), so the
     // single-service guard applies only to whole-repo (non-monorepo) repos. A monorepo
-    // service MUST name its subdirectory so execution can scope agents to it.
-    if (repo.blockId && !repo.isMonorepo) {
-      throw new ValidationError('This repository is already linked to a board service')
+    // service MUST name its subdirectory so execution can scope agents to it. The link
+    // is the account-owned Service, so a duplicate is detected via `getByRepo`.
+    if (!repo.isMonorepo && this.serviceRepository) {
+      const existing = await this.serviceRepository.getByRepo(repo.installationId, repo.githubId)
+      if (existing) {
+        throw new ValidationError('This repository is already linked to a board service')
+      }
     }
     if (repo.isMonorepo && !directory) {
       throw new ValidationError('Select a service directory for this monorepo')
@@ -374,12 +411,6 @@ export class BoardService {
       directory: directory ?? null,
     })
     await this.blockRepository.insert(workspaceId, block, serviceId)
-    // A monorepo's repo backs several frames, so the projection's single `block_id`
-    // link can't represent it — the Service mapping (read by resolveRepoTarget) is
-    // authoritative there. Keep the legacy link only for a whole-repo service.
-    if (!repo.isMonorepo) {
-      await this.repoProjectionRepository.linkBlock(workspaceId, repo.githubId, block.id)
-    }
     await this.emitBoardChanged(workspaceId, 'block-added', block.id)
     return block
   }
@@ -434,6 +465,13 @@ export class BoardService {
     if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
       block.taskTypeFields = input.taskTypeFields
     }
+    // A document task starts with the universal writing-style fragments pre-selected
+    // (default-on, user-removable like any block pin). These fold into the `doc-aware`
+    // authoring/review kinds via the engine's fragment path — the selection default lives
+    // here, at task creation, not hard-coded in a prompt.
+    if (taskType === 'document') {
+      block.fragmentIds = [...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS]
+    }
     // Optional epic membership at creation (the epic-import spawn path passes this so
     // every child task joins the epic it was imported under).
     if (input.epicId) block.epicId = input.epicId
@@ -463,6 +501,70 @@ export class BoardService {
     // the fan-out reaches every workspace mounting the service, not just the acting one.
     await this.emitBoardChanged(homeWorkspaceId, 'block-added', block.id)
     return block
+  }
+
+  /**
+   * Create a HEADLESS internal task — a top-level, `internal: true` block used purely to anchor
+   * a public-API run (an external "initiative breakdown"). It is EXCLUDED from every board
+   * projection (see the snapshot/board reads), so it never renders in the UI; deliberately does
+   * NOT emit a `block-added` event (nothing should flash onto a live board). Returns the block so
+   * the caller can start an execution on it. The engine writes status onto it like any block.
+   */
+  async createInternalTask(
+    workspaceId: string,
+    input: { title: string; description: string },
+  ): Promise<Block> {
+    await this.requireWorkspace(workspaceId)
+    const block: Block = {
+      id: this.idGenerator.next('task'),
+      title: input.title.trim() || 'Initiative',
+      // `type` is the service/repo CLASSIFICATION (frontend/service/library/…), orthogonal to the
+      // `level` hierarchy; there is no task-specific BlockType. This anchor is a standalone,
+      // never-rendered, repo-less `level:'task'` block, so `type` is irrelevant to it — 'service'
+      // is just the neutral default (a normal task inherits its parent service's type instead).
+      type: 'service',
+      description: input.description ?? '',
+      position: { x: 0, y: 0 },
+      status: 'planned',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'task',
+      parentId: null,
+      internal: true,
+    }
+    await this.blockRepository.insert(workspaceId, block)
+    return block
+  }
+
+  /**
+   * Fetch a HEADLESS internal anchor block by id, or null when no block with that id exists in
+   * the workspace OR it is not `internal`. The public-API job reads use this to confine an
+   * external key to the runs IT created (an `internal` block) — never an arbitrary board
+   * execution that merely shares the key's workspace. See PublicApiController.
+   */
+  async getInternalTask(workspaceId: string, blockId: string): Promise<Block | null> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    return block?.internal ? block : null
+  }
+
+  /**
+   * Delete a HEADLESS internal anchor block. Used by the public API to roll back the anchor when
+   * the run it was created for fails to start, so a failed dispatch never leaves an orphan
+   * `internal` block behind (it renders nowhere and is invisible to the cap, so it would just
+   * accumulate). A headless anchor has no children/service subtree, so a direct delete is enough.
+   */
+  async deleteInternalTask(workspaceId: string, blockId: string): Promise<void> {
+    await this.blockRepository.deleteMany(workspaceId, [blockId])
+  }
+
+  /**
+   * How many of the workspace's headless internal "initiative" runs are still in flight — the
+   * concurrency backstop the public API checks before starting another, so a single (possibly
+   * leaked) key can't spin up unbounded LLM runs. A SQL `COUNT`, not a load-and-count.
+   */
+  countActiveInternalTasks(workspaceId: string): Promise<number> {
+    return this.blockRepository.countActiveInternal(workspaceId)
   }
 
   /** Add a module (sub-frame) inside a service. */
@@ -598,6 +700,61 @@ export class BoardService {
       const { serviceFragmentIds: _ignored, ...rest } = patch
       effective = rest
     }
+    // `serviceConnections` lives only on service-type frames (the consumer end of each
+    // edge); dropped elsewhere for the same never-persist-dead-data reason as above.
+    if (effective.serviceConnections !== undefined) {
+      if (block.level !== 'frame' || block.type !== 'service') {
+        const { serviceConnections: _ignored, ...rest } = effective
+        effective = rest
+      } else if (effective.serviceConnections.length) {
+        // Resolve targets from ONE home-workspace read; only ids not homed here (a
+        // service mounted from another workspace) fall back to the cross-home-aware
+        // per-id resolve — a bounded user-authored list, not a data-sized loop.
+        const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+        const byId = new Map(homeBlocks.map((b) => [b.id, b]))
+        const resolved = new Map<string, Block>()
+        for (const { serviceBlockId } of effective.serviceConnections) {
+          if (byId.has(serviceBlockId) || resolved.has(serviceBlockId)) continue
+          const found = await this.resolveBlock(workspaceId, serviceBlockId).catch(() => null)
+          if (found) resolved.set(serviceBlockId, found.block)
+        }
+        const error = serviceConnectionsError(
+          id,
+          effective.serviceConnections,
+          (targetId) => byId.get(targetId) ?? resolved.get(targetId),
+        )
+        if (error) throw new ValidationError(error)
+      }
+    }
+    // `involvedServiceIds` is a task-level selection drawn from the enclosing service
+    // frame's connection neighbors; dropped on non-tasks, validated on tasks.
+    if (effective.involvedServiceIds !== undefined) {
+      if (block.level !== 'task') {
+        const { involvedServiceIds: _ignored, ...rest } = effective
+        effective = rest
+      } else if (effective.involvedServiceIds.length) {
+        const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
+        // A connection neighbor can be a service mounted from another workspace — the SPA
+        // offers those (it computes neighbors over the composed board), so validate against
+        // the same universe: resolve each selected id not homed here (cross-home aware) and
+        // fold its block in, so an INCOMING edge from a mounted foreign consumer counts as a
+        // neighbor too. A bounded user-authored list (contract-capped), not a data-sized loop.
+        const byId = new Set(homeBlocks.map((b) => b.id))
+        const foreign: Block[] = []
+        for (const sid of effective.involvedServiceIds) {
+          if (byId.has(sid)) continue
+          byId.add(sid)
+          const found = await this.resolveBlock(workspaceId, sid).catch(() => null)
+          if (found) foreign.push(found.block)
+        }
+        const error = involvedServiceIdsError(
+          [...homeBlocks, ...foreign],
+          block,
+          effective.involvedServiceIds,
+        )
+        if (error) throw new ValidationError(error)
+      }
+    }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
     await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id)
@@ -723,10 +880,30 @@ export class BoardService {
   ): Promise<void> {
     for (const b of survivors) {
       if (removed.has(b.id)) continue
-      const patch: { dependsOn?: string[]; epicId?: string | null } = {}
+      const patch: {
+        dependsOn?: string[]
+        epicId?: string | null
+        initiativeId?: string | null
+        serviceConnections?: ServiceConnection[]
+        involvedServiceIds?: string[]
+      } = {}
       const next = b.dependsOn.filter((d) => !removed.has(d))
       if (next.length !== b.dependsOn.length) patch.dependsOn = next
       if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+      // Initiative membership is non-structural (epic-style): a task the loop spawned
+      // isn't a descendant of the deleted initiative block, so detach the dangling link
+      // here the same way epic membership is pruned above.
+      if (b.initiativeId && removed.has(b.initiativeId)) patch.initiativeId = null
+      // Service-connection edges into the removed set, and task selections of a removed
+      // involved service, dangle the same way dependency edges do — drop them here too.
+      const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))
+      if (connections.length !== (b.serviceConnections ?? []).length) {
+        patch.serviceConnections = connections
+      }
+      const involved = (b.involvedServiceIds ?? []).filter((sid) => !removed.has(sid))
+      if (involved.length !== (b.involvedServiceIds ?? []).length) {
+        patch.involvedServiceIds = involved
+      }
       if (Object.keys(patch).length) {
         await this.blockRepository.update(homeWorkspaceId, b.id, patch)
       }
@@ -761,17 +938,6 @@ export class BoardService {
     const doomed = descendantIds(blocks, id)
 
     await this.executionRepository.deleteByBlock(homeWorkspaceId, id)
-    // Unlink any repo backing a doomed service frame so the repo becomes
-    // addable again (otherwise its github_repos.block_id dangles to a deleted
-    // block: the repo shows "already on board" yet nothing renders it).
-    if (this.repoProjectionRepository) {
-      const repos = await this.repoProjectionRepository.list(homeWorkspaceId)
-      for (const repo of repos) {
-        if (repo.blockId && doomed.has(repo.blockId)) {
-          await this.repoProjectionRepository.linkBlock(homeWorkspaceId, repo.githubId, null)
-        }
-      }
-    }
     // Drop the account-owned service (and every workspace's mount of it) for any doomed
     // service frame, so deleting a frame doesn't leave an orphaned service lingering in the
     // org catalog (mountable, badged, yet rendering nothing) on other boards.
@@ -796,6 +962,27 @@ export class BoardService {
         const ids = [...doomedServiceIds]
         await this.workspaceMountRepository.removeByServices(ids)
         await this.serviceRepository.deleteMany(ids)
+      }
+    }
+    // Delete the `initiatives` entity anchored to any doomed initiative-level block, the same
+    // way the doomed service frames' account-owned services are reclaimed above. Without this
+    // the 1:1 row survives with a `block_id` pointing at a deleted block: the snapshot's
+    // `initiatives` list keeps returning a phantom, its `(workspace_id, slug)` stays reserved
+    // (re-creating a same-title initiative silently gets `<slug>-2`), and slice 3's
+    // `listExecuting` sweeper would re-drive a dead initiative. One `list` read + bounded
+    // deletes (the doomed set holds at most the subtree's few initiative blocks), never a
+    // per-block `getByBlock` loop.
+    if (this.initiativeRepository) {
+      const doomedInitiativeBlockIds = new Set(
+        blocks.filter((b) => doomed.has(b.id) && b.level === 'initiative').map((b) => b.id),
+      )
+      if (doomedInitiativeBlockIds.size > 0) {
+        const initiatives = await this.initiativeRepository.list(homeWorkspaceId)
+        for (const initiative of initiatives) {
+          if (doomedInitiativeBlockIds.has(initiative.blockId)) {
+            await this.initiativeRepository.delete(homeWorkspaceId, initiative.id)
+          }
+        }
       }
     }
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])

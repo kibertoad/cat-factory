@@ -25,6 +25,8 @@ export {
   ExecutionService,
   type ExecutionServiceDependencies,
 } from './modules/execution/ExecutionService.js'
+export type { TesterQualityReviewer } from './modules/execution/TesterQualityReviewService.js'
+export type { TesterQualityOutcome } from './modules/execution/testerQuality.logic.js'
 export type { AdvanceOptions, AdvanceResult } from './modules/execution/advance.js'
 // The gate / step-resolver extension seams live in @cat-factory/kernel (so a deployment
 // package can register one without depending on this package); re-exported here for
@@ -88,6 +90,7 @@ export {
 } from './modules/execution/release.logic.js'
 export {
   resolveFrontendBindings,
+  buildFrontendRunNotes,
   hasLiveServiceBinding,
   hasServiceBinding,
   boundServiceFrameIds,
@@ -103,6 +106,11 @@ export {
   RecurringPipelineService,
   type RecurringPipelineServiceDependencies,
 } from './modules/recurring/RecurringPipelineService.js'
+export {
+  InitiativeService,
+  type InitiativeServiceDependencies,
+} from './modules/initiative/InitiativeService.js'
+export * as initiativeLogic from './modules/initiative/initiative.logic.js'
 export {
   TrackerSettingsService,
   type TrackerSettingsServiceDependencies,
@@ -142,6 +150,13 @@ export {
   type ReleaseHealthServiceDependencies,
 } from './modules/releaseHealth/ReleaseHealthService.js'
 export {
+  PackageRegistryService,
+  PACKAGE_REGISTRY_CIPHER_INFO,
+  resolvePackageRegistriesForDispatch,
+  type PackageRegistryServiceDependencies,
+  type DispatchPackageRegistry,
+} from './modules/packageRegistries/PackageRegistryService.js'
+export {
   PreviewService,
   type PreviewServiceDependencies,
   type PreviewJobPlan,
@@ -165,6 +180,8 @@ export {
   LlmObservabilityService,
   type LlmObservabilityServiceDependencies,
   type RecordLlmCallInput,
+  type HarnessCallsRecordInput,
+  makeHarnessCallRecorder,
 } from './modules/observability/LlmObservabilityService.js'
 export {
   AgentContextObservabilityService,
@@ -237,6 +254,7 @@ export {
   type BrainstormModule,
   type NotificationsModule,
   type ReleaseHealthModule,
+  type PackageRegistriesModule,
   type PreviewModule,
   type IncidentEnrichmentModule,
   type SlackModule,
@@ -246,6 +264,7 @@ export {
   type ModelPresetsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,
+  type InitiativesModule,
   type RecurringModule,
   type TrackerModule,
   type ServicesModule,

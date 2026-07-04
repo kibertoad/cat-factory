@@ -1,7 +1,13 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { serve } from '@hono/node-server'
-import { NodeRealtimeHub, createApp, serveAppWithRealtime, start } from '@cat-factory/node-server'
+import {
+  DEFAULT_APP_CACHES_PROFILE,
+  NodeRealtimeHub,
+  createApp,
+  serveAppWithRealtime,
+  start,
+} from '@cat-factory/node-server'
 import { logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { applyLocalDefaults } from './config.js'
@@ -97,6 +103,14 @@ export async function startLocal(
     env,
     host: options.host,
     buildContainer: (o) => buildLocalContainer(o),
+    // Pass the repo projection through live: local mode seeds `github_repos` via the
+    // out-of-process `link-repo` CLI and runs single-node with no invalidation bus, so an
+    // in-memory TTL'd entry would keep serving a pre-link (or pre-monorepo-flag) projection
+    // after the CLI writes it. Same isolate-safe reasoning as the Worker; the resolver reads
+    // live and the (no-op) invalidations on the in-process sync/bootstrap paths stay wired.
+    cachesProfile: {
+      repoProjection: { ...DEFAULT_APP_CACHES_PROFILE.repoProjection, enabled: false },
+    },
   })
 }
 
@@ -124,9 +138,11 @@ async function startLocalMothership(
     'local mode: booting in MOTHERSHIP mode (no local Postgres; org state served remotely)',
   )
   // Shared with the engine's event publisher (wired inside the container) and the HTTP
-  // server's WebSocket upgrade listener below, exactly as the Node `start()` does.
+  // server's WebSocket upgrade listener below, exactly as the Node `start()` does. Local
+  // mode is always single-node, so the bare hub IS the real-time sink — no cross-node
+  // propagator (Redis) is wired here.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildLocalContainer({ env, realtimeHub })
+  const container = buildLocalContainer({ env, realtimeSink: realtimeHub })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
   validateRegistrationsOnce({

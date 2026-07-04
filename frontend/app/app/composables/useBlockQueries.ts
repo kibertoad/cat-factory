@@ -59,11 +59,33 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     return childrenOf(serviceId).filter((b) => b.level === 'module')
   }
 
+  /** Initiative containers inside a service (frame children, like modules). */
+  function initiativesOf(serviceId: string) {
+    return childrenOf(serviceId).filter((b) => b.level === 'initiative')
+  }
+
   /** Tasks anywhere under a container — directly, or nested inside its modules. */
   function allTasksUnder(containerId: string): Block[] {
     const direct = tasksOf(containerId)
     const nested = modulesOf(containerId).flatMap((m) => tasksOf(m.id))
     return [...direct, ...nested]
+  }
+
+  /**
+   * Every block nested under a container (transitive), excluding the container
+   * itself — the exact set a delete cascades over. Used to state the blast radius
+   * in the delete confirmation. Structural children only (via `parentId`), so a
+   * non-structural epic membership is not counted.
+   */
+  function descendantsOf(id: string): Block[] {
+    const out: Block[] = []
+    const stack = [...childrenOf(id)]
+    while (stack.length > 0) {
+      const b = stack.pop()!
+      out.push(b)
+      stack.push(...childrenOf(b.id))
+    }
+    return out
   }
 
   /** The top-level service a block ultimately belongs to. */
@@ -124,9 +146,17 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
    */
   function frameStatus(frameId: string): BlockStatus {
     const tasks = allTasksUnder(frameId)
-    if (tasks.length === 0) return 'planned'
-    if (tasks.some((t) => t.status === 'blocked')) return 'blocked'
-    if (tasks.some((t) => t.status === 'in_progress' || t.status === 'pr_ready'))
+    // Initiative containers are frame children too: a frame holding only an initiative
+    // is NOT empty, and an active (planning/executing → block `in_progress`) or blocked
+    // initiative drives the frame's activity dot just like a task does.
+    const inits = initiativesOf(frameId)
+    if (tasks.length === 0 && inits.length === 0) return 'planned'
+    if (tasks.some((t) => t.status === 'blocked') || inits.some((i) => i.status === 'blocked'))
+      return 'blocked'
+    if (
+      tasks.some((t) => t.status === 'in_progress' || t.status === 'pr_ready') ||
+      inits.some((i) => i.status === 'in_progress')
+    )
       return 'in_progress'
     return 'ready'
   }
@@ -152,6 +182,11 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
       const s = containerSize(m.id)
       w = Math.max(w, m.position.x + s.w + 12)
       inner = Math.max(inner, m.position.y + s.h + 12)
+    }
+    // Initiative cards render inside the frame's drop zone like tasks (230×~170).
+    for (const i of initiativesOf(id)) {
+      w = Math.max(w, i.position.x + 230 + 12)
+      inner = Math.max(inner, i.position.y + 170 + 12)
     }
     return { w, h: inner + headerH }
   }
@@ -180,7 +215,9 @@ export function useBlockQueries(blocks: Ref<Block[]>) {
     childrenOf,
     tasksOf,
     modulesOf,
+    initiativesOf,
     allTasksUnder,
+    descendantsOf,
     serviceOf,
     unmetDeps,
     isRunnable,

@@ -7,6 +7,8 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepMetadataCard from '~/components/panels/StepMetadataCard.vue'
 import StepTestReport from '~/components/panels/StepTestReport.vue'
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
+import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
+import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
@@ -58,6 +60,24 @@ const testPhase = computed(() => step.value?.test ?? null)
 // coder consume it), so the panel shows its spinning-up/running/shutdown/errored state.
 const stepEnvironment = computed(() => step.value?.environment ?? null)
 
+// For a frontend UI-test step (`tester-ui`): the enclosing `frontend` frame's backend-binding
+// config, so the detail can project how each env var resolved (live URL | mocked) — rendered from
+// the FROZEN bindings the engine stamped on the run (`instance.frontendBindings`), so a finished
+// run shows what it actually drove against rather than re-resolving against current live state.
+const frontendFrame = computed(() => (block.value ? board.serviceOf(block.value) : undefined))
+const isFrontendFrame = computed(() => frontendFrame.value?.type === 'frontend')
+const frontendConfig = computed(() =>
+  step.value?.agentKind === UI_TESTER_AGENT_KIND && isFrontendFrame.value
+    ? (frontendFrame.value!.frontendConfig ?? null)
+    : null,
+)
+// The frozen start-time resolution the tester ran against (absent for a non-frontend / pre-6b run).
+const frontendBindings = computed(() => instance.value?.frontendBindings ?? [])
+// The run-start advisories the engine stamped on the run (duplicate env vars / partially-mocked
+// services) are a whole-RUN fact, so surface them on ANY step detail of a frontend-frame run, not
+// only the `tester-ui` step — a duplicate-env-var note shouldn't be invisible from the coder step.
+const runNotes = computed(() => (isFrontendFrame.value ? (instance.value?.notes ?? []) : []))
+
 // The run's infrastructure attempts (container/runner/env spin-up + tear-down), behind
 // a toggle. This is the surface that makes the per-run `container` log rows + the
 // executionId filter visible — most useful when the run failed to start a container.
@@ -68,6 +88,14 @@ const executionId = computed(() => instance.value?.id ?? null)
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
 // "spinning up" phase, no spinner.
 const runFailed = computed(() => instance.value?.status === 'failed')
+
+// Whether the run is still doing something (can still spin infra up/down). A terminal
+// run (`done`/`failed`) has nothing left to provision, so the infra-attempts drawer
+// stops its background live-polling (manual refresh stays available).
+const runLive = computed(() => {
+  const status = instance.value?.status
+  return status != null && status !== 'done' && status !== 'failed'
+})
 
 // Live elapsed-time clock for the open step.
 const { isRunning, durationLabel } = useStepTimer({
@@ -167,8 +195,9 @@ onKeyStroke('Escape', () => {
   if (open.value) close()
 })
 
+const { copy } = useCopyToClipboard()
 async function copyOutput() {
-  if (step.value?.output) await navigator.clipboard?.writeText(step.value.output)
+  if (step.value?.output) await copy(step.value.output)
 }
 </script>
 
@@ -345,6 +374,27 @@ async function copyOutput() {
                    errored + the exact error), when this step runs against one -->
               <EnvironmentStatusPanel v-if="stepEnvironment" :environment="stepEnvironment" />
 
+              <!-- frontend UI-test: how the frame's backend bindings resolved (env var →
+                   live URL | mocked) + the run-start advisories (duplicate env vars /
+                   partially-mocked services) the engine stamped on the run. Rendered from the
+                   FROZEN start-time bindings so a finished run shows what it actually drove
+                   against, not a live re-resolution. -->
+              <FrontendBindingsResolved
+                v-if="frontendConfig"
+                :config="frontendConfig"
+                :resolved="frontendBindings"
+              />
+              <ul v-if="runNotes.length" class="space-y-1" data-testid="run-notes">
+                <li
+                  v-for="(note, i) in runNotes"
+                  :key="i"
+                  class="flex items-start gap-1.5 text-[11px] leading-snug text-amber-300/80"
+                >
+                  <UIcon name="i-lucide-info" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{{ note }}</span>
+                </li>
+              </ul>
+
               <!-- this run's infrastructure attempts (container/runner/env spin-up +
                    tear-down): the surface for the per-run container log rows + the exact
                    provider error, behind a toggle (most useful on a failed-to-start run) -->
@@ -365,6 +415,7 @@ async function copyOutput() {
                   v-if="showProvisioning"
                   class="mt-2"
                   :execution-id="executionId"
+                  :live="runLive"
                 />
               </div>
 

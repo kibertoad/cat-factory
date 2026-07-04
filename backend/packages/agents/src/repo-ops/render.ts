@@ -43,13 +43,14 @@ export interface RenderedFile {
   content: string
 }
 
-/** SHA-256 hex digest — Web Crypto, runs on both runtimes. */
-async function sha256Hex(input: string): Promise<string> {
+/** SHA-256 hex digest — Web Crypto, runs on both runtimes. Shared by every repo-op renderer. */
+export async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-function asString(value: unknown): string | undefined {
+/** Trimmed non-empty string, else undefined — the shared coercion primitive. */
+export function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
 }
 

@@ -2,6 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { HarnessAuthFields, RepoSpec } from './job.js'
 import {
+  branchAheadOfBase,
   branchHasCommitsSince,
   cloneExistingBranch,
   cloneRepo,
@@ -16,7 +17,7 @@ import {
   remoteBranchExists,
 } from './git.js'
 import { FOLLOW_UPS_FILENAME, FollowUpTailer } from './follow-ups.js'
-import type { PiRunStats } from './pi.js'
+import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -88,6 +89,8 @@ export interface CodingAgentOutcome {
   stderrTail?: string
   /** Token usage from a subscription harness's CLI stream (absent for Pi). */
   usage?: { inputTokens: number; outputTokens: number }
+  /** Per-model-call telemetry from a subscription harness's CLI stream (absent for Pi). */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /**
@@ -295,7 +298,7 @@ export async function runCodingAgent(
       try {
         opts.onPhase?.('agent')
         logger.info('coding-agent: running agent', { serviceDirectory })
-        const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+        const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
           {
             dir: workDir,
             systemPrompt: spec.systemPrompt,
@@ -343,7 +346,24 @@ export async function runCodingAgent(
           })
         }
 
-        const hasWork = resumed || (await branchHasCommitsSince(dir, baseSha, signal))
+        // A fresh run produced work iff the branch advanced past its pre-run tip. A RESUMED
+        // run already carries prior work — UNLESS that branch turns out to have nothing ahead
+        // of the PR base (e.g. its earlier PR was merged with a merge commit, leaving the
+        // branch reachable from base and its best-effort delete skipped). Opening a PR for such
+        // a branch fails with GitHub's opaque 422 "No commits between ...", so a CONFIRMED-empty
+        // resumed branch is a no-op, not work. `undefined` (couldn't determine) keeps the prior
+        // resume-is-work behaviour; the PR-open path then no-ops on the 422 as a backstop.
+        const advancedThisPass = await branchHasCommitsSince(dir, baseSha, signal)
+        let hasWork = advancedThisPass || resumed
+        if (resumed && !advancedThisPass) {
+          const ahead = await branchAheadOfBase(dir, spec.repo.baseBranch, spec.ghToken, signal)
+          if (ahead === false) {
+            logger.info('coding-agent: resumed branch has no commits ahead of base — no-op', {
+              base: spec.repo.baseBranch,
+            })
+            hasWork = false
+          }
+        }
         if (!hasWork) {
           logger.info('coding-agent: no changes produced', { ...stats })
           outcome = {
@@ -353,6 +373,7 @@ export async function runCodingAgent(
             stats,
             ...(stderrTail ? { stderrTail } : {}),
             ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
           }
         } else {
           opts.onPhase?.('push')
@@ -365,6 +386,7 @@ export async function runCodingAgent(
             stats,
             ...(stderrTail ? { stderrTail } : {}),
             ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
           }
         }
       } finally {

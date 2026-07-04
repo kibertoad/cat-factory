@@ -13,7 +13,8 @@ import {
   serviceProvisioningSchema,
 } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
-import { frontendConfigSchema } from './frontend.js'
+import { frontendConfigSchema, resolvedFrontendBindingSchema } from './frontend.js'
+import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
   agentStateSchema,
@@ -85,6 +86,14 @@ export const blockSchema = v.object({
    * an epic. Only meaningful on `task`-level blocks.
    */
   epicId: v.optional(v.nullable(v.string())),
+  /**
+   * Membership link to an `initiative`-level block, INDEPENDENT of `parentId`.
+   * A task spawned by an initiative's execution loop carries the initiative's
+   * block id here so the loop can reconcile its items from the spawned blocks
+   * and the board can badge initiative work. Absent/null ⇒ not spawned by an
+   * initiative. Only meaningful on `task`-level blocks.
+   */
+  initiativeId: v.optional(v.nullable(v.string())),
   /**
    * Preceding-task toggle: when this task's PR merges (it reaches `done`), the
    * engine automatically starts every task that `dependsOn` it and whose other
@@ -191,6 +200,22 @@ export const blockSchema = v.object({
    */
   frontendConfig: v.optional(frontendConfigSchema),
   /**
+   * Service-frame-level (`type: 'service'`): this service's directed connections
+   * to the other services it uses, stored on the consumer end (see
+   * {@link serviceConnectionSchema}). Drawn as board edges, and the source of the
+   * per-task "involved services" choices ({@link blockSchema.entries.involvedServiceIds}).
+   * Absent on non-service blocks.
+   */
+  serviceConnections: v.optional(serviceConnectionsSchema),
+  /**
+   * Task-level: the connected service frames "directly involved" in this task
+   * beyond the task's own service (always implicitly involved, never listed here).
+   * Each id must be a connection neighbor of the task's service frame. Involved
+   * services are spun up as ephemeral environments alongside the task's own
+   * service, and the coding agent may change their repos too.
+   */
+  involvedServiceIds: v.optional(v.array(v.string())),
+  /**
    * The pull request the block's implementation ("implementer") agent opened for
    * its work. Set on a task once its container agent pushes a branch and opens a
    * PR; surfaced on the board so the PR can be opened from the selected task.
@@ -242,6 +267,24 @@ export const blockSchema = v.object({
    * Only meaningful on `task`-level blocks that have a linked tracker issue.
    */
   trackerResolveOnMerge: v.optional(v.nullable(writebackOverrideSchema)),
+  /**
+   * Headless marker: when `true` this block was created by the public API (an external
+   * "initiative breakdown" run) purely to anchor an execution, and is EXCLUDED from every
+   * board projection — the board-listing read and the workspace snapshot filter it out, so
+   * it never renders in the UI. The block still exists for the engine (it carries the run's
+   * `executionId` and receives status writes). Absent / false ⇒ a normal, board-visible block.
+   */
+  internal: v.optional(v.boolean()),
+  /**
+   * Redaction marker set ONLY in the per-viewer workspace snapshot (never persisted): when
+   * `true`, this service frame is backed by a repo the requesting user cannot reach (a repo
+   * linked via ANOTHER member's personal access token, `GitHubRepo.linkedVia === 'user_pat'`,
+   * that this viewer's PAT can't access). The server scrubs the frame's title/description and
+   * drops its whole subtree from the snapshot, leaving only the block id + this flag, so the
+   * SPA renders a "Permission denied" placeholder instead of the service's contents. Absent ⇒
+   * a normal, fully-visible block.
+   */
+  accessDenied: v.optional(v.boolean()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
 
@@ -508,8 +551,28 @@ export const pipelineSchema = v.object({
    * not version-tracked) and on rows persisted before versioning existed (treated as 0).
    */
   version: v.optional(v.number()),
+  /**
+   * When true this pipeline may be invoked by an EXTERNAL caller through the public API
+   * (`POST /api/v1/initiatives`). Only honored for inline (no-container/no-GitHub) pipelines,
+   * so an external initiative run never pushes to a repo. Absent / false ⇒ not exposed to the
+   * public API (still fully usable from the authenticated SPA). See the `initiative-breakdown`
+   * pipeline for the first public entry.
+   */
+  public: v.optional(v.boolean()),
+  /**
+   * How this pipeline may be LAUNCHED: `'one-off'` (only as a manual task), `'recurring'`
+   * (only attached to a schedule), or `'both'`. Absent means `'both'` — pre-1.0, no
+   * migration/back-fill, so existing rows read as unrestricted. Enforced server-side in
+   * {@link ExecutionService.start} (via the run `origin`) and in `RecurringPipelineService`,
+   * and used by the SPA pickers to filter the offered pipelines. A `bug-intake` step is
+   * meaningless without a schedule, so a pipeline carrying one must be `'recurring'`.
+   */
+  availability: v.optional(
+    v.union([v.literal('one-off'), v.literal('recurring'), v.literal('both')]),
+  ),
 })
 export type Pipeline = v.InferOutput<typeof pipelineSchema>
+export type PipelineAvailability = NonNullable<Pipeline['availability']>
 
 export const decisionSchema = v.object({
   id: v.string(),
@@ -745,6 +808,23 @@ export const gateAttemptSchema = v.object({
   outcome: v.picklist(['completed', 'failed']),
   /** The PR head commit the helper worked against, when known. */
   headSha: v.optional(v.nullable(v.string())),
+  /**
+   * The fixing instructions handed to the helper for this round — the failing-check
+   * summary the CI gate fed the `ci-fixer`, the conflict reason / human-review comments
+   * the other gates fed their fixer. Stashed at dispatch and recorded with the attempt so
+   * the run-detail UI can show WHAT each round was asked to fix (not only that a round
+   * happened) — the gate analogue of the Tester attempt's `concerns`. Null when the gate
+   * hands its fixer no textual instructions (the conflicts gate: GitHub reports mergeability
+   * as a single bit and the harness leaves the conflict markers for the resolver).
+   */
+  instructions: v.optional(v.nullable(v.string())),
+  /**
+   * Structured failing checks handed to this attempt's helper (the CI gate's red check runs
+   * behind {@link instructions}), snapshotted at dispatch so each attempt shows the checks it
+   * set out to fix. Absent for the conflicts gate (no file-level detail) and when the round
+   * carried no structured checks.
+   */
+  failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
   /** The helper's own summary (or the failure reason), naming what it did / what remains. */
   summary: v.optional(v.nullable(v.string())),
 })
@@ -776,6 +856,14 @@ export const gateStepStateSchema = v.object({
    * gate (GitHub reports no file-level detail) and when the last probe passed.
    */
   failingChecks: v.optional(v.nullable(v.array(gateFailingCheckSchema))),
+  /**
+   * The fixing instructions handed to the most-recently dispatched helper (the failing-check
+   * summary / conflict reason / human fix prompt), stashed at dispatch so the attempt recorded
+   * when that helper's job settles can carry WHAT the round was asked to fix onto its
+   * {@link gateAttemptSchema} entry. Transient bookkeeping — the durable per-round history lives
+   * on {@link attemptLog}. Null when the gate hands its fixer no textual instructions.
+   */
+  lastDispatchedInstructions: v.optional(v.nullable(v.string())),
   /**
    * Epoch ms of the release marker for a time-windowed gate (post-release-health) — the
    * moment it began watching the deployed release. The gate keeps polling `pending`
@@ -1037,6 +1125,27 @@ export const runContainerSchema = v.object({
   url: v.optional(v.nullable(v.string())),
 })
 export type RunContainer = v.InferOutput<typeof runContainerSchema>
+
+/**
+ * The TERMINAL per-frame outcome of one environment a `deployer` step provisioned during a
+ * multi-env fan-out (the task's own service frame + every involved-service frame): `ready`
+ * (a live env, `url` set), `failed` (the provision broke, `error` carries the cause), or
+ * `skipped` (the frame is `infraless`, nothing stood up). The IN-FLIGHT frame is not recorded
+ * here — it lives on `step.jobId`/`step.deployFrameId` until it settles. See
+ * {@link pipelineStepSchema.entries.deployEnvs}.
+ */
+export const deployEnvStateSchema = v.object({
+  status: v.picklist(['ready', 'failed', 'skipped']),
+  /** The provisioned URL for a `ready` env (absent for `failed`/`skipped`). */
+  url: v.optional(v.nullable(v.string())),
+  /** The verbatim provider error for a `failed` env. */
+  error: v.optional(v.nullable(v.string())),
+})
+export type DeployEnvState = v.InferOutput<typeof deployEnvStateSchema>
+
+/** Per-frame deploy outcomes keyed by service-frame block id; see {@link deployEnvStateSchema}. */
+export const deployEnvsSchema = v.record(v.string(), deployEnvStateSchema)
+export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
 
 export const humanTestEnvironmentSchema = v.object({
   /** The `environments` row id, so the window can fetch access creds / re-poll status. */
@@ -1386,6 +1495,15 @@ export const pipelineStepSchema = v.object({
     v.nullable(v.object({ itemIds: v.array(v.string()), note: v.optional(v.string()) })),
   ),
   /**
+   * Transient interview intent carried on a parked `initiative-interviewer` gate step. Set
+   * when the human has answered the planning questions and asked to continue (or proceed):
+   * the run is signalled to wake and the durable driver, on re-entering the gate, runs the
+   * interviewer LLM again against the answers — asking follow-ups (re-park) or synthesizing
+   * the goal/constraints brief and advancing. `proceed` skips any remaining questions.
+   * Cleared once that async re-entry completes. Absent when no continuation is pending.
+   */
+  pendingInterview: v.optional(v.nullable(v.object({ proceed: v.optional(v.boolean()) }))),
+  /**
    * Consensus configuration for this step, copied from the pipeline's `consensus`
    * array at run start. Present (with `enabled: true`) when this step should run
    * through the multi-model consensus mechanism; read by the consensus executor
@@ -1491,6 +1609,31 @@ export const pipelineStepSchema = v.object({
    * legacy single-connection path (re-resolution is harmless there). See {@link serviceProvisioningSchema}.
    */
   deployProvisioning: v.optional(serviceProvisioningSchema),
+  /**
+   * A `deployer` step fanning out over several service frames (the task's own frame + each
+   * involved-service frame; see the connections initiative) records each frame's TERMINAL
+   * outcome here, keyed by frame block id — so a durable replay knows which frames are already
+   * provisioned and only the remaining ones are dispatched. The in-flight frame is tracked by
+   * {@link deployFrameId} + {@link jobId} until it settles into this map. Absent for a
+   * single-frame deploy that never fanned out. See {@link deployEnvsSchema}.
+   */
+  deployEnvs: v.optional(deployEnvsSchema),
+  /**
+   * The service FRAME the deployer step's currently in-flight deploy job ({@link jobId}) is
+   * provisioning, during a multi-env fan-out — so the poll/finalize maps the settled job onto the
+   * right frame's {@link deployEnvs} entry. Cleared once that frame settles; absent when no deploy
+   * job is in flight or the step never fanned out.
+   */
+  deployFrameId: v.optional(v.string()),
+  /**
+   * The task's OWN (primary) service frame, pinned on the FIRST target resolution of a `deployer`
+   * fan-out and reused on every re-entry/replay. Keeps the primary classification STABLE against a
+   * mid-flight reparent (which would otherwise re-derive a different own frame and flip an
+   * own-service provisioning failure from terminal to a non-terminal peer failure — completing the
+   * run `done` despite a failed deploy). Absent until the first resolution / for a step that never
+   * fanned out.
+   */
+  deployPrimaryFrameId: v.optional(v.string()),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 
@@ -1512,6 +1655,33 @@ export const executionInstanceSchema = v.object({
    */
   failure: v.optional(v.nullable(agentFailureSchema)),
   /**
+   * Failures from the run's PRIOR attempts, oldest→newest. Each retry/restart appends
+   * the then-current {@link failure} here and clears `failure` on the fresh attempt, so
+   * the top failure banner (keyed on `status === 'failed'`) disappears once the task is
+   * restarted while the full error trail stays viewable in the "previous errors" history.
+   * Absent/empty for a run that has never been failed-then-retried.
+   */
+  failureHistory: v.optional(v.array(agentFailureSchema)),
+  /**
+   * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
+   * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live
+   * set of bound services where some fall back to WireMock). Mirrors the harness's own
+   * `buildInfraNotes` but surfaced on the RUN so the SPA renders it in the run/step detail
+   * (distinct from a `failure`, which aborts the run). Absent/empty when there is nothing to
+   * flag. Rides in the `detail` JSON column (no dedicated column), reflecting the start-time
+   * state even after the underlying envs change.
+   */
+  notes: v.optional(v.array(v.string())),
+  /**
+   * The frontend UI-test flow's backend bindings RESOLVED once at run start (env var → the bound
+   * service's live ephemeral URL, or absent ⇒ mocked; see {@link resolveFrontendBindings}). Stamped
+   * on the run so the SPA's run/step detail projects what the run ACTUALLY drove against — a frozen
+   * snapshot that stays truthful after the underlying envs are torn down, rather than re-resolving
+   * against current live state (which for a finished run could disagree with the co-located
+   * start-time {@link notes}). Rides in the `detail` JSON column; absent for a non-frontend run.
+   */
+  frontendBindings: v.optional(v.array(resolvedFrontendBindingSchema)),
+  /**
    * Internal user id (`usr_*`) of whoever started this run (or retried it). Recorded
    * so the individual-usage restricted mode can use the initiator's OWN personal
    * subscription (e.g. Claude) for the run's steps — a personal credential is never
@@ -1520,12 +1690,20 @@ export const executionInstanceSchema = v.object({
    */
   initiatedBy: v.optional(v.nullable(v.string())),
   /**
+   * Epoch-ms creation time, stamped when the run is first started. Gives a run a stable
+   * creation timestamp independent of when its first step actually starts (the public-API
+   * job view reports it as `createdAt`). Absent on legacy runs persisted before this field.
+   */
+  createdAt: v.optional(v.number()),
+  /**
    * Optimistic-concurrency token: a monotonic revision of the persisted run row,
    * bumped on every write. Read back by the repository and used by
    * `compareAndSwap` so a human-action write (resolve decision / approve /
    * request changes) that raced another writer is detected and retried on fresh
-   * state instead of silently clobbering it. Internal; defaults to 0 for a run
-   * that has never been persisted and is ignored by clients.
+   * state instead of silently clobbering it. Defaults to 0 for a run that has
+   * never been persisted. The SPA's execution store also keys its monotonic
+   * reconcile on it, so a lagging snapshot refresh can't regress a run a live
+   * event already advanced.
    */
   rev: v.optional(v.number()),
 })

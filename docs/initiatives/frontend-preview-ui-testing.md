@@ -39,18 +39,21 @@ build on. Link the merged pilot PR here once it lands.
 
 ## Per-slice status
 
-| #   | Slice                                                                                 | Status | PR                                                        |
-| --- | ------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------- |
-| 1   | Repo type selector + `library`/`document` types + task/pipeline gating                | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
-| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry  | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
-| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance     | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
-| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                    | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
-| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e      | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
-| 4c  | Surface/gate visual pipelines (`tester-ui`/`visual-confirmation`) to frames with a UI | done   | [#636](https://github.com/kibertoad/cat-factory/pull/636) |
-| 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)    | done   | [#638](https://github.com/kibertoad/cat-factory/pull/638) |
-| 5b  | Harness `preview` mode — build+serve kept alive (the serve mechanic's container half) | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
-| 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop   | done   | this PR                                                   |
-| 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector         | done   | this PR                                                   |
+| #   | Slice                                                                                             | Status | PR                                                        |
+| --- | ------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------- |
+| 1   | Repo type selector + `library`/`document` types + task/pipeline gating                            | done   | [#605](https://github.com/kibertoad/cat-factory/pull/605) |
+| 2   | `frontend` block + `frontendConfig` + inspector + board links + persistence/symmetry              | done   | [#609](https://github.com/kibertoad/cat-factory/pull/609) |
+| 3   | Harness frontend infra + `ui` image bump + `testerInfraSpec` wiring + conformance                 | done   | [#615](https://github.com/kibertoad/cat-factory/pull/615) |
+| 4   | Mocker frontend awareness + `pl_frontend` pipeline                                                | done   | [#629](https://github.com/kibertoad/cat-factory/pull/629) |
+| 4b  | Deployer service-frame env keying → live-service binding resolves + live-env e2e                  | done   | [#633](https://github.com/kibertoad/cat-factory/pull/633) |
+| 4c  | Surface/gate visual pipelines (`tester-ui`/`visual-confirmation`) to frames with a UI             | done   | [#636](https://github.com/kibertoad/cat-factory/pull/636) |
+| 5a  | `frontendPreview` infrastructure capability + SPA toggle gate (Worker unsupported)                | done   | [#638](https://github.com/kibertoad/cat-factory/pull/638) |
+| 5b  | Harness `preview` mode — build+serve kept alive (the serve mechanic's container half)             | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
+| 5c  | Transport preview dispatch (host-port publish) + `PreviewService`/controller + stop               | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
+| 5d  | SPA preview surface (frame-inspector URL + start/stop) on the frame inspector                     | done   | [#641](https://github.com/kibertoad/cat-factory/pull/641) |
+| 6a  | Reverse CORS origin injection (`{{input.frontendOrigins}}`) + binding dedup correctness           | done   | this PR                                                   |
+| 6b  | Inspector resolved-binding visibility (envVar → service → live URL/mock) + run-detail + soft note | done   | this PR                                                   |
+| 6c  | Pin local preview host port (deterministic preview origin) + fold into `frontendOrigins`          | done   | this PR                                                   |
 
 ## Conventions & gotchas carried between iterations
 
@@ -356,3 +359,142 @@ ci → merger`, in `seed.ts`) just orders the steps that exercise it, so `pl_fro
     (`preview-panel`/`preview-status`/`preview-url`/`preview-start`/`preview-stop`) are in place for a
     future e2e — none was added here (the e2e backend runs GitHub + Docker OFF, so a real preview can't
     stand up there; the conformance suite is the runtime-neutral proof).
+- Slice 6a conventions & gotchas (reverse CORS origin injection + binding correctness):
+  - **Forward binding resolution is per-binding-correct and now deterministic.** Each operator-named
+    `envVar` independently resolves its bound service FRAME's live env URL
+    (`indexLiveServiceEnvUrls`, newest-wins, one `listByWorkspace` read — no N+1). Two bindings sharing
+    a (non-empty) `envVar` now resolve to the LAST one (`resolveFrontendBindings` maps by `envVar`), not
+    left to insertion order; `duplicateBindingEnvVars` (`@cat-factory/contracts`) surfaces the collision
+    for the inspector + a run-start note (slice 6b). NOT a `frontendConfigSchema` `v.check` — bindings
+    persist per-blur and allow empty `envVar`, so a schema reject would 422 a mid-edit PATCH.
+  - **`frontendOriginsForService` is the REVERSE of `backendBindings`, mirroring
+    `frameAllowsVisualPipeline`.** It scans the workspace block list once for `frontend` frames that
+    bind a service (non-empty `envVar`) and emits each one's tester origin `http://localhost:<servePort
+?? DEFAULT_FRONTEND_SERVE_PORT>`. A deployer step passes the comma-joined result as
+    `inputs.frontendOrigins` (`RunDispatcher.frontendOriginsInput`, keyed by the service frame id it
+    already resolves), so the backend's provisioning can fold the origins into its CORS allow-list.
+  - **TWO template syntaxes depending on the provider — document both.** The HTTP-manifest provider
+    interpolates `{{input.frontendOrigins}}` (the `{{input.*}}` namespace); the Kubernetes native
+    adapter renders `{{frontendOrigins}}` FLAT (its `templateVars` spreads all provision inputs, like
+    `{{branch}}`/`{{namespace}}`). Same value, different placeholder — an operator authoring a
+    `secretInjections.valueTemplate` / helm `--set` uses `{{frontendOrigins}}`.
+  - **Deployer-path only; the operator still authors the mapping and must re-provision.** Injection is
+    wired into `deployerProvisionArgs` (the frame-keyed env a frontend binds), NOT the HumanTest
+    controller manual env (which isn't frame-keyed, so a frontend can't bind it anyway — a separate
+    change if ever needed). Automated: origin derivation + the `frontendOrigins` input. Manual: the
+    operator maps `{{…frontendOrigins}}` into their CORS (and any OAuth-callback) env var in their
+    manifest, and re-provisions the backend to pick up a newly-linked frontend or a changed servePort
+    (CORS is baked at provision time). For zero-config local dev, a `localhost`-wildcard CORS default
+    avoids re-provision; exact-origin injection is the recommended path.
+  - **Deferred to 6b/6c (do NOT re-derive):** 6b surfaces the resolved `envVar → service frame → live
+URL | mocked` mapping in `FrontendConfig.vue` (one workspace-environments read indexed by frameId, a
+    SPA mirror of `indexLiveServiceEnvUrls`) + the `duplicateBindingEnvVars` warning, projects the
+    resolved bindings into the run/step detail, and adds a non-fatal run-start note (mirror the harness
+    `buildInfraNotes`) for the partial-live / duplicate-envVar cases. 6c pins the LOCAL preview to a
+    deterministic host port (widen `RunContainerSpec.publishPorts` to `{ container, host }`; Docker
+    emits `-p 127.0.0.1:<host>:<container>`; `LocalPreviewTransport` forms the URL from it) so the
+    browsable-preview origin is knowable ahead of provision, then extends `frontendOriginsForService` to
+    emit it when `previewEnabled`. **Apple asymmetry:** Apple reaches the container IP directly, so its
+    preview origin is `http://<containerIP>:<servePort>`, not `localhost` — only the Docker adapter
+    yields a pinnable localhost origin.
+  - **Follow-up conformance:** a full provision-with-request-capture assertion (a manifest whose
+    `bodyTemplate`/`secretInjections` renders `frontendOrigins`, with a frontend frame bound, asserting
+    the captured value on both Postgres runtimes) lands with 6b. 6a pins the operator contract with unit
+    tests on `frontendOriginsForService` + both render syntaxes (`interpolateTemplate` /
+    `renderTemplate`∘`templateVars`).
+- Slice 6b conventions & gotchas (resolved-binding visibility + run-detail projection + run-start note):
+  - **The pure binding-resolution helpers now live in `@cat-factory/contracts`, NOT orchestration.**
+    `resolveFrontendBindings` / `indexLiveServiceEnvUrls` / `boundServiceFrameIds` / the
+    `ResolvedFrontendBinding` + `LiveEnvHandle` types / the new `buildFrontendRunNotes` moved next to
+    `frontendOriginsForService` so the SPA and the backend import the SAME resolution (they can't drift on
+    which env a live `service` binding resolves to). `frontend-infra.logic.ts` (orchestration) now just
+    RE-EXPORTS them + keeps the two gate-only predicates (`hasLiveServiceBinding` / `hasServiceBinding`),
+    so every existing importer is unchanged. A new SPA consumer imports from `@cat-factory/contracts`
+    directly, not from orchestration.
+  - **Both the resolved bindings AND the run-start note are persisted on the RUN, in the `detail` JSON — no
+    migration.** `ExecutionInstance.notes?: string[]` and `ExecutionInstance.frontendBindings?:
+ResolvedFrontendBinding[]` ride in `agent_runs.detail` (like `failureHistory`), so both stores round-trip
+    them through the shared `@cat-factory/server` mapper (`executionToDetail` / `rowToExecution`) with ZERO
+    schema change (`frontendBindings` is parsed with a tolerant `is(resolvedFrontendBindingSchema, …)` filter,
+    like the failure parsers). Computed ONCE at start (`ExecutionService.start` →
+    `AgentContextBuilder.resolveFrontendRunInfo`), gated on `pipelineHasVisualStep` so only a visual pipeline
+    pays the extra env read; a non-frontend run carries neither. Both reflect the START-time resolution (they
+    don't re-derive when envs later change) — the honest historical advisory, mirroring the harness's own
+    `buildInfraNotes`. Note cases: duplicate env vars, and a partial-live set (some bound services live, others
+    fall back to WireMock). A frontend with NO live bound service is refused at the gate, so that case never
+    produces a note.
+  - **`resolveFrontendConfig` and `resolveFrontendRunInfo` share ONE resolution** (`resolveFrontendResolution`),
+    so the agent-context path and the run-info path read `listHandles` the same way (still one query, no N+1).
+    `resolveFrontendRunInfo` returns `{ bindings, notes }` and BOTH are stamped on the run — the resolved-binding
+    TABLE in the `tester-ui` run/step detail projects the FROZEN `instance.frontendBindings` (what the run
+    actually drove against), so a completed run's detail stays truthful after its envs are torn down instead of
+    silently disagreeing with the co-located start-time note. (The frame INSPECTOR still resolves LIVE — it's
+    showing current state, not a past run.)
+  - **The SPA resolved-binding view is one shared component with two modes.** `FrontendBindingsResolved.vue`
+    takes an optional `resolved?: ResolvedFrontendBinding[]` prop: when OMITTED (the `FrontendConfig.vue`
+    inspector) it resolves LIVE against the workspace env handles via the new lightweight `useEnvironmentsStore`
+    (`GET /workspaces/:ws/environments`, load-on-open, no snapshot delivery / no self-poll) and shows the
+    duplicate-envVar warning (`duplicateBindingEnvVars`); when PROVIDED (a `tester-ui` step's `AgentStepDetail.vue`,
+    fed `instance.frontendBindings`) it renders those FROZEN bindings and leaves the duplicate advisory to the
+    run-start note. Both modes feed the SAME `resolveFrontendBindings` / `indexLiveServiceEnvUrls` the backend
+    uses, and join off the LAST config binding per envVar (matching the last-wins dedup) purely to LABEL a mocked
+    upstream as `mock` vs `service-offline`. The run-start note itself renders on ANY step detail of a
+    frontend-frame run (it's a whole-run fact), not only the `tester-ui` step.
+  - **Conformance uses a capturing FAKE provider, not a real fetch.** The 6b conformance test injects an
+    `environmentProvider` whose `provision(req)` captures `req.inputs.frontendOrigins` (the manifest carries a
+    `bodyTemplate` documenting where the operator folds it in; the render itself is unit-tested in 6a). This is
+    the runtime-neutral proof that BOTH stores read `frontend_config` to DERIVE the origins — stubbing global
+    `fetch` across workerd + node was avoided deliberately. The same test then starts a UI-tester run and asserts
+    both the duplicate-env-var `notes` AND the frozen `frontendBindings` (the live `service` binding resolved to
+    the auth env URL) round-trip through a fresh snapshot read (`agent_runs.detail` D1 ⇄ Drizzle).
+    Skipped on `mothership` (its env connect/provision write surface is unproxied), like the sibling 4b test.
+  - **6c is unaffected.** The local-preview host-port pinning + folding the preview origin into
+    `frontendOriginsForService` remains the last open slice; nothing here touches the preview transport.
+- Slice 6c conventions & gotchas (pin the local preview host port → deterministic preview origin):
+  - **The preview host port is PINNED to the serve port, and that resolves the whole slice** — the
+    browsable preview origin becomes `http://localhost:<servePort>`, the SAME string
+    `frontendOriginsForService` already injects for the in-container `tester-ui`. So the "fold the
+    preview into `frontendOrigins`" work was NOT a new emission: `frontendOriginsForService` needed
+    only a doc update. Before 6c the preview served on an EPHEMERAL host port and the transport formed
+    its URL via `docker port` (→ `http://127.0.0.1:<random>`), a DIFFERENT origin from the injected
+    `http://localhost:<servePort>` CORS entry — so a developer browsing the preview got CORS-blocked
+    when the app called the live backend. 6c aligns the two by pinning host = serve port. Do NOT
+    introduce a separate "preview port" config field or a distinct preview origin — the coincidence
+    with the tester origin is the point (one CORS entry covers both paths).
+  - **`RunContainerSpec.publishPorts` widened from `number[]` to `Array<{ container; host? }>`.** An
+    explicit `host` pins the mapping (Docker `-p 127.0.0.1:<host>:<container>` — deterministic,
+    pre-knowable); an absent `host` keeps the old ephemeral behaviour (`-p 127.0.0.1:0:<container>`).
+    Only the preview transport sets `publishPorts` (the runner transport never publishes extra ports),
+    so the blast radius is `LocalPreviewTransport` + the two adapters + their unit tests.
+  - **`ContainerRuntimeAdapter.publishesToLocalhost` is the runtime asymmetry, a top-level adapter
+    flag (not a `RuntimeCapabilities` field).** Docker/Podman/OrbStack/Colima publish to the host
+    loopback ⇒ `true` (a class-constant on `DockerRuntimeAdapter`, since it's family-constant, NOT
+    threaded through `RuntimeProfile`/constructor options); Apple `container` (one VM per container,
+    reached by IP) ⇒ `false`. The transport keys off it: `true` ⇒ pin host = serve port and form
+    `http://localhost:<servePort>` WITHOUT a `docker port` readback (which would report `127.0.0.1`, a
+    different origin from the injected `localhost`); `false` ⇒ read the container IP after start and
+    form `http://<containerIP>:<servePort>`. Apple's origin is NOT pre-knowable (the VM IP is assigned
+    at runtime), so it is never folded into `frontendOriginsForService` — only the Docker family yields
+    a pinnable localhost origin. Adding the field touched the two real adapters + the two fake adapters
+    in the local-runtime unit tests.
+  - **`localhost` vs `127.0.0.1` is a real CORS distinction** — browsers treat them as separate
+    origins. The injected CORS entry (`frontendOriginsForService`) and the browsable URL the SPA shows
+    (`PreviewView.url`) BOTH use `localhost` so a developer's `Origin` header matches. This is why the
+    transport hardcodes `http://localhost:<servePort>` for the pinned case rather than echoing back
+    `docker port` (which is `127.0.0.1`).
+  - **Pinning trades ephemeral collision-freedom for a deterministic origin.** The old `-p
+127.0.0.1:0:<port>` mapping could never collide; pinning host = serve port can, when the port is
+    already bound on the host (a second frontend frame's preview defaulting to the same `servePort`,
+    or a local dev server — 4173 is `vite preview`'s default). `LocalPreviewTransport.start` catches
+    the `-p` bind failure (only reachable on the pinned/localhost path) and rethrows an actionable
+    "host port `<servePort>` is already in use" message instead of the raw daemon stderr. There is
+    deliberately NO ephemeral fallback: an ephemeral host port would break the CORS-origin match that
+    is the whole point of the slice.
+  - **Runtime symmetry:** the preview transport is a genuine local/node differentiator (only a runtime
+    with a host-port-publish primitive wires it; the Worker never does — `frontendPreview.supported:
+false`), so pinning it needs no Worker change. `frontendOriginsForService` lives in
+    `@cat-factory/contracts` and is consumed by the shared `RunDispatcher`, so the CORS injection works
+    on every runtime that runs a deployer. No harness change (no image bump): pinning is a
+    transport/adapter concern; the app still serves on the serve port inside the container regardless.
+  - **The initiative's runtime-neutral self-contained UI-test path is complete; the browsable preview
+    (a local/node differentiator) is complete through 6c.** No open slices remain in this tracker.

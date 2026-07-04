@@ -1,5 +1,542 @@
 # @cat-factory/integrations
 
+## 0.64.0
+
+### Minor Changes
+
+- 1f6d9fc: Cache the workspace GitHub repo projection through the app caching seam
+  (caching-layer initiative, slice 3). A new `AppCaches.repoProjection` group cache
+  (grouped and keyed by workspace id) serves the whole-projection re-list that the
+  block→repo resolver (`buildResolveRepoTarget`) runs on every agent dispatch and
+  every durable poll tick, replacing a live `repoProjectionRepository.list` per
+  resolution with a per-workspace cached read.
+
+  Coherence is invalidation-driven: every projection write drops the workspace
+  group after it commits — `GitHubSyncService` (repo link / monorepo-flag / the
+  exact-set write + tombstone / the link-time full re-stamp, fanned out per
+  workspace), `BoardService.addServiceFromRepo` (the monorepo-flag write on the
+  import-existing-repo path), `WebhookService` (the `installation_repositories`
+  removed tombstone), and `ContainerRepoBootstrapper` (projecting a freshly
+  bootstrapped repo). `GitHubSyncService.syncRepo` only invalidates on a `full`
+  (link-time) pass — an incremental resync re-stamps `syncedAt` alone, which the
+  resolver never reads, so invalidating there would only churn the cache. The
+  installation lookup and the tree-depth-bounded block ancestry walk stay live, so
+  a block reparent or a service repo-link change needs no cache invalidation.
+
+  The cache is pass-through on the Cloudflare Worker's isolate-safe profile (our own
+  mutable D1 state, no cross-isolate invalidation bus), so the Worker reads the
+  projection live. Local mode is likewise pass-through: it seeds the projection via
+  the out-of-process `link-repo` CLI and runs single-node with no invalidation bus,
+  so an in-memory TTL'd entry could serve a pre-link projection. So the cache is
+  active on the multi-node-capable Node facade only. Absent a cache (tests /
+  harnesses) every resolve lists live, unchanged.
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.63.0
+
+### Minor Changes
+
+- e5ddaa4: Cache document-backed prompt-fragment bodies through the app caching seam
+  (caching-layer initiative, slice 2). A new `AppCaches.fragmentDocumentBody`
+  group cache serves a living fragment's external Confluence/Notion/GitHub/Figma/
+  Zeplin/Linear body, replacing the hand-rolled `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS`
+  in `FragmentLibraryService`: a run reads the cached body instead of blocking on a
+  live page fetch, and an entry entering its refresh window runs the source's cheap
+  version probe — keeping the cached body when the page hasn't moved, reloading in
+  the background when it has.
+
+  To support the probe, `DocumentContent` now carries an opaque `version` token and
+  `DocumentSourceProvider`/`DocumentContentResolver` gain a `probeVersion` method
+  (metadata-only, strictly cheaper than a full fetch), implemented across all
+  document providers. The self-verifying cache stays enabled on the Cloudflare
+  Worker (bounded staleness via the probe), unlike the mutable-state fragment
+  catalog.
+
+  Behavior change (pre-1.0, no back-compat): the durable `prompt_fragments.body` is
+  now the offline fallback + management-view content, refreshed only by an explicit
+  create/refresh; the live run-time body flows through the cache. Without a cache
+  wired, a run serves the persisted body and does not re-resolve live.
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.62.1
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
+## 0.62.0
+
+### Minor Changes
+
+- 6c1efd1: Docker Compose ephemeral envs: opt-in build-from-source mode.
+
+  The Docker Compose environment backend was checkout-free / image-pull only and hard-rejected
+  `build:`, host bind mounts, relative `env_file`, and `privileged`, so an app repo that builds
+  its own images (e.g. a .NET + Angular + SQL Server stack) could not become a per-PR preview env.
+
+  A new opt-in `build` mode (workspace handler `providerConfig.build`, mirrored advisory
+  `ServiceProvisioning.composeBuild`) clones the PR head into a per-project working tree, writes
+  the isolation-safe rewritten compose beside the original inside the checkout, and runs
+  `docker compose build` + `up --wait`. In build mode `build:`, in-checkout relative bind mounts,
+  and relative `env_file`s are honored. Image mode is unchanged and remains the default.
+
+  Host-escape refusal is uniform across EVERY path-bearing reference, not just bind mounts: bind
+  sources, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:` `file:` sources are
+  all run through `escapesCheckout`, which now also catches UNC/backslash-absolute paths, a
+  separator-buried `../` source (`sub/../../../etc`, previously mis-read as a named volume), and an
+  unresolved `${VAR}` interpolation (expands to an arbitrary host path at runtime). `include:` and
+  cross-file `extends: { file }` are refused outright in both modes — the daemon merges those files
+  from disk, so their services would otherwise slip a privileged container / host bind / pinned port
+  past the parse-based guard. `privileged: true` stays refused.
+
+  The `ComposeRuntime` seam gains optional `checkout`/`writeCheckoutFile` (implemented in the local
+  facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a LAZY
+  `clone` resolver (a thunk) invoked only by the build-mode provider that actually needs a working
+  tree — so image-mode compose / custom / k8s-sync provisions no longer mint a short-lived VCS token
+  they never use (reusing the deploy clone-target seam, memoized so one provision never mints twice).
+  Build mode registers only on the docker-family local runtime — the documented runtime-bound
+  exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
+
+  Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
+  recommended in build-from-source mode (previously it was recommended blindly and then failed at
+  provision time).
+
+  The compose environment connect form gains an "Image source" selector (pull pre-built vs build
+  from source) and a build-timeout field; the misleading "image-based stacks only" copy is removed.
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+
+## 0.61.0
+
+### Minor Changes
+
+- 6edcce0: Personal-PAT repo access + fail-closed board redaction, and removal of the legacy repo→block link.
+
+  - **Expand the repo picker with your own PAT (all facades).** A user's stored GitHub PAT
+    (`user_secrets` kind `github_pat`) now surfaces repos it can reach beyond the workspace's GitHub
+    App grant — even on the hosted Cloudflare/Node facades. Linking one creates a **personal service**
+    (`GitHubRepo.linkedVia === 'user_pat'`); runs against it already use the initiator's PAT.
+  - **Fail-closed frame redaction.** A service frame backed by a repo linked via another member's PAT
+    is hidden from members who can't reach it: the board snapshot scrubs the frame to just its
+    internal id + a "Permission denied" placeholder and drops its subtree. Access is a fail-closed
+    per-user projection (`github_user_repo_access`), refreshed when a user enumerates their PAT repos
+    and cleared when they remove their PAT — no live GitHub call on the snapshot path.
+  - **New:** `github_repos.linked_via` column + `github_user_repo_access` table (mirrored D1 ⇄
+    Drizzle, with a cross-runtime conformance suite); kernel `UserRepoAccessRepository` port and
+    optional `GitHubClient.listReposForToken`/`getRepoForToken`; `Block.accessDenied` +
+    `GitHubAvailableRepo.personal` wire fields.
+
+  **Breaking (pre-1.0, no migration):** the legacy `github_repos.block_id` repo↔frame link is removed
+  — the account-owned `Service` (`getByFrameBlock` → `repoGithubId`) is now the SOLE repo↔frame
+  linkage. `RepoProjectionRepository.linkBlock` and `GitHubRepo.blockId` are gone; `resolveRepoTarget`
+  now requires a `serviceRepository`; the `RepoBootstrapper` port's `linkRepoToBlock` is replaced by
+  `projectBootstrappedRepo` (the caller binds the frame's `Service`). Existing rows' `block_id` is
+  dropped; repos remain reachable through their `Service`.
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+
+## 0.60.2
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+
+## 0.60.1
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/kernel@0.79.1
+
+## 0.60.0
+
+### Minor Changes
+
+- 47a2975: Initiatives slice 3 — the execution loop.
+
+  An approved initiative plan now RUNS: a new `InitiativeLoopService` drives each `executing`
+  initiative — reconciling its spawned tasks, spawning the next wave just-in-time, and completing
+  the initiative once every tracker item settles.
+
+  - **The loop** (`orchestration/modules/initiative/InitiativeLoopService.ts`): per-initiative
+    `tick` = reconcile (fold each spawned task block's status back onto its item — done + PR link /
+    `pr_open` / `blocked` + deviation, one batched block read, no N+1) → complete (all items settled
+    → initiative + anchor block `done`, tracker re-commit, notify) → spawn (create task blocks for
+    the eligible `pending` items — current phase, deps met, phase not halted — up to the concurrency
+    cap, each pipeline chosen by the policy's estimate→pipeline rules). Spawning is CLAIM-FIRST (a
+    rev-CAS write records the pre-generated block id before any side effect), so a concurrent ticker
+    never orphans a double-spawn. A per-service task-limit conflict leaves the item `pending` for the
+    next sweep; a missing pipeline (deleted after ingest) records a deviation + notification and
+    blocks the item — the sweep never throws.
+  - **Blocked = halt the phase, notify.** A blocked item stops new spawns in its phase (and keeps the
+    phase current, so the initiative never advances past it) and raises the new `initiative`
+    notification type; in-flight siblings finish. A human retries/skips the item to unblock.
+  - **Both cron seams + terminal pokes.** `runDue` is wired into the Worker `scheduled` handler and a
+    Node one-minute interval sweeper (symmetric). A settling child run pokes its owning initiative's
+    loop immediately (`RunStateMachine.emitInstance` on a terminal run, `ExecutionService.finalizeMerge`
+    on a merge), so work advances without waiting for the next sweep.
+  - **Controls.** Pause / resume / cancel endpoints + `InitiativeService` CAS transitions; the sweep
+    skips a non-`executing` initiative. The tracker window gains a live progress bar and the inspector
+    the loop controls (`initiative.inspector.pause/resume/cancel`, all locales).
+  - **`listExecuting()` now returns `{ workspaceId, initiative }[]`** (the entity carries no workspace
+    id) — mirrored in the D1 + Drizzle repos and asserted, with the persisted loop-state round-trip,
+    by the cross-runtime conformance suite.
+
+  No new persistence (the `initiatives` table already exists on both facades) — so no D1/Drizzle
+  migration and no executor-harness image bump.
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+
+## 0.59.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+
+## 0.58.1
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/contracts@0.89.0
+  - @cat-factory/kernel@0.77.0
+
+## 0.58.0
+
+### Minor Changes
+
+- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
+  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
+  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
+  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
+  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
+
+  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
+    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
+    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
+    key is shown once on create.
+  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
+    external runs never appear in the UI.
+  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+
+## 0.57.2
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+
+## 0.57.1
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+
+## 0.57.0
+
+### Minor Changes
+
+- 7fd6a19: Import-from-repo picker: find and link accessible repos in realtime instead of enumerating the whole installation and filtering in memory. The old path listed every installation repo (capped at a bounded page count) then substring-filtered client-of-the-cap — so on a wide App install a repo beyond that window returned "no matches" for a repo you actually had access to, and every keystroke re-fetched all pages. Two new `GitHubClient` primitives fix it end to end: `searchInstallationRepos` issues one bounded, account-scoped GitHub search per query, and `getRepoById` point-reads the picked repo by id when linking it (so a repo surfaced by search from beyond the enumeration cap links instead of spuriously 409-ing). Blank-query browse-all is unchanged; PAT (local) and GitLab connections filter their bounded token listing. When an installation has no resolvable account to scope the GitHub search to, the App adapter filters its own bounded listing rather than running an unscoped global search (which would surface arbitrary, unlinkable public repos).
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+
+## 0.56.5
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+
+## 0.56.4
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/kernel@0.71.0
+
+## 0.56.3
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+
+## 0.56.2
+
+### Patch Changes
+
+- 0d51638: Harden three server-side SSRF surfaces:
+
+  - **Local-runner allow-list** no longer treats a DNS hostname that merely starts with `fc`/`fd`
+    (e.g. `fc2.com`) as a private IPv6 ULA — the ULA/loopback tests are now gated behind an
+    "is IPv6 literal" check and the classification reuses the vetted kernel `ip-host` primitives.
+  - **Runner-pool provider** (`HttpRunnerPoolProvider.execute`/`oauthToken`) and the shared
+    `probeConnection` now follow redirects by hand and re-run the SSRF guard on every hop, so a
+    permitted scheduler host can't 302 the secret-bearing dispatch body to an internal/metadata
+    target. Factored the per-hop `safeFetch` + capped-read helpers into a shared module reused by
+    the environment provider. `safeFetch` additionally drops the request body and strips
+    credential headers (`authorization`/`cookie`/`proxy-authorization`) on any **cross-origin**
+    redirect hop, so a permitted host also can't bounce the secrets to a _different_ public host
+    (re-establishing the cross-origin credential stripping the platform `fetch` would have done,
+    which the manual `redirect: 'manual'` follower had bypassed).
+  - **Account-configured SearXNG web-search URL** is now validated (public host, http/https, no
+    private/internal/metadata target) both at the write boundary and with per-hop revalidation on
+    fetch.
+
+- 0d51638: Secret-handling hardening:
+
+  - **LLM telemetry** (`LlmObservabilityService`) now scrubs credential shapes from the
+    prompt/response/reasoning bodies AND the `errorMessage` with a shared `redactSecrets`
+    (promoted to `@cat-factory/kernel`, reused by the provisioning-log path) BEFORE anything is
+    stored or fanned out to an external trace sink (Langfuse). `errorMessage` is kept as
+    diagnostic metadata even when bodies are dropped and is fanned out ungated, so it is
+    scrubbed too (an upstream 4xx/5xx string can echo an auth header). Prompt/response/reasoning
+    body capture is additionally gated on the per-workspace `storeAgentContext` toggle (numeric
+    telemetry is always recorded). Also fixed a latent O(n²) regex backtrack in the URL-userinfo
+    redaction rule that a large prompt could trigger.
+  - **Signed tokens** (`HmacSigner`) now derive an independent HKDF-SHA256 subkey per audience
+    (`session`/`oauth-state`/`llm-proxy`/`ws`/`machine`), so a token class is cryptographically
+    isolated rather than sharing one raw HMAC key. Key derivation is bounded to that fixed
+    audience set — `verify` selects the key from the token's attacker-controlled claimed `aud`
+    before the MAC check, so an unrecognised (or absent) audience falls back to the raw-secret
+    base key rather than deriving+caching a fresh subkey, preventing an unbounded key-cache /
+    per-request-HKDF DoS from a flood of junk-audience tokens. Breaking: any tokens signed before
+    this change no longer verify (pre-1.0, no migration — clients re-authenticate).
+
+- Updated dependencies [0d51638]
+  - @cat-factory/kernel@0.70.1
+
+## 0.56.1
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+
+## 0.56.0
+
+### Minor Changes
+
+- 5ce03c6: Frontend-config inspector: add repo autodetection, a frontend-directory field, clearer serve-mode
+  help, and collapsible field groups.
+
+  - **Detect from repo**: a new deterministic, checkout-free detector proposes a frontend config
+    (package manager from the lockfile, install command, build script + output dir from
+    package.json/framework markers, serve mode/script, and backend-binding env-var names from dotenv
+    examples). Exposed as `POST /workspaces/:ws/environments/detect-frontend-config`
+    (`detectFrontendConfig` on the environments connection service) and surfaced in the panel as a
+    non-binding preview the user reviews and applies (backend bindings are appended, never
+    overwriting existing service links).
+  - **Frontend directory**: `FrontendConfig.directory` scopes a monorepo frontend's build/serve to a
+    subdirectory (threaded into the harness job-body builder).
+  - **Serve mode**: replaced the single hint with per-mode descriptions and a note distinguishing it
+    from the separate env-injection axis.
+  - **Grouping**: the panel's fields are now collapsible sections (Build / Serve / Mocking / Env
+    injection / Backend bindings / Preview), collapsed by default.
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/kernel@0.69.8
+
+## 0.55.0
+
+### Minor Changes
+
+- 05d1b08: refactor(integrations): app-own the user-secret-kind registry (registry DI migration)
+
+  Migrates the per-user secret KIND registry off its module-global `Map` onto an app-owned
+  instance, the next slice of the registry-DI initiative (see
+  `docs/initiatives/registry-di-migration.md`). The composition root now owns the registry and
+  injects it, so a deployment-registered custom kind is seen by reference regardless of module
+  identity — the same footgun-free pattern as the environment/runner backend registries.
+
+  - New `UserSecretKindRegistry` class (`register`/`get`/`list`) + `defaultUserSecretKindRegistry()`
+    pre-loaded with the built-in `github_pat` kind, added to `BackendRegistries` /
+    `createBackendRegistries()`. `UserSecretService` reads the injected registry.
+  - **Breaking:** the free `registerUserSecretKind` / `getUserSecretKind` / `listUserSecretKinds`
+    exports are removed (pre-1.0, no back-compat). The built-in kind is now the exported
+    `githubPatUserSecretKind` handler, registered into the default registry.
+  - Wired symmetrically into the Worker + Node facades (local inherits via `buildNodeContainer`);
+    the cross-runtime conformance suite asserts a programmatically-registered custom kind is
+    described identically on every runtime.
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+  - @cat-factory/kernel@0.69.7
+
+## 0.54.3
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/kernel@0.69.6
+
+## 0.54.2
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/kernel@0.69.5
+
+## 0.54.1
+
+### Patch Changes
+
+- 2a91615: Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview initiative):
+
+  - **Reverse CORS origin injection.** A `deployer` step now passes `inputs.frontendOrigins` — the
+    comma-joined browser origins (`http://localhost:<servePort>`) of every `frontend` frame that
+    binds the service being provisioned (the reverse of the frontend's `backendBindings`). A
+    backend manifest folds it into its CORS allow-list via `{{input.frontendOrigins}}` (HTTP-manifest
+    provider) or `{{frontendOrigins}}` (Kubernetes native adapter, flat scope), so an ephemeral
+    frontend can reach an ephemeral backend. Derivation is automatic (`frontendOriginsForService`,
+    a single workspace block-list read — no N+1); the CORS env-var mapping stays operator-authored,
+    and the backend must be re-provisioned to pick up a newly-linked frontend. The served port is
+    resolved through the shared `resolveFrontendServePort` (contracts) — the same reserved-port
+    sanitization the harness infra spec uses — so a `servePort` set to a reserved in-container port
+    (8080/8089) injects the port the app is actually served on (4173), not the raw value.
+  - **Binding-resolution correctness.** `resolveFrontendBindings` now dedupes a repeated `envVar`
+    deterministically (last non-empty binding wins, matching the injected env map) instead of leaving
+    it to insertion order. New `duplicateBindingEnvVars` predicate (contracts) surfaces the collision
+    for the inspector + run-start notes (a follow-up slice); it is advisory, not a schema reject
+    (bindings persist per-blur with an allowed empty `envVar`).
+
+  Runtime-neutral (all facades). The inspector visibility panel + run-detail projection (6b) and the
+  deterministic local preview host port (6c) are tracked follow-ups in
+  `docs/initiatives/frontend-preview-ui-testing.md`.
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/kernel@0.69.4
+
+## 0.54.0
+
+### Minor Changes
+
+- 67d3876: feat(github): search available repos server-side in the "add service from repo" picker.
+  The picker no longer prefetches the entire installation repo list on open (slow for a wide
+  App install or PAT with hundreds of repos, and it blocked filtering until the whole list
+  loaded). Instead the user types at least 3 characters and the (debounced) query is sent to
+  `GET /github/available-repos?q=…`, which returns only the `owner/name` matches. The `q`
+  param is optional, so the repo-link management panel's browse-all is unchanged. The now-moot
+  manual "refresh list" button is removed (each search hits GitHub live).
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/kernel@0.69.3
+
+## 0.53.2
+
+### Patch Changes
+
+- 63cf6de: Performance: batch reads, parallelize independent awaits, and push work into SQL on hot paths.
+
+  - `GET /workspaces/:id` (the board-load endpoint) now fetches its ~15 independent snapshot
+    ingredients concurrently instead of serially, so its latency is the slowest read rather
+    than the sum of every round-trip; the create-workspace route parallelizes its spend +
+    infra-setup reads the same way.
+  - Agent-context reference lookups (Jira keys / GitHub refs / URLs) run concurrently on the
+    per-step dispatch path; run-start model-default resolutions run concurrently per agent kind.
+  - New batched port methods, mirrored on both runtimes with conformance coverage:
+    `BlockRepository.findByIds` (cross-workspace dependency resolution — one chunked query
+    instead of a point-read per id, also allow-listed for mothership mode),
+    `NotificationRepository.escalateStaleOpen` (the escalation sweep is now one
+    `UPDATE … RETURNING` statement instead of a load-filter-upsert loop), and
+    `GitHubInstallationRepository.listByInstallationIds` (connect-UI annotation).
+  - GitHub webhook fan-out resolves linked workspaces via the existing batched
+    `linkedWorkspaces` read instead of a per-workspace point-read on every delivery.
+  - The Node Drizzle GitHub projections write chunked multi-row upserts (matching the D1
+    twins' `db.batch`) instead of one round-trip per row, and their list reads run
+    `ORDER BY`/`LIMIT` in SQL (NULLS LAST for D1 parity) instead of sorting full result
+    sets in JS.
+  - `autoStartDependents` hoists the invariant workspace-pipeline read out of its loop and
+    stops re-fetching blocks it already holds.
+  - Session/WS-ticket/machine-token verification reuses a memoized `HmacSigner` per secret,
+    so `crypto.subtle.importKey` no longer runs on every request (`signerFor` export).
+  - The Cloudflare Workflows drivers (execution / bootstrap / env-config-repair) build the
+    DI container once per wake instead of once per `step.do` poll tick.
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/contracts@0.80.1
+
+## 0.53.1
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/kernel@0.69.1
+
 ## 0.53.0
 
 ### Minor Changes

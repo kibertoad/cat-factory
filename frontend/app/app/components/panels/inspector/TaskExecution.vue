@@ -8,7 +8,9 @@ import {
   containerPhaseLabel,
 } from '~/utils/pipelineRender'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
+import AgentFailureHistory from '~/components/board/AgentFailureHistory.vue'
 import EmptyState from '~/components/common/EmptyState.vue'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -56,6 +58,10 @@ const failedRun = computed(() => {
   const run = agentRuns.byBlock[props.block.id]
   return run && run.status === 'failed' ? run : null
 })
+
+// Failures from prior attempts, preserved across retries — shown regardless of the run's
+// CURRENT status, so the error trail stays viewable after a restart clears the top banner.
+const failureHistory = computed(() => agentRuns.byBlock[props.block.id]?.failureHistory ?? [])
 
 const pr = computed(() => props.block.pullRequest)
 /** A PR is merged once the block is `done`; otherwise it is open awaiting merge. */
@@ -180,7 +186,13 @@ async function mergePr() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <!-- The live run surface stays open by default: it is what a user selecting a
+       running task is looking for (and what the e2e specs assert on). -->
+  <InspectorSection
+    :title="t('inspector.execution.title')"
+    :hint="t('inspector.execution.hint')"
+    default-open
+  >
     <!-- running pipeline -->
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
@@ -413,6 +425,9 @@ async function mergePr() {
     <!-- failed run: shared failure banner + retry -->
     <AgentFailureCard v-if="failedRun" :run="failedRun" />
 
+    <!-- error trail of prior attempts (survives a retry/restart that cleared the banner) -->
+    <AgentFailureHistory :failures="failureHistory" />
+
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
       <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -464,5 +479,5 @@ async function mergePr() {
     >
       {{ t('inspector.execution.mergePr') }}
     </UButton>
-  </div>
+  </InspectorSection>
 </template>

@@ -1,13 +1,16 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
+import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
+  BlockRepository,
   DeployCloneTarget,
   EnvironmentProvider,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
   LlmCallActivity,
+  NotificationRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
   RunRepoContext,
@@ -69,16 +72,23 @@ export interface TestResponse<T = unknown> {
  */
 export interface ConformanceApp {
   /** Issue an HTTP request through the facade's real Hono `app.fetch`. */
-  call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
+  call<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<TestResponse<T>>
   /** Create (and optionally seed) a workspace, returning its snapshot. */
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
-   * Create an unseeded workspace owned by an ORG account (a fresh org + owner created
-   * straight through the facade's services, since dev-open has no signed-in user to
-   * drive the HTTP account flow). Backs the conformance assertion that an individual-only
-   * subscription (Claude) is refused for org-owned workspaces on every runtime.
+   * Create a workspace owned by an ORG account (a fresh org + owner created straight through
+   * the facade's services, since dev-open has no signed-in user to drive the HTTP account flow).
+   * Unseeded by default; pass `seed: true` for the demo board + built-in pipelines (e.g. the
+   * public-API test, which needs the account AND the seeded `pl_initiative_breakdown` pipeline).
+   * Backs the assertion that an individual-only subscription (Claude) is refused for org-owned
+   * workspaces on every runtime.
    */
-  createOrgWorkspace(options?: { name?: string }): Promise<WorkspaceSnapshot>
+  createOrgWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
    * Drive every active run in a workspace to a standstill (done, or parked on a
    * decision / the spend gate) and return the latest executions. In production a
@@ -147,6 +157,18 @@ export interface ConformanceApp {
    */
   agentRunRepository(): AgentRunRepository
   /**
+   * The facade's block repository over its real store, so the suite can assert the batched
+   * cross-workspace read (`findByIds`) resolves each block to its HOME workspace identically
+   * on D1 and Postgres.
+   */
+  blockRepository(): BlockRepository
+  /**
+   * The facade's notification repository over its real store, so the suite can assert the
+   * escalation sweep's single-statement `escalateStaleOpen` flips exactly the overdue open
+   * cards — and returns them for re-delivery — identically on D1 and Postgres.
+   */
+  notificationRepository(): NotificationRepository
+  /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim
    * actually deletes the backing service on every runtime. The only production path that
@@ -186,6 +208,21 @@ export interface ConformanceApp {
    * wire the store (no ENCRYPTION_KEY / API-key pool).
    */
   openRouterCatalog?(): OpenRouterCatalogProbe | undefined
+  /**
+   * The facade's per-workspace private package-registry service over its real store. The
+   * CRUD is workspace-scoped and asserted over the HTTP `call` path; this probe covers the
+   * DISPATCH half — the decrypt that puts host+token on a container job body — which no
+   * HTTP route exposes (tokens are write-only on the wire). Undefined when the facade did
+   * not wire the store (no ENCRYPTION_KEY).
+   */
+  packageRegistries?(): PackageRegistriesProbe | undefined
+}
+
+/** The dispatch-side subset of the package-registry service the conformance suite drives. */
+export interface PackageRegistriesProbe {
+  resolveForDispatch(
+    workspaceId: string,
+  ): Promise<{ ecosystem: string; host: string; scopes: string[]; token: string }[]>
 }
 
 /** One OpenRouter model's cached metadata, as stored in the dynamic catalog. */
@@ -318,4 +355,12 @@ export interface ConformanceAppOptions {
    * Worker's `buildContainer` overrides). Absent → the facade's default built-in-only registry.
    */
   backendRegistries?: BackendRegistries
+  /**
+   * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
+   * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an
+   * adequate report — is driven on EVERY runtime without a real model. Each facade harness
+   * threads it into its core overrides (the `testerQualityReviewer` seam `createCore` reads);
+   * absent ⇒ the facade's model-derived reviewer (a pass-through with no model wired).
+   */
+  testerQualityReviewer?: TesterQualityReviewer
 }

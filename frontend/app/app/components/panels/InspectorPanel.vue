@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
-import { pipelineAllowedForFrame } from '~/utils/pipeline'
+import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import TaskContextDocs from '~/components/documents/TaskContextDocs.vue'
 import TaskContextIssues from '~/components/tasks/TaskContextIssues.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
@@ -9,6 +9,7 @@ import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.v
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
 import ServiceReleaseHealthConfig from '~/components/panels/inspector/ServiceReleaseHealthConfig.vue'
 import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
+import ServiceConnections from '~/components/panels/inspector/ServiceConnections.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
@@ -16,6 +17,7 @@ import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
 import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
 import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
+import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -72,6 +74,7 @@ watch(
 const isContainer = computed(() => level.value === 'frame' || level.value === 'module')
 const isTask = computed(() => level.value === 'task')
 const isEpic = computed(() => level.value === 'epic')
+const isInitiative = computed(() => level.value === 'initiative')
 
 const instance = computed(() => execution.getInstance(block.value?.executionId))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
@@ -166,12 +169,13 @@ const taskBranchUrl = computed(() => {
   return base ? `${base}/tree/${pr.branch}` : null
 })
 
-// Hide UI-testing pipelines when this block's frame has no UI to exercise — they'd be refused
-// at run start (see utils/pipeline + the backend gate).
+// Hide UI-testing pipelines when this block's frame has no UI to exercise, and `'recurring'`-only
+// pipelines (a manual run of one is refused server-side) — they'd be refused at run start (see
+// utils/pipeline + the backend gate).
 const runMenu = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
   return pipelines.pipelines
-    .filter((p) => pipelineAllowedForFrame(p, frame, board.blocks))
+    .filter((p) => pipelineAllowedForManualStart(p, frame, board.blocks))
     .map((p) => ({
       label: p.name,
       icon: 'i-lucide-play',
@@ -441,10 +445,10 @@ const showOriginalDescription = ref(false)
       </div>
 
       <!-- task: context documents -->
-      <TaskContextDocs v-if="isTask" :block="block" />
+      <TaskContextDocs v-if="isTask" :key="`context-docs-${block.id}`" :block="block" />
 
       <!-- task: context issues (tracker) -->
-      <TaskContextIssues v-if="isTask" :block="block" />
+      <TaskContextIssues v-if="isTask" :key="`context-issues-${block.id}`" :block="block" />
 
       <!-- service (frame): navigate the prescriptive spec tree (+ Gherkin scenarios when
            the spec is on the repo's default branch) -->
@@ -461,32 +465,55 @@ const showOriginalDescription = ref(false)
       </UButton>
 
       <!-- service / module: tasks summary -->
-      <ContainerSummary v-if="isContainer" :block="block" />
+      <ContainerSummary v-if="isContainer" :key="`container-${block.id}`" :block="block" />
       <!-- frontend (frame): build/serve/mock config + backend bindings (board links) -->
-      <FrontendConfig v-if="isFrame && block.type === 'frontend'" :block="block" />
+      <FrontendConfig
+        v-if="isFrame && block.type === 'frontend'"
+        :key="`frontend-${block.id}`"
+        :block="block"
+      />
+
+      <!-- service (frame): directed connections to the other services it uses (board links) -->
+      <ServiceConnections
+        v-if="isFrame && block.type === 'service'"
+        :key="`connections-${block.id}`"
+        :block="block"
+      />
 
       <!-- service (frame): test infra + provisioning configuration -->
-      <ServiceTestConfig v-if="isFrame" :block="block" />
+      <ServiceTestConfig v-if="isFrame" :key="`test-config-${block.id}`" :block="block" />
 
       <!-- service (frame): best-practice fragments for code-aware agents -->
-      <ServiceFragments v-if="isFrame" :block="block" />
+      <ServiceFragments v-if="isFrame" :key="`fragments-${block.id}`" :block="block" />
 
       <!-- service (frame): post-release-health monitor/SLO mapping -->
-      <ServiceReleaseHealthConfig v-if="isFrame" :block="block" />
+      <ServiceReleaseHealthConfig
+        v-if="isFrame"
+        :key="`release-health-${block.id}`"
+        :block="block"
+      />
 
-      <!-- task: dependencies, structure, agent config, run settings, execution -->
+      <!-- task: the live execution surface first (open by default), then the estimate,
+           then the collapsed configuration sections (dependencies, run settings, agent
+           config, structure) so a running task reads top-down without scrolling. -->
+      <!-- Keyed by block id so a manual collapse/expand doesn't leak across task
+           selections: switching tasks re-mounts each section back to its default state
+           (e.g. the live Execution section is open again for the newly selected task). -->
       <template v-else-if="isTask">
-        <RecurringScheduleSettings :block="block" />
-        <TaskDependencies :block="block" />
-        <TaskStructure :block="block" />
-        <TaskAgentConfig :block="block" />
-        <TaskEstimateBadge :block="block" />
-        <TaskRunSettings :block="block" />
-        <TaskExecution :block="block" />
+        <RecurringScheduleSettings :key="`schedule-${block.id}`" :block="block" />
+        <TaskExecution :key="`execution-${block.id}`" :block="block" />
+        <TaskEstimateBadge :key="`estimate-${block.id}`" :block="block" />
+        <TaskDependencies :key="`deps-${block.id}`" :block="block" />
+        <TaskRunSettings :key="`run-settings-${block.id}`" :block="block" />
+        <TaskAgentConfig :key="`agent-config-${block.id}`" :block="block" />
+        <TaskStructure :key="`structure-${block.id}`" :block="block" />
       </template>
 
       <!-- epic: the full tree of member tasks, grouped by service → module -->
-      <EpicChildren v-else-if="isEpic" :block="block" />
+      <EpicChildren v-else-if="isEpic" :key="`epic-${block.id}`" :block="block" />
+
+      <!-- initiative: status + goal, run-planning + tracker controls -->
+      <InitiativeInspector v-else-if="isInitiative" :block="block" />
 
       <!-- actions -->
       <div class="flex items-center gap-2">

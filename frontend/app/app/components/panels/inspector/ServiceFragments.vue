@@ -1,11 +1,17 @@
 <script setup lang="ts">
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 // Service-level best-practice fragments (frame blocks). These are the programming
 // standards/guidelines for the whole service; at run time their bodies are folded
 // into the prompt of every `code-aware` agent on tasks under this service. Drawn from
-// the universal fragment pool (built-in + deployment-registered), grouped by category.
-const props = defineProps<{ block: Block }>()
+// the board's merged fragment catalog (built-in ∪ registered ∪ account ∪ workspace,
+// via the fragments store; static pool when the library is off), grouped by category.
+// `defaultOpen` expands the section on surfaces that embed this as the primary content
+// (the add-service modal); the inspector leaves it collapsed.
+const props = defineProps<{ block: Block; defaultOpen?: boolean }>()
 
 const board = useBoardStore()
 const fragments = useFragmentsStore()
@@ -15,19 +21,19 @@ const { t } = useI18n()
 
 onMounted(() => fragments.ensureLoaded())
 
-type MenuItem = { label: string; icon?: string; onSelect: () => void }
-
+// An id the catalog no longer resolves (removed/suppressed after selection) still
+// renders — labelled by its raw id — so it stays visible and removable.
 const selectedFragments = computed(() =>
-  (props.block.serviceFragmentIds ?? [])
-    .map((id) => fragments.getFragment(id))
-    .filter((f): f is NonNullable<typeof f> => !!f),
+  (props.block.serviceFragmentIds ?? []).map(
+    (id) => fragments.getFragment(id) ?? { id, title: id, summary: '' },
+  ),
 )
 
 // A trailing group that jumps from "attach a fragment" to authoring/editing the
 // library itself (board tier always; account tier when accounts are enabled).
 // Open to every member — managing fragments is not an admin-only action.
-const manageItems = computed<MenuItem[]>(() => {
-  const items: MenuItem[] = [
+const manageItems = computed<DropdownMenuItem[]>(() => {
+  const items: DropdownMenuItem[] = [
     {
       label: t('inspector.fragments.manageBoard'),
       icon: 'i-lucide-book-marked',
@@ -44,18 +50,14 @@ const manageItems = computed<MenuItem[]>(() => {
   return items
 })
 
-// Picker menu: every pool fragment not already selected, grouped by category, with
-// the management links appended as the final group.
-const fragmentMenu = computed<MenuItem[][]>(() => {
+// Picker menu: every pool fragment not already selected, grouped into labelled
+// per-category sections, with the management links appended as the final group.
+const fragmentMenu = computed<DropdownMenuItem[][]>(() => {
   const selected = new Set(props.block.serviceFragmentIds ?? [])
-  const groups = new Map<string, MenuItem[]>()
-  for (const f of fragments.fragments) {
-    if (selected.has(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => addFragment(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.values(), manageItems.value]
+  return [
+    ...buildFragmentPickerGroups(fragments.fragments, (id) => selected.has(id), addFragment),
+    manageItems.value,
+  ]
 })
 
 function addFragment(id: string) {
@@ -73,11 +75,13 @@ function removeFragment(id: string) {
 </script>
 
 <template>
-  <div>
-    <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('inspector.fragments.serviceTitle') }}
-      </span>
+  <InspectorSection
+    :title="t('inspector.fragments.serviceTitle')"
+    :hint="t('inspector.fragments.serviceHint')"
+    :count="selectedFragments.length"
+    :default-open="props.defaultOpen"
+  >
+    <template #actions>
       <UDropdownMenu :items="fragmentMenu">
         <UButton
           size="xs"
@@ -87,8 +91,8 @@ function removeFragment(id: string) {
           trailing-icon="i-lucide-chevron-down"
         />
       </UDropdownMenu>
-    </div>
-    <div v-if="selectedFragments.length" class="mb-1 flex flex-wrap gap-1">
+    </template>
+    <div v-if="selectedFragments.length" class="flex flex-wrap gap-1">
       <UBadge
         v-for="f in selectedFragments"
         :key="f.id"
@@ -105,5 +109,5 @@ function removeFragment(id: string) {
     <div v-else class="text-[11px] text-slate-500">
       {{ t('inspector.fragments.serviceEmpty') }}
     </div>
-  </div>
+  </InspectorSection>
 </template>

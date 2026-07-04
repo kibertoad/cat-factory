@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Block } from '~/types/domain'
 import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useExecutionStore } from '~/stores/execution'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Task-level configuration contributed by the agents in this task's selected
 // pipeline (e.g. the Playwright agent's e2e target: CI vs ephemeral). Each value is
@@ -49,10 +50,12 @@ function setValue(id: string, value: string) {
 </script>
 
 <template>
-  <div v-if="descriptors.length" class="space-y-3">
-    <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-      {{ t('inspector.agentConfig.title') }}
-    </div>
+  <InspectorSection
+    v-if="descriptors.length"
+    :title="t('inspector.agentConfig.title')"
+    :hint="t('inspector.agentConfig.hint')"
+    :count="descriptors.length"
+  >
     <div v-for="d in descriptors" :key="d.id" class="space-y-1">
       <div class="flex items-center justify-between">
         <span class="text-[11px] text-slate-400">{{ d.label }}</span>
@@ -80,5 +83,5 @@ function setValue(id: string, value: string) {
       </div>
       <p class="text-[11px] leading-snug text-slate-500">{{ d.description }}</p>
     </div>
-  </div>
+  </InspectorSection>
 </template>

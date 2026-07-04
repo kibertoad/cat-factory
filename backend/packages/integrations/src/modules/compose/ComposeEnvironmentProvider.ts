@@ -13,7 +13,9 @@ import type {
 import {
   type ComposeEnvironmentConfig,
   type ComposeRuntime,
+  checkoutDepthFor,
   classifyComposePs,
+  composeFileDir,
   parseComposeEnvConfig,
   parseHostPort,
   prepareComposeProject,
@@ -47,6 +49,12 @@ const WAIT_TIMEOUT_S = 300
 // hang a provision/status/teardown forever; `up` gets a longer bound that clears its own --wait.
 const SHORT_TIMEOUT_MS = 60_000
 const UP_TIMEOUT_MS = (WAIT_TIMEOUT_S + 30) * 1000
+// Build mode default bound for `docker compose build` — separate from UP_TIMEOUT_MS so a slow
+// image build (a .NET/Angular multi-stage Dockerfile) doesn't consume the health-wait budget.
+// Overridable per-workspace via the connect form's `buildTimeoutMinutes`.
+const DEFAULT_BUILD_TIMEOUT_MS = 900_000
+// The rewritten (isolation-safe) compose file, written beside the original inside the checkout.
+const REWRITTEN_COMPOSE_NAME = 'cat-factory.compose.yaml'
 
 export interface ComposeEnvironmentProviderOptions {
   /** Reserved for future URL-policy-aware behaviour; unused today (the URL is always localhost). */
@@ -69,21 +77,36 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
 
     const composeText = renderTemplate(await this.readComposeFile(req, config), vars)
     // Rewrite the repo compose into one isolation-safe project file (ephemeral host ports, the
-    // probed service guaranteed to publish, unsupported references rejected). A blocking issue
-    // surfaces as a deterministic failure BEFORE we touch the daemon.
-    const prepared = prepareComposeProject(composeText, config.service, config.port)
+    // probed service guaranteed to publish, unsupported references rejected — mode-aware: build
+    // mode allows build:/in-checkout binds/relative env_files). A blocking issue surfaces as a
+    // deterministic failure BEFORE we touch the daemon or clone anything.
+    const prepared = prepareComposeProject(composeText, config.service, config.port, {
+      build: config.build,
+      // In build mode, relatives resolve against the compose file's own dir inside the checkout, so
+      // a ref may climb this many `../`s and still be in-checkout (the escape line is the root).
+      baseDepth: config.build ? checkoutDepthFor(config.composePath) : 0,
+    })
     if (prepared.issues.length > 0) {
       return this.failed(
         project,
         `This Docker Compose stack can't be provisioned as a preview env:\n- ${prepared.issues.join('\n- ')}`,
       )
     }
-    const basePath = await this.runtime.writeProjectFile(project, 'compose.yaml', prepared.content)
-    const files = ['-f', basePath]
     const env = config.envTemplate ? renderEnvMap(config.envTemplate, vars) : undefined
 
+    // Materialize the project: build mode clones the PR head into a working tree (so build:/binds/
+    // env_files resolve) and `docker compose build`s; image mode writes the rewritten file to a
+    // scratch dir and relies on pre-built images. Either yields the `-f` file(s) + project dir.
+    const setup = config.build
+      ? await this.setupBuildProject(req, config, project, prepared.content, env)
+      : await this.setupImageProject(project, prepared.content)
+    if ('error' in setup) return this.failed(project, setup.error)
+    const scope = setup.projectDir
+      ? ['-p', project, '--project-directory', setup.projectDir, ...setup.files]
+      : ['-p', project, ...setup.files]
+
     const up = await this.runtime.compose(
-      ['-p', project, ...files, 'up', '-d', '--wait', '--wait-timeout', String(WAIT_TIMEOUT_S)],
+      [...scope, 'up', '-d', '--wait', '--wait-timeout', String(WAIT_TIMEOUT_S)],
       { env, timeoutMs: UP_TIMEOUT_MS },
     )
     if (up.code !== 0) {
@@ -94,7 +117,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     }
 
     const portRes = await this.runtime.compose(
-      ['-p', project, ...files, 'port', config.service, String(config.port)],
+      [...scope, 'port', config.service, String(config.port)],
       { env, timeoutMs: SHORT_TIMEOUT_MS },
     )
     const hostPort = parseHostPort(portRes.stdout)
@@ -221,7 +244,24 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
         label: 'Container port',
         required: true,
         placeholder: '8080',
-        help: 'The in-container port to publish to an ephemeral host port + probe. Image-based stacks only (v1) — a service that builds from source is not yet supported.',
+        help: 'The in-container port to publish to an ephemeral host port + probe.',
+      },
+      {
+        key: 'build',
+        label: 'Image source',
+        type: 'select',
+        default: 'false',
+        options: [
+          { value: 'false', label: 'Pull pre-built images' },
+          { value: 'true', label: 'Build from source (clone the PR head)' },
+        ],
+        help: 'Build from source clones the PR head into a working tree and runs `docker compose build`, so `build:` contexts, in-checkout bind mounts, and relative env_files resolve. Requires a Docker-capable (local) deployment.',
+      },
+      {
+        key: 'buildTimeoutMinutes',
+        label: 'Build timeout (minutes)',
+        default: '15',
+        help: 'Build-from-source only: how long `docker compose build` may run before it is aborted (separate from the startup health-wait).',
       },
       { key: 'scheme', label: 'URL scheme', default: 'http' },
       {
@@ -257,6 +297,71 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
   }
 
   // --- internals ----------------------------------------------------------
+
+  /** Image mode: write the rewritten compose to a scratch dir; images are pulled, not built. */
+  private async setupImageProject(
+    project: string,
+    content: string,
+  ): Promise<{ files: string[]; projectDir?: string }> {
+    const basePath = await this.runtime.writeProjectFile(project, 'compose.yaml', content)
+    return { files: ['-f', basePath] }
+  }
+
+  /**
+   * Build mode: clone the PR head into a per-project working tree, write the rewritten compose
+   * BESIDE the original inside the checkout (so relative build contexts / bind mounts / env_files
+   * resolve against the compose file's own directory), then `docker compose build`. Returns the
+   * `-f` file + the `--project-directory` to reuse for `up`/`port`, or a deterministic `error`.
+   */
+  private async setupBuildProject(
+    req: ProvisionEnvironmentRequest,
+    config: ComposeEnvironmentConfig,
+    project: string,
+    content: string,
+    env: Record<string, string> | undefined,
+  ): Promise<{ files: string[]; projectDir: string } | { error: string }> {
+    if (!this.runtime.checkout || !this.runtime.writeCheckoutFile) {
+      return {
+        error:
+          'Build-from-source compose mode needs a Docker-capable runtime that can clone + build (unavailable on this deployment).',
+      }
+    }
+    const clone = await req.clone?.()
+    if (!clone) {
+      return {
+        error:
+          'Build-from-source compose mode needs a repo clone target — is the VCS connected and the service linked to a repo?',
+      }
+    }
+    const ref = req.inputs.branch || clone.ref
+    let dir: string
+    try {
+      ;({ dir } = await this.runtime.checkout(project, {
+        cloneUrl: clone.cloneUrl,
+        ref,
+        token: clone.token,
+      }))
+    } catch (err) {
+      return {
+        error: `Could not clone the repo for build: ${err instanceof Error ? err.message : String(err)}`,
+      }
+    }
+    const composeDir = composeFileDir(config.composePath)
+    const relPath = composeDir ? `${composeDir}/${REWRITTEN_COMPOSE_NAME}` : REWRITTEN_COMPOSE_NAME
+    const filePath = await this.runtime.writeCheckoutFile(project, relPath, content)
+    const projectDir = composeDir ? `${dir}/${composeDir}` : dir
+    const files = ['-f', filePath]
+
+    const build = await this.runtime.compose(
+      ['-p', project, '--project-directory', projectDir, ...files, 'build'],
+      { env, timeoutMs: config.buildTimeoutMs ?? DEFAULT_BUILD_TIMEOUT_MS },
+    )
+    if (build.code !== 0) {
+      await this.safeDown(project)
+      return { error: tailOutput(build.stderr || build.stdout) || 'docker compose build failed' }
+    }
+    return { files, projectDir }
+  }
 
   private failed(project: string, error: string): ProvisionedEnvironment {
     return {

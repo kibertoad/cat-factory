@@ -7,7 +7,7 @@ import {
 } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 
-const { parseFragmentMarkdown, slugFromPath, digestListing } = fragmentSourceLogic
+const { parseFragmentMarkdown, slugFromPath } = fragmentSourceLogic
 
 function record(over: Partial<PromptFragmentRecord>): PromptFragmentRecord {
   return {
@@ -170,23 +170,8 @@ describe('frontmatter parsing', () => {
     expect(parsed.summary).toBe('Never log secrets in production.')
   })
 
-  it('slugs paths and digests listings stably (order-independent)', () => {
+  it('slugs paths stably', () => {
     expect(slugFromPath('guidelines/Backend Errors.md')).toBe('guidelines-backend-errors')
-    const a = digestListing([
-      { path: 'a', sha: '1' },
-      { path: 'b', sha: '2' },
-    ])
-    const b = digestListing([
-      { path: 'b', sha: '2' },
-      { path: 'a', sha: '1' },
-    ])
-    expect(a).toBe(b)
-    expect(a).not.toBe(
-      digestListing([
-        { path: 'a', sha: '9' },
-        { path: 'b', sha: '2' },
-      ]),
-    )
   })
 })
 

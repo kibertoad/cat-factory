@@ -1,8 +1,10 @@
 import type { GitHubBranch, GitHubIssue, GitHubPullRequest, GitHubRepo } from '@cat-factory/kernel'
+import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { githubDeps, makeApp, uniqueInstallationId } from '../helpers'
 import { FakeAgentExecutor } from '../fakes/FakeAgentExecutor'
 import { FakeGitHubClient } from '../fakes/FakeGitHubClient'
+import { D1GitHubInstallationRepository } from '../../src/infrastructure/repositories/D1GitHubInstallationRepository'
 
 function seededClient(installationId: number): FakeGitHubClient {
   const client = new FakeGitHubClient()
@@ -14,7 +16,6 @@ function seededClient(installationId: number): FakeGitHubClient {
       name: 'web',
       defaultBranch: 'main',
       private: true,
-      blockId: null,
       syncedAt: 0,
     },
   ]
@@ -175,5 +176,34 @@ describe('github sync', () => {
     const { workspace } = await app.createWorkspace()
     const res = await app.call('GET', `/workspaces/${workspace.id}/github/repos`)
     expect(res.status).toBe(503)
+  })
+
+  it('listByInstallationIds batches the connect-UI annotation read (tombstones included)', async () => {
+    const repo = new D1GitHubInstallationRepository({ db: env.DB })
+    const first = uniqueInstallationId()
+    const second = uniqueInstallationId()
+    const installation = (installationId: number) => ({
+      installationId,
+      // github_installations.workspace_id is UNIQUE — one binding per workspace.
+      workspaceId: `ws_conn_${installationId}`,
+      accountId: null,
+      accountLogin: 'octo',
+      targetType: 'Organization' as const,
+      appId: null,
+      cachedToken: null,
+      tokenExpiresAt: null,
+      createdAt: 1000,
+      deletedAt: null,
+    })
+    await repo.upsert(installation(first))
+    await repo.upsert(installation(second))
+    await repo.softDelete(second, 2000)
+
+    // The batched read mirrors the point read: tombstoned rows included, unknown ids absent.
+    // 2_000_000_001 is above uniqueInstallationId's range, so it is never a real row.
+    const found = await repo.listByInstallationIds([first, second, 2_000_000_001])
+    expect(found.map((i) => i.installationId).sort()).toEqual([first, second].sort())
+    expect(found.find((i) => i.installationId === second)?.deletedAt).toBe(2000)
+    expect(await repo.listByInstallationIds([])).toEqual([])
   })
 })

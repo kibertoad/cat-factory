@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import type {
   Clock,
   IdGenerator,
@@ -9,8 +10,10 @@ import type {
   LlmPromptChainTip,
   LlmTraceSink,
 } from '@cat-factory/kernel'
+import type { HarnessCallMetric } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
+  makeHarnessCallRecorder,
   MAX_BODY_CHARS,
   type RecordLlmCallInput,
 } from './LlmObservabilityService.js'
@@ -319,6 +322,90 @@ describe('LlmObservabilityService trace-sink fan-out', () => {
   })
 })
 
+/** A settings repo returning a fixed storeAgentContext value for every workspace. */
+function settingsRepo(storeAgentContext: boolean) {
+  return {
+    async get() {
+      return {
+        ...DEFAULT_WORKSPACE_SETTINGS,
+        storeAgentContext,
+      }
+    },
+    async upsert() {},
+  }
+}
+
+describe('LlmObservabilityService secret redaction', () => {
+  it('scrubs credential shapes from the stored + fanned-out prompt/response/reasoning', async () => {
+    const repo = new MemoryRepo()
+    const sink = new CaptureSink()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      traceSink: sink,
+    })
+
+    await service.record(
+      input({
+        promptText: 'clone https://x-access-token:ghp_abcdefghijklmnopqrstuvwx1234@github.com/o/r',
+        responseText: 'Authorization: Bearer sk-abcdefghijklmnopqrstuvwx',
+        reasoningText: 'the key is AKIAIOSFODNN7EXAMPLE',
+        errorMessage: 'upstream 401: Authorization: Bearer sk-leakedleakedleakedleaked',
+      }),
+    )
+
+    const m = repo.recorded[0]!
+    expect(m.promptText).not.toContain('ghp_abcdefghijklmnopqrstuvwx1234')
+    expect(m.promptText).toContain('[REDACTED]')
+    expect(m.responseText).not.toContain('sk-abcdefghijklmnopqrstuvwx')
+    expect(m.reasoningText).not.toContain('AKIAIOSFODNN7EXAMPLE')
+    // errorMessage is the one exchange field kept even when bodies are dropped, so it must
+    // be scrubbed too (it can echo an upstream auth header).
+    expect(m.errorMessage).not.toContain('sk-leakedleakedleakedleaked')
+    expect(m.errorMessage).toContain('[REDACTED]')
+    // The external trace sink receives the redacted text too.
+    const e = sink.events[0]!
+    expect(e.input).not.toContain('ghp_abcdefghijklmnopqrstuvwx1234')
+    expect(e.output).not.toContain('sk-abcdefghijklmnopqrstuvwx')
+    expect(e.errorMessage).not.toContain('sk-leakedleakedleakedleaked')
+  })
+})
+
+describe('LlmObservabilityService storeAgentContext gating', () => {
+  it('records bodies when the workspace has storeAgentContext on', async () => {
+    const repo = new MemoryRepo()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      workspaceSettingsRepository: settingsRepo(true),
+    })
+    await service.record(input({ promptText: '[{"role":"user"}]', responseText: 'hello' }))
+    expect(repo.recorded[0]!.responseText).toBe('hello')
+  })
+
+  it('drops prompt/response bodies (but keeps numeric telemetry) when the workspace opted out', async () => {
+    const repo = new MemoryRepo()
+    const sink = new CaptureSink()
+    const service = new LlmObservabilityService({
+      llmCallMetricRepository: repo,
+      idGenerator,
+      clock,
+      traceSink: sink,
+      workspaceSettingsRepository: settingsRepo(false),
+    })
+    await service.record(input({ promptText: '[{"role":"user"}]', responseText: 'secret' }))
+
+    const m = repo.recorded[0]!
+    expect(m.promptText).toBe('')
+    expect(m.responseText).toBe('')
+    expect(m.promptTokens).toBe(100) // numeric telemetry still recorded
+    expect(sink.events[0]!.input).toBe('')
+    expect(sink.events[0]!.output).toBe('')
+  })
+})
+
 describe('LlmObservabilityService.exportForExecution', () => {
   it('builds an export stamped with the service clock', async () => {
     const repo = new MemoryRepo()
@@ -332,5 +419,117 @@ describe('LlmObservabilityService.exportForExecution', () => {
     expect(out.executionId).toBe('exec')
     expect(out.generatedAt).toBe(1700)
     expect(out.totals.calls).toBe(1)
+  })
+})
+
+describe('makeHarnessCallRecorder', () => {
+  function metric(overrides: Partial<HarnessCallMetric> = {}): HarnessCallMetric {
+    return {
+      model: 'claude-opus-4-8',
+      promptText: '[{"role":"system","content":"s"}]',
+      messageCount: 1,
+      responseText: 'hi',
+      reasoningText: '',
+      inputTokens: 120,
+      cachedInputTokens: 20,
+      outputTokens: 30,
+      finishReason: 'end_turn',
+      ...overrides,
+    }
+  }
+
+  it('maps a harness call onto a recorded llm_call_metrics row (tokens, bodies, vendor)', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      calls: [metric()],
+    })
+
+    expect(repo.recorded).toHaveLength(1)
+    const m = repo.recorded[0]!
+    expect(m.provider).toBe('claude')
+    // The call's own model wins over the dispatch `provider:model`.
+    expect(m.model).toBe('claude-opus-4-8')
+    expect(m.promptTokens).toBe(120)
+    expect(m.cachedPromptTokens).toBe(20)
+    expect(m.completionTokens).toBe(30)
+    expect(m.totalTokens).toBe(150)
+    expect(m.finishReason).toBe('end_turn')
+    expect(m.responseText).toBe('hi')
+    // The CLIs expose no per-HTTP timing, so both are zero (overhead derives zero).
+    expect(m.totalMs).toBe(0)
+    expect(m.upstreamMs).toBe(0)
+    expect(m.overheadMs).toBe(0)
+    expect(m.ok).toBe(true)
+  })
+
+  it('records calls in order so the prompt-delta chain stays intact', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      calls: [
+        metric({
+          promptText: '[{"role":"system","content":"s"}]',
+          messageCount: 1,
+          responseText: 'a',
+        }),
+        metric({
+          promptText: '[{"role":"system","content":"s"},{"role":"assistant","content":"a"}]',
+          messageCount: 2,
+          responseText: 'b',
+        }),
+      ],
+    })
+
+    expect(repo.recorded).toHaveLength(2)
+    // Second row chained onto the first: only the new tail message is stored as a delta.
+    expect(repo.recorded[1]!.promptPrefixCount).toBe(1)
+    expect(repo.chainTipReads).toBeGreaterThan(0)
+  })
+
+  it('mints deterministic per-call ids off the job id so a replay is idempotent', async () => {
+    const repo = new MemoryRepo()
+    const record = makeHarnessCallRecorder(
+      new LlmObservabilityService({
+        llmCallMetricRepository: repo,
+        idGenerator: seqIdGenerator,
+        clock: seqClock,
+      }),
+    )
+    await record({
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      provider: 'claude',
+      model: 'claude:claude-opus-4-8',
+      jobId: 'exec-coder',
+      calls: [metric({ responseText: 'a' }), metric({ responseText: 'b' })],
+    })
+
+    // Ids are derived from the job id + call index, so a durable-driver replay of the
+    // same job produces the SAME ids (a duplicate insert the store then rejects).
+    expect(repo.recorded.map((m) => m.id)).toEqual(['exec-coder-hc-0', 'exec-coder-hc-1'])
   })
 })

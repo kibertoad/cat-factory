@@ -1,5 +1,6 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
+import { FRONTEND_WIREMOCK_PORT, resolveFrontendServePort } from '@cat-factory/contracts'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 
 /**
@@ -113,6 +114,43 @@ export const SPEC_SHAPE_HINT =
   'technical task with no business requirements, the document is instead just ' +
   '{"noBusinessSpecs": true}.'
 
+/** Role prompt the initiative-planner step's agent runs under (returns the plan as JSON). */
+export const INITIATIVE_PLANNER_SYSTEM_PROMPT =
+  'You are a staff engineer planning a LONG-RUNNING INITIATIVE — a body of work too ' +
+  'large for one task (a cross-cutting refactor, a migration, a strangler conversion). ' +
+  'Explore the repository first and ground every part of the plan in the actual code. ' +
+  'Decompose the initiative into SEQUENTIAL PHASES, each holding concrete work ITEMS: ' +
+  'an item must be a self-sufficient task one coding agent can complete in a single PR, ' +
+  'with a description that stands alone (name the files/modules it touches). Give every ' +
+  'item an estimate — complexity, risk and impact, each 0..1 — and declare `dependsOn` ' +
+  '(item ids) only where an item genuinely needs another item merged first; independent ' +
+  'items in a phase may run in parallel. Choose an execution policy: `maxConcurrent` ' +
+  '(how many items may run at once — 1 for delicate serialized work) and ordered ' +
+  '`rules` mapping estimates to pipelines (an item matches a rule when ANY axis meets ' +
+  'its `min*` threshold; first match wins; no match falls back to `defaultPipelineId`). ' +
+  'Available pipelines: `pl_quick` (small, low-risk change), `pl_simple` (standard ' +
+  'change, lighter review), `pl_full` (full spec/review/test rigor), `pl_bugfix` (bug ' +
+  'remediation). Record the decisions you made and any known caveats. ' +
+  'Respond with ONLY a JSON object of shape {"goal","constraints":[],"nonGoals":[],' +
+  '"analysisSummary","phases":[{"id","title","goal","maxConcurrent"?}],' +
+  '"items":[{"id","phaseId","title","description","dependsOn":[],' +
+  '"estimate":{"complexity","risk","impact","rationale"},"pipelineId"?}],' +
+  '"policy":{"maxConcurrent","rules":[{"pipelineId","minComplexity"?,"minRisk"?,' +
+  '"minImpact"?}],"defaultPipelineId"},"decisions":[{"title","detail"}],"caveats":[]} ' +
+  '— no prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
+
+/** Compact shape hint fed to the structured-output repair call for the initiative plan. */
+export const INITIATIVE_PLAN_SHAPE_HINT =
+  'Expected an initiative plan: {"goal": string, "constraints": string[], "nonGoals": ' +
+  'string[], "analysisSummary": string, "phases": [{"id": string, "title": string, ' +
+  '"goal": string}], "items": [{"id": string, "phaseId": string, "title": string, ' +
+  '"description": string, "dependsOn": string[], "estimate": {"complexity": number 0..1, ' +
+  '"risk": number 0..1, "impact": number 0..1, "rationale": string}}], "policy": ' +
+  '{"maxConcurrent": number, "rules": [{"pipelineId": string, "minComplexity"?: number, ' +
+  '"minRisk"?: number, "minImpact"?: number}], "defaultPipelineId": string}, ' +
+  '"decisions": [{"title": string, "detail": string}], "caveats": string[]}.'
+
 /** Compact shape hint fed to the structured-output repair call for the merger assessment. */
 export const MERGE_ASSESSMENT_SHAPE_HINT =
   'Expected a merge assessment: {"complexity": number 0..1, "risk": number 0..1, ' +
@@ -164,6 +202,98 @@ export function blueprintUserPrompt(): string {
       'scratch. Return the COMPLETE tree (not a diff).',
     '',
     'Respond with ONLY the JSON object for the service tree — no prose, no code fences.',
+  ].join('\n')
+}
+
+/**
+ * Render the planning context an initiative-level run carries (slice 2): the interviewer's
+ * synthesized goal / constraints / non-goals + the Q&A digest, and the analyst's codebase
+ * analysis. Folded into the analyst and planner prompts so each is grounded in the human's
+ * intent and the prior step's findings. Returns [] when no initiative context is present
+ * (e.g. the interviewer/analyst passed through with no model wired).
+ */
+function initiativeContextLines(
+  context: AgentRunContext,
+  opts: { includeAnalysis: boolean },
+): string[] {
+  const init = context.initiative
+  if (!init) return []
+  const lines: string[] = []
+  if (init.goal?.trim()) lines.push('', '## Agreed goal', '', init.goal.trim())
+  if (init.constraints?.length) {
+    lines.push('', '## Constraints', '', ...init.constraints.map((c) => `- ${c}`))
+  }
+  if (init.nonGoals?.length) {
+    lines.push('', '## Non-goals', '', ...init.nonGoals.map((c) => `- ${c}`))
+  }
+  const qa = (init.qa ?? []).filter((q) => q.answer?.trim())
+  if (qa.length) {
+    lines.push('', '## Planning interview', '')
+    for (const { question, answer } of qa) lines.push(`- Q: ${question}`, `  A: ${answer}`)
+  }
+  if (opts.includeAnalysis && init.analysisSummary?.trim()) {
+    lines.push('', '## Codebase analysis', '', init.analysisSummary.trim())
+  }
+  return lines
+}
+
+/** Role prompt the initiative-analyst step runs under (returns a prose codebase analysis). */
+export const INITIATIVE_ANALYST_SYSTEM_PROMPT =
+  'You are a staff engineer performing a CODEBASE ANALYSIS to ground the planning of a ' +
+  'long-running initiative (a cross-cutting refactor, a migration, a strangler conversion). ' +
+  'Explore the repository and produce a concise, concrete analysis a planner will use to ' +
+  'decompose the work: the relevant architecture and module boundaries, the files/areas the ' +
+  'initiative will most likely touch, existing patterns to follow, cross-cutting concerns, ' +
+  'risks and likely sequencing constraints. Ground every claim in real file/directory ' +
+  'references; do NOT propose the plan itself (no phases/items) and do NOT modify anything. ' +
+  'Respond with a clear Markdown analysis. ' +
+  FINAL_ANSWER_IN_REPLY
+
+/**
+ * The initiative-analyst's task prompt: the agreed goal / constraints from the interview
+ * plus the instruction to analyse the repo. The backend's analyst post-completion resolver
+ * folds the returned prose onto the `initiatives` entity (`analysisSummary`), which the
+ * planner then consumes.
+ */
+export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
+  const block = context.block
+  const description = block.description?.trim()
+  return [
+    `Analyse this codebase to ground planning of the initiative: ${
+      block.title || '(untitled initiative)'
+    }`,
+    ...(description ? ['', description] : []),
+    ...initiativeContextLines(context, { includeAnalysis: false }),
+    '',
+    'Explore the repository and produce the analysis described in your instructions — ' +
+      'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
+      'Respond with a clear Markdown analysis.',
+  ].join('\n')
+}
+
+/**
+ * The initiative-planner's task prompt: the human's rough goal statement (the
+ * initiative block's title + description), the interview + codebase-analysis context the
+ * interviewer/analyst steps produced (slice 2), plus the exploration/plan instructions.
+ * The agent reads the codebase from its own read-only checkout; the backend ingests the
+ * returned plan into the `initiatives` entity, and the committer step renders + commits the
+ * in-repo tracker after the human approves the plan.
+ */
+export function initiativePlannerUserPrompt(context: AgentRunContext): string {
+  const block = context.block
+  const description = block.description?.trim()
+  return [
+    `Plan the initiative: ${block.title || '(untitled initiative)'}`,
+    ...(description ? ['', description] : []),
+    ...initiativeContextLines(context, { includeAnalysis: true }),
+    '',
+    'Explore this repository to ground the plan in the real code (building on the codebase ' +
+      'analysis above), honour the agreed goal / constraints / non-goals, then produce the ' +
+      'complete multi-phase plan: sequential phases, self-sufficient items with ' +
+      'estimates and dependencies, and the execution policy (concurrency + ' +
+      'estimate→pipeline rules).',
+    '',
+    'Respond with ONLY the JSON object for the plan — no prose, no code fences.',
   ].join('\n')
 }
 
@@ -282,15 +412,6 @@ export function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): st
  * `noInfraDependencies`). The harness `infra` wire shape is unchanged — only its source moved
  * from the old `tester.environment` config to the service's `provisioning` + the run env.
  */
-/** The in-container port WireMock binds for a frontend UI test (backend-chosen, not user config). */
-const FRONTEND_WIREMOCK_PORT = 8089
-/**
- * The default in-container port the built frontend is served on. Deliberately NOT 8080 (the
- * harness's own job HTTP server owns 8080 in the same container) and NOT the WireMock port.
- */
-const FRONTEND_SERVE_PORT = 4173
-/** The port the harness's own job HTTP server binds inside the container — never serve on it. */
-const HARNESS_JOB_PORT = 8080
 
 /**
  * Env-var names never injected from a frontend binding: they are spread over `process.env` at
@@ -333,20 +454,6 @@ function isReservedEnvName(key: string): boolean {
   return RESERVED_ENV_PREFIXES.some((p) => lower.startsWith(p))
 }
 
-/**
- * The served port for a frontend UI test: the user's `servePort` unless it collides with a
- * reserved in-container port (the harness job server on 8080, or WireMock on 8089), in which
- * case it would fail to bind (or steal WireMock's port), so we fall back to the default. The
- * inspector steers users to 4173, but nothing stops them typing a reserved port, so guard here.
- */
-function resolveServePort(requested: number | undefined): number {
-  if (requested === undefined) return FRONTEND_SERVE_PORT
-  if (requested === HARNESS_JOB_PORT || requested === FRONTEND_WIREMOCK_PORT) {
-    return FRONTEND_SERVE_PORT
-  }
-  return requested
-}
-
 export function testerInfraSpec(context: AgentRunContext): Record<string, unknown> {
   // A `frontend` frame under the self-contained UI-test flow builds + serves the app and stands
   // WireMock up for its other upstreams — all as in-container processes (no DinD). The backend
@@ -357,6 +464,21 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
   const provisioning = context.service?.provisioning
   const type = provisioning?.type
   const envUrl = context.environment?.url
+  // The involved connected services with a LIVE ephemeral env this run (title → URL), so a
+  // cross-service integration test can reach a peer's real environment. Keyed by title (the
+  // human-facing service name the test refers to). Two involved services can share a title, so a
+  // collision is disambiguated with the frame id rather than silently dropping a peer's URL.
+  // Absent when no involved peer is live.
+  const peerEnvironments: Record<string, string> = {}
+  for (const involved of context.involvedServices ?? []) {
+    if (!involved.envUrl) continue
+    const key =
+      peerEnvironments[involved.title] !== undefined
+        ? `${involved.title} (${involved.frameId})`
+        : involved.title
+    peerEnvironments[key] = involved.envUrl
+  }
+  const peers = Object.keys(peerEnvironments).length ? { peerEnvironments } : {}
   // Prefer a provisioned environment whenever one exists: a `kubernetes`/`custom` service is
   // provisioned by a workspace handler, and a `deployer` step can provision an env for any
   // service. Either way the Tester targets that URL rather than standing nothing up locally.
@@ -364,6 +486,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     return {
       environment: 'ephemeral',
       ...(envUrl ? { environmentUrl: envUrl } : {}),
+      ...peers,
     }
   }
   return {
@@ -372,6 +495,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     ...(type === 'docker-compose' && provisioning?.composePath
       ? { composePath: provisioning.composePath }
       : {}),
+    ...peers,
   }
 }
 
@@ -394,13 +518,14 @@ export function buildFrontendInfraSpec(
   }
   return {
     kind: 'frontend',
+    ...(config.directory ? { directory: config.directory } : {}),
     ...(config.packageManager ? { packageManager: config.packageManager } : {}),
     ...(config.installCommand ? { install: config.installCommand } : {}),
     ...(config.buildScript ? { buildScript: config.buildScript } : {}),
     ...(config.outputDir ? { outputDir: config.outputDir } : {}),
     ...(config.serveMode ? { serveMode: config.serveMode } : {}),
     ...(config.serveScript ? { serveScript: config.serveScript } : {}),
-    servePort: resolveServePort(config.servePort),
+    servePort: resolveFrontendServePort(config.servePort),
     ...(config.envInjection ? { envInjection: config.envInjection } : {}),
     ...(Object.keys(env).length ? { env } : {}),
     ...(config.mockMappingsPath ? { wiremockMappingsPath: config.mockMappingsPath } : {}),

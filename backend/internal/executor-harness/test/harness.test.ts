@@ -23,6 +23,7 @@ import {
 } from '../src/pi.js'
 import {
   authenticatedCloneUrl,
+  branchAheadOfBase,
   branchHasCommitsSince,
   changedPathsFromPorcelain,
   commitTrackedEdits,
@@ -444,6 +445,57 @@ describe('refreshFromBaseIfClean', () => {
     // The aborted merge left no conflict markers and the branch tip unchanged.
     expect(await unmergedPaths(work)).toEqual([])
     expect(await headCommit(work)).toBe(tip)
+  })
+})
+
+describe('branchAheadOfBase', () => {
+  let origin: string
+  let work: string
+
+  const g = (cwd: string, ...args: string[]): Promise<unknown> => exec('git', args, { cwd })
+
+  beforeEach(async () => {
+    origin = await mkdtemp(join(tmpdir(), 'ahead-origin-'))
+    await g(origin, 'init', '-b', 'main')
+    await g(origin, 'config', 'user.email', 'o@e.com')
+    await g(origin, 'config', 'user.name', 'Origin')
+    await writeFile(join(origin, 'file.txt'), 'base\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'base')
+  })
+  afterEach(async () => {
+    await rm(origin, { recursive: true, force: true })
+    await rm(work, { recursive: true, force: true })
+  })
+
+  it('returns false for a resumed branch reachable from base (nothing ahead)', async () => {
+    // The work branch points at the SAME commit as main — exactly the stranded, already-merged
+    // branch case (GitHub would answer 422 "No commits between ..." on a PR).
+    await g(origin, 'branch', 'cat-factory/blk', 'main')
+    work = await mkdtemp(join(tmpdir(), 'ahead-work-'))
+    // Single-branch clone, mirroring the resume path (no origin/main tracking ref).
+    await exec('git', ['clone', '--branch', 'cat-factory/blk', '--single-branch', origin, work])
+    expect(await branchAheadOfBase(work, 'main', 'token')).toBe(false)
+  })
+
+  it('returns true for a resumed branch that carries commits ahead of base', async () => {
+    await g(origin, 'checkout', '-b', 'cat-factory/blk')
+    await writeFile(join(origin, 'feature.txt'), 'work\n', 'utf8')
+    await g(origin, 'add', '-A')
+    await g(origin, 'commit', '-m', 'real work')
+    await g(origin, 'checkout', 'main')
+    work = await mkdtemp(join(tmpdir(), 'ahead-work-'))
+    await exec('git', ['clone', '--branch', 'cat-factory/blk', '--single-branch', origin, work])
+    expect(await branchAheadOfBase(work, 'main', 'token')).toBe(true)
+  })
+
+  it('returns undefined when the base ref cannot be resolved (fetch fails)', async () => {
+    await g(origin, 'branch', 'cat-factory/blk', 'main')
+    work = await mkdtemp(join(tmpdir(), 'ahead-work-'))
+    await exec('git', ['clone', '--branch', 'cat-factory/blk', '--single-branch', origin, work])
+    // No such base branch on origin → the fetch errors → tri-state undefined (couldn't tell),
+    // so the caller keeps its prior resume-is-work behaviour rather than dropping real work.
+    expect(await branchAheadOfBase(work, 'does-not-exist', 'token')).toBeUndefined()
   })
 })
 

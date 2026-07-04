@@ -8,6 +8,7 @@ import type {
   ClarityReview,
   EnvConfigRepairJob,
   ExecutionInstance,
+  Initiative,
   KaizenGrading,
   LlmCallActivity,
   Notification,
@@ -44,14 +45,29 @@ interface UpgradableServer {
 const WS_EVENTS_PATH = /^\/workspaces\/([^/]+)\/events$/
 
 /**
+ * The narrow write side of the real-time transport: fan a pre-serialised workspace event
+ * out to the sockets it should reach. {@link NodeRealtimeHub} implements it for the LOCAL
+ * process; the layered {@link LayeredEventPropagator} (see `propagator.ts`) implements the
+ * SAME shape by additionally forwarding to peer nodes over a cross-node adapter (e.g.
+ * Redis). {@link NodeEventPublisher} writes through this seam so a single-node deployment
+ * (local mode) and a multi-node one differ only in which sink is wired — no other code
+ * changes between them.
+ */
+export interface LocalEventSink {
+  broadcast(workspaceId: string, payload: string, originConnectionId?: string | null): void
+}
+
+/**
  * Per-workspace subscriber registry. Every browser subscribed to a workspace's stream
  * converges here, so a published event fans out to all of them. In-memory and
  * single-process: the Node service runs as one process (unlike the Worker's globally
  * addressed Durable Object), which is the right model for the self-hosted / local
- * deployments this facade targets. A multi-replica deployment would need a shared bus
- * (Postgres LISTEN/NOTIFY) in front of this — a follow-up, not needed for local mode.
+ * deployments this facade targets. A multi-replica deployment fronts this with a
+ * cross-node {@link LayeredEventPropagator} adapter (Redis today) so an event published on
+ * one node reaches browsers connected to another — see `propagator.ts`. Single-node / local
+ * mode needs none of that: the bare hub IS the sink.
  */
-export class NodeRealtimeHub {
+export class NodeRealtimeHub implements LocalEventSink {
   private readonly rooms = new Map<string, Set<WebSocket>>()
   // The `?cid=` each socket connected with — used to skip echoing a board mutation back to
   // the connection that caused it (the Node analogue of the DO's serialized attachment).
@@ -108,7 +124,11 @@ export class NodeRealtimeHub {
  * swallows its own errors.
  */
 export class NodeEventPublisher implements ExecutionEventPublisher {
-  constructor(private readonly hub: NodeRealtimeHub) {}
+  // Writes through the {@link LocalEventSink} seam, not the concrete hub: the standard boot
+  // wires the layered propagator (local hub + cross-node adapters) here so events also reach
+  // browsers on peer nodes, while local mode wires the bare hub. Either way this class is
+  // unchanged.
+  constructor(private readonly sink: LocalEventSink) {}
 
   async executionChanged(
     workspaceId: string,
@@ -174,13 +194,17 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
     this.publish(workspaceId, { type: 'kaizen', grading, at: Date.now() })
   }
 
+  async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
+    this.publish(workspaceId, { type: 'initiative', initiative, at: Date.now() })
+  }
+
   private publish(
     workspaceId: string,
     event: WorkspaceEvent,
     originConnectionId?: string | null,
   ): void {
     try {
-      this.hub.broadcast(workspaceId, JSON.stringify(event), originConnectionId)
+      this.sink.broadcast(workspaceId, JSON.stringify(event), originConnectionId)
     } catch {
       // No subscribers / serialisation hiccup — the DB write is authoritative and the
       // client's reconnect-resync covers any missed event.

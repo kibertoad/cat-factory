@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // Workspace settings: the default best-practice fragments NEW services inherit. The
-// selection is drawn from the universal fragment pool (built-in + deployment-registered)
-// served by GET /prompt-fragments. Changing it does not retroactively change existing
+// selection is drawn from the board's merged fragment catalog (built-in ∪ registered ∪
+// account ∪ workspace via the fragments store; the static GET /prompt-fragments pool
+// when the library is off). Changing it does not retroactively change existing
 // services — each owns its selection from creation. Persisted via the
 // serviceFragmentDefaults store (the backend replaces the whole list on each change).
 import { onMounted, ref } from 'vue'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const { t } = useI18n()
 const fragments = useFragmentsStore()
@@ -17,23 +19,16 @@ const busy = ref(false)
 // The tab renders when Workspace settings opens; load the fragment pool then.
 onMounted(() => void fragments.ensureLoaded())
 
+// An id the catalog no longer resolves still renders (labelled by its raw id) so it
+// stays visible and removable from the default set.
 const selected = computed(() =>
-  defaults.fragmentIds
-    .map((id) => fragments.getFragment(id))
-    .filter((f): f is NonNullable<typeof f> => !!f),
+  defaults.fragmentIds.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
 )
 
-// Pool fragments not already in the default set, grouped by category.
+// Pool fragments not already in the default set, grouped into labelled per-category sections.
 const menu = computed(() => {
   const chosen = new Set(defaults.fragmentIds)
-  const groups = new Map<string, { label: string; onSelect: () => void }[]>()
-  for (const f of fragments.fragments) {
-    if (chosen.has(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => add(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.values()]
+  return buildFragmentPickerGroups(fragments.fragments, (id) => chosen.has(id), add)
 })
 
 async function save(ids: string[]) {

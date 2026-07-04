@@ -30,6 +30,16 @@ jobs:
       kubernetes: ${{ steps.filter.outputs.kubernetes }}
       deployHarness: ${{ steps.filter.outputs.deployHarness }}
       eks: ${{ steps.filter.outputs.eks }}
+      # Coarse test-lane gating (computed in the `scope` step below):
+      #   backendCode — backend source OR a root build/dependency input changed. Gates the
+      #                 pure-backend lanes (`test-worker`, `test-db`); a frontend- or
+      #                 docs-only PR leaves it false so those lanes skip.
+      #   code        — ANY real source changed (backend, frontend, a `deploy/*` example, or
+      #                 a root build input), i.e. NOT a docs-/prose-only diff. Gates the
+      #                 cross-stack lanes (`test-units`, `test-e2e`); a docs-only PR runs no
+      #                 tests at all. (On non-PR events both flags are forced true — see `scope`.)
+      backendCode: ${{ steps.scope.outputs.backendCode }}
+      code: ${{ steps.scope.outputs.code }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -55,6 +65,7 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # The Kubernetes integration suite (`test-k8s`) spins up a real k3d cluster, so it
             # only runs when code touching the native K8s backends — the adapters/logic, the
             # wire contracts that define their config, or the ports they implement — changes.
@@ -75,12 +86,14 @@ jobs:
               - 'backend/packages/cli/src/host-shell.ts'
               - 'backend/packages/cli/vitest.integration.config.ts'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # The deploy-harness integration suite (also in `test-k8s`) drives `handleDeploy`
             # against the SAME k3d cluster with real kubectl/kustomize, so it only runs when the
             # harness itself changes.
             deployHarness:
               - 'backend/internal/deploy-harness/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             # The EKS integration suite (`test-eks`) boots a floci-emulated EKS cluster (a real
             # k3s behind the AWS EKS API), so it only runs when the EKS package, the wire
             # contracts that define its config, or the ports it implements change. This job is
@@ -92,6 +105,82 @@ jobs:
               - 'backend/packages/contracts/src/primitives.ts'
               - 'backend/packages/integrations/src/modules/kubernetes/**'
               - '.github/workflows/ci.yml'
+            # Root build / dependency / CI inputs that can change the outcome of ANY suite:
+            # the lockfile, the workspace + root package manifests, the shared tsconfigs, the
+            # Turbo task graph, and this workflow (or the composite actions it calls). Any of
+            # these forces every lane to run — a dep or build-graph change is never "no-op".
+            rootBuild:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig*.json'
+              - 'backend/tsconfig*.json'
+              - 'turbo.json'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
+
+      # A SECOND paths-filter with `predicate-quantifier: every` so each rule set is an AND —
+      # which is what makes the `!` exclusions actually SUBTRACT (under the default `some`
+      # quantifier a broad `**`-style positive would still match a doc file, defeating the
+      # exclusion). It can't share the step above, whose OR-style positive filters rely on
+      # `some`. Purpose: decide whether a diff touched real SOURCE, treating markdown/prose as
+      # non-code so a docs-only change is genuinely "zero code changes".
+      - id: src
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            # Backend source in any package / runtime / internal harness — but NOT markdown
+            # or the backend/docs tree, so a backend docs-only edit doesn't drag in the whole
+            # backend test matrix.
+            backendSrc:
+              - 'backend/**'
+              - '!**/*.md'
+              - '!backend/docs/**'
+            # Frontend layer source, likewise minus its markdown docs.
+            frontendSrc:
+              - 'frontend/**'
+              - '!**/*.md'
+            # Example deployments (`deploy/*`) — the assembled-product wiring. `test-e2e`
+            # builds and serves `deploy/frontend` as its real SPA (Playwright's webServer
+            # runs `pnpm --filter @cat-factory/deploy-frontend run build && ... preview`), so a
+            # deploy-only change must still run the cross-stack lanes. Kept a SEPARATE filter
+            # (not another positive on `frontendSrc`): under `predicate-quantifier: every`
+            # multiple positives are AND-ed, so `frontend/**` AND `deploy/**` would match
+            # nothing. Markdown excluded so a deploy README edit stays docs-only.
+            deploySrc:
+              - 'deploy/**'
+              - '!**/*.md'
+
+      # Fold the two paths-filter steps into the coarse lane flags the jobs gate on. Kept in a
+      # shell step (not inline `if:` expressions) so each job's condition stays a single,
+      # readable output reference. Values are our own 'true'/'false' strings passed via env —
+      # never interpolated into the script body — so there's no template-injection surface.
+      - id: scope
+        env:
+          BACKEND_SRC: ${{ steps.src.outputs.backendSrc }}
+          FRONTEND_SRC: ${{ steps.src.outputs.frontendSrc }}
+          DEPLOY_SRC: ${{ steps.src.outputs.deploySrc }}
+          ROOT_BUILD: ${{ steps.filter.outputs.rootBuild }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          backend=false
+          code=false
+          if [ "$BACKEND_SRC" = 'true' ] || [ "$ROOT_BUILD" = 'true' ]; then backend=true; fi
+          if [ "$backend" = 'true' ] || [ "$FRONTEND_SRC" = 'true' ] || [ "$DEPLOY_SRC" = 'true' ]; then code=true; fi
+          # Change-gating only makes sense against a PR base. On non-PR events (a push to
+          # `main`, or a manual `workflow_dispatch`) paths-filter diffs against the default
+          # branch, so a dispatch on `main` — HEAD == base tip — yields an EMPTY diff and every
+          # filter reads false. Don't let that skip the whole suite green: on any non-PR event
+          # run everything, matching the pre-gating behaviour (these lanes had no change gate).
+          if [ "$EVENT_NAME" != 'pull_request' ]; then backend=true; code=true; fi
+          {
+            echo "backendCode=$backend"
+            echo "code=$code"
+          } >> "$GITHUB_OUTPUT"
+          echo "backendCode=$backend | code=$code" \
+            "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
+            "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
 
   lint:
     name: Lint & format
@@ -108,39 +197,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
 
       - name: Lint & Formatting
         run: pnpm lint
+
+      # Monorepo manifest lint: mismatched dependency versions across packages,
+      # missing/duplicate fields. Ignores: `typescript` (backend is on the 7.x RC
+      # while frontend/app stays on 6.x for vue-tsc) and `@types/node` (the
+      # image-feeding harnesses pin ^26.0.0 and their deps are only bumped in
+      # deliberate image-tag-bumping changes, never in a tooling sweep).
+      - name: Monorepo lint (sherif)
+        run: pnpm lint:monorepo
 
   build-typecheck:
     name: Build & typecheck
@@ -177,36 +246,10 @@ jobs:
       - name: Guard package catalog
         run: node scripts/check-package-catalog.mjs
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       # Build the publishable libraries (contracts → prompt-fragments → core →
       # worker, in dependency order). `tsc` emits declarations, so this is also a
@@ -214,6 +257,20 @@ jobs:
       # deployments and npm consumers use.
       - name: Build libraries
         run: pnpm build
+
+      # Publish-integrity backstop: publint + attw over every publishable package's packed
+      # output, so an empty-shell publish (dist/ missing — the @cat-factory/gitlab /
+      # provider-s3 incident; prepublishOnly is the other guard) or a broken exports map
+      # fails the PR instead of the npm consumer. Needs the dist/ built above.
+      - name: Check publish integrity (publint + attw)
+        run: pnpm check:publish
+
+      # Unused files / exports / dependencies across the workspace. The knip.json config is
+      # scoped to pass today (see its comments for deliberate ignores); tightening the
+      # baseline is tracked separately. Runs after the build because workspace packages
+      # resolve each other through their exports maps into the gitignored dist/.
+      - name: Knip (unused code & deps)
+        run: pnpm lint:knip
 
       # The internal harnesses (executor-harness, benchmark-harness) are NOT in the
       # `backend/tsconfig.build.json` project-reference graph, so `pnpm build` above
@@ -276,6 +333,11 @@ jobs:
   # worker uses a local D1 inside the Workers pool.
   test-worker:
     name: Test worker (shard ${{ matrix.shard }})
+    needs: changes
+    # Pure-backend lane: the Cloudflare worker facade never imports the frontend, so a
+    # frontend-only or docs-only PR has nothing here to test and skips (the `Test` gate
+    # treats that skip as a pass).
+    if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -288,36 +350,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       # Per-package tests resolve workspace deps against built dist, so build first.
       - name: Build libraries
@@ -332,6 +368,11 @@ jobs:
   # paying the database's ~20s init or sharing its lane.
   test-units:
     name: Test units (no DB)
+    needs: changes
+    # Cross-stack lane: this runs every non-facade package's unit suite, which spans the
+    # backend shared packages AND the frontend layer — so it runs whenever ANY real source
+    # changed, and skips only on a docs-/prose-only PR (nothing to test).
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -340,36 +381,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       - name: Build libraries
         run: pnpm build
@@ -390,6 +405,10 @@ jobs:
   # the conformance suite is split into per-group spec files that fan out across workers.
   test-db:
     name: Test DB (node/local) (shard ${{ matrix.shard }})
+    needs: changes
+    # Pure-backend lane (Node + Local Postgres facades): skips on a frontend-only or
+    # docs-only PR, exactly like `test-worker`.
+    if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -424,36 +443,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       - name: Build libraries
         run: pnpm build
@@ -471,7 +464,8 @@ jobs:
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
   # same Postgres service as the Node suite; Playwright's own webServer boots both the
   # backend (src/testServer.ts) and the SPA (deploy/frontend's nuxt dev). Covers
-  # frontend + backend, so it runs on every PR (not gated by the backend paths filter).
+  # frontend + backend, so it is gated only on the coarse `code` flag (any real source,
+  # frontend OR backend) — it still runs on every code PR, but a docs-only diff skips it.
   #
   # NON-BLOCKING: deliberately NOT a dependency of the aggregated `Test` gate below, so a
   # browser/boot flake here can't block an otherwise-green PR. It still runs on every PR
@@ -490,6 +484,9 @@ jobs:
   # per-shard wall-clock bounded as coverage expands.)
   test-e2e:
     name: Test e2e (shard ${{ matrix.shard }})
+    needs: changes
+    # Skip only on a docs-only diff; any frontend or backend source change runs it.
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -518,34 +515,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       # The e2e backend imports the built `dist` of the workspace libraries.
       - name: Build libraries
@@ -593,7 +566,9 @@ jobs:
   test-e2e-report:
     name: Test e2e (merged report)
     needs: [test-e2e]
-    if: ${{ !cancelled() }}
+    # Run even when a shard failed (that's when the merged report matters most), but NOT when
+    # e2e was skipped wholesale (a docs-only PR) — there'd be no blob reports to merge.
+    if: ${{ !cancelled() && needs.test-e2e.result != 'skipped' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -602,34 +577,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
 
       # Gather every shard's blob report into one directory (merge-multiple flattens the
       # per-shard artifacts) for `playwright merge-reports`.
@@ -670,34 +619,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       # The integration specs import the built `dist` of the workspace libraries.
       - name: Build libraries
@@ -925,29 +850,47 @@ jobs:
         run: docker rm -f floci || true
 
   # Single aggregated status named "Test" so branch protection can require one
-  # check regardless of the job/shard layout. Fails unless every test job passed.
+  # check regardless of the job/shard layout. Fails unless every test job passed OR was
+  # legitimately skipped by the change-detection gate (no relevant changes → nothing to run).
   # NOTE: `test-e2e` and `test-eks` are intentionally NOT in `needs` — they're non-blocking for
   # now (see their job comments above), so their result does not gate this required status.
   test-gate:
     name: Test
-    needs: [test-worker, test-units, test-db, test-k8s]
+    needs: [changes, test-worker, test-units, test-db, test-k8s]
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Verify all test jobs passed
+      - name: Verify all test jobs passed (or were correctly skipped)
         env:
+          # The change-detection job's own status. It MUST have succeeded: a `skipped` lane is
+          # only trustworthy if the paths filter that decided to skip it actually ran. If
+          # `changes` failed, the lanes below skip on empty outputs and this gate would pass
+          # with nothing tested — so gate on it explicitly to close that fail-open hole.
+          CHANGES: ${{ needs.changes.result }}
+          # Each lane is `success` when it ran, or `skipped` when the change-detection gate
+          # found no relevant changes for it (a pure-backend lane on a frontend/docs PR, any
+          # lane on a docs-only PR, or `test-k8s` on a non-Kubernetes PR). Both count as a pass.
           WORKER: ${{ needs.test-worker.result }}
           UNITS: ${{ needs.test-units.result }}
           DB: ${{ needs.test-db.result }}
-          # `test-k8s` only runs when Kubernetes files change, so on an unrelated PR it is
-          # SKIPPED — which counts as a pass here (the gate must not block a non-K8s PR on an
-          # un-run job). When it does run, it must succeed.
           K8S: ${{ needs.test-k8s.result }}
         run: |
-          echo "worker shards: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
-          test "$WORKER" = "success" && test "$UNITS" = "success" && test "$DB" = "success"
-          test "$K8S" = "success" || test "$K8S" = "skipped"
+          echo "changes: $CHANGES | worker: $WORKER | units: $UNITS | db: $DB | k8s: $K8S"
+          if [ "$CHANGES" != 'success' ]; then
+            echo "::error::change detection did not succeed; refusing to pass the test gate"
+            exit 1
+          fi
+          for lane in "$WORKER" "$UNITS" "$DB" "$K8S"; do
+            case "$lane" in
+              success | skipped) ;;
+              *)
+                echo "::error::a required test lane reported '$lane'"
+                exit 1
+                ;;
+            esac
+          done
+          echo "All required test lanes passed or were skipped with no relevant changes."
 
   acceptance:
     name: Container acceptance (Docker)
@@ -961,43 +904,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
       # zizmor flags cache-poisoning because this job also builds an image
       # (docker/build-push-action below). It is a false positive here: these host
-      # caches (pnpm store + node_modules) never feed that image — the Dockerfile
-      # runs its own npm install inside Docker — and the image is loaded for the
-      # acceptance test only, never pushed/published. The published runner image
-      # is built separately with no-cache (docker-publish.yml). Caching is for the
-      # host-side test scaffolding only.
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+      # caches (pnpm store + node_modules + turbo) never feed that image — the
+      # Dockerfile runs its own npm install inside Docker — and the image is loaded
+      # for the acceptance test only, never pushed/published. The published runner
+      # image is built separately with no-cache (docker-publish.yml). Caching is for
+      # the host-side test scaffolding only.
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup # zizmor: ignore[cache-poisoning]
         with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          turbo-cache: 'true'
 
       # The acceptance scaffolding imports the domain packages and @cat-factory/worker,
       # which now resolve to built `dist`, so build the libraries first.
@@ -1047,36 +964,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
-      - name: Set up Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 26
-          cache: pnpm
-
-      - name: Cache node_modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-          # is a near-no-op on a hit and the frontend typecheck still resolves.
-          path: |
-            node_modules
-            backend/packages/*/node_modules
-            backend/runtimes/*/node_modules
-            backend/internal/*/node_modules
-            frontend/app/node_modules
-            frontend/app/.nuxt
-            deploy/backend/node_modules
-            deploy/frontend/node_modules
-            deploy/frontend/.nuxt
-            deploy/node/node_modules
-            deploy/local/node_modules
-          key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
 
       # Fails when versioned packages changed without an accompanying changeset.
       # For changes that genuinely need no release (docs, CI, tests), add an
@@ -1095,6 +984,24 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      # Lint the workflow files themselves (syntax, expression typos, action inputs,
+      # shellcheck over run: blocks — shellcheck is preinstalled on ubuntu runners and
+      # actionlint picks it up from PATH). Complements zizmor below, which covers only
+      # the security dimension. Pinned checksum-verified binary download per repo
+      # convention (no third-party action to keep pinned). Note actionlint lints
+      # workflows only, not composite actions — zizmor scans .github/actions too.
+      - name: Install actionlint
+        run: |
+          ACTIONLINT_VERSION=1.7.12
+          ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            -o "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+
+      - name: Run actionlint
+        run: '"$RUNNER_TEMP/actionlint" -color'
 
       - name: Run zizmor
         uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7

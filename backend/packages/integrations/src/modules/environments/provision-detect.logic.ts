@@ -15,6 +15,7 @@ import type {
   ServiceProvisioning,
 } from '@cat-factory/contracts'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
+import { hasBuildDirective } from '../compose/compose-environment.logic.js'
 
 // ---------------------------------------------------------------------------
 // Per-service provisioning AUTO-DETECTION (slice 11): a deterministic, pure-TS heuristic
@@ -521,6 +522,8 @@ interface ComposeHit {
   path: string
   /** The declared `services:` keys (empty when unparseable / none). */
   services: string[]
+  /** True when any service declares a `build:` — the stack builds its images from source. */
+  hasBuild: boolean
 }
 
 /**
@@ -539,8 +542,12 @@ async function findCompose(scanner: Scanner, root: string): Promise<ComposeHit |
       if (!names.has(candidate)) continue
       const path = joinPath(dirPath, candidate)
       const content = await scanner.getFile(path)
-      const services = content ? Object.keys(asRecord(parseOne(content)?.services) ?? {}) : []
-      return { path, services }
+      const servicesRecord = content ? (asRecord(parseOne(content)?.services) ?? {}) : {}
+      const services = Object.keys(servicesRecord)
+      // Single source of truth with the provider's build-mode rejection: any service with a
+      // `build:` means the stack builds from source, so build mode is required to provision it.
+      const hasBuild = Object.values(servicesRecord).some((s) => hasBuildDirective(s))
+      return { path, services, hasBuild }
     }
   }
   return null
@@ -733,6 +740,17 @@ function composeRecommendation(
       message: `Detected a Docker Compose file at ${compose.path}.`,
     },
   ]
+  // A service that declares `build:` can only run in build-from-source mode (the checkout-free
+  // image-pull path would reject it), so recommend build mode — a Docker-daemon capability, so
+  // only a local deployment can provision it.
+  if (compose.hasBuild) {
+    notes.push({
+      field: 'composeBuild',
+      confidence: 'high',
+      message:
+        'This compose stack builds its images from source (build:). Recommending build-from-source mode, which clones the PR head and runs `docker compose build` — available only on a local (Docker-capable) deployment.',
+    })
+  }
   // Symmetric to the kubernetes path's `compose` note: when we recommend compose because it's
   // the selected tab but k8s manifests also exist, say so (the user can switch).
   if (kubernetesAlsoExists) {
@@ -754,7 +772,11 @@ function composeRecommendation(
   }
   return {
     detected: true,
-    provisioning: { type: 'docker-compose', composePath: compose.path },
+    provisioning: {
+      type: 'docker-compose',
+      composePath: compose.path,
+      ...(compose.hasBuild ? { composeBuild: true } : {}),
+    },
     ...(composeServiceCandidates ? { composeServiceCandidates } : {}),
     notes,
   }

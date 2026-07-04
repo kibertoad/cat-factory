@@ -25,17 +25,55 @@ export const useExecutionStore = defineStore('execution', () => {
   // gets identical handling, including the fire-and-forget ones that never caught.
   const runErrors = usePipelineErrorToast()
   const instances = ref<ExecutionInstance[]>([])
+  // The workspace whose snapshot last hydrated the cache. Scopes the DROP-preservation
+  // below: a board SWITCH replaces the cache outright instead of leaking the previous
+  // board's runs (an ExecutionInstance carries no workspaceId of its own).
+  let hydratedWorkspaceId: string | null = null
 
-  /** Replace the cached executions with a server snapshot. */
-  function hydrate(next: ExecutionInstance[]) {
-    instances.value = next
+  /** A run's monotonic server revision (bumped on every persisted write; absent = 0). */
+  function revOf(e: ExecutionInstance): number {
+    return e.rev ?? 0
   }
 
-  /** Insert or replace a single execution instance pushed by the event stream. */
+  /**
+   * Reconcile the cached executions with a server snapshot for `workspaceId`. A snapshot
+   * is authoritative EXCEPT where a live `execution` event already advanced (or ADDED) a
+   * run past what this (possibly stale) read observed — the same two clobber hazards the
+   * `agentRuns` store guards, keyed here on the run's monotonic `rev`:
+   *   - REGRESS: a run present in BOTH — keep the newer-by-`rev` version, so a lagging
+   *     refresh (the stream's on-(re)connect resync, the debounced `board`-event refetch)
+   *     can't revert a just-terminal run to `running`. A terminal run emits nothing
+   *     further, so a regression here would strand the UI until an unrelated refresh.
+   *   - DROP: a run a live event just ADDED that the (older) snapshot never saw — keep it
+   *     rather than silently dropping it.
+   */
+  function hydrate(next: ExecutionInstance[], workspaceId: string) {
+    const sameWorkspace = hydratedWorkspaceId === workspaceId
+    hydratedWorkspaceId = workspaceId
+    if (!sameWorkspace) {
+      instances.value = next
+      return
+    }
+    const incomingIds = new Set(next.map((e) => e.id))
+    const held = new Map(instances.value.map((e) => [e.id, e]))
+    const reconciled = next.map((incoming) => {
+      const current = held.get(incoming.id)
+      return current && revOf(current) > revOf(incoming) ? current : incoming
+    })
+    const preserved = [...held.values()].filter((e) => !incomingIds.has(e.id))
+    instances.value = [...reconciled, ...preserved]
+  }
+
+  /**
+   * Insert or replace a single execution instance pushed by the event stream.
+   * Monotonic by `rev`: an out-of-order/stale event can't regress a run a newer
+   * write already advanced (same guard as {@link hydrate}).
+   */
   function upsert(instance: ExecutionInstance) {
     const i = instances.value.findIndex((e) => e.id === instance.id)
-    if (i >= 0) instances.value[i] = instance
-    else instances.value.push(instance)
+    if (i >= 0) {
+      if (revOf(instance) >= revOf(instances.value[i]!)) instances.value[i] = instance
+    } else instances.value.push(instance)
   }
 
   const byId = computed(() => {
@@ -266,10 +304,14 @@ export const useExecutionStore = defineStore('execution', () => {
     }
   }
 
-  /** Cancel the execution running against a block and reset it to planned. */
-  async function cancel(blockId: string) {
+  /**
+   * Cancel the execution running against a block and reset it to planned. `workspaceId`
+   * defaults to the current workspace but can be pinned by callers that cancel a run for a
+   * board the user may have since navigated away from (e.g. a deferred delete's commit).
+   */
+  async function cancel(blockId: string, workspaceId?: string) {
     const ws = useWorkspaceStore()
-    await api.cancelExecution(ws.requireId(), blockId)
+    await api.cancelExecution(workspaceId ?? ws.requireId(), blockId)
     instances.value = instances.value.filter((e) => e.blockId !== blockId)
     await ws.refresh()
   }

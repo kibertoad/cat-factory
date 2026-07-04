@@ -1,5 +1,6 @@
 import type { AgentRunResult, RunnerJobResult } from '@cat-factory/kernel'
-import { coerceBlueprintService, coerceSpecDoc } from '@cat-factory/agents'
+import { INITIATIVE_PLANNER_AGENT_KIND } from '@cat-factory/kernel'
+import { coerceBlueprintService, coerceInitiativePlan, coerceSpecDoc } from '@cat-factory/agents'
 import {
   BLUEPRINTS_AGENT_KIND,
   MERGER_AGENT_KIND,
@@ -67,6 +68,16 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
       return {
         output: result.summary?.trim() || 'Service specification updated.',
         ...(spec ? { spec } : {}),
+      }
+    }
+    // Initiative planner: coerce into `initiativePlan` (the engine's strict parse +
+    // ingest into the `initiatives` entity). A structureless/garbage plan coerces to
+    // null ⇒ left unset (no ingest — the step still records its prose output).
+    if (agentKind === INITIATIVE_PLANNER_AGENT_KIND) {
+      const plan = coerceInitiativePlan(result.custom)
+      return {
+        output: result.summary?.trim() || 'Initiative plan drafted.',
+        ...(plan ? { initiativePlan: plan } : {}),
       }
     }
     if (agentKind === MERGER_AGENT_KIND) {

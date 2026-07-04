@@ -44,10 +44,15 @@ export interface TestResponse<T = unknown> {
 }
 
 export interface TestApp {
-  call<T = unknown>(method: string, path: string, body?: unknown): Promise<TestResponse<T>>
+  call<T = unknown>(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<TestResponse<T>>
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /** Create an unseeded workspace owned by a fresh ORG account (via the real services). */
-  createOrgWorkspace(options?: { name?: string }): Promise<WorkspaceSnapshot>
+  createOrgWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**
    * Drive every active run in a workspace to a standstill (done, or parked on a
    * decision / the spend gate), then return the latest executions. Reproduces the
@@ -97,12 +102,20 @@ export function makeApp(
   }
   const app = createApp({ overrides: coreOverrides, ...appOptions })
 
-  async function call<T>(method: string, path: string, body?: unknown): Promise<TestResponse<T>> {
+  async function call<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    extraHeaders?: Record<string, string>,
+  ): Promise<TestResponse<T>> {
     const hasBody = body !== undefined
     const res = await app.fetch(
       new Request(`${BASE}${path}`, {
         method,
-        headers: hasBody ? { 'content-type': 'application/json' } : undefined,
+        headers: {
+          ...(hasBody ? { 'content-type': 'application/json' } : {}),
+          ...extraHeaders,
+        },
         body: hasBody ? JSON.stringify(body) : undefined,
       }),
       env,
@@ -119,12 +132,14 @@ export function makeApp(
   // Create an org account + owner and a workspace owned by it directly through the
   // container's services — dev-open has no signed-in user, so the HTTP account flow
   // (which requires one) can't be used to set up an org-scoped workspace.
-  async function createOrgWorkspace(options: { name?: string } = {}): Promise<WorkspaceSnapshot> {
+  async function createOrgWorkspace(
+    options: { name?: string; seed?: boolean } = {},
+  ): Promise<WorkspaceSnapshot> {
     const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
     const user = { id: 'usr_org-owner', login: 'org-owner', name: 'Org Owner' }
     const name = options.name ?? 'Org board'
     const org = await c.accountService.createOrg(user, { name: `${name} org` })
-    return c.workspaceService.create({ name, seed: false }, user.id, org.id)
+    return c.workspaceService.create({ name, seed: options.seed ?? false }, user.id, org.id)
   }
 
   // Drive every active run to a standstill through the SHARED production driver
@@ -137,7 +152,9 @@ export function makeApp(
     return driveWorkspace(
       c.executionService,
       workspaceId,
-      async () => (await c.workspaceService.snapshot(workspaceId)).executions,
+      // Enumerate runs straight from the repository (as production does — it drives by run id),
+      // NOT via the SPA snapshot, which now hides the public-API "initiative" runs' executions.
+      () => c.executionRepository.listByWorkspace(workspaceId),
       maxRounds,
     )
   }

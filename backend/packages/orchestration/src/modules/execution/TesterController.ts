@@ -524,12 +524,16 @@ export class TesterController {
       )
     }
     const isFinalStep = instance.currentStep === instance.steps.length - 1
+    // Build the context AS the fixer: the hosting step's kind is the tester, so the
+    // `code-aware` service-fragment fold must key off the fixer's kind (the tester
+    // itself is not code-aware — it only reads).
     const base = await this.deps.contextBuilder.buildContext(
       workspaceId,
       instance,
       step,
       isFinalStep,
       block,
+      { agentKind: FIXER_AGENT_KIND },
     )
     const context: AgentRunContext = {
       ...base,

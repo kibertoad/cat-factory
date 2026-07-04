@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { KubernetesEnvironmentConfig } from '@cat-factory/kernel'
+import type { Block, KubernetesEnvironmentConfig } from '@cat-factory/kernel'
+import { frontendOriginsForService } from '@cat-factory/contracts'
 import { classifyDeploymentReadiness } from './kubernetes.logic.js'
 import {
   deriveUrl,
   extractLoadBalancerAddress,
   isManifestFile,
   parseManifests,
+  renderTemplate,
   resolveNamespace,
   resourceUrl,
   templateVars,
@@ -17,6 +19,35 @@ const baseConfig: KubernetesEnvironmentConfig = {
   manifestSource: { type: 'colocated', path: 'k8s' },
   url: { source: 'ingressTemplate', hostTemplate: '{{branch}}.preview.example.com' },
 }
+
+describe('frontendOrigins CORS injection (deployer input → K8s template)', () => {
+  it('renders the derived frontend origins into a secretInjection valueTemplate via {{frontendOrigins}}', () => {
+    // End-to-end reverse-origin chain for the K8s native adapter: a `frontend` frame bound to
+    // this service contributes its browser origin; the deployer flattens it into the provision
+    // inputs; `templateVars` spreads all inputs, so an operator's `{{frontendOrigins}}` template
+    // (like `{{branch}}`) folds it into the backend's CORS env var.
+    const frontendFrame: Pick<Block, 'level' | 'type' | 'frontendConfig'> = {
+      level: 'frame',
+      type: 'frontend',
+      frontendConfig: {
+        backendBindings: [
+          { envVar: 'PUB_API_URL', source: { kind: 'service', serviceBlockId: 'blk_api' } },
+        ],
+        servePort: 4173,
+      },
+    }
+    const origins = frontendOriginsForService('blk_api', [frontendFrame]).join(',')
+    const vars = templateVars({ frontendOrigins: origins, branch: 'feat' }, 'cf-env-1', undefined)
+    expect(renderTemplate('{{frontendOrigins}}', vars)).toBe('http://localhost:4173')
+    // An unrelated existing var still renders (the new key doesn't shadow the curated ones).
+    expect(renderTemplate('{{branch}}', vars)).toBe('feat')
+  })
+
+  it('renders empty when no frontend binds the service (the key is simply absent)', () => {
+    const vars = templateVars({}, 'cf-env-1', undefined)
+    expect(renderTemplate('{{frontendOrigins}}', vars)).toBe('')
+  })
+})
 
 describe('resolveNamespace', () => {
   it('renders the template then sanitizes to an RFC1123 label', () => {

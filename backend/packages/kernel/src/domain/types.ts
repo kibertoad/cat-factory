@@ -22,6 +22,7 @@ export type {
   ExecutionInstance,
   ExecutionStatus,
   Pipeline,
+  PipelineAvailability,
   PipelineStep,
   Position,
   PromptFragment,
@@ -139,6 +140,11 @@ export type {
   FrontendConfig,
   FrontendBackendBinding,
   FrontendBackendSource,
+  // Frontend backend-binding resolution (shared pure helpers' types).
+  ResolvedFrontendBinding,
+  LiveEnvHandle,
+  // Directed service→service connections (stored on the consumer frame).
+  ServiceConnection,
   KubernetesEngineConfig,
   InfraHandlerConfig,
   CustomManifestType,
@@ -296,6 +302,8 @@ export type {
   TestOutcome,
   TestConcern,
   TestConcernSeverity,
+  // Test quality-control companion (per-Tester-step) config.
+  TesterQualityConfig,
   // Container provisioning vocabulary.
   CloudProvider,
   InstanceSize,
@@ -360,4 +368,23 @@ export type {
   SandboxGradeDimension,
   SandboxObjectiveResult,
   SandboxGrade,
+  // Initiative (long-running multi-task work container) shapes.
+  Initiative,
+  InitiativeStatus,
+  InitiativeItem,
+  InitiativeItemStatus,
+  InitiativePhase,
+  InitiativeEstimate,
+  InitiativePipelineRule,
+  InitiativeExecutionPolicy,
+  InitiativeDecision,
+  InitiativeDeviation,
+  InitiativeFollowUp,
+  InitiativeQa,
+  InitiativeInterviewState,
+  InitiativePlanDraft,
+  InitiativeDraftItem,
+  InitiativeVersion,
+  CreateInitiativeInput,
+  AnswerInitiativeQuestionInput,
 } from '@cat-factory/contracts'

@@ -4,6 +4,7 @@ import type {
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  UserRepoAccessRepository,
   VcsIdentityRegistry,
   VcsWebhookSink,
 } from '@cat-factory/kernel'
@@ -15,6 +16,7 @@ import type {
   OpenRouterCatalogService,
   PersonalSubscriptionService,
   ProviderSubscriptionService,
+  PublicApiKeyService,
   RunnerBackendRegistry,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -99,6 +101,13 @@ export interface ServerContainer extends Core {
    */
   apiKeys?: ApiKeyService
   /**
+   * The INBOUND public-API key store — the credentials external systems present to the
+   * `/api/v1` surface. Present only when the facade wired the public-api-key repository (needs
+   * ENCRYPTION_KEY as the HMAC pepper). Drives the key-management controller and the in-controller
+   * authentication of `PublicApiController`. Absent ⇒ both surfaces 503.
+   */
+  publicApiKeys?: PublicApiKeyService
+  /**
    * Whether the opt-in Cloudflare Workers AI provider lib is registered for this
    * deployment (binding on the Worker, REST account/token on Node). When false, the
    * `workers-ai` provider is unavailable and `cloudflare`-flavour catalog models are
@@ -126,6 +135,14 @@ export interface ServerContainer extends Core {
    * (needs ENCRYPTION_KEY). Drives the user-secret controller and `ResolveUserGitHubToken`.
    */
   userSecrets?: UserSecretService
+  /**
+   * The per-USER "repos my personal access token can reach" projection. Present only when the
+   * facade wired GitHub (needs an installation-backed projection). Drives (a) the fail-closed
+   * board redaction — a service frame backed by a `linkedVia:'user_pat'` repo is hidden from
+   * members not recorded here — and (b) the repo-picker/link expansion, which records a user's
+   * PAT-reachable repos when they enumerate them. See `UserRepoAccessRepository`.
+   */
+  userRepoAccess?: UserRepoAccessRepository
   /**
    * The per-WORKSPACE OpenRouter dynamic-catalog store. Present only when the facade wired
    * the OpenRouter-catalog repository + the API-key pool (needs ENCRYPTION_KEY). Drives the

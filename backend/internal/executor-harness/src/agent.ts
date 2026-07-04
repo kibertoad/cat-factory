@@ -11,6 +11,7 @@ import type {
   ServiceInfraSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
+import { configurePackageRegistries } from './package-registries.js'
 import { captureRedactedOutput, redactSecrets } from './redact.js'
 import {
   cloneRepo,
@@ -263,6 +264,11 @@ async function cloneServiceCheckout(
 
 /** Run one generic agent job end to end, dispatching on `mode`. */
 export async function handleAgent(job: AgentJob, opts: RunOptions = {}): Promise<AgentResult> {
+  // Private-registry auth first, before any mode runs: every mode with a checkout may
+  // install dependencies (the agent's own shell and the frontend-infra stand-up both
+  // inherit `HOME`, so they all read the written ~/.npmrc). A job with no entries
+  // clears any stale ~/.npmrc from a prior job on a reused (warm-pool) container.
+  await configurePackageRegistries(job.packageRegistries)
   if (job.mode === 'preview') return runPreviewMode(job, opts)
   return job.mode === 'coding' ? runCodingMode(job, opts) : runExploreMode(job, opts)
 }
@@ -421,6 +427,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           stats,
           stderrTail,
           usage,
+          callMetrics,
           diagnostics: runDiag,
         } = await runAgentInWorkspace(
           {
@@ -453,6 +460,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             error: noOutputReason(stats, stderrTail),
             failureCause: 'no-usable-output',
             ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
             ...infraSetupFields,
           }
         }
@@ -470,6 +478,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
               error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
               failureCause: 'no-usable-output',
               ...(usage ? { usage } : {}),
+              ...(callMetrics ? { callMetrics } : {}),
               ...infraSetupFields,
             }
           }
@@ -478,7 +487,13 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
         // Prose: the summary IS the deliverable.
         if (job.output?.kind !== 'structured') {
           logger.info('agent(explore): done (prose)', { ...stats })
-          return { summary, stats, ...(usage ? { usage } : {}), ...infraSetupFields }
+          return {
+            summary,
+            stats,
+            ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
+            ...infraSetupFields,
+          }
         }
 
         // Structured: parse the agent's JSON. With repair enabled (default) a malformed
@@ -522,6 +537,7 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
             error: noStructuredReason(stats, stderrTail, diagnostics),
             failureCause: 'no-usable-output',
             ...(usage ? { usage } : {}),
+            ...(callMetrics ? { callMetrics } : {}),
             ...infraSetupFields,
           }
         }
@@ -540,7 +556,14 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           ;(custom as Record<string, unknown>).environment = reportedEnvironment
         }
         logger.info('agent(explore): done (structured)', { ...stats })
-        return { summary, custom, stats, ...(usage ? { usage } : {}), ...infraSetupFields }
+        return {
+          summary,
+          custom,
+          stats,
+          ...(usage ? { usage } : {}),
+          ...(callMetrics ? { callMetrics } : {}),
+          ...infraSetupFields,
+        }
       } finally {
         if (managed) await managed.cleanup()
       }
@@ -565,7 +588,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
   if (job.mergeBase) return runConflictResolution(job, opts)
 
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
-  const { summary, stats, stderrTail, pushed, usage } = await runCodingAgent(
+  const { summary, stats, stderrTail, pushed, usage, callMetrics } = await runCodingAgent(
     {
       kind: 'agent',
       jobId: job.jobId,
@@ -596,7 +619,14 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
   if (!pushed) {
     // A no-op: a failure for the implementer, a clean non-event for the fixers.
     if (job.noChangesIsError === false) {
-      return { pushed: false, branch: pushBranch, summary, stats, ...(usage ? { usage } : {}) }
+      return {
+        pushed: false,
+        branch: pushBranch,
+        summary,
+        stats,
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      }
     }
     return {
       pushed: false,
@@ -606,6 +636,7 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       error: noChangesReason('the agent produced no file changes', stats, stderrTail),
       failureCause: 'no-changes',
       ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
     }
   }
 
@@ -626,9 +657,54 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
       ...(job.repo.provider ? { provider: job.repo.provider } : {}),
       signal: opts.signal,
     })
-    return { pushed: true, prUrl, branch: pushBranch, summary, stats, ...(usage ? { usage } : {}) }
+    // `null` ⇒ the branch has nothing ahead of base, so there was no PR to open (a resumed
+    // branch whose earlier PR already merged). Record it as a clean no-op rather than a push,
+    // mirroring the no-changes outcome — the `runCodingAgent` guard normally catches this, so
+    // this is the belt-and-suspenders path when the ahead-of-base check couldn't determine it.
+    if (prUrl === null) {
+      if (job.noChangesIsError === false) {
+        return {
+          pushed: false,
+          branch: pushBranch,
+          summary,
+          stats,
+          ...(usage ? { usage } : {}),
+          ...(callMetrics ? { callMetrics } : {}),
+        }
+      }
+      return {
+        pushed: false,
+        branch: pushBranch,
+        summary,
+        stats,
+        error: noChangesReason(
+          'the work branch has no commits ahead of its base (nothing to open a PR for)',
+          stats,
+          stderrTail,
+        ),
+        failureCause: 'no-changes',
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      }
+    }
+    return {
+      pushed: true,
+      prUrl,
+      branch: pushBranch,
+      summary,
+      stats,
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+    }
   }
-  return { pushed: true, branch: pushBranch, summary, stats, ...(usage ? { usage } : {}) }
+  return {
+    pushed: true,
+    branch: pushBranch,
+    summary,
+    stats,
+    ...(usage ? { usage } : {}),
+    ...(callMetrics ? { callMetrics } : {}),
+  }
 }
 
 /**
@@ -697,7 +773,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     const diff = await conflictDiff(dir, conflicted, signal)
     const userPrompt = buildConflictPrompt(mergeBase, job.branch, conflicted, diff, job.userPrompt)
 
-    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
@@ -730,6 +806,7 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
         error: unresolvedReason(unresolved, stats, stderrTail),
         failureCause: 'agent',
         ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
       }
     }
     // Complete the merge commit with the agent's resolution staged, then push.
@@ -737,7 +814,14 @@ async function runConflictResolution(job: AgentJob, opts: RunOptions): Promise<A
     opts.onPhase?.('push')
     logger.info('agent(conflict): pushing resolved branch', { ...stats })
     await pushBranch(dir, job.branch, job.ghToken, signal)
-    return { pushed: true, branch: job.branch, summary, stats, ...(usage ? { usage } : {}) }
+    return {
+      pushed: true,
+      branch: job.branch,
+      summary,
+      stats,
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+    }
   })
 }
 
@@ -828,7 +912,7 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
 
     opts.onPhase?.('agent')
     logger.info('agent(bootstrap): running agent')
-    const { summary, stats, stderrTail, usage } = await runAgentInWorkspace(
+    const { summary, stats, stderrTail, usage, callMetrics } = await runAgentInWorkspace(
       {
         dir,
         systemPrompt: job.systemPrompt,
@@ -852,7 +936,14 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
     if (!(await producedRepoContent(dir, !fromScratch, signal))) {
       const error = bootstrapNoOpReason(!fromScratch, stats, summary, stderrTail)
       logger.error('agent(bootstrap): agent produced no content, refusing to push', { ...stats })
-      return { summary, stats, error, failureCause: 'agent', ...(usage ? { usage } : {}) }
+      return {
+        summary,
+        stats,
+        error,
+        failureCause: 'agent',
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+      }
     }
 
     opts.onPhase?.('push')
@@ -868,7 +959,13 @@ async function runBootstrap(job: AgentJob, opts: RunOptions): Promise<AgentResul
         : `Bootstrap from ${job.repo.owner}/${job.repo.name}`,
     })
     logger.info('agent(bootstrap): complete', { defaultBranch: boot.target.defaultBranch })
-    return { defaultBranch: boot.target.defaultBranch, summary, stats, ...(usage ? { usage } : {}) }
+    return {
+      defaultBranch: boot.target.defaultBranch,
+      summary,
+      stats,
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+    }
   })
 }
 

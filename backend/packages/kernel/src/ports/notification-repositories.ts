@@ -36,4 +36,11 @@ export interface NotificationRepository {
    * resolve (a 404 on action) and the dedup would leak back at the delivery layer.
    */
   upsertOpenForBlock(workspaceId: string, notification: Notification): Promise<Notification>
+  /**
+   * Escalate every open, still-`normal` (or severity-less) notification created at or
+   * before `cutoff` to `urgent`, in ONE statement (the escalation sweep's write — never a
+   * per-row upsert loop), returning the escalated notifications so the caller can
+   * re-deliver each for the real-time inbox re-render. Nothing matches → empty array.
+   */
+  escalateStaleOpen(workspaceId: string, cutoff: number): Promise<Notification[]>
 }

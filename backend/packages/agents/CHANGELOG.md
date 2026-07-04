@@ -1,5 +1,503 @@
 # @cat-factory/agents
 
+## 0.33.1
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.33.0
+
+### Minor Changes
+
+- 8eaa3f2: Universal writing-style fragments for document-authoring tasks (WS2 of the
+  documentation-type task initiative). Two built-in fragments — `style.anti-llmisms`
+  (cut the machine-written tells: filler intensifiers, hedging, throat-clearing,
+  summary-that-restates, bullet inflation) and `style.concise-actionable` (lead with
+  the point, active voice, one idea per paragraph, every recommendation names an actor
+  and an action) — now guide the document-authoring agents.
+
+  They reach those agents through a new `doc-aware` capability trait, the document
+  analogue of `code-aware`: the `doc-researcher` / `doc-outliner` / `doc-writer` /
+  `doc-finalizer` kinds carry it on their definitions and the `doc-reviewer` companion
+  carries it too, so the execution engine folds the block's selected style fragments
+  into each one's system prompt via the same `AgentContextBuilder` path `code-aware`
+  uses — no parallel fragment path in the prompt builders. Because the reviewer sees
+  the same bodies, the style guidance is both the writer's instruction and the
+  reviewer's criteria (an explicit clause in the companion prompt says so).
+
+  A new document task is pre-seeded with both style fragments (default-on,
+  user-removable like any block pin) via `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, seeded
+  onto the task's `fragmentIds` in `BoardService.addTask` — the selection default lives
+  at task creation, not hard-coded in a prompt.
+
+  The fragment "add" pickers (service, task, and workspace-default) now render their
+  options as labelled per-category sections instead of one flat list, so the catalog
+  stays navigable now that a block can pin across two tracks at once — the technical
+  collections (Node / React / …) and the Writing-style fragments.
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/prompt-fragments@0.10.0
+
+## 0.32.0
+
+### Minor Changes
+
+- e5ddaa4: Cache document-backed prompt-fragment bodies through the app caching seam
+  (caching-layer initiative, slice 2). A new `AppCaches.fragmentDocumentBody`
+  group cache serves a living fragment's external Confluence/Notion/GitHub/Figma/
+  Zeplin/Linear body, replacing the hand-rolled `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS`
+  in `FragmentLibraryService`: a run reads the cached body instead of blocking on a
+  live page fetch, and an entry entering its refresh window runs the source's cheap
+  version probe — keeping the cached body when the page hasn't moved, reloading in
+  the background when it has.
+
+  To support the probe, `DocumentContent` now carries an opaque `version` token and
+  `DocumentSourceProvider`/`DocumentContentResolver` gain a `probeVersion` method
+  (metadata-only, strictly cheaper than a full fetch), implemented across all
+  document providers. The self-verifying cache stays enabled on the Cloudflare
+  Worker (bounded staleness via the probe), unlike the mutable-state fragment
+  catalog.
+
+  Behavior change (pre-1.0, no back-compat): the durable `prompt_fragments.body` is
+  now the offline fallback + management-view content, refreshed only by an explicit
+  create/refresh; the live run-time body flows through the cache. Without a cache
+  wired, a run serves the persisted body and does not re-resolve live.
+
+- 6213771: Add a per-`DocKind` document template registry (WS1 of the documentation-type task
+  initiative). Each document kind now carries a structured template — required and optional
+  sections with per-section authoring guidance — that is the single source of truth for the
+  kind's expected shape. The templates are woven into the `doc-outliner` prompt (the outline
+  must cover the required sections) and the `doc-writer` prompt (start from the rendered
+  skeleton), replacing the previous one-line structure hint. A deployment can override a
+  kind's template through the public `registerDocTemplate` seam (an import side effect,
+  mirroring `registerPromptFragment`).
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.31.0
+
+### Minor Changes
+
+- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
+  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
+
+  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
+    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
+    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
+    invalidation bus, never a data tier; with no notification factory injected the
+    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
+    machinery so ioredis never enters the module graph outside the Node facade's
+    REDIS_URL-gated wiring.
+  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
+    (group = workspace id), and every fragment write path — create / update / remove /
+    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
+    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
+    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
+  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
+    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
+    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
+    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
+    write — the same gating and resilience pattern as the realtime propagator. Local
+    mode stays bare in-memory (single-node by construction).
+  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
+    cross-instance state) is pass-through, since an isolate has no cross-isolate
+    invalidation bus. Documented in the caching package README.
+  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
+    catalog on all three runtimes (Worker/Node/local).
+  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+    in-memory `isEntryStillCurrentFn` support: a cache profile may set
+    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+    the probe reports the source unmoved, and fall back to a full background reload
+    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
+## 0.30.5
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+  - @cat-factory/prompt-fragments@0.9.55
+
+## 0.30.4
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+  - @cat-factory/prompt-fragments@0.9.54
+
+## 0.30.3
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/prompt-fragments@0.9.53
+
+## 0.30.2
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/prompt-fragments@0.9.52
+
+## 0.30.1
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/prompt-fragments@0.9.51
+
+## 0.30.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+  - @cat-factory/prompt-fragments@0.9.50
+
+## 0.29.1
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/contracts@0.89.0
+  - @cat-factory/kernel@0.77.0
+  - @cat-factory/prompt-fragments@0.9.49
+
+## 0.29.0
+
+### Minor Changes
+
+- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
+  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
+  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
+  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
+  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
+
+  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
+    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
+    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
+    key is shown once on create.
+  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
+    external runs never appear in the UI.
+  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+  - @cat-factory/prompt-fragments@0.9.48
+
+## 0.28.0
+
+### Minor Changes
+
+- ca5c3e8: Initiatives (slice 1 of 4): the long-running, multi-task counterpart to a task — see
+  `docs/initiatives/initiatives-feature.md` for the full multi-slice plan.
+
+  - **New `initiative` block level** — a container block under a service frame (created via the
+    new "Create initiative" button in the frame header, next to add-task/import-task). Tasks a
+    later slice's execution loop spawns link back via the new `blocks.initiative_id` membership
+    column (epic-style). D1 migration `0035_initiatives.sql` ⇄ Drizzle schema, shared mapper.
+  - **New `initiatives` entity + store** — the DB row is the source of truth (phases, items with
+    planner-authored estimates + dependencies, the execution policy with estimate→pipeline rules,
+    decisions / deviations / follow-ups / caveats), guarded by a `rev` compare-and-swap so the
+    loop has a single logical writer. Mirrored D1 ⇄ Drizzle repositories with a cross-runtime
+    conformance suite (CRUD, doc round-trip, CAS conflict, `blocks.initiative_id`).
+  - **Initiative Planning pipeline skeleton (`pl_initiative`)** — `initiative-planner` (a
+    read-only structured container explore that drafts the multi-phase plan, gated for human
+    approval) + `initiative-committer` (a deterministic engine step that flips the entity to
+    `executing` and commits the rendered tracker to `docs/initiatives/<slug>/` — canonical
+    `initiative.json` + human `tracker.md` + `version.json`, hash-short-circuited and
+    replay-safe, following the blueprint artifact pattern). A bidirectional guard in the
+    engine's shared `assertRunnable` makes `pl_initiative` the ONLY pipeline runnable on an
+    initiative block (and vice versa), across start/retry/restart.
+  - **API + snapshot + realtime** — `POST/GET /workspaces/:ws/initiatives` (+ by-block read),
+    the snapshot's optional `initiatives` field, and a new `initiative` WorkspaceEvent pushed
+    from both runtimes' publishers.
+  - **Frontend** — the Create Initiative modal + frame-header button, the initiative board card,
+    an inspector body (run planning / open tracker) and the read-only Initiative Tracker window
+    (`initiative-tracker` result view), with the `initiative.*` i18n namespace across all 8
+    locales.
+
+  Later slices add the interactive planning interview, the execution loop (just-in-time task
+  spawning with estimate-gated pipeline selection), and follow-up/deviation harvesting.
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+  - @cat-factory/prompt-fragments@0.9.47
+
+## 0.27.1
+
+### Patch Changes
+
+- cc924a9: Requirements-review recommendations: batch, tighten, and surface what's awaited.
+
+  - The Requirement Writer now answers findings in CHUNKS (up to 4 per LLM call) instead of one
+    call per finding, so a batch of N findings costs `ceil(N / 4)` calls rather than N. Shared
+    grounding is still gathered once and progress still streams `ready / total` a chunk at a time;
+    a failure is isolated to its chunk. Each finding keeps the same per-finding output budget the
+    single-call path used (scaled by chunk size), and a batched response is routed back to its
+    findings by the echoed itemId with a prompt-order fallback — so a response that drops the ids
+    isn't discarded wholesale and the whole chunk force-reopened.
+  - The Writer prompt (`requirement-writer`, bumped to v2) now asks for precise, succinct
+    recommendations — the concrete answer in a couple of sentences, cite sources briefly, no
+    preamble or padding — instead of open-ended prose.
+  - The review window now shows a persistent "awaited recommendations" summary (how many the
+    Writer is still generating and how many are waiting on the human) in the stats rail, and lets
+    you request recommendations while a merged review is being reworked — not only in the initial
+    `ready` state.
+  - The incorporated-requirements document can now be collapsed as a whole. It defaults to collapsed
+    only in the pre-incorporation `ready` phase (so a long doc doesn't push the findings being worked
+    through off-screen) and expanded in `merged`/`incorporated`, where the document itself is the
+    thing to read; a manual collapse no longer leaks across a status change.
+
+## 0.27.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/prompt-fragments@0.9.46
+
+## 0.26.18
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+
+## 0.26.17
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/prompt-fragments@0.9.45
+
+## 0.26.16
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/prompt-fragments@0.9.44
+
+## 0.26.15
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+  - @cat-factory/prompt-fragments@0.9.43
+
+## 0.26.14
+
+### Patch Changes
+
+- Updated dependencies [0d51638]
+  - @cat-factory/kernel@0.70.1
+
+## 0.26.13
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+
+## 0.26.12
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/prompt-fragments@0.9.42
+
+## 0.26.11
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+  - @cat-factory/kernel@0.69.7
+
+## 0.26.10
+
+### Patch Changes
+
+- 4955639: Fix five bugs in how best-practice prompt fragments are managed and applied:
+
+  - **Code-aware helper agents now receive the service fragments.** `ci-fixer`, `fixer`
+    and `on-call` are dispatched off their HOSTING step (a `ci`/`post-release-health`
+    gate, the tester, the human-test/visual-confirmation loops), and the fragment fold
+    keyed off that step's kind — so the helpers never received the service's standards
+    despite being marked `code-aware`. `AgentContextBuilder.buildContext` now takes an
+    explicit `agentKind` override and every helper dispatch passes it; the on-call job
+    body additionally folds the resolved fragments into its bespoke system prompt
+    (previously bypassed). A stale `step.selectedFragmentIds` is also cleared when a
+    re-dispatch resolves to nothing, so observability can't over-report.
+  - **Tier tombstones now stick on the run path.** `resolveBodiesForRun` used to fall
+    back to the static pool for any id missing from the merged catalog — which is
+    exactly what a tombstone does to a built-in, so suppressing a fragment a service
+    had selected silently resurrected it. The fallback is gone; a missing id is dropped.
+  - **Deployment-registered fragments join the tenant catalog.** The library's built-in
+    tier now reads the UNIVERSAL pool (shipped catalog + `registerPromptFragment`
+    entries, lazily) instead of the raw shipped array, so a registered override of a
+    built-in id actually reaches runs and the resolved catalog, and registered
+    fragments can be tier-shadowed/tombstoned like any built-in.
+  - **Repo-source resync no longer mishandles renames and id edits.** The tombstone
+    sweep is keyed by the fragment ids the current tree produces, not by stale paths:
+    renaming a file that pins an explicit frontmatter `id` no longer tombstones the
+    fragment the rename just updated, and changing a file's explicit `id` in place now
+    retires the old id instead of leaving a live duplicate forever. The GitHub
+    installation is also resolved once per sync instead of once per file, and the
+    requirement writer's fragment grounding resolves through the merged tenant catalog
+    when the library is wired.
+  - **The SPA pickers now offer the merged catalog.** The per-service / per-block /
+    workspace-default fragment pickers loaded only the static built-in pool, so
+    managed, repo-sourced and document-backed fragments could be authored but never
+    attached (and a managed id set via API rendered no chip). The fragments store now
+    loads the workspace's resolved catalog (falling back to the static pool when the
+    library is off), invalidates on library edits, and unknown selected ids render as
+    removable chips instead of disappearing. The catalog is per-board, so a workspace
+    switch now invalidates it and the task inspector reloads it on mount — otherwise the
+    task picker kept showing the previous board's fragments.
+
+  Review follow-ups: `AgentContextBuilder` now clears a stale `step.selectedFragmentIds`
+  on the non-code-aware and error paths too (not only when a code-aware resolve is empty);
+  the requirement-writer grounding resolves the merged catalog once (reused for titles and
+  bodies) instead of twice; a repo-source RENAME of an explicit-id file inherits the
+  fragment's `version`/`createdAt` by id instead of resetting them; and the source `status`
+  count no longer double-counts a pure rename.
+
+## 0.26.9
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/prompt-fragments@0.9.41
+
+## 0.26.8
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/prompt-fragments@0.9.40
+
+## 0.26.7
+
+### Patch Changes
+
+- fc8df61: Fix a cross-tenant access hole on the fragment-source routes: `unlink`/`status`/`sync`
+  resolved the source by its id alone, so an authenticated member of one account/workspace
+  could read, resync or delete another tenant's fragment source by addressing its id under
+  their own prefix. `FragmentSourceService.unlink/sync/status` now take the addressed
+  `(ownerKind, ownerId)` and 404 when the source belongs to a different owner (breaking
+  signature change for direct callers of those three methods).
+
+## 0.26.6
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/kernel@0.69.4
+  - @cat-factory/prompt-fragments@0.9.39
+
+## 0.26.5
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/kernel@0.69.3
+  - @cat-factory/prompt-fragments@0.9.38
+
+## 0.26.4
+
+### Patch Changes
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/contracts@0.80.1
+  - @cat-factory/prompt-fragments@0.9.37
+
+## 0.26.3
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/kernel@0.69.1
+  - @cat-factory/prompt-fragments@0.9.36
+
 ## 0.26.2
 
 ### Patch Changes

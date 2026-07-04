@@ -3,6 +3,7 @@ import {
   type AppEnv,
   CORS_ALLOWED_HEADERS,
   type ServerContainer,
+  corsReflectsWhenUnset,
   handleError,
   logger,
   mountAuthGate,
@@ -13,6 +14,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
 import { PgBoss } from 'pg-boss'
+import { type AppCachesProfile, createAppCaches } from '@cat-factory/caching'
+import { buildCacheNotifications } from './cacheNotifications.js'
 import { type NodeContainerOptions, buildNodeContainer } from './container.js'
 import { createDbClient } from './db/client.js'
 import { migrate } from './db/migrate.js'
@@ -22,10 +25,18 @@ import { startBootstrapWorker } from './execution/bootstrapRunner.js'
 import { startEnvConfigRepairWorker } from './execution/envConfigRepairRunner.js'
 import { startEnvironmentSweeper } from './environments.js'
 import { startScheduleSweeper } from './recurring.js'
+import { startInitiativeLoopSweeper } from './initiativeLoop.js'
 import { startKaizenSweeper } from './kaizen.js'
 import { startNotificationEscalationSweeper } from './notifications.js'
+import { buildRealtimePropagator } from './propagator.js'
 import { NodeRealtimeHub, attachRealtime } from './realtime.js'
+import { DrizzleGitHubInstallationRepository } from './repositories/containerExecution.js'
 import { createDrizzleRepositories } from './repositories/drizzle.js'
+import { startGitHubReconcileSweeper } from './githubReconcile.js'
+import {
+  DrizzleCommitProjectionRepository,
+  DrizzleRepoProjectionRepository,
+} from './repositories/github.js'
 import { DrizzleSubscriptionActivationRepository } from './repositories/personalSubscription.js'
 import { startArtifactRetentionSweeper, startRetentionSweeper } from './retention.js'
 import { SystemClock } from './runtime.js'
@@ -46,7 +57,8 @@ export function createApp(
   app.use(
     '*',
     cors({
-      origin: (origin) => resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS),
+      origin: (origin) =>
+        resolveCorsOrigin(origin, env.CORS_ALLOWED_ORIGINS, corsReflectsWhenUnset(env.ENVIRONMENT)),
       // Same shared allow-list the Worker uses, so the facades stay symmetric (Hono
       // would otherwise echo the requested headers, masking a drift like the missing
       // X-Connection-Id the Worker hit).
@@ -131,6 +143,14 @@ export async function start(
      * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
      */
     host?: string
+    /**
+     * Per-cache profile overrides merged over the default profile. A sibling facade passes
+     * this to opt a cache out where its coherence assumptions don't hold: local mode makes
+     * the repo projection pass-through because its `link-repo` CLI writes the projection
+     * out-of-process and local mode has no cross-process invalidation bus (the same reason
+     * the Worker's isolate-safe profile passes it through). Omitted ⇒ the default profile.
+     */
+    cachesProfile?: Partial<AppCachesProfile>
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
@@ -153,10 +173,35 @@ export async function start(
   // The per-workspace real-time subscriber registry. Created here (not in the container
   // builder) because it must be shared between the engine's event publisher — wired
   // inside the container — and the HTTP server's WebSocket upgrade listener attached
-  // below. The local facade's builder forwards this option to buildNodeContainer
+  // below. The local facade's builder forwards these options to buildNodeContainer
   // unchanged, so local mode gets live updates too.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildContainer({ db, boss, env, repos, realtimeHub })
+  // Wrap the hub in the layered propagator: when REDIS_URL is set (a multi-node deployment)
+  // events also fan to peer nodes over Redis pub/sub so a browser on any node sees them; with
+  // no bus configured (local mode, single replica) it is the bare hub with zero overhead. The
+  // engine writes through this sink; the HTTP upgrade listener still registers sockets on the
+  // hub directly.
+  const realtimePropagator = buildRealtimePropagator(realtimeHub, env, logger)
+  // The process-wide cache bag (caching initiative). In-memory only; when REDIS_URL is
+  // set (multi-node) each cache also broadcasts its invalidations to peers over its own
+  // Redis notification channel, mirroring the realtime propagator's gating. Built here
+  // (not in the container builder) so this process owns exactly one bag + its shutdown.
+  const caches = createAppCaches({
+    notificationPairFactory: await buildCacheNotifications(env, logger),
+    logger,
+    ...(options.cachesProfile ? { profile: options.cachesProfile } : {}),
+  })
+  const container = buildContainer({
+    db,
+    boss,
+    env,
+    repos,
+    realtimeSink: realtimePropagator,
+    caches,
+  })
+  // Connect the cross-node adapters (a no-op when none are configured) so peer events start
+  // reaching this node's browsers.
+  await realtimePropagator.start(logger)
 
   // Validate the registered extensions (gates / agent kinds) once, before serving — every
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
@@ -215,6 +260,7 @@ export async function start(
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
       provisioningLogRepository: repos.provisioningLogRepository,
       passwordResetTokenRepository: repos.passwordResetTokenRepository,
+      commitRepository: new DrizzleCommitProjectionRepository(db),
     },
     container.config.retention,
     clock,
@@ -234,6 +280,10 @@ export async function start(
     : () => {}
   // Fire due recurring pipelines on a one-minute timer (the Worker uses cron).
   const stopScheduleSweeper = startScheduleSweeper(container, clock, logger)
+  // Tick the initiative execution loop on a one-minute timer (the Worker uses cron); reconciles
+  // + spawns for every executing initiative. Terminal child runs poke the loop directly, so this
+  // is the backstop cadence; no-op unless the initiatives module is wired.
+  const stopInitiativeLoop = startInitiativeLoopSweeper(container, clock, logger)
   // Tear down expired ephemeral environments (the Worker uses cron); no-op unless the
   // environments integration is wired.
   const stopEnvironmentSweeper = startEnvironmentSweeper(container, clock, logger)
@@ -243,6 +293,20 @@ export async function start(
   // Run pending Kaizen gradings on a one-minute timer (the Worker uses cron); no-op
   // unless the Kaizen feature is wired.
   const stopKaizenSweeper = startKaizenSweeper(container, clock, logger)
+  // Re-sync stale GitHub repo projections — the backstop for missed webhooks (the
+  // Worker's `github-reconcile` cron); no-op unless the GitHub App module is wired.
+  const stopGitHubReconcile = container.github
+    ? startGitHubReconcileSweeper(
+        {
+          repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
+          installationRepository: new DrizzleGitHubInstallationRepository(db),
+          syncRepoById: (workspaceId, repoGithubId) =>
+            container.github!.syncService.syncRepoById(workspaceId, repoGithubId),
+        },
+        clock,
+        logger,
+      )
+    : () => {}
 
   // Ordered graceful shutdown: stop accepting connections, halt the sweeper + pg-boss
   // worker, release the pool, then exit. Without closing the HTTP server the process
@@ -256,16 +320,31 @@ export async function start(
     stopRetention()
     stopArtifactRetention()
     stopScheduleSweeper()
+    stopInitiativeLoop()
     stopEnvironmentSweeper()
     stopNotificationEscalation()
     stopKaizenSweeper()
+    stopGitHubReconcile()
     stopRealtime()
+    // Release any cross-node propagation adapters (Redis connections); a no-op when none.
+    await realtimePropagator.stop()
+    // Quit the cache-invalidation notification clients (a no-op for bare in-memory caches).
+    await caches.close()
     await new Promise<void>((resolve) => server.close(() => resolve()))
     try {
       await boss.stop()
       await pool.end()
     } catch (err) {
       logger.error({ err: err instanceof Error ? err.message : String(err) }, 'shutdown error')
+    }
+    try {
+      // Facade-owned disposables (e.g. the local facade's native host-process harnesses) —
+      // released in their OWN try so a failing boss.stop()/pool.end() above can't skip them and
+      // orphan the in-flight agent children they abort. Graceful teardown beats the exit-hook
+      // backstop.
+      await container.onShutdown?.()
+    } catch (err) {
+      logger.error({ err: err instanceof Error ? err.message : String(err) }, 'onShutdown error')
     }
     process.exit(0)
   }

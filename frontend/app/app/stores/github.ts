@@ -14,6 +14,7 @@ import type {
   ResyncRequest,
 } from '~/types/domain'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { useServicesStore } from '~/stores/services'
 
 /**
  * GitHub integration state: the workspace's App installation, the projected
@@ -62,9 +63,14 @@ export const useGitHubStore = defineStore('github', () => {
     return repos.value.find((r) => r.githubId === repoGithubId)
   }
 
-  /** The repo linked to a board block (its backing service repo), if any. */
+  /**
+   * The repo backing a board service frame, if any — resolved through the account-owned
+   * Service bound to the frame (the sole repo↔frame linkage; the projection carries no
+   * repo→block column).
+   */
   function repoForBlock(blockId: string): GitHubRepo | undefined {
-    return repos.value.find((r) => r.blockId === blockId)
+    const service = useServicesStore().serviceByFrameBlock[blockId]
+    return service?.repoGithubId != null ? repoFor(service.repoGithubId) : undefined
   }
 
   function pullsForRepo(repoGithubId: number): GitHubPullRequest[] {
@@ -131,12 +137,21 @@ export const useGitHubStore = defineStore('github', () => {
     if (connected.value && repos.value.length === 0) await load()
   }
 
-  /** Load the repos the installation can access, with this workspace's link state. */
-  async function loadAvailableRepos() {
+  /**
+   * Load the repos the installation can access, with this workspace's link state.
+   * With a `q` the backend filters `owner/name` server-side (the add-service picker
+   * searches instead of prefetching a huge installation); without one it browses all
+   * (the repo-link panel). A blank/short `q` clears the list rather than fetching.
+   */
+  async function loadAvailableRepos(q?: string) {
     if (!connected.value) return
+    if (q !== undefined && q.trim() === '') {
+      availableRepos.value = []
+      return
+    }
     loadingAvailable.value = true
     try {
-      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId())
+      availableRepos.value = await api.listGitHubAvailableRepos(workspace.requireId(), q)
     } finally {
       loadingAvailable.value = false
     }

@@ -27,6 +27,8 @@ export const RESULT_VIEW_IDS = [
   'service-spec',
   'follow-ups',
   'merger',
+  'initiative-tracker',
+  'initiative-planning',
 ] as const
 
 export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]

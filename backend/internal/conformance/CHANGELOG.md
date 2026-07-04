@@ -1,5 +1,540 @@
 # @cat-factory/conformance
 
+## 0.10.15
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+  - @cat-factory/server@0.80.0
+  - @cat-factory/integrations@0.64.0
+  - @cat-factory/orchestration@0.70.1
+  - @cat-factory/agents@0.33.1
+  - @cat-factory/gates@0.2.88
+
+## 0.10.14
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/prompt-fragments@0.10.0
+  - @cat-factory/agents@0.33.0
+  - @cat-factory/orchestration@0.70.0
+  - @cat-factory/server@0.79.4
+
+## 0.10.13
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+- Updated dependencies [6213771]
+  - @cat-factory/kernel@0.84.0
+  - @cat-factory/integrations@0.63.0
+  - @cat-factory/agents@0.32.0
+  - @cat-factory/orchestration@0.69.1
+  - @cat-factory/gates@0.2.87
+  - @cat-factory/server@0.79.3
+
+## 0.10.12
+
+### Patch Changes
+
+- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
+  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
+
+  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
+    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
+    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
+    invalidation bus, never a data tier; with no notification factory injected the
+    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
+    machinery so ioredis never enters the module graph outside the Node facade's
+    REDIS_URL-gated wiring.
+  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
+    (group = workspace id), and every fragment write path — create / update / remove /
+    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
+    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
+    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
+  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
+    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
+    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
+    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
+    write — the same gating and resilience pattern as the realtime propagator. Local
+    mode stays bare in-memory (single-node by construction).
+  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
+    cross-instance state) is pass-through, since an isolate has no cross-isolate
+    invalidation bus. Documented in the caching package README.
+  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
+    catalog on all three runtimes (Worker/Node/local).
+  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+    in-memory `isEntryStillCurrentFn` support: a cache profile may set
+    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+    the probe reports the source unmoved, and fall back to a full background reload
+    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+  - @cat-factory/agents@0.31.0
+  - @cat-factory/orchestration@0.69.0
+  - @cat-factory/gates@0.2.86
+  - @cat-factory/integrations@0.62.1
+  - @cat-factory/server@0.79.2
+
+## 0.10.11
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+  - @cat-factory/integrations@0.62.0
+  - @cat-factory/agents@0.30.5
+  - @cat-factory/gates@0.2.85
+  - @cat-factory/orchestration@0.68.1
+  - @cat-factory/prompt-fragments@0.9.55
+  - @cat-factory/server@0.79.1
+
+## 0.10.10
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+  - @cat-factory/integrations@0.61.0
+  - @cat-factory/server@0.79.0
+  - @cat-factory/orchestration@0.68.0
+  - @cat-factory/agents@0.30.4
+  - @cat-factory/gates@0.2.84
+  - @cat-factory/prompt-fragments@0.9.54
+
+## 0.10.9
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/orchestration@0.67.0
+  - @cat-factory/server@0.78.0
+  - @cat-factory/agents@0.30.3
+  - @cat-factory/gates@0.2.83
+  - @cat-factory/integrations@0.60.2
+  - @cat-factory/prompt-fragments@0.9.53
+
+## 0.10.8
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/orchestration@0.66.0
+  - @cat-factory/server@0.77.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/gates@0.2.82
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/prompt-fragments@0.9.52
+
+## 0.10.7
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/integrations@0.60.0
+  - @cat-factory/orchestration@0.65.0
+  - @cat-factory/server@0.76.0
+  - @cat-factory/agents@0.30.1
+  - @cat-factory/gates@0.2.81
+  - @cat-factory/prompt-fragments@0.9.51
+
+## 0.10.6
+
+### Patch Changes
+
+- Updated dependencies [0477068]
+  - @cat-factory/server@0.75.2
+
+## 0.10.5
+
+### Patch Changes
+
+- Updated dependencies [4a59f45]
+  - @cat-factory/server@0.75.1
+
+## 0.10.4
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/orchestration@0.64.0
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+  - @cat-factory/integrations@0.59.0
+  - @cat-factory/agents@0.30.0
+  - @cat-factory/server@0.75.0
+  - @cat-factory/gates@0.2.80
+  - @cat-factory/prompt-fragments@0.9.50
+
+## 0.10.3
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+- Updated dependencies [f372f4e]
+  - @cat-factory/contracts@0.89.0
+  - @cat-factory/kernel@0.77.0
+  - @cat-factory/orchestration@0.63.0
+  - @cat-factory/server@0.74.0
+  - @cat-factory/agents@0.29.1
+  - @cat-factory/gates@0.2.79
+  - @cat-factory/integrations@0.58.1
+  - @cat-factory/prompt-fragments@0.9.49
+
+## 0.10.2
+
+### Patch Changes
+
+- Updated dependencies [6917962]
+  - @cat-factory/server@0.73.1
+
+## 0.10.1
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+  - @cat-factory/agents@0.29.0
+  - @cat-factory/integrations@0.58.0
+  - @cat-factory/server@0.73.0
+  - @cat-factory/orchestration@0.62.0
+  - @cat-factory/gates@0.2.78
+  - @cat-factory/prompt-fragments@0.9.48
+
+## 0.10.0
+
+### Minor Changes
+
+- ca5c3e8: Initiatives (slice 1 of 4): the long-running, multi-task counterpart to a task — see
+  `docs/initiatives/initiatives-feature.md` for the full multi-slice plan.
+
+  - **New `initiative` block level** — a container block under a service frame (created via the
+    new "Create initiative" button in the frame header, next to add-task/import-task). Tasks a
+    later slice's execution loop spawns link back via the new `blocks.initiative_id` membership
+    column (epic-style). D1 migration `0035_initiatives.sql` ⇄ Drizzle schema, shared mapper.
+  - **New `initiatives` entity + store** — the DB row is the source of truth (phases, items with
+    planner-authored estimates + dependencies, the execution policy with estimate→pipeline rules,
+    decisions / deviations / follow-ups / caveats), guarded by a `rev` compare-and-swap so the
+    loop has a single logical writer. Mirrored D1 ⇄ Drizzle repositories with a cross-runtime
+    conformance suite (CRUD, doc round-trip, CAS conflict, `blocks.initiative_id`).
+  - **Initiative Planning pipeline skeleton (`pl_initiative`)** — `initiative-planner` (a
+    read-only structured container explore that drafts the multi-phase plan, gated for human
+    approval) + `initiative-committer` (a deterministic engine step that flips the entity to
+    `executing` and commits the rendered tracker to `docs/initiatives/<slug>/` — canonical
+    `initiative.json` + human `tracker.md` + `version.json`, hash-short-circuited and
+    replay-safe, following the blueprint artifact pattern). A bidirectional guard in the
+    engine's shared `assertRunnable` makes `pl_initiative` the ONLY pipeline runnable on an
+    initiative block (and vice versa), across start/retry/restart.
+  - **API + snapshot + realtime** — `POST/GET /workspaces/:ws/initiatives` (+ by-block read),
+    the snapshot's optional `initiatives` field, and a new `initiative` WorkspaceEvent pushed
+    from both runtimes' publishers.
+  - **Frontend** — the Create Initiative modal + frame-header button, the initiative board card,
+    an inspector body (run planning / open tracker) and the read-only Initiative Tracker window
+    (`initiative-tracker` result view), with the `initiative.*` i18n namespace across all 8
+    locales.
+
+  Later slices add the interactive planning interview, the execution loop (just-in-time task
+  spawning with estimate-gated pipeline selection), and follow-up/deviation harvesting.
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+  - @cat-factory/agents@0.28.0
+  - @cat-factory/orchestration@0.61.0
+  - @cat-factory/server@0.72.0
+  - @cat-factory/gates@0.2.77
+  - @cat-factory/integrations@0.57.2
+  - @cat-factory/prompt-fragments@0.9.47
+
+## 0.9.102
+
+### Patch Changes
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+  - @cat-factory/orchestration@0.60.4
+  - @cat-factory/server@0.71.2
+
+## 0.9.101
+
+### Patch Changes
+
+- Updated dependencies [803fa76]
+  - @cat-factory/server@0.71.1
+
+## 0.9.100
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/agents@0.27.0
+  - @cat-factory/server@0.71.0
+  - @cat-factory/gates@0.2.76
+  - @cat-factory/integrations@0.57.1
+  - @cat-factory/orchestration@0.60.3
+  - @cat-factory/prompt-fragments@0.9.46
+
+## 0.9.99
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+  - @cat-factory/server@0.70.0
+  - @cat-factory/integrations@0.57.0
+  - @cat-factory/agents@0.26.18
+  - @cat-factory/gates@0.2.75
+  - @cat-factory/orchestration@0.60.2
+
+## 0.9.98
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/gates@0.2.74
+  - @cat-factory/orchestration@0.60.1
+  - @cat-factory/agents@0.26.17
+  - @cat-factory/integrations@0.56.5
+  - @cat-factory/prompt-fragments@0.9.45
+  - @cat-factory/server@0.69.1
+
+## 0.9.97
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/orchestration@0.60.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/server@0.69.0
+  - @cat-factory/agents@0.26.16
+  - @cat-factory/gates@0.2.73
+  - @cat-factory/integrations@0.56.4
+  - @cat-factory/prompt-fragments@0.9.44
+
+## 0.9.96
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+  - @cat-factory/orchestration@0.59.2
+  - @cat-factory/server@0.68.2
+  - @cat-factory/agents@0.26.15
+  - @cat-factory/gates@0.2.72
+  - @cat-factory/integrations@0.56.3
+  - @cat-factory/prompt-fragments@0.9.43
+
+## 0.9.95
+
+### Patch Changes
+
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+  - @cat-factory/integrations@0.56.2
+  - @cat-factory/server@0.68.1
+  - @cat-factory/kernel@0.70.1
+  - @cat-factory/orchestration@0.59.1
+  - @cat-factory/agents@0.26.14
+  - @cat-factory/gates@0.2.71
+
+## 0.9.94
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+  - @cat-factory/orchestration@0.59.0
+  - @cat-factory/server@0.68.0
+  - @cat-factory/agents@0.26.13
+  - @cat-factory/gates@0.2.70
+  - @cat-factory/integrations@0.56.1
+
+## 0.9.93
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/integrations@0.56.0
+  - @cat-factory/server@0.67.0
+  - @cat-factory/agents@0.26.12
+  - @cat-factory/gates@0.2.69
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/orchestration@0.58.1
+  - @cat-factory/prompt-fragments@0.9.42
+
+## 0.9.92
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/gates@0.2.68
+
+## 0.9.91
+
+### Patch Changes
+
+- Updated dependencies [4955639]
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+  - @cat-factory/server@0.66.6
+
+## 0.9.90
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/server@0.66.5
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/gates@0.2.67
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/prompt-fragments@0.9.41
+
+## 0.9.89
+
+### Patch Changes
+
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+  - @cat-factory/server@0.66.4
+
+## 0.9.88
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/gates@0.2.66
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/prompt-fragments@0.9.40
+
+## 0.9.87
+
+### Patch Changes
+
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/orchestration@0.57.4
+
+## 0.9.86
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/orchestration@0.57.3
+  - @cat-factory/integrations@0.54.1
+  - @cat-factory/server@0.66.1
+  - @cat-factory/agents@0.26.6
+  - @cat-factory/gates@0.2.65
+  - @cat-factory/kernel@0.69.4
+  - @cat-factory/prompt-fragments@0.9.39
+
+## 0.9.85
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/integrations@0.54.0
+  - @cat-factory/server@0.66.0
+  - @cat-factory/agents@0.26.5
+  - @cat-factory/gates@0.2.64
+  - @cat-factory/kernel@0.69.3
+  - @cat-factory/orchestration@0.57.2
+  - @cat-factory/prompt-fragments@0.9.38
+
+## 0.9.84
+
+### Patch Changes
+
+- d7f6e1c: Correctness fixes across the engine, the Node facade, and the SPA stores:
+
+  - **Engine:** `finalizeMerge` and the merger resolver are now idempotent under
+    durable-driver replays — a re-resolved merger step on an already-`done` (= merged)
+    block is a no-op instead of re-merging, downgrading the block to `pr_ready`, and
+    raising a spurious `merge_review` notification. `approveStep` now runs under the same
+    optimistic-concurrency write as its siblings (`resolveDecision`/`requestStepChanges`),
+    so an approve holding a stale snapshot can no longer resurrect a run a racing reject
+    already failed (it now returns 409).
+  - **CI gate (behavior change):** a check run concluding `stale` (superseded by GitHub)
+    no longer fails the CI gate — previously it looped the `ci-fixer` against a check it
+    could never fix until the attempt budget failed the run. `cancelled`/`timed_out`/
+    `action_required` still fail the gate.
+  - **Node facade parity:** the retention sweep now prunes the `github_commits`
+    projection to `retention.commitMs` (previously it grew without bound; the Worker
+    already pruned it), and a new every-2-min GitHub reconcile sweeper re-syncs stale
+    repo projections and tombstones uninstalled installations — the backstop for missed
+    webhooks the Worker's `github-reconcile` cron already provided.
+  - **SPA stores:** the execution store now reconciles snapshots/events monotonically by
+    the run's `rev` (a lagging refresh can no longer revert a just-terminal run to
+    `running`), the requirements/clarity/brainstorm stores guard live-event upserts by
+    `updatedAt` (out-of-order events no longer revert just-submitted answers), and
+    `board.moveBlock`/`updateBlock` roll their optimistic mutation back on API failure.
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/orchestration@0.57.1
+  - @cat-factory/contracts@0.80.1
+  - @cat-factory/integrations@0.53.2
+  - @cat-factory/server@0.65.2
+  - @cat-factory/agents@0.26.4
+  - @cat-factory/gates@0.2.63
+  - @cat-factory/prompt-fragments@0.9.37
+
+## 0.9.83
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/orchestration@0.57.0
+  - @cat-factory/kernel@0.69.1
+  - @cat-factory/agents@0.26.3
+  - @cat-factory/gates@0.2.62
+  - @cat-factory/integrations@0.53.1
+  - @cat-factory/prompt-fragments@0.9.36
+  - @cat-factory/server@0.65.1
+
 ## 0.9.82
 
 ### Patch Changes

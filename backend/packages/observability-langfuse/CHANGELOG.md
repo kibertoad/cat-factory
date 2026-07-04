@@ -1,5 +1,190 @@
 # @cat-factory/observability-langfuse
 
+## 0.7.131
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.7.130
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.7.129
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
+## 0.7.128
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/kernel@0.82.0
+
+## 0.7.127
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/kernel@0.81.0
+
+## 0.7.126
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/kernel@0.80.0
+
+## 0.7.125
+
+### Patch Changes
+
+- @cat-factory/kernel@0.79.1
+
+## 0.7.124
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/kernel@0.79.0
+
+## 0.7.123
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/kernel@0.78.0
+
+## 0.7.122
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+  - @cat-factory/kernel@0.77.0
+
+## 0.7.121
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/kernel@0.76.0
+
+## 0.7.120
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/kernel@0.75.0
+
+## 0.7.119
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+
+## 0.7.118
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+
+## 0.7.117
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/kernel@0.72.0
+
+## 0.7.116
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+  - @cat-factory/kernel@0.71.0
+
+## 0.7.115
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/kernel@0.70.2
+
+## 0.7.114
+
+### Patch Changes
+
+- Updated dependencies [0d51638]
+  - @cat-factory/kernel@0.70.1
+
+## 0.7.113
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/kernel@0.70.0
+
+## 0.7.112
+
+### Patch Changes
+
+- @cat-factory/kernel@0.69.8
+
+## 0.7.111
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+  - @cat-factory/kernel@0.69.7
+
+## 0.7.110
+
+### Patch Changes
+
+- @cat-factory/kernel@0.69.6
+
+## 0.7.109
+
+### Patch Changes
+
+- @cat-factory/kernel@0.69.5
+
+## 0.7.108
+
+### Patch Changes
+
+- @cat-factory/kernel@0.69.4
+
+## 0.7.107
+
+### Patch Changes
+
+- @cat-factory/kernel@0.69.3
+
+## 0.7.106
+
+### Patch Changes
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+
+## 0.7.105
+
+### Patch Changes
+
+- Updated dependencies [120de05]
+  - @cat-factory/kernel@0.69.1
+
 ## 0.7.104
 
 ### Patch Changes

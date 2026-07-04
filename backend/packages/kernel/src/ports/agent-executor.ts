@@ -229,6 +229,22 @@ export interface AgentRunContext {
     bindings: { envVar: string; serviceUrl?: string }[]
   }
   /**
+   * The connected services "directly involved" in this task beyond its own (see the service
+   * connections initiative) — resolved by the engine from the task's `involvedServiceIds`,
+   * read-time stale-filtered to ids that still resolve to a connected service frame. Each carries
+   * the frame's title, the connection `description` prose (folded into the agent prompt to explain
+   * the relationship), and — when the involved service has a LIVE ephemeral env provisioned in
+   * this run — its URL. The Tester turns these into its `peerEnvironments` infra map so a
+   * cross-service integration test can reach the peer's real environment. Absent when the task
+   * names no (still-valid) involved services.
+   */
+  involvedServices?: {
+    frameId: string
+    title: string
+    description?: string
+    envUrl?: string
+  }[]
+  /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.
    */
@@ -246,6 +262,20 @@ export interface AgentRunContext {
     previousProposal: string
     feedback: string
     comments?: { quotedSource?: string; body: string }[]
+  }
+  /**
+   * The planning context an initiative-level run carries, resolved by the engine from the
+   * block's `initiatives` entity (slice 2). The interviewer's synthesized goal / constraints /
+   * non-goals and the Q&A digest, plus the analyst's codebase analysis — so the analyst and
+   * planner prompts are grounded in the human's intent and the prior step's findings. Absent
+   * on non-initiative runs (and when no initiative entity is wired).
+   */
+  initiative?: {
+    goal?: string
+    constraints?: string[]
+    nonGoals?: string[]
+    qa?: { question: string; answer: string }[]
+    analysisSummary?: string
   }
 }
 
@@ -336,6 +366,15 @@ export interface AgentRunResult {
    */
   onCallAssessment?: unknown
   /**
+   * The multi-phase initiative plan draft an `initiative-planner` step produced
+   * (phases, items with estimates + dependencies, the execution policy). The engine
+   * strictly validates it and ingests it into the block's `initiatives` entity;
+   * the committer step later renders + commits the in-repo tracker from that
+   * entity. Carried as `unknown` so the port stays free of the contracts schema;
+   * the engine parses it before use.
+   */
+  initiativePlan?: unknown
+  /**
    * A generic, manifest-driven `agent` step's structured output (the parsed JSON object
    * a `container-explore` structured agent returned). Carried as `unknown` so the port
    * stays free of any schema; the kind's post-op coerces/validates + renders artifact
@@ -408,6 +447,13 @@ export interface AgentJobHandle {
    * (usage-aware rotation). Absent for proxy-metered Pi jobs.
    */
   subscriptionTokenId?: string
+  /**
+   * The model provider/vendor the job runs on (e.g. `claude`, `codex`, `openai`),
+   * known at dispatch. Carried so the poll site can stamp it on the per-call telemetry
+   * a subscription harness reports (which the proxy would otherwise supply). Absent ⇒
+   * telemetry falls back to the provider parsed from {@link model}.
+   */
+  provider?: string
   /**
    * The agent kind the job runs as (`coder`, `merger`, …). The poll site MUST supply it
    * for any kind whose result is mapped kind-aware (e.g. a migrated `merger`/`on-call`,

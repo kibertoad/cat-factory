@@ -14,12 +14,7 @@ import type {
   PromptFragmentRecord,
   PromptFragmentRepository,
 } from '@cat-factory/kernel'
-import {
-  digestListing,
-  isMarkdownFile,
-  parseFragmentMarkdown,
-  slugFromPath,
-} from './fragment-source.logic.js'
+import { isMarkdownFile, parseFragmentMarkdown, slugFromPath } from './fragment-source.logic.js'
 
 /**
  * Resolve the GitHub App installation id that can read a tier's repos. A
@@ -39,6 +34,13 @@ export interface FragmentSourceServiceDependencies {
   resolveInstallationId: ResolveFragmentInstallationId
   idGenerator: IdGenerator
   clock: Clock
+  /**
+   * Drops the cached merged catalog for a tier after this service mutates its
+   * fragments (sync/unlink) — wired to
+   * {@link FragmentLibraryService.invalidateCatalogTier} by the composition root.
+   * Absent (tests) ⇒ no cache to keep coherent.
+   */
+  invalidateCatalog?: (ownerKind: FragmentOwnerKind, ownerId: string) => Promise<void>
 }
 
 /**
@@ -48,6 +50,11 @@ export interface FragmentSourceServiceDependencies {
  * go through the account's existing GitHub installation — no new credential store.
  * Sync runs inline (bounded directory); the sha-keyed upsert is idempotent so it
  * can later move behind a Workflow safely.
+ *
+ * The full fragment bodies are cached on our side (in `prompt_fragments`), so the
+ * run path never re-fetches. Staleness is therefore a **single lightweight commit
+ * probe**: sync pins the source dir's head commit sha, and {@link status} compares
+ * that stored commit against the current head — no directory listing, no body reads.
  */
 export class FragmentSourceService {
   constructor(private readonly deps: FragmentSourceServiceDependencies) {}
@@ -73,7 +80,7 @@ export class FragmentSourceService {
       repoName: input.repoName.trim(),
       gitRef: input.gitRef?.trim() || 'HEAD',
       dirPath: normalizeDir(input.dirPath),
-      lastSyncedSha: null,
+      lastSyncedCommit: null,
       lastSyncedAt: null,
       createdAt: now,
       deletedAt: null,
@@ -83,47 +90,91 @@ export class FragmentSourceService {
   }
 
   /** Unlink a source and tombstone every fragment it produced. */
-  async unlink(sourceId: string): Promise<void> {
-    const source = await this.require(sourceId)
+  async unlink(ownerKind: FragmentOwnerKind, ownerId: string, sourceId: string): Promise<void> {
+    const source = await this.require(ownerKind, ownerId, sourceId)
     const now = this.deps.clock.now()
     const fragments = await this.deps.promptFragmentRepository.listBySource(sourceId)
     for (const f of fragments) {
       await this.deps.promptFragmentRepository.softDelete(f.ownerKind, f.ownerId, f.fragmentId, now)
     }
     await this.deps.fragmentSourceRepository.softDelete(source.id, now)
+    if (fragments.length > 0) await this.deps.invalidateCatalog?.(ownerKind, ownerId)
   }
 
   /**
    * Resync a source: list the directory, upsert every Markdown file whose blob
-   * sha changed, tombstone files removed upstream, and stamp the new tree digest.
-   * Idempotent — re-running with no upstream change touches nothing.
+   * sha changed, tombstone fragments no longer produced by any current file, and
+   * stamp the source dir's head commit sha. Idempotent — re-running with no upstream
+   * change touches nothing.
    */
-  async sync(sourceId: string): Promise<FragmentSyncResult> {
-    const source = await this.require(sourceId)
-    const entries = await this.readMarkdown(source)
+  async sync(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    sourceId: string,
+  ): Promise<FragmentSyncResult> {
+    const source = await this.require(ownerKind, ownerId, sourceId)
+    // The installation is invariant across the whole sync — resolve it ONCE here,
+    // never per file (the per-entry reads below share it).
+    const installationId = await this.requireInstallation(source)
+    // Pin the dir's head commit BEFORE reading so we never record a newer commit than
+    // the content we actually pulled: if a commit lands mid-sync we read at (and stamp)
+    // the pinned sha, and the next status flags it as changed rather than silently
+    // treating stale content as current. Read the tree at that exact commit when known.
+    const headCommit = await this.deps.githubClient.latestCommitSha(
+      installationId,
+      { owner: source.repoOwner, repo: source.repoName },
+      source.dirPath,
+      source.gitRef,
+    )
+    const readRef = headCommit ?? source.gitRef
+    const entries = await this.readMarkdown(source, installationId, readRef)
     const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
     const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
+    // Keyed by fragment id too, so `syncEntry` can inherit an existing fragment's
+    // version/createdAt when a RENAME reaches it under a new path (path lookup misses,
+    // id lookup hits) rather than silently resetting them to defaults.
+    const existingById = new Map(existing.map((f) => [f.fragmentId, f]))
     const now = this.deps.clock.now()
 
     let upserted = 0
     let unchanged = 0
-    const seenPaths = new Set<string>()
+    // The fragment ids the CURRENT tree produces — the survivors. Keyed by id, not
+    // path: a rename of a file that pins an explicit frontmatter `id` keeps the same
+    // fragment id under a new path, and a path-keyed sweep would tombstone the row
+    // the rename just updated. Conversely a file whose explicit `id` changed leaves
+    // its OLD id unproduced, which an id-keyed sweep correctly retires.
+    const liveIds = new Set<string>()
 
     for (const entry of entries) {
-      seenPaths.add(entry.path)
       const prior = existingByPath.get(entry.path)
       if (prior && prior.sourceSha === entry.sha) {
         unchanged++
+        liveIds.add(prior.fragmentId)
         continue
       }
-      await this.syncEntry(source, entry, prior, now)
-      upserted++
+      const syncedId = await this.syncEntry(
+        source,
+        entry,
+        existingById,
+        now,
+        installationId,
+        readRef,
+      )
+      if (syncedId) {
+        liveIds.add(syncedId)
+        upserted++
+      } else if (prior) {
+        // Unreadable/unparseable this round: keep the prior fragment alive rather
+        // than retiring guidance over a transient read or an in-progress edit.
+        liveIds.add(prior.fragmentId)
+      }
     }
 
-    // Tombstone fragments whose source file disappeared upstream.
+    // Tombstone fragments the current tree no longer produces (file removed upstream,
+    // or its explicit frontmatter `id` changed).
     let tombstoned = 0
     for (const f of existing) {
-      if (f.sourcePath && !seenPaths.has(f.sourcePath)) {
+      if (!liveIds.has(f.fragmentId)) {
         await this.deps.promptFragmentRepository.softDelete(
           f.ownerKind,
           f.ownerId,
@@ -134,91 +185,121 @@ export class FragmentSourceService {
       }
     }
 
-    const lastSyncedSha = digestListing(entries.map((e) => ({ path: e.path, sha: e.sha })))
-    await this.deps.fragmentSourceRepository.updateSyncState(source.id, lastSyncedSha, now)
-    return { upserted, tombstoned, unchanged, lastSyncedSha }
+    await this.deps.fragmentSourceRepository.updateSyncState(source.id, headCommit, now)
+    // Invalidate AFTER the sync state commits, and only when fragments actually
+    // changed — a no-op resync must not churn every peer's cached catalog.
+    if (upserted > 0 || tombstoned > 0) await this.deps.invalidateCatalog?.(ownerKind, ownerId)
+    return { upserted, tombstoned, unchanged, lastSyncedCommit: headCommit }
   }
 
-  /** Cheap "check for changes": compare the remote tree digest to the stored one. */
-  async status(sourceId: string): Promise<FragmentSourceStatus> {
-    const source = await this.require(sourceId)
-    const entries = await this.readMarkdown(source)
-    const existing = await this.deps.promptFragmentRepository.listBySource(sourceId)
-    const existingByPath = new Map(existing.map((f) => [f.sourcePath ?? '', f]))
-
-    let changedCount = 0
-    const seen = new Set<string>()
-    for (const entry of entries) {
-      seen.add(entry.path)
-      const prior = existingByPath.get(entry.path)
-      if (!prior || prior.sourceSha !== entry.sha) changedCount++
-    }
-    for (const f of existing) {
-      if (f.sourcePath && !seen.has(f.sourcePath)) changedCount++
-    }
-
-    const remoteSha = digestListing(entries.map((e) => ({ path: e.path, sha: e.sha })))
+  /**
+   * Lightweight "check for changes": read only the source dir's current head commit sha
+   * and compare it to the one stored at the last sync. One cheap commit lookup — no
+   * directory listing, no file bodies (those are already cached on our side). `changed`
+   * is exact at commit granularity: any commit touching the dir (edit, add, remove,
+   * rename) advances the head sha.
+   */
+  async status(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    sourceId: string,
+  ): Promise<FragmentSourceStatus> {
+    const source = await this.require(ownerKind, ownerId, sourceId)
+    const installationId = await this.requireInstallation(source)
+    const remoteCommit = await this.deps.githubClient.latestCommitSha(
+      installationId,
+      { owner: source.repoOwner, repo: source.repoName },
+      source.dirPath,
+      source.gitRef,
+    )
     return {
-      changed: remoteSha !== source.lastSyncedSha,
-      changedCount,
-      lastSyncedSha: source.lastSyncedSha,
-      remoteSha,
+      changed: remoteCommit !== source.lastSyncedCommit,
+      lastSyncedCommit: source.lastSyncedCommit,
+      remoteCommit,
     }
   }
 
   // --- internals ----------------------------------------------------------
 
-  private async require(sourceId: string): Promise<FragmentSourceRecord> {
+  private async require(
+    ownerKind: FragmentOwnerKind,
+    ownerId: string,
+    sourceId: string,
+  ): Promise<FragmentSourceRecord> {
     const source = assertFound(
       await this.deps.fragmentSourceRepository.get(sourceId),
       'FragmentSource',
       sourceId,
     )
+    // The route gates only authorize the addressed owner (account/workspace) prefix, so
+    // the record must belong to that owner; 404 hides other tenants' sources entirely.
+    if (source.ownerKind !== ownerKind || source.ownerId !== ownerId) {
+      throw new NotFoundError('FragmentSource', sourceId)
+    }
     if (source.deletedAt !== null) throw new NotFoundError('FragmentSource', sourceId)
     return source
   }
 
-  /** List the source directory and keep only Markdown files (with their shas). */
-  private async readMarkdown(source: FragmentSourceRecord): Promise<RepoContentEntry[]> {
+  /** Resolve the GitHub installation that reads this source's tier, or throw cleanly. */
+  private async requireInstallation(source: FragmentSourceRecord): Promise<number> {
     const installationId = await this.deps.resolveInstallationId(source.ownerKind, source.ownerId)
     if (installationId === null) {
       throw new ValidationError(
         'No GitHub installation is available for this scope; connect GitHub before syncing a source',
       )
     }
+    return installationId
+  }
+
+  /**
+   * List the source directory and keep only Markdown files (with their shas). Reads at
+   * `readRef` — the sync's pinned head commit sha (falls back to the source's `gitRef`).
+   */
+  private async readMarkdown(
+    source: FragmentSourceRecord,
+    installationId: number,
+    readRef: string,
+  ): Promise<RepoContentEntry[]> {
     const entries = await this.deps.githubClient.listDirectory(
       installationId,
       { owner: source.repoOwner, repo: source.repoName },
       source.dirPath,
-      source.gitRef,
+      readRef,
     )
     return entries.filter((e) => e.type === 'file' && isMarkdownFile(e.name))
   }
 
-  /** Read, parse and upsert one file as a fragment owned by the source's tier. */
+  /**
+   * Read, parse and upsert one file as a fragment owned by the source's tier.
+   * Returns the fragment id it produced, or null when the file was unreadable /
+   * unparseable (nothing written).
+   */
   private async syncEntry(
     source: FragmentSourceRecord,
     entry: RepoContentEntry,
-    prior: PromptFragmentRecord | undefined,
+    existingById: Map<string, PromptFragmentRecord>,
     now: number,
-  ): Promise<void> {
-    const installationId = await this.deps.resolveInstallationId(source.ownerKind, source.ownerId)
-    if (installationId === null) {
-      throw new ValidationError('No GitHub installation is available for this scope')
-    }
+    installationId: number,
+    readRef: string,
+  ): Promise<string | null> {
     const file = await this.deps.githubClient.getFileContent(
       installationId,
       { owner: source.repoOwner, repo: source.repoName },
       entry.path,
-      source.gitRef,
+      readRef,
     )
-    if (!file) return
+    if (!file) return null
     const parsed = parseFragmentMarkdown(entry.path, file.content)
-    if (!parsed) return
+    if (!parsed) return null
 
     // Sourced ids are namespaced so two sources can't collide; an explicit
     // frontmatter `id` instead *shadows* a built-in/inherited fragment (ADR 0006).
     const fragmentId = parsed.id?.trim() || `src:${source.id}:${slugFromPath(entry.path)}`
+    // Match the existing row by the id THIS file produces, not by path — so a rename
+    // (new path, same explicit id) still inherits the fragment's version + createdAt,
+    // while a genuinely new id (a fresh file, or a file whose explicit id changed) starts
+    // fresh and lets the sweep retire the old id.
+    const prior = existingById.get(fragmentId)
     const record: PromptFragmentRecord = {
       fragmentId,
       ownerKind: source.ownerKind,
@@ -242,6 +323,7 @@ export class FragmentSourceService {
       deletedAt: null,
     }
     await this.deps.promptFragmentRepository.upsert(record)
+    return fragmentId
   }
 }
 
@@ -258,7 +340,7 @@ function toWire(record: FragmentSourceRecord): FragmentSource {
     repoName: record.repoName,
     gitRef: record.gitRef,
     dirPath: record.dirPath,
-    lastSyncedSha: record.lastSyncedSha,
+    lastSyncedCommit: record.lastSyncedCommit,
     lastSyncedAt: record.lastSyncedAt,
     createdAt: record.createdAt,
   }

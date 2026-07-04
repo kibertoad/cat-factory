@@ -1,5 +1,891 @@
 # @cat-factory/local-server
 
+## 0.44.4
+
+### Patch Changes
+
+- 1f6d9fc: Cache the workspace GitHub repo projection through the app caching seam
+  (caching-layer initiative, slice 3). A new `AppCaches.repoProjection` group cache
+  (grouped and keyed by workspace id) serves the whole-projection re-list that the
+  block→repo resolver (`buildResolveRepoTarget`) runs on every agent dispatch and
+  every durable poll tick, replacing a live `repoProjectionRepository.list` per
+  resolution with a per-workspace cached read.
+
+  Coherence is invalidation-driven: every projection write drops the workspace
+  group after it commits — `GitHubSyncService` (repo link / monorepo-flag / the
+  exact-set write + tombstone / the link-time full re-stamp, fanned out per
+  workspace), `BoardService.addServiceFromRepo` (the monorepo-flag write on the
+  import-existing-repo path), `WebhookService` (the `installation_repositories`
+  removed tombstone), and `ContainerRepoBootstrapper` (projecting a freshly
+  bootstrapped repo). `GitHubSyncService.syncRepo` only invalidates on a `full`
+  (link-time) pass — an incremental resync re-stamps `syncedAt` alone, which the
+  resolver never reads, so invalidating there would only churn the cache. The
+  installation lookup and the tree-depth-bounded block ancestry walk stay live, so
+  a block reparent or a service repo-link change needs no cache invalidation.
+
+  The cache is pass-through on the Cloudflare Worker's isolate-safe profile (our own
+  mutable D1 state, no cross-isolate invalidation bus), so the Worker reads the
+  projection live. Local mode is likewise pass-through: it seeds the projection via
+  the out-of-process `link-repo` CLI and runs single-node with no invalidation bus,
+  so an in-memory TTL'd entry could serve a pre-link projection. So the cache is
+  active on the multi-node-capable Node facade only. Absent a cache (tests /
+  harnesses) every resolve lists live, unchanged.
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+  - @cat-factory/server@0.80.0
+  - @cat-factory/integrations@0.64.0
+  - @cat-factory/orchestration@0.70.1
+  - @cat-factory/node-server@0.71.3
+  - @cat-factory/agents@0.33.1
+  - @cat-factory/gitlab@0.6.12
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.44.3
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/agents@0.33.0
+  - @cat-factory/orchestration@0.70.0
+  - @cat-factory/server@0.79.4
+  - @cat-factory/node-server@0.71.2
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.44.2
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+- Updated dependencies [6213771]
+  - @cat-factory/kernel@0.84.0
+  - @cat-factory/integrations@0.63.0
+  - @cat-factory/agents@0.32.0
+  - @cat-factory/orchestration@0.69.1
+  - @cat-factory/node-server@0.71.1
+  - @cat-factory/gitlab@0.6.11
+  - @cat-factory/server@0.79.3
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.44.1
+
+### Patch Changes
+
+- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
+  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
+
+  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
+    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
+    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
+    invalidation bus, never a data tier; with no notification factory injected the
+    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
+    machinery so ioredis never enters the module graph outside the Node facade's
+    REDIS_URL-gated wiring.
+  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
+    (group = workspace id), and every fragment write path — create / update / remove /
+    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
+    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
+    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
+  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
+    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
+    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
+    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
+    write — the same gating and resilience pattern as the realtime propagator. Local
+    mode stays bare in-memory (single-node by construction).
+  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
+    cross-instance state) is pass-through, since an isolate has no cross-isolate
+    invalidation bus. Documented in the caching package README.
+  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
+    catalog on all three runtimes (Worker/Node/local).
+  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+    in-memory `isEntryStillCurrentFn` support: a cache profile may set
+    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+    the probe reports the source unmoved, and fall back to a full background reload
+    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+  - @cat-factory/agents@0.31.0
+  - @cat-factory/orchestration@0.69.0
+  - @cat-factory/node-server@0.71.0
+  - @cat-factory/gitlab@0.6.10
+  - @cat-factory/integrations@0.62.1
+  - @cat-factory/server@0.79.2
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.44.0
+
+### Minor Changes
+
+- 6c1efd1: Docker Compose ephemeral envs: opt-in build-from-source mode.
+
+  The Docker Compose environment backend was checkout-free / image-pull only and hard-rejected
+  `build:`, host bind mounts, relative `env_file`, and `privileged`, so an app repo that builds
+  its own images (e.g. a .NET + Angular + SQL Server stack) could not become a per-PR preview env.
+
+  A new opt-in `build` mode (workspace handler `providerConfig.build`, mirrored advisory
+  `ServiceProvisioning.composeBuild`) clones the PR head into a per-project working tree, writes
+  the isolation-safe rewritten compose beside the original inside the checkout, and runs
+  `docker compose build` + `up --wait`. In build mode `build:`, in-checkout relative bind mounts,
+  and relative `env_file`s are honored. Image mode is unchanged and remains the default.
+
+  Host-escape refusal is uniform across EVERY path-bearing reference, not just bind mounts: bind
+  sources, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:` `file:` sources are
+  all run through `escapesCheckout`, which now also catches UNC/backslash-absolute paths, a
+  separator-buried `../` source (`sub/../../../etc`, previously mis-read as a named volume), and an
+  unresolved `${VAR}` interpolation (expands to an arbitrary host path at runtime). `include:` and
+  cross-file `extends: { file }` are refused outright in both modes — the daemon merges those files
+  from disk, so their services would otherwise slip a privileged container / host bind / pinned port
+  past the parse-based guard. `privileged: true` stays refused.
+
+  The `ComposeRuntime` seam gains optional `checkout`/`writeCheckoutFile` (implemented in the local
+  facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a LAZY
+  `clone` resolver (a thunk) invoked only by the build-mode provider that actually needs a working
+  tree — so image-mode compose / custom / k8s-sync provisions no longer mint a short-lived VCS token
+  they never use (reusing the deploy clone-target seam, memoized so one provision never mints twice).
+  Build mode registers only on the docker-family local runtime — the documented runtime-bound
+  exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
+
+  Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
+  recommended in build-from-source mode (previously it was recommended blindly and then failed at
+  provision time).
+
+  The compose environment connect form gains an "Image source" selector (pull pre-built vs build
+  from source) and a build-timeout field; the misleading "image-based stacks only" copy is removed.
+
+### Patch Changes
+
+- Updated dependencies [6c1efd1]
+  - @cat-factory/contracts@0.95.0
+  - @cat-factory/kernel@0.82.0
+  - @cat-factory/integrations@0.62.0
+  - @cat-factory/agents@0.30.5
+  - @cat-factory/gitlab@0.6.9
+  - @cat-factory/orchestration@0.68.1
+  - @cat-factory/server@0.79.1
+  - @cat-factory/node-server@0.70.1
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.43.0
+
+### Minor Changes
+
+- 6edcce0: Personal-PAT repo access + fail-closed board redaction, and removal of the legacy repo→block link.
+
+  - **Expand the repo picker with your own PAT (all facades).** A user's stored GitHub PAT
+    (`user_secrets` kind `github_pat`) now surfaces repos it can reach beyond the workspace's GitHub
+    App grant — even on the hosted Cloudflare/Node facades. Linking one creates a **personal service**
+    (`GitHubRepo.linkedVia === 'user_pat'`); runs against it already use the initiator's PAT.
+  - **Fail-closed frame redaction.** A service frame backed by a repo linked via another member's PAT
+    is hidden from members who can't reach it: the board snapshot scrubs the frame to just its
+    internal id + a "Permission denied" placeholder and drops its subtree. Access is a fail-closed
+    per-user projection (`github_user_repo_access`), refreshed when a user enumerates their PAT repos
+    and cleared when they remove their PAT — no live GitHub call on the snapshot path.
+  - **New:** `github_repos.linked_via` column + `github_user_repo_access` table (mirrored D1 ⇄
+    Drizzle, with a cross-runtime conformance suite); kernel `UserRepoAccessRepository` port and
+    optional `GitHubClient.listReposForToken`/`getRepoForToken`; `Block.accessDenied` +
+    `GitHubAvailableRepo.personal` wire fields.
+
+  **Breaking (pre-1.0, no migration):** the legacy `github_repos.block_id` repo↔frame link is removed
+  — the account-owned `Service` (`getByFrameBlock` → `repoGithubId`) is now the SOLE repo↔frame
+  linkage. `RepoProjectionRepository.linkBlock` and `GitHubRepo.blockId` are gone; `resolveRepoTarget`
+  now requires a `serviceRepository`; the `RepoBootstrapper` port's `linkRepoToBlock` is replaced by
+  `projectBootstrappedRepo` (the caller binds the frame's `Service`). Existing rows' `block_id` is
+  dropped; repos remain reachable through their `Service`.
+
+### Patch Changes
+
+- Updated dependencies [6edcce0]
+  - @cat-factory/contracts@0.94.0
+  - @cat-factory/kernel@0.81.0
+  - @cat-factory/integrations@0.61.0
+  - @cat-factory/server@0.79.0
+  - @cat-factory/orchestration@0.68.0
+  - @cat-factory/node-server@0.70.0
+  - @cat-factory/gitlab@0.6.8
+  - @cat-factory/agents@0.30.4
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.42.1
+
+### Patch Changes
+
+- @cat-factory/node-server@0.69.1
+
+## 0.42.0
+
+### Minor Changes
+
+- dbde3b8: Cross-node WebSocket propagation for the Node facade (optional Redis adapter).
+
+  The Node facade's real-time transport (`NodeRealtimeHub`) is an in-process, single-node socket
+  registry: an event published on the node that processed a run only reaches browsers connected to
+  THAT node. A horizontally-scaled Node deployment spreads browsers and background work across
+  several nodes, so an event produced on one node has to reach a browser attached to another.
+
+  This adds that reach as a **layered propagator** with pluggable cross-node adapters. Publishing an
+  event fans it to the local hub AND to each configured adapter; an adapter carries it to peer nodes,
+  which apply it to their own local hubs. **Redis pub/sub is the first adapter** — a Postgres
+  LISTEN/NOTIFY or NATS adapter would implement the same `WebSocketPropagator` port with no other
+  changes.
+
+  - `ioredis` is an **optional dependency**, imported dynamically only when `REDIS_URL` is set. With
+    no bus configured (single-replica Node, and **local mode**, which is always single-node) the
+    layer is exactly the bare hub with zero overhead and no extra dependency — the default.
+  - Config: `REDIS_URL` enables it; `REDIS_REALTIME_CHANNEL` (default `cat-factory:realtime`) and
+    `REALTIME_NODE_ID` (default a random uuid, used to drop a node's own echoes) tune it.
+  - The engine's event publisher now writes through a narrow `LocalEventSink` seam that both the bare
+    hub and the layered propagator implement, so no other code differs between single- and multi-node.
+
+  The Worker facade needs none of this: its real-time transport is a globally-addressed
+  `WorkspaceEventsHub` Durable Object (one per workspace across the whole deployment), so cross-node
+  propagation is inherent to the platform — this is a genuine Node-only concern, not a facade gap.
+
+### Patch Changes
+
+- Updated dependencies [dbde3b8]
+  - @cat-factory/node-server@0.69.0
+
+## 0.41.5
+
+### Patch Changes
+
+- Updated dependencies [ef57cb1]
+  - @cat-factory/contracts@0.93.0
+  - @cat-factory/kernel@0.80.0
+  - @cat-factory/orchestration@0.67.0
+  - @cat-factory/server@0.78.0
+  - @cat-factory/node-server@0.68.0
+  - @cat-factory/agents@0.30.3
+  - @cat-factory/gitlab@0.6.7
+  - @cat-factory/integrations@0.60.2
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.4
+
+### Patch Changes
+
+- Updated dependencies [1d738f7]
+  - @cat-factory/contracts@0.92.0
+  - @cat-factory/orchestration@0.66.0
+  - @cat-factory/server@0.77.0
+  - @cat-factory/node-server@0.67.0
+  - @cat-factory/agents@0.30.2
+  - @cat-factory/gitlab@0.6.6
+  - @cat-factory/integrations@0.60.1
+  - @cat-factory/kernel@0.79.1
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.3
+
+### Patch Changes
+
+- Updated dependencies [47a2975]
+  - @cat-factory/contracts@0.91.0
+  - @cat-factory/kernel@0.79.0
+  - @cat-factory/integrations@0.60.0
+  - @cat-factory/orchestration@0.65.0
+  - @cat-factory/server@0.76.0
+  - @cat-factory/node-server@0.66.0
+  - @cat-factory/agents@0.30.1
+  - @cat-factory/gitlab@0.6.5
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.2
+
+### Patch Changes
+
+- Updated dependencies [0477068]
+  - @cat-factory/server@0.75.2
+  - @cat-factory/node-server@0.65.2
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.1
+
+### Patch Changes
+
+- Updated dependencies [4a59f45]
+  - @cat-factory/server@0.75.1
+  - @cat-factory/node-server@0.65.1
+  - @cat-factory/executor-harness@1.34.4
+
+## 0.41.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+### Patch Changes
+
+- Updated dependencies [b928904]
+  - @cat-factory/orchestration@0.64.0
+  - @cat-factory/contracts@0.90.0
+  - @cat-factory/kernel@0.78.0
+  - @cat-factory/integrations@0.59.0
+  - @cat-factory/agents@0.30.0
+  - @cat-factory/server@0.75.0
+  - @cat-factory/node-server@0.65.0
+  - @cat-factory/executor-harness@1.34.4
+  - @cat-factory/gitlab@0.6.4
+
+## 0.40.8
+
+### Patch Changes
+
+- Updated dependencies [7fa7578]
+- Updated dependencies [f372f4e]
+  - @cat-factory/contracts@0.89.0
+  - @cat-factory/kernel@0.77.0
+  - @cat-factory/orchestration@0.63.0
+  - @cat-factory/server@0.74.0
+  - @cat-factory/node-server@0.64.2
+  - @cat-factory/agents@0.29.1
+  - @cat-factory/gitlab@0.6.3
+  - @cat-factory/integrations@0.58.1
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.40.7
+
+### Patch Changes
+
+- Updated dependencies [6917962]
+  - @cat-factory/server@0.73.1
+  - @cat-factory/executor-harness@1.34.2
+  - @cat-factory/node-server@0.64.1
+
+## 0.40.6
+
+### Patch Changes
+
+- Updated dependencies [55661f4]
+  - @cat-factory/contracts@0.88.0
+  - @cat-factory/kernel@0.76.0
+  - @cat-factory/agents@0.29.0
+  - @cat-factory/integrations@0.58.0
+  - @cat-factory/server@0.73.0
+  - @cat-factory/orchestration@0.62.0
+  - @cat-factory/node-server@0.64.0
+  - @cat-factory/gitlab@0.6.2
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.40.5
+
+### Patch Changes
+
+- Updated dependencies [ca5c3e8]
+  - @cat-factory/contracts@0.87.0
+  - @cat-factory/kernel@0.75.0
+  - @cat-factory/agents@0.28.0
+  - @cat-factory/orchestration@0.61.0
+  - @cat-factory/server@0.72.0
+  - @cat-factory/node-server@0.63.0
+  - @cat-factory/gitlab@0.6.1
+  - @cat-factory/integrations@0.57.2
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.40.4
+
+### Patch Changes
+
+- Updated dependencies [cc924a9]
+  - @cat-factory/agents@0.27.1
+  - @cat-factory/orchestration@0.60.4
+  - @cat-factory/server@0.71.2
+  - @cat-factory/node-server@0.62.2
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.40.3
+
+### Patch Changes
+
+- Updated dependencies [803fa76]
+  - @cat-factory/server@0.71.1
+  - @cat-factory/executor-harness@1.34.2
+  - @cat-factory/node-server@0.62.1
+
+## 0.40.2
+
+### Patch Changes
+
+- 7b8b04f: Pin the local browsable-preview host port to the app's serve port so the preview origin is a deterministic `http://localhost:<servePort>` — the same origin `frontendOriginsForService` injects into a bound backend's CORS allow-list. Previously the preview published to an ephemeral host port and formed its URL via `docker port` (`http://127.0.0.1:<random>`), a different origin, so a developer browsing the preview was CORS-blocked when the app called the live backend. `RunContainerSpec.publishPorts` gains an optional pinned `host`, and a new `ContainerRuntimeAdapter.publishesToLocalhost` flag distinguishes the Docker family (pinnable localhost origin) from Apple `container` (reached at the container's own IP).
+
+## 0.40.1
+
+### Patch Changes
+
+- Updated dependencies [b216fdc]
+  - @cat-factory/kernel@0.74.0
+  - @cat-factory/contracts@0.86.0
+  - @cat-factory/agents@0.27.0
+  - @cat-factory/server@0.71.0
+  - @cat-factory/gitlab@0.6.0
+  - @cat-factory/node-server@0.62.0
+  - @cat-factory/integrations@0.57.1
+  - @cat-factory/orchestration@0.60.3
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.40.0
+
+### Minor Changes
+
+- 7fd6a19: Import-from-repo picker: find and link accessible repos in realtime instead of enumerating the whole installation and filtering in memory. The old path listed every installation repo (capped at a bounded page count) then substring-filtered client-of-the-cap — so on a wide App install a repo beyond that window returned "no matches" for a repo you actually had access to, and every keystroke re-fetched all pages. Two new `GitHubClient` primitives fix it end to end: `searchInstallationRepos` issues one bounded, account-scoped GitHub search per query, and `getRepoById` point-reads the picked repo by id when linking it (so a repo surfaced by search from beyond the enumeration cap links instead of spuriously 409-ing). Blank-query browse-all is unchanged; PAT (local) and GitLab connections filter their bounded token listing. When an installation has no resolvable account to scope the GitHub search to, the App adapter filters its own bounded listing rather than running an unscoped global search (which would surface arbitrary, unlinkable public repos).
+
+### Patch Changes
+
+- Updated dependencies [7fd6a19]
+  - @cat-factory/kernel@0.73.0
+  - @cat-factory/server@0.70.0
+  - @cat-factory/integrations@0.57.0
+  - @cat-factory/gitlab@0.5.0
+  - @cat-factory/agents@0.26.18
+  - @cat-factory/orchestration@0.60.2
+  - @cat-factory/node-server@0.61.2
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.39.2
+
+### Patch Changes
+
+- Updated dependencies [96cff56]
+  - @cat-factory/executor-harness@1.34.2
+
+## 0.39.1
+
+### Patch Changes
+
+- Updated dependencies [0ac0dc4]
+  - @cat-factory/contracts@0.85.0
+  - @cat-factory/kernel@0.72.0
+  - @cat-factory/orchestration@0.60.1
+  - @cat-factory/agents@0.26.17
+  - @cat-factory/gitlab@0.4.45
+  - @cat-factory/integrations@0.56.5
+  - @cat-factory/server@0.69.1
+  - @cat-factory/node-server@0.61.1
+  - @cat-factory/executor-harness@1.34.0
+
+## 0.39.0
+
+### Minor Changes
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+### Patch Changes
+
+- Updated dependencies [36f4cf6]
+- Updated dependencies [b78adf5]
+- Updated dependencies [b78adf5]
+  - @cat-factory/contracts@0.84.0
+  - @cat-factory/orchestration@0.60.0
+  - @cat-factory/kernel@0.71.0
+  - @cat-factory/server@0.69.0
+  - @cat-factory/executor-harness@1.34.0
+  - @cat-factory/node-server@0.61.0
+  - @cat-factory/agents@0.26.16
+  - @cat-factory/gitlab@0.4.44
+  - @cat-factory/integrations@0.56.4
+
+## 0.38.12
+
+### Patch Changes
+
+- Updated dependencies [e0aab3f]
+  - @cat-factory/contracts@0.83.0
+  - @cat-factory/kernel@0.70.2
+  - @cat-factory/orchestration@0.59.2
+  - @cat-factory/server@0.68.2
+  - @cat-factory/node-server@0.60.2
+  - @cat-factory/agents@0.26.15
+  - @cat-factory/gitlab@0.4.43
+  - @cat-factory/integrations@0.56.3
+  - @cat-factory/executor-harness@1.32.0
+
+## 0.38.11
+
+### Patch Changes
+
+- 0d51638: Boundary hardening:
+
+  - **Local mode** now enforces a minimum strength on the required crypto secrets at config
+    load: `AUTH_SESSION_SECRET` must be ≥32 characters (local mode defaults the auth gate open,
+    so a weak secret would leave session/proxy/machine tokens forgeable) and `ENCRYPTION_KEY`
+    must decode to a full 32-byte key (surfaced early instead of deep in the first cipher build).
+  - **GitHub webhook verifier** fails closed when the webhook secret is unset (previously it would
+    import an empty HMAC key and compare), matching the GitLab verifier.
+  - **CORS** no longer reflects an arbitrary Origin by default outside development: an unset
+    `CORS_ALLOWED_ORIGINS` reflects any origin only when `ENVIRONMENT` is an explicitly
+    recognised development value (`development`/`dev`/`test`/`testing`/`local`/`e2e`). An
+    unset, unknown, or production `ENVIRONMENT` default-denies (fails safe), so a deployment
+    that forgets BOTH `ENVIRONMENT` and `CORS_ALLOWED_ORIGINS` no longer silently reflects.
+    An explicit `*` still opts into reflect-all.
+
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+- Updated dependencies [0d51638]
+  - @cat-factory/integrations@0.56.2
+  - @cat-factory/server@0.68.1
+  - @cat-factory/node-server@0.60.1
+  - @cat-factory/kernel@0.70.1
+  - @cat-factory/orchestration@0.59.1
+  - @cat-factory/executor-harness@1.32.0
+  - @cat-factory/agents@0.26.14
+  - @cat-factory/gitlab@0.4.42
+
+## 0.38.10
+
+### Patch Changes
+
+- Updated dependencies [eb67d40]
+  - @cat-factory/executor-harness@1.32.0
+  - @cat-factory/kernel@0.70.0
+  - @cat-factory/orchestration@0.59.0
+  - @cat-factory/server@0.68.0
+  - @cat-factory/node-server@0.60.0
+  - @cat-factory/agents@0.26.13
+  - @cat-factory/gitlab@0.4.41
+  - @cat-factory/integrations@0.56.1
+
+## 0.38.9
+
+### Patch Changes
+
+- Updated dependencies [5ce03c6]
+- Updated dependencies [5ce03c6]
+  - @cat-factory/contracts@0.82.0
+  - @cat-factory/integrations@0.56.0
+  - @cat-factory/server@0.67.0
+  - @cat-factory/executor-harness@1.31.12
+  - @cat-factory/agents@0.26.12
+  - @cat-factory/gitlab@0.4.40
+  - @cat-factory/kernel@0.69.8
+  - @cat-factory/orchestration@0.58.1
+  - @cat-factory/node-server@0.59.4
+
+## 0.38.8
+
+### Patch Changes
+
+- Updated dependencies [7f9d215]
+- Updated dependencies [05d1b08]
+  - @cat-factory/kernel@0.69.7
+  - @cat-factory/orchestration@0.58.0
+  - @cat-factory/server@0.66.7
+  - @cat-factory/node-server@0.59.3
+  - @cat-factory/integrations@0.55.0
+  - @cat-factory/agents@0.26.11
+  - @cat-factory/gitlab@0.4.39
+  - @cat-factory/executor-harness@1.31.10
+
+## 0.38.7
+
+### Patch Changes
+
+- 9577c4a: Fix a batch of native-mode (`LOCAL_NATIVE_AGENTS`) agent-harness bugs:
+
+  - The harnesses (executor + deploy) now shut down gracefully on SIGTERM/SIGINT:
+    every running job is aborted (`JobRegistry.abortAll`) so in-flight `claude`/
+    `codex`/git/kubectl children are killed instead of being orphaned. Previously a
+    dev-server restart left the agent CLI running unsupervised on the developer's
+    login. The abort now targets the child's whole process group (POSIX), so the
+    CLI's own grandchildren (a shell tool, a build, its git) die with it rather than
+    reparenting to init. Shutdown exits as soon as the aborted jobs settle (capped at
+    6s) instead of always waiting the fixed window. Both harness servers also honor a
+    new `HARNESS_BIND_HOST` env, which the native transport sets to `127.0.0.1` so the
+    unsandboxed agent-spawning API is no longer reachable from the LAN (containers keep
+    binding all interfaces).
+  - The native host-process transport sanitizes the harness child's environment to an
+    allow-list (`LOCAL_HARNESS_ENV_ALLOW` extends it), so the orchestrator's secrets
+    (DATABASE_URL, ENCRYPTION_KEY, GITHUB_PAT, provider keys) no longer leak into the
+    ambient agent's env; the inline ambient CLI runner is sanitized the same way. The
+    allow-list keeps the TLS trust-anchor vars (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE, ...)
+    alongside the proxy vars, so a corporate TLS-terminating proxy still works. The
+    deploy transport keeps full inheritance (kubectl/helm need ambient cluster env).
+  - Process-lifecycle fixes in `LocalProcessRunnerTransport`: a harness that never
+    becomes healthy is killed instead of leaking one process per retry, and
+    `shutdown()` racing an in-flight lazy start now kills the child instead of
+    resurrecting it. The local/Node graceful-shutdown path now invokes the
+    container's `onShutdown`, which stops the native harnesses; that call is isolated
+    in its own try so a failing pg-boss/pool teardown can't skip it.
+  - `NativeRoutingRunnerTransport` no longer reports a blanket eviction for refs it
+    doesn't know: after an orchestrator restart both `poll` and `release` fall back to
+    the container leg (which re-finds a per-run container by label), so a still-running
+    container job is re-attached / torn down instead of spuriously re-driven or leaked.
+  - Config typos are no longer silent: unrecognized `LOCAL_NATIVE_AGENTS` tokens and
+    an unrecognized/under-configured `LOCAL_DEPLOY_RUNTIME` now log a boot warning
+    (behavior still fails safe).
+
+- Updated dependencies [9577c4a]
+- Updated dependencies [4955639]
+  - @cat-factory/executor-harness@1.31.10
+  - @cat-factory/node-server@0.59.2
+  - @cat-factory/agents@0.26.10
+  - @cat-factory/orchestration@0.57.7
+  - @cat-factory/server@0.66.6
+
+## 0.38.6
+
+### Patch Changes
+
+- Updated dependencies [4a7a3f1]
+  - @cat-factory/contracts@0.81.3
+  - @cat-factory/server@0.66.5
+  - @cat-factory/orchestration@0.57.6
+  - @cat-factory/agents@0.26.9
+  - @cat-factory/gitlab@0.4.38
+  - @cat-factory/integrations@0.54.3
+  - @cat-factory/kernel@0.69.6
+  - @cat-factory/node-server@0.59.1
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.5
+
+### Patch Changes
+
+- 6347d0e: Fix opaque "Failed to open PR (HTTP 422): No commits between ..." run failure when a
+  coding run resumes a work branch that has nothing ahead of its base (e.g. its earlier PR
+  was merged with a merge commit, leaving the branch reachable from base and its best-effort
+  delete skipped).
+
+  - `runCodingAgent` no longer treats a resumed branch as work unconditionally: when the
+    branch has no new commits this pass, it confirms the branch is actually ahead of the PR
+    base (new `branchAheadOfBase`, tri-state so an undeterminable result keeps the prior
+    resume-is-work behaviour) and records a clean no-op otherwise.
+  - `openPullRequest` now maps GitHub's `422 "No commits between ..."` to a no-op (returns
+    `null`) instead of a hard `HarnessFailure`, as a backstop.
+
+  Image-bumping: `@cat-factory/executor-harness` → 1.31.7 with the three runner-image pins
+  synced.
+
+- Updated dependencies [4e82496]
+- Updated dependencies [6347d0e]
+- Updated dependencies [6439181]
+- Updated dependencies [6347d0e]
+  - @cat-factory/node-server@0.59.0
+  - @cat-factory/server@0.66.4
+  - @cat-factory/executor-harness@1.31.8
+
+## 0.38.4
+
+### Patch Changes
+
+- Updated dependencies [6243bea]
+  - @cat-factory/contracts@0.81.2
+  - @cat-factory/integrations@0.54.2
+  - @cat-factory/server@0.66.3
+  - @cat-factory/agents@0.26.8
+  - @cat-factory/gitlab@0.4.37
+  - @cat-factory/kernel@0.69.5
+  - @cat-factory/orchestration@0.57.5
+  - @cat-factory/node-server@0.58.6
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.3
+
+### Patch Changes
+
+- Updated dependencies [fc8df61]
+- Updated dependencies [fc8df61]
+  - @cat-factory/agents@0.26.7
+  - @cat-factory/server@0.66.2
+  - @cat-factory/node-server@0.58.5
+  - @cat-factory/orchestration@0.57.4
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.2
+
+### Patch Changes
+
+- 9468b90: Force fully non-interactive git auth in the harness so native local mode never triggers a Git
+  Credential Manager popup. Every git invocation now empties the host credential-helper list
+  (`-c credential.helper=`) and disables interactive credential backends, so git falls back to the
+  harness's own askpass PAT instead of the host's GCM — which on Windows either stole focus with a
+  stray auth window or, when modal, hung the git command (clone/fetch/push) until it timed out. A
+  per-command git timeout is now surfaced as an explicit stall (naming the likely causes) rather
+  than a contentless "Command failed", and a genuine git failure now folds in git's stderr.
+
+  Bumps the executor-harness image tag (and the matched `RECOMMENDED_HARNESS_IMAGE` pin) to 1.31.5.
+
+- Updated dependencies [9468b90]
+  - @cat-factory/executor-harness@1.31.6
+
+## 0.38.1
+
+### Patch Changes
+
+- Updated dependencies [986ed0e]
+  - @cat-factory/executor-harness@1.31.4
+
+## 0.38.0
+
+### Minor Changes
+
+- 063ef2b: Local native mode: default `LOCAL_HARNESS_ENTRY` to a bundled harness (no more manual path)
+
+  Native execution (`LOCAL_NATIVE_AGENTS`) previously required `LOCAL_HARNESS_ENTRY` to be set
+  to a filesystem path to the executor-harness server entry, which only existed inside a full
+  monorepo checkout — so consumers installing `@cat-factory/*` from npm had no stable target.
+
+  - `@cat-factory/executor-harness` is now **published** (was `private`). Its `.` export is the
+    zero-dependency `dist/server.js` HTTP server that native mode spawns via `node <entry>`.
+  - `@cat-factory/local-server` now depends on it and **auto-resolves** the entry via
+    `require.resolve('@cat-factory/executor-harness')` when `LOCAL_HARNESS_ENTRY` is unset — so a
+    fresh install runs native mode out of the box, mirroring how an unset `LOCAL_HARNESS_IMAGE`
+    falls back to the pinned recommended image. Setting `LOCAL_HARNESS_ENTRY` still overrides it
+    (for a custom or source-checkout build).
+  - `cat-factory init` (`@cat-factory/cli`) no longer treats the entry as required: it is written
+    commented (optional override) and the "set it before starting" warnings are gone.
+
+### Patch Changes
+
+- Updated dependencies [2a91615]
+- Updated dependencies [063ef2b]
+- Updated dependencies [063ef2b]
+  - @cat-factory/contracts@0.81.1
+  - @cat-factory/orchestration@0.57.3
+  - @cat-factory/integrations@0.54.1
+  - @cat-factory/server@0.66.1
+  - @cat-factory/executor-harness@1.31.2
+  - @cat-factory/agents@0.26.6
+  - @cat-factory/gitlab@0.4.36
+  - @cat-factory/kernel@0.69.4
+  - @cat-factory/node-server@0.58.4
+
+## 0.37.3
+
+### Patch Changes
+
+- Updated dependencies [67d3876]
+  - @cat-factory/contracts@0.81.0
+  - @cat-factory/integrations@0.54.0
+  - @cat-factory/server@0.66.0
+  - @cat-factory/agents@0.26.5
+  - @cat-factory/gitlab@0.4.35
+  - @cat-factory/kernel@0.69.3
+  - @cat-factory/orchestration@0.57.2
+  - @cat-factory/node-server@0.58.3
+
+## 0.37.2
+
+### Patch Changes
+
+- 63cf6de: Performance: batch reads, parallelize independent awaits, and push work into SQL on hot paths.
+
+  - `GET /workspaces/:id` (the board-load endpoint) now fetches its ~15 independent snapshot
+    ingredients concurrently instead of serially, so its latency is the slowest read rather
+    than the sum of every round-trip; the create-workspace route parallelizes its spend +
+    infra-setup reads the same way.
+  - Agent-context reference lookups (Jira keys / GitHub refs / URLs) run concurrently on the
+    per-step dispatch path; run-start model-default resolutions run concurrently per agent kind.
+  - New batched port methods, mirrored on both runtimes with conformance coverage:
+    `BlockRepository.findByIds` (cross-workspace dependency resolution — one chunked query
+    instead of a point-read per id, also allow-listed for mothership mode),
+    `NotificationRepository.escalateStaleOpen` (the escalation sweep is now one
+    `UPDATE … RETURNING` statement instead of a load-filter-upsert loop), and
+    `GitHubInstallationRepository.listByInstallationIds` (connect-UI annotation).
+  - GitHub webhook fan-out resolves linked workspaces via the existing batched
+    `linkedWorkspaces` read instead of a per-workspace point-read on every delivery.
+  - The Node Drizzle GitHub projections write chunked multi-row upserts (matching the D1
+    twins' `db.batch`) instead of one round-trip per row, and their list reads run
+    `ORDER BY`/`LIMIT` in SQL (NULLS LAST for D1 parity) instead of sorting full result
+    sets in JS.
+  - `autoStartDependents` hoists the invariant workspace-pipeline read out of its loop and
+    stops re-fetching blocks it already holds.
+  - Session/WS-ticket/machine-token verification reuses a memoized `HmacSigner` per secret,
+    so `crypto.subtle.importKey` no longer runs on every request (`signerFor` export).
+  - The Cloudflare Workflows drivers (execution / bootstrap / env-config-repair) build the
+    DI container once per wake instead of once per `step.do` poll tick.
+
+- Updated dependencies [d7f6e1c]
+- Updated dependencies [63cf6de]
+  - @cat-factory/kernel@0.69.2
+  - @cat-factory/orchestration@0.57.1
+  - @cat-factory/contracts@0.80.1
+  - @cat-factory/node-server@0.58.2
+  - @cat-factory/integrations@0.53.2
+  - @cat-factory/server@0.65.2
+  - @cat-factory/agents@0.26.4
+  - @cat-factory/gitlab@0.4.34
+
+## 0.37.1
+
+### Patch Changes
+
+- 120de05: feat(testing): pipeline-builder toggle + Test Report surfacing for the test quality companion (PR 2)
+
+  Completes the test quality-control (QC) companion (see
+  `docs/initiatives/tester-quality-companion.md`) with its authoring + observability surfaces:
+
+  - **Pipeline builder**: a per-Tester-step toggle (enabled by default) turns the QC companion
+    off, and an optional estimate-gating panel runs the coverage audit only on tasks whose
+    estimate clears a threshold (mirroring the companion-gating panel). The estimator-required
+    hint now covers QC gating too.
+  - **Test Report window**: a "Coverage review" section renders each QC verdict (adequate /
+    gaps-found, the reviewer's feedback + concrete gaps, model, timestamp) plus the loop budget
+    and a "budget spent" badge — so a report that greenlit only after a QC-driven re-run shows
+    why it looped.
+  - **Persistence fix**: the pipeline create/update/clone API + `PipelineService` now thread
+    `testerQuality` (and the sibling `followUps`, which had the same latent gap) end-to-end, so a
+    custom pipeline's builder toggle actually persists instead of being silently stripped by the
+    request-body validator. This includes the persistence layer itself: new `follow_ups` +
+    `tester_quality` JSON columns on the `pipelines` table, mirrored D1 (migration
+    `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+    repos and read by the shared `rowToPipeline` mapper. A QC estimate gate is validated like
+    companion gating (a threshold must be set and a `task-estimator` must run earlier).
+  - **Conformance**: the full QC loop (audit → loop the Tester on gaps → conclude on an adequate
+    report) is now driven through an injected deterministic reviewer on every runtime, asserting
+    the verdicts + counters persist identically across D1 and Drizzle. A separate round-trip
+    assertion saves a custom pipeline with a `followUps` opt-out + a gated `testerQuality` config
+    and re-reads it from the store, so the new columns can't silently drop the toggles on either
+    runtime.
+
+  All new user-facing copy is translated across every shipped locale.
+
+- Updated dependencies [120de05]
+  - @cat-factory/contracts@0.80.0
+  - @cat-factory/orchestration@0.57.0
+  - @cat-factory/kernel@0.69.1
+  - @cat-factory/node-server@0.58.1
+  - @cat-factory/agents@0.26.3
+  - @cat-factory/gitlab@0.4.33
+  - @cat-factory/integrations@0.53.1
+  - @cat-factory/server@0.65.1
+
 ## 0.37.0
 
 ### Minor Changes

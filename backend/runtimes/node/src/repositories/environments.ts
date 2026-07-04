@@ -238,6 +238,47 @@ export class DrizzleEnvironmentRegistryRepository implements EnvironmentRegistry
     return rows[0] ? rowToEnvironment(rows[0]) : null
   }
 
+  async getByBlockAndFrame(
+    workspaceId: string,
+    blockId: string,
+    frameId: string,
+  ): Promise<EnvironmentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(environments)
+      .where(
+        and(
+          eq(environments.workspace_id, workspaceId),
+          eq(environments.block_id, blockId),
+          eq(environments.frame_id, frameId),
+          isNull(environments.deleted_at),
+        ),
+      )
+      .orderBy(desc(environments.created_at))
+      .limit(1)
+    return rows[0] ? rowToEnvironment(rows[0]) : null
+  }
+
+  async getFramelessByBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<EnvironmentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(environments)
+      .where(
+        and(
+          eq(environments.workspace_id, workspaceId),
+          eq(environments.block_id, blockId),
+          isNull(environments.frame_id),
+          isNull(environments.deleted_at),
+        ),
+      )
+      .orderBy(desc(environments.created_at))
+      .limit(1)
+    return rows[0] ? rowToEnvironment(rows[0]) : null
+  }
+
   async listByWorkspace(workspaceId: string): Promise<EnvironmentRecord[]> {
     const rows = await this.db
       .select()

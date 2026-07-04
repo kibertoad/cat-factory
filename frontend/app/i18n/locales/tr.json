@@ -50,7 +50,8 @@
       "revoked": "{name} iptal edildi",
       "cleared": "{name} temizlendi",
       "destroyed": "{name} yok edildi"
-    }
+    },
+    "undo": "Geri al"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -80,7 +81,9 @@
       "moveFailed": "Taşınamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
-      "recurringDeleteFailed": "Yinelenen pipeline silinemedi"
+      "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
+      "deleted": "\"{name}\" silindi",
+      "moved": "\"{name}\" taşındı"
     },
     "repoTypes": {
       "service": "Servis",
@@ -193,7 +196,9 @@
       "linearTeamId": "Linear takım kimliği",
       "footerHint": "Servisin içine tek bir yinelenen görev eklenir; her çalıştırma bir öncekinin yerini alır. Çalıştırma geçmişi inceleme panelinde görünür.",
       "submit": "Yinelenen pipeline ekle",
-      "addFailedTitle": "Yinelenen pipeline eklenemedi"
+      "addFailedTitle": "Yinelenen pipeline eklenemedi",
+      "onDemand": "İstek üzerine (yalnızca manuel)",
+      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir."
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",
@@ -204,7 +209,10 @@
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
       "showDetail": "Ayrıntıyı göster",
-      "retrying": "Yeniden deneniyor…"
+      "retrying": "Yeniden deneniyor…",
+      "history": {
+        "previousErrors": "{count} önceki hata | {count} önceki hata"
+      }
     },
     "stop": {
       "label": "Durdur",
@@ -242,7 +250,12 @@
       "dragService": "Servisi sürükle",
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
-      "addFirstTask": "İlk görevi ekle"
+      "addFirstTask": "İlk görevi ekle",
+      "createInitiativeTitle": "Girisim olustur",
+      "accessDenied": {
+        "title": "İzin reddedildi",
+        "hint": "Bu hizmetin dayandığı depoya erişiminiz yok."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Karar gerekiyor",
@@ -384,6 +397,8 @@
   },
   "inspector": {
     "container": {
+      "title": "İçerik",
+      "hint": "Bu bloğun içindeki modüller ve görevler. Bir öğeye tıklayarak panoda seçin.",
       "modules": "Modüller ({count})",
       "taskCount": "{count} görev | {count} görev",
       "allTasks": "Tüm görevler ({count})",
@@ -394,6 +409,7 @@
     },
     "epicChildren": {
       "title": "Epic görevleri",
+      "hint": "Bu epic'e atanan tüm görevler, bulundukları servis ve modüle göre gruplanır. Epic yalnızca görevleri gruplar; kendisi hiçbir şey çalıştırmaz.",
       "doneCount": "{done}/{total} tamamlandı",
       "empty": "Bu epic'e henüz hiçbir görev ait değil. Bir epic'in alt görevlerini içe aktarın veya bir görevin epic'ini ayarlayın.",
       "unassigned": "Atanmamış"
@@ -428,10 +444,13 @@
         "skipped": "Atlandı"
       },
       "updateFailed": "Zamanlama güncellenemedi",
-      "runNowFailed": "Şimdi çalıştırılamadı"
+      "runNowFailed": "Şimdi çalıştırılamadı",
+      "onDemand": "İstek üzerine",
+      "onDemandHint": "Yalnızca manuel. Siz tetiklediğinizde çalışır ve bireysel kullanımlı bir abonelik modeli kullanabilir."
     },
     "fragments": {
       "serviceTitle": "Servis en iyi uygulamaları",
+      "serviceHint": "Tüm servis için programlama standartları. Seçilen her parçanın içeriği, bu servisin görevlerinde çalışan kod farkında her ajanın prompt'una eklenir.",
       "serviceEmpty": "Yok. Bu servisteki kod farkında ajanlar varsayılan yönergelerini izler.",
       "manageBoard": "Bu pano'nun fragman kütüphanesini yönet…",
       "manageAccount": "Hesap fragmanlarını yönet…"
@@ -439,14 +458,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "Bağımsız bir arayüz testi için bu frontend'in nasıl derleneceği, sunulacağı ve taklit edileceği. Aşağıdaki bağlamalar onu çağırdığı backend hizmetlerine bağlar.",
+      "detect": {
+        "title": "Depodan algıla",
+        "button": "Algıla",
+        "hint": "Bağlı depoyu okur ve uygulamadan önce gözden geçirmeniz için bir yapılandırma önerir. Uygulayana kadar hiçbir şey kaydedilmez.",
+        "error": "Depo okunamadı. Frontend'in bağlı bir depoya bağlı olduğunu kontrol edin.",
+        "none": "Frontend biçiminde bir şey algılanmadı. Frontend dizinini ayarlayın (bir monorepo için) veya alanları elle doldurun.",
+        "apply": "Uygula",
+        "dismiss": "Yoksay",
+        "confidenceHigh": "kesin",
+        "confidenceLow": "tahmin"
+      },
+      "groups": {
+        "build": "Derleme",
+        "serve": "Sunma",
+        "mocking": "Taklit",
+        "envInjection": "Ortam enjeksiyonu",
+        "bindings": "Backend bağlantıları",
+        "preview": "Önizleme"
+      },
       "packageManager": "Paket yöneticisi",
+      "directory": "Frontend dizini",
+      "directoryHint": "Depodaki frontend uygulamasının alt klasörü (bir monorepo, örn. frontend/). Uygulama deponun kökündeyse boş bırakın.",
       "installCommand": "Kurulum komutu",
       "buildScript": "Derleme betiği",
       "outputDir": "Çıktı dizini",
       "serveMode": "Sunma modu",
       "serveStatic": "Statik",
       "serveCommand": "Komut",
-      "serveModeHint": "Statik, derleme çıktı dizinini sunar; Komut, bir package.json betiğini (örn. preview) çalıştırır.",
+      "serveStaticDesc": "derlenen çıktı dizinini statik dosyalar olarak sunar. Tamamen derlenmiş bir uygulamanın arayüz testi için en ucuzu.",
+      "serveCommandDesc": "uygulamayı sunmak için bir package.json betiği (örn. preview) çalıştırır; çalışan bir sunucu gerektiren derlemeler için.",
+      "serveEnvAxisNote": "Aşağıdaki Ortam enjeksiyonundan (derleme zamanı vs çalışma zamanı) ayrıdır; o, backend URL'lerinin uygulamaya nasıl ulaştığını kontrol eder, nasıl sunulduğunu değil.",
       "serveScript": "Sunma betiği",
       "servePort": "Sunma bağlantı noktası",
       "mockMappingsPath": "Taklit eşleme yolu",
@@ -475,10 +517,25 @@
           "failed": "Başarısız",
           "stopped": "Başlatılmadı"
         }
+      },
+      "resolved": {
+        "title": "Şu anda çözümleniyor",
+        "duplicateWarning": "Birden fazla bağlamada kullanılıyor, bu yüzden yalnızca sonuncusu geçerli: {vars}.",
+        "serviceOffline": "{service}: çalışan ortam yok (taklit ediliyor)",
+        "mock": "Mock (WireMock)"
       }
+    },
+    "serviceConnections": {
+      "title": "Servis bağlantıları",
+      "hint": "Bu servisin kullandığı diğer servisler, örn. e-postalarını gönderen bir servis. Bağlantılar panoda kenar olarak çizilir ve görevler bağlı bir servisi doğrudan dahil olarak işaretleyebilir.",
+      "descriptionPlaceholder": "Bu servis onu nasıl kullanıyor, örn. e-postaları onun üzerinden gönderir",
+      "remove": "Bağlantıyı kaldır",
+      "empty": "Bağlantı yok. Bu servisi kullandığı başka bir servise bağlamak için bir bağlantı ekleyin.",
+      "usedBy": "Kullananlar"
     },
     "releaseHealth": {
       "title": "Sürüm sonrası sağlık",
+      "sectionHint": "Bu servisin değişiklikleri birleştirilip yayınlandıktan sonra bir gate, eşlenen monitörleri ve SLO'ları bir süre izler. Bir gerileme olursa incelemek üzere bir nöbetçi ajan başlatır; hiçbir şey otomatik geri alınmaz.",
       "clear": "Temizle",
       "connectPrompt": "Bu servisi sürümlerden sonra izlemek için bir gözlemlenebilirlik entegrasyonu bağlayın.",
       "connectFirst": "Önce bir gözlemlenebilirlik entegrasyonu bağlayın",
@@ -495,6 +552,7 @@
     },
     "testConfig": {
       "title": "Test altyapısı",
+      "hint": "Bir pipeline bu servisi çalıştırmak istediğinde test ortamının nasıl kurulacağı: altyapısız, bir Docker Compose dosyası, Kubernetes manifestoları veya özel bir manifest türü.",
       "provisionType": "Sağlama türü",
       "provisionTypeHint": "Bu hizmetin Tester için ortamını nasıl ayağa kaldırdığı. Her türün nasıl ele alınacağını (motor + bağlantı) çalışma alanı yapılandırır.",
       "provisionTypes": {
@@ -578,11 +636,13 @@
     },
     "agentConfig": {
       "title": "Ajan yapılandırması",
+      "hint": "Bu görevin pipeline'ındaki ajanların sunduğu seçenekler. Her seçenek, ajanı başlayana kadar düzenlenebilir; sonra o çalıştırma için kilitlenir.",
       "inherited": "hizmetten devralındı",
       "frozen": "Donduruldu: ajan başladı"
     },
     "dependencies": {
       "title": "Şuna bağlı",
+      "hint": "Bu görev çalışmadan önce birleştirilmesi gereken görevler. Tüm bağımlılıklar tamamlanana kadar Çalıştır kontrolü kilitli kalır.",
       "merged": "Birleştirildi",
       "notMerged": "Henüz birleştirilmedi",
       "empty": "Bağımlılık yok. İstediğiniz zaman çalıştırılabilir.",
@@ -594,11 +654,14 @@
     },
     "estimate": {
       "title": "Tahmin",
+      "hint": "Görev tahmin ajanı tarafından üretilir: bu görevin ne kadar karmaşık, riskli ve etkili göründüğü. Konsensüs (çoklu çalıştırma) adımlarının değip değmeyeceğine karar vermek için kullanılır.",
       "complexity": "Karmaşıklık",
       "risk": "Risk",
       "impact": "Etki"
     },
     "execution": {
+      "title": "Yürütme",
+      "hint": "Bu görevin pipeline'ının canlı yürütmesi: her ajan adımı, ilerlemesi ve ortaya çıkan pull request.",
       "stage": {
         "incorporating": "Dahil ediliyor…",
         "reviewing": "Yeniden inceleniyor…",
@@ -652,12 +715,18 @@
       }
     },
     "structure": {
+      "title": "Yapı",
+      "hint": "Bu görevin servisi içinde nerede bulunduğu ve ajanlarının hangi kod standartlarını izlediği.",
       "module": "Modül",
       "modulePlaceholder": "örn. Sessions (yeniyse uygulama sırasında oluşturulur)",
+      "moduleHint": "Bu görevin ait olduğu servis modülü. Bir ad yazın; henüz var olmayan bir modül, görev uygulanırken oluşturulur.",
       "bestPractices": "En iyi uygulamalar",
-      "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler."
+      "bestPracticesEmpty": "Yok. Ajanlar varsayılan yönergelerini izler.",
+      "bestPracticesHint": "Servis düzeyindeki standartlara ek olarak bu görevin ajanlarının prompt'larına eklenen en iyi uygulama parçaları."
     },
     "runSettings": {
+      "title": "Çalıştırma ayarları",
+      "hint": "Bu görevin pipeline'ının nasıl çalıştığı: hangi pipeline'ın başladığı, hangi birleştirme ve model politikalarının uygulandığı ve çalıştırmanın çevresinde neler olduğu.",
       "unassigned": "Atanmamış",
       "workspaceDefault": "Çalışma alanı varsayılanı",
       "workspaceDefaultParen": "(çalışma alanı varsayılanı)",
@@ -676,10 +745,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "Varsayılan yok. Bu görevi çalıştırırken bir pipeline seçin.",
+      "pipelineHint": "Çalıştır düğmesinin varsayılan olarak başlattığı pipeline: bu görev için yürütülen ajan adımları dizisi (örneğin spesifikasyon, kod, test, birleştirme).",
       "mergePolicy": "Birleştirme politikası",
       "mergePresetDetail": "{name}: karmaşıklık ≤ {complexity}, risk ≤ {risk}, etki ≤ {impact} olduğunda otomatik birleştir; en fazla {attempts} CI düzeltme denemesi.",
       "mergePresetEmpty": "Yapılandırılmış ön ayar yok. Birleştirici her PR için bir inceleme bildirimi oluşturur.",
+      "mergePolicyHint": "Tamamlanan bir pull request'in insan incelemesi beklemeden ne zaman otomatik birleştirileceğini ve bir çalıştırmanın kaç CI düzeltme denemesi alacağını belirler.",
       "modelPreset": "Model ön ayarı",
+      "modelPresetHint": "Her ajan adımının hangi yapay zeka modelinde çalışacağını belirler.",
       "modelPresetBase": "temel {model}",
       "modelPresetOverrides": ", {count} geçersiz kılma | , {count} geçersiz kılma",
       "modelPresetEmpty": "Yapılandırılmış ön ayar yok. Ajanlar dağıtımın varsayılan yönlendirmesiyle çalışır.",
@@ -700,7 +772,11 @@
       "responsibleProduct": "Sorumlu ürün",
       "responsibleEmpty": "Atanmamış. Gereksinim incelemesi bu görevi işaretlediğinde bildirim almak için bir ürün sahibi belirleyin.",
       "autoStartDependents": "Bağımlıları otomatik başlat",
-      "autoStartHint": "Bu görev birleştirildiğinde, ona bağlı görevleri otomatik olarak başlat (diğer bağımlılıkları da tamamlandığında)."
+      "autoStartHint": "Bu görev birleştirildiğinde, ona bağlı görevleri otomatik olarak başlat (diğer bağımlılıkları da tamamlandığında).",
+      "involvedServices": "Dahil olan servisler",
+      "involvedServicesHint": "Bu göreve doğrudan dahil olan bağlı servisler: her biri görevin kendi servisiyle birlikte geçici bir ortam olarak ayağa kaldırılır ve kodlama ajanı onların depolarında da değişiklik yapabilir.",
+      "involvedServicesEmpty": "Bağlı servis yok. Burada seçebilmek için servis çerçevesinde servisleri bağlayın.",
+      "involvedServiceStale": "Artık bu görevin servisine bağlı değil; bir sonraki değişiklikte kaldırılacak."
     }
   },
   "panels": {
@@ -895,7 +971,8 @@
         "recurring": {
           "title": "Bu yinelenen pipeline silinsin mi?",
           "body": "\"{name}\", zamanlaması ve çalıştırma geçmişi kaldırılacak. Bu işlem geri alınamaz."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz. | \"{name}\" ve içindeki {count} öğe kaldırılacak. Bu işlem geri alınamaz."
       }
     }
   },
@@ -1225,6 +1302,7 @@
         "visual_confirmation_ready": "Okundu işaretle",
         "human_review": "Okundu işaretle",
         "followup_pending": "Okundu işaretle",
+        "initiative": "Okundu işaretle",
         "markRead": "Okundu işaretle"
       },
       "toast": {
@@ -1400,6 +1478,7 @@
         "documents": "Belgeler",
         "taskTrackers": "Görev izleyiciler",
         "observability": "Gözlemlenebilirlik",
+        "development": "Geliştirme",
         "personal": "Kişisel (yalnızca siz)"
       },
       "items": {
@@ -1436,6 +1515,10 @@
         "observability": {
           "label": "Sürüm sonrası sağlık",
           "description": "Bir sürüm yayınlandıktan sonra monitörleri ve SLO'ları izleyin (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Özel paket kayıt defterleri",
+          "description": "Aracıların özel bağımlılıkları yüklemek için kullandığı npm ve GitHub Packages token'ları."
         },
         "githubPat": {
           "label": "GitHub token'ım",
@@ -1535,9 +1618,9 @@
         "environment-provider": "Özel HTTP sağlayıcısı",
         "environment-providerDesc": "Geçici ortamları kendi HTTP yönetim API'niz aracılığıyla sağlayın.",
         "compose": "Docker Compose önizleme ortamı",
-        "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker daemon üzerinde Tester'ın URL'si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Yalnızca imaj tabanlı stack'ler; bir Docker daemon gerektirir, bu nedenle yalnızca yerel dağıtımlar içindir."
+        "composeDesc": "Deponun kendi docker-compose.yml dosyasını yerel bir Docker arka plan hizmetinde Test Edici URL’si olarak ayağa kaldırır. Yerel Compose tabanlı uygulamalar için idealdir. Önceden oluşturulmuş imgeleri veya kaynaktan derlemeyi destekler; bir Docker arka plan hizmeti gerektirir, bu nedenle yalnızca yerel dağıtımlarda çalışır."
       },
-      "dockerComposeInfo": "Docker Compose servisleri çalışma zamanının yerel Docker'ında ayağa kalkar: bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker'ı desteklemelidir).",
+      "dockerComposeInfo": "Docker Compose hizmetleri çalışma zamanının yerel Docker’ında ayağa kalkar: bağlantı gerekmez (çalıştırmanın kapsayıcısı Docker-in-Docker’ı desteklemelidir). Hizmeti, bağlantı noktasını ve imge kaynağını (önceden oluşturulmuş imge çekme veya kaynaktan derleme) hizmetin ortam ayarlarında yapılandırın.",
       "engine": {
         "local-k3s": "Yerel k3s",
         "remote-kubernetes": "Uzak Kubernetes"
@@ -1937,6 +2020,31 @@
       },
       "connectionNoun": "gözlemlenebilirlik bağlantısı",
       "incidentNoun": "olay sağlayıcısı"
+    },
+    "packageRegistries": {
+      "title": "Özel paket kayıt defterleri",
+      "intro": "Depolarınızın yükleme yaptığı özel kayıt defterlerini bağlayın. Aracılar bir depoyu çekerken bunları alır, böylece özel bağımlılıklar yükleme sırasında çözülür. Token'lar yalnızca yazılırdır: birini değiştirmek için girdiyi silin ve yeniden ekleyin.",
+      "entryNoun": "kayıt defteri girdisi",
+      "list": {
+        "heading": "Bağlı kayıt defterleri",
+        "tokenTail": "token …{tail}",
+        "remove": "Girdiyi kaldır"
+      },
+      "add": {
+        "heading": "Kayıt defteri ekle",
+        "vendor": "Kayıt defteri",
+        "host": "Token yalnızca {host} adresine gönderilir.",
+        "scopes": "Paket kapsamları",
+        "scopesHelp": "Virgülle ayrılmış npm kapsamları",
+        "token": "Erişim token'ı",
+        "save": "Kayıt defteri ekle"
+      },
+      "toast": {
+        "loadFailed": "Paket kayıt defterleri yüklenemedi",
+        "added": "Kayıt defteri eklendi",
+        "addFailed": "Kayıt defteri eklenemedi",
+        "removeFailed": "Kayıt defteri girdisi kaldırılamadı"
+      }
     },
     "localMode": {
       "title": "Yerel mod",
@@ -2390,7 +2498,8 @@
       "repoLabel": {
         "private": " (özel)",
         "monorepo": " · monorepo",
-        "onBoard": " · zaten panoda"
+        "onBoard": " · zaten panoda",
+        "personal": " · kişisel (kendi belirteciniz)"
       },
       "monorepoLabel": "Bu bir monorepo (birden fazla servis barındırır)",
       "monorepoDescription": "Tek depodan, her biri bir alt dizine sabitlenmiş birkaç servis ekleyin.",
@@ -2463,7 +2572,8 @@
       "clarity_review": "Netlik incelemesi",
       "release_regression": "Sürüm gerilemesi",
       "human_test_ready": "İnsan testine hazır",
-      "visual_confirmation_ready": "Görsel onaya hazır"
+      "visual_confirmation_ready": "Görsel onaya hazır",
+      "initiative": "Girisim guncellemeleri"
     },
     "role": {
       "engineering": "Mühendislik",
@@ -2541,6 +2651,7 @@
     },
     "taskDocs": {
       "heading": "Bağlam belgeleri",
+      "hint": "Bu göreve bağlam olarak eklenen belgeler. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
       "attach": "Ekle",
       "importPage": "Bir sayfa içe aktar…",
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
@@ -2561,6 +2672,7 @@
     },
     "contextIssues": {
       "title": "Bağlam sorunları",
+      "hint": "Bu göreve bağlam olarak eklenen tracker sorunları. İçerikleri görev üzerinde çalışan ajanlara iletilir.",
       "attach": "Ekle",
       "attached": "Sorun eklendi",
       "attachFailed": "Eklenemedi",
@@ -2645,6 +2757,10 @@
       "consensusRevertTooltip": "Fikir birliği etkin. Tek ajana dönmek için tıklayın.",
       "followUpEnableTooltip": "Takip eşlikçisi devre dışı. Etkinleştirmek için tıklayın (Coder, açık uçları / soruları yüzeye çıkarır).",
       "followUpDisableTooltip": "Takip eşlikçisi etkin. Coder açık uçları / yan görevleri / soruları yüzeye çıkarır; devre dışı bırakmak için tıklayın.",
+      "testerQualityEnableTooltip": "Test kalitesi yardımcısı devre dışı. Etkinleştirmek için tıklayın (raporun kapsamını denetler ve eksiklerde Test aracını yeniden çalıştırır).",
+      "testerQualityDisableTooltip": "Test kalitesi yardımcısı etkin. Onaydan önce raporun kapsamını denetler ve eksiklerde Test aracını yeniden çalıştırır; devre dışı bırakmak için tıklayın.",
+      "testerQualityLabel": "Test kalitesi yardımcısı",
+      "testerQualityGateTooltip": "Kalite denetimini yalnızca görev tahmini bir eşiği aştığında çalıştır (önce bir Görev Tahmincisi gerekir)",
       "moveUp": "Adımı yukarı taşı",
       "moveDown": "Adımı aşağı taşı",
       "removeStep": "Bu adımı pipeline'dan kaldır",
@@ -2820,6 +2936,8 @@
     },
     "attemptsHeading": "{helper} denemeleri",
     "attempt": "Deneme {number}",
+    "attemptInstructions": "{helper}'a iletildi",
+    "attemptReport": "{helper} raporu",
     "outcome": {
       "completed": "tamamlandı",
       "failed": "başarısız oldu"
@@ -2893,6 +3011,9 @@
       "findings": "Bulgular",
       "open": "Açık",
       "answered": "Yanıtlanan",
+      "recommendations": "Öneriler",
+      "recsGenerating": "Oluşturuluyor",
+      "recsToReview": "İncelenecek",
       "model": "Model"
     },
     "actions": {
@@ -3286,6 +3407,15 @@
       "failed": "Başarısız",
       "addressed": "Ele alınıyor"
     },
+    "quality": {
+      "heading": "Kapsam incelemesi",
+      "reruns": "Kalite kaynaklı Test aracı yeniden çalıştırmaları",
+      "rerunCount": "{attempts}/{max} yeniden çalıştırma",
+      "exceeded": "Bütçe tükendi",
+      "adequate": "Kapsam yeterli",
+      "inadequate": "Kapsam eksikleri bulundu",
+      "gaps": "Kapatılacak eksikler"
+    },
     "empty": {
       "title": "Henüz test raporu yok.",
       "hint": "Rapor, Tester bir turu bitirdiğinde görünür. Çalışırken adım, tahtada canlı ilerlemeyi gösterir."
@@ -3585,19 +3715,23 @@
       "connectFirst": "Önce Entegrasyonlar altında bir belge kaynağı (Confluence, Notion veya GitHub) bağlayın.",
       "refPlaceholder": "Sayfa kimliği veya URL (örn. bir Confluence/Notion sayfası veya GitHub dosya URL'si)",
       "tagsPlaceholder": "Etiketler, virgülle ayrılmış (isteğe bağlı)",
-      "link": "Canlı parça olarak bağla"
+      "link": "Canlı parça olarak bağla",
+      "githubBrowseHint": "Depoya göz atın ve bağlanacak dosyayı seçin."
     },
     "sources": {
       "metaSynced": "eşitlendi · ref {ref}",
       "metaNever": "hiç eşitlenmedi · ref {ref}",
-      "changes": "{count} değişiklik | {count} değişiklik",
+      "changes": "Değişiklikler",
       "empty": "Bağlı yönerge reposu yok. Markdown dosyalarını parça olarak içe aktarmak için aşağıdan bir tane bağlayın.",
       "linkTitle": "Bir yönerge reposu bağla",
       "ownerPlaceholder": "sahip",
       "repoPlaceholder": "repo",
       "dirPlaceholder": "dizin yolu (örn. guidelines)",
       "refPlaceholder": "ref (varsayılan HEAD)",
-      "link": "Bağla ve eşitle"
+      "link": "Bağla ve eşitle",
+      "browseHint": "Depoya göz atın ve Markdown yönerge dizinini seçin (veya tüm depoyu bağlayın).",
+      "selectedDir": "Dizin:",
+      "wholeRepo": "Tüm depo (kök)."
     },
     "toast": {
       "added": "Parça eklendi",
@@ -3612,7 +3746,7 @@
       "linkSourceFailed": "Kaynak bağlanamadı",
       "synced": "Eşitlendi: {updated} güncellendi, {removed} kaldırıldı",
       "syncFailed": "Kaynak eşitlenemedi",
-      "changesAvailable": "{count} değişiklik mevcut | {count} değişiklik mevcut",
+      "changesAvailable": "Değişiklikler mevcut",
       "upToDate": "Güncel",
       "checkSourceFailed": "Kaynak denetlenemedi",
       "sourceUnlinked": "Kaynak bağlantısı kaldırıldı",
@@ -3621,7 +3755,8 @@
     "confirmRemove": {
       "title": "Bu parça silinsin mi?",
       "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
-    }
+    },
+    "unavailable": "Bu dağıtımda istem parçası kütüphanesi etkin değil."
   },
   "sandbox": {
     "title": "Sandbox: prompt ve model testi",
@@ -3845,6 +3980,86 @@
       "toast": {
         "reseedFailed": "Birleştirme ön ayarı yeniden tohumlanamadı"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Girisim olustur",
+      "inFrame": "{frame} icinde yeni girisim",
+      "titleField": "Baslik",
+      "titlePlaceholder": "orn. API'yi yeni kimlik dogrulama modeline tasi",
+      "goalField": "Hedef",
+      "goalPlaceholder": "Hedefi, kisitlari ve yaklasik kapsami aciklayin. Planlayici bunu cok asamali bir plana donusturur.",
+      "hint": "Henuz hicbir sey calismiyor: olusturduktan sonra blok uzerinde Girisim Planlama hattini calistirin. Kod tabanini analiz eder ve onayiniz icin cok asamali plani taslak olarak hazirlar.",
+      "submit": "Girisim olustur",
+      "failedTitle": "Girisim olusturulamadi"
+    },
+    "status": {
+      "planning": "Planlaniyor",
+      "awaiting_approval": "Onay bekliyor",
+      "executing": "Yurutuluyor",
+      "paused": "Duraklatildi",
+      "done": "Tamamlandi",
+      "cancelled": "Iptal edildi"
+    },
+    "itemStatus": {
+      "pending": "Beklemede",
+      "in_progress": "Devam ediyor",
+      "pr_open": "PR acik",
+      "done": "Tamamlandi",
+      "blocked": "Engellendi",
+      "skipped": "Atlandi"
+    },
+    "card": {
+      "kind": "Girisim",
+      "progress": "{done}/{total} oge tamamlandi",
+      "openTracker": "Izleyiciyi ac"
+    },
+    "tracker": {
+      "title": "Girisim izleyici",
+      "subtitle": "Bu girisimin asamalari, is ogeleri, kararlari ve ilerlemesi",
+      "empty": "Bu blok icin girisim bulunamadi.",
+      "goal": "Hedef",
+      "constraints": "Kisitlar",
+      "nonGoals": "Kapsam disi",
+      "analysis": "Kod tabani analizi",
+      "noPlan": "Henuz plan yok. Cok asamali plani taslak olarak hazirlamak icin Girisim Planlama hattini calistirin.",
+      "phase": "Asama: {title}",
+      "colItem": "Oge",
+      "colStatus": "Durum",
+      "colPr": "PR",
+      "dependsOn": "Sunlara bagli: {items}",
+      "prLink": "PR",
+      "policy": "Yurutme politikasi",
+      "maxConcurrent": "En fazla es zamanli gorev: {count}",
+      "defaultPipeline": "Varsayilan hat:",
+      "axisComplexity": "karmasiklik >= {value}",
+      "axisRisk": "risk >= {value}",
+      "axisImpact": "etki >= {value}",
+      "axisNever": "hicbir zaman eslesmez (esik yok)",
+      "decisions": "Kararlar",
+      "deviations": "Sapmalar",
+      "followUps": "Takip isleri",
+      "caveats": "Bilinen uyarilar"
+    },
+    "inspector": {
+      "runPlanning": "Planlamayi calistir",
+      "answerPlanning": "Planlama sorularini yanitla",
+      "pause": "Duraklat",
+      "resume": "Devam et",
+      "cancel": "Girisimi iptal et",
+      "hint": "Planlama hatti kod tabanini inceler, onay icin cok asamali plani hazirlar ve ardindan izleyici belgesini depoya kaydeder."
+    },
+    "planning": {
+      "title": "Girisimi planla",
+      "subtitle": "Girisimi kapsamlandirmak icin planlayicinin sorularini yanitlayin",
+      "intro": "Planlayici bu girisimi kapsamlandiriyor. Hedefi ve kisitlari sekillendirmek icin sorularini yanitlayin, ardindan devam edin veya elindekiyle planlamaya gecin.",
+      "empty": "Bu blok icin girisim bulunamadi.",
+      "converged": "Bekleyen soru yok. Planlayici ihtiyaci olani aldi ve plani hazirliyor.",
+      "answerPlaceholder": "Yanitiniz",
+      "hint": "Devam et, planlayicinin ek sorular sormasini saglar; Planlamaya gec, mevcut yanitlarla planlar.",
+      "proceed": "Planlamaya gec",
+      "continue": "Devam et"
     }
   }
 }

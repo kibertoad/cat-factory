@@ -228,11 +228,124 @@ export class FetchGitHubClient implements GitHubClient {
     return { items }
   }
 
+  async searchInstallationRepos(
+    installationId: number,
+    query: string,
+    opts: { owner?: string; ownerType?: 'Organization' | 'User'; limit?: number } = {},
+  ): Promise<GitHubRepo[]> {
+    const trimmed = query.trim()
+    if (!trimmed) return []
+    const syncedAt = this.deps.clock.now()
+    const per = Math.min(Math.max(opts.limit ?? 50, 1), 100)
+    // Without an account to scope it to, `/search/repositories` would run UNSCOPED across
+    // all of GitHub and return arbitrary public repos this installation can't link (each
+    // would then 404 on `getRepoById`). Never do that: fall back to filtering the
+    // installation's own bounded repo listing, so a missing account can't leak the search.
+    if (!opts.owner) {
+      const q = trimmed.toLowerCase()
+      const { items } = await this.listInstallationRepos(installationId)
+      return items.filter((r) => `${r.owner}/${r.name}`.toLowerCase().includes(q)).slice(0, per)
+    }
+    // Match the typed text against the repo NAME (accepting an `owner/name` paste by
+    // matching only the name segment), scoped to the installation's account so results stay
+    // within what it manages. GitHub matches names by token/prefix (NOT arbitrary
+    // substring), and a public org repo the App wasn't granted may still surface — linking
+    // one point-reads it via `getRepoById`, which returns null (a clean "grant access"
+    // signal) when the installation genuinely can't access it.
+    const nameTerm = trimmed.slice(trimmed.lastIndexOf('/') + 1).trim() || trimmed
+    const scope = ` ${opts.ownerType === 'Organization' ? 'org' : 'user'}:${opts.owner}`
+    const q = encodeURIComponent(`${nameTerm} in:name fork:true${scope}`)
+    const { json } = await this.request(`/search/repositories?q=${q}&per_page=${per}`, {
+      installationId,
+    })
+    const items = (json as { items?: gp.GhRepoPayload[] } | null)?.items ?? []
+    return items.map((r) => gp.toRepoProjection(r, installationId, syncedAt))
+  }
+
   // ---- reads --------------------------------------------------------------
 
   async getRepo(installationId: number, ref: GitHubRepoRef): Promise<GitHubRepo> {
     const { json } = await this.request(`/repos/${ref.owner}/${ref.repo}`, { installationId })
     return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
+  }
+
+  async getRepoById(installationId: number, repoGithubId: number): Promise<GitHubRepo | null> {
+    // `/repositories/{id}` resolves a repo by its numeric id in one request. A 404/403 means
+    // the installation can't access it (or it's gone) — surface that as null, exactly the
+    // "not accessible" signal linking checks for.
+    try {
+      const { json } = await this.request(`/repositories/${repoGithubId}`, { installationId })
+      return gp.toRepoProjection(json as gp.GhRepoPayload, installationId, this.deps.clock.now())
+    } catch (err) {
+      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return null
+      throw err
+    }
+  }
+
+  async listReposForToken(token: string): Promise<Paged<GitHubRepo>> {
+    // The PAT analogue of `/installation/repositories` (App-only): enumerate the repos the
+    // token can reach. Flagged `linkedVia:'user_pat'` — personal, not App-reachable. The
+    // installation id is a placeholder here (the picker dedups by github id); the link flow
+    // attributes the row to the workspace's real installation.
+    const syncedAt = this.deps.clock.now()
+    const items: GitHubRepo[] = []
+    let url: string | undefined =
+      `/user/repos?per_page=${PER_PAGE}&sort=full_name&affiliation=owner,collaborator,organization_member`
+    let page = 0
+    for (; url && page < MAX_PAGES; page++) {
+      const { json, next } = await this.requestWithToken(url, token)
+      const repos = (json as gp.GhRepoPayload[] | null) ?? []
+      for (const r of repos) {
+        items.push({ ...gp.toRepoProjection(r, 0, syncedAt), linkedVia: 'user_pat' })
+      }
+      url = next
+    }
+    // A `next` link still present at the page cap means the token reaches more repos than we
+    // enumerated — flag it so the access-cache refresh records additively rather than replacing
+    // (a truncated REPLACE would drop reachable repos and fail-closed-redact the user's own frames).
+    return { items, truncated: Boolean(url) }
+  }
+
+  async getRepoForToken(token: string, repoGithubId: number): Promise<GitHubRepo | null> {
+    try {
+      const { json } = await this.requestWithToken(`/repositories/${repoGithubId}`, token)
+      return {
+        ...gp.toRepoProjection(json as gp.GhRepoPayload, 0, this.deps.clock.now()),
+        linkedVia: 'user_pat',
+      }
+    } catch (err) {
+      if (err instanceof GitHubApiError && (err.status === 404 || err.status === 403)) return null
+      throw err
+    }
+  }
+
+  /**
+   * A minimal authenticated GET using an explicit personal access token instead of the
+   * installation/App registry — the only place the client talks to GitHub with a
+   * caller-supplied bearer. Used by the PAT-scoped repo reads above; never mints or caches.
+   */
+  private async requestWithToken(
+    pathOrUrl: string,
+    token: string,
+  ): Promise<{ json: unknown; next?: string }> {
+    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `${this.deps.apiBase}${pathOrUrl}`
+    const res = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: ACCEPT,
+        'user-agent': USER_AGENT,
+        'x-github-api-version': API_VERSION,
+      },
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new GitHubApiError(
+        res.status,
+        `GitHub GET ${url} → ${res.status}: ${text.slice(0, 300)}`,
+      )
+    }
+    const json = res.status === 204 ? null : await res.json().catch(() => null)
+    return { json, next: parseNextLink(res.headers.get('link')) }
   }
 
   async canPush(installationId: number, ref: GitHubRepoRef): Promise<boolean> {
@@ -392,6 +505,33 @@ export class FetchGitHubClient implements GitHubClient {
     if (file.type !== 'file' || typeof file.content !== 'string') return null
     const content = file.encoding === 'base64' ? decodeBase64Utf8(file.content) : file.content
     return { content, sha: file.sha ?? '' }
+  }
+
+  async latestCommitSha(
+    installationId: number,
+    ref: GitHubRepoRef,
+    path: string,
+    gitRef?: string,
+  ): Promise<string | null> {
+    const clean = path.replace(/^\/+|\/+$/g, '')
+    const params = new URLSearchParams({ per_page: '1' })
+    if (clean) params.set('path', clean)
+    // The commits list endpoint does not accept `HEAD`; omitting `sha` defaults to the
+    // repo's default branch, which is exactly what a `HEAD`/absent gitRef means here.
+    if (gitRef && gitRef !== 'HEAD') params.set('sha', gitRef)
+    let json: unknown
+    try {
+      ;({ json } = await this.request(
+        `/repos/${ref.owner}/${ref.repo}/commits?${params.toString()}`,
+        { installationId },
+      ))
+    } catch (err) {
+      // Empty repo / missing path / unknown ref → no commit to pin against.
+      if (err instanceof GitHubApiError && err.status === 404) return null
+      throw err
+    }
+    const commits = Array.isArray(json) ? (json as Array<{ sha?: string }>) : []
+    return commits[0]?.sha ?? null
   }
 
   async listPullRequests(

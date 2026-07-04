@@ -46,6 +46,7 @@ function makeService(body: { value: string }) {
       title: 'Export PRD',
       url: 'https://docs/export-prd',
       body: body.value,
+      version: '1',
     }),
   }
   const registry: DocumentSourceRegistry = {

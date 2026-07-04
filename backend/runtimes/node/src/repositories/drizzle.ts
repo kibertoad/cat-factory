@@ -39,6 +39,8 @@ import type {
   ObservabilityConnectionRecord,
   ObservabilityConnectionRepository,
   ObservabilityProviderKind,
+  PackageRegistryConnectionRecord,
+  PackageRegistryConnectionRepository,
   ReleaseHealthConfigRecord,
   ReleaseHealthConfigRepository,
   ModelPreset,
@@ -75,6 +77,8 @@ import type {
   BrainstormItem,
   BrainstormStage,
   BrainstormSessionRepository,
+  Initiative,
+  InitiativeRepository,
   RunRef,
   SandboxExperiment,
   SandboxExperimentRepository,
@@ -112,7 +116,7 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
-import { agentRunKindSchema } from '@cat-factory/contracts'
+import { agentRunKindSchema, decodeInitiativeRow } from '@cat-factory/contracts'
 import {
   decodeEnum,
   tryDecodeRows,
@@ -135,7 +139,21 @@ import {
   rowToSandboxRun,
   rowToWorkspace,
 } from '@cat-factory/server'
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import {
   accountInvitations,
@@ -149,6 +167,7 @@ import {
   consensusSessions,
   incidentEnrichmentConnections,
   observabilityConnections,
+  packageRegistryConnections,
   emailConnections,
   llmCallMetrics,
   provisioningLog,
@@ -164,6 +183,7 @@ import {
   clarityReviews,
   binaryArtifacts,
   brainstormSessions,
+  initiatives,
   sandboxPromptVersions,
   sandboxFixtures,
   sandboxExperiments,
@@ -267,26 +287,38 @@ class DrizzleWorkspaceRepository implements WorkspaceRepository {
 class DrizzleBlockRepository implements BlockRepository {
   constructor(private readonly db: DrizzleDb) {}
 
+  // List reads order by `seq` (insertion order) for parity with the Cloudflare facade's
+  // `ORDER BY rowid` — Postgres heap order is otherwise non-deterministic.
   async listByWorkspace(workspaceId: string): Promise<Block[]> {
-    const rows = await this.db.select().from(blocks).where(eq(blocks.workspace_id, workspaceId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.workspace_id, workspaceId))
+      .orderBy(blocks.seq)
     // Snapshot-facing list read: drop a corrupt block rather than failing the whole board load.
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByService(serviceId: string): Promise<Block[]> {
-    const rows = await this.db.select().from(blocks).where(eq(blocks.service_id, serviceId))
+    const rows = await this.db
+      .select()
+      .from(blocks)
+      .where(eq(blocks.service_id, serviceId))
+      .orderBy(blocks.seq)
     return tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id }))
   }
 
   async listByServices(serviceIds: string[]): Promise<Block[]> {
     if (serviceIds.length === 0) return []
     const out: Block[] = []
-    // Chunk the IN list to stay well under the bind-parameter limit.
+    // Chunk the IN list to stay well under the bind-parameter limit. Ordering is
+    // per-chunk, matching the D1 twin's per-chunk `ORDER BY rowid`.
     for (let i = 0; i < serviceIds.length; i += 500) {
       const rows = await this.db
         .select()
         .from(blocks)
         .where(inArray(blocks.service_id, serviceIds.slice(i, i + 500)))
+        .orderBy(blocks.seq)
       out.push(...tryDecodeRows(rows, rowToBlock, (r) => ({ table: 'blocks', id: r.id })))
     }
     return out
@@ -310,6 +342,28 @@ class DrizzleBlockRepository implements BlockRepository {
       serviceId: row.service_id ?? null,
       block: rowToBlock(row),
     }
+  }
+
+  async findByIds(
+    blockIds: string[],
+  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>> {
+    if (blockIds.length === 0) return []
+    const out: Array<{ workspaceId: string; serviceId: string | null; block: Block }> = []
+    // Chunk the IN list to stay well under the bind-parameter limit.
+    for (let i = 0; i < blockIds.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(blocks)
+        .where(inArray(blocks.id, blockIds.slice(i, i + 500)))
+      out.push(
+        ...rows.map((row) => ({
+          workspaceId: row.workspace_id,
+          serviceId: row.service_id ?? null,
+          block: rowToBlock(row),
+        })),
+      )
+    }
+    return out
   }
 
   async insert(workspaceId: string, block: Block, serviceId?: string | null): Promise<void> {
@@ -342,6 +396,20 @@ class DrizzleBlockRepository implements BlockRepository {
     await this.db
       .delete(blocks)
       .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids)))
+  }
+
+  async countActiveInternal(workspaceId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(blocks)
+      .where(
+        and(
+          eq(blocks.workspace_id, workspaceId),
+          eq(blocks.internal, 1),
+          eq(blocks.status, 'in_progress'),
+        ),
+      )
+    return row?.n ?? 0
   }
 }
 
@@ -380,10 +448,14 @@ class DrizzlePipelineRepository implements PipelineRepository {
       enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
       consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
       gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+      follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+      tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
       labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
       archived: pipeline.archived ? 1 : null,
       builtin: pipeline.builtin ? 1 : null,
       version: pipeline.version ?? null,
+      public: pipeline.public ? 1 : null,
+      availability: pipeline.availability ?? null,
     })
   }
 
@@ -401,9 +473,13 @@ class DrizzlePipelineRepository implements PipelineRepository {
         enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
         consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
         gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+        follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+        tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
         labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
         archived: pipeline.archived ? 1 : null,
         version: pipeline.version ?? null,
+        public: pipeline.public ? 1 : null,
+        availability: pipeline.availability ?? null,
       })
       .where(and(eq(pipelines.workspace_id, workspaceId), eq(pipelines.id, pipeline.id)))
   }
@@ -535,6 +611,68 @@ class DrizzleExecutionRepository implements ExecutionRepository {
     if (rows[0]) execution.rev = rows[0].rev
   }
 
+  async insertLive(
+    workspaceId: string,
+    execution: ExecutionInstance,
+    opts?: { replaceId?: string },
+  ): Promise<boolean> {
+    // One live run per block, enforced atomically by the partial unique index
+    // `uniq_live_execution_per_block` on (workspace_id, block_id) over live execution rows. The
+    // cleanup and the insert run inside ONE transaction so a losing concurrent insert can never
+    // wipe the winner: the DELETE only ever removes the block's TERMINAL rows and the caller's
+    // own `replaceId` (the run it is knowingly superseding) — NEVER another writer's fresh live
+    // row — and the index then rejects a second live insert via DO NOTHING (empty returning).
+    // Callers therefore MUST NOT `deleteByBlock` first. The conflict target mirrors the D1 repo
+    // and the index predicate exactly; the insert columns mirror upsert (service_id subquery,
+    // rev 0).
+    const now = this.clock.now()
+    const detail = executionToDetail(execution)
+    const serviceIdSub = sql`(SELECT ${blocks.service_id} FROM ${blocks} WHERE ${blocks.workspace_id} = ${workspaceId} AND ${blocks.id} = ${execution.blockId})`
+    const terminalOrReplaced = opts?.replaceId
+      ? or(
+          notInArray(agentRuns.status, ['running', 'blocked', 'paused']),
+          eq(agentRuns.id, opts.replaceId),
+        )
+      : notInArray(agentRuns.status, ['running', 'blocked', 'paused'])
+    const rows = await this.db.transaction(async (tx) => {
+      await tx
+        .delete(agentRuns)
+        .where(
+          and(
+            eq(agentRuns.workspace_id, workspaceId),
+            eq(agentRuns.block_id, execution.blockId),
+            eq(agentRuns.kind, 'execution'),
+            terminalOrReplaced,
+          ),
+        )
+      return tx
+        .insert(agentRuns)
+        .values({
+          workspace_id: workspaceId,
+          id: execution.id,
+          kind: 'execution',
+          block_id: execution.blockId,
+          status: execution.status,
+          detail,
+          created_at: now,
+          updated_at: now,
+          workflow_instance_id: execution.id,
+          service_id: serviceIdSub,
+          rev: 0,
+        })
+        .onConflictDoNothing({
+          target: [agentRuns.workspace_id, agentRuns.block_id],
+          // For DO NOTHING, `where` is the conflict target's partial-index predicate (the
+          // DO-UPDATE `targetWhere`); it must mirror uniq_live_execution_per_block exactly.
+          where: sql`${agentRuns.kind} = 'execution' AND ${agentRuns.status} IN ('running', 'blocked', 'paused')`,
+        })
+        .returning({ rev: agentRuns.rev })
+    })
+    if (!rows[0]) return false
+    execution.rev = rows[0].rev
+    return true
+  }
+
   async compareAndSwap(workspaceId: string, execution: ExecutionInstance): Promise<boolean> {
     // Conditional update guarded on the rev last read onto this instance; only writes
     // when the stored row is unchanged. No insert — the run must already exist.
@@ -648,6 +786,15 @@ class DrizzleAgentRunRepository implements AgentRunRepository {
         id: r.id,
       }),
     }))
+  }
+
+  async listPausedExecutions(): Promise<AgentRunRef[]> {
+    const rows = await this.db
+      .select({ workspaceId: agentRuns.workspace_id, id: agentRuns.id })
+      .from(agentRuns)
+      .where(and(eq(agentRuns.kind, 'execution'), eq(agentRuns.status, 'paused')))
+      .orderBy(agentRuns.updated_at)
+    return rows.map((r) => ({ workspaceId: r.workspaceId, id: r.id, kind: 'execution' as const }))
   }
 
   async liveRunIds(ids: string[]): Promise<string[]> {
@@ -1767,6 +1914,7 @@ function rowToSchedule(row: ScheduleRow): PipelineSchedule {
     template: row.template as ScheduleTemplate,
     name: row.name,
     recurrence,
+    onDemand: row.on_demand === 1,
     enabled: row.enabled === 1,
     lastRunAt: row.last_run_at,
     nextRunAt: row.next_run_at,
@@ -1815,6 +1963,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
       window_end_hour: r.windowEndHour,
       timezone: r.timezone,
       enabled: schedule.enabled ? 1 : 0,
+      on_demand: schedule.onDemand ? 1 : 0,
       last_run_at: schedule.lastRunAt,
       next_run_at: schedule.nextRunAt,
       created_at: schedule.createdAt,
@@ -1879,7 +2028,13 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
     const rows = await this.db
       .select()
       .from(pipelineSchedules)
-      .where(and(eq(pipelineSchedules.enabled, 1), lt(pipelineSchedules.next_run_at, asOf + 1)))
+      .where(
+        and(
+          eq(pipelineSchedules.enabled, 1),
+          eq(pipelineSchedules.on_demand, 0),
+          lt(pipelineSchedules.next_run_at, asOf + 1),
+        ),
+      )
       .orderBy(pipelineSchedules.next_run_at)
     return rows.map((row) => ({ workspaceId: row.workspace_id, schedule: rowToSchedule(row) }))
   }
@@ -1904,6 +2059,7 @@ class DrizzlePipelineScheduleRepository implements PipelineScheduleRepository {
           window_end_hour: values.window_end_hour,
           timezone: values.timezone,
           enabled: values.enabled,
+          on_demand: values.on_demand,
           last_run_at: values.last_run_at,
           next_run_at: values.next_run_at,
         },
@@ -2936,6 +3092,106 @@ export class DrizzleBrainstormSessionRepository implements BrainstormSessionRepo
   }
 }
 
+// The row → entity decode (doc blob + column-lifted keys) is the shared
+// `decodeInitiativeRow` (contracts), so the Drizzle and D1 repos can't drift.
+const rowToInitiative = decodeInitiativeRow
+
+/**
+ * Initiatives over Postgres — the Drizzle mirror of the Worker's
+ * `D1InitiativeRepository` (migration 0035). Behaviourally identical so the
+ * cross-runtime conformance suite asserts the same CRUD + rev-guarded CAS against
+ * both stores.
+ */
+export class DrizzleInitiativeRepository implements InitiativeRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<Initiative | null> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(and(eq(initiatives.workspace_id, workspaceId), eq(initiatives.id, id)))
+      .limit(1)
+    return rows[0] ? rowToInitiative(rows[0]) : null
+  }
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<Initiative | null> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(and(eq(initiatives.workspace_id, workspaceId), eq(initiatives.block_id, blockId)))
+      .limit(1)
+    return rows[0] ? rowToInitiative(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<Initiative[]> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(eq(initiatives.workspace_id, workspaceId))
+      .orderBy(asc(initiatives.created_at))
+    // Snapshot-facing list read: drop a corrupt row rather than failing the board load.
+    return rows.map(rowToInitiative).filter((i): i is Initiative => i !== null)
+  }
+
+  async listExecuting(): Promise<Array<{ workspaceId: string; initiative: Initiative }>> {
+    const rows = await this.db
+      .select()
+      .from(initiatives)
+      .where(eq(initiatives.status, 'executing'))
+      .orderBy(asc(initiatives.created_at))
+    return rows
+      .map((row) => {
+        const initiative = rowToInitiative(row)
+        return initiative ? { workspaceId: row.workspace_id, initiative } : null
+      })
+      .filter((r): r is { workspaceId: string; initiative: Initiative } => r !== null)
+  }
+
+  async insert(workspaceId: string, initiative: Initiative): Promise<void> {
+    await this.db.insert(initiatives).values({
+      workspace_id: workspaceId,
+      id: initiative.id,
+      block_id: initiative.blockId,
+      slug: initiative.slug,
+      status: initiative.status,
+      rev: initiative.rev,
+      doc: JSON.stringify(initiative),
+      created_at: initiative.createdAt,
+      updated_at: initiative.updatedAt,
+    })
+  }
+
+  async compareAndSwap(
+    workspaceId: string,
+    next: Initiative,
+    expectedRev: number,
+  ): Promise<boolean> {
+    const result = await this.db
+      .update(initiatives)
+      .set({
+        slug: next.slug,
+        status: next.status,
+        rev: next.rev,
+        doc: JSON.stringify(next),
+        updated_at: next.updatedAt,
+      })
+      .where(
+        and(
+          eq(initiatives.workspace_id, workspaceId),
+          eq(initiatives.id, next.id),
+          eq(initiatives.rev, expectedRev),
+        ),
+      )
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async delete(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(initiatives)
+      .where(and(eq(initiatives.workspace_id, workspaceId), eq(initiatives.id, id)))
+  }
+}
+
 type MergePresetRow = typeof mergeThresholdPresets.$inferSelect
 
 function rowToMergePreset(row: MergePresetRow): MergeThresholdPreset {
@@ -3651,6 +3907,60 @@ export class DrizzleObservabilityConnectionRepository implements ObservabilityCo
 }
 
 /**
+ * A workspace's private package-registry connection over Postgres (the Drizzle mirror
+ * of the Worker's `D1PackageRegistryConnectionRepository`, migration 0034). One row per
+ * workspace; the registry entries are stored as ONE sealed JSON array (encrypted by the
+ * caller), with a non-secret `summary` blob for display.
+ */
+export class DrizzlePackageRegistryConnectionRepository implements PackageRegistryConnectionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string): Promise<PackageRegistryConnectionRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(packageRegistryConnections)
+      .where(eq(packageRegistryConnections.workspace_id, workspaceId))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return null
+    return {
+      workspaceId: row.workspace_id,
+      entries: row.entries,
+      summary: row.summary,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }
+  }
+
+  async upsert(record: PackageRegistryConnectionRecord): Promise<void> {
+    const values = {
+      workspace_id: record.workspaceId,
+      entries: record.entries,
+      summary: record.summary,
+      created_at: record.createdAt,
+      updated_at: record.updatedAt,
+    }
+    await this.db
+      .insert(packageRegistryConnections)
+      .values(values)
+      .onConflictDoUpdate({
+        target: packageRegistryConnections.workspace_id,
+        set: {
+          entries: values.entries,
+          summary: values.summary,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async delete(workspaceId: string): Promise<void> {
+    await this.db
+      .delete(packageRegistryConnections)
+      .where(eq(packageRegistryConnections.workspace_id, workspaceId))
+  }
+}
+
+/**
  * A workspace's incident-enrichment connection over Postgres (the Drizzle mirror of the
  * Worker's `D1IncidentEnrichmentConnectionRepository`, migration 0013). One row per
  * workspace; both PagerDuty + incident.io credentials live in ONE sealed JSON blob
@@ -3925,9 +4235,11 @@ export interface CoreRepositories {
   consensusSessionRepository: ConsensusSessionRepository
   clarityReviewRepository: ClarityReviewRepository
   brainstormSessionRepository: BrainstormSessionRepository
+  initiativeRepository: InitiativeRepository
   mergePresetRepository: MergePresetRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
+  packageRegistryConnectionRepository: PackageRegistryConnectionRepository
   incidentEnrichmentConnectionRepository: IncidentEnrichmentConnectionRepository
   accountSettingsRepository: AccountSettingsRepository
   releaseHealthConfigRepository: ReleaseHealthConfigRepository
@@ -3964,9 +4276,11 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
     clarityReviewRepository: new DrizzleClarityReviewRepository(db),
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
+    initiativeRepository: new DrizzleInitiativeRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
+    packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),
     incidentEnrichmentConnectionRepository: new DrizzleIncidentEnrichmentConnectionRepository(db),
     accountSettingsRepository: new DrizzleAccountSettingsRepository(db),
     releaseHealthConfigRepository: new DrizzleReleaseHealthConfigRepository(db),

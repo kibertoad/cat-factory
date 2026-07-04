@@ -17,12 +17,13 @@ import { setupTestDb } from './harness.js'
 const nodeResolveRepoTarget = (
   db: DrizzleDb,
   installations: DrizzleGitHubInstallationRepository,
-  blockRepository: ReturnType<typeof createDrizzleRepositories>['blockRepository'],
+  repos: ReturnType<typeof createDrizzleRepositories>,
 ) =>
   buildResolveRepoTarget({
     installationRepository: installations,
     repoProjectionRepository: new DrizzleRepoProjectionRepository(db),
-    blockRepository,
+    blockRepository: repos.blockRepository,
+    serviceRepository: repos.serviceRepository,
   })
 
 // The Postgres persistence + repo-target resolution the Node container-agent
@@ -110,7 +111,7 @@ describe('container-execution persistence (Postgres)', () => {
     it('resolves the repo linked to the service frame a block sits under', async () => {
       const workspaceId = ws()
       const installations = new DrizzleGitHubInstallationRepository(db)
-      const { blockRepository } = createDrizzleRepositories(db, new SystemClock())
+      const repos = createDrizzleRepositories(db, new SystemClock())
 
       await installations.upsert({
         installationId: 77,
@@ -144,7 +145,8 @@ describe('container-execution persistence (Postgres)', () => {
           parent_id: 'frame1',
         },
       ])
-      // The repo projection row links to the frame.
+      // The repo projection row, plus the account-owned Service binding it to the frame
+      // (the sole repo↔frame linkage).
       await db.insert(githubRepos).values({
         workspace_id: workspaceId,
         github_id: 999,
@@ -153,11 +155,19 @@ describe('container-execution persistence (Postgres)', () => {
         name: 'widget',
         default_branch: 'main',
         private: 1,
-        block_id: 'frame1',
         synced_at: 1,
       })
+      await repos.serviceRepository.insert({
+        id: `svc_${randomUUID()}`,
+        accountId: null,
+        frameBlockId: 'frame1',
+        installationId: 77,
+        repoGithubId: 999,
+        directory: null,
+        createdAt: 1,
+      })
 
-      const resolve = nodeResolveRepoTarget(db, installations, blockRepository)
+      const resolve = nodeResolveRepoTarget(db, installations, repos)
       const target = await resolve(workspaceId, 'task1')
       expect(target).toEqual({
         installationId: 77,
@@ -170,15 +180,15 @@ describe('container-execution persistence (Postgres)', () => {
     it('returns null when GitHub is not connected', async () => {
       const workspaceId = ws()
       const installations = new DrizzleGitHubInstallationRepository(db)
-      const { blockRepository } = createDrizzleRepositories(db, new SystemClock())
-      const resolve = nodeResolveRepoTarget(db, installations, blockRepository)
+      const repos = createDrizzleRepositories(db, new SystemClock())
+      const resolve = nodeResolveRepoTarget(db, installations, repos)
       expect(await resolve(workspaceId, 'whatever')).toBeNull()
     })
 
     it('throws when the block is not under a repo-linked service', async () => {
       const workspaceId = ws()
       const installations = new DrizzleGitHubInstallationRepository(db)
-      const { blockRepository } = createDrizzleRepositories(db, new SystemClock())
+      const repos = createDrizzleRepositories(db, new SystemClock())
       await installations.upsert({
         installationId: 88,
         workspaceId,
@@ -199,8 +209,8 @@ describe('container-execution persistence (Postgres)', () => {
         status: 'planned',
         level: 'task',
       })
-      // A repo exists but is linked to a different (absent) block, so the orphan
-      // task resolves to no repo.
+      // A repo exists but no Service binds the orphan task's frame to it, so it
+      // resolves to no repo.
       await db.insert(githubRepos).values({
         workspace_id: workspaceId,
         github_id: 1234,
@@ -209,10 +219,9 @@ describe('container-execution persistence (Postgres)', () => {
         name: 'other',
         default_branch: 'main',
         private: 0,
-        block_id: 'some-other-frame',
         synced_at: 1,
       })
-      const resolve = nodeResolveRepoTarget(db, installations, blockRepository)
+      const resolve = nodeResolveRepoTarget(db, installations, repos)
       await expect(resolve(workspaceId, 'orphan')).rejects.toThrow(/not under a service linked/)
     })
   })

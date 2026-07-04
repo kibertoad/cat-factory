@@ -114,7 +114,7 @@ describe('DockerRuntimeAdapter', () => {
     expect(await adapter.endpoint(exec, 'cid')).toEqual({ host: '127.0.0.1', port: 49170 })
   })
 
-  it('publishes extra ports (preview serve port) alongside the harness :8080', async () => {
+  it('pins a preview serve port to a deterministic host port alongside the harness :8080', async () => {
     const adapter = new DockerRuntimeAdapter({
       id: 'docker',
       binary: 'docker',
@@ -130,11 +130,34 @@ describe('DockerRuntimeAdapter', () => {
       sharedSecret: 's',
       privileged: false,
       env: {},
-      publishPorts: [4173],
+      publishPorts: [{ container: 4173, host: 4173 }],
     })
     const run = calls[0]!.join(' ')
     expect(run).toContain('-p 127.0.0.1:0:8080')
-    expect(run).toContain('-p 127.0.0.1:0:4173')
+    // A pinned `host` gives a deterministic, pre-knowable host port (the preview origin).
+    expect(run).toContain('-p 127.0.0.1:4173:4173')
+    expect(adapter.publishesToLocalhost).toBe(true)
+  })
+
+  it('publishes an extra port to an ephemeral host port when no host is pinned', async () => {
+    const adapter = new DockerRuntimeAdapter({
+      id: 'docker',
+      binary: 'docker',
+      hostAlias: 'host.docker.internal',
+      addHostGateway: true,
+      localDind: true,
+      pooling: true,
+    })
+    const { exec, calls } = fakeExec({ run: 'cid\n' })
+    await adapter.run(exec, {
+      runId: 'preview-blk_fe',
+      image: 'img',
+      sharedSecret: 's',
+      privileged: false,
+      env: {},
+      publishPorts: [{ container: 4173 }],
+    })
+    expect(calls[0]!.join(' ')).toContain('-p 127.0.0.1:0:4173')
   })
 
   it('reads the endpoint for a specific in-container port (the preview serve port)', async () => {
@@ -164,8 +187,10 @@ describe('AppleContainerRuntimeAdapter', () => {
       sharedSecret: 'sek',
       privileged: true, // ignored: Apple has no DinD
       env: { FOO: 'bar' },
+      publishPorts: [{ container: 4173, host: 4173 }], // ignored: no published-port model
     })
     expect(id).toBe('cf-run_42')
+    expect(adapter.publishesToLocalhost).toBe(false)
     const run = calls[0]!
     expect(run.slice(0, 2)).toEqual(['run', '-d'])
     expect(run).toContain('--name')

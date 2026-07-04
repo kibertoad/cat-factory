@@ -1,4 +1,5 @@
-import type { Block, BlockLevel, Position } from '@cat-factory/kernel'
+import type { Block, BlockLevel, Position, ServiceConnection } from '@cat-factory/kernel'
+import { connectionNeighborIds } from '@cat-factory/contracts'
 
 // Pure board computations — no IO, no ports. They operate on plain in-memory
 // block arrays so they can be exhaustively unit-tested and are reused verbatim
@@ -55,6 +56,10 @@ export function canReparent(childLevel: BlockLevel, parent: Block): boolean {
   // An epic may optionally be placed under a service/module (or live top-level); it is a
   // grouping node, never a container, so nothing reparents INTO it.
   if (childLevel === 'epic') return parent.level === 'frame' || parent.level === 'module'
+  // An initiative lives directly under a service frame (like a module). The tasks its
+  // execution loop spawns join it via their `initiativeId` membership link (epic-style),
+  // never by reparenting into it.
+  if (childLevel === 'initiative') return parent.level === 'frame'
   return false // frames are not nested
 }
 
@@ -110,4 +115,61 @@ export function unmetDependencies(blocks: Block[], taskId: string): Block[] {
   return task.dependsOn
     .map((depId) => byId.get(depId))
     .filter((b): b is Block => !!b && b.status !== 'done')
+}
+
+/**
+ * Why a service frame's `serviceConnections` patch is invalid, or null when it is fine.
+ * Targets are validated against the caller-resolved blocks (`resolveTarget` — the
+ * cross-home-aware lookup, so a service mounted from another home workspace connects
+ * too): each must resolve to a `service`-type frame that isn't the owning frame, and
+ * appear at most once. Cycles between services are deliberately LEGAL (A↔B mutual
+ * calls are ordinary architecture; nothing deadlocks on them — the later merge/provision
+ * ordering falls back to a deterministic order inside a cycle).
+ */
+export function serviceConnectionsError(
+  frameId: string,
+  connections: ServiceConnection[],
+  resolveTarget: (id: string) => Block | undefined,
+): string | null {
+  const seen = new Set<string>()
+  for (const connection of connections) {
+    const targetId = connection.serviceBlockId
+    if (targetId === frameId) return 'A service cannot be connected to itself'
+    if (seen.has(targetId)) return `Duplicate connection to service '${targetId}'`
+    seen.add(targetId)
+    const target = resolveTarget(targetId)
+    if (!target) return `Connection target '${targetId}' does not exist on this board`
+    if (target.level !== 'frame' || target.type !== 'service') {
+      return `Connection target '${target.title}' is not a service (frontends bind services via their backend bindings instead)`
+    }
+  }
+  return null
+}
+
+/**
+ * Why a task's `involvedServiceIds` patch is invalid, or null when it is fine. Each id
+ * must be a connection NEIGHBOR of the task's enclosing service frame — undirected,
+ * because a task on either endpoint of a connection may need the other service spun up
+ * or changed — and never the own frame (it is always implicitly involved). Ids that
+ * merely went stale later (a connection removed after selection) are filtered at read
+ * time instead, so this guards only the write.
+ */
+export function involvedServiceIdsError(
+  blocks: Block[],
+  task: Block,
+  involvedServiceIds: string[],
+): string | null {
+  const frame = serviceOf(blocks, task)
+  if (!frame) return 'The task is not inside a service frame'
+  const neighbors = connectionNeighborIds(blocks, frame.id)
+  const seen = new Set<string>()
+  for (const id of involvedServiceIds) {
+    if (id === frame.id) return `'${frame.title}' is the task's own service and is always involved`
+    if (seen.has(id)) return `Duplicate involved service '${id}'`
+    seen.add(id)
+    if (!neighbors.has(id)) {
+      return `Service '${id}' is not connected to '${frame.title}' — connect the services on the service frame first`
+    }
+  }
+  return null
 }

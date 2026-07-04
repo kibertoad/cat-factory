@@ -1,17 +1,22 @@
+import { randomUUID } from 'node:crypto'
 import { type DrizzleDb, createDbClient, schema } from '@cat-factory/node-server'
 import { and, eq, ne } from 'drizzle-orm'
 import { syntheticInstallationId } from './installations.js'
 
 // Link a real GitHub repo to a board service frame for LOCAL mode. Container agent
-// steps resolve which repo to operate on from the `github_repos` /
-// `github_installations` projection (`buildResolveRepoTarget`). The cloud facades
-// populate those rows from the GitHub App connect/sync flow; local mode has no App, so
-// this helper seeds them directly from the repo's public metadata read with the PAT:
+// steps resolve which repo to operate on from the account-owned `Service` bound to the
+// enclosing frame (`buildResolveRepoTarget` walks the block ancestry to it). The cloud
+// facades populate the projection from the GitHub App connect/sync flow; local mode has
+// no App, so this helper seeds it directly from the repo's public metadata read with the
+// PAT:
 //   - a synthetic per-workspace `github_installations` row (the executor's PAT token
 //     source ignores the installation id, but `resolveRepoTarget` requires a row to
-//     exist + reads its id back), and
-//   - a `github_repos` row linked to the frame via `block_id` (the legacy projection
-//     link `resolveRepoTarget` walks the block ancestry to find).
+//     exist + reads its id back),
+//   - a `github_repos` row (the projected repo the resolver reads owner/name/branch from),
+//     and
+//   - the frame's `Service` bound to the repo (`repo_github_id` + `installation_id`) — the
+//     sole repo↔frame linkage. An existing service (created when the frame was added on the
+//     board) is updated in place; if the frame has none yet, one is inserted + mounted.
 // Idempotent: re-linking the same repo/frame updates the rows in place.
 
 const GITHUB_API_BASE = 'https://api.github.com'
@@ -133,8 +138,11 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
       name,
       default_branch: defaultBranch,
       private: meta.private ? 1 : 0,
-      block_id: options.frameBlockId,
       is_monorepo: 0,
+      // Local mode's single `GITHUB_PAT` is the workspace-wide credential every member
+      // shares (its analogue of the shared App installation), so a linked repo is
+      // `'app'`-reachable, not a per-user `'user_pat'` repo.
+      linked_via: 'app',
       etag: null,
       synced_at: now,
       deleted_at: null,
@@ -146,6 +154,49 @@ export async function linkRepo(options: LinkRepoOptions): Promise<LinkedRepo> {
         target: [schema.githubRepos.workspace_id, schema.githubRepos.github_id],
         set: repoValues,
       })
+
+    // Bind the frame's account-owned Service to the repo — the sole linkage
+    // `resolveRepoTarget` reads. Update the service the board created for the frame; if
+    // the frame has none (seeded/headless), insert one and mount it on the workspace.
+    const existing = await db
+      .select({ id: schema.services.id })
+      .from(schema.services)
+      .where(eq(schema.services.frame_block_id, options.frameBlockId))
+      .limit(1)
+    if (existing[0]) {
+      await db
+        .update(schema.services)
+        .set({ installation_id: installationId, repo_github_id: meta.id })
+        .where(eq(schema.services.id, existing[0].id))
+    } else {
+      const workspaceRow = await db
+        .select({ account_id: schema.workspaces.account_id })
+        .from(schema.workspaces)
+        .where(eq(schema.workspaces.id, options.workspaceId))
+        .limit(1)
+      const serviceId = `svc_${randomUUID()}`
+      await db.insert(schema.services).values({
+        id: serviceId,
+        account_id: workspaceRow[0]?.account_id ?? null,
+        frame_block_id: options.frameBlockId,
+        installation_id: installationId,
+        repo_github_id: meta.id,
+        directory: null,
+        created_at: now,
+      })
+      await db
+        .insert(schema.workspaceServices)
+        .values({
+          workspace_id: options.workspaceId,
+          service_id: serviceId,
+          pos_x: 0,
+          pos_y: 0,
+          width: null,
+          height: null,
+          created_at: now,
+        })
+        .onConflictDoNothing()
+    }
   } finally {
     await close?.()
   }

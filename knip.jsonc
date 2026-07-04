@@ -1,0 +1,158 @@
+// Knip config — unused files / exports / dependencies across the workspace.
+// Run AFTER `pnpm build`: workspace packages resolve each other through their exports
+// maps into the gitignored dist/, so a cold tree reports a wall of unresolved imports.
+//
+// The `ignore` / `ignoreDependencies` entries below are the ACCEPTED BASELINE from the
+// first run, kept explicit so a follow-up can triage them (delete the dead code / drop the
+// dep and shrink the list) — they are NOT an invitation to add more. New findings fail CI.
+// `exports`/`types`/`duplicates` are reported as non-failing warnings for now: these are
+// published libraries whose deep-module exports need per-symbol triage (~150 findings),
+// which is the same follow-up.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "devDependencies": "error",
+    "unlisted": "error",
+    "binaries": "error",
+    "exports": "warn",
+    "types": "warn",
+    "duplicates": "warn",
+  },
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs"],
+      "project": ["scripts/**/*.mjs"],
+      // `attw` is invoked as a spawned binary (`pnpm exec attw`) from
+      // scripts/check-publish-integrity.mjs, never statically imported, so knip can't see it.
+      "ignoreDependencies": ["@arethetypeswrong/cli"],
+    },
+    "backend/packages/*": {
+      "entry": ["src/bin.ts", "src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+    },
+    "backend/packages/contracts": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      // Baseline: not imported from src/ — triage separately.
+      "ignoreDependencies": ["@toad-contracts/core"],
+    },
+    "backend/packages/consensus": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@cat-factory/contracts"],
+    },
+    "backend/packages/provider-bedrock": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@cat-factory/kernel", "ai"],
+    },
+    "backend/packages/provider-cloudflare": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@cat-factory/kernel"],
+    },
+    "backend/packages/server": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@toad-contracts/valibot"],
+    },
+    "backend/runtimes/*": {
+      "entry": ["src/main.ts", "src/link-repo.ts", "src/**/*.test.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+    },
+    "backend/runtimes/cloudflare": {
+      "entry": ["src/**/*.test.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      // The workers-pool vitest config reads ./migrations relative to cwd, which breaks
+      // when knip loads it from the repo root — and its test entries are covered by the
+      // explicit test/ glob above anyway.
+      "vitest": false,
+      // `cloudflare` is knip misreading the `cloudflare:workers` module specifier scheme
+      // as an npm package. The rest is the accepted unused-dep baseline (plausible
+      // leftovers of the @cat-factory/server extraction) — triage separately.
+      "ignoreDependencies": [
+        "cloudflare",
+        "@ai-sdk/openai-compatible",
+        "@cat-factory/prompt-fragments",
+        "@hono/valibot-validator",
+        "pino",
+        "valibot",
+      ],
+      // Unreferenced-file baseline (same extraction leftovers) — triage separately.
+      "ignore": [
+        "src/infrastructure/ai/RunnerJobClient.ts",
+        "src/infrastructure/auth/GitHubOAuth.ts",
+        "src/infrastructure/auth/middleware.ts",
+        "src/infrastructure/auth/signing.ts",
+        "src/infrastructure/github/encoding.ts",
+        "src/infrastructure/github/state.ts",
+        "src/infrastructure/http/params.ts",
+        "src/infrastructure/repositories/D1EnvironmentUserHandlerRepository.ts",
+        "src/infrastructure/runners/RunnerPoolTransport.ts",
+      ],
+    },
+    "backend/runtimes/node": {
+      "entry": ["src/main.ts", "src/**/*.test.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      // `layered-loader` is loaded via the OPAQUE dynamic import in
+      // cacheNotifications.ts (`import('layered-loader' as string)`, gated on
+      // REDIS_URL — the cast deliberately hides its Redis modules from the TS
+      // build graph), so knip sees no static import.
+      "ignoreDependencies": ["@cat-factory/prompt-fragments", "layered-loader"],
+    },
+    "backend/runtimes/local": {
+      "entry": ["src/main.ts", "src/link-repo.ts", "src/**/*.test.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      // `@cat-factory/executor-harness` is resolved dynamically at runtime via
+      // createRequire(import.meta.url).resolve('@cat-factory/executor-harness') in
+      // LocalProcessRunnerTransport (native mode spawns its bundled dist/server.js), so knip
+      // sees no static import.
+      "ignoreDependencies": ["@cat-factory/executor-harness"],
+    },
+    "backend/internal/*": {
+      "entry": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts"],
+      "project": ["src/**/*.ts"],
+    },
+    "backend/internal/benchmark-harness": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@cat-factory/contracts"],
+    },
+    "backend/internal/smoketest-harness": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@cat-factory/kernel"],
+    },
+    "backend/internal/executor-harness": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      // Binaries invoked inside the runner container image, not on the dev machine.
+      "ignoreBinaries": ["java", "serve", "pi"],
+    },
+    "frontend/app": {
+      "entry": ["nuxt.config.ts", "app/**/*.{vue,ts}", "i18n/**/*.ts", "scripts/*.mjs"],
+      "project": ["app/**/*.{vue,ts}", "i18n/**/*.ts"],
+      // @vue-flow/*: referenced as CSS paths in nuxt.config.ts, which knip double-reports
+      // as unlisted-in-config + unused-in-app. vue-tsc backs `nuxt typecheck`; msw and
+      // @toad-contracts/testing are test-setup deps outside the project globs.
+      "ignoreDependencies": [
+        "@vue-flow/core",
+        "@vue-flow/node-resizer",
+        "@toad-contracts/valibot",
+        "@toad-contracts/testing",
+        "msw",
+        "vue-tsc",
+      ],
+    },
+    "deploy/backend": { "entry": ["src/**/*.ts"] },
+    "deploy/node": { "entry": ["src/**/*.ts"] },
+    "deploy/local": { "entry": ["src/**/*.ts"] },
+    "deploy/frontend": {
+      "entry": ["nuxt.config.ts"],
+      // Backs `nuxt typecheck` in the deploy consumer.
+      "ignoreDependencies": ["vue-tsc"],
+    },
+  },
+}

@@ -1,4 +1,5 @@
-import type { LlmCallMetric, LlmCallMetricRepository } from '@cat-factory/kernel'
+import type { HarnessCallMetric, LlmCallMetric, LlmCallMetricRepository } from '@cat-factory/kernel'
+import { LlmObservabilityService, makeHarnessCallRecorder } from '@cat-factory/orchestration'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the LLM observability sink. The proxy that records these
@@ -214,6 +215,75 @@ export function defineLlmMetricsSuite(name: string, makeRepo: () => LlmCallMetri
       )
       const summaries = await repo.summarizeByExecution(ws, e1)
       expect(summaries.map((s) => s.agentKind).sort()).toEqual(['coder', 'reviewer'])
+    })
+
+    it("records a subscription harness's per-call telemetry through the observability sink", async () => {
+      // The proxy-bypassing path: Claude Code / Codex report per-call metrics off their CLI
+      // stream, which the executor feeds through the SAME LlmObservabilityService the proxy
+      // uses. This asserts that path lands correctly on each runtime's real store (bodies,
+      // vendor, zero timing, and the delta chain), not just the raw repo round-trip above.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      let n = 0
+      const record = makeHarnessCallRecorder(
+        new LlmObservabilityService({
+          llmCallMetricRepository: repo,
+          idGenerator: { next: (p) => `${ws}-${p}-${(n += 1)}` },
+          clock: { now: () => 1 },
+        }),
+      )
+      const call = (overrides: Partial<HarnessCallMetric>): HarnessCallMetric => ({
+        model: 'claude-opus-4-8',
+        promptText: '[]',
+        messageCount: 1,
+        responseText: '',
+        reasoningText: '',
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        finishReason: 'end_turn',
+        ...overrides,
+      })
+      await record({
+        workspaceId: ws,
+        executionId: e1,
+        agentKind: 'coder',
+        provider: 'claude',
+        model: 'claude:claude-opus-4-8',
+        calls: [
+          call({
+            promptText: '[{"role":"system","content":"s"},{"role":"user","content":"u"}]',
+            messageCount: 2,
+            responseText: 'hi',
+            inputTokens: 120,
+            cachedInputTokens: 20,
+            outputTokens: 30,
+          }),
+          call({
+            promptText:
+              '[{"role":"system","content":"s"},{"role":"user","content":"u"},{"role":"assistant","content":"hi"}]',
+            messageCount: 3,
+            responseText: 'done',
+            inputTokens: 200,
+            outputTokens: 40,
+          }),
+        ],
+      })
+
+      const rows = await repo.listByExecution(ws, e1)
+      expect(rows).toHaveLength(2)
+      const byResp = Object.fromEntries(rows.map((c) => [c.responseText, c]))
+      const first = byResp['hi']!
+      expect(first.provider).toBe('claude')
+      expect(first.model).toBe('claude-opus-4-8') // the call's own model wins
+      expect(first.promptTokens).toBe(120)
+      expect(first.cachedPromptTokens).toBe(20)
+      expect(first.completionTokens).toBe(30)
+      // The CLIs expose no per-HTTP timing, so the split is zero.
+      expect(first.totalMs).toBe(0)
+      expect(first.upstreamMs).toBe(0)
+      // The second call chained onto the first as a prompt delta on the real store.
+      expect(byResp['done']!.promptPrefixCount).toBe(2)
     })
 
     it('prunes rows older than a cutoff', async () => {

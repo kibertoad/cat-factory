@@ -1,16 +1,28 @@
 {
   "name": "@cat-factory/executor-harness",
-  "version": "1.31.0",
-  "private": true,
-  "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container; carries no secrets.",
+  "version": "1.34.4",
+  "description": "Container payload: a thin TypeScript wrapper that runs the Pi coding agent against a cloned repo and opens a PR. Runs in the Cloudflare Container (and, in local native mode, as a host process); carries no secrets.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kibertoad/cat-factory.git",
+    "directory": "backend/internal/executor-harness"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "type": "module",
   "main": "./dist/server.js",
   "exports": {
     ".": "./dist/server.js",
     "./embed": "./src/embed.ts"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "start": "node dist/server.js",
     "test": "vitest run",

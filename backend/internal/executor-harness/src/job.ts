@@ -1,4 +1,4 @@
-import type { PiRunStats } from './pi.js'
+import type { HarnessCallMetric, PiRunStats } from './pi.js'
 import type { HarnessKind } from './pi-workspace.js'
 import type { FailureCause } from './failure.js'
 
@@ -146,7 +146,10 @@ function parseHarnessAuth(o: Record<string, unknown>): HarnessAuthFields {
  * `..` segment) — the agent's cwd is built from this, so a hostile value must never
  * point outside the cloned repo.
  */
-function sanitizeServiceDirectory(value: unknown): string | undefined {
+function sanitizeServiceDirectory(
+  value: unknown,
+  field = 'repo.serviceDirectory',
+): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value
     .trim()
@@ -156,7 +159,7 @@ function sanitizeServiceDirectory(value: unknown): string | undefined {
   const segments = normalized.split('/').filter((s) => s !== '' && s !== '.')
   if (segments.length === 0) return undefined
   if (segments.some((s) => s === '..')) {
-    throw new Error("Invalid job: 'repo.serviceDirectory' must be a path inside the repo")
+    throw new Error(`Invalid job: '${field}' must be a path inside the repo`)
   }
   return segments.join('/')
 }
@@ -229,6 +232,89 @@ function assertAllowedHost(
   }
 }
 
+// ---- Private package registries ------------------------------------------
+// Workspace-configured private-registry auth (npm private orgs, GitHub Packages)
+// so the checkout's installs resolve private dependencies. The backend derives the
+// host from a fixed vendor set, so the harness hard-allowlists where a registry
+// token may be sent — a body-supplied host outside the allowlist is treated as
+// forgery (token exfiltration) and rejects the job. Ecosystem-discriminated:
+// entries of an unknown ecosystem are DROPPED (not an error) so later ecosystems
+// (pip/maven/cargo) stay additive for an older harness image.
+
+/** One private-registry entry: rendered into `~/.npmrc` before the agent runs. */
+export interface PackageRegistrySpec {
+  ecosystem: 'npm'
+  /** Registry host, e.g. `registry.npmjs.org` — allowlisted, never a full URL. */
+  host: string
+  /** npm scopes (`@org`) routed to this registry. */
+  scopes: string[]
+  token: string
+}
+
+/** npm registry hosts the harness is willing to send a registry token to. */
+export function allowedNpmRegistryHosts(env: NodeJS.ProcessEnv = process.env): Set<string> {
+  const hosts = new Set(['registry.npmjs.org', 'npm.pkg.github.com'])
+  // Optional extra allowlist (comma-separated) for tests / bespoke deployments.
+  for (const h of (env.NPM_ALLOWED_REGISTRY_HOSTS ?? '').split(',')) {
+    const t = h.trim().toLowerCase()
+    if (t) hosts.add(t)
+  }
+  return hosts
+}
+
+/** An npm scope (`@org`) — same shape the backend validates at the write boundary. */
+const NPM_SCOPE_PATTERN = /^@[a-z0-9~-][a-z0-9._~-]*$/i
+
+// A registry token is a single opaque string. Reject any whitespace / control
+// character: a newline in the token would inject arbitrary lines into the rendered
+// `~/.npmrc` (a second, forged registry/_authToken line). Mirrors the backend's
+// write-boundary constraint so a drifted body can't slip a multiline token past.
+const NPM_TOKEN_PATTERN = /^[\x21-\x7e]+$/
+
+/** Validate the optional `packageRegistries` list (see {@link PackageRegistrySpec}). */
+export function parsePackageRegistries(
+  value: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): PackageRegistrySpec[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error("Invalid job: 'packageRegistries' must be an array")
+  const allowed = allowedNpmRegistryHosts(env)
+  const entries: PackageRegistrySpec[] = []
+  for (const [i, raw] of value.entries()) {
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error(`Invalid job: 'packageRegistries[${i}]' must be an object`)
+    }
+    const entry = raw as Record<string, unknown>
+    // Unknown ecosystems are additive: a newer backend may send pip/maven entries an
+    // older image doesn't understand yet — skip them rather than failing the job.
+    if (entry.ecosystem !== 'npm') continue
+    const host = str(entry.host, `packageRegistries[${i}].host`).trim().toLowerCase()
+    if (!allowed.has(host)) {
+      throw new Error(
+        `Invalid job: 'packageRegistries[${i}].host' '${host}' is not an allowed npm registry host`,
+      )
+    }
+    if (!Array.isArray(entry.scopes) || entry.scopes.length === 0) {
+      throw new Error(`Invalid job: 'packageRegistries[${i}].scopes' must be a non-empty array`)
+    }
+    const scopes = entry.scopes.map((scope, j) => {
+      const s = str(scope, `packageRegistries[${i}].scopes[${j}]`).trim()
+      if (!NPM_SCOPE_PATTERN.test(s)) {
+        throw new Error(`Invalid job: 'packageRegistries[${i}].scopes[${j}]' must look like @org`)
+      }
+      return s
+    })
+    const token = str(entry.token, `packageRegistries[${i}].token`)
+    if (!NPM_TOKEN_PATTERN.test(token)) {
+      throw new Error(
+        `Invalid job: 'packageRegistries[${i}].token' must not contain spaces or control characters`,
+      )
+    }
+    entries.push({ ecosystem: 'npm', host, scopes, token })
+  }
+  return entries
+}
+
 // ---- Shared repo-bootstrap target ---------------------------------------
 
 /** The new repository a repo-bootstrap run force-pushes its fresh history to. */
@@ -277,6 +363,13 @@ export interface ServiceInfraSpec {
   composePath?: string
   /** Ephemeral mode: the provisioned environment URL (echoed for context only). */
   environmentUrl?: string
+  /**
+   * The connected services "directly involved" in this task that have a LIVE ephemeral env this
+   * run (service title → URL), so a cross-service integration test can reach a peer's real
+   * environment. Echoed for context only (surfaced in the agent's prompt); the harness stands
+   * nothing up for it. Absent when no involved peer is live.
+   */
+  peerEnvironments?: Record<string, string>
 }
 
 /**
@@ -290,6 +383,12 @@ export interface ServiceInfraSpec {
  */
 export interface FrontendInfraSpec {
   kind: 'frontend'
+  /**
+   * The frontend app's subdirectory within the checkout (a monorepo frontend). Absent ⇒ the
+   * checkout root. When set, install/build/serve run there and `outputDir`/`wiremockMappingsPath`
+   * are resolved relative to it.
+   */
+  directory?: string
   /** Package manager for install/build. Default `pnpm`. */
   packageManager?: 'pnpm' | 'npm' | 'yarn'
   /** Explicit install command, overriding the one derived from `packageManager`. */
@@ -403,6 +502,14 @@ export interface AgentJob extends HarnessAuthFields {
    * The agent reads them on demand; they are kept out of any commit. Absent ⇒ none.
    */
   contextFiles?: ContextFileSpec[]
+  /**
+   * Private package-registry auth (npm private orgs, GitHub Packages), rendered into
+   * `~/.npmrc` before the run so the checkout's installs — the agent's own and the
+   * frontend-infra stand-up's — resolve private dependencies. Hosts are hard-allowlisted
+   * (see {@link allowedNpmRegistryHosts}). Absent ⇒ any stale `~/.npmrc` from a prior
+   * job on a reused container is removed.
+   */
+  packageRegistries?: PackageRegistrySpec[]
   /**
    * Explore mode: stand the service's dependencies up before the agent runs (the
    * tester). Brings the docker-compose infra up on localhost for the duration of the
@@ -520,6 +627,12 @@ export interface AgentResult {
    */
   failureCause?: FailureCause
   usage?: { inputTokens: number; outputTokens: number }
+  /**
+   * Per-model-call telemetry from a subscription harness's CLI stream (absent for the
+   * proxy-metered Pi harness). The backend records these into `llm_call_metrics`. See
+   * {@link HarnessCallMetric}.
+   */
+  callMetrics?: HarnessCallMetric[]
 }
 
 /** Parse the coding-mode bootstrap spec, or undefined when absent. Validates the target. */
@@ -592,7 +705,21 @@ function parseAgentInfraSpec(value: unknown): AgentInfraSpec | undefined {
     ...(typeof o.environmentUrl === 'string' && o.environmentUrl
       ? { environmentUrl: o.environmentUrl }
       : {}),
+    ...(() => {
+      const peers = parseStringMap(o.peerEnvironments)
+      return peers ? { peerEnvironments: peers } : {}
+    })(),
   }
+}
+
+/** Parse a `Record<string, string>` from untrusted input, keeping only string→non-empty-string. */
+function parseStringMap(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const out: Record<string, string> = {}
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof val === 'string' && val) out[key] = val
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 /**
@@ -659,8 +786,13 @@ function parseFrontendInfraSpec(o: Record<string, unknown>): FrontendInfraSpec {
   }
   const servePort = port(o.servePort)
   const wiremockPort = port(o.wiremockPort)
+  // The app's monorepo subdirectory becomes the install/build/serve cwd, so it goes through the
+  // same escape-guard as `repo.serviceDirectory` — strip slashes and reject any `..` segment so a
+  // hostile value can't point the stand-up outside the cloned repo.
+  const directory = sanitizeServiceDirectory(o.directory, 'frontend.directory')
   return {
     kind: 'frontend',
+    ...(directory ? { directory } : {}),
     ...(packageManager ? { packageManager } : {}),
     ...(typeof o.install === 'string' && o.install ? { install: o.install } : {}),
     ...(typeof o.buildScript === 'string' && o.buildScript ? { buildScript: o.buildScript } : {}),
@@ -726,6 +858,7 @@ export function parseAgentJob(input: unknown): AgentJob {
   const infra = parseAgentInfraSpec(o.infra)
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
+  const packageRegistries = parsePackageRegistries(o.packageRegistries)
   const guardLimits = parseGuardLimits(o.guardLimits)
   const job: AgentJob = {
     jobId: str(o.jobId, 'jobId'),
@@ -745,6 +878,7 @@ export function parseAgentJob(input: unknown): AgentJob {
     ...(bootstrap ? { bootstrap } : {}),
     ...(output ? { output } : {}),
     ...(contextFiles.length ? { contextFiles } : {}),
+    ...(packageRegistries.length ? { packageRegistries } : {}),
     ...(infra ? { infra } : {}),
     ...(typeof o.newBranch === 'string' && o.newBranch ? { newBranch: o.newBranch } : {}),
     ...(typeof o.pushBranch === 'string' && o.pushBranch ? { pushBranch: o.pushBranch } : {}),

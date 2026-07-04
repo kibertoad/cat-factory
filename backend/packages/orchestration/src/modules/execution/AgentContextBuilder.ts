@@ -10,6 +10,8 @@ import type {
   DocumentRepository,
   DocumentSourceKind,
   ExecutionInstance,
+  FrontendConfig,
+  InitiativeRepository,
   PipelineStep,
   RequirementReviewRepository,
   TaskRecord,
@@ -17,12 +19,16 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
-import { CODE_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
+import { CODE_AWARE_TRAIT, DOC_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
 import {
   boundServiceFrameIds,
+  buildFrontendRunNotes,
   indexLiveServiceEnvUrls,
   resolveFrontendBindings,
+  type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
+import { connectionDescription } from '@cat-factory/contracts'
+import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { extractReferences } from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -123,6 +129,13 @@ export interface AgentContextBuilderDeps {
   requirementReviews?: RequirementReviewRepository
   clarityReviews?: ClarityReviewRepository
   brainstormSessions?: BrainstormSessionRepository
+  /**
+   * Optional: the initiative store. When wired, an `initiative`-level run's context carries the
+   * planning entity (the interviewer's synthesized goal/constraints + Q&A digest and the
+   * analyst's codebase analysis), so the analyst and planner prompts are grounded in the prior
+   * steps' findings. Absent → the initiative steps run off the raw block description alone.
+   */
+  initiatives?: InitiativeRepository
   environmentProvisioning?: EnvironmentProvisioningService
   /**
    * Optional: resolves fragment ids against the merged tenant catalog (managed +
@@ -144,14 +157,25 @@ export interface AgentContextBuilderDeps {
 export class AgentContextBuilder {
   constructor(private readonly deps: AgentContextBuilderDeps) {}
 
-  /** Assemble the {@link AgentRunContext} for a step from the run + block state. */
+  /**
+   * Assemble the {@link AgentRunContext} for a step from the run + block state.
+   *
+   * `options.agentKind` overrides the step's own kind as the kind that will actually
+   * RUN — a gate step dispatches its helper (`ci` → `ci-fixer`, `post-release-health` →
+   * `on-call`) and the Tester loop its `fixer` off the HOSTING step, whose kind is the
+   * gate/tester, not the helper. Trait-driven context (the `code-aware` fragment fold)
+   * must key off the helper's kind, else a code-aware helper never receives the
+   * service's standards.
+   */
   async buildContext(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     isFinalStep: boolean,
     block: Block,
+    options?: { agentKind?: string },
   ): Promise<AgentRunContext> {
+    const agentKind = options?.agentKind ?? step.agentKind
     // When a block's requirements have been reworked, that standardized document is
     // the single source of truth for every agent step: it already folds in the
     // description plus the linked docs / tracker issues, so it REPLACES the
@@ -178,9 +202,13 @@ export class AgentContextBuilder {
       description,
       { includeLinked: !reworked },
     )
-    const environment = await this.resolveEnvironment(workspaceId, block.id)
+    const environment = await this.resolveEnvironment(workspaceId, block)
     const service = await this.resolveServiceConfig(workspaceId, block)
     const frontend = await this.resolveFrontendConfig(workspaceId, block)
+    const involvedServices = await this.resolveInvolvedServices(workspaceId, block)
+    // An initiative-level run (the planning pipeline) carries the interview + analysis
+    // context so the analyst/planner prompts fold in the human's intent and prior findings.
+    const initiative = await this.resolveInitiativeContext(workspaceId, block)
     const agentConfig = block.agentConfig
     // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
     // replace the description) as a synthetic prior output so the architect and downstream
@@ -200,9 +228,9 @@ export class AgentContextBuilder {
     // Resolve the best-practice fragments to inject for this step. `code-aware` kinds
     // get the running service's selected fragments unioned with the block's own pins;
     // other kinds keep only their block pins. Recorded on the step for observability.
-    const resolved = await this.resolveFragments(workspaceId, step, block)
+    const resolved = await this.resolveFragments(workspaceId, agentKind, step, block)
     return {
-      agentKind: step.agentKind,
+      agentKind,
       pipelineName: instance.pipelineName,
       workspaceId,
       executionId: instance.id,
@@ -254,6 +282,8 @@ export class AgentContextBuilder {
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
+      ...(involvedServices?.length ? { involvedServices } : {}),
+      ...(initiative ? { initiative } : {}),
       priorOutputs,
       decisions: instance.steps
         .filter((s, i) => i < instance.currentStep && s.decision?.chosen)
@@ -268,6 +298,31 @@ export class AgentContextBuilder {
       // human's gate feedback share one revision shape; the companion path takes
       // precedence when both are present.
       ...buildRevisionContext(step),
+    }
+  }
+
+  /**
+   * The planning context for an `initiative`-level run: the interviewer's synthesized
+   * goal / constraints / non-goals + the answered Q&A digest, and the analyst's codebase
+   * analysis. Returns undefined for non-initiative blocks, when no initiative store is wired,
+   * or when the block has no initiative entity yet.
+   */
+  private async resolveInitiativeContext(
+    workspaceId: string,
+    block: Block,
+  ): Promise<AgentRunContext['initiative']> {
+    if (block.level !== 'initiative' || !this.deps.initiatives) return undefined
+    const initiative = await this.deps.initiatives.getByBlock(workspaceId, block.id)
+    if (!initiative) return undefined
+    const qa = (initiative.qa ?? [])
+      .filter((q) => q.answer?.trim())
+      .map((q) => ({ question: q.question, answer: q.answer }))
+    return {
+      ...(initiative.goal ? { goal: initiative.goal } : {}),
+      ...(initiative.constraints?.length ? { constraints: initiative.constraints } : {}),
+      ...(initiative.nonGoals?.length ? { nonGoals: initiative.nonGoals } : {}),
+      ...(qa.length ? { qa } : {}),
+      ...(initiative.analysisSummary ? { analysisSummary: initiative.analysisSummary } : {}),
     }
   }
 
@@ -340,6 +395,47 @@ export class AgentContextBuilder {
     workspaceId: string,
     block: Block,
   ): Promise<AgentRunContext['frontend'] | undefined> {
+    const resolution = await this.resolveFrontendResolution(workspaceId, block)
+    if (!resolution) return undefined
+    const { config, liveServiceEnvUrls } = resolution
+    return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
+  }
+
+  /**
+   * The run-start binding snapshot + soft notes for a frontend UI-test / preview run: the
+   * resolved bindings (env-var → live URL | mocked) plus the non-fatal advisories
+   * ({@link buildFrontendRunNotes}). Shares the SAME single-read resolution as
+   * {@link resolveFrontendConfig}. The engine stamps BOTH results on the run (`frontendBindings`
+   * + `notes`) at start, so the SPA's run/step detail projects the frozen start-time resolution
+   * with no extra live-env read at view time (and it stays truthful after the envs are torn down).
+   * Returns undefined for a non-frontend frame (nothing to project), exactly like
+   * {@link resolveFrontendConfig}.
+   */
+  async resolveFrontendRunInfo(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{ bindings: ResolvedFrontendBinding[]; notes: string[] } | undefined> {
+    const resolution = await this.resolveFrontendResolution(workspaceId, block)
+    if (!resolution) return undefined
+    const { config, liveServiceEnvUrls } = resolution
+    return {
+      bindings: resolveFrontendBindings(config, liveServiceEnvUrls),
+      notes: buildFrontendRunNotes(config, liveServiceEnvUrls),
+    }
+  }
+
+  /**
+   * Resolve a frontend frame's config plus the live env URLs of the services it binds — the one
+   * IO step ({@link EnvironmentProvisioningService.listHandles}) shared by both the agent-context
+   * resolution and the run-info projection. Only a `type: 'frontend'` frame carrying a
+   * `frontendConfig` yields a result; every other frame returns undefined. The live env URLs are
+   * read ONCE and indexed by the service-frame id (no per-binding point read), so this is a single
+   * query regardless of binding count.
+   */
+  private async resolveFrontendResolution(
+    workspaceId: string,
+    block: Block,
+  ): Promise<{ config: FrontendConfig; liveServiceEnvUrls: Map<string, string> } | undefined> {
     const frame =
       block.level === 'frame' ? block : await this.resolveServiceFrame(workspaceId, block.id)
     if (!frame || frame.type !== 'frontend' || !frame.frontendConfig) return undefined
@@ -356,7 +452,7 @@ export class AgentContextBuilder {
             serviceFrameIds,
           )
         : new Map<string, string>()
-    return { config, bindings: resolveFrontendBindings(config, liveServiceEnvUrls) }
+    return { config, liveServiceEnvUrls }
   }
 
   /**
@@ -432,20 +528,29 @@ export class AgentContextBuilder {
 
   /**
    * Resolve the best-practice fragments to fold into a step's system prompt. Service
-   * fragments reach an agent ONLY when its kind carries the `code-aware` trait: those
-   * kinds get the running SERVICE's selected fragments (the frame's
-   * `serviceFragmentIds`, seeded from the workspace default and editable per service)
-   * unioned with the block's own manual pins, resolved against the universal pool. A
-   * non-code-aware kind returns null so `composeBlockSystemPrompt` falls back to the
-   * block's own `fragmentIds` unchanged. Records the selected ids on the step for
-   * observability; never throws (a lookup failure degrades to the block pins).
+   * fragments reach an agent ONLY when its kind carries the `code-aware` trait (technical
+   * standards) OR the `doc-aware` trait (document writing-style fragments): those kinds get
+   * the running SERVICE's selected fragments (the frame's `serviceFragmentIds`, seeded from
+   * the workspace default and editable per service) unioned with the block's own manual pins
+   * (for a document task, the default-on `style.*` pins seeded at creation), resolved against
+   * the universal pool. A kind carrying neither trait returns null so `composeBlockSystemPrompt`
+   * falls back to the block's own `fragmentIds` unchanged. Records the selected ids on the step
+   * for observability; never throws (a lookup failure degrades to the block pins).
    */
   private async resolveFragments(
     workspaceId: string,
+    agentKind: string,
     step: PipelineStep,
     block: Block,
   ): Promise<{ fragments: { id: string; body: string }[] } | null> {
-    if (!hasTrait(step.agentKind, CODE_AWARE_TRAIT)) return null
+    // Recorded per dispatch, so it always reflects the kind that actually ran. A step
+    // reused across dispatches (a gate/tester host, then its code-aware helper, then a
+    // re-test) must not keep reporting a prior round's fragments: a non-code-aware kind
+    // receives none, so clear it here rather than leaving a stale selection behind.
+    if (!hasTrait(agentKind, CODE_AWARE_TRAIT) && !hasTrait(agentKind, DOC_AWARE_TRAIT)) {
+      step.selectedFragmentIds = undefined
+      return null
+    }
     try {
       const serviceIds = await this.resolveServiceFragmentIds(workspaceId, block)
       // Service standards first, then the block's own pins; deduped, stable order.
@@ -466,11 +571,17 @@ export class AgentContextBuilder {
               return fragment ? { id, body: fragment.body } : null
             })
             .filter((f): f is { id: string; body: string } => f !== null)
+      // Re-recorded per dispatch — including clearing it when a re-dispatch resolves to
+      // nothing (the selection was emptied between rounds), so the step never keeps
+      // reporting fragments a later round no longer received.
+      step.selectedFragmentIds = fragments.length ? fragments.map((f) => f.id) : undefined
       if (fragments.length === 0) return null
-      step.selectedFragmentIds = fragments.map((f) => f.id)
       return { fragments }
     } catch {
-      // Resolution must never wedge a run; fall back to the block's own pins.
+      // Resolution must never wedge a run; fall back to the block's own pins. Clear any
+      // stale selection so observability doesn't keep reporting a prior round's fragments
+      // that this dispatch did not actually inject.
+      step.selectedFragmentIds = undefined
       return null
     }
   }
@@ -523,35 +634,52 @@ export class AgentContextBuilder {
     }
 
     if (opts.includeLinked) {
-      if (this.deps.documents)
-        for (const d of await this.deps.documents.listByBlock(workspaceId, blockId)) addDoc(d)
-      if (this.deps.tasks)
-        for (const t of await this.deps.tasks.listByBlock(workspaceId, blockId)) addTask(t)
+      const [linkedDocs, linkedTasks] = await Promise.all([
+        this.deps.documents?.listByBlock(workspaceId, blockId) ?? [],
+        this.deps.tasks?.listByBlock(workspaceId, blockId) ?? [],
+      ])
+      for (const d of linkedDocs) addDoc(d)
+      for (const t of linkedTasks) addTask(t)
     }
 
     // Resolve explicitly-named references against the imported corpus by a POINT LOOKUP
     // per reference — never a full-corpus scan. Only items that actually exist are added
     // (a `UTF-8` that happens to match the Jira-key shape just resolves to nothing);
-    // nothing is fetched live.
+    // nothing is fetched live. The lookups are independent point reads on the per-step
+    // dispatch path, so they run concurrently; results are folded in in reference order
+    // so the dedupe (and the resulting context ordering) stays deterministic.
     const refs = extractReferences(description ?? '')
-    if (this.deps.tasks) {
-      for (const key of refs.jiraKeys) addTask(await this.deps.tasks.get(workspaceId, 'jira', key))
-      for (const ref of refs.githubRefs)
-        addTask(await this.deps.tasks.get(workspaceId, 'github', ref))
-    }
-    for (const url of refs.urls) {
-      if (this.deps.documents) {
-        // Prefer a precise match by the document's stable (source, externalId) — a pasted
-        // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
-        // title segment or tracking params still resolves. Fall back to the url-string
-        // lookup for any source the resolver doesn't claim (or when it isn't wired).
-        const ref = this.deps.documentUrlResolver?.(url)
-        const byRef = ref
-          ? await this.deps.documents.get(workspaceId, ref.source, ref.externalId)
-          : null
-        addDoc(byRef ?? (await this.deps.documents.getByUrl(workspaceId, url)))
-      }
-      if (this.deps.tasks) addTask(await this.deps.tasks.getByUrl(workspaceId, url))
+    const documents = this.deps.documents
+    const taskRepo = this.deps.tasks
+    const [keyTasks, refTasks, urlItems] = await Promise.all([
+      Promise.all(refs.jiraKeys.map((key) => taskRepo?.get(workspaceId, 'jira', key) ?? null)),
+      Promise.all(refs.githubRefs.map((ref) => taskRepo?.get(workspaceId, 'github', ref) ?? null)),
+      Promise.all(
+        refs.urls.map(async (url) => {
+          const [doc, task] = await Promise.all([
+            (async () => {
+              if (!documents) return null
+              // Prefer a precise match by the document's stable (source, externalId) — a pasted
+              // link canonicalised through the providers' parseRef — so a Figma/Notion URL with a
+              // title segment or tracking params still resolves. Fall back to the url-string
+              // lookup for any source the resolver doesn't claim (or when it isn't wired).
+              const ref = this.deps.documentUrlResolver?.(url)
+              const byRef = ref
+                ? await documents.get(workspaceId, ref.source, ref.externalId)
+                : null
+              return byRef ?? (await documents.getByUrl(workspaceId, url))
+            })(),
+            taskRepo?.getByUrl(workspaceId, url) ?? null,
+          ])
+          return { doc, task }
+        }),
+      ),
+    ])
+    for (const t of keyTasks) addTask(t)
+    for (const t of refTasks) addTask(t)
+    for (const { doc, task } of urlItems) {
+      addDoc(doc)
+      addTask(task)
     }
 
     return {
@@ -566,9 +694,55 @@ export class AgentContextBuilder {
    * wired (the provisioning service is an optional dependency), so the engine
    * stays unchanged when it is off.
    */
-  private async resolveEnvironment(workspaceId: string, blockId: string) {
+  private async resolveEnvironment(workspaceId: string, block: Block) {
     if (!this.deps.environmentProvisioning) return null
-    return this.deps.environmentProvisioning.resolveForBlock(workspaceId, blockId)
+    // Resolve the OWN service frame's env specifically: a task can provision several envs (its own
+    // frame's plus each involved-service frame's), all under this block, so a plain block read
+    // could surface a peer's. The own env is the one the running task's agent/tester targets.
+    const frameId = (await this.resolveServiceFrameId(workspaceId, block.id)) ?? undefined
+    return this.deps.environmentProvisioning.resolveForBlock(workspaceId, block.id, frameId)
+  }
+
+  /**
+   * Resolve the connected services "directly involved" in a task beyond its own (the connections
+   * initiative) into the agent-context shape: title + the connection `description` prose + the
+   * peer's LIVE ephemeral env URL when one is up this run. Read-time STALE FILTER — a
+   * `involvedServiceIds` entry that is no longer a connection neighbour or no longer resolves to a
+   * `service` frame is dropped (inert, never a run failure). Only tasks carry involved services
+   * (reviews/deploys are task-scoped), so frames/modules resolve nothing. The peers' live env URLs
+   * are read ONCE via {@link EnvironmentProvisioningService.listHandles} and indexed by frame id
+   * (the same newest-wins helper the frontend bindings use) — a single query regardless of count.
+   */
+  private async resolveInvolvedServices(
+    workspaceId: string,
+    block: Block,
+  ): Promise<AgentRunContext['involvedServices'] | undefined> {
+    if (block.level !== 'task') return undefined
+    if ((block.involvedServiceIds?.length ?? 0) === 0) return undefined
+    const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
+    const byId = new Map(blocks.map((b) => [b.id, b]))
+    const ownFrameId = frameOf(byId, block.id)?.id
+    if (!ownFrameId) return undefined
+    const valid = validInvolvedServiceFrames(blocks, block, ownFrameId)
+    if (valid.length === 0) return undefined
+    const frameIds = new Set(valid.map((b) => b.id))
+    const liveEnvUrls =
+      this.deps.environmentProvisioning && frameIds.size > 0
+        ? indexLiveServiceEnvUrls(
+            await this.deps.environmentProvisioning.listHandles(workspaceId),
+            frameIds,
+          )
+        : new Map<string, string>()
+    return valid.map((frame) => {
+      const description = connectionDescription(blocks, ownFrameId, frame.id)
+      const envUrl = liveEnvUrls.get(frame.id)
+      return {
+        frameId: frame.id,
+        title: frame.title,
+        ...(description ? { description } : {}),
+        ...(envUrl ? { envUrl } : {}),
+      }
+    })
   }
 }
 

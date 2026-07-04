@@ -1,5 +1,527 @@
 # @cat-factory/contracts
 
+## 0.95.0
+
+### Minor Changes
+
+- 6c1efd1: Docker Compose ephemeral envs: opt-in build-from-source mode.
+
+  The Docker Compose environment backend was checkout-free / image-pull only and hard-rejected
+  `build:`, host bind mounts, relative `env_file`, and `privileged`, so an app repo that builds
+  its own images (e.g. a .NET + Angular + SQL Server stack) could not become a per-PR preview env.
+
+  A new opt-in `build` mode (workspace handler `providerConfig.build`, mirrored advisory
+  `ServiceProvisioning.composeBuild`) clones the PR head into a per-project working tree, writes
+  the isolation-safe rewritten compose beside the original inside the checkout, and runs
+  `docker compose build` + `up --wait`. In build mode `build:`, in-checkout relative bind mounts,
+  and relative `env_file`s are honored. Image mode is unchanged and remains the default.
+
+  Host-escape refusal is uniform across EVERY path-bearing reference, not just bind mounts: bind
+  sources, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:` `file:` sources are
+  all run through `escapesCheckout`, which now also catches UNC/backslash-absolute paths, a
+  separator-buried `../` source (`sub/../../../etc`, previously mis-read as a named volume), and an
+  unresolved `${VAR}` interpolation (expands to an arbitrary host path at runtime). `include:` and
+  cross-file `extends: { file }` are refused outright in both modes — the daemon merges those files
+  from disk, so their services would otherwise slip a privileged container / host bind / pinned port
+  past the parse-based guard. `privileged: true` stays refused.
+
+  The `ComposeRuntime` seam gains optional `checkout`/`writeCheckoutFile` (implemented in the local
+  facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a LAZY
+  `clone` resolver (a thunk) invoked only by the build-mode provider that actually needs a working
+  tree — so image-mode compose / custom / k8s-sync provisions no longer mint a short-lived VCS token
+  they never use (reusing the deploy clone-target seam, memoized so one provision never mints twice).
+  Build mode registers only on the docker-family local runtime — the documented runtime-bound
+  exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
+
+  Auto-detection is now content-aware: a compose stack that declares `build:` is detected and
+  recommended in build-from-source mode (previously it was recommended blindly and then failed at
+  provision time).
+
+  The compose environment connect form gains an "Image source" selector (pull pre-built vs build
+  from source) and a build-timeout field; the misleading "image-based stacks only" copy is removed.
+
+## 0.94.0
+
+### Minor Changes
+
+- 6edcce0: Personal-PAT repo access + fail-closed board redaction, and removal of the legacy repo→block link.
+
+  - **Expand the repo picker with your own PAT (all facades).** A user's stored GitHub PAT
+    (`user_secrets` kind `github_pat`) now surfaces repos it can reach beyond the workspace's GitHub
+    App grant — even on the hosted Cloudflare/Node facades. Linking one creates a **personal service**
+    (`GitHubRepo.linkedVia === 'user_pat'`); runs against it already use the initiator's PAT.
+  - **Fail-closed frame redaction.** A service frame backed by a repo linked via another member's PAT
+    is hidden from members who can't reach it: the board snapshot scrubs the frame to just its
+    internal id + a "Permission denied" placeholder and drops its subtree. Access is a fail-closed
+    per-user projection (`github_user_repo_access`), refreshed when a user enumerates their PAT repos
+    and cleared when they remove their PAT — no live GitHub call on the snapshot path.
+  - **New:** `github_repos.linked_via` column + `github_user_repo_access` table (mirrored D1 ⇄
+    Drizzle, with a cross-runtime conformance suite); kernel `UserRepoAccessRepository` port and
+    optional `GitHubClient.listReposForToken`/`getRepoForToken`; `Block.accessDenied` +
+    `GitHubAvailableRepo.personal` wire fields.
+
+  **Breaking (pre-1.0, no migration):** the legacy `github_repos.block_id` repo↔frame link is removed
+  — the account-owned `Service` (`getByFrameBlock` → `repoGithubId`) is now the SOLE repo↔frame
+  linkage. `RepoProjectionRepository.linkBlock` and `GitHubRepo.blockId` are gone; `resolveRepoTarget`
+  now requires a `serviceRepository`; the `RepoBootstrapper` port's `linkRepoToBlock` is replaced by
+  `projectBootstrappedRepo` (the caller binds the frame's `Service`). Existing rows' `block_id` is
+  dropped; repos remain reachable through their `Service`.
+
+## 0.93.0
+
+### Minor Changes
+
+- ef57cb1: Bug-triage pipeline, Phase A — pipeline `availability` (one-off / recurring / both).
+
+  A library pipeline can now declare HOW it may be launched, so a recurring-only pipeline (the
+  upcoming `pl_bug_triage`) can't be started as a manual one-off, and a one-off-only pipeline can't
+  be attached to a schedule. Absent means `'both'` (unrestricted) — pre-1.0, no migration/back-fill,
+  existing rows read unchanged.
+
+  - **Contract**: `pipelineSchema` gains `availability?: 'one-off' | 'recurring' | 'both'` (+ the
+    `PipelineAvailability` type, re-exported from kernel); `createPipeline`/`updatePipeline` accept
+    and persist it.
+  - **Persistence** (both runtimes, kept symmetric): `availability` is a new `pipelines.availability`
+    column — D1 migration `0037_pipeline_availability.sql` ⇄ Drizzle schema + generated migration —
+    read/written by the shared `rowToPipeline` mapper and both repos, so the field round-trips
+    instead of being silently dropped on save.
+  - **Server enforcement** (the pickers are convenience, not the gate): `ExecutionService.start`
+    gains an `origin: 'manual' | 'recurring'` option (default `'manual'`), and a start-only
+    `assertPipelineLaunchable` gate rejects a manual start of a recurring-only pipeline (and a
+    scheduled fire of a one-off-only one). `RecurringPipelineService.fire` passes `'recurring'`; its
+    `create`/`update` reject attaching a one-off-only pipeline to a schedule. A retry/restart
+    re-drives an already-validated run, so it never re-checks the launch constraint. A pipeline
+    carrying an ENABLED `bug-intake` step must be `'recurring'` (validated at builder save + start;
+    a disabled step imposes no requirement). The schedule-attach check delegates to the same gate
+    (one rule, one `ValidationError`), and `clone` re-runs it so an un-launchable copy can't be
+    minted. Editing a pipeline to `'one-off'` while a schedule still references it is rejected
+    (`ConflictError`) rather than silently breaking every future fire.
+  - **SPA pickers**: the manual-start surfaces (add-task modal, board/inspector Run menus, task
+    run-settings default) filter out `'recurring'`-only pipelines, and the recurring-pipeline modal
+    filters out `'one-off'`-only ones — composed with the existing `pipelineAllowedForFrame`
+    predicate.
+
+## 0.92.0
+
+### Minor Changes
+
+- 1d738f7: feat(recurring): on-demand (manual-only) recurring tasks that can use individual-usage subscriptions
+
+  A recurring pipeline can now be flagged **on-demand**: it has no cadence and is never
+  fired by the sweeper — it runs ONLY when a person triggers it via "run now". Because a
+  human is present at every fire, an on-demand schedule's block MAY target an individual-usage
+  subscription model (Claude / Codex / GLM), unlocked per run-now with the initiator's personal
+  password exactly like a manual task start. A cadence schedule still refuses individual-usage
+  models (no one is present to unlock them unattended).
+
+  - New `onDemand` flag on `PipelineSchedule` + `createScheduleSchema` (recurrence is now
+    optional — an on-demand schedule needs none). Persisted as an `on_demand` column on both
+    runtimes (D1 migration `0037` ⇄ Drizzle), with `listDue` filtering `on_demand = 0` so the
+    sweeper skips them. Cross-runtime conformance asserts the flag round-trips and run-now fires.
+  - `RecurringPipelineService.fire` exempts on-demand schedules from the individual-usage
+    refusal and threads the run-now initiator + credential-activation closure into the run;
+    the run-now controller resolves the personal-credential gate (428 when a password is needed).
+  - Frontend: an "on-demand" toggle in the add-recurring modal (hides the cadence editor), an
+    on-demand inspector view (no cadence/pause, just run-now), and run-now now rides the cached
+    personal password through the credential modal. i18n in all 8 locales.
+
+## 0.91.0
+
+### Minor Changes
+
+- 47a2975: Initiatives slice 3 — the execution loop.
+
+  An approved initiative plan now RUNS: a new `InitiativeLoopService` drives each `executing`
+  initiative — reconciling its spawned tasks, spawning the next wave just-in-time, and completing
+  the initiative once every tracker item settles.
+
+  - **The loop** (`orchestration/modules/initiative/InitiativeLoopService.ts`): per-initiative
+    `tick` = reconcile (fold each spawned task block's status back onto its item — done + PR link /
+    `pr_open` / `blocked` + deviation, one batched block read, no N+1) → complete (all items settled
+    → initiative + anchor block `done`, tracker re-commit, notify) → spawn (create task blocks for
+    the eligible `pending` items — current phase, deps met, phase not halted — up to the concurrency
+    cap, each pipeline chosen by the policy's estimate→pipeline rules). Spawning is CLAIM-FIRST (a
+    rev-CAS write records the pre-generated block id before any side effect), so a concurrent ticker
+    never orphans a double-spawn. A per-service task-limit conflict leaves the item `pending` for the
+    next sweep; a missing pipeline (deleted after ingest) records a deviation + notification and
+    blocks the item — the sweep never throws.
+  - **Blocked = halt the phase, notify.** A blocked item stops new spawns in its phase (and keeps the
+    phase current, so the initiative never advances past it) and raises the new `initiative`
+    notification type; in-flight siblings finish. A human retries/skips the item to unblock.
+  - **Both cron seams + terminal pokes.** `runDue` is wired into the Worker `scheduled` handler and a
+    Node one-minute interval sweeper (symmetric). A settling child run pokes its owning initiative's
+    loop immediately (`RunStateMachine.emitInstance` on a terminal run, `ExecutionService.finalizeMerge`
+    on a merge), so work advances without waiting for the next sweep.
+  - **Controls.** Pause / resume / cancel endpoints + `InitiativeService` CAS transitions; the sweep
+    skips a non-`executing` initiative. The tracker window gains a live progress bar and the inspector
+    the loop controls (`initiative.inspector.pause/resume/cancel`, all locales).
+  - **`listExecuting()` now returns `{ workspaceId, initiative }[]`** (the entity carries no workspace
+    id) — mirrored in the D1 + Drizzle repos and asserted, with the persisted loop-state round-trip,
+    by the cross-runtime conformance suite.
+
+  No new persistence (the `initiatives` table already exists on both facades) — so no D1/Drizzle
+  migration and no executor-harness image bump.
+
+## 0.90.0
+
+### Minor Changes
+
+- b928904: Service connections Phase 2 — multi-env provisioning. A `deployer` step now fans out over
+  the task's own service frame PLUS each connected involved-service frame, provisioning one
+  ephemeral environment per frame (dispatched provider-before-consumer, parked between), each
+  keyed per `(blockId, frameId)` so the fan-out no longer clobbers itself. Already-ready peers
+  are injected into a later provision as `{{input.peerEnvUrls}}`, the agent context gains
+  `involvedServices` (title + connection description + the peer's live env URL, read-time
+  stale-filtered), and the Tester infra spec gains a `peerEnvironments` map so a cross-service
+  integration test can reach a peer's real environment.
+
+## 0.89.0
+
+### Minor Changes
+
+- 7fa7578: Initiatives slice 2 — interactive planning.
+
+  The Initiative Planning pipeline (`pl_initiative`) now interviews the human and analyses the
+  codebase before the planner drafts, so the plan is grounded in the stakeholder's intent and the
+  real code. The pipeline becomes
+  `[initiative-interviewer → initiative-analyst → initiative-planner → approval gate → initiative-committer]`
+  (catalog `version` bumped to 2, so workspaces get the reseed offer).
+
+  - **`initiative-interviewer`** — a new inline LLM gate that asks clarifying questions about goals,
+    scope and constraints, PARKS the planning run on a durable decision-wait while the human answers
+    through a dedicated planning Q&A window, then synthesizes the agreed goal / constraints / non-goals
+    brief. It is **entity-native**: the questions, answers and brief live directly on the `initiatives`
+    entity (its `qa` + new `interview` fields) via the CAS `mutate` — no new table. Reuses the shared
+    `RunStateMachine` park/answer/resume spine (the review-gate model). Passes through when no
+    interviewer model is wired, so pipelines run unchanged.
+  - **`initiative-analyst`** — a new container-explore agent that reads the repo and writes a prose
+    codebase analysis onto the entity (`analysisSummary`), grounding the plan.
+  - The **planner** and **analyst** prompts now fold in the interview brief + analysis (threaded onto
+    the agent context for `initiative`-level runs).
+  - New endpoints (`POST /blocks/:blockId/initiative-planning/{answer,continue,proceed}`), store
+    actions and the `initiative-planning` result-view window; the inspector surfaces an "Answer
+    planning questions" button while the interviewer is parked. `initiative.planning.*` copy added to
+    all locales.
+
+  Runtime-symmetric with no facade changes (the interviewer resolves its model exactly like the
+  requirements reviewer, from the routing default already wired in both runtimes) and no new
+  persistence — so no D1/Drizzle migration and no executor-harness image bump.
+
+## 0.88.0
+
+### Minor Changes
+
+- 55661f4: Add a public, key-authenticated external API (`/api/v1`) whose first use-case is "break down an
+  initiative": an external system picks a public, inline pipeline and posts a brief, and the platform
+  runs it headlessly and persists the result in the DB for asynchronous retrieval (poll
+  `GET /api/v1/jobs/:id` or stream `GET /api/v1/jobs/:id/events` over SSE). Nothing is committed to
+  GitHub — the run uses an inline agent (`initiative-breakdown`) with no container/repo.
+
+  - Inbound public-API keys (`public_api_keys`, mirrored D1 ⇄ Drizzle) are revocable and stored as a
+    one-way peppered hash (`HMAC-SHA256(secret, ENCRYPTION_KEY)`) — never plaintext, never
+    recoverable. Managed per-workspace via `GET|POST|DELETE /workspaces/:ws/public-api-keys`; the raw
+    key is shown once on create.
+  - Runs are anchored on a headless `internal` block excluded from every board projection, so the
+    external runs never appear in the UI.
+  - Requires `ENCRYPTION_KEY` (the HMAC pepper); the surface 503s when unconfigured.
+
+## 0.87.0
+
+### Minor Changes
+
+- ca5c3e8: Initiatives (slice 1 of 4): the long-running, multi-task counterpart to a task — see
+  `docs/initiatives/initiatives-feature.md` for the full multi-slice plan.
+
+  - **New `initiative` block level** — a container block under a service frame (created via the
+    new "Create initiative" button in the frame header, next to add-task/import-task). Tasks a
+    later slice's execution loop spawns link back via the new `blocks.initiative_id` membership
+    column (epic-style). D1 migration `0035_initiatives.sql` ⇄ Drizzle schema, shared mapper.
+  - **New `initiatives` entity + store** — the DB row is the source of truth (phases, items with
+    planner-authored estimates + dependencies, the execution policy with estimate→pipeline rules,
+    decisions / deviations / follow-ups / caveats), guarded by a `rev` compare-and-swap so the
+    loop has a single logical writer. Mirrored D1 ⇄ Drizzle repositories with a cross-runtime
+    conformance suite (CRUD, doc round-trip, CAS conflict, `blocks.initiative_id`).
+  - **Initiative Planning pipeline skeleton (`pl_initiative`)** — `initiative-planner` (a
+    read-only structured container explore that drafts the multi-phase plan, gated for human
+    approval) + `initiative-committer` (a deterministic engine step that flips the entity to
+    `executing` and commits the rendered tracker to `docs/initiatives/<slug>/` — canonical
+    `initiative.json` + human `tracker.md` + `version.json`, hash-short-circuited and
+    replay-safe, following the blueprint artifact pattern). A bidirectional guard in the
+    engine's shared `assertRunnable` makes `pl_initiative` the ONLY pipeline runnable on an
+    initiative block (and vice versa), across start/retry/restart.
+  - **API + snapshot + realtime** — `POST/GET /workspaces/:ws/initiatives` (+ by-block read),
+    the snapshot's optional `initiatives` field, and a new `initiative` WorkspaceEvent pushed
+    from both runtimes' publishers.
+  - **Frontend** — the Create Initiative modal + frame-header button, the initiative board card,
+    an inspector body (run planning / open tracker) and the read-only Initiative Tracker window
+    (`initiative-tracker` result view), with the `initiative.*` i18n namespace across all 8
+    locales.
+
+  Later slices add the interactive planning interview, the execution loop (just-in-time task
+  spawning with estimate-gated pipeline selection), and follow-up/deviation harvesting.
+
+## 0.86.0
+
+### Minor Changes
+
+- b216fdc: Fragment GitHub-source staleness is now a lightweight commit-version check.
+
+  The full fragment bodies were already cached on our side; the "check for changes"
+  probe previously re-listed the whole source directory and hashed every blob sha.
+  It now reads only the source directory's current head commit sha and compares it to
+  the commit the source was last synced to — a single cheap GitHub/GitLab call, no
+  directory listing or file reads.
+
+  Breaking (pre-1.0, no migration): `FragmentSource`/`FragmentSyncResult` now expose
+  `lastSyncedCommit` instead of `lastSyncedSha`, and `FragmentSourceStatus` is
+  `{ changed, lastSyncedCommit, remoteCommit }` (the per-file `changedCount`/`remoteSha`
+  are gone — the resync badge is now a plain "changes available" indicator). A new
+  `latestCommitSha` port method is added to `GitHubClient` and `VcsClient`. The physical
+  `fragment_sources.last_synced_sha` column is unchanged and reused to store the commit
+  sha, so no database migration is required; existing rows re-derive their commit on the
+  next sync.
+
+## 0.85.0
+
+### Minor Changes
+
+- 0ac0dc4: Surface per-iteration fixing instructions in polling-gate run details. A `ci` /
+  `conflicts` gate's helper attempt now records the instructions it was handed (the
+  failing-check summary + structured red checks for CI, the conflict/review detail for the
+  others) alongside the helper's own report, so the gate window shows WHAT each round set out
+  to fix — bringing the gate attempt timeline to parity with the Tester's fixer timeline
+  (`concerns` + `summary`). Adds `instructions` / `failingChecks` to `gateAttemptSchema` and a
+  transient `lastDispatchedInstructions` stash on `gateStepStateSchema` (schemaless step JSON,
+  no migration).
+
+## 0.84.0
+
+### Minor Changes
+
+- 36f4cf6: Frontend UI-test bindings: surface how each backend binding resolves + a non-fatal run-start note.
+
+  - **Shared resolution helpers moved to `@cat-factory/contracts`** (next to `frontendOriginsForService`)
+    so the SPA and the backend share ONE source of truth: `resolveFrontendBindings`,
+    `indexLiveServiceEnvUrls`, `boundServiceFrameIds`, the `ResolvedFrontendBinding`/`LiveEnvHandle`
+    types, and a new pure `buildFrontendRunNotes`. Orchestration re-exports them, so existing importers
+    are unchanged.
+  - **Inspector resolved-binding visibility**: `FrontendConfig.vue` now shows, live, how each backend
+    binding resolves — `envVar → a bound service's live ephemeral URL | mocked (WireMock)` — mirroring
+    what a UI-test run resolves, plus a warning for duplicate env vars. Backed by a new lightweight
+    `environments` store over `GET /workspaces/:ws/environments`.
+  - **Run/step detail projection + run-start note**: the engine stamps BOTH the resolved bindings
+    (`ExecutionInstance.frontendBindings`) and the non-fatal advisories (`ExecutionInstance.notes`:
+    duplicate env vars, or a partial-live set where some bound services fall back to WireMock) on the
+    run ONCE at start — the SPA-visible mirror of the harness's own `buildInfraNotes`. A `tester-ui`
+    step's detail projects the FROZEN start-time bindings (so a finished run shows what it actually
+    drove against, not a live re-resolution that could disagree with the co-located note after the
+    envs are torn down); the run-start note shows on any step detail of a frontend-frame run. Both
+    ride in the run's `detail` JSON (no migration) and round-trip identically on D1 ⇄ Postgres.
+
+  No wire/behaviour break: the notes field is optional, the moved helpers are re-exported, and a
+  non-frontend run is unaffected.
+
+- b78adf5: Private package registries: workspace-scoped npm registry credentials (npm private
+  orgs + GitHub Packages) that agent containers use to resolve private dependencies on
+  checkout.
+
+  - **Storage**: one `package_registry_connections` row per workspace (D1 migration 0034
+    ⇄ Drizzle mirror) holding a single sealed JSON array of entries
+    (`{ id, ecosystem: 'npm', vendor: 'npmjs' | 'github-packages', scopes, token }`,
+    cipher tag `cat-factory:package-registries`) plus a non-secret summary (vendor +
+    scopes + token tail). Ecosystem-discriminated so pip/maven/cargo are later additive.
+  - **API**: `GET|POST /workspaces/:ws/package-registries`, `DELETE …/:entryId`
+    (`PackageRegistriesController`, 503 when the module is unwired). Tokens are
+    write-only — the list view never returns them; edit = delete + re-add. Only one
+    entry per vendor is allowed (a 409 otherwise): the harness renders a single
+    host-keyed `_authToken` per registry, so a duplicate token would be silently
+    dropped — put every scope for a vendor on its one entry. Tokens are validated as a
+    single opaque printable-ASCII string (no spaces/control characters) so a token can't
+    inject extra `~/.npmrc` lines.
+  - **Dispatch**: `ContainerAgentExecutor` + `ContainerRepoBootstrapper` accept a
+    `resolvePackageRegistries` seam (wired in both facades from the same store) and
+    forward the decrypted entries as a `packageRegistries` field on every container job
+    body, like `ghToken`. The registry host is derived backend-side from the fixed
+    vendor set. A resolution failure fails the dispatch rather than silently running
+    without auth. The agent-context snapshot's allow-list projection excludes the field.
+  - **UI**: a "Private package registries" panel in the Integrations hub
+    (`PackageRegistriesPanel.vue`) — vendor preset + scopes + write-only token, entries
+    listed from the redacted summary.
+  - **Conformance**: a new suite section asserts add → redacted list → decrypted
+    dispatch resolution → remove identically on D1 and Postgres.
+
+## 0.83.0
+
+### Minor Changes
+
+- e0aab3f: Connections between services, phase 1 of the service-connections initiative (see
+  `backend/docs/service-connections.md` + `docs/initiatives/service-connections.md`):
+
+  - **Service connections**: a `service`-type frame carries `serviceConnections` — directed
+    consumer→provider edges to the other services it uses, each with an optional
+    description ("sends transactional email via it"). Stored as a JSON column on the block
+    (D1 migration `0034` ⇄ Drizzle), validated at the `updateBlock` write gate (no
+    self-connection, no duplicates, targets must be service frames; cycles are deliberately
+    legal), pruned when a connected frame is deleted, and drawn as emerald consumer→provider
+    edges on the board. A new inspector panel on service frames edits the connections and
+    shows the reverse "Used by" list.
+  - **Per-task involved services**: a task carries `involvedServiceIds` — the connected
+    services directly involved in it beyond its own service, picked (in the task's run
+    settings) from the frame's connection neighbors in either direction. Validated at the
+    write gate against the neighbor set; a selection whose connection was later removed is
+    badged stale in the UI and dropped on the next change. Later phases use the selection
+    to provision every involved service as an ephemeral environment and to let the coding
+    agent change every involved repo (multi-repo sibling checkouts) — designed in the
+    docs, not yet implemented.
+  - Cross-runtime conformance now round-trips both JSON columns and asserts the write-gate
+    rejections on both stores.
+
+## 0.82.0
+
+### Minor Changes
+
+- 5ce03c6: Frontend-config inspector: add repo autodetection, a frontend-directory field, clearer serve-mode
+  help, and collapsible field groups.
+
+  - **Detect from repo**: a new deterministic, checkout-free detector proposes a frontend config
+    (package manager from the lockfile, install command, build script + output dir from
+    package.json/framework markers, serve mode/script, and backend-binding env-var names from dotenv
+    examples). Exposed as `POST /workspaces/:ws/environments/detect-frontend-config`
+    (`detectFrontendConfig` on the environments connection service) and surfaced in the panel as a
+    non-binding preview the user reviews and applies (backend bindings are appended, never
+    overwriting existing service links).
+  - **Frontend directory**: `FrontendConfig.directory` scopes a monorepo frontend's build/serve to a
+    subdirectory (threaded into the harness job-body builder).
+  - **Serve mode**: replaced the single hint with per-mode descriptions and a note distinguishing it
+    from the separate env-injection axis.
+  - **Grouping**: the panel's fields are now collapsible sections (Build / Serve / Mocking / Env
+    injection / Backend bindings / Preview), collapsed by default.
+
+## 0.81.3
+
+### Patch Changes
+
+- 4a7a3f1: Preserve a task run's error trail across retries. A failed run's `failure` is now
+  appended to a new `failureHistory` on the fresh attempt (persisted in the shared
+  `agent_runs.detail`, so both runtimes get it with no migration), and cleared on the
+  running attempt — so the top failure banner disappears the moment the task restarts
+  while every previous error stays viewable in a "previous errors" history on the task
+  inspector. Applies to both retry (resume-from-failure) and restart-from-step.
+
+## 0.81.2
+
+### Patch Changes
+
+- 6243bea: Scope the "create task from a GitHub issue" picker's already-imported list to the
+  target service's repo. The quick-pick list of imported issues was filtered only by
+  source and free text, so it leaked in issues from every repo in the workspace even
+  though the live search was already repo-scoped. `listTasks` now accepts an optional
+  `blockId` that resolves the service's linked repo (via the same `resolveRepoTarget`
+  the search uses) and drops GitHub issues from other repos; repo-less sources (Jira,
+  Linear) are unaffected. The picker fetches its own repo-scoped list rather than
+  reading the shared workspace-wide store.
+
+## 0.81.1
+
+### Patch Changes
+
+- 2a91615: Frontend↔backend ephemeral-stack wiring (slice 6a of the frontend-preview initiative):
+
+  - **Reverse CORS origin injection.** A `deployer` step now passes `inputs.frontendOrigins` — the
+    comma-joined browser origins (`http://localhost:<servePort>`) of every `frontend` frame that
+    binds the service being provisioned (the reverse of the frontend's `backendBindings`). A
+    backend manifest folds it into its CORS allow-list via `{{input.frontendOrigins}}` (HTTP-manifest
+    provider) or `{{frontendOrigins}}` (Kubernetes native adapter, flat scope), so an ephemeral
+    frontend can reach an ephemeral backend. Derivation is automatic (`frontendOriginsForService`,
+    a single workspace block-list read — no N+1); the CORS env-var mapping stays operator-authored,
+    and the backend must be re-provisioned to pick up a newly-linked frontend. The served port is
+    resolved through the shared `resolveFrontendServePort` (contracts) — the same reserved-port
+    sanitization the harness infra spec uses — so a `servePort` set to a reserved in-container port
+    (8080/8089) injects the port the app is actually served on (4173), not the raw value.
+  - **Binding-resolution correctness.** `resolveFrontendBindings` now dedupes a repeated `envVar`
+    deterministically (last non-empty binding wins, matching the injected env map) instead of leaving
+    it to insertion order. New `duplicateBindingEnvVars` predicate (contracts) surfaces the collision
+    for the inspector + run-start notes (a follow-up slice); it is advisory, not a schema reject
+    (bindings persist per-blur with an allowed empty `envVar`).
+
+  Runtime-neutral (all facades). The inspector visibility panel + run-detail projection (6b) and the
+  deterministic local preview host port (6c) are tracked follow-ups in
+  `docs/initiatives/frontend-preview-ui-testing.md`.
+
+## 0.81.0
+
+### Minor Changes
+
+- 67d3876: feat(github): search available repos server-side in the "add service from repo" picker.
+  The picker no longer prefetches the entire installation repo list on open (slow for a wide
+  App install or PAT with hundreds of repos, and it blocked filtering until the whole list
+  loaded). Instead the user types at least 3 characters and the (debounced) query is sent to
+  `GET /github/available-repos?q=…`, which returns only the `owner/name` matches. The `q`
+  param is optional, so the repo-link management panel's browse-all is unchanged. The now-moot
+  manual "refresh list" button is removed (each search hits GitHub live).
+
+## 0.80.1
+
+### Patch Changes
+
+- d7f6e1c: Correctness fixes across the engine, the Node facade, and the SPA stores:
+
+  - **Engine:** `finalizeMerge` and the merger resolver are now idempotent under
+    durable-driver replays — a re-resolved merger step on an already-`done` (= merged)
+    block is a no-op instead of re-merging, downgrading the block to `pr_ready`, and
+    raising a spurious `merge_review` notification. `approveStep` now runs under the same
+    optimistic-concurrency write as its siblings (`resolveDecision`/`requestStepChanges`),
+    so an approve holding a stale snapshot can no longer resurrect a run a racing reject
+    already failed (it now returns 409).
+  - **CI gate (behavior change):** a check run concluding `stale` (superseded by GitHub)
+    no longer fails the CI gate — previously it looped the `ci-fixer` against a check it
+    could never fix until the attempt budget failed the run. `cancelled`/`timed_out`/
+    `action_required` still fail the gate.
+  - **Node facade parity:** the retention sweep now prunes the `github_commits`
+    projection to `retention.commitMs` (previously it grew without bound; the Worker
+    already pruned it), and a new every-2-min GitHub reconcile sweeper re-syncs stale
+    repo projections and tombstones uninstalled installations — the backstop for missed
+    webhooks the Worker's `github-reconcile` cron already provided.
+  - **SPA stores:** the execution store now reconciles snapshots/events monotonically by
+    the run's `rev` (a lagging refresh can no longer revert a just-terminal run to
+    `running`), the requirements/clarity/brainstorm stores guard live-event upserts by
+    `updatedAt` (out-of-order events no longer revert just-submitted answers), and
+    `board.moveBlock`/`updateBlock` roll their optimistic mutation back on API failure.
+
+## 0.80.0
+
+### Minor Changes
+
+- 120de05: feat(testing): pipeline-builder toggle + Test Report surfacing for the test quality companion (PR 2)
+
+  Completes the test quality-control (QC) companion (see
+  `docs/initiatives/tester-quality-companion.md`) with its authoring + observability surfaces:
+
+  - **Pipeline builder**: a per-Tester-step toggle (enabled by default) turns the QC companion
+    off, and an optional estimate-gating panel runs the coverage audit only on tasks whose
+    estimate clears a threshold (mirroring the companion-gating panel). The estimator-required
+    hint now covers QC gating too.
+  - **Test Report window**: a "Coverage review" section renders each QC verdict (adequate /
+    gaps-found, the reviewer's feedback + concrete gaps, model, timestamp) plus the loop budget
+    and a "budget spent" badge — so a report that greenlit only after a QC-driven re-run shows
+    why it looped.
+  - **Persistence fix**: the pipeline create/update/clone API + `PipelineService` now thread
+    `testerQuality` (and the sibling `followUps`, which had the same latent gap) end-to-end, so a
+    custom pipeline's builder toggle actually persists instead of being silently stripped by the
+    request-body validator. This includes the persistence layer itself: new `follow_ups` +
+    `tester_quality` JSON columns on the `pipelines` table, mirrored D1 (migration
+    `0032_pipeline_companion_toggles`) ⇄ Drizzle (schema + generated migration), written by both
+    repos and read by the shared `rowToPipeline` mapper. A QC estimate gate is validated like
+    companion gating (a threshold must be set and a `task-estimator` must run earlier).
+  - **Conformance**: the full QC loop (audit → loop the Tester on gaps → conclude on an adequate
+    report) is now driven through an injected deterministic reviewer on every runtime, asserting
+    the verdicts + counters persist identically across D1 and Drizzle. A separate round-trip
+    assertion saves a custom pipeline with a `followUps` opt-out + a gated `testerQuality` config
+    and re-reads it from the store, so the new columns can't silently drop the toggles on either
+    runtime.
+
+  All new user-facing copy is translated across every shipped locale.
+
 ## 0.79.0
 
 ### Minor Changes

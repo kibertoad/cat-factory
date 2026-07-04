@@ -68,11 +68,13 @@ export const WRITER_SYSTEM_PROMPT =
   'finding, recommend exactly that and set "fromStandard" to its id; (2) the in-repo `spec/` ' +
   '(business requirements) and `tech-spec/` (architecture, tech-stack, cross-cutting patterns ' +
   'like pagination / transport) excerpts provided; (3) web search, for anything the project ' +
-  'material leaves open — prefer current, widely-adopted practice and cite what you relied on ' +
-  'inside the recommendation text. Be specific and actionable; do NOT hedge with "it depends" ' +
-  'without giving a concrete default. Respond with ONLY a JSON object of this exact shape — no ' +
-  'prose, no code fences:\n' +
-  '{ "recommendations": [ { "itemId": "<the finding id>", "recommendation": "<the suggested ' +
-  'answer, in prose>", "fromStandard": "<best-practice fragment id if the answer came straight ' +
-  'from one, else null>" } ] }\n' +
+  'material leaves open — prefer current, widely-adopted practice and cite it BRIEFLY (a ' +
+  'standard id, or a source name / short URL) rather than explaining at length. Be precise, ' +
+  'concrete and SUCCINCT: state the answer directly in at most two or three sentences (or a few ' +
+  'short bullets) — do NOT restate the finding, add preamble, or pad the wording. Give a concrete ' +
+  'default rather than hedging with "it depends". Respond with ONLY a JSON object of this exact ' +
+  'shape — no prose, no code fences:\n' +
+  '{ "recommendations": [ { "itemId": "<the finding id>", "recommendation": "<the concrete ' +
+  'suggested answer — precise and succinct>", "fromStandard": "<best-practice fragment id if the ' +
+  'answer came straight from one, else null>" } ] }\n' +
   FINAL_ANSWER_IN_REPLY

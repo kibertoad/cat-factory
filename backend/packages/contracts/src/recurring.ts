@@ -47,6 +47,13 @@ export type Recurrence = v.InferOutput<typeof recurrenceSchema>
  * task block the pipeline runs against; `frameId` is the service frame it lives
  * in. `nextRunAt` is the computed epoch-ms of the next eligible fire (the global
  * sweeper queries `enabled AND nextRunAt <= now`).
+ *
+ * An **on-demand** schedule (`onDemand: true`) has no automatic cadence — the
+ * global sweeper never fires it; it runs ONLY when a human triggers it via
+ * "run now". Because a person is always present at fire time, an on-demand
+ * schedule's block MAY use an individual-usage subscription model (Claude/Codex/
+ * GLM), which a cadence schedule can never do (no one is present to unlock it).
+ * Its `recurrence` is retained but ignored, and `nextRunAt` never drives a fire.
  */
 export const pipelineScheduleSchema = v.object({
   id: v.string(),
@@ -62,6 +69,8 @@ export const pipelineScheduleSchema = v.object({
   template: scheduleTemplateSchema,
   name: v.string(),
   recurrence: recurrenceSchema,
+  /** Manual-only: never auto-fired by the sweeper; may use an individual-usage model. */
+  onDemand: v.boolean(),
   enabled: v.boolean(),
   lastRunAt: v.nullable(v.number()),
   nextRunAt: v.number(),
@@ -93,7 +102,16 @@ export const createScheduleSchema = v.object({
   pipelineId: v.string(),
   template: v.optional(scheduleTemplateSchema, 'custom'),
   name: scheduleNameSchema,
-  recurrence: recurrenceSchema,
+  /**
+   * The cadence for a scheduled pipeline. Optional — an on-demand schedule needs no
+   * cadence, so the server fills a nominal (ignored) recurrence when it is omitted.
+   */
+  recurrence: v.optional(recurrenceSchema),
+  /**
+   * When true the schedule is manual-only: the sweeper never fires it, so its block may
+   * use an individual-usage subscription model (unlocked per run-now by the initiator).
+   */
+  onDemand: v.optional(v.boolean(), false),
   enabled: v.optional(v.boolean(), true),
   /**
    * The prompt/description for the reused on-board task block — the same free-text a

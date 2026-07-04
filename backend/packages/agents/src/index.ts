@@ -51,11 +51,13 @@ export {
   defineStructuredOutput,
 } from './agents/kinds/structured-output.js'
 // Agent capability traits (standard + custom). `code-aware` gates the engine's folding
-// of the service's best-practice fragments; `spec-aware` appends the in-repo-spec guidance.
+// of the service's best-practice fragments; `doc-aware` folds the document-task writing
+// style fragments the same way; `spec-aware` appends the in-repo-spec guidance.
 export {
   type AgentTrait,
   type AgentTraitDefinition,
   CODE_AWARE_TRAIT,
+  DOC_AWARE_TRAIT,
   SPEC_AWARE_TRAIT,
   BINARY_STORAGE_TRAIT,
   SPEC_AWARE_GUIDANCE,
@@ -157,6 +159,29 @@ export {
   DOCUMENT_AGENT_KINDS,
   registerDocumentAgents,
 } from './agents/kinds/document.js'
+// Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
+// woven into the outliner/writer prompts and (later) read by the doc-quality gate. The
+// built-in `DOC_TEMPLATES` are the fallback; a deployment overrides via `registerDocTemplate`.
+// The public surface is the registry + the two cross-consumer helpers: `requiredSectionTitles`
+// (the WS4 doc-quality gate's source of truth) and `renderTemplateSkeleton` (for override
+// authors to preview a template). The prompt-weaving helpers (`templateStructureLine` /
+// `templateOutlineGuidance` / `templateSkeletonGuidance`) stay module-private to `document.ts`.
+export {
+  type DocTemplate,
+  type DocTemplateSection,
+  DOC_TEMPLATES,
+  registerDocTemplate,
+  registerDocTemplates,
+  clearRegisteredDocTemplates,
+  docTemplateFor,
+  requiredSectionTitles,
+  renderTemplateSkeleton,
+} from './agents/kinds/doc-templates.js'
+export {
+  INITIATIVE_BREAKDOWN_KIND,
+  INITIATIVE_AGENT_KINDS,
+  registerInitiativeAgents,
+} from './agents/kinds/initiative.js'
 export {
   READ_ONLY_AGENT_KINDS,
   READ_ONLY_GUARDRAIL,
@@ -205,6 +230,20 @@ export { runRepoOps } from './repo-ops/run.js'
 // + commit lifted out of the executor-harness, keyed by the engine's built-in op map (NOT
 // the registry, so they never leak into the custom-kind palette).
 export { blueprintPostOp, specPostOp } from './repo-ops/builtin.js'
+// Initiative tracker helpers: lenient plan coercion + the deterministic render/commit of
+// the in-repo `docs/initiatives/<slug>/` projection (the blueprint pattern applied to the
+// initiative entity). Driven from the engine's committer step handler, not a postOp — the
+// tracker renders the DB entity, which a RepoOp context doesn't carry.
+export {
+  coerceInitiativePlan,
+  canonicalInitiativeJson,
+  hashInitiative,
+  initiativeContentView,
+  renderInitiativeFiles,
+  renderInitiativeTrackerMarkdown,
+  parseInitiativeVersionFile,
+  commitInitiativeTracker,
+} from './repo-ops/initiative.js'
 
 // The generic AI provisioning facade: a mixable provider registry + the base,
 // runtime-neutral resolvers. Optional/heavier backends ship as their own packages

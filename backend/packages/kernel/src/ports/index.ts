@@ -46,6 +46,7 @@ export type {
 } from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
+export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,
   KaizenVerifiedComboRepository,
@@ -221,7 +222,9 @@ export type {
   PromptFragmentRepository,
   FragmentSourceRecord,
   FragmentSourceRepository,
+  ResolvedCatalogEntry,
 } from './fragment-repositories.js'
+export type { AppCaches, GroupCacheHandle } from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,
@@ -303,6 +306,7 @@ export type {
 } from './env-config-repair.js'
 export { NoopEnvConfigRepairRunner } from './env-config-repair.js'
 export type {
+  HarnessCallMetric,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobContainer,
@@ -336,6 +340,7 @@ export type {
   ProviderApiKeyRecord,
   ProviderApiKeyRepository,
 } from './provider-api-key-repositories.js'
+export type { PublicApiKeyRecord, PublicApiKeyRepository } from './public-api-key-repositories.js'
 export type {
   PersonalSubscriptionRecord,
   PersonalSubscriptionRepository,
@@ -352,6 +357,10 @@ export type {
   ResolveUserGitHubToken,
   RunInitiatorScope,
 } from './user-secret-repositories.js'
+export type {
+  UserRepoAccessRecord,
+  UserRepoAccessRepository,
+} from './user-repo-access-repositories.js'
 export type {
   ProviderModelCatalogRecord,
   ProviderModelCatalogRepository,
@@ -392,6 +401,10 @@ export type {
   IncidentEnrichmentConnectionRecord,
   IncidentEnrichmentConnectionRepository,
 } from './incident-enrichment-repositories.js'
+export type {
+  PackageRegistryConnectionRecord,
+  PackageRegistryConnectionRepository,
+} from './package-registry-repositories.js'
 export type {
   AccountSettingsRecord,
   AccountSettingsRepository,

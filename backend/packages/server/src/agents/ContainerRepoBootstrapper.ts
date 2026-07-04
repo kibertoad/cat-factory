@@ -7,6 +7,8 @@ import type {
   BootstrapRepoRequest,
   GitHubClient,
   GitHubInstallationRepository,
+  GitHubRepo,
+  GroupCacheHandle,
   ModelRef,
   RepoBootstrapper,
   RepoEntry,
@@ -14,6 +16,7 @@ import type {
 } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
+import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
 
@@ -29,6 +32,12 @@ export interface ContainerRepoBootstrapperDependencies {
   bootstrapJobRepository: BootstrapJobRepository
   /** Local repo projection: where the bootstrapped repo is recorded + linked to its frame. */
   repoRepository: RepoProjectionRepository
+  /**
+   * The workspace repo-projection cache (`AppCaches.repoProjection`, slice 3): projecting
+   * a freshly-bootstrapped repo changes what `resolveRepoTarget` lists, so drop the
+   * workspace group after the write. Absent (tests / the Worker's pass-through) ⇒ no-op.
+   */
+  repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   /** Resolves/validates the pre-created target repository (existence + emptiness). */
   githubClient: GitHubClient
   /** Mints a short-lived GitHub installation token for clone + push. */
@@ -43,6 +52,13 @@ export interface ContainerRepoBootstrapperDependencies {
   githubApiBase?: string
   /** Web base for building the created repo's URL (defaults to github.com). */
   webBaseUrl?: string
+  /**
+   * Resolve the workspace's private package-registry entries for the bootstrap
+   * container (the scaffolder installs dependencies too). Same seam as
+   * `ContainerAgentExecutorDependencies.resolvePackageRegistries`; a resolution
+   * failure propagates. Absent ⇒ no registry auth is forwarded.
+   */
+  resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
 }
 
 /** The role prompt when adapting a cloned reference architecture. */
@@ -170,6 +186,10 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
     }
 
     const ghToken = await this.deps.mintInstallationToken(installation.installationId)
+    // Private-registry auth for the scaffolder's installs, exactly as the
+    // implementation executor forwards it.
+    const packageRegistries =
+      (await this.deps.resolvePackageRegistries?.(request.workspaceId)) ?? []
     const sessionToken = await this.deps.sessionService.mint({
       workspaceId: request.workspaceId,
       executionId: request.jobId,
@@ -227,6 +247,7 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       proxyBaseUrl: this.deps.proxyBaseUrl,
       sessionToken,
       ghToken,
+      ...(packageRegistries.length ? { packageRegistries } : {}),
       repo: repoSpec,
       branch: repoSpec.baseBranch,
       // Bootstrap always resets history to a single commit and force-pushes (the fresh
@@ -313,16 +334,16 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
   }
 
   /**
-   * After a successful run: record the bootstrapped repo in the local projection
-   * (a brand-new repo may not be there yet) and link it to the board frame, so
-   * tasks dropped on that service resolve to (and are implemented against) it.
+   * After a successful run: record the bootstrapped repo in the local projection (a
+   * brand-new repo may not be there yet) and return its identity, so the caller binds
+   * the board frame's account-owned {@link Service} to it (tasks dropped on that service
+   * then resolve to, and are implemented against, it).
    */
-  async linkRepoToBlock(
+  async projectBootstrappedRepo(
     workspaceId: string,
     outcome: BootstrapRepoOutcome,
-    blockId: string,
-  ): Promise<void> {
-    const log = logger.child({ workspaceId, blockId })
+  ): Promise<{ installationId: number; githubId: number }> {
+    const log = logger.child({ workspaceId })
     const installation = await this.deps.installationRepository.getByWorkspace(workspaceId)
     if (!installation || installation.deletedAt) {
       throw new Error(`Workspace '${workspaceId}' is not connected to GitHub`)
@@ -332,11 +353,12 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       repo: outcome.name,
     })
     await this.deps.repoRepository.upsertMany(workspaceId, [repo])
-    await this.deps.repoRepository.linkBlock(workspaceId, repo.githubId, blockId)
+    await this.deps.repoProjectionCache?.invalidateGroup(workspaceId)
     log.info(
       { repo: `${outcome.owner}/${outcome.name}`, githubId: repo.githubId },
-      'bootstrap: linked repo to service frame',
+      'bootstrap: projected repo for service frame',
     )
+    return { installationId: installation.installationId, githubId: repo.githubId }
   }
 
   /** Construct the success outcome from the installation + the recorded job's repo name. */

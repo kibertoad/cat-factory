@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Block, BlockStatus } from '~/types/domain'
 import { useBoardStore } from '~/stores/board'
+import { useWorkspaceStore } from '~/stores/workspace'
 
 /** Minimal Block factory — only the fields the read getters care about. */
 function block(id: string, over: Partial<Block> = {}): Block {
@@ -86,6 +87,26 @@ describe('board store read getters', () => {
         .map((b) => b.id)
         .sort(),
     ).toEqual(['t2', 't3'])
+  })
+
+  it('descendantsOf returns the transitive structural subtree, excluding the root', () => {
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1'),
+      task('t1', 'f1'),
+      task('t2', 'm1'),
+      frame('f2'),
+      task('t3', 'f2'),
+    ])
+    expect(
+      store
+        .descendantsOf('f1')
+        .map((b) => b.id)
+        .sort(),
+    ).toEqual(['m1', 't1', 't2'])
+    // a leaf task has no descendants; unknown ids are a safe empty
+    expect(store.descendantsOf('t1')).toEqual([])
+    expect(store.descendantsOf('missing')).toEqual([])
   })
 
   it('epicMembers groups blocks by their epicId (indexed lookup)', () => {
@@ -248,5 +269,219 @@ describe('board store read getters', () => {
     store.upsert(task('t1', 'f1', { title: 'second' }))
     expect(store.getBlock('t1')?.title).toBe('second')
     expect(store.allTasks).toHaveLength(1)
+  })
+})
+
+describe('board store optimistic rollback', () => {
+  // These instantiate their own store AFTER stubbing the api (the store captures
+  // `useApi()` at setup), unlike the read-getter suite above.
+  beforeEach(() => {
+    useWorkspaceStore().workspaceId = 'ws1'
+  })
+
+  it('moveBlock restores the pre-drag position when the API rejects', async () => {
+    vi.stubGlobal('useApi', () => ({
+      moveBlock: () => Promise.reject(new Error('conflict')),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { position: { x: 10, y: 20 } })])
+    await store.moveBlock('t1', { x: 500, y: 600 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 10, y: 20 })
+  })
+
+  it('moveBlock keeps the new position on success', async () => {
+    vi.stubGlobal('useApi', () => ({
+      moveBlock: async () => task('t1', 'f1', { position: { x: 500, y: 600 } }),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { position: { x: 10, y: 20 } })])
+    await store.moveBlock('t1', { x: 500, y: 600 })
+    expect(store.getBlock('t1')?.position).toEqual({ x: 500, y: 600 })
+  })
+
+  it('updateBlock restores only the patched fields when the API rejects', async () => {
+    vi.stubGlobal('useApi', () => ({
+      updateBlock: () => Promise.reject(new Error('validation')),
+    }))
+    const store = useBoardStore()
+    store.hydrate([frame('f1'), task('t1', 'f1', { title: 'orig', description: 'keep' })])
+    await store.updateBlock('t1', { title: 'renamed' })
+    expect(store.getBlock('t1')?.title).toBe('orig')
+    expect(store.getBlock('t1')?.description).toBe('keep')
+  })
+
+  it('reparentBlock offers an undo that moves the block back to its previous home', async () => {
+    vi.stubGlobal('useApi', () => ({
+      reparentBlock: async (
+        _ws: string,
+        id: string,
+        body: { parentId: string; position: unknown },
+      ) => task(id, body.parentId, { position: body.position as { x: number; y: number } }),
+    }))
+    interface ToastAction {
+      onClick: () => void
+    }
+    const actions: ToastAction[] = []
+    vi.stubGlobal('useToast', () => ({
+      add: (t: { actions?: ToastAction[] }) => {
+        if (t.actions) actions.push(...t.actions)
+      },
+    }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    const store = useBoardStore()
+    store.hydrate([
+      frame('f1'),
+      moduleBlock('m1', 'f1'),
+      task('t1', 'f1', { position: { x: 1, y: 2 } }),
+    ])
+    await store.reparentBlock('t1', 'm1', { x: 5, y: 6 })
+    expect(store.getBlock('t1')?.parentId).toBe('m1')
+    // the undo action returns the block to its original parent + position
+    expect(actions).toHaveLength(1)
+    actions[0]!.onClick()
+    await vi.waitFor(() => {
+      expect(store.getBlock('t1')?.parentId).toBe('f1')
+      expect(store.getBlock('t1')?.position).toEqual({ x: 1, y: 2 })
+    })
+    // the undo move is itself non-undoable, so no second toast is queued
+    expect(actions).toHaveLength(1)
+  })
+})
+
+describe('board store deferred delete + undo', () => {
+  interface ToastAction {
+    onClick: () => void
+  }
+  /** Build a store with a stubbed api/toast, capturing the undo action offered on delete. */
+  function setup(removeImpl: () => Promise<void>) {
+    const removeSpy = vi.fn(removeImpl)
+    const addSpy = vi.fn()
+    const actions: ToastAction[] = []
+    vi.stubGlobal('useApi', () => ({ removeBlock: removeSpy }))
+    vi.stubGlobal('useToast', () => ({
+      add: (t: { actions?: ToastAction[] }) => {
+        addSpy(t)
+        if (t.actions) actions.push(...t.actions)
+      },
+    }))
+    setActivePinia(createPinia())
+    useWorkspaceStore().workspaceId = 'ws1'
+    return { store: useBoardStore(), removeSpy, addSpy, actions }
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('hides the subtree immediately but defers the backend delete', () => {
+    const { store, removeSpy } = setup(async () => {})
+    store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
+    store.removeBlock('f1')
+    // the whole subtree disappears at once…
+    expect(store.getBlock('f1')).toBeUndefined()
+    expect(store.getBlock('m1')).toBeUndefined()
+    expect(store.getBlock('t1')).toBeUndefined()
+    // …but nothing is deleted server-side yet.
+    expect(removeSpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps a pending-delete subtree hidden across a coarse refresh, and prunes its edges', () => {
+    const { store } = setup(async () => {})
+    store.hydrate([frame('f1'), task('t1', 'f1'), task('t2', 'f1', { dependsOn: ['t1'] })])
+    store.removeBlock('t1')
+    // A full re-hydrate (e.g. a `board` live event) that still carries the deleted block and
+    // the now-dangling dependency edge must not resurrect either.
+    store.hydrate([frame('f1'), task('t1', 'f1'), task('t2', 'f1', { dependsOn: ['t1'] })])
+    expect(store.getBlock('t1')).toBeUndefined()
+    expect(store.getBlock('t2')?.dependsOn).toEqual([])
+  })
+
+  it('ignores a live upsert for a block awaiting its deferred delete', () => {
+    const { store } = setup(async () => {})
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('t1')
+    store.upsert(task('t1', 'f1', { title: 'resurrected' }))
+    expect(store.getBlock('t1')).toBeUndefined()
+  })
+
+  it('undo cancels the pending delete and restores the subtree', async () => {
+    const { store, removeSpy, actions } = setup(async () => {})
+    store.hydrate([frame('f1'), moduleBlock('m1', 'f1'), task('t1', 'm1')])
+    store.removeBlock('f1')
+    expect(actions).toHaveLength(1)
+    actions[0]!.onClick()
+    expect(store.getBlock('f1')?.id).toBe('f1')
+    expect(store.getBlock('t1')?.id).toBe('t1')
+    // the deferred delete never fires after an undo
+    await vi.runAllTimersAsync()
+    expect(removeSpy).not.toHaveBeenCalled()
+  })
+
+  it('fires the backend delete for the captured workspace once the window elapses', async () => {
+    const { store, removeSpy } = setup(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1')
+    await vi.runAllTimersAsync()
+    expect(removeSpy).toHaveBeenCalledWith('ws1', 'f1')
+  })
+
+  it('restores the subtree and toasts an error if the deferred delete fails', async () => {
+    const { store, addSpy } = setup(() => Promise.reject(new Error('boom')))
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('f1')
+    await vi.runAllTimersAsync()
+    expect(store.getBlock('f1')?.id).toBe('f1')
+    expect(store.getBlock('t1')?.id).toBe('t1')
+    expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ color: 'error' }))
+  })
+
+  it('does not reattach a failed deferred delete onto a different workspace', async () => {
+    const { store } = setup(() => Promise.reject(new Error('boom')))
+    store.hydrate([frame('f1'), task('t1', 'f1')])
+    store.removeBlock('f1')
+    // The user switches workspace during the undo window; when the delete then fails, the
+    // ws1 subtree must NOT be injected onto the ws2 board now on screen.
+    useWorkspaceStore().workspaceId = 'ws2'
+    await vi.runAllTimersAsync()
+    expect(store.getBlock('f1')).toBeUndefined()
+    expect(store.getBlock('t1')).toBeUndefined()
+  })
+
+  it('runs onCommit with the captured workspace only when the window elapses', async () => {
+    const { store } = setup(async () => {})
+    const onCommit = vi.fn(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1', { onCommit })
+    await vi.runAllTimersAsync()
+    expect(onCommit).toHaveBeenCalledWith('ws1')
+  })
+
+  it('skips onCommit (the irreversible side effect) when the delete is undone', async () => {
+    const { store, actions } = setup(async () => {})
+    const onCommit = vi.fn(async () => {})
+    store.hydrate([frame('f1')])
+    store.removeBlock('f1', { onCommit })
+    actions[0]!.onClick() // undo before the window elapses
+    await vi.runAllTimersAsync()
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('undo re-adds pruned edges without clobbering ones gained during the window', () => {
+    const { store, actions } = setup(async () => {})
+    store.hydrate([
+      frame('f1'),
+      task('t1', 'f1'),
+      task('t2', 'f1', { dependsOn: ['t1'] }),
+      task('t3', 'f1'),
+    ])
+    store.removeBlock('t1')
+    // A live event adds a new dependency to the survivor mid-window (t1's edge was pruned).
+    store.upsert(task('t2', 'f1', { dependsOn: ['t3'] }))
+    actions[0]!.onClick() // undo restores t1 and its edge, keeping the newly-added t3 edge
+    expect(store.getBlock('t2')?.dependsOn.slice().sort()).toEqual(['t1', 't3'])
   })
 })

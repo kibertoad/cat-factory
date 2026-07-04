@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Block } from '~/types/domain'
 import { STATUS_META } from '~/utils/catalog'
+import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // The epic inspector body: the full tree of member tasks (which may live under different
 // services/modules), grouped service → module → task. Each task row selects it. Membership
@@ -45,15 +46,16 @@ const groups = computed(() => {
 </script>
 
 <template>
-  <div>
-    <div class="mb-1 flex items-center justify-between">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {{ t('inspector.epicChildren.title') }}
-      </span>
+  <InspectorSection
+    :title="t('inspector.epicChildren.title')"
+    :hint="t('inspector.epicChildren.hint')"
+    default-open
+  >
+    <template #actions>
       <span class="text-[11px] text-slate-500">{{
         t('inspector.epicChildren.doneCount', { done, total: members.length })
       }}</span>
-    </div>
+    </template>
 
     <div v-if="members.length === 0" class="text-[11px] text-slate-500">
       {{ t('inspector.epicChildren.empty') }}
@@ -92,5 +94,5 @@ const groups = computed(() => {
         </div>
       </div>
     </div>
-  </div>
+  </InspectorSection>
 </template>

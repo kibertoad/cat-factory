@@ -80,6 +80,15 @@ export interface BlockRepository {
     blockId: string,
   ): Promise<{ workspaceId: string; serviceId: string | null; block: Block } | null>
   /**
+   * The batched form of {@link BlockRepository.findById}: resolve every id that exists, in a
+   * single (chunked) query — used to augment a board's block list with cross-workspace
+   * dependency blocks without one round-trip per id. Ids with no block are simply absent
+   * from the result. Empty input → empty result.
+   */
+  findByIds(
+    blockIds: string[],
+  ): Promise<Array<{ workspaceId: string; serviceId: string | null; block: Block }>>
+  /**
    * Insert a block. `serviceId` stamps the account-owned service the block belongs to
    * (so it can be rendered on every workspace that mounts the service); omit/undefined
    * for legacy, workspace-local blocks.
@@ -94,6 +103,13 @@ export interface BlockRepository {
    */
   setService(workspaceId: string, ids: string[], serviceId: string | null): Promise<void>
   deleteMany(workspaceId: string, ids: string[]): Promise<void>
+  /**
+   * Count the workspace's HEADLESS internal anchor blocks (`internal = 1`) still in flight
+   * (`status = 'in_progress'`) — the concurrency backstop for the public API, which caps how
+   * many external "initiative" runs a workspace can have active at once. A SQL `COUNT`, never a
+   * load-and-count in JS (an unbounded external caller could otherwise start runs without limit).
+   */
+  countActiveInternal(workspaceId: string): Promise<number>
 }
 
 export interface PipelineRepository {
@@ -134,6 +150,33 @@ export interface ExecutionRepository {
    * Used by the durable driver and lifecycle transitions, which own the run's progress.
    */
   upsert(workspaceId: string, execution: ExecutionInstance): Promise<void>
+  /**
+   * Atomically replace a block's prior run with a brand-new live one, but ONLY if no OTHER
+   * live execution run (`running`/`blocked`/`paused`) exists for the block. In ONE
+   * transaction it (1) deletes the block's terminal (`done`/`failed`) rows plus, when
+   * `replaceId` is given, that specific prior row (the run the caller is knowingly
+   * superseding — e.g. a `restart` that already tore its source down), then (2) inserts the
+   * new run guarded by the partial unique index on `(workspace_id, block_id)` over live rows.
+   *
+   * Doing the cleanup and the insert as a single unit is what makes the one-live-run-per-block
+   * invariant hold under concurrency: a losing insert never deletes the winner (the delete only
+   * ever removes terminal rows and the caller's own `replaceId` — never another writer's fresh
+   * live row), and the index rejects a second live insert. So two genuinely-concurrent starts
+   * (double-click, a recurring fire racing a manual start, a notification retry racing a human
+   * retry) can never create two live runs — two drivers, two containers — for one block. This
+   * is why callers MUST NOT `deleteByBlock` first: an unconditional pre-delete would wipe a
+   * concurrent winner and re-open the exact race this method closes.
+   *
+   * Returns `true` when the row was inserted (and sets the in-memory `execution.rev` to its
+   * fresh value); returns `false` with NO net write (the transaction still commits the
+   * terminal/`replaceId` cleanup, but no new run) when another live run already exists, so the
+   * caller rejects the duplicate start rather than materialising a second run.
+   */
+  insertLive(
+    workspaceId: string,
+    execution: ExecutionInstance,
+    opts?: { replaceId?: string },
+  ): Promise<boolean>
   /**
    * Optimistic-concurrency write: persist `execution` only if the stored row's `rev`
    * still equals the `rev` last read onto this instance. Returns `true` (and bumps the

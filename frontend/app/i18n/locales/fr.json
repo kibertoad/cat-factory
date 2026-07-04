@@ -50,7 +50,8 @@
       "revoked": "{name} révoqué",
       "cleared": "{name} effacé",
       "destroyed": "{name} détruit"
-    }
+    },
+    "undo": "Annuler"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -80,7 +81,9 @@
       "moveFailed": "Impossible de déplacer",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
-      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent"
+      "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent",
+      "deleted": "\"{name}\" supprimé",
+      "moved": "\"{name}\" déplacé"
     },
     "repoTypes": {
       "service": "Service",
@@ -193,7 +196,9 @@
       "linearTeamId": "ID d’équipe Linear",
       "footerHint": "Une seule tâche récurrente est ajoutée dans le service ; chaque exécution remplace la précédente. Son historique d’exécutions est visible dans l’inspecteur.",
       "submit": "Ajouter la pipeline récurrente",
-      "addFailedTitle": "Impossible d’ajouter la pipeline récurrente"
+      "addFailedTitle": "Impossible d’ajouter la pipeline récurrente",
+      "onDemand": "À la demande (manuel uniquement)",
+      "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel."
     },
     "failure": {
       "containerFailedToStart": "Le conteneur n’a pas pu démarrer",
@@ -204,7 +209,10 @@
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
       "showDetail": "Afficher le détail",
-      "retrying": "Nouvelle tentative…"
+      "retrying": "Nouvelle tentative…",
+      "history": {
+        "previousErrors": "{count} erreur précédente | {count} erreurs précédentes"
+      }
     },
     "stop": {
       "label": "Arrêter",
@@ -242,7 +250,12 @@
       "dragService": "Faire glisser le service",
       "dragTask": "Faire glisser la tâche",
       "dragToResize": "Glisser pour redimensionner",
-      "addFirstTask": "Ajouter la première tâche"
+      "addFirstTask": "Ajouter la première tâche",
+      "createInitiativeTitle": "Creer une initiative",
+      "accessDenied": {
+        "title": "Autorisation refusée",
+        "hint": "Vous n'avez pas accès au dépôt sur lequel repose ce service."
+      }
     },
     "decisionBadge": {
       "decisionNeeded": "Décision requise",
@@ -384,6 +397,8 @@
   },
   "inspector": {
     "container": {
+      "title": "Contenu",
+      "hint": "Les modules et les tâches contenus dans ce bloc. Cliquez sur une entrée pour la sélectionner sur le tableau.",
       "modules": "Modules ({count})",
       "taskCount": "{count} tâche | {count} tâches",
       "allTasks": "Toutes les tâches ({count})",
@@ -394,6 +409,7 @@
     },
     "epicChildren": {
       "title": "Tâches de l'epic",
+      "hint": "Toutes les tâches assignées à cet epic, regroupées par service et module. Un epic ne fait que regrouper des tâches ; il n'exécute rien lui-même.",
       "doneCount": "{done}/{total} terminées",
       "empty": "Aucune tâche n'appartient encore à cet epic. Importez les enfants d'un epic, ou définissez l'epic d'une tâche.",
       "unassigned": "Non assigné"
@@ -428,10 +444,13 @@
         "skipped": "Ignoré"
       },
       "updateFailed": "Impossible de mettre à jour la planification",
-      "runNowFailed": "Impossible d'exécuter maintenant"
+      "runNowFailed": "Impossible d'exécuter maintenant",
+      "onDemand": "À la demande",
+      "onDemandHint": "Manuel uniquement. S'exécute lorsque vous le déclenchez et peut utiliser un modèle d'abonnement à usage individuel."
     },
     "fragments": {
       "serviceTitle": "Bonnes pratiques du service",
+      "serviceHint": "Normes de programmation pour tout le service. Le contenu de chaque fragment sélectionné est ajouté au prompt de chaque agent conscient du code travaillant sur les tâches de ce service.",
       "serviceEmpty": "Aucune. Les agents conscients du code sur ce service suivent leurs consignes par défaut.",
       "manageBoard": "Gérer la bibliothèque de fragments de ce tableau…",
       "manageAccount": "Gérer les fragments du compte…"
@@ -439,14 +458,37 @@
     "frontendConfig": {
       "title": "Frontend",
       "hint": "Comment compiler, servir et simuler ce frontend pour un test d'interface autonome. Les liaisons ci-dessous le relient aux services de backend qu'il appelle.",
+      "detect": {
+        "title": "Détecter depuis le dépôt",
+        "button": "Détecter",
+        "hint": "Lit le dépôt lié et propose une configuration à vérifier avant application. Rien n'est enregistré tant que vous n'appliquez pas.",
+        "error": "Impossible de lire le dépôt. Vérifiez que le frontend est lié à un dépôt connecté.",
+        "none": "Aucun élément de type frontend détecté. Indiquez le répertoire du frontend (pour un monorepo) ou renseignez les champs manuellement.",
+        "apply": "Appliquer",
+        "dismiss": "Ignorer",
+        "confidenceHigh": "sûr",
+        "confidenceLow": "estimation"
+      },
+      "groups": {
+        "build": "Compilation",
+        "serve": "Service",
+        "mocking": "Simulation",
+        "envInjection": "Injection d'environnement",
+        "bindings": "Liaisons backend",
+        "preview": "Aperçu"
+      },
       "packageManager": "Gestionnaire de paquets",
+      "directory": "Répertoire du frontend",
+      "directoryHint": "Le sous-dossier de l'app frontend dans le dépôt (un monorepo, p. ex. frontend/). Laissez vide si l'app est à la racine du dépôt.",
       "installCommand": "Commande d'installation",
       "buildScript": "Script de compilation",
       "outputDir": "Répertoire de sortie",
       "serveMode": "Mode de service",
       "serveStatic": "Statique",
       "serveCommand": "Commande",
-      "serveModeHint": "Statique sert le répertoire de sortie de la compilation ; Commande exécute un script de package.json (p. ex. preview).",
+      "serveStaticDesc": "sert le répertoire de sortie compilé en fichiers statiques. Le plus économique pour un test d'interface d'une app entièrement compilée.",
+      "serveCommandDesc": "exécute un script de package.json (p. ex. preview) pour servir l'app, pour les compilations nécessitant un serveur en fonctionnement.",
+      "serveEnvAxisNote": "Distinct de l'Injection d'environnement (à la compilation vs à l'exécution) ci-dessous, qui contrôle comment les URL du backend atteignent l'app, pas comment elle est servie.",
       "serveScript": "Script de service",
       "servePort": "Port de service",
       "mockMappingsPath": "Chemin des mappages de simulation",
@@ -475,10 +517,25 @@
           "failed": "Échec",
           "stopped": "Non démarré"
         }
+      },
+      "resolved": {
+        "title": "Résolution actuelle",
+        "duplicateWarning": "Utilisé sur plusieurs liaisons, seule la dernière s'applique : {vars}.",
+        "serviceOffline": "{service} : aucun environnement actif (simulé)",
+        "mock": "Mock (WireMock)"
       }
+    },
+    "serviceConnections": {
+      "title": "Connexions de services",
+      "hint": "Les autres services que celui-ci utilise, p. ex. un service qui envoie ses e-mails. Les connexions tracent des liens sur le tableau, et les tâches peuvent marquer un service connecté comme directement impliqué.",
+      "descriptionPlaceholder": "Comment ce service l'utilise, p. ex. envoie des e-mails via lui",
+      "remove": "Supprimer la connexion",
+      "empty": "Aucune connexion. Ajoutez-en une pour relier ce service à un autre service qu'il utilise.",
+      "usedBy": "Utilisé par"
     },
     "releaseHealth": {
       "title": "Santé post-déploiement",
+      "sectionHint": "Une fois les changements de ce service fusionnés et déployés, une gate surveille pendant un temps les monitors et SLO configurés. En cas de régression, elle lance un agent d'astreinte pour enquêter ; rien n'est annulé automatiquement.",
       "clear": "Effacer",
       "connectPrompt": "Connectez une intégration d'observabilité pour surveiller ce service après les déploiements.",
       "connectFirst": "Connectez d'abord une intégration d'observabilité",
@@ -495,6 +552,7 @@
     },
     "testConfig": {
       "title": "Infrastructure de test",
+      "hint": "Comment un environnement de test est mis en place pour ce service quand un pipeline doit l'exécuter : sans infrastructure, un fichier Docker Compose, des manifestes Kubernetes ou un type de manifeste personnalisé.",
       "provisionType": "Type de provisionnement",
       "provisionTypeHint": "Comment ce service met en place son environnement pour le Tester. L'espace de travail configure la gestion de chaque type (le moteur + la connexion).",
       "provisionTypes": {
@@ -578,11 +636,13 @@
     },
     "agentConfig": {
       "title": "Configuration de l'agent",
+      "hint": "Options apportées par les agents du pipeline de cette tâche. Chaque option reste modifiable jusqu'au démarrage de son agent, puis elle est verrouillée pour cette exécution.",
       "inherited": "hérité du service",
       "frozen": "Figé : l'agent a démarré"
     },
     "dependencies": {
       "title": "Dépend de",
+      "hint": "Tâches qui doivent être fusionnées avant que celle-ci puisse s'exécuter. Le contrôle Exécuter reste verrouillé tant que toutes les dépendances ne sont pas terminées.",
       "merged": "Fusionné",
       "notMerged": "Pas encore fusionné",
       "empty": "Aucune dépendance. Peut s'exécuter à tout moment.",
@@ -594,11 +654,14 @@
     },
     "estimate": {
       "title": "Estimation",
+      "hint": "Produite par l'agent estimateur de tâches : la complexité, le risque et l'impact estimés de cette tâche. Sert à décider si les étapes de consensus (multi-exécutions) en valent la peine.",
       "complexity": "Complexité",
       "risk": "Risque",
       "impact": "Impact"
     },
     "execution": {
+      "title": "Exécution",
+      "hint": "L'exécution en direct du pipeline de cette tâche : chaque étape d'agent, sa progression et la pull request obtenue.",
       "stage": {
         "incorporating": "Intégration en cours…",
         "reviewing": "Nouvelle revue en cours…",
@@ -652,12 +715,18 @@
       }
     },
     "structure": {
+      "title": "Structure",
+      "hint": "Où vit cette tâche dans son service et quelles normes de code ses agents suivent.",
       "module": "Module",
       "modulePlaceholder": "ex. Sessions (créé lors de l'implémentation s'il est nouveau)",
+      "moduleHint": "Le module du service auquel cette tâche appartient. Saisissez un nom ; un module qui n'existe pas encore est créé lors de l'implémentation de la tâche.",
       "bestPractices": "Bonnes pratiques",
-      "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut."
+      "bestPracticesEmpty": "Aucune. Les agents suivent leurs consignes par défaut.",
+      "bestPracticesHint": "Fragments de bonnes pratiques ajoutés aux prompts des agents de cette tâche, en plus des normes au niveau du service."
     },
     "runSettings": {
+      "title": "Paramètres d'exécution",
+      "hint": "Comment le pipeline de cette tâche s'exécute : quel pipeline démarre, quelles politiques de fusion et de modèle s'appliquent et ce qui se passe autour de l'exécution.",
       "unassigned": "Non assigné",
       "workspaceDefault": "Valeur par défaut de l'espace de travail",
       "workspaceDefaultParen": "(valeur par défaut de l'espace de travail)",
@@ -676,10 +745,13 @@
       },
       "pipeline": "Pipeline",
       "pipelineEmpty": "Aucune valeur par défaut. Choisissez un pipeline lorsque vous exécutez cette tâche.",
+      "pipelineHint": "Le pipeline que le bouton Exécuter démarre par défaut : la séquence d'étapes d'agent (par exemple spécification, code, test, fusion) exécutée pour cette tâche.",
       "mergePolicy": "Politique de fusion",
       "mergePresetDetail": "{name} : fusion automatique lorsque la complexité ≤ {complexity}, le risque ≤ {risk}, l'impact ≤ {impact} ; jusqu'à {attempts} tentatives de correction CI.",
       "mergePresetEmpty": "Aucun preset configuré. Le fusionneur déclenche une notification de revue pour chaque PR.",
+      "mergePolicyHint": "Décide quand une pull request terminée est fusionnée automatiquement au lieu d'attendre une revue humaine, et combien de tentatives de correction de CI une exécution obtient.",
       "modelPreset": "Preset de modèle",
+      "modelPresetHint": "Décide avec quel modèle d'IA chaque étape d'agent s'exécute.",
       "modelPresetBase": "base {model}",
       "modelPresetOverrides": ", {count} remplacement | , {count} remplacements",
       "modelPresetEmpty": "Aucun preset configuré. Les agents s'exécutent avec le routage par défaut du déploiement.",
@@ -700,7 +772,11 @@
       "responsibleProduct": "Produit responsable",
       "responsibleEmpty": "Non assigné. Définissez un responsable produit pour le notifier lorsque la revue d'exigences signale cette tâche.",
       "autoStartDependents": "Démarrer automatiquement les dépendants",
-      "autoStartHint": "Lorsque cette tâche est fusionnée, démarrer automatiquement les tâches qui en dépendent (une fois que leurs autres dépendances sont également terminées)."
+      "autoStartHint": "Lorsque cette tâche est fusionnée, démarrer automatiquement les tâches qui en dépendent (une fois que leurs autres dépendances sont également terminées).",
+      "involvedServices": "Services impliqués",
+      "involvedServicesHint": "Services connectés directement impliqués dans cette tâche : chacun démarre comme environnement éphémère aux côtés du service propre de la tâche, et l'agent de code peut aussi modifier leurs dépôts.",
+      "involvedServicesEmpty": "Aucun service connecté. Connectez des services sur le cadre du service pour les sélectionner ici.",
+      "involvedServiceStale": "N'est plus connecté au service de cette tâche ; il sera retiré au prochain changement."
     }
   },
   "panels": {
@@ -895,7 +971,8 @@
         "recurring": {
           "title": "Supprimer ce pipeline récurrent ?",
           "body": "\"{name}\", sa planification et son historique d'exécution seront supprimés. Cette action est irréversible."
-        }
+        },
+        "containerBodyWithCount": "\"{name}\" et le {count} élément qu'il contient seront supprimés. Cette action est irréversible. | \"{name}\" et les {count} éléments qu'il contient seront supprimés. Cette action est irréversible."
       }
     }
   },
@@ -1225,6 +1302,7 @@
         "visual_confirmation_ready": "Marquer comme lu",
         "human_review": "Marquer comme lu",
         "followup_pending": "Marquer comme lu",
+        "initiative": "Marquer comme lu",
         "markRead": "Marquer comme lu"
       },
       "toast": {
@@ -1400,6 +1478,7 @@
         "documents": "Documents",
         "taskTrackers": "Outils de suivi des tâches",
         "observability": "Observabilité",
+        "development": "Développement",
         "personal": "Personnel (vous uniquement)"
       },
       "items": {
@@ -1436,6 +1515,10 @@
         "observability": {
           "label": "Santé après publication",
           "description": "Surveillez les moniteurs et les SLO après la publication d'une version (Datadog)."
+        },
+        "packageRegistries": {
+          "label": "Registres de paquets privés",
+          "description": "Jetons npm et GitHub Packages que les agents utilisent pour installer les dépendances privées."
         },
         "githubPat": {
           "label": "Mon jeton GitHub",
@@ -1816,6 +1899,31 @@
       "connectionNoun": "la connexion d’observabilité",
       "incidentNoun": "le fournisseur d’incidents"
     },
+    "packageRegistries": {
+      "title": "Registres de paquets privés",
+      "intro": "Connectez les registres privés depuis lesquels vos dépôts installent leurs dépendances. Les agents les reçoivent lors du checkout d'un dépôt, afin que les dépendances privées se résolvent pendant l'installation. Les jetons sont en écriture seule : pour en changer un, supprimez l'entrée puis ajoutez-la de nouveau.",
+      "entryNoun": "entrée de registre",
+      "list": {
+        "heading": "Registres connectés",
+        "tokenTail": "jeton …{tail}",
+        "remove": "Supprimer l'entrée"
+      },
+      "add": {
+        "heading": "Ajouter un registre",
+        "vendor": "Registre",
+        "host": "Le jeton n'est envoyé qu'à {host}.",
+        "scopes": "Portées de paquets",
+        "scopesHelp": "Portées npm séparées par des virgules",
+        "token": "Jeton d'accès",
+        "save": "Ajouter le registre"
+      },
+      "toast": {
+        "loadFailed": "Impossible de charger les registres de paquets",
+        "added": "Registre ajouté",
+        "addFailed": "Impossible d'ajouter le registre",
+        "removeFailed": "Impossible de supprimer l'entrée du registre"
+      }
+    },
     "localMode": {
       "title": "Mode local",
       "intro": "Réglage de l'exécuteur de conteneurs local, stocké sur le déploiement de cette machine (il a remplacé les variables d'environnement {poolVars} / {harnessVars}). L'enregistrement redimensionne le pool à chaud en direct, sans redémarrage nécessaire; les exécutions en cours conservent le conteneur qu'elles détiennent déjà.",
@@ -2000,9 +2108,10 @@
       "testEnvBackend": {
         "label": "Où s'exécutent les environnements de test",
         "local-compose": "docker-compose dans le conteneur",
-        "environment-provider": "Fournisseur d'environnements"
+        "environment-provider": "Fournisseur d'environnements",
+        "composeDesc": "Démarre le docker-compose.yml du dépôt sur un démon Docker local comme URL du Testeur. Idéal pour les applications locales basées sur Compose. Prend en charge les images préconstruites ou la construction depuis les sources ; nécessite un démon Docker, donc uniquement pour les déploiements locaux."
       },
-      "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime: aucune connexion requise (le conteneur de l'exécution doit prendre en charge Docker-in-Docker).",
+      "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime : aucune connexion requise (le conteneur d’exécution doit prendre en charge Docker-in-Docker). Configurez le service, le port et la source de l’image (image préconstruite ou construction depuis les sources) dans les paramètres d’environnement du service.",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes distant"
@@ -2377,7 +2486,8 @@
       "repoLabel": {
         "private": " (privé)",
         "monorepo": " · monorepo",
-        "onBoard": " · déjà sur le tableau"
+        "onBoard": " · déjà sur le tableau",
+        "personal": " · personnel (votre jeton)"
       },
       "monorepoLabel": "Ceci est un monorepo (héberge plusieurs services)",
       "monorepoDescription": "Ajoutez plusieurs services depuis un même dépôt, chacun rattaché à un sous-répertoire.",
@@ -2450,7 +2560,8 @@
       "clarity_review": "Revue de clarte",
       "release_regression": "Regression de version",
       "human_test_ready": "Pret pour les tests humains",
-      "visual_confirmation_ready": "Pret pour la confirmation visuelle"
+      "visual_confirmation_ready": "Pret pour la confirmation visuelle",
+      "initiative": "Mises a jour de l'initiative"
     },
     "role": {
       "engineering": "Ingenierie",
@@ -2528,6 +2639,7 @@
     },
     "taskDocs": {
       "heading": "Documents de contexte",
+      "hint": "Documents joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
       "attach": "Joindre",
       "importPage": "Importer une page…",
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
@@ -2548,6 +2660,7 @@
     },
     "contextIssues": {
       "title": "Tickets de contexte",
+      "hint": "Tickets du tracker joints à cette tâche comme contexte. Leur contenu est fourni aux agents qui travaillent sur la tâche.",
       "attach": "Joindre",
       "attached": "Ticket joint",
       "attachFailed": "Impossible de joindre",
@@ -2632,6 +2745,10 @@
       "consensusRevertTooltip": "Consensus activé. Cliquez pour revenir à un seul agent.",
       "followUpEnableTooltip": "Compagnon de suivi désactivé. Cliquez pour l'activer (Coder repère les points en suspens / questions).",
       "followUpDisableTooltip": "Compagnon de suivi activé. Coder repère les points en suspens / sous-tâches / questions ; cliquez pour le désactiver.",
+      "testerQualityEnableTooltip": "Compagnon de qualité des tests désactivé. Cliquez pour l'activer (audite la couverture du rapport et relance le Testeur en cas de lacunes).",
+      "testerQualityDisableTooltip": "Compagnon de qualité des tests activé. Audite la couverture du rapport avant le feu vert et relance le Testeur en cas de lacunes ; cliquez pour le désactiver.",
+      "testerQualityLabel": "Compagnon de qualité des tests",
+      "testerQualityGateTooltip": "N'exécuter l'audit de qualité que lorsque l'estimation de la tâche dépasse un seuil (nécessite un Estimateur de tâches en amont)",
       "moveUp": "Monter l'étape",
       "moveDown": "Descendre l'étape",
       "removeStep": "Retirer cette étape du pipeline",
@@ -2807,6 +2924,8 @@
     },
     "attemptsHeading": "Tentatives du {helper}",
     "attempt": "Tentative {number}",
+    "attemptInstructions": "Transmis à {helper}",
+    "attemptReport": "Rapport de {helper}",
     "outcome": {
       "completed": "terminée",
       "failed": "échouée"
@@ -2880,6 +2999,9 @@
       "findings": "Observations",
       "open": "Ouvertes",
       "answered": "Répondues",
+      "recommendations": "Recommandations",
+      "recsGenerating": "En cours",
+      "recsToReview": "À examiner",
       "model": "Modèle"
     },
     "actions": {
@@ -3273,6 +3395,15 @@
       "failed": "Échec",
       "addressed": "Corrige"
     },
+    "quality": {
+      "heading": "Revue de couverture",
+      "reruns": "Relances du Testeur pilotées par la qualité",
+      "rerunCount": "{attempts}/{max} relances",
+      "exceeded": "Budget épuisé",
+      "adequate": "Couverture adéquate",
+      "inadequate": "Lacunes de couverture détectées",
+      "gaps": "Lacunes à combler"
+    },
     "empty": {
       "title": "Aucun rapport de tests pour l'instant.",
       "hint": "Le rapport apparaît une fois que le Testeur a terminé une passe. Pendant son exécution, l'étape affiche la progression en direct sur le tableau."
@@ -3572,19 +3703,23 @@
       "connectFirst": "Connectez d'abord une source de documents (Confluence, Notion ou GitHub) dans Intégrations.",
       "refPlaceholder": "Id ou URL de page (par ex. une page Confluence/Notion ou l'URL d'un fichier GitHub)",
       "tagsPlaceholder": "Étiquettes, séparées par des virgules (facultatif)",
-      "link": "Lier comme fragment vivant"
+      "link": "Lier comme fragment vivant",
+      "githubBrowseHint": "Parcourez le dépôt et choisissez le fichier à lier."
     },
     "sources": {
       "metaSynced": "synchronisé · ref {ref}",
       "metaNever": "jamais synchronisé · ref {ref}",
-      "changes": "{count} changement | {count} changements",
+      "changes": "Changements",
       "empty": "Aucun dépôt de consignes lié. Liez-en un ci-dessous pour importer ses fichiers Markdown comme fragments.",
       "linkTitle": "Lier un dépôt de consignes",
       "ownerPlaceholder": "propriétaire",
       "repoPlaceholder": "dépôt",
       "dirPlaceholder": "chemin du répertoire (par ex. guidelines)",
       "refPlaceholder": "ref (HEAD par défaut)",
-      "link": "Lier et synchroniser"
+      "link": "Lier et synchroniser",
+      "browseHint": "Parcourez le dépôt et choisissez le répertoire de consignes Markdown (ou liez tout le dépôt).",
+      "selectedDir": "Répertoire :",
+      "wholeRepo": "Dépôt entier (racine)."
     },
     "toast": {
       "added": "Fragment ajouté",
@@ -3599,7 +3734,7 @@
       "linkSourceFailed": "Impossible de lier la source",
       "synced": "Synchronisé : {updated} mis à jour, {removed} supprimés",
       "syncFailed": "Impossible de synchroniser la source",
-      "changesAvailable": "{count} changement disponible | {count} changements disponibles",
+      "changesAvailable": "Changements disponibles",
       "upToDate": "À jour",
       "checkSourceFailed": "Impossible de vérifier la source",
       "sourceUnlinked": "Source dissociée",
@@ -3608,7 +3743,8 @@
     "confirmRemove": {
       "title": "Supprimer ce fragment ?",
       "body": "\"{name}\" sera supprimé. Cette action est irréversible."
-    }
+    },
+    "unavailable": "La bibliothèque de fragments de prompt n'est pas activée pour ce déploiement."
   },
   "sandbox": {
     "title": "Bac à sable : test de prompts et de modèles",
@@ -3832,6 +3968,86 @@
       "toast": {
         "reseedFailed": "Impossible de régénérer le preset de fusion"
       }
+    }
+  },
+  "initiative": {
+    "create": {
+      "title": "Creer une initiative",
+      "inFrame": "Nouvelle initiative dans {frame}",
+      "titleField": "Titre",
+      "titlePlaceholder": "p. ex. Migrer l'API vers le nouveau modele d'authentification",
+      "goalField": "Objectif",
+      "goalPlaceholder": "Decrivez l'objectif, les contraintes et le perimetre approximatif. Le planificateur l'affine en un plan multiphase.",
+      "hint": "Rien ne s'execute encore : apres la creation, lancez le pipeline de planification d'initiative sur le bloc. Il analyse le code et redige le plan multiphase pour votre approbation.",
+      "submit": "Creer l'initiative",
+      "failedTitle": "Impossible de creer l'initiative"
+    },
+    "status": {
+      "planning": "Planification",
+      "awaiting_approval": "En attente d'approbation",
+      "executing": "En cours d'execution",
+      "paused": "En pause",
+      "done": "Terminee",
+      "cancelled": "Annulee"
+    },
+    "itemStatus": {
+      "pending": "En attente",
+      "in_progress": "En cours",
+      "pr_open": "PR ouverte",
+      "done": "Termine",
+      "blocked": "Bloque",
+      "skipped": "Ignore"
+    },
+    "card": {
+      "kind": "Initiative",
+      "progress": "{done}/{total} elements termines",
+      "openTracker": "Ouvrir le suivi"
+    },
+    "tracker": {
+      "title": "Suivi de l'initiative",
+      "subtitle": "Phases, elements de travail, decisions et progression de cette initiative",
+      "empty": "Aucune initiative trouvee pour ce bloc.",
+      "goal": "Objectif",
+      "constraints": "Contraintes",
+      "nonGoals": "Hors perimetre",
+      "analysis": "Analyse du code",
+      "noPlan": "Pas encore de plan. Lancez le pipeline de planification pour rediger le plan multiphase.",
+      "phase": "Phase : {title}",
+      "colItem": "Element",
+      "colStatus": "Statut",
+      "colPr": "PR",
+      "dependsOn": "Depend de : {items}",
+      "prLink": "PR",
+      "policy": "Politique d'execution",
+      "maxConcurrent": "Taches concurrentes maximum : {count}",
+      "defaultPipeline": "Pipeline par defaut :",
+      "axisComplexity": "complexite >= {value}",
+      "axisRisk": "risque >= {value}",
+      "axisImpact": "impact >= {value}",
+      "axisNever": "ne correspond jamais (aucun seuil)",
+      "decisions": "Decisions",
+      "deviations": "Ecarts",
+      "followUps": "Suites a donner",
+      "caveats": "Limites connues"
+    },
+    "inspector": {
+      "runPlanning": "Lancer la planification",
+      "answerPlanning": "Repondre aux questions de planification",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "cancel": "Annuler l'initiative",
+      "hint": "Le pipeline de planification explore le code, redige le plan multiphase pour approbation, puis valide le document de suivi dans le depot."
+    },
+    "planning": {
+      "title": "Planifier l'initiative",
+      "subtitle": "Repondez aux questions du planificateur pour cadrer l'initiative",
+      "intro": "Le planificateur cadre cette initiative. Repondez a ses questions pour definir l'objectif et les contraintes, puis continuez, ou procedez a la planification avec ce qu'il a.",
+      "empty": "Aucune initiative trouvee pour ce bloc.",
+      "converged": "Aucune question en attente. Le planificateur dispose de ce qu'il faut et redige le plan.",
+      "answerPlaceholder": "Votre reponse",
+      "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
+      "proceed": "Proceder a la planification",
+      "continue": "Continuer"
     }
   }
 }
