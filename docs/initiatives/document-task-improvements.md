@@ -1,6 +1,6 @@
 # Initiative: documentation-type task improvements
 
-**Status:** in progress (WS1 item 1 landed) · **Owner:** core · **Started:** 2026-07-04
+**Status:** in progress (WS1 item 1 + WS2 landed) · **Owner:** core · **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -180,9 +180,9 @@ two: backend loop, then UI).
 | 2   | `role`-tagged (`template`/`exemplar`) workspace+`DocKind` document link, reusing the documents integration's link/read path (`DocumentLinkService`/`DocumentRepository`, incl. the existing `github` doc source) — no new fetch machinery | WS1        | todo   |           |
 | 3   | Workspace-linked template override resolution: outliner/writer prefer the `role:'template'` link's body over the built-in skeleton when one is linked for the kind                                                                        | WS1        | todo   |           |
 | 4   | Built-in curated exemplar links per kind, surfaced alongside the `role:'exemplar'` workspace links from item 2                                                                                                                            | WS1        | todo   |           |
-| 5   | `style.anti-llmisms` + `style.concise-actionable` fragments (new `collections/style.ts`)                                                                                                                                                  | WS2        | todo   |           |
-| 6   | `doc-aware` trait + engine fragment folding for doc kinds; default-on selection for document tasks                                                                                                                                        | WS2        | todo   |           |
-| 7   | Style fragments as review criteria for `doc-reviewer`                                                                                                                                                                                     | WS2        | todo   |           |
+| 5   | `style.anti-llmisms` + `style.concise-actionable` fragments (new `collections/style.ts`)                                                                                                                                                  | WS2        | done   | #787      |
+| 6   | `doc-aware` trait + engine fragment folding for doc kinds; default-on selection for document tasks                                                                                                                                        | WS2        | done   | #787      |
+| 7   | Style fragments as review criteria for `doc-reviewer`                                                                                                                                                                                     | WS2        | done   | #787      |
 | 8   | Kind-specific `taskTypeFields` (contracts) + `docBriefSection` folding                                                                                                                                                                    | WS3        | todo   |           |
 | 9   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                                                                                                                                   | WS3        | todo   |           |
 | 10  | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                                                                                                                                         | WS4        | todo   |           |
@@ -226,6 +226,20 @@ two: backend loop, then UI).
   GitHub-only code. The only new surface is the `role`/`docKind` scoping on the link itself.
 - **Fragment folding is trait-gated** (`code-aware` today). WS2 extends the trait mechanism
   (`doc-aware`); do not special-case doc kinds inside the prompt builders.
+- **WS2 landed via `doc-aware` (not a parallel path):** the trait lives in
+  `agents/kinds/traits.ts` (`DOC_AWARE_TRAIT`, a pure marker registered like `code-aware`); the
+  four producer doc kinds carry it on their `AgentKindDefinition.traits` in `document.ts`, and
+  the `doc-reviewer` companion carries it via `STANDARD_AGENT_TRAITS` (mirroring the code
+  `reviewer`). The engine gate is `AgentContextBuilder.resolveFragments` — it now folds when a
+  kind is `code-aware` OR `doc-aware`, reusing the exact same service∪block-pin resolution. The
+  style fragments (`style.anti-llmisms` / `style.concise-actionable`) live in
+  `prompt-fragments/src/collections/style.ts`; `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` is the
+  single source of the default-on selection, seeded onto a document task's `block.fragmentIds` in
+  `BoardService.addTask` (NOT hard-coded in a prompt). Item 7 is realized by the reviewer
+  carrying `doc-aware` (so it receives the same folded bodies) plus one explicit clause in
+  `companion.ts` telling it to treat those standards as the criteria. No doc prompt-version bump
+  was needed: the inline `DOC_*_SYSTEM_PROMPT` text is unchanged (they aren't in `PROMPT_VERSIONS`
+  anyway); the new fragments carry their own semver `version`.
 - **Editing a versioned prompt means bumping its number** (`agents/kinds/versions.ts` rule);
   any prompt-visible change to the `doc-*` kinds in WS1/WS2 bumps accordingly.
 - **Pipeline catalog edits need a `version` bump** on the touched pipeline (the reseed-offer

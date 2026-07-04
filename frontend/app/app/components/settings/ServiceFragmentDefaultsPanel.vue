@@ -6,6 +6,7 @@
 // services — each owns its selection from creation. Persisted via the
 // serviceFragmentDefaults store (the backend replaces the whole list on each change).
 import { onMounted, ref } from 'vue'
+import { buildFragmentPickerGroups } from '~/utils/fragmentPicker'
 
 const { t } = useI18n()
 const fragments = useFragmentsStore()
@@ -24,17 +25,10 @@ const selected = computed(() =>
   defaults.fragmentIds.map((id) => fragments.getFragment(id) ?? { id, title: id, summary: '' }),
 )
 
-// Pool fragments not already in the default set, grouped by category.
+// Pool fragments not already in the default set, grouped into labelled per-category sections.
 const menu = computed(() => {
   const chosen = new Set(defaults.fragmentIds)
-  const groups = new Map<string, { label: string; onSelect: () => void }[]>()
-  for (const f of fragments.fragments) {
-    if (chosen.has(f.id)) continue
-    const items = groups.get(f.category) ?? []
-    items.push({ label: f.title, onSelect: () => add(f.id) })
-    groups.set(f.category, items)
-  }
-  return [...groups.values()]
+  return buildFragmentPickerGroups(fragments.fragments, (id) => chosen.has(id), add)
 })
 
 async function save(ids: string[]) {
