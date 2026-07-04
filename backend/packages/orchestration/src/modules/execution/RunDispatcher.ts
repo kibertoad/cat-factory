@@ -2026,9 +2026,14 @@ export class RunDispatcher {
     const pickup = outcome.picked
     // Seed the reused recurring block from the picked issue so each fire works a different bug
     // through the same block (the same block-seeding `createTaskFromIssue` does, applied in place).
+    // Clear the previous fire's peer PRs too — this fire works a DIFFERENT bug, so a prior bug's
+    // connected-repo PRs must not linger on the block. (The own-service `pullRequest` is overwritten
+    // by this run's coder step before any step reads it; it is a non-nullable `BlockPatch` field, so
+    // it cannot be cleared here anyway.)
     await this.blockRepository.update(workspaceId, block.id, {
       title: pickup.seedTitle,
       description: pickup.seedDescription,
+      peerPullRequests: [],
     })
     // Best-effort: claim the issue where it was filed (in-progress mark + "taken by cat-factory"
     // comment). Fire-and-forget — a tracker hiccup must never fail the run, mirroring the PR
@@ -2050,9 +2055,15 @@ export class RunDispatcher {
   /**
    * Complete the run successfully after a `bug-intake` step found no issue to work: record the
    * intake step's own no-match output (it SUCCEEDED — it made the decision), then mark every
-   * REMAINING step `skipped` and finalize the block `done`. A scoped early-complete that reuses
-   * the same terminal machinery as {@link skipGatedStep}'s final branch — no new gate archetype,
-   * no notification (the outcome is visible in the schedule's run history).
+   * REMAINING step `skipped` and finalize the reused block `done`, with NO notification (the
+   * outcome is visible in the schedule's run history).
+   *
+   * The block is finalized `done` DIRECTLY here rather than through `RunStateMachine.finalizeBlock`:
+   * for a mergerless task block (every bug-triage pipeline) finalizeBlock's terminal branch treats
+   * the run as "work complete but unmerged" — it flips the block `pr_ready` and raises a
+   * `pipeline_complete` "confirm + merge the PR" notification. This fire did NO work and opened NO
+   * PR, so that card would be spurious (and its payload would reference a STALE PR carried over from
+   * a prior fire). Setting the terminal status inline keeps the no-op silent, as documented.
    */
   private async completeRunSkippingRemaining(
     workspaceId: string,
@@ -2075,7 +2086,13 @@ export class RunDispatcher {
     }
     instance.currentStep = instance.steps.length - 1
     instance.status = 'done'
-    await this.runStateMachine.finalizeBlock(workspaceId, instance, undefined)
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (block && block.status !== 'done') {
+      await this.blockRepository.update(workspaceId, instance.blockId, {
+        status: 'done',
+        progress: 1,
+      })
+    }
     await this.executionRepository.upsert(workspaceId, instance)
     await this.runStateMachine.emitInstance(workspaceId, instance)
     await this.runStateMachine.stopRunContainer(workspaceId, instance)

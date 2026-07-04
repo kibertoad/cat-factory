@@ -203,15 +203,12 @@
       "intakeHint": "Кожен запуск вибирає одне відкрите завдання з трекера, що відповідає умовам, і опрацьовує його від початку до кінця.",
       "intakeNoSources": "Спочатку підключіть джерело завдань, щоб отримувати з нього завдання.",
       "intakeGithubRepo": "Репозиторій",
-      "intakeGithubRepoPlaceholder": "власник/назва",
       "intakeTitleFragment": "Заголовок містить",
       "intakeTitleFragmentPlaceholder": "напр. crash",
       "intakeLabels": "Мітки",
       "intakeLabelsPlaceholder": "через кому",
       "intakeIssueType": "Тип завдання",
-      "intakeIssueTypePlaceholder": "bug",
-      "intakeInProgressLabel": "Мітка «в роботі»",
-      "intakeInProgressLabelPlaceholder": "in-progress"
+      "intakeInProgressLabel": "Мітка «в роботі»"
     },
     "failure": {
       "containerFailedToStart": "Не вдалося запустити контейнер",

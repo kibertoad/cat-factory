@@ -87,11 +87,19 @@ export class BugIntakeService {
       }
     }
 
-    // Exclusion list: every issue already imported AND linked to a block for this source is off
-    // limits (it is or was being worked). ONE batched projection read, filtered in memory — never
+    // Exclusion list: every issue currently imported AND linked to a block for this source is off
+    // limits — it is actively being worked. ONE batched projection read, filtered in memory — never
     // a per-candidate point lookup (the no-N+1 rule). The reused block's own previous-fire link is
-    // included here (replace-link below drops it AFTER the search), so a still-open prior bug is
-    // not immediately re-picked.
+    // included here (replace-link below drops it only AFTER the search), so the immediately-prior
+    // pick is never re-selected on the very next fire.
+    //
+    // NOTE (scope): this excludes CURRENTLY-linked issues, not "ever worked" ones. Because
+    // `replaceForBlock` unlinks the prior pick, a bug that was worked but LEFT OPEN (its fix PR
+    // never merged, so the vendor `searchIssues` still returns it) can be re-picked a couple of
+    // fires later. That is acceptable — an unmerged bug is unfinished, and a re-pick resumes it on
+    // the same branch. A true "already resolved, never revisit" ledger would need a persisted
+    // worked-issues table mirrored across both runtimes; deferred to a later phase rather than
+    // faked here.
     const worked = await this.deps.taskRepository.listByWorkspace(workspaceId)
     const excludeExternalIds = worked
       .filter((t) => t.linkedBlockId && t.source === config.source)

@@ -7569,13 +7569,22 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
       })
 
       it('bug-intake picks up a matching issue, seeds the block, and drives to completion', async () => {
-        // A GitHub fake source (credentialless — no connection to seed) pre-loaded with an open
-        // bug. The suite holds the instance to seed the backlog + inspect the recorded query.
-        const source = new FakeTaskSourceProvider('github')
+        // A Jira fake source, CONNECTED (so it is `offered` — available + enabled — which the
+        // schedule intake-config validation requires), pre-loaded with an open bug. The suite holds
+        // the instance to seed the backlog + inspect the recorded query.
+        const source = new FakeTaskSourceProvider('jira')
         source.set('42', { title: 'Login crashes on submit', labels: ['bug'], status: 'open' })
         const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+        // Connect the source so it counts as a usable intake source (the fake accepts any creds).
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
 
         // A recurring pipeline whose first step is `bug-intake`; a trailing `architect` step
         // proves the run advances past intake when an issue is picked up.
@@ -7593,8 +7602,8 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
             name: 'Nightly bug triage',
             recurrence,
             issueIntake: {
-              source: 'github',
-              board: { githubRepo: 'octo/app' },
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
               predicates: { titleFragment: 'crash', labels: ['bug'] },
             },
           },
@@ -7628,12 +7637,20 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
       })
 
       it('bug-intake with no matching issue completes the run, skipping the remaining steps', async () => {
-        // The backlog holds only a NON-matching issue (wrong title), so nothing qualifies.
-        const source = new FakeTaskSourceProvider('github')
+        // The backlog holds only a NON-matching issue (wrong title), so nothing qualifies. A
+        // CONNECTED Jira source (the schedule validation requires an offered source).
+        const source = new FakeTaskSourceProvider('jira')
         source.set('7', { title: 'Update docs', labels: ['bug'], status: 'open' })
         const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Bug triage',
@@ -7649,8 +7666,8 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
             name: 'Nightly bug triage',
             recurrence,
             issueIntake: {
-              source: 'github',
-              board: { githubRepo: 'octo/app' },
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
               predicates: { titleFragment: 'crash' },
             },
           },
@@ -7669,9 +7686,14 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         expect(intakeStep?.output).toContain('No matching')
         expect(run?.steps.find((s) => s.agentKind === 'architect')?.skipped).toBe(true)
 
-        // No issue was picked up, so the block's title is untouched.
+        // No issue was picked up, so the block's title is untouched, the block is finalized `done`
+        // (NOT `pr_ready`), and — since nothing was worked and no PR opened — the no-op raises NO
+        // `pipeline_complete` "confirm + merge" notification.
         const blockAfter = await app.blockRepository().get(wsId, blockId)
         expect(blockAfter?.title).toBe(blockBefore?.title)
+        expect(blockAfter?.status).toBe('done')
+        const notes = await app.notificationRepository().listOpen(wsId)
+        expect(notes.some((n) => n.blockId === blockId)).toBe(false)
       })
 
       it('rejects a bug-intake schedule with no issue-intake configuration', async () => {

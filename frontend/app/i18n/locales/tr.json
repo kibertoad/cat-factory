@@ -203,15 +203,12 @@
       "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
       "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
       "intakeGithubRepo": "Depo",
-      "intakeGithubRepoPlaceholder": "sahip/ad",
       "intakeTitleFragment": "Başlık şunu içerir",
       "intakeTitleFragmentPlaceholder": "örn. crash",
       "intakeLabels": "Etiketler",
       "intakeLabelsPlaceholder": "virgülle ayrılmış",
       "intakeIssueType": "Sorun türü",
-      "intakeIssueTypePlaceholder": "bug",
-      "intakeInProgressLabel": "Devam ediyor etiketi",
-      "intakeInProgressLabelPlaceholder": "in-progress"
+      "intakeInProgressLabel": "Devam ediyor etiketi"
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",

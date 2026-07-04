@@ -155,9 +155,12 @@ export class RecurringPipelineService {
         "A 'bug-intake' pipeline needs an issue-intake configuration (source, board and predicates) on its schedule.",
       )
     }
+    // `isOffered` (available AND enabled), NOT `isEnabled`: the toggle defaults ON for a
+    // never-connected source (no settings row), so `isEnabled` would wave through a source that
+    // has no connection to search — the exact silent-no-op this guard exists to reject.
     if (
       this.taskConnectionService &&
-      !(await this.taskConnectionService.isEnabled(workspaceId, issueIntake.source))
+      !(await this.taskConnectionService.isOffered(workspaceId, issueIntake.source))
     ) {
       throw new ValidationError(
         `The '${issueIntake.source}' task source is not connected for this workspace — connect it before scheduling bug intake from it.`,

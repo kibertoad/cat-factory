@@ -224,15 +224,12 @@
       "intakeHint": "Each run picks one matching open issue from the tracker and works it end to end.",
       "intakeNoSources": "Connect a task source first to pull issues from it.",
       "intakeGithubRepo": "Repository",
-      "intakeGithubRepoPlaceholder": "owner/name",
       "intakeTitleFragment": "Title contains",
       "intakeTitleFragmentPlaceholder": "e.g. crash",
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "comma-separated",
       "intakeIssueType": "Issue type",
-      "intakeIssueTypePlaceholder": "bug",
-      "intakeInProgressLabel": "In-progress label",
-      "intakeInProgressLabelPlaceholder": "in-progress"
+      "intakeInProgressLabel": "In-progress label"
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",

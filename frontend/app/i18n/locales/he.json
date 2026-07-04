@@ -203,15 +203,12 @@
       "intakeHint": "כל הרצה בוחרת תקלה פתוחה תואמת אחת מהמעקב ומטפלת בה מקצה לקצה.",
       "intakeNoSources": "חבר תחילה מקור משימות כדי למשוך ממנו תקלות.",
       "intakeGithubRepo": "מאגר",
-      "intakeGithubRepoPlaceholder": "owner/name",
       "intakeTitleFragment": "הכותרת מכילה",
       "intakeTitleFragmentPlaceholder": "למשל crash",
       "intakeLabels": "תוויות",
       "intakeLabelsPlaceholder": "מופרדות בפסיקים",
       "intakeIssueType": "סוג תקלה",
-      "intakeIssueTypePlaceholder": "bug",
-      "intakeInProgressLabel": "תווית בתהליך",
-      "intakeInProgressLabelPlaceholder": "in-progress"
+      "intakeInProgressLabel": "תווית בתהליך"
     },
     "failure": {
       "containerFailedToStart": "מכל הקונטיינר נכשל בהפעלה",

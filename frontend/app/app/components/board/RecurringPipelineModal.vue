@@ -90,11 +90,16 @@ const template = computed<ScheduleTemplate>(() => {
 })
 const isTechDebt = computed(() => template.value === 'tech-debt')
 
-// A pipeline whose (enabled) steps include `bug-intake` pulls its work from the tracker board, so
-// the intake config is surfaced + required. `agentKinds` is a plain string list on the wire.
-const isBugIntake = computed(() =>
-  (selectedPipeline.value?.agentKinds ?? []).includes('bug-intake'),
-)
+// A pipeline whose ENABLED steps include `bug-intake` pulls its work from the tracker board, so
+// the intake config is surfaced + required. Mirrors the backend `pipelineHasEnabledBugIntake`
+// (a disabled step imposes nothing), so the modal doesn't demand config for a step that won't run.
+const isBugIntake = computed(() => {
+  const pipeline = selectedPipeline.value
+  if (!pipeline) return false
+  return pipeline.agentKinds.some(
+    (kind, i) => kind === 'bug-intake' && pipeline.enabled?.[i] !== false,
+  )
+})
 // Sources that can back intake right now (connected / App-installed AND enabled).
 const intakeSources = computed(() => tasks.offeredSources)
 
@@ -360,11 +365,8 @@ async function add() {
             :label="t('board.recurring.intakeGithubRepo')"
             required
           >
-            <UInput
-              v-model="intakeGithubRepo"
-              :placeholder="t('board.recurring.intakeGithubRepoPlaceholder')"
-              class="w-full"
-            />
+            <!-- A GitHub repo ref is always the literal `owner/name` path, never localized. -->
+            <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
           </UFormField>
 
           <template v-if="intakeSource">
@@ -383,21 +385,15 @@ async function add() {
               />
             </UFormField>
             <UFormField :label="t('board.recurring.intakeIssueType')">
-              <UInput
-                v-model="intakeIssueType"
-                :placeholder="t('board.recurring.intakeIssueTypePlaceholder')"
-                class="w-full"
-              />
+              <!-- A literal issue-type example (tracker vocabulary), kept verbatim across locales. -->
+              <UInput v-model="intakeIssueType" placeholder="bug" class="w-full" />
             </UFormField>
             <UFormField
               v-if="intakeSource === 'github'"
               :label="t('board.recurring.intakeInProgressLabel')"
             >
-              <UInput
-                v-model="intakeInProgressLabel"
-                :placeholder="t('board.recurring.intakeInProgressLabelPlaceholder')"
-                class="w-full"
-              />
+              <!-- A literal label example, kept verbatim across locales. -->
+              <UInput v-model="intakeInProgressLabel" placeholder="in-progress" class="w-full" />
             </UFormField>
           </template>
         </div>

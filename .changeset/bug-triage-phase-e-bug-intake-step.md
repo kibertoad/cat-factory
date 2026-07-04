@@ -34,3 +34,21 @@ image bump.
 - **Conformance** — intake pickup (a matching issue is imported, linked and seeds the block),
   the no-match no-op (the run completes with the remaining steps skipped), and the
   missing-config rejection are asserted on every runtime against a fake task source.
+
+Review fixes folded in:
+
+- The no-match no-op now finalizes the reused block `done` DIRECTLY instead of via
+  `finalizeBlock`, which for a mergerless bug-triage pipeline would have flipped the block
+  `pr_ready` and raised a spurious `pipeline_complete` "confirm + merge the PR" notification for a
+  PR that does not exist. The conformance no-match test now asserts the `done` status and that no
+  notification is raised.
+- Schedule intake validation now checks `TaskConnectionService.isOffered` (available AND enabled)
+  rather than `isEnabled`, which defaults ON for a never-connected source and so would have waved
+  through intake from a source with no connection to search.
+- `PipelineService.update` now rejects enabling a `bug-intake` step on a pipeline whose attached
+  schedules carry no `issueIntake` config (the pipeline-edit dual of the schedule-attach guard).
+- Reseeding the reused block on pickup also clears the previous fire's `peerPullRequests` so a new
+  bug doesn't inherit a prior bug's connected-repo PRs.
+- `RecurringPipelineModal.vue`'s bug-intake detection now respects the per-step `enabled` mask,
+  mirroring the backend, and the literal `owner/name` / `bug` / `in-progress` placeholder examples
+  are inlined in the component rather than living (and being mistranslated) in the message catalog.
