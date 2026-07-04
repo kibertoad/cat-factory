@@ -62,6 +62,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
+import { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -7565,6 +7566,154 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
         )
         expect(again.status).toBe(200)
+      })
+
+      it('bug-intake picks up a matching issue, seeds the block, and drives to completion', async () => {
+        // A Jira fake source, CONNECTED (so it is `offered` — available + enabled — which the
+        // schedule intake-config validation requires), pre-loaded with an open bug. The suite holds
+        // the instance to seed the backlog + inspect the recorded query.
+        const source = new FakeTaskSourceProvider('jira')
+        source.set('42', { title: 'Login crashes on submit', labels: ['bug'], status: 'open' })
+        const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        // Connect the source so it counts as a usable intake source (the fake accepts any creds).
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+
+        // A recurring pipeline whose first step is `bug-intake`; a trailing `architect` step
+        // proves the run advances past intake when an issue is picked up.
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Bug triage',
+          agentKinds: ['bug-intake', 'architect'],
+          availability: 'recurring',
+        })
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Nightly bug triage',
+            recurrence,
+            issueIntake: {
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
+              predicates: { titleFragment: 'crash', labels: ['bug'] },
+            },
+          },
+        )
+        expect(created.status).toBe(201)
+        const blockId = created.body.blockId
+
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+
+        const driven = await app.drive(wsId)
+        const run = driven.find((e) => e.blockId === blockId)
+        expect(run?.status).toBe('done')
+        // The intake step recorded the pickup, and NEITHER step was skipped (the fix work ran).
+        const intakeStep = run?.steps.find((s) => s.agentKind === 'bug-intake')
+        expect(intakeStep?.output).toContain('42')
+        expect(intakeStep?.skipped).toBeFalsy()
+        expect(run?.steps.find((s) => s.agentKind === 'architect')?.skipped).toBeFalsy()
+
+        // The search ran with the schedule's predicates pushed into the intake query.
+        expect(source.intakeCalls).toHaveLength(1)
+        expect(source.intakeCalls[0]!.query.titleFragment).toBe('crash')
+
+        // The reused block was reseeded from the picked issue (title keyed by the external id).
+        const block = await app.blockRepository().get(wsId, blockId)
+        expect(block?.title).toContain('42')
+        expect(block?.title).toContain('Login crashes on submit')
+      })
+
+      it('bug-intake with no matching issue completes the run, skipping the remaining steps', async () => {
+        // The backlog holds only a NON-matching issue (wrong title), so nothing qualifies. A
+        // CONNECTED Jira source (the schedule validation requires an offered source).
+        const source = new FakeTaskSourceProvider('jira')
+        source.set('7', { title: 'Update docs', labels: ['bug'], status: 'open' })
+        const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Bug triage',
+          agentKinds: ['bug-intake', 'architect'],
+          availability: 'recurring',
+        })
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Nightly bug triage',
+            recurrence,
+            issueIntake: {
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
+              predicates: { titleFragment: 'crash' },
+            },
+          },
+        )
+        const blockId = created.body.blockId
+        const blockBefore = await app.blockRepository().get(wsId, blockId)
+
+        await app.call('POST', `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`)
+        const driven = await app.drive(wsId)
+        const run = driven.find((e) => e.blockId === blockId)
+
+        // The run completes SUCCESSFULLY, with the trailing step skipped (nothing to fix).
+        expect(run?.status).toBe('done')
+        const intakeStep = run?.steps.find((s) => s.agentKind === 'bug-intake')
+        expect(intakeStep?.skipped).toBeFalsy()
+        expect(intakeStep?.output).toContain('No matching')
+        expect(run?.steps.find((s) => s.agentKind === 'architect')?.skipped).toBe(true)
+
+        // No issue was picked up, so the block's title is untouched, the block is finalized `done`
+        // (NOT `pr_ready`), and — since nothing was worked and no PR opened — the no-op raises NO
+        // `pipeline_complete` "confirm + merge" notification.
+        const blockAfter = await app.blockRepository().get(wsId, blockId)
+        expect(blockAfter?.title).toBe(blockBefore?.title)
+        expect(blockAfter?.status).toBe('done')
+        const notes = await app.notificationRepository().listOpen(wsId)
+        expect(notes.some((n) => n.blockId === blockId)).toBe(false)
+      })
+
+      it('rejects a bug-intake schedule with no issue-intake configuration', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Bug triage',
+          agentKinds: ['bug-intake', 'architect'],
+          availability: 'recurring',
+        })
+        // Attaching it to a schedule with no `issueIntake` is refused up front (every fire would
+        // otherwise silently no-op — nothing to pull work from).
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          { frameId: 'blk_auth', pipelineId: pipeline.body.id, name: 'Nightly', recurrence },
+        )
+        expect(created.status).toBe(422)
       })
 
       it('persists an on-demand schedule (no cadence) and fires it via run-now', async () => {

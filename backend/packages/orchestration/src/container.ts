@@ -141,6 +141,7 @@ import {
   TaskConnectionService,
   TaskImportService,
   TaskLinkService,
+  BugIntakeService,
   MapTaskSourceRegistry,
   EnvironmentConnectionService,
   EnvironmentProvisioningService,
@@ -838,6 +839,12 @@ export interface TasksModule {
   connectionService: TaskConnectionService
   importService: TaskImportService
   linkService: TaskLinkService
+  /**
+   * The recurring `bug-intake` engine step's read-and-claim helper (present only when a
+   * schedule repository is wired). Injected into the execution engine so the `bug-intake`
+   * step can pull one matching issue from the schedule's tracker board and claim it.
+   */
+  bugIntakeService?: BugIntakeService
 }
 
 /** The environment integration's services, present only when configured. */
@@ -1284,7 +1291,26 @@ function createTasksModule(
     taskRepository,
     importService,
   })
-  return { connectionService, importService, linkService }
+  // The recurring bug-intake step's read-and-claim helper — wired only when a schedule
+  // repository is present (an intake fire resolves the schedule's `issueIntake` config by
+  // block). Composes the just-built import/link services + the source registry, so it stays
+  // provider-neutral and runtime-symmetric.
+  const bugIntakeService = deps.pipelineScheduleRepository
+    ? new BugIntakeService({
+        pipelineScheduleRepository: deps.pipelineScheduleRepository,
+        taskSourceRegistry: registry,
+        taskConnectionRepository,
+        importService,
+        linkService,
+        taskRepository,
+      })
+    : undefined
+  return {
+    connectionService,
+    importService,
+    linkService,
+    ...(bugIntakeService ? { bugIntakeService } : {}),
+  }
 }
 
 /**
@@ -2071,6 +2097,7 @@ function createTrackerModule(deps: CoreDependencies): TrackerModule | undefined 
 function createRecurringModule(
   deps: CoreDependencies,
   executionService: ExecutionService,
+  taskConnectionService?: TaskConnectionService,
 ): RecurringModule | undefined {
   const { pipelineScheduleRepository } = deps
   if (!pipelineScheduleRepository) return undefined
@@ -2085,6 +2112,9 @@ function createRecurringModule(
     clock: deps.clock,
     serviceRepository: deps.serviceRepository,
     workspaceMountRepository: deps.workspaceMountRepository,
+    // Validates a `bug-intake` pipeline's schedule carries an `issueIntake` config whose source
+    // is a connected task source. Absent (no task sources wired) → the presence check still runs.
+    taskConnectionService,
   })
   return { service }
 }
@@ -2266,12 +2296,18 @@ export function createCore(dependencies: CoreDependencies): Core {
     void initiativeLoopRef?.pokeForInitiativeBlock(workspaceId, initiativeBlockId)
   }
 
+  // Built before the execution engine so the engine's `bug-intake` step can drive the
+  // read-and-claim intake helper (`tasks.bugIntakeService`). Also feeds the recurring module's
+  // schedule intake-config validation below.
+  const tasks = createTasksModule(dependencies, boardService)
+
   const executionService = new ExecutionService({
     ...dependencies,
     workRunner,
     executionEventPublisher,
     boardService,
     pokeInitiativeLoop,
+    bugIntakeService: tasks?.bugIntakeService,
     spendService,
     // Route runtime fragment-id resolution through the merged tenant catalog (so
     // managed + document-backed fragments reach a run), present only when the
@@ -2326,7 +2362,6 @@ export function createCore(dependencies: CoreDependencies): Core {
   })
 
   const github = createGitHubModule(dependencies)
-  const tasks = createTasksModule(dependencies, boardService)
   const runners = createRunnersModule(dependencies)
   // After a bootstrap succeeds, map the new repo into a blueprint + the board by
   // starting the blueprint-only pipeline against the service frame.
@@ -2334,7 +2369,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
   )
   const tracker = createTrackerModule(dependencies)
-  const recurring = createRecurringModule(dependencies, executionService)
+  const recurring = createRecurringModule(dependencies, executionService, tasks?.connectionService)
   // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
   // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
   // settling child run advances its owning initiative immediately. Present only when initiatives

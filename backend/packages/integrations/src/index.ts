@@ -98,6 +98,12 @@ export {
   type TaskLinkServiceDependencies,
 } from './modules/tasks/TaskLinkService.js'
 export {
+  BugIntakeService,
+  type BugIntakeServiceDependencies,
+  type BugIntakeOutcome,
+  type BugIntakePickup,
+} from './modules/tasks/BugIntakeService.js'
+export {
   MapTaskSourceRegistry,
   type TaskContextView,
   renderTaskContext,

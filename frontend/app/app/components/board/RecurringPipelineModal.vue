@@ -5,7 +5,8 @@
 // task block inside the frame that the schedule re-runs. When the Tech-debt
 // pipeline is picked, the workspace issue-tracker choice is surfaced inline (it is
 // where that pipeline files its ticket) and saved alongside.
-import type { Recurrence, ScheduleTemplate } from '~/types/recurring'
+import type { IssueIntakeConfig, Recurrence, ScheduleTemplate } from '~/types/recurring'
+import type { TaskSourceKind } from '~/types/domain'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 
 const ui = useUiStore()
@@ -13,6 +14,7 @@ const board = useBoardStore()
 const pipelines = usePipelinesStore()
 const recurring = useRecurringPipelinesStore()
 const tracker = useTrackerStore()
+const tasks = useTasksStore()
 const toast = useToast()
 const { t } = useI18n()
 
@@ -40,6 +42,17 @@ const onDemand = ref(false)
 const trackerKind = ref<'github' | 'jira' | 'linear' | null>(null)
 const jiraProjectKey = ref('')
 const linearTeamId = ref('')
+
+// Issue-intake config (only relevant when the picked pipeline has a `bug-intake` step). Which
+// tracker board + predicates a recurring bug-triage run pulls its one issue from, per-schedule.
+const intakeSource = ref<TaskSourceKind | null>(null)
+const intakeJiraProjectKey = ref('')
+const intakeLinearTeamId = ref('')
+const intakeGithubRepo = ref('')
+const intakeTitleFragment = ref('')
+const intakeLabels = ref('') // comma-separated in the UI, sent as an array
+const intakeIssueType = ref('')
+const intakeInProgressLabel = ref('')
 
 function defaultRecurrence(): Recurrence {
   return {
@@ -77,6 +90,19 @@ const template = computed<ScheduleTemplate>(() => {
 })
 const isTechDebt = computed(() => template.value === 'tech-debt')
 
+// A pipeline whose ENABLED steps include `bug-intake` pulls its work from the tracker board, so
+// the intake config is surfaced + required. Mirrors the backend `pipelineHasEnabledBugIntake`
+// (a disabled step imposes nothing), so the modal doesn't demand config for a step that won't run.
+const isBugIntake = computed(() => {
+  const pipeline = selectedPipeline.value
+  if (!pipeline) return false
+  return pipeline.agentKinds.some(
+    (kind, i) => kind === 'bug-intake' && pipeline.enabled?.[i] !== false,
+  )
+})
+// Sources that can back intake right now (connected / App-installed AND enabled).
+const intakeSources = computed(() => tasks.offeredSources)
+
 watch(open, (isOpen) => {
   if (!isOpen) return
   name.value = ''
@@ -92,9 +118,62 @@ watch(open, (isOpen) => {
   trackerKind.value = tracker.settings.tracker
   jiraProjectKey.value = tracker.settings.jiraProjectKey ?? ''
   linearTeamId.value = tracker.settings.linearTeamId ?? ''
+  intakeSource.value = null
+  intakeJiraProjectKey.value = ''
+  intakeLinearTeamId.value = ''
+  intakeGithubRepo.value = ''
+  intakeTitleFragment.value = ''
+  intakeLabels.value = ''
+  intakeIssueType.value = ''
+  intakeInProgressLabel.value = ''
+  // Load the connected task sources so the intake source picker is populated.
+  void tasks.probe()
 })
 
-const canAdd = computed(() => name.value.trim().length > 0 && pipelineId.value.length > 0)
+// The board field required for the picked source must be filled before a bug-intake schedule saves.
+const intakeReady = computed(() => {
+  if (!isBugIntake.value) return true
+  if (intakeSource.value === 'jira') return intakeJiraProjectKey.value.trim().length > 0
+  if (intakeSource.value === 'linear') return intakeLinearTeamId.value.trim().length > 0
+  if (intakeSource.value === 'github') return intakeGithubRepo.value.trim().length > 0
+  return false
+})
+
+function buildIssueIntake(): IssueIntakeConfig {
+  const source = intakeSource.value as TaskSourceKind
+  const labels = intakeLabels.value
+    .split(',')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  return {
+    source,
+    board: {
+      ...(source === 'jira' && intakeJiraProjectKey.value.trim()
+        ? { jiraProjectKey: intakeJiraProjectKey.value.trim() }
+        : {}),
+      ...(source === 'linear' && intakeLinearTeamId.value.trim()
+        ? { linearTeamId: intakeLinearTeamId.value.trim() }
+        : {}),
+      ...(source === 'github' && intakeGithubRepo.value.trim()
+        ? { githubRepo: intakeGithubRepo.value.trim() }
+        : {}),
+    },
+    predicates: {
+      ...(intakeTitleFragment.value.trim()
+        ? { titleFragment: intakeTitleFragment.value.trim() }
+        : {}),
+      ...(labels.length ? { labels } : {}),
+      ...(intakeIssueType.value.trim() ? { issueType: intakeIssueType.value.trim() } : {}),
+    },
+    ...(source === 'github' && intakeInProgressLabel.value.trim()
+      ? { inProgressLabel: intakeInProgressLabel.value.trim() }
+      : {}),
+  }
+}
+
+const canAdd = computed(
+  () => name.value.trim().length > 0 && pipelineId.value.length > 0 && intakeReady.value,
+)
 
 async function add() {
   const frameId = ui.addRecurringFrameId
@@ -119,6 +198,7 @@ async function add() {
       onDemand: onDemand.value,
       ...(onDemand.value ? {} : { recurrence: recurrence.value }),
       ...(description.value.trim() ? { description: description.value.trim() } : {}),
+      ...(isBugIntake.value ? { issueIntake: buildIssueIntake() } : {}),
     })
     ui.closeAddRecurring()
   } catch (e) {
@@ -236,6 +316,86 @@ async function add() {
           <UFormField v-if="trackerKind === 'linear'" :label="t('board.recurring.linearTeamId')">
             <UInput v-model="linearTeamId" placeholder="team_…" class="w-full" />
           </UFormField>
+        </div>
+
+        <div v-if="isBugIntake" class="space-y-3 rounded-lg border border-slate-800 p-3">
+          <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {{ t('board.recurring.intake') }}
+          </p>
+          <p class="text-[11px] text-slate-500">
+            {{ t('board.recurring.intakeHint') }}
+          </p>
+          <p v-if="intakeSources.length === 0" class="text-[11px] text-amber-500">
+            {{ t('board.recurring.intakeNoSources') }}
+          </p>
+          <div v-else class="flex flex-wrap gap-1">
+            <UButton
+              v-for="s in intakeSources"
+              :key="s.source"
+              size="xs"
+              :color="intakeSource === s.source ? 'primary' : 'neutral'"
+              :variant="intakeSource === s.source ? 'solid' : 'subtle'"
+              :icon="s.icon"
+              @click="intakeSource = s.source"
+            >
+              {{ s.label }}
+            </UButton>
+          </div>
+
+          <UFormField
+            v-if="intakeSource === 'jira'"
+            :label="t('board.recurring.jiraProjectKey')"
+            required
+          >
+            <UInput
+              v-model="intakeJiraProjectKey"
+              :placeholder="t('board.recurring.jiraProjectKeyPlaceholder')"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField
+            v-if="intakeSource === 'linear'"
+            :label="t('board.recurring.linearTeamId')"
+            required
+          >
+            <UInput v-model="intakeLinearTeamId" placeholder="team_…" class="w-full" />
+          </UFormField>
+          <UFormField
+            v-if="intakeSource === 'github'"
+            :label="t('board.recurring.intakeGithubRepo')"
+            required
+          >
+            <!-- A GitHub repo ref is always the literal `owner/name` path, never localized. -->
+            <UInput v-model="intakeGithubRepo" placeholder="owner/name" class="w-full" />
+          </UFormField>
+
+          <template v-if="intakeSource">
+            <UFormField :label="t('board.recurring.intakeTitleFragment')">
+              <UInput
+                v-model="intakeTitleFragment"
+                :placeholder="t('board.recurring.intakeTitleFragmentPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField :label="t('board.recurring.intakeLabels')">
+              <UInput
+                v-model="intakeLabels"
+                :placeholder="t('board.recurring.intakeLabelsPlaceholder')"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField :label="t('board.recurring.intakeIssueType')">
+              <!-- A literal issue-type example (tracker vocabulary), kept verbatim across locales. -->
+              <UInput v-model="intakeIssueType" placeholder="bug" class="w-full" />
+            </UFormField>
+            <UFormField
+              v-if="intakeSource === 'github'"
+              :label="t('board.recurring.intakeInProgressLabel')"
+            >
+              <!-- A literal label example, kept verbatim across locales. -->
+              <UInput v-model="intakeInProgressLabel" placeholder="in-progress" class="w-full" />
+            </UFormField>
+          </template>
         </div>
 
         <p class="text-[11px] text-slate-500">

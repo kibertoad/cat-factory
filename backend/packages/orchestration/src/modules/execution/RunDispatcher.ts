@@ -77,10 +77,13 @@ import {
 } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
 import type {
+  BugIntakeOutcome,
+  BugIntakeService,
   EnvironmentProvisioningService,
   ProvisionArgs,
   ProvisionDispatch,
 } from '@cat-factory/integrations'
+import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
@@ -257,6 +260,8 @@ export interface RunDispatcherDeps {
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
   issueWriteback?: IssueWritebackProvider
+  /** The recurring `bug-intake` step's read-and-claim helper; absent → the step is a no-op. */
+  bugIntakeService?: BugIntakeService
   notificationService?: NotificationService
   blueprintReconciler?: BlueprintReconciler
   initiativeService?: InitiativeService
@@ -314,6 +319,7 @@ export class RunDispatcher {
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
   private readonly issueWriteback?: IssueWritebackProvider
+  private readonly bugIntakeService?: BugIntakeService
   private readonly notificationService?: NotificationService
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly initiativeService?: InitiativeService
@@ -364,6 +370,7 @@ export class RunDispatcher {
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
     this.issueWriteback = deps.issueWriteback
+    this.bugIntakeService = deps.bugIntakeService
     this.notificationService = deps.notificationService
     this.blueprintReconciler = deps.blueprintReconciler
     this.initiativeService = deps.initiativeService
@@ -1992,6 +1999,107 @@ export class RunDispatcher {
   }
 
   /**
+   * Run a `bug-intake` step — the recurring bug-triage pipeline's inbound dual of `tracker`
+   * (design §3). Pull ONE matching open issue from the schedule's configured tracker board,
+   * claim it (import + replace-link onto the reused block, mark it in-progress + comment), and
+   * seed the block's title/description from it so every downstream step works THAT bug. When
+   * nothing matches — or no task source is wired — the run completes SUCCESSFULLY with every
+   * remaining step skipped (there is nothing to investigate / reproduce / fix), no notification.
+   * Best-effort throughout: the intake helper never throws (a tracker outage resolves to a
+   * no-op), and the pickup writeback is fire-and-forget.
+   */
+  private async runBugIntake(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+    isFinalStep: boolean,
+  ): Promise<AdvanceResult> {
+    const outcome: BugIntakeOutcome = this.bugIntakeService
+      ? await this.bugIntakeService.pickForBlock(workspaceId, block.id)
+      : { picked: null, summary: 'Issue intake is not configured on this deployment.' }
+
+    if (!outcome.picked) {
+      return this.completeRunSkippingRemaining(workspaceId, instance, step, outcome.summary)
+    }
+
+    const pickup = outcome.picked
+    // Seed the reused recurring block from the picked issue so each fire works a different bug
+    // through the same block (the same block-seeding `createTaskFromIssue` does, applied in place).
+    // Clear the previous fire's peer PRs too — this fire works a DIFFERENT bug, so a prior bug's
+    // connected-repo PRs must not linger on the block. (The own-service `pullRequest` is overwritten
+    // by this run's coder step before any step reads it; it is a non-nullable `BlockPatch` field, so
+    // it cannot be cleared here anyway.)
+    await this.blockRepository.update(workspaceId, block.id, {
+      title: pickup.seedTitle,
+      description: pickup.seedDescription,
+      peerPullRequests: [],
+    })
+    // Best-effort: claim the issue where it was filed (in-progress mark + "taken by cat-factory"
+    // comment). Fire-and-forget — a tracker hiccup must never fail the run, mirroring the PR
+    // open/merge writeback hooks; and unlike them this is NOT gated on the writeback settings.
+    if (this.issueWriteback) {
+      await this.issueWriteback
+        .onIssuePickedUp(
+          workspaceId,
+          block.id,
+          pickup.inProgressLabel ? { inProgressLabel: pickup.inProgressLabel } : {},
+        )
+        .catch(() => {})
+    }
+    return this.recordStepResult(workspaceId, instance, step, isFinalStep, {
+      output: pickup.summary,
+    })
+  }
+
+  /**
+   * Complete the run successfully after a `bug-intake` step found no issue to work: record the
+   * intake step's own no-match output (it SUCCEEDED — it made the decision), then mark every
+   * REMAINING step `skipped` and finalize the reused block `done`, with NO notification (the
+   * outcome is visible in the schedule's run history).
+   *
+   * The block is finalized `done` DIRECTLY here rather than through `RunStateMachine.finalizeBlock`:
+   * for a mergerless task block (every bug-triage pipeline) finalizeBlock's terminal branch treats
+   * the run as "work complete but unmerged" — it flips the block `pr_ready` and raises a
+   * `pipeline_complete` "confirm + merge the PR" notification. This fire did NO work and opened NO
+   * PR, so that card would be spurious (and its payload would reference a STALE PR carried over from
+   * a prior fire). Setting the terminal status inline keeps the no-op silent, as documented.
+   */
+  private async completeRunSkippingRemaining(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    summary: string,
+  ): Promise<AdvanceResult> {
+    step.output = summary
+    step.progress = 1
+    step.subtasks = undefined
+    this.stepGraph.finishStep(step)
+    for (let i = instance.currentStep + 1; i < instance.steps.length; i++) {
+      const remaining = instance.steps[i]
+      if (!remaining) continue
+      remaining.skipped = true
+      remaining.output = ''
+      remaining.progress = 1
+      remaining.subtasks = undefined
+      this.stepGraph.finishStep(remaining)
+    }
+    instance.currentStep = instance.steps.length - 1
+    instance.status = 'done'
+    const block = await this.blockRepository.get(workspaceId, instance.blockId)
+    if (block && block.status !== 'done') {
+      await this.blockRepository.update(workspaceId, instance.blockId, {
+        status: 'done',
+        progress: 1,
+      })
+    }
+    await this.executionRepository.upsert(workspaceId, instance)
+    await this.runStateMachine.emitInstance(workspaceId, instance)
+    await this.runStateMachine.stopRunContainer(workspaceId, instance)
+    return { kind: 'done' }
+  }
+
+  /**
    * Persist an APPROVED initiative plan for an `initiative-committer` step: flip the
    * entity to `executing` and mirror the tracker into the repo's default branch
    * (`docs/initiatives/<slug>/`) via the checkout-free {@link RepoFiles}. Deterministic,
@@ -2333,6 +2441,18 @@ export class RunDispatcher {
           const result = await this.runTracker(workspaceId, instance, block)
           return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
         },
+      },
+      // A `bug-intake` step (the recurring bug-triage pipeline) pulls ONE matching open issue from
+      // the schedule's tracker board, claims it, and seeds the reused block from it — no LLM of its
+      // own, the inbound dual of `tracker`. On no match (or no task source wired) it completes the
+      // run successfully, skipping every remaining step. Handled entirely inside
+      // {@link runBugIntake}, so it always claims the step.
+      {
+        kind: BUG_INTAKE_AGENT_KIND,
+        order: 111,
+        canHandle: ({ step }) => step.agentKind === BUG_INTAKE_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.runBugIntake(workspaceId, instance, step, block, isFinalStep),
       },
       // The `initiative-interviewer` step interviews the human on goals/constraints — an
       // inline LLM gate that PARKS the planning run on a decision-wait while they answer

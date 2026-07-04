@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ConflictError,
   CredentialRequiredError,
+  ValidationError,
   type Block,
   type Clock,
   type CreateScheduleInput,
   type ExecutionInstance,
+  type Pipeline,
   type PipelineSchedule,
   type Workspace,
 } from '@cat-factory/kernel'
+import type { TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import { RecurringPipelineService } from './RecurringPipelineService.js'
 import type { RecurringPipelineServiceDependencies } from './RecurringPipelineService.js'
@@ -163,5 +166,115 @@ describe('RecurringPipelineService.create recurrence validation', () => {
     expect(created.onDemand).toBe(true)
     expect(blockInsert).toHaveBeenCalledTimes(1)
     expect(upsert).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Phase E intake-config validation: a `bug-intake` pipeline's schedule must carry an
+// `issueIntake` config pointed at an OFFERED (available + enabled) task source. Guards both the
+// missing-config case and — via `isOffered`, not the default-true `isEnabled` — a source that is
+// not actually connected.
+describe('RecurringPipelineService bug-intake intake-config validation', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const RECURRENCE = {
+    intervalHours: 24,
+    weekdays: [],
+    windowStartHour: null,
+    windowEndHour: null,
+    timezone: 'UTC',
+  }
+  const bugIntakePipeline = {
+    id: 'pl_1',
+    agentKinds: ['bug-intake', 'architect'],
+    availability: 'recurring',
+    enabled: [true, true],
+  } as unknown as Pipeline
+
+  function makeIntakeService(offered: boolean | undefined) {
+    const upsert = vi.fn(async () => {})
+    const blockInsert = vi.fn(async () => {})
+    const deps: RecurringPipelineServiceDependencies = {
+      pipelineScheduleRepository: {
+        get: async () => null,
+        upsert,
+        insertRun: async () => {},
+        listRuns: async () => [],
+      } as unknown as RecurringPipelineServiceDependencies['pipelineScheduleRepository'],
+      workspaceRepository: {
+        get: async () => ({ id: WS }) as Workspace,
+      } as unknown as RecurringPipelineServiceDependencies['workspaceRepository'],
+      pipelineRepository: {
+        get: async () => bugIntakePipeline,
+      } as unknown as RecurringPipelineServiceDependencies['pipelineRepository'],
+      blockRepository: {
+        get: async () => frame(),
+        insert: blockInsert,
+      } as unknown as RecurringPipelineServiceDependencies['blockRepository'],
+      executionRepository: {
+        getByBlock: async () => null,
+      } as unknown as RecurringPipelineServiceDependencies['executionRepository'],
+      executionService: {
+        start: vi.fn(async () => ({ id: 'exec_1' }) as ExecutionInstance),
+        individualVendorsForBlock: async () => [],
+      } as unknown as ExecutionService,
+      idGenerator: { next: (prefix: string) => `${prefix}_x` },
+      clock: { now: () => 1000 } as Clock,
+      // Absent when `offered === undefined` (no task sources wired ⇒ only the presence check runs).
+      ...(offered === undefined
+        ? {}
+        : {
+            taskConnectionService: {
+              isOffered: async () => offered,
+            } as unknown as TaskConnectionService,
+          }),
+    }
+    return { service: new RecurringPipelineService(deps), upsert, blockInsert }
+  }
+
+  const withIntake = (issueIntake?: unknown) =>
+    ({
+      frameId: 'blk_frame',
+      pipelineId: 'pl_1',
+      template: 'custom',
+      name: 'Nightly',
+      onDemand: false,
+      enabled: true,
+      recurrence: RECURRENCE,
+      ...(issueIntake ? { issueIntake } : {}),
+    }) as CreateScheduleInput
+
+  it('rejects a bug-intake schedule with no issue-intake config (before creating a block)', async () => {
+    const { service, blockInsert } = makeIntakeService(true)
+    await expect(service.create(WS, withIntake())).rejects.toBeInstanceOf(ValidationError)
+    expect(blockInsert).not.toHaveBeenCalled()
+  })
+
+  it('rejects a bug-intake schedule whose source is not offered (isEnabled would have wrongly passed)', async () => {
+    const { service, blockInsert } = makeIntakeService(false)
+    const input = withIntake({ source: 'jira', board: { jiraProjectKey: 'P' }, predicates: {} })
+    await expect(service.create(WS, input)).rejects.toBeInstanceOf(ValidationError)
+    expect(blockInsert).not.toHaveBeenCalled()
+  })
+
+  it('accepts a bug-intake schedule pointed at an offered source', async () => {
+    const { service, blockInsert, upsert } = makeIntakeService(true)
+    const input = withIntake({ source: 'jira', board: { jiraProjectKey: 'P' }, predicates: {} })
+    const created = await service.create(WS, input)
+    expect(created.issueIntake).toEqual({
+      source: 'jira',
+      board: { jiraProjectKey: 'P' },
+      predicates: {},
+    })
+    expect(blockInsert).toHaveBeenCalledTimes(1)
+    expect(upsert).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the offered-source check when no task-connection service is wired (presence check stands)', async () => {
+    const { service, blockInsert } = makeIntakeService(undefined)
+    const input = withIntake({ source: 'jira', board: { jiraProjectKey: 'P' }, predicates: {} })
+    // No taskConnectionService ⇒ the connected-source half is skipped; a present config passes.
+    const created = await service.create(WS, input)
+    expect(created.issueIntake).toBeDefined()
+    expect(blockInsert).toHaveBeenCalledTimes(1)
   })
 })

@@ -219,7 +219,17 @@
       "submit": "Add recurring pipeline",
       "addFailedTitle": "Could not add recurring pipeline",
       "onDemand": "On-demand (manual only)",
-      "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model."
+      "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model.",
+      "intake": "Issue intake",
+      "intakeHint": "Each run picks one matching open issue from the tracker and works it end to end.",
+      "intakeNoSources": "Connect a task source first to pull issues from it.",
+      "intakeGithubRepo": "Repository",
+      "intakeTitleFragment": "Title contains",
+      "intakeTitleFragmentPlaceholder": "e.g. crash",
+      "intakeLabels": "Labels",
+      "intakeLabelsPlaceholder": "comma-separated",
+      "intakeIssueType": "Issue type",
+      "intakeInProgressLabel": "In-progress label"
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",

@@ -198,7 +198,17 @@
       "submit": "Ajouter la pipeline récurrente",
       "addFailedTitle": "Impossible d’ajouter la pipeline récurrente",
       "onDemand": "À la demande (manuel uniquement)",
-      "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel."
+      "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel.",
+      "intake": "Prise en charge des tickets",
+      "intakeHint": "Chaque exécution sélectionne un ticket ouvert correspondant dans le suivi et le traite de bout en bout.",
+      "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
+      "intakeGithubRepo": "Dépôt",
+      "intakeTitleFragment": "Le titre contient",
+      "intakeTitleFragmentPlaceholder": "ex. crash",
+      "intakeLabels": "Étiquettes",
+      "intakeLabelsPlaceholder": "séparées par des virgules",
+      "intakeIssueType": "Type de ticket",
+      "intakeInProgressLabel": "Étiquette en cours"
     },
     "failure": {
       "containerFailedToStart": "Le conteneur n’a pas pu démarrer",

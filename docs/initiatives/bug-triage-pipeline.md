@@ -212,14 +212,42 @@ Notes for Phase E (which consumes all of this):
 
 ### Phase E — `bug-intake` step (design §3, engine + SPA)
 
+Implemented in [PR #770](https://github.com/kibertoad/cat-factory/pull/770) (branch
+`claude/bug-triage-phase-2-hyi9pg`, branched off the #752 branch for the Phase D foundations it
+consumes, and targeting it, like Phase C's #761 / Phase D's #766). Zero harness changes / no
+image bump — the step is backend TypeScript over the Phase D ports.
+
 | Item                                                                                          | Status |
 | --------------------------------------------------------------------------------------------- | ------ |
-| Step handler: predicate search + batched projection dedupe + oldest-first pick                | todo   |
-| Pickup: import → replace-link → rewrite block title/description → `onIssuePickedUp`           | todo   |
-| No-match: skip all remaining steps, run completes successfully, no notification               | todo   |
-| Schedule validation: `issueIntake` required + source connected when pipeline has `bug-intake` | todo   |
-| SPA: intake config section in `RecurringPipelineModal.vue` + i18n (all locales)               | todo   |
-| Conformance: intake pickup + no-match no-op on both runtimes (fake task source)               | todo   |
+| Step handler: predicate search + batched projection dedupe + oldest-first pick                | done   |
+| Pickup: import → replace-link → rewrite block title/description → `onIssuePickedUp`           | done   |
+| No-match: skip all remaining steps, run completes successfully, no notification               | done   |
+| Schedule validation: `issueIntake` required + source connected when pipeline has `bug-intake` | done   |
+| SPA: intake config section in `RecurringPipelineModal.vue` + i18n (all locales)               | done   |
+| Conformance: intake pickup + no-match no-op on both runtimes (fake task source)               | done   |
+
+Notes for Phase F/G/H (which build on this step):
+
+- **`BugIntakeService`** (`@cat-factory/integrations`) owns the read-and-claim half (resolve the
+  schedule's `issueIntake` by block → `searchIssues` → dedupe against the one batched
+  `listByWorkspace` read → import + `replaceForBlock`), returning a pickup or a `null` outcome.
+  The engine (`RunDispatcher.runBugIntake`) owns the block-reseed + best-effort `onIssuePickedUp`
+  writeback + the completion. It is wired into the engine ONLY when task sources are configured
+  (a `TasksModule.bugIntakeService`, threaded through `ExecutionService` like `issueWriteback`).
+- **The no-match / no-source path completes the run** via `RunDispatcher.completeRunSkippingRemaining`
+  — mark this step's output, mark every remaining step `skipped`, finalize the block `done`. It
+  reuses `skipGatedStep`'s terminal machinery; there is deliberately NO new gate/notification.
+- **`BUG_INTAKE_AGENT_KIND`** is now exported from `pipelineShape.ts` (with a
+  `pipelineHasEnabledBugIntake` helper) as the single source of truth shared by the launch
+  constraint, the schedule intake-config validation, and the engine handler.
+- **Intake dedupe uses `TaskRepository.listByWorkspace`** filtered to `linkedBlockId && source`
+  — one batched projection read, not a per-candidate lookup. The reused block's own previous-fire
+  link is in the exclusion set (the search runs BEFORE `replaceForBlock` drops it), so a still-open
+  prior bug isn't immediately re-picked.
+- **Validation home**: the `issueIntake`-required + connected-source check lives in
+  `RecurringPipelineService` (create/update), NOT `assertPipelineLaunchable` (which has no access
+  to the schedule config or the workspace's connections). It's skipped for the connected-source
+  half when no task-connection service is wired; the presence check always runs.
 
 ### Phase F — investigation + clarification (design §4–5)
 

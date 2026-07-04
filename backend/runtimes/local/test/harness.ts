@@ -142,6 +142,7 @@ export function makeConformanceApp(
     resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
     backendRegistries?: BackendRegistries
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
+    taskSourceProviders?: CoreDependencies['taskSourceProviders']
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -168,7 +169,10 @@ export function makeConformanceApp(
     // Swap the config-wired real Jira provider for a deterministic fake (the Drizzle
     // task repos stay), so the shared suite asserts create-task-from-issue against
     // Postgres without hitting the network. Override wins over the config providers.
-    taskSourceProviders: [new FakeTaskSourceProvider('jira'), new FakeTaskSourceProvider('linear')],
+    taskSourceProviders: opts?.taskSourceProviders ?? [
+      new FakeTaskSourceProvider('jira'),
+      new FakeTaskSourceProvider('linear'),
+    ],
     // Inject the engine's run-repo resolver (a fake in the suite) so the registered
     // custom kind's pre/post-op hooks run + commit identically to a real GitHub-wired facade.
     ...(opts?.resolveRunRepoContext ? { resolveRunRepoContext: opts.resolveRunRepoContext } : {}),

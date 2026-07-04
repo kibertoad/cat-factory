@@ -198,7 +198,17 @@
       "submit": "Añadir pipeline recurrente",
       "addFailedTitle": "No se pudo añadir la pipeline recurrente",
       "onDemand": "Bajo demanda (solo manual)",
-      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual."
+      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual.",
+      "intake": "Admisión de incidencias",
+      "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
+      "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
+      "intakeGithubRepo": "Repositorio",
+      "intakeTitleFragment": "El título contiene",
+      "intakeTitleFragmentPlaceholder": "p. ej. crash",
+      "intakeLabels": "Etiquetas",
+      "intakeLabelsPlaceholder": "separadas por comas",
+      "intakeIssueType": "Tipo de incidencia",
+      "intakeInProgressLabel": "Etiqueta de en progreso"
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",

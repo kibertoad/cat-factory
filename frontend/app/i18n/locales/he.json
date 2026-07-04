@@ -198,7 +198,17 @@
       "submit": "הוסף צינור מחזורי",
       "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי",
       "onDemand": "לפי דרישה (ידני בלבד)",
-      "onDemandHint": "רץ רק כשאתה מפעיל אותו, ללא תזמון. מכיוון שאתה נוכח בכל פעם, המשימה יכולה להשתמש במודל מנוי לשימוש אישי."
+      "onDemandHint": "רץ רק כשאתה מפעיל אותו, ללא תזמון. מכיוון שאתה נוכח בכל פעם, המשימה יכולה להשתמש במודל מנוי לשימוש אישי.",
+      "intake": "קליטת תקלות",
+      "intakeHint": "כל הרצה בוחרת תקלה פתוחה תואמת אחת מהמעקב ומטפלת בה מקצה לקצה.",
+      "intakeNoSources": "חבר תחילה מקור משימות כדי למשוך ממנו תקלות.",
+      "intakeGithubRepo": "מאגר",
+      "intakeTitleFragment": "הכותרת מכילה",
+      "intakeTitleFragmentPlaceholder": "למשל crash",
+      "intakeLabels": "תוויות",
+      "intakeLabelsPlaceholder": "מופרדות בפסיקים",
+      "intakeIssueType": "סוג תקלה",
+      "intakeInProgressLabel": "תווית בתהליך"
     },
     "failure": {
       "containerFailedToStart": "מכל הקונטיינר נכשל בהפעלה",

@@ -92,9 +92,13 @@ const harness: ConformanceHarness = {
           : {}),
         ...fragmentLibraryDeps(),
         // A deterministic task source (fake 'jira') over the real D1 task repos, so the
-        // shared suite can assert create-task-from-issue parity against D1 too.
+        // shared suite can assert create-task-from-issue parity against D1 too. The suite may
+        // override with pre-seeded providers to drive the recurring `bug-intake` step.
         ...tasksDeps({
-          providers: [new FakeTaskSourceProvider('jira'), new FakeTaskSourceProvider('linear')],
+          providers: opts?.taskSourceProviders ?? [
+            new FakeTaskSourceProvider('jira'),
+            new FakeTaskSourceProvider('linear'),
+          ],
         }),
       },
       // The Worker binds `AI` in tests; let the suite force the opt-in flag off so the

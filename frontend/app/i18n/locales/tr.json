@@ -198,7 +198,17 @@
       "submit": "Yinelenen pipeline ekle",
       "addFailedTitle": "Yinelenen pipeline eklenemedi",
       "onDemand": "İstek üzerine (yalnızca manuel)",
-      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir."
+      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir.",
+      "intake": "Sorun alımı",
+      "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
+      "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
+      "intakeGithubRepo": "Depo",
+      "intakeTitleFragment": "Başlık şunu içerir",
+      "intakeTitleFragmentPlaceholder": "örn. crash",
+      "intakeLabels": "Etiketler",
+      "intakeLabelsPlaceholder": "virgülle ayrılmış",
+      "intakeIssueType": "Sorun türü",
+      "intakeInProgressLabel": "Devam ediyor etiketi"
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",
