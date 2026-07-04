@@ -21,6 +21,7 @@ import type {
 
 const board = useBoardStore()
 const clarity = useClarityStore()
+const models = useModelsStore()
 const toast = useToast()
 const { t } = useI18n()
 
@@ -493,7 +494,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                 </div>
                 <div v-if="review.model" class="flex items-center justify-between">
                   <span>{{ t('clarity.rail.model') }}</span>
-                  <span class="truncate ps-2 text-slate-500">{{ review.model }}</span>
+                  <span class="truncate ps-2 text-slate-500">{{
+                    models.labelForRef(review.model) ?? review.model
+                  }}</span>
                 </div>
               </div>
 

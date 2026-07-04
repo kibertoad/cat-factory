@@ -78,6 +78,43 @@ const md = new MarkdownIt({
 const HEADINGS = new Set(['H1', 'H2', 'H3', 'H4', 'H5', 'H6'])
 const LINK_CLASS = 'text-indigo-300 underline decoration-indigo-500/40 hover:text-indigo-200'
 
+// A second markdown-it instance for INLINE prose rendering (a rationale, a synthesis,
+// a summary) — the same secure config as `md` (html: false, so raw HTML is escaped and
+// dangerous link schemes are blocked by `validateLink`), but without the segmentation
+// plugin: these surfaces render one continuous document, not a ToC-navigable outline.
+// Link attributes are set through a renderer rule (not DOM post-processing) so the
+// function returns ready-to-inject HTML without depending on `document`.
+const proseMd = new MarkdownIt({
+  html: false, // secure by default: escape raw HTML rather than render it
+  linkify: true, // turn bare URLs into links
+  breaks: true, // single newlines → <br>, matching how agents lay out prose
+  typographer: true,
+})
+
+// Make every rendered link open safely in a new tab and pick up the prose link style,
+// mirroring `decorateLinks` but at the token level so no DOM is required.
+const defaultLinkOpen =
+  proseMd.renderer.rules.link_open ??
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+proseMd.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]!
+  token.attrSet('target', '_blank')
+  token.attrSet('rel', 'noopener noreferrer')
+  token.attrSet('class', LINK_CLASS)
+  return defaultLinkOpen(tokens, idx, options, env, self)
+}
+
+/**
+ * Render an agent's prose (markdown) to safe HTML for inline display. Escapes raw HTML,
+ * blocks dangerous link schemes, and decorates links to open safely in a new tab — the
+ * same guarantees as the reader overlay, minus the heading segmentation. Empty/nullish
+ * input renders to an empty string.
+ */
+export function renderMarkdown(text: string | null | undefined): string {
+  const source = text ?? ''
+  return source.trim() ? proseMd.render(source) : ''
+}
+
 function slugify(title: string, used: Set<string>): string {
   const base =
     title

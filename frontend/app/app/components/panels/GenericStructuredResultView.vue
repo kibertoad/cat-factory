@@ -9,6 +9,8 @@
 import { computed } from 'vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import CopyButton from '~/components/common/CopyButton.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -94,17 +96,19 @@ const customJson = computed<string | null>(() => {
         <div class="flex min-h-0 flex-1">
           <!-- Main: prose summary + structured JSON -->
           <div class="min-w-0 flex-1 overflow-y-auto px-5 py-4">
-            <p
+            <MarkdownProse
               v-if="step?.output"
-              class="mb-4 whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300"
-            >
-              {{ step.output }}
-            </p>
+              :text="step.output"
+              class="mb-4 text-[13px] leading-relaxed text-slate-300"
+            />
 
             <template v-if="customJson">
-              <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                {{ t('panels.structuredResult.structuredOutput') }}
-              </h3>
+              <div class="mb-2 flex items-center gap-2">
+                <h3 class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t('panels.structuredResult.structuredOutput') }}
+                </h3>
+                <CopyButton :text="customJson" class="-my-1" />
+              </div>
               <pre
                 class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[12px] leading-relaxed text-slate-200"
               ><code>{{ customJson }}</code></pre>

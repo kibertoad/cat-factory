@@ -9,11 +9,14 @@
 import { computed } from 'vue'
 import type { ConsensusContribution, ConsensusSession } from '~/types/consensus'
 import CopyButton from '~/components/common/CopyButton.vue'
+import MarkdownProse from '~/components/common/MarkdownProse.vue'
+import { agentKindMeta } from '~/utils/catalog'
 
 const { t, n } = useI18n()
 
 const board = useBoardStore()
 const consensus = useConsensusStore()
+const models = useModelsStore()
 
 const { open, blockId, close } = useResultView('consensus-session', {
   onOpen: (id) => {
@@ -114,7 +117,7 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
               <span v-if="block" class="font-normal text-slate-400">— {{ block.title }}</span>
             </h2>
             <p v-if="session" class="text-xs text-slate-500">
-              {{ session.agentKind }} ·
+              {{ agentKindMeta(session.agentKind).label }} ·
               {{
                 t(
                   'consensus.participantCount',
@@ -169,11 +172,12 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                   class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300"
                   >{{ t('consensus.confidence', { pct: pct(session.confidence) }) }}</span
                 >
+                <CopyButton :text="session.synthesis" class="ms-auto -my-1" />
               </div>
-              <pre
-                class="whitespace-pre-wrap rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
-                >{{ session.synthesis }}</pre
-              >
+              <MarkdownProse
+                :text="session.synthesis"
+                class="rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
+              />
               <ul v-if="session.dissent?.length" class="mt-2 space-y-1">
                 <li
                   v-for="(d, i) in session.dissent"
@@ -201,7 +205,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                     t('consensus.expert', { letter: String.fromCharCode(65 + i) })
                   }}</span>
                   <span class="text-slate-400"> · {{ p.role }}</span>
-                  <span v-if="p.modelId" class="ms-1 text-slate-500">({{ p.modelId }})</span>
+                  <span v-if="p.modelId" class="ms-1 text-slate-500"
+                    >({{ models.labelForRef(p.modelId) ?? p.modelId }})</span
+                  >
                 </div>
               </div>
             </section>
@@ -233,8 +239,9 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
                         })
                       }}</span
                     >
+                    <CopyButton :text="c.text" :class="topScore(c) ? '-my-1' : 'ms-auto -my-1'" />
                   </div>
-                  <pre class="whitespace-pre-wrap text-sm text-slate-300">{{ c.text }}</pre>
+                  <MarkdownProse :text="c.text" class="text-sm text-slate-300" />
                   <div v-if="c.scores?.length" class="mt-2 flex flex-wrap gap-1.5">
                     <span
                       v-for="s in c.scores"
