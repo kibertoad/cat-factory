@@ -230,7 +230,12 @@ describe('ComposeEnvironmentProvider', () => {
           'docker-compose.yml':
             'services:\n  web:\n    build: .\n    volumes:\n      - ./init:/init\n    env_file:\n      - ./.env\n',
         }),
-        clone: { cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 'ghs_secret' },
+        clone: () =>
+          Promise.resolve({
+            cloneUrl: 'https://github.com/acme/shop.git',
+            ref: 'main',
+            token: 'ghs_secret',
+          }),
         ...overrides,
       })
 

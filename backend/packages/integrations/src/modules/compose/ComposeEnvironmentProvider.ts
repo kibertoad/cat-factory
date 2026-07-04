@@ -13,6 +13,7 @@ import type {
 import {
   type ComposeEnvironmentConfig,
   type ComposeRuntime,
+  checkoutDepthFor,
   classifyComposePs,
   composeFileDir,
   parseComposeEnvConfig,
@@ -81,6 +82,9 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     // deterministic failure BEFORE we touch the daemon or clone anything.
     const prepared = prepareComposeProject(composeText, config.service, config.port, {
       build: config.build,
+      // In build mode, relatives resolve against the compose file's own dir inside the checkout, so
+      // a ref may climb this many `../`s and still be in-checkout (the escape line is the root).
+      baseDepth: config.build ? checkoutDepthFor(config.composePath) : 0,
     })
     if (prepared.issues.length > 0) {
       return this.failed(
@@ -322,19 +326,20 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
           'Build-from-source compose mode needs a Docker-capable runtime that can clone + build (unavailable on this deployment).',
       }
     }
-    if (!req.clone) {
+    const clone = await req.clone?.()
+    if (!clone) {
       return {
         error:
           'Build-from-source compose mode needs a repo clone target — is the VCS connected and the service linked to a repo?',
       }
     }
-    const ref = req.inputs.branch || req.clone.ref
+    const ref = req.inputs.branch || clone.ref
     let dir: string
     try {
       ;({ dir } = await this.runtime.checkout(project, {
-        cloneUrl: req.clone.cloneUrl,
+        cloneUrl: clone.cloneUrl,
         ref,
-        token: req.clone.token,
+        token: clone.token,
       }))
     } catch (err) {
       return {

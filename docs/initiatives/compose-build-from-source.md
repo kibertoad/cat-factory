@@ -68,14 +68,27 @@ token})` + `writeCheckoutFile(project, relPath, content)`, mirroring the optiona
 
 ## Conventions / gotchas carried between iterations
 
-- **Host-escape is the core safety line.** Build mode still rejects absolute, `~`, and
-  `../`-escaping bind sources via `escapesCheckout`; only in-checkout relatives are allowed.
+- **Host-escape is the core safety line — apply it to EVERY path-bearing reference, uniformly.**
+  Build mode rejects escaping sources via `escapesCheckout` for bind mounts, `env_file`s, the
+  `build:` context, and top-level `secrets:`/`configs:` `file:` sources alike; only in-checkout
+  relatives are allowed. `escapesCheckout` covers absolute / `~` / drive / UNC-or-backslash roots,
+  `../`-above-root (including a separator-buried `a/../../b`), and any unresolved `${VAR}`/`$VAR`
+  (it expands to an arbitrary host path at runtime). `bindMountSource` treats any short-form source
+  containing a path separator as a host bind (a named volume never has one), so a `sub/../../etc`
+  escape can't masquerade as a named volume. Do NOT special-case one reference kind and forget the
+  others — that inconsistency is exactly what a build-mode preview env would exploit.
+- **`include:` and cross-file `extends: { file }` are refused in BOTH modes.** The daemon merges
+  those referenced files from disk at build/up time, so their services never pass through this
+  backend's single-file parse (or `neutralizeHostPorts` / `ensureServicePublishes`) — a merged file
+  would smuggle a privileged container, host bind, or pinned host port past every guard. Refuse them
+  rather than trying to recursively resolve-and-validate.
 - **Project-directory.** The rewritten file must sit beside the original inside the checkout and
   `--project-directory` (or the first `-f`) must point at that dir, or relative build contexts /
   mounts / env_files break.
-- **Sync clone seam.** `resolveDeployCloneTarget` was async-path-only; forgetting to thread
-  `req.clone` through `buildProvisionRequest` yields a null clone and a hard fail even with a PAT
-  wired.
+- **Sync clone seam is a LAZY thunk.** `resolveDeployCloneTarget` was async-path-only; `req.clone`
+  threads it through `buildProvisionRequest` as a memoized thunk so ONLY the build-mode provider
+  that needs a working tree mints a token (image-mode / custom / k8s-sync provisions don't).
+  Forgetting to wire it yields a null clone and a hard fail even with a PAT wired.
 - **Private-image registry auth stays UNMODELED.** Build mode fixes building the app's OWN images;
   a private base image / sidecar still needs `docker login`, which this backend does not
   provision. Out of scope — call it out to the user.

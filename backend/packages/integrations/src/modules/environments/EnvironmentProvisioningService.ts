@@ -442,20 +442,24 @@ export class EnvironmentProvisioningService {
       repoBlockId && this.deps.resolveRunRepoContext
         ? await this.deps.resolveRunRepoContext(workspaceId, repoBlockId)
         : null
-    // Clone target for a SYNCHRONOUS provider that needs a working tree (the Docker Compose
-    // build-from-source mode). Reuse the async deploy inputs' already-resolved clone when present
-    // (same `resolveDeployCloneTarget` seam) so we never mint a second token; otherwise resolve it
-    // here when `opts.resolveClone` asks (the provision paths that may run a sync build). Left
-    // absent for `finalizeProvision`, which only maps a view and must not mint a clone token.
-    const clone =
-      deploy?.clone ??
-      (opts?.resolveClone && this.deps.resolveDeployCloneTarget && repoBlockId
-        ? ((await this.deps.resolveDeployCloneTarget(
-            workspaceId,
-            repoBlockId,
-            args.context?.branch,
-          )) ?? undefined)
-        : undefined)
+    // LAZY clone target for a SYNCHRONOUS provider that needs a working tree (Docker Compose
+    // build-from-source). Exposed as a memoized thunk so ONLY the build-mode provider that
+    // actually clones pays the token mint — image-mode compose / custom / k8s-sync provisions
+    // never invoke it, and `finalizeProvision` (no `resolveClone`) can't mint at all. Reuse the
+    // async deploy inputs' already-resolved clone when present so one provision never mints twice.
+    let clonePromise: Promise<DeployCloneTarget | undefined> | undefined
+    const clone = opts?.resolveClone
+      ? () =>
+          (clonePromise ??= (async () =>
+            deploy?.clone ??
+            (this.deps.resolveDeployCloneTarget && repoBlockId
+              ? ((await this.deps.resolveDeployCloneTarget(
+                  workspaceId,
+                  repoBlockId,
+                  args.context?.branch,
+                )) ?? undefined)
+              : undefined))())
+      : undefined
     return {
       manifest,
       inputs,

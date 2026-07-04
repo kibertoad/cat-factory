@@ -109,14 +109,17 @@ export interface ProvisionEnvironmentRequest {
    */
   deploy?: DeployProvisionInputs
   /**
-   * Clone coordinates (HTTPS URL + short-lived token + ref) for a SYNCHRONOUS provider that
-   * needs a working tree — the Docker Compose backend's build-from-source mode clones the PR
-   * head so `build:` contexts, in-checkout bind mounts, and relative `env_file`s resolve.
-   * Resolved by the provisioning service (the same `resolveDeployCloneTarget` the async deploy
-   * path uses) when a repo-bound block is known. Absent ⇒ no clone was resolvable (no VCS
-   * connection / block-less manual provision); a build-mode provision then fails deterministically.
+   * LAZY clone-target resolver (HTTPS URL + short-lived token + ref) for a SYNCHRONOUS provider
+   * that needs a working tree — the Docker Compose backend's build-from-source mode clones the PR
+   * head so `build:` contexts, in-checkout bind mounts, and relative `env_file`s resolve. It is a
+   * thunk, not an eager value, so ONLY a provider that actually needs a checkout pays the token
+   * mint: image-mode compose / custom / k8s-sync provisions never call it. Backed by the same
+   * `resolveDeployCloneTarget` seam the async deploy path uses (memoized, and reused from the
+   * deploy inputs when present, so one provision never mints twice). Resolves to `undefined` when
+   * no clone target is available (no VCS connection / block-less manual provision); a build-mode
+   * provision then fails deterministically. Absent ⇒ the caller doesn't offer a clone at all.
    */
-  clone?: DeployCloneTarget
+  clone?: () => Promise<DeployCloneTarget | undefined>
 }
 
 export interface EnvironmentStatusRequest {

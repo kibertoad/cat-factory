@@ -331,27 +331,39 @@ export function ensureServicePublishes(doc: ComposeDoc, service: string, port: n
   return doc
 }
 
-function isRelativePath(path: string): boolean {
-  return !path.startsWith('/') && !/^[a-zA-Z]:[\\/]/.test(path)
-}
-
 /** True when a service declares a `build:` (a build context / long-form build object). */
 export function hasBuildDirective(service: unknown): boolean {
   return !!service && typeof service === 'object' && (service as ComposeService).build !== undefined
 }
 
 /**
- * True when a bind-mount source would resolve OUTSIDE the cloned checkout — an absolute path, a
- * `~` home ref, a Windows drive path, or a relative path whose normalized form pops above the
- * checkout root (`../` escape). These stay refused even in build mode (host-filesystem escape);
- * only in-checkout relatives (`./x`, `x`, `x/y`) are allowed. A named/anonymous volume is never a
- * bind source (callers only pass the result of {@link bindMountSource}, which is already null for
- * those), so this only ever judges a real host-path source.
+ * True when a host path (bind source / env_file / build context / secret-or-config `file:`) would
+ * resolve OUTSIDE the cloned checkout — so it stays refused even in build mode (host-filesystem
+ * escape); only in-checkout relatives (`./x`, `x`, `x/y`) are allowed. Refused:
+ *  - an absolute path (`/etc`), a `~` home ref, a Windows drive path (`C:\`), or a UNC / backslash
+ *    root (`\\server\share`);
+ *  - a relative path whose normalized form pops above the checkout root (`../` escape, including
+ *    a mid-path `a/../../b`);
+ *  - a path carrying an unresolved `$VAR`/`${VAR}` interpolation — the daemon expands it from the
+ *    operator's environment before mounting, so it can become ANY host path; we can't bound it
+ *    statically, so we refuse it rather than let it slip past.
+ *
+ * Relatives resolve against `--project-directory` (the compose file's own dir), which sits
+ * `baseDepth` levels BELOW the checkout root, so `baseDepth` `../`s are still in-checkout (they
+ * only reach the root) — a compose at `deploy/` may legitimately reference `..` (the repo root).
+ * The escape line is the checkout root, not the compose dir. `baseDepth` defaults to 0 (root-level
+ * compose file), which is the strictest.
  */
-export function escapesCheckout(source: string): boolean {
-  if (source.startsWith('/') || source.startsWith('~') || /^[a-zA-Z]:[\\/]/.test(source))
+export function escapesCheckout(source: string, baseDepth = 0): boolean {
+  if (
+    source.startsWith('/') ||
+    source.startsWith('~') ||
+    source.startsWith('\\') || // UNC (\\server\share) / backslash-absolute
+    /^[a-zA-Z]:[\\/]/.test(source) || // Windows drive path
+    source.includes('$') // unresolved ${VAR}/$VAR — expands to an arbitrary host path at runtime
+  )
     return true
-  let depth = 0
+  let depth = baseDepth
   for (const segment of source.split(/[\\/]+/)) {
     if (segment === '' || segment === '.') continue
     if (segment === '..') {
@@ -364,24 +376,61 @@ export function escapesCheckout(source: string): boolean {
   return false
 }
 
+/** The number of path levels a repo-relative compose file sits below the checkout root — i.e. how
+ * many `../`s a reference beside it may climb while staying in-checkout. `''`/root → 0. */
+export function checkoutDepthFor(composePath: string): number {
+  const dir = composeFileDir(composePath)
+  return dir ? dir.split('/').length : 0
+}
+
+/**
+ * The host-path source of a bind mount (short `src:dst[:mode]` or long `{ type: bind, source }`),
+ * or null when the volume is a named/anonymous volume (never a host bind). A named volume name is
+ * `[a-zA-Z0-9][a-zA-Z0-9_.-]*` — it can't contain a path separator — so ANY short-form source that
+ * contains a `/` or `\` (or the usual `.`/`/`/`~` prefixes) is a host path and is returned for
+ * {@link escapesCheckout} to judge. This is what stops a separator-buried escape like
+ * `sub/../../../etc:/host` from being mis-read as a harmless named volume.
+ */
 export function bindMountSource(volume: unknown): string | null {
   if (typeof volume === 'string') {
     const segments = volume.split(':')
     if (segments.length < 2) return null // anonymous volume (`/data`) — a container path, not a host bind
     const source = segments[0] ?? ''
-    return source.startsWith('.') || source.startsWith('/') || source.startsWith('~')
-      ? source
-      : null
+    return isHostPathSource(source) ? source : null
   }
   if (volume && typeof volume === 'object') {
     const v = volume as Record<string, unknown>
     if (v.type === 'bind') return typeof v.source === 'string' ? v.source : 'bind'
     if (v.type === undefined && typeof v.source === 'string') {
       const s = v.source
-      return s.startsWith('.') || s.startsWith('/') || s.startsWith('~') ? s : null
+      return isHostPathSource(s) ? s : null
     }
   }
   return null
+}
+
+/** A short-form volume source is a host path (bind) — not a named volume — when it is prefixed
+ * like a path or contains a path separator (a named volume name never does). */
+function isHostPathSource(source: string): boolean {
+  return (
+    source.startsWith('.') ||
+    source.startsWith('/') ||
+    source.startsWith('~') ||
+    source.includes('/') ||
+    source.includes('\\')
+  )
+}
+
+/** The build context of a service's `build:` (short string form or long `{ context }`), or null
+ * when no `build:` is declared. A `build:` with no explicit context defaults to `.`. */
+export function buildContextSource(build: unknown): string | null {
+  if (build === undefined) return null
+  if (typeof build === 'string') return build || '.'
+  if (build && typeof build === 'object') {
+    const ctx = (build as Record<string, unknown>).context
+    return typeof ctx === 'string' ? ctx : '.'
+  }
+  return '.'
 }
 
 /**
@@ -393,28 +442,63 @@ export function bindMountSource(volume: unknown): string | null {
  * with no repo on disk, so anything resolved against the repo working tree is broken —
  *  - `build:` — needs the source tree (image-based stacks only);
  *  - ANY host bind mount — resolves against an empty scratch dir; also exposes the host filesystem;
- *  - relative `env_file` — points into the absent repo tree;
+ *  - ANY `env_file` / secret-or-config `file:` — points into the absent repo tree (or the host);
  *  - `privileged: true` — refused on the shared host daemon.
  *
  * **Build mode** (`opts.build === true`): the PR head is cloned into a working tree, so `build:`
- * contexts, IN-CHECKOUT relative bind mounts, and relative `env_file`s all resolve and are allowed.
- * Still refused, because they escape the checkout or the daemon's safety envelope —
- *  - a host-escaping bind source (absolute / `~` / `../` above the checkout root, per
- *    {@link escapesCheckout});
- *  - `privileged: true` (unchanged).
+ * contexts, IN-CHECKOUT relative bind mounts, relative `env_file`s, and in-checkout secret/config
+ * `file:` sources all resolve and are allowed. Still refused, because they escape the checkout or
+ * the daemon's safety envelope — every path-bearing reference (bind source, env_file, build
+ * context, secret/config `file:`) is uniformly run through {@link escapesCheckout}, and
+ * `privileged: true` stays refused.
+ *
+ * In BOTH modes, `include:` and cross-file `extends: { file }` are refused outright: the daemon
+ * merges those referenced files at build/up time, so their services never pass through this parse
+ * (or through `neutralizeHostPorts` / `ensureServicePublishes`) — leaving them in would let a
+ * merged file smuggle a privileged container, a host bind, or a pinned port past every guard.
  */
 export function collectUnsupportedComposeRefs(
   doc: ComposeDoc,
-  opts?: { build?: boolean },
+  opts?: { build?: boolean; baseDepth?: number },
 ): string[] {
   const build = opts?.build === true
+  const baseDepth = opts?.baseDepth ?? 0
   const issues: string[] = []
+  // Reject a path that the daemon would resolve against the host / an absent tree. Image mode has
+  // no checkout, so any host or repo-relative path is unusable; build mode only refuses one that
+  // ESCAPES the cloned checkout (in-checkout relatives resolve against the clone).
+  const refuseHostPath = (source: string): boolean =>
+    build ? escapesCheckout(source, baseDepth) : true
+
+  // The daemon merges `include:`d files from disk, bypassing this whole guard — refuse it.
+  if (doc.include !== undefined) {
+    issues.push(
+      'compose declares include: — unsupported (included files are merged by the daemon and bypass the isolation / host-escape checks)',
+    )
+  }
   for (const [name, service] of Object.entries(servicesOf(doc))) {
     if (!service || typeof service !== 'object') continue
-    if (!build && service.build !== undefined) {
+    // Cross-file `extends: { file }` merges another file from disk — same bypass as include.
+    const extendsFile =
+      service.extends && typeof service.extends === 'object'
+        ? (service.extends as Record<string, unknown>).file
+        : undefined
+    if (typeof extendsFile === 'string') {
       issues.push(
-        `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
+        `service '${name}' uses extends.file ('${extendsFile}') — unsupported (the referenced file is merged by the daemon and bypasses the isolation / host-escape checks)`,
       )
+    }
+    const buildContext = buildContextSource(service.build)
+    if (buildContext !== null) {
+      if (!build) {
+        issues.push(
+          `service '${name}' uses build: — image-based stacks only (no repo is checked out)`,
+        )
+      } else if (escapesCheckout(buildContext, baseDepth)) {
+        issues.push(
+          `service '${name}' builds from a context outside the checkout ('${buildContext}') — refused (host-filesystem escape)`,
+        )
+      }
     }
     if (service.privileged === true) {
       issues.push(`service '${name}' requests privileged: true — refused on the shared host daemon`)
@@ -426,21 +510,40 @@ export function collectUnsupportedComposeRefs(
         issues.push(
           `service '${name}' bind-mounts a host path ('${source}') — unsupported (no repo on disk; use a named volume)`,
         )
-      } else if (escapesCheckout(source)) {
+      } else if (escapesCheckout(source, baseDepth)) {
         issues.push(
           `service '${name}' bind-mounts a path outside the checkout ('${source}') — refused (host-filesystem escape)`,
         )
       }
     }
-    if (!build) {
-      for (const entry of asArray(service.env_file)) {
-        const path =
-          typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
-        if (typeof path === 'string' && isRelativePath(path)) {
-          issues.push(
-            `service '${name}' reads a relative env_file ('${path}') — unsupported (no repo on disk)`,
-          )
-        }
+    for (const entry of asArray(service.env_file)) {
+      const path =
+        typeof entry === 'string' ? entry : (entry as Record<string, unknown> | null)?.path
+      if (typeof path !== 'string') continue
+      if (refuseHostPath(path)) {
+        issues.push(
+          build
+            ? `service '${name}' reads an env_file outside the checkout ('${path}') — refused (host-filesystem escape)`
+            : `service '${name}' reads an env_file ('${path}') — unsupported (no repo on disk)`,
+        )
+      }
+    }
+  }
+  // Top-level `secrets:` / `configs:` with a host `file:` source are mounted into the service — the
+  // same host-path escape surface as a bind mount, so judge them the same way.
+  for (const kind of ['secrets', 'configs'] as const) {
+    const defs = doc[kind]
+    if (!defs || typeof defs !== 'object') continue
+    for (const [key, def] of Object.entries(defs as Record<string, unknown>)) {
+      const file =
+        def && typeof def === 'object' ? (def as Record<string, unknown>).file : undefined
+      if (typeof file !== 'string') continue
+      if (refuseHostPath(file)) {
+        issues.push(
+          build
+            ? `${kind.slice(0, -1)} '${key}' reads a file outside the checkout ('${file}') — refused (host-filesystem escape)`
+            : `${kind.slice(0, -1)} '${key}' reads a host file ('${file}') — unsupported (no repo on disk)`,
+        )
       }
     }
   }
@@ -466,7 +569,7 @@ export function prepareComposeProject(
   renderedText: string,
   service: string,
   port: number,
-  opts?: { build?: boolean },
+  opts?: { build?: boolean; baseDepth?: number },
 ): PreparedCompose {
   let parsed: unknown
   try {

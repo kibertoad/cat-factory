@@ -16,12 +16,22 @@ A new opt-in `build` mode (workspace handler `providerConfig.build`, mirrored ad
 `ServiceProvisioning.composeBuild`) clones the PR head into a per-project working tree, writes
 the isolation-safe rewritten compose beside the original inside the checkout, and runs
 `docker compose build` + `up --wait`. In build mode `build:`, in-checkout relative bind mounts,
-and relative `env_file`s are honored; `privileged: true` and **host-escaping** bind mounts
-(absolute / `~` / `../`-escape) stay refused. Image mode is unchanged and remains the default.
+and relative `env_file`s are honored. Image mode is unchanged and remains the default.
+
+Host-escape refusal is uniform across EVERY path-bearing reference, not just bind mounts: bind
+sources, `env_file`s, the `build:` context, and top-level `secrets:`/`configs:` `file:` sources are
+all run through `escapesCheckout`, which now also catches UNC/backslash-absolute paths, a
+separator-buried `../` source (`sub/../../../etc`, previously mis-read as a named volume), and an
+unresolved `${VAR}` interpolation (expands to an arbitrary host path at runtime). `include:` and
+cross-file `extends: { file }` are refused outright in both modes — the daemon merges those files
+from disk, so their services would otherwise slip a privileged container / host bind / pinned port
+past the parse-based guard. `privileged: true` stays refused.
 
 The `ComposeRuntime` seam gains optional `checkout`/`writeCheckoutFile` (implemented in the local
-facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a
-`clone` target resolved on the synchronous provision path (reusing the deploy clone-target seam).
+facade via a shallow, token-authenticated git clone); `ProvisionEnvironmentRequest` gains a LAZY
+`clone` resolver (a thunk) invoked only by the build-mode provider that actually needs a working
+tree — so image-mode compose / custom / k8s-sync provisions no longer mint a short-lived VCS token
+they never use (reusing the deploy clone-target seam, memoized so one provision never mints twice).
 Build mode registers only on the docker-family local runtime — the documented runtime-bound
 exception. Build timeout is separate from the health-wait bound (`buildTimeoutMinutes`).
 
