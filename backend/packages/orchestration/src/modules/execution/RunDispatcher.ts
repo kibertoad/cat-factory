@@ -87,11 +87,13 @@ import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
 import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.logic.js'
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
+import { renderInvestigationDigest } from './bugInvestigation.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   BLUEPRINTS_AGENT_KIND,
+  BUG_INVESTIGATOR_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
   HUMAN_TEST_AGENT_KIND,
@@ -2807,6 +2809,21 @@ export class RunDispatcher {
       // whether the single-actor estimator or the consensus ranked-scoring variant produced
       // the JSON. Running at the post-completion slot keeps the summary in `step.output`
       // before the approval gate reads it as the proposal.
+      // A `bug-investigator` step returns its STRUCTURED triage as `result.custom` (kept on
+      // `step.custom` for the generic-structured view + the clarity gate's structured read).
+      // Render a prose digest into `step.output` at the post-completion slot so downstream
+      // steps (estimator / repro-test / coder) read the investigation via `priorOutputs`
+      // (which carries only `step.output`), and the clarity gate's investigation-prose context
+      // sees it too. An unparseable result leaves the agent's raw reply on `step.output`.
+      {
+        kind: BUG_INVESTIGATOR_AGENT_KIND,
+        phase: 'post-completion',
+        applies: (result) => result.custom !== undefined,
+        resolve: async ({ result }) => {
+          const digest = renderInvestigationDigest(result.custom)
+          if (digest) return { output: digest }
+        },
+      },
       {
         kind: TASK_ESTIMATOR_AGENT_KIND,
         phase: 'post-completion',

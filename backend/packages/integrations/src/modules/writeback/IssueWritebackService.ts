@@ -130,6 +130,23 @@ export class IssueWritebackService implements IssueWritebackProvider {
     })
   }
 
+  async postQuestions(workspaceId: string, blockId: string, questions: string[]): Promise<void> {
+    // Echo the clarification gate's open questions onto the linked tracker issue(s) so the
+    // reporter sees the ask where they filed the bug. Like `onIssuePickedUp`, NOT gated on
+    // the workspace writeback settings (see the port doc), and best-effort per issue.
+    const asked = questions.map((q) => q.trim()).filter((q) => q.length > 0)
+    if (asked.length === 0) return
+    const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
+    if (issues.length === 0) return
+    const body = [
+      '🤖 cat-factory needs a few clarifications before it can fix this bug. Please answer ' +
+        'in the platform (these are echoed here for visibility):',
+      '',
+      ...asked.map((q) => `- ${q}`),
+    ].join('\n')
+    await this.forEachIssue(issues, (issue) => this.comment(workspaceId, issue, body))
+  }
+
   /** Run a writeback per issue, isolating failures so one bad issue can't block the rest. */
   private async forEachIssue(
     issues: TaskRecord[],

@@ -51,16 +51,18 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'clarity-review',
   },
   {
-    // A read-only `/explore` agent (like the architect), so it's a first-class palette block
-    // a user can add to any pipeline — not just the `pl_bugfix` preset where it leads. No
-    // `resultView`: the enriched report is prose, so it uses the generic step-detail panel.
+    // A read-only, structured `container-explore` agent, so it's a first-class palette block a
+    // user can add to any pipeline — not just the `pl_bugfix` preset where it leads. Its
+    // structured triage opens in the shared generic viewer; the clarity gate consumes its
+    // `clarity`/`questions` server-side.
     kind: 'bug-investigator',
     label: 'Bug Investigator',
     icon: 'i-lucide-search-code',
     color: '#38bdf8',
     category: 'review',
     description:
-      'Read-only codebase investigation that traces the bug to its root cause and produces an enriched report (no code changes).',
+      'Read-only, multi-repo codebase investigation that traces the bug to its root cause and decides whether the report is fixable as-is or needs the reporter to clarify (no code changes).',
+    resultView: 'generic-structured',
   },
   {
     kind: 'task-estimator',

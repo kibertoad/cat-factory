@@ -1,5 +1,11 @@
-import type { Block, ClarityReview, RequirementReviewItem } from '@cat-factory/kernel'
+import type {
+  Block,
+  ClarityReview,
+  RequirementConcernLevel,
+  RequirementReviewItem,
+} from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
+import { assertFound, DEFAULT_MAX_REQUIREMENT_ITERATIONS } from '@cat-factory/kernel'
 import { CLARITY_REVIEW_SYSTEM_PROMPT, CLARITY_REWORK_SYSTEM_PROMPT } from '@cat-factory/agents'
 import {
   type IterativeReviewDeps,
@@ -11,6 +17,7 @@ import {
   type ClarityContext,
   buildClarityPrompt,
   buildClarityReworkPrompt,
+  buildSeededClarityItems,
 } from './clarity.logic.js'
 
 export interface ClarityReviewServiceDependencies extends IterativeReviewDeps {
@@ -88,6 +95,46 @@ export class ClarityReviewService extends IterativeReviewService<
 
   protected newReview(common: ReviewCommon): ClarityReview {
     return { ...common, clarifiedReport: null }
+  }
+
+  /**
+   * Seed the FIRST clarity pass from an upstream `bug-investigator`'s structured triage —
+   * DETERMINISTICALLY, with no reviewer LLM call and no model required (so it runs on every
+   * runtime, wired model or not):
+   *
+   * - `clarity: 'clear'` → zero items → the shared dispose logic auto-passes (status
+   *   `incorporated`), so the gate advances with no park and no notification.
+   * - `clarity: 'needs_clarification'` → one blocking finding per question → the gate parks the
+   *   run for the human, exactly as an LLM reviewer pass would (the questions came from the
+   *   investigator instead of a second LLM). Re-review / incorporate later still use the model.
+   *
+   * Mirrors the requirements-review auto-pass pattern (see `IterativeReviewService.review`);
+   * `model` is `null` because no model produced these items.
+   */
+  async seedReview(
+    workspaceId: string,
+    blockId: string,
+    opts: {
+      clarity: 'clear' | 'needs_clarification'
+      questions: string[]
+      maxIterations?: number
+      concernThreshold?: RequirementConcernLevel
+    },
+  ): Promise<ClarityReview> {
+    const block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
+    const now = this.deps.clock.now()
+    const items =
+      opts.clarity === 'needs_clarification'
+        ? buildSeededClarityItems(opts.questions, () => this.deps.idGenerator.next('clri'), now)
+        : []
+    return this.persistInitialReview(workspaceId, block, items, null, {
+      maxIterations: opts.maxIterations ?? DEFAULT_MAX_REQUIREMENT_ITERATIONS,
+      concernThreshold: opts.concernThreshold ?? 'none',
+    })
   }
 
   /** Assemble the bug report under review (block + optional investigation). */

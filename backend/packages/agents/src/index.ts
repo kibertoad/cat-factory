@@ -167,6 +167,13 @@ export {
   READ_ONLY_GUARDRAIL,
   isReadOnlyAgentKind,
 } from './agents/kinds/read-only.js'
+export {
+  BUG_INVESTIGATOR_KIND,
+  BUG_INVESTIGATOR_AGENT_KINDS,
+  bugInvestigation,
+  type BugInvestigation,
+  registerBugInvestigatorAgent,
+} from './agents/kinds/bug-investigator.js'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/prompts/mock.js'
 export {
   type BusinessLogicAgentKind,

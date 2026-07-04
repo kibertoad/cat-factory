@@ -402,7 +402,7 @@ export async function runCodingAgent(
 }
 
 /** Sanitise an owner/name into a safe single path segment for a sibling checkout directory. */
-function safeDirSegment(value: string): string {
+export function safeDirSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
 }
 
@@ -479,7 +479,9 @@ export async function runMultiRepoCoding(
         dirName: claimDir(peer.repo),
         dir: '',
         cloneBranch: peer.repo.baseBranch,
-        workBranch: peer.newBranch,
+        // Coding peers always carry `newBranch` (the backend sets the shared work branch);
+        // fall back to the primary's for the type (read-only peers never reach this path).
+        workBranch: peer.newBranch ?? primaryWorkBranch,
         ghToken: peer.ghToken ?? job.ghToken,
         ...(peer.pr ? { pr: peer.pr } : {}),
         ...(peer.frameId ? { frameId: peer.frameId } : {}),

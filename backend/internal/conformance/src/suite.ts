@@ -7859,6 +7859,121 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
       })
     })
 
+    // The `bug-investigator` is a structured `container-explore` kind whose `clarity`/`questions`
+    // drive the downstream `clarity-review` gate (phase F): `clear` auto-passes with no human
+    // park; `needs_clarification` seeds one finding per question and parks the run for a human.
+    // The seed is DETERMINISTIC — no reviewer model — so the gate behaves identically on every
+    // runtime (conformance wires no reviewer model), which is exactly what these assert.
+    describe('bug-triage investigation + clarification (phase F)', () => {
+      type SeededReview = {
+        id: string
+        status: string
+        items: { id: string; status: string; detail: string }[]
+      }
+      const investigatorResult = (over: Record<string, unknown>): Record<string, unknown> => ({
+        clarity: 'clear',
+        summary: 'The submit handler swallows the validation error.',
+        rootCauseHypotheses: ['Unhandled promise rejection in onSubmit'],
+        affectedRepos: [],
+        suggestedReproductions: ['Submit the form with an empty email'],
+        questions: [],
+        ...over,
+      })
+
+      it('auto-passes the clarity gate when the investigator reports the report is clear', async () => {
+        const app = harness.makeApp({ customResult: investigatorResult({ clarity: 'clear' }) })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Triage & investigate',
+          agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        // Clear ⇒ no park: the run drives straight through the clarity gate to the architect.
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'architect')?.state).toBe('done')
+
+        // The investigator recorded its structured triage on `step.custom`, and the
+        // post-completion resolver rendered a prose digest onto `step.output` (what the
+        // downstream `priorOutputs` carries).
+        const investigator = exec.steps.find((s) => s.agentKind === 'bug-investigator')!
+        expect((investigator.custom as { clarity?: string } | undefined)?.clarity).toBe('clear')
+        expect(investigator.output).toContain('Investigation summary')
+        expect(investigator.output).toContain('swallows the validation error')
+
+        // The clarity review auto-passed (settled `incorporated`, no findings, no model).
+        const review = await app.call<SeededReview | null>(
+          'GET',
+          `/workspaces/${wsId}/blocks/task_login/clarity-review`,
+        )
+        expect(review.body?.status).toBe('incorporated')
+        expect(review.body?.items ?? []).toHaveLength(0)
+      })
+
+      it('parks the clarity gate for a human on needs_clarification, then resumes on proceed', async () => {
+        const app = harness.makeApp({
+          customResult: investigatorResult({
+            clarity: 'needs_clarification',
+            questions: ['What are the exact reproduction steps?', 'Which browser and version?'],
+          }),
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Triage & investigate',
+          agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+
+        // needs_clarification ⇒ the gate seeds one finding per question and PARKS the run.
+        let exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('blocked')
+        expect(exec.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe(
+          'waiting_decision',
+        )
+        expect(exec.steps.find((s) => s.agentKind === 'architect')?.state).not.toBe('done')
+
+        // The seeded review carries one OPEN finding per investigator question — no LLM ran.
+        const review = await app.call<SeededReview | null>(
+          'GET',
+          `/workspaces/${wsId}/blocks/task_login/clarity-review`,
+        )
+        expect(review.body?.status).toBe('ready')
+        const items = review.body?.items ?? []
+        expect(items).toHaveLength(2)
+        expect(items.every((i) => i.status === 'open')).toBe(true)
+        expect(items.map((i) => i.detail)).toContain('Which browser and version?')
+
+        // Resume: dismiss both questions, then proceed — advancing the parked run (no model).
+        for (const item of items) {
+          const dismissed = await app.call(
+            'PATCH',
+            `/workspaces/${wsId}/clarity-reviews/${review.body!.id}/items/${item.id}`,
+            { status: 'dismissed' },
+          )
+          expect(dismissed.status).toBe(200)
+        }
+        const proceeded = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/clarity-review/proceed`,
+        )
+        expect(proceeded.status).toBe(200)
+
+        exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'architect')?.state).toBe('done')
+      })
+    })
+
     // Slack is an extra notification transport; both facades wire the same module +
     // channel. These assert the per-workspace routing and the per-account member map
     // persist + read back identically on each store (the persistence-parity concern).

@@ -22,6 +22,7 @@ import {
 } from '@cat-factory/contracts'
 import {
   BINARY_STORAGE_TRAIT,
+  bugInvestigation,
   companionFor,
   companionTargets,
   hasTrait,
@@ -1918,22 +1919,58 @@ export class ExecutionService {
    */
   private buildClarityKind(): ReviewKind<ClarityReview> {
     const require = (): ClarityReviewService => {
-      if (!this.clarityReviewService?.enabled) {
+      if (!this.clarityReviewService) {
         throw new ConflictError('The clarity reviewer is not configured')
       }
       return this.clarityReviewService
     }
     return {
       agentKind: CLARITY_REVIEW_AGENT_KIND,
+      // Enabled whenever the clarity STORE is wired — the bug-triage seed/auto-pass path is
+      // deterministic (driven by the upstream investigator's structured triage) and needs no
+      // reviewer model, so the gate must activate even with no model configured. The LLM
+      // review/incorporate/re-review paths still resolve their own model (and degrade gracefully
+      // when unwired: no investigation + no model ⇒ the review closure auto-passes).
       entityName: 'Clarity review',
-      enabled: () => !!this.clarityReviewService?.enabled,
+      enabled: () => !!this.clarityReviewService,
       getForBlock: (ws, blockId) => require().getForBlock(ws, blockId),
-      review: async (ws, block, preset) =>
-        require().review(ws, block.id, {
+      review: async (ws, block, preset) => {
+        const svc = require()
+        const structured = await this.structuredInvestigationForBlock(ws, block.id)
+        // An upstream structured `bug-investigator`: seed the gate from its triage (auto-pass on
+        // `clear`, one finding per question on `needs_clarification`) — NO reviewer LLM. On a
+        // clarification park, best-effort echo the questions onto the linked tracker issue.
+        if (structured) {
+          const review = await svc.seedReview(ws, block.id, {
+            clarity: structured.clarity,
+            questions: structured.questions,
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+          })
+          if (review.status !== 'incorporated' && structured.questions.length > 0) {
+            await this.issueWriteback
+              ?.postQuestions(ws, block.id, structured.questions)
+              .catch(() => {})
+          }
+          return review
+        }
+        // No structured investigation. Run the reviewer LLM when a model is wired; otherwise
+        // there is nothing to review against, so auto-pass (equivalent to the old pass-through
+        // when the reviewer wasn't configured).
+        if (!svc.enabled) {
+          return svc.seedReview(ws, block.id, {
+            clarity: 'clear',
+            questions: [],
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+          })
+        }
+        return svc.review(ws, block.id, {
           maxIterations: preset.maxRequirementIterations,
           concernThreshold: preset.maxRequirementConcernAllowed,
           investigation: await this.investigationForBlock(ws, block.id),
-        }),
+        })
+      },
       reReview: (ws, reviewId, preset) =>
         require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
       incorporate: async (ws, blockId, reviewId, feedback) => {
@@ -2116,6 +2153,38 @@ export class ExecutionService {
     if (!block?.executionId) return undefined
     const instance = await this.executionRepository.get(workspaceId, block.executionId)
     return instance ? this.investigationFor(instance) : undefined
+  }
+
+  /**
+   * The latest `bug-investigator` step's STRUCTURED triage on a run — its `clarity` verdict +
+   * `questions` — parsed leniently from `step.custom`. Drives the clarity gate's seed/auto-pass
+   * (see {@link buildClarityKind}): a structured investigator upstream means the gate seeds its
+   * findings from `questions` (or auto-passes on `clarity === 'clear'`) instead of running its
+   * own reviewer LLM. Undefined when no investigator ran or its result wasn't structured (an
+   * older prose investigator, or an unparseable reply) — the gate then falls back to the LLM path.
+   */
+  private structuredInvestigationFor(
+    instance: ExecutionInstance,
+  ): { clarity: 'clear' | 'needs_clarification'; questions: string[] } | undefined {
+    for (let i = instance.steps.length - 1; i >= 0; i--) {
+      const s = instance.steps[i]!
+      if (s.agentKind !== BUG_INVESTIGATOR_AGENT_KIND || s.custom === undefined) continue
+      const parsed = bugInvestigation.safeParse(s.custom)
+      if (!parsed) return undefined
+      return { clarity: parsed.clarity, questions: parsed.questions }
+    }
+    return undefined
+  }
+
+  /** Resolve a block's structured investigator triage via its current execution. */
+  private async structuredInvestigationForBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ clarity: 'clear' | 'needs_clarification'; questions: string[] } | undefined> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return undefined
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    return instance ? this.structuredInvestigationFor(instance) : undefined
   }
 
   // The clarity / human-testing / visual-confirmation gate-window actions now live on the

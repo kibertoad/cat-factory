@@ -101,16 +101,43 @@ describe('parseAgentJob', () => {
     ).toThrow(/peerRepos\[0\]\.repo\.cloneUrl/)
   })
 
-  it('requires a newBranch on each peer repo', () => {
+  it('validates newBranch on a peer repo when present (a malformed one throws)', () => {
     expect(() =>
       parseAgentJob({
         ...base,
         mode: 'coding',
         peerRepos: [
-          { repo: { ...base.repo, name: 'email', cloneUrl: 'https://github.com/acme/email.git' } },
+          {
+            repo: { ...base.repo, name: 'email', cloneUrl: 'https://github.com/acme/email.git' },
+            newBranch: '',
+          },
         ],
       }),
     ).toThrow(/peerRepos\[0\]\.newBranch/)
+  })
+
+  it('parses a READ-ONLY explore peer repo (no newBranch / no pr — bug-investigator fan-out)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured' },
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'email',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/email.git',
+          },
+          frameId: 'frame-email',
+        },
+      ],
+    })
+    expect(job.peerRepos).toHaveLength(1)
+    expect(job.peerRepos?.[0]).toMatchObject({ frameId: 'frame-email', repo: { name: 'email' } })
+    // A read-only explore peer carries no work branch and no PR — it exists only to be read.
+    expect(job.peerRepos?.[0]?.newBranch).toBeUndefined()
+    expect(job.peerRepos?.[0]?.pr).toBeUndefined()
   })
 
   it('accepts a structured explore job', () => {

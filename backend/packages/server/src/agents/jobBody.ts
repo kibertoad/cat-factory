@@ -260,14 +260,26 @@ export function buildRegisteredAgentBody(
   }
 
   // container-explore (read-only): prose, or a structured JSON object as `custom`.
+  // Multi-repo (service-connections phase 3, read-only): a fan-out kind (today the
+  // `bug-investigator`) clones each connected involved-service repo as a SIBLING checkout so
+  // it can read across every repo the bug touches. Unlike the coding path there is no
+  // `newBranch`/`pr` — the peers are read, never pushed — so the harness's read-only
+  // `runMultiRepoExplore` just clones them (`{ repo, frameId }`) and runs the agent at the
+  // workspace root. The layout section names each repo/subdir + role.
+  const explorePeers = parts.peerRepos?.length
+    ? parts.peerRepos.map((p) => ({ repo: p.repo, ...(p.frameId ? { frameId: p.frameId } : {}) }))
+    : undefined
   return {
     kind: 'agent',
     body: {
       ...common,
       mode: 'explore',
-      systemPrompt: roleSystemPrompt,
+      systemPrompt: parts.multiRepoSection
+        ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
+        : roleSystemPrompt,
       userPrompt,
       branch: exploreBranch,
+      ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(step.clone?.full ? { full: true } : {}),
       ...(step.output?.kind === 'structured'
         ? {

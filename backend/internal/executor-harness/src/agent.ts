@@ -8,6 +8,7 @@ import type {
   AgentJob,
   AgentResult,
   InfraSetupRecord,
+  RepoSpec,
   ServiceInfraSpec,
 } from './job.js'
 import { standUpFrontend, tearDownFrontend } from './frontend-infra.js'
@@ -26,8 +27,13 @@ import {
   reinitAndPush,
   unmergedPaths,
 } from './git.js'
-import type { PiRunStats } from './pi.js'
-import { noChangesReason, runCodingAgent, runMultiRepoCoding } from './coding-agent.js'
+import type { PiRunStats, RunDiagnostics } from './pi.js'
+import {
+  noChangesReason,
+  runCodingAgent,
+  runMultiRepoCoding,
+  safeDirSegment,
+} from './coding-agent.js'
 import {
   acquireRepoCheckout,
   agentNeverActed,
@@ -370,6 +376,11 @@ async function runPreviewMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
  */
 async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const logger = opts.log ?? log
+  // Multi-repo read-only exploration (service-connections phase 3): when the job carries peer
+  // repos, clone them all as siblings and run at the workspace root. Keyed off job DATA
+  // (`peerRepos`), not the agent kind — the backend sets it for the bug-investigator when the
+  // task has involved services in distinct repos. A reused persistent checkout is single-repo.
+  if (job.peerRepos?.length && !job.persistentCheckout) return runMultiRepoExplore(job, opts)
   return acquireRepoCheckout(
     { persistent: job.persistentCheckout === true, prefix: 'agent-explore', repo: job.repo },
     async (dir) => {
@@ -453,122 +464,251 @@ async function runExploreMode(job: AgentJob, opts: RunOptions): Promise<AgentRes
           opts,
         )
 
-        if (!summary.trim()) {
-          return {
-            summary,
-            stats,
-            error: noOutputReason(stats, stderrTail),
-            failureCause: 'no-usable-output',
-            ...(usage ? { usage } : {}),
-            ...(callMetrics ? { callMetrics } : {}),
-            ...infraSetupFields,
-          }
-        }
-
-        // Opt-in (document producers): a final answer cut off at the output ceiling — or empty —
-        // must FAIL LOUDLY here, BEFORE the structured repair below could launder a truncated
-        // reply into a half-baked doc the backend then shards/commits + hands onward. Mirrors the
-        // bespoke `/spec` handler's `unusableFinalAnswerCause` gate (which drove the old loop).
-        if (job.output?.kind === 'structured' && job.output.failOnUnusableFinal) {
-          const unusable = unusableFinalAnswerCause(runDiag)
-          if (unusable) {
-            return {
-              summary,
-              stats,
-              error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
-              failureCause: 'no-usable-output',
-              ...(usage ? { usage } : {}),
-              ...(callMetrics ? { callMetrics } : {}),
-              ...infraSetupFields,
-            }
-          }
-        }
-
-        // Prose: the summary IS the deliverable.
-        if (job.output?.kind !== 'structured') {
-          logger.info('agent(explore): done (prose)', { ...stats })
-          return {
-            summary,
-            stats,
-            ...(usage ? { usage } : {}),
-            ...(callMetrics ? { callMetrics } : {}),
-            ...infraSetupFields,
-          }
-        }
-
-        // Structured: parse the agent's JSON. With repair enabled (default) a malformed
-        // reply gets ONE structured repair call before giving up; with `repair:false` we
-        // parse directly (no repair channel). The backend coerces/validates + renders from
-        // the returned object in a post-op.
-        let custom: unknown = null
-        let diagnostics: StructuredOutputDiagnostics | undefined
-        if (job.output.repair === false) {
-          try {
-            custom = extractJsonObject(summary)
-          } catch {
-            custom = null
-          }
-        } else {
-          const resolved = await resolveStructuredOutput(
-            {
-              label: 'agent',
-              shapeHint: job.output.shapeHint ?? 'Expected a single JSON object.',
-              parse: (text) => extractJsonObject(text),
-            },
-            summary,
-            {
-              harness: job.harness,
-              subscriptionToken: job.subscriptionToken,
-              subscriptionBaseUrl: job.subscriptionBaseUrl,
-              proxyBaseUrl: job.proxyBaseUrl,
-              sessionToken: job.sessionToken,
-              model: job.model,
-              jobId: job.jobId,
-              signal: opts.signal,
-            },
-          )
-          custom = resolved.value
-          diagnostics = resolved.diagnostics
-        }
-        if (custom === undefined || custom === null) {
-          return {
-            summary,
-            stats,
-            error: noStructuredReason(stats, stderrTail, diagnostics),
-            failureCause: 'no-usable-output',
-            ...(usage ? { usage } : {}),
-            ...(callMetrics ? { callMetrics } : {}),
-            ...infraSetupFields,
-          }
-        }
-        // Stamp the run's actual environment authoritatively onto the structured result when
-        // infra was managed (the tester): which env the suite ran in is decided by the job's
-        // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
-        // even when the model omits it from its JSON (or a structured repair drops it). A
-        // frontend run tests the app against its live ephemeral backend(s), so it reports
-        // `ephemeral` (the TestReport env vocabulary has no separate frontend value).
-        const reportedEnvironment = infra
-          ? infra.kind === 'frontend'
-            ? 'ephemeral'
-            : infra.environment
-          : undefined
-        if (reportedEnvironment && typeof custom === 'object') {
-          ;(custom as Record<string, unknown>).environment = reportedEnvironment
-        }
-        logger.info('agent(explore): done (structured)', { ...stats })
-        return {
-          summary,
-          custom,
-          stats,
-          ...(usage ? { usage } : {}),
-          ...(callMetrics ? { callMetrics } : {}),
-          ...infraSetupFields,
-        }
+        return await finalizeExploreResult(
+          job,
+          { summary, stats, stderrTail, usage, callMetrics, runDiag },
+          { infra, infraSetupFields, logger, signal: opts.signal },
+        )
       } finally {
         if (managed) await managed.cleanup()
       }
     },
   )
+}
+
+/** The agent-run outputs the explore result-parsing reads (shared single-/multi-repo). */
+interface ExploreAgentRun {
+  summary: string
+  stats: PiRunStats
+  stderrTail?: string
+  usage?: AgentResult['usage']
+  callMetrics?: AgentResult['callMetrics']
+  runDiag?: RunDiagnostics
+}
+
+/**
+ * Turn an explore agent's raw run into an {@link AgentResult}: guard an empty/truncated reply,
+ * then either return the prose summary or parse (+ optionally repair) the structured JSON as
+ * `custom` — the backend renders any artifact files from it in a post-op. Extracted so the
+ * single-repo {@link runExploreMode} and the read-only {@link runMultiRepoExplore} share ONE
+ * result contract (the multi-repo path passes no infra, so the tester-only env stamping no-ops).
+ */
+async function finalizeExploreResult(
+  job: AgentJob,
+  run: ExploreAgentRun,
+  ctx: {
+    infra?: AgentInfraSpec | ServiceInfraSpec
+    infraSetupFields: { infraSetup?: InfraSetupRecord }
+    logger: Logger
+    signal?: AbortSignal
+  },
+): Promise<AgentResult> {
+  const { summary, stats, stderrTail, usage, callMetrics, runDiag } = run
+  const { infra, infraSetupFields, logger, signal } = ctx
+
+  if (!summary.trim()) {
+    return {
+      summary,
+      stats,
+      error: noOutputReason(stats, stderrTail),
+      failureCause: 'no-usable-output',
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+      ...infraSetupFields,
+    }
+  }
+
+  // Opt-in (document producers): a final answer cut off at the output ceiling — or empty —
+  // must FAIL LOUDLY here, BEFORE the structured repair below could launder a truncated
+  // reply into a half-baked doc the backend then shards/commits + hands onward. Mirrors the
+  // bespoke `/spec` handler's `unusableFinalAnswerCause` gate (which drove the old loop).
+  if (job.output?.kind === 'structured' && job.output.failOnUnusableFinal) {
+    const unusable = unusableFinalAnswerCause(runDiag)
+    if (unusable) {
+      return {
+        summary,
+        stats,
+        error: `the agent did not return a usable result: ${unusable}.${agentOutputTail(stderrTail, summary)}`,
+        failureCause: 'no-usable-output',
+        ...(usage ? { usage } : {}),
+        ...(callMetrics ? { callMetrics } : {}),
+        ...infraSetupFields,
+      }
+    }
+  }
+
+  // Prose: the summary IS the deliverable.
+  if (job.output?.kind !== 'structured') {
+    logger.info('agent(explore): done (prose)', { ...stats })
+    return {
+      summary,
+      stats,
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+      ...infraSetupFields,
+    }
+  }
+
+  // Structured: parse the agent's JSON. With repair enabled (default) a malformed
+  // reply gets ONE structured repair call before giving up; with `repair:false` we
+  // parse directly (no repair channel). The backend coerces/validates + renders from
+  // the returned object in a post-op.
+  let custom: unknown = null
+  let diagnostics: StructuredOutputDiagnostics | undefined
+  if (job.output.repair === false) {
+    try {
+      custom = extractJsonObject(summary)
+    } catch {
+      custom = null
+    }
+  } else {
+    const resolved = await resolveStructuredOutput(
+      {
+        label: 'agent',
+        shapeHint: job.output.shapeHint ?? 'Expected a single JSON object.',
+        parse: (text) => extractJsonObject(text),
+      },
+      summary,
+      {
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        model: job.model,
+        jobId: job.jobId,
+        signal,
+      },
+    )
+    custom = resolved.value
+    diagnostics = resolved.diagnostics
+  }
+  if (custom === undefined || custom === null) {
+    return {
+      summary,
+      stats,
+      error: noStructuredReason(stats, stderrTail, diagnostics),
+      failureCause: 'no-usable-output',
+      ...(usage ? { usage } : {}),
+      ...(callMetrics ? { callMetrics } : {}),
+      ...infraSetupFields,
+    }
+  }
+  // Stamp the run's actual environment authoritatively onto the structured result when
+  // infra was managed (the tester): which env the suite ran in is decided by the job's
+  // infra spec, NOT the model, so the backend can echo it back to the UI deterministically
+  // even when the model omits it from its JSON (or a structured repair drops it). A
+  // frontend run tests the app against its live ephemeral backend(s), so it reports
+  // `ephemeral` (the TestReport env vocabulary has no separate frontend value).
+  const reportedEnvironment = infra
+    ? infra.kind === 'frontend'
+      ? 'ephemeral'
+      : infra.environment
+    : undefined
+  if (reportedEnvironment && typeof custom === 'object') {
+    ;(custom as Record<string, unknown>).environment = reportedEnvironment
+  }
+  logger.info('agent(explore): done (structured)', { ...stats })
+  return {
+    summary,
+    custom,
+    stats,
+    ...(usage ? { usage } : {}),
+    ...(callMetrics ? { callMetrics } : {}),
+    ...infraSetupFields,
+  }
+}
+
+/**
+ * Read-only MULTI-REPO exploration (service-connections phase 3, read-only): clone the primary
+ * repo PLUS every connected peer repo as SIBLING checkouts under one workspace root, run the
+ * agent ONCE with its cwd at the root (so it can read across every repo the bug touches), and
+ * return its prose/structured result — making NO edits, NO commits and opening NO PR. The
+ * counterpart of {@link runMultiRepoCoding} for the `bug-investigator`, but strictly read-only:
+ * peers carry no `newBranch`/`pr`, nothing is pushed, and the peers exist only to be read. The
+ * multi-repo layout is explained to the agent by the backend-composed system-prompt section
+ * (which repo/subdir each service lives in) + the harness's own AGENTS.md multi-repo note.
+ */
+async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
+  const logger = (opts.log ?? log).child({ kind: 'multi-repo-explore', jobId: job.jobId })
+  const peers = job.peerRepos ?? []
+
+  // Unique sibling directory per repo (owner-prefixed on a name collision), so two repos
+  // named the same never clobber each other — same claim scheme as the coding fan-out.
+  const usedDirs = new Set<string>()
+  const claimDir = (repo: RepoSpec): string => {
+    let seg = safeDirSegment(repo.name)
+    if (usedDirs.has(seg)) seg = safeDirSegment(`${repo.owner}-${repo.name}`)
+    let unique = seg
+    for (let i = 2; usedDirs.has(unique); i++) unique = `${seg}-${i}`
+    usedDirs.add(unique)
+    return unique
+  }
+  const legs = [
+    { repo: job.repo, cloneBranch: job.branch, ghToken: job.ghToken },
+    ...peers.map((peer) => ({
+      repo: peer.repo,
+      cloneBranch: peer.repo.baseBranch,
+      ghToken: peer.ghToken ?? job.ghToken,
+    })),
+  ].map((leg) => ({ ...leg, dirName: claimDir(leg.repo) }))
+
+  return withWorkspace('explore-multi', async (root) => {
+    // Clone phase: every repo (read-only) into its sibling dir under the workspace root. No
+    // work branch, no resume — the investigator only reads.
+    opts.onPhase?.('clone')
+    for (const leg of legs) {
+      const dir = join(root, leg.dirName)
+      await mkdir(dir, { recursive: true })
+      logger.info('multi-repo-explore: cloning', {
+        repo: leg.dirName,
+        cloneBranch: leg.cloneBranch,
+      })
+      await cloneRepo({
+        repo: { ...leg.repo, baseBranch: leg.cloneBranch },
+        ghToken: leg.ghToken,
+        dir,
+        signal: opts.signal,
+      })
+    }
+
+    opts.onPhase?.('agent')
+    logger.info('multi-repo-explore: running agent', { repos: legs.map((l) => l.dirName) })
+    const run = await runAgentInWorkspace(
+      {
+        dir: root,
+        systemPrompt: job.systemPrompt,
+        userPrompt: job.userPrompt,
+        model: job.model,
+        harness: job.harness,
+        subscriptionToken: job.subscriptionToken,
+        subscriptionBaseUrl: job.subscriptionBaseUrl,
+        ambientAuth: job.ambientAuth,
+        proxyBaseUrl: job.proxyBaseUrl,
+        sessionToken: job.sessionToken,
+        // Read-only: no edits expected, so the no-progress guard's no-edit bound must not fire.
+        expectsEdits: false,
+        webToolsGuidance: job.webToolsGuidance,
+        webSearchProxy: job.webSearch,
+        ...(job.contextFiles ? { contextFiles: job.contextFiles } : {}),
+        guardLimits: job.guardLimits,
+        multiRepo: true,
+      },
+      opts,
+    )
+    return finalizeExploreResult(
+      job,
+      {
+        summary: run.summary,
+        stats: run.stats,
+        stderrTail: run.stderrTail,
+        usage: run.usage,
+        callMetrics: run.callMetrics,
+        runDiag: run.diagnostics,
+      },
+      { infraSetupFields: {}, logger, signal: opts.signal },
+    )
+  })
 }
 
 /**

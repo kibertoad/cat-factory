@@ -72,8 +72,12 @@ export interface PeerRepoSpec {
   repo: RepoSpec
   /** The involved service frame this repo resolved from, echoed back on the peer PR. */
   frameId?: string
-  /** The work branch to create off the peer's base and push (the shared `cat-factory/<block>`). */
-  newBranch: string
+  /**
+   * The work branch to create off the peer's base and push (the shared `cat-factory/<block>`).
+   * Present for a COING fan-out (coder / ci-fixer). Absent for a READ-ONLY explore fan-out
+   * (the bug-investigator), which only clones the peer to read it and never pushes.
+   */
+  newBranch?: string
   /** Open a PR/MR in this peer when set AND the run changed the peer (skipped for a clean repo). */
   pr?: PrSpec
   /** Per-repo GitHub token; defaults to the job's `ghToken` (one installation per workspace today). */
@@ -213,8 +217,10 @@ function parsePeerRepos(value: unknown): PeerRepoSpec[] {
     const e = entry as Record<string, unknown>
     const spec: PeerRepoSpec = {
       repo: parseRepoSpec((e.repo ?? {}) as Record<string, unknown>),
-      newBranch: str(e.newBranch, `peerRepos[${i}].newBranch`),
     }
+    // `newBranch` is required for a coding fan-out (it pushes to it) but ABSENT for a
+    // read-only explore fan-out (bug-investigator) — validate it only when present.
+    if (e.newBranch !== undefined) spec.newBranch = str(e.newBranch, `peerRepos[${i}].newBranch`)
     if (typeof e.frameId === 'string' && e.frameId) spec.frameId = e.frameId
     if (typeof e.ghToken === 'string' && e.ghToken) spec.ghToken = e.ghToken
     if (typeof e.pr === 'object' && e.pr !== null) {

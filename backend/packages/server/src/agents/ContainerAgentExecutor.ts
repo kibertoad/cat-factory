@@ -328,11 +328,18 @@ const IMPLEMENTER_AGENT_KIND = 'coder'
  * The kinds that fan out across the task's connected repos as sibling checkouts
  * (service-connections phases 3–4). The `coder` opens the PRs; the `ci-fixer` resumes those
  * SAME work branches to fix red CI across every repo in one container (a cross-repo contract
- * break is exactly what a single-repo fixer can't fix). The conflict-resolver stays SINGLE-repo
- * (a git conflict is per-repo textual — handled by targeting the conflicted repo, not fan-out);
- * read-only / structured kinds never fan out.
+ * break is exactly what a single-repo fixer can't fix). The `bug-investigator` is READ-ONLY: it
+ * gets the same sibling checkouts so it can trace a cross-service bug through every involved
+ * repo (the fault often lives in a service other than the one the report names), but it opens no
+ * PR — the harness's read-only multi-repo explore path just clones the peers to read them (see
+ * `runMultiRepoExplore`). The conflict-resolver stays SINGLE-repo (a git conflict is per-repo
+ * textual — handled by targeting the conflicted repo, not fan-out).
  */
-const MULTI_REPO_FANOUT_KINDS: ReadonlySet<string> = new Set([IMPLEMENTER_AGENT_KIND, 'ci-fixer'])
+const MULTI_REPO_FANOUT_KINDS: ReadonlySet<string> = new Set([
+  IMPLEMENTER_AGENT_KIND,
+  'ci-fixer',
+  'bug-investigator',
+])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
 function contextFileName(base: string, used: Set<string>): string {
