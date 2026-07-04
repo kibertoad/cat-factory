@@ -7337,6 +7337,49 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         expect(again.status).toBe(200)
       })
 
+      it('persists an on-demand schedule (no cadence) and fires it via run-now', async () => {
+        const app = harness.makeApp({ confidence: 1 })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'On-demand inline',
+          agentKinds: ['architect'],
+        })
+        // No `recurrence` on the body — an on-demand schedule needs none.
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Manual pass',
+            onDemand: true,
+          },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.onDemand).toBe(true)
+
+        // The flag round-trips through the store on both runtimes.
+        const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(
+          snapshot.body.recurringPipelines?.find((s) => s.id === created.body.id)?.onDemand,
+        ).toBe(true)
+
+        // Manual run-now still fires it (the credential gate is a no-op with no individual model).
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+        const runs = await app.call<ScheduleRun[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/runs`,
+        )
+        expect(runs.body).toHaveLength(1)
+        expect(runs.body[0]!.executionId).toBeTruthy()
+      })
+
       it('reads and writes the workspace tracker selection', async () => {
         const app = harness.makeApp()
         const { workspace } = await app.createWorkspace()

@@ -80,12 +80,20 @@ export const useRecurringPipelinesStore = defineStore('recurringPipelines', () =
     }
   }
 
-  async function runNow(id: string) {
+  /**
+   * Fire a schedule now. An on-demand schedule may target an individual-usage model, so the
+   * initiator's personal password is supplied transparently from the cache and prompted via
+   * the credential modal (then retried) when the server replies 428. Returns false when the
+   * user cancels the password prompt; true once the fire is accepted.
+   */
+  async function runNow(id: string): Promise<boolean> {
     const ws = useWorkspaceStore()
-    const schedule = await api.runScheduleNow(ws.requireId(), id)
-    await loadRuns(id)
-    await ws.refresh()
-    return schedule
+    const personal = usePersonalSubscriptionsStore()
+    return personal.withCredential(async (password) => {
+      await api.runScheduleNow(ws.requireId(), id, password)
+      await loadRuns(id)
+      await ws.refresh()
+    })
   }
 
   /** Fetch (and cache) a schedule's run history for the inspector. */

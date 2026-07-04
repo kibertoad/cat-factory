@@ -196,7 +196,9 @@
       "linearTeamId": "Linear takım kimliği",
       "footerHint": "Servisin içine tek bir yinelenen görev eklenir; her çalıştırma bir öncekinin yerini alır. Çalıştırma geçmişi inceleme panelinde görünür.",
       "submit": "Yinelenen pipeline ekle",
-      "addFailedTitle": "Yinelenen pipeline eklenemedi"
+      "addFailedTitle": "Yinelenen pipeline eklenemedi",
+      "onDemand": "İstek üzerine (yalnızca manuel)",
+      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir."
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",
@@ -438,7 +440,9 @@
         "skipped": "Atlandı"
       },
       "updateFailed": "Zamanlama güncellenemedi",
-      "runNowFailed": "Şimdi çalıştırılamadı"
+      "runNowFailed": "Şimdi çalıştırılamadı",
+      "onDemand": "İstek üzerine",
+      "onDemandHint": "Yalnızca manuel. Siz tetiklediğinizde çalışır ve bireysel kullanımlı bir abonelik modeli kullanabilir."
     },
     "fragments": {
       "serviceTitle": "Servis en iyi uygulamaları",

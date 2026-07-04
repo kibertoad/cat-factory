@@ -1,10 +1,11 @@
 {
-  "dialect": "postgres",
-  "id": "b1f2e9df-1a67-432f-bff7-26ec79ecd52d",
-  "prevIds": [
-    "099cb959-0bd1-4779-8bc9-af7da2de443c"
-  ],
   "version": "8",
+  "dialect": "postgres",
+  "id": "099cb959-0bd1-4779-8bc9-af7da2de443c",
+  "prevIds": [
+    "0b00f8e2-a94f-40c6-9367-192a23152126",
+    "72b7f585-05f1-410e-9c6a-32430932e9f0"
+  ],
   "ddl": [
     {
       "name": "provisioning",
@@ -6937,19 +6938,6 @@
       "generated": null,
       "identity": null,
       "name": "public",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "pipelines"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "availability",
       "entityType": "columns",
       "schema": "public",
       "table": "pipelines"

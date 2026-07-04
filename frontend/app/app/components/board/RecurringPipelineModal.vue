@@ -32,6 +32,9 @@ const description = ref('')
 const pipelineId = ref('')
 const saving = ref(false)
 const recurrence = ref<Recurrence>(defaultRecurrence())
+// On-demand: no cadence, fires only via "run now". Because a person is present at fire time,
+// its block may use an individual-usage subscription model (which a cadence schedule can't).
+const onDemand = ref(false)
 
 // Tracker config (only relevant when the tech-debt pipeline is picked).
 const trackerKind = ref<'github' | 'jira' | 'linear' | null>(null)
@@ -84,6 +87,7 @@ watch(open, (isOpen) => {
     pipelines.pipelines[0]?.id ??
     ''
   recurrence.value = defaultRecurrence()
+  onDemand.value = false
   saving.value = false
   trackerKind.value = tracker.settings.tracker
   jiraProjectKey.value = tracker.settings.jiraProjectKey ?? ''
@@ -111,7 +115,9 @@ async function add() {
       pipelineId: pipelineId.value,
       template: template.value,
       name: name.value.trim(),
-      recurrence: recurrence.value,
+      // An on-demand schedule carries no cadence; a scheduled one sends its recurrence.
+      onDemand: onDemand.value,
+      ...(onDemand.value ? {} : { recurrence: recurrence.value }),
       ...(description.value.trim() ? { description: description.value.trim() } : {}),
     })
     ui.closeAddRecurring()
@@ -174,7 +180,15 @@ async function add() {
           />
         </UFormField>
 
-        <RecurringRecurrenceEditor v-model="recurrence" />
+        <div class="flex items-start gap-2 rounded-lg border border-slate-800 p-3">
+          <USwitch v-model="onDemand" size="sm" class="mt-0.5" />
+          <div class="space-y-0.5">
+            <p class="text-xs font-medium text-slate-200">{{ t('board.recurring.onDemand') }}</p>
+            <p class="text-[11px] text-slate-500">{{ t('board.recurring.onDemandHint') }}</p>
+          </div>
+        </div>
+
+        <RecurringRecurrenceEditor v-if="!onDemand" v-model="recurrence" />
 
         <div v-if="isTechDebt" class="space-y-3 rounded-lg border border-slate-800 p-3">
           <p class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
