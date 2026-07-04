@@ -5,6 +5,7 @@ import {
   FakeEnvConfigRepairer,
   FakeRepoBootstrapper,
   RecordingEventPublisher,
+  defineCacheSuite,
   defineConformanceSuite,
   makeIncorporatedClarityReview,
   makeIncorporatedReview,
@@ -192,3 +193,7 @@ const harness: ConformanceHarness = {
 }
 
 defineConformanceSuite(harness)
+// Caching initiative: the Worker serves the fragment catalog through the
+// ISOLATE-SAFE (pass-through) profile — coherence must hold there exactly as it
+// does through Node's live in-memory cache.
+defineCacheSuite(harness)

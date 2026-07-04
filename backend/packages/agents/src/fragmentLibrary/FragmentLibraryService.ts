@@ -9,7 +9,7 @@ import type {
   UpdatePromptFragmentInput,
 } from '@cat-factory/kernel'
 import { ValidationError, buildExcerpt } from '@cat-factory/kernel'
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, GroupCacheHandle } from '@cat-factory/kernel'
 import type {
   FragmentSelector,
   FragmentResolver,
@@ -52,6 +52,14 @@ export interface FragmentLibraryServiceDependencies {
   documentContentResolver?: DocumentContentResolver
   /** Freshness window for a document-backed body; defaults to {@link DEFAULT_DOCUMENT_FRAGMENT_TTL_MS}. */
   documentFragmentTtlMs?: number
+  /**
+   * Read-through cache for the merged tenant catalog (`AppCaches.fragmentCatalog`,
+   * docs/initiatives/caching-layer.md slice 1), grouped by workspace id. This
+   * service owns its coherence: every fragment write below invalidates through
+   * {@link FragmentLibraryService.invalidateCatalogTier}. Absent (direct test
+   * construction) ⇒ every resolve loads from the repositories.
+   */
+  catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
 }
 
 /**
@@ -71,6 +79,7 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly builtinsOverride?: PromptFragment[]
   private readonly documentResolver?: DocumentContentResolver
   private readonly ttlMs: number
+  private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
 
   constructor(deps: FragmentLibraryServiceDependencies) {
     this.repo = deps.promptFragmentRepository
@@ -80,6 +89,7 @@ export class FragmentLibraryService implements FragmentResolver {
     this.builtinsOverride = deps.builtins
     this.documentResolver = deps.documentContentResolver
     this.ttlMs = deps.documentFragmentTtlMs ?? DEFAULT_DOCUMENT_FRAGMENT_TTL_MS
+    this.catalogCache = deps.catalogCache
   }
 
   /**
@@ -129,6 +139,7 @@ export class FragmentLibraryService implements FragmentResolver {
       deletedAt: null,
     }
     await this.repo.upsert(record)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
     return recordToWire(record)
   }
 
@@ -178,6 +189,7 @@ export class FragmentLibraryService implements FragmentResolver {
       deletedAt: null,
     }
     await this.repo.upsert(record)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
     return recordToWire(record)
   }
 
@@ -221,6 +233,7 @@ export class FragmentLibraryService implements FragmentResolver {
       updatedAt: now,
     }
     await this.repo.upsert(next)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
     return recordToWire(next)
   }
 
@@ -275,6 +288,7 @@ export class FragmentLibraryService implements FragmentResolver {
       throw new ValidationError('A fragment needs a summary and a body')
     }
     await this.repo.upsert(next)
+    await this.invalidateCatalogTier(ownerKind, ownerId)
     return recordToWire(next)
   }
 
@@ -288,6 +302,7 @@ export class FragmentLibraryService implements FragmentResolver {
     const existing = await this.repo.get(ownerKind, ownerId, fragmentId)
     if (existing) {
       await this.repo.softDelete(ownerKind, ownerId, fragmentId, now)
+      await this.invalidateCatalogTier(ownerKind, ownerId)
       return
     }
     await this.repo.upsert({
@@ -312,16 +327,48 @@ export class FragmentLibraryService implements FragmentResolver {
       updatedAt: now,
       deletedAt: now,
     })
+    await this.invalidateCatalogTier(ownerKind, ownerId)
   }
 
-  /** Resolve the merged catalog a workspace sees (built-in ∪ account ∪ workspace). */
+  /**
+   * Resolve the merged catalog a workspace sees (built-in ∪ account ∪ workspace).
+   * Served through the fragment-catalog cache when wired — this runs on every
+   * agent dispatch (and again on each poll tick that re-enters context assembly),
+   * so a hit skips the tenant reads + merge entirely. The key is just the
+   * workspace id (its account is resolved inside the load): a workspace never
+   * changes accounts, and keying by account would force an extra read per hit.
+   */
   async resolveCatalog(workspaceId: string): Promise<ResolvedCatalogEntry[]> {
+    if (!this.catalogCache) return this.loadCatalog(workspaceId)
+    return this.catalogCache.get(workspaceId, workspaceId, () => this.loadCatalog(workspaceId))
+  }
+
+  /** The uncached tenant merge {@link resolveCatalog} reads through the cache. */
+  private async loadCatalog(workspaceId: string): Promise<ResolvedCatalogEntry[]> {
     const accountId = await this.workspaces.accountOf(workspaceId)
     const [accountRows, workspaceRows] = await Promise.all([
       accountId ? this.repo.listByOwner('account', accountId, true) : Promise.resolve([]),
       this.repo.listByOwner('workspace', workspaceId, true),
     ])
     return mergeCatalog(this.builtins(), accountRows, workspaceRows)
+  }
+
+  /**
+   * Drop the cached merged catalog for every workspace a tier write affects —
+   * called after each fragment write here (and by the source-sync service via its
+   * injected hook). A workspace-tier write is one group eviction; an account-tier
+   * write affects every workspace in the account, so it clears the whole cache
+   * (deliberately coarse — account writes are rare management actions, and
+   * enumerating the account's workspaces on every one would cost more than the
+   * repopulation it saves). Peers drop their entries via the notification bus.
+   */
+  async invalidateCatalogTier(ownerKind: FragmentOwnerKind, ownerId: string): Promise<void> {
+    if (!this.catalogCache) return
+    if (ownerKind === 'workspace') {
+      await this.catalogCache.invalidateGroup(ownerId)
+    } else {
+      await this.catalogCache.invalidateAll()
+    }
   }
 
   /** The merged catalog as wire {@link ResolvedFragment}s for the management UI. */
@@ -443,6 +490,10 @@ export class FragmentLibraryService implements FragmentResolver {
           resolvedAt: now,
           updatedAt: now,
         })
+        // The cached catalog still carries the pre-refresh body + resolvedAt;
+        // without this, every subsequent run would re-fetch the document until
+        // the entry expired.
+        await this.invalidateCatalogTier(entry.tier, ownerId)
       }
       return content.body
     } catch {

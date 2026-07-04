@@ -269,6 +269,25 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typescript@7.0.1-rc)
     devDependencies:
+      '@cat-factory/caching':
+        specifier: workspace:*
+        version: link:../caching
+      typescript:
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+
+  backend/packages/caching:
+    dependencies:
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      layered-loader:
+        specifier: ^14.4.1
+        version: 14.5.2
+    devDependencies:
       typescript:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
@@ -430,6 +449,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../agents
+      '@cat-factory/caching':
+        specifier: workspace:*
+        version: link:../caching
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -659,6 +681,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@cat-factory/caching':
+        specifier: workspace:*
+        version: link:../../packages/caching
       '@cat-factory/consensus':
         specifier: workspace:*
         version: link:../../packages/consensus
@@ -793,6 +818,9 @@ importers:
       '@cat-factory/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@cat-factory/caching':
+        specifier: workspace:*
+        version: link:../../packages/caching
       '@cat-factory/consensus':
         specifier: workspace:*
         version: link:../../packages/consensus
@@ -844,6 +872,9 @@ importers:
       hono:
         specifier: ^4.12.27
         version: 4.12.27
+      layered-loader:
+        specifier: ^14.4.1
+        version: 14.5.2
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -903,7 +934,7 @@ importers:
         version: link:../../frontend/app
       nuxt:
         specifier: ^4.4.8
-        version: 4.4.8(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7))(@parcel/watcher@2.5.6)(@types/node@26.0.1)(@vue/compiler-sfc@3.5.39)(aws4fetch@1.0.20)(cac@6.7.14)(db0@0.3.4)(esbuild@0.28.1)(eslint@10.6.0(jiti@2.7.0))(ioredis@5.11.1)(lightningcss@1.32.0)(magicast@0.5.3)(optionator@0.9.4)(oxlint@1.71.0)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3)))(rollup-plugin-visualizer@7.0.1(rollup@4.62.2))(rollup@4.62.2)(srvx@0.11.17)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue-tsc@3.3.5(typescript@6.0.3))(yaml@2.9.0)
+        version: 4.4.8(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7))(@parcel/watcher@2.5.6)(@types/node@26.0.1)(@vue/compiler-sfc@3.5.39)(aws4fetch@1.0.20)(cac@6.7.14)(db0@0.3.4)(esbuild@0.28.1)(eslint@10.6.0(jiti@2.7.0))(ioredis@5.11.1)(lightningcss@1.32.0)(magicast@0.5.3)(optionator@0.9.4)(oxlint@1.71.0)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3)))(rollup-plugin-visualizer@7.0.1(rollup@4.62.2))(rollup@4.62.2)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue-tsc@3.3.5(typescript@6.0.3))(yaml@2.9.0)
     devDependencies:
       typescript:
         specifier: ^6.0.3
@@ -1009,7 +1040,7 @@ importers:
         version: 2.14.6(@types/node@26.0.1)(typescript@6.0.3)
       nuxt:
         specifier: ^4.4.8
-        version: 4.4.8(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7))(@parcel/watcher@2.5.6)(@types/node@26.0.1)(@vue/compiler-sfc@3.5.39)(aws4fetch@1.0.20)(cac@6.7.14)(db0@0.3.4)(esbuild@0.28.1)(eslint@10.6.0(jiti@2.7.0))(ioredis@5.11.1)(lightningcss@1.32.0)(magicast@0.5.3)(optionator@0.9.4)(oxlint@1.71.0)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3)))(rollup-plugin-visualizer@7.0.1(rollup@4.62.2))(rollup@4.62.2)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue-tsc@3.3.5(typescript@6.0.3))(yaml@2.9.0)
+        version: 4.4.8(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7))(@parcel/watcher@2.5.6)(@types/node@26.0.1)(@vue/compiler-sfc@3.5.39)(aws4fetch@1.0.20)(cac@6.7.14)(db0@0.3.4)(esbuild@0.28.1)(eslint@10.6.0(jiti@2.7.0))(ioredis@5.11.1)(lightningcss@1.32.0)(magicast@0.5.3)(optionator@0.9.4)(oxlint@1.71.0)(pinia@3.0.4(typescript@6.0.3)(vue@3.5.39(typescript@6.0.3)))(rollup-plugin-visualizer@7.0.1(rollup@4.62.2))(rollup@4.62.2)(srvx@0.11.17)(terser@5.48.0)(tsx@4.22.4)(typescript@6.0.3)(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))(vue-tsc@3.3.5(typescript@6.0.3))(yaml@2.9.0)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -6511,6 +6542,10 @@ packages:
   launch-editor@2.14.1:
     resolution: {integrity: sha512-QWBrQsMpH7gPr965dsKD/3cKWiNoTjpATQf++Xq63N6sKRGMwlVXz41O1IZTMfZQgBctD/K5Zt06+/I6pP6+HA==}
 
+  layered-loader@14.5.2:
+    resolution: {integrity: sha512-0GjKJsPDAxSw+vNwNjWwBD2mhcDXgoqDTQRhxxC5YEJsv7GuEPPvc5Qj/9kGxVazEE3kr4JGNxm5DdCUtn0olQ==}
+    engines: {node: '>=22'}
+
   lazystream@1.0.1:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
@@ -8017,6 +8052,10 @@ packages:
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
+
+  toad-cache@3.7.4:
+    resolution: {integrity: sha512-m1TdR/rvT7kgGJZhspNtXdsdYk0fddFpJJFlG5s+UkPFo6lkLoZ3YLOaovPYjq1R75NP5JfeTlSHaOsE09peCg==}
+    engines: {node: '>=20'}
 
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
@@ -14034,6 +14073,13 @@ snapshots:
       picocolors: 1.1.1
       shell-quote: 1.8.4
 
+  layered-loader@14.5.2:
+    dependencies:
+      ioredis: 5.11.1
+      toad-cache: 3.7.4
+    transitivePeerDependencies:
+      - supports-color
+
   lazystream@1.0.1:
     dependencies:
       readable-stream: 2.3.8
@@ -16087,6 +16133,8 @@ snapshots:
   to-regex-range@5.0.1:
     dependencies:
       is-number: 7.0.0
+
+  toad-cache@3.7.4: {}
 
   toidentifier@1.0.1: {}
 

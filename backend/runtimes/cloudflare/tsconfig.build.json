@@ -8,18 +8,47 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../../packages/agents/tsconfig.build.json" },
-    { "path": "../../packages/consensus/tsconfig.build.json" },
-    { "path": "../../packages/contracts/tsconfig.build.json" },
-    { "path": "../../packages/gates/tsconfig.build.json" },
-    { "path": "../../packages/gitlab/tsconfig.build.json" },
-    { "path": "../../packages/integrations/tsconfig.build.json" },
-    { "path": "../../packages/kernel/tsconfig.build.json" },
-    { "path": "../../packages/observability-langfuse/tsconfig.build.json" },
-    { "path": "../../packages/orchestration/tsconfig.build.json" },
-    { "path": "../../packages/prompt-fragments/tsconfig.build.json" },
-    { "path": "../../packages/provider-cloudflare/tsconfig.build.json" },
-    { "path": "../../packages/server/tsconfig.build.json" },
-    { "path": "../../packages/spend/tsconfig.build.json" }
+    {
+      "path": "../../packages/caching/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/agents/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/consensus/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/contracts/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/gates/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/gitlab/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/integrations/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/kernel/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/observability-langfuse/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/orchestration/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/prompt-fragments/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/provider-cloudflare/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/server/tsconfig.build.json"
+    },
+    {
+      "path": "../../packages/spend/tsconfig.build.json"
+    }
   ]
 }

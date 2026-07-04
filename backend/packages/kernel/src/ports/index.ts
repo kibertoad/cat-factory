@@ -222,7 +222,9 @@ export type {
   PromptFragmentRepository,
   FragmentSourceRecord,
   FragmentSourceRepository,
+  ResolvedCatalogEntry,
 } from './fragment-repositories.js'
+export type { AppCaches, GroupCacheHandle } from './caching.js'
 export type {
   SelectableFragment,
   FragmentSelectionContext,

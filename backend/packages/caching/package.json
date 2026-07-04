@@ -1,11 +1,11 @@
 {
-  "name": "@cat-factory/orchestration",
-  "version": "0.67.0",
-  "description": "Delivery-workflow engine for the Agent Architecture Board (execution, bootstrap, pipelines, board, boardScan, requirements, and composition root).",
+  "name": "@cat-factory/caching",
+  "version": "0.1.0",
+  "description": "The app-level caching seam for the Agent Architecture Board (docs/initiatives/caching-layer.md): createAppCaches builds the named, typed in-memory read-through caches (layered-loader) the services consume via the kernel AppCaches port, with optional distributed invalidation over an injected Redis notification pair. Redis is only ever an invalidation bus, never a data tier.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kibertoad/cat-factory.git",
-    "directory": "backend/packages/orchestration"
+    "directory": "backend/packages/caching"
   },
   "files": [
     "dist"
@@ -27,23 +27,14 @@
     "build": "tsc -b tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest",
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/agents": "workspace:*",
-    "@cat-factory/caching": "workspace:*",
-    "@cat-factory/contracts": "workspace:*",
-    "@cat-factory/integrations": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@cat-factory/prompt-fragments": "workspace:*",
-    "@cat-factory/sandbox": "workspace:*",
-    "@cat-factory/spend": "workspace:*",
-    "@cat-factory/workspaces": "workspace:*",
-    "ai": "^6.0.214"
+    "layered-loader": "^14.4.1"
   },
   "devDependencies": {
-    "@cat-factory/sandbox-fixtures": "workspace:*",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }
