@@ -195,8 +195,9 @@ onKeyStroke('Escape', () => {
   if (open.value) close()
 })
 
+const { copy } = useCopyToClipboard()
 async function copyOutput() {
-  if (step.value?.output) await navigator.clipboard?.writeText(step.value.output)
+  if (step.value?.output) await copy(step.value.output)
 }
 </script>
 

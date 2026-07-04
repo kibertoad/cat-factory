@@ -8,6 +8,7 @@
 // as `consensus` stream events arrive.
 import { computed } from 'vue'
 import type { ConsensusContribution, ConsensusSession } from '~/types/consensus'
+import CopyButton from '~/components/common/CopyButton.vue'
 
 const { t, n } = useI18n()
 
@@ -149,9 +150,12 @@ function topScore(c: ConsensusContribution): { label: string; value: number } | 
             <!-- failure -->
             <div
               v-if="session.status === 'failed'"
-              class="mb-5 rounded-lg border border-rose-800/60 bg-rose-950/40 px-4 py-3 text-sm text-rose-200"
+              class="mb-5 flex items-start gap-2 rounded-lg border border-rose-800/60 bg-rose-950/40 px-4 py-3 text-sm text-rose-200"
             >
-              {{ t('consensus.failed', { error: session.error ?? t('consensus.unknownError') }) }}
+              <span class="min-w-0 flex-1">{{
+                t('consensus.failed', { error: session.error ?? t('consensus.unknownError') })
+              }}</span>
+              <CopyButton v-if="session.error" :text="session.error" class="-me-1 shrink-0" />
             </div>
 
             <!-- synthesized result -->

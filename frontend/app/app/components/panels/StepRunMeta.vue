@@ -40,8 +40,9 @@ function formatClock(ms?: number | null): string | null {
   return ms ? d(new Date(ms), 'long') : null
 }
 
+const { copy } = useCopyToClipboard()
 async function copyRunId() {
-  if (runId.value) await navigator.clipboard?.writeText(runId.value)
+  if (runId.value) await copy(runId.value)
 }
 </script>
 
