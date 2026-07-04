@@ -5,6 +5,8 @@
 // message. Tone (summary/pre classes) is passed by the host so it blends into each surface
 // (rose banner vs slate history) while the guard + the `showDetail` key + the whitespace-
 // preserving `<pre>` structure live in one place.
+import CopyButton from '~/components/common/CopyButton.vue'
+
 defineProps<{
   detail: string | null
   message: string

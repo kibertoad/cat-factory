@@ -12,6 +12,7 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
+import CopyButton from '~/components/common/CopyButton.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()

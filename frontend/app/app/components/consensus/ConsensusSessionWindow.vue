@@ -8,6 +8,7 @@
 // as `consensus` stream events arrive.
 import { computed } from 'vue'
 import type { ConsensusContribution, ConsensusSession } from '~/types/consensus'
+import CopyButton from '~/components/common/CopyButton.vue'
 
 const { t, n } = useI18n()
 
