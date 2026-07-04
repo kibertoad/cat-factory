@@ -3,6 +3,7 @@ import {
   buildLinearCommentVariables,
   buildLinearStateUpdateVariables,
   pickCompletedStateId,
+  pickStartedStateId,
 } from './linear.writeback.logic.js'
 
 describe('buildLinearCommentVariables', () => {
@@ -35,5 +36,23 @@ describe('pickCompletedStateId', () => {
   it('returns null when there is no completed state', () => {
     expect(pickCompletedStateId([{ id: 's1', type: 'started' }])).toBeNull()
     expect(pickCompletedStateId([])).toBeNull()
+  })
+})
+
+describe('pickStartedStateId', () => {
+  it('picks the first started-type state (the intake in-progress mark)', () => {
+    expect(
+      pickStartedStateId([
+        { id: 's0', type: 'unstarted' },
+        { id: 's1', type: 'started' },
+        { id: 's2', type: 'started' },
+        { id: 's3', type: 'completed' },
+      ]),
+    ).toBe('s1')
+  })
+
+  it('returns null when there is no started state', () => {
+    expect(pickStartedStateId([{ id: 's3', type: 'completed' }])).toBeNull()
+    expect(pickStartedStateId([])).toBeNull()
   })
 })

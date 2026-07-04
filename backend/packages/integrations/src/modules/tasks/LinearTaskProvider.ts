@@ -1,5 +1,6 @@
 import {
   ValidationError,
+  type IssueIntakeQuery,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchResult,
@@ -13,6 +14,7 @@ import {
   linearAuthFromCredentials,
 } from '../shared/linear.client.js'
 import {
+  LINEAR_INTAKE_ISSUES_QUERY,
   LINEAR_ISSUE_CHILDREN_QUERY,
   LINEAR_ISSUE_COMMENTS_QUERY,
   LINEAR_ISSUE_QUERY,
@@ -24,9 +26,11 @@ import {
   type LinearChildrenPage,
   type LinearCommentsPage,
   type LinearTeam,
+  buildLinearIntakeFilter,
   linearIssueSearchHit,
   mapLinearChildIds,
   mapLinearComments,
+  mapLinearIntakeResults,
   mapLinearIssue,
   mapLinearSearchResults,
   mapLinearTeams,
@@ -103,6 +107,30 @@ export class LinearTaskProvider implements TaskSourceProvider {
       out.push(hit)
     }
     return out
+  }
+
+  /**
+   * Issue-intake predicate search: the predicates travel as one GraphQL
+   * `IssueFilter` (team, open-only, labels, title fragment — see
+   * {@link buildLinearIntakeFilter}), asked for oldest-created-first. The
+   * already-worked exclusion list is the one predicate the filter can't express
+   * on the human identifier, so the call overscans by the exclusion count
+   * (bounded by Linear's 100/page) and drops the excluded ids in the mapper.
+   */
+  async searchIssues(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<TaskSearchResult[]> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const exclude = query.excludeExternalIds ?? []
+    const data = await client.query<Parameters<typeof mapLinearIntakeResults>[0]>(
+      LINEAR_INTAKE_ISSUES_QUERY,
+      {
+        filter: buildLinearIntakeFilter(query),
+        first: Math.min(query.limit + exclude.length, 100),
+      },
+    )
+    return mapLinearIntakeResults(data, query.limit, exclude)
   }
 
   /** Fetch one issue by identifier and project it as a lean search hit (for the exact-match path). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildJiraCommentPayload, pickDoneTransition } from './jira.writeback.logic.js'
+import { buildJiraCommentPayload, pickTransitionByCategory } from './jira.writeback.logic.js'
 
 describe('buildJiraCommentPayload', () => {
   it('wraps a Markdown comment body in an ADF document', () => {
@@ -11,32 +11,52 @@ describe('buildJiraCommentPayload', () => {
   })
 })
 
-describe('pickDoneTransition', () => {
+describe('pickTransitionByCategory', () => {
   it('picks the first transition whose target status is in the Done category', () => {
-    const transition = pickDoneTransition([
-      { id: '11', name: 'Start Progress', to: { statusCategory: { key: 'indeterminate' } } },
-      { id: '31', name: 'Done', to: { statusCategory: { key: 'done' } } },
-      { id: '41', name: 'Closed', to: { statusCategory: { key: 'done' } } },
-    ])
+    const transition = pickTransitionByCategory(
+      [
+        { id: '11', name: 'Start Progress', to: { statusCategory: { key: 'indeterminate' } } },
+        { id: '31', name: 'Done', to: { statusCategory: { key: 'done' } } },
+        { id: '41', name: 'Closed', to: { statusCategory: { key: 'done' } } },
+      ],
+      'done',
+    )
     expect(transition?.id).toBe('31')
   })
 
-  it('returns null when no transition resolves to a Done status', () => {
-    expect(
-      pickDoneTransition([
-        { id: '11', name: 'Start Progress', to: { statusCategory: { key: 'indeterminate' } } },
+  it('picks the first transition into the In Progress (indeterminate) category', () => {
+    const transition = pickTransitionByCategory(
+      [
         { id: '21', name: 'Back to To Do', to: { statusCategory: { key: 'new' } } },
-      ]),
+        { id: '11', name: 'Start Progress', to: { statusCategory: { key: 'indeterminate' } } },
+        { id: '12', name: 'In Review', to: { statusCategory: { key: 'indeterminate' } } },
+        { id: '31', name: 'Done', to: { statusCategory: { key: 'done' } } },
+      ],
+      'indeterminate',
+    )
+    expect(transition?.id).toBe('11')
+  })
+
+  it('returns null when no transition resolves to the requested category', () => {
+    expect(
+      pickTransitionByCategory(
+        [
+          { id: '11', name: 'Start Progress', to: { statusCategory: { key: 'indeterminate' } } },
+          { id: '21', name: 'Back to To Do', to: { statusCategory: { key: 'new' } } },
+        ],
+        'done',
+      ),
     ).toBeNull()
   })
 
-  it('ignores a Done transition with no id (cannot be executed)', () => {
+  it('ignores a matching transition with no id (cannot be executed)', () => {
     expect(
-      pickDoneTransition([{ name: 'Done', to: { statusCategory: { key: 'done' } } }]),
+      pickTransitionByCategory([{ name: 'Done', to: { statusCategory: { key: 'done' } } }], 'done'),
     ).toBeNull()
   })
 
   it('returns null for an empty transition list', () => {
-    expect(pickDoneTransition([])).toBeNull()
+    expect(pickTransitionByCategory([], 'done')).toBeNull()
+    expect(pickTransitionByCategory([], 'indeterminate')).toBeNull()
   })
 })

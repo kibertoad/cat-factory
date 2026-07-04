@@ -582,10 +582,16 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     query: string,
     limit = 20,
+    order?: 'created-asc',
   ): Promise<GitHubIssueSearchHit[]> {
     const q = encodeURIComponent(`${query} is:issue`)
     const per = Math.min(Math.max(limit, 1), 100)
-    const { json } = await this.request(`/search/issues?q=${q}&per_page=${per}`, { installationId })
+    // Oldest-first (issue intake) rides the search API's sort/order params — the
+    // in-query `sort:` syntax is a web-UI affordance the REST API doesn't honor.
+    const sort = order === 'created-asc' ? '&sort=created&order=asc' : ''
+    const { json } = await this.request(`/search/issues?q=${q}&per_page=${per}${sort}`, {
+      installationId,
+    })
     const items = ((json as { items?: GhSearchIssueItem[] } | null)?.items ?? []).filter(
       (i) => !i.pull_request,
     )
@@ -1041,6 +1047,30 @@ export class FetchGitHubClient implements GitHubClient {
       installationId,
       method: 'PATCH',
       body: { state: 'closed', state_reason: 'completed' },
+    })
+  }
+
+  async applyIssueLabel(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void> {
+    // Ensure the label exists first — a 422 means it already does, which is fine.
+    // (Relying on the add-labels endpoint to auto-create is undocumented behaviour.)
+    try {
+      await this.request(`/repos/${ref.owner}/${ref.repo}/labels`, {
+        installationId,
+        method: 'POST',
+        body: { name: label },
+      })
+    } catch (err) {
+      if (!(err instanceof GitHubApiError && err.status === 422)) throw err
+    }
+    await this.request(`/repos/${ref.owner}/${ref.repo}/issues/${number}/labels`, {
+      installationId,
+      method: 'POST',
+      body: { labels: [label] },
     })
   }
 

@@ -42,6 +42,7 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
     listByWorkspace: async () => issues,
     listByBlock: async () => issues,
     linkBlock: async () => {},
+    unlinkAllFromBlock: async () => {},
   }
 }
 
@@ -289,6 +290,77 @@ describe('IssueWritebackService — Linear dispatch', () => {
     expect(operations).toContain('update')
   })
 
+  it('marks the Linear issue in-progress (started state) on pickup', async () => {
+    const operations: string[] = []
+    const fetchImpl = async (
+      _url: string,
+      init: { method: string; headers: Record<string, string>; body?: string },
+    ) => {
+      const body = JSON.parse(init.body ?? '{}') as {
+        query: string
+        variables: Record<string, unknown>
+      }
+      if (body.query.includes('IssueResolveLookup')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({
+            data: {
+              issue: {
+                id: 'uuid-1',
+                team: {
+                  states: {
+                    nodes: [
+                      { id: 'st-progress', type: 'started' },
+                      { id: 'st-done', type: 'completed' },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+        }
+      }
+      if (body.query.includes('IssueId')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({ data: { issue: { id: 'uuid-1' } } }),
+        }
+      }
+      if (body.query.includes('CommentCreate')) {
+        operations.push('comment')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({ data: { commentCreate: { success: true } } }),
+        }
+      }
+      if (body.query.includes('IssueUpdate')) {
+        operations.push('update')
+        expect((body.variables.input as { stateId: string }).stateId).toBe('st-progress')
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({ data: { issueUpdate: { success: true } } }),
+        }
+      }
+      throw new Error(`unexpected query: ${body.query}`)
+    }
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([linearIssue()]),
+      resolveLinearConnection: async () => ({ apiKey: 'lin_api_x' }),
+      fetchImpl,
+    })
+    await svc.onIssuePickedUp('ws', 'blk_1', { runUrl: 'https://app.example.test/run/1' })
+    expect(operations).toEqual(['comment', 'update'])
+  })
+
   it('passes through when no Linear connection is wired', async () => {
     let called = false
     const svc = new IssueWritebackService({
@@ -302,5 +374,104 @@ describe('IssueWritebackService — Linear dispatch', () => {
     })
     await svc.onPullRequestOpened('ws', block(), PR)
     expect(called).toBe(false)
+  })
+})
+
+describe('IssueWritebackService — issue pickup (bug intake)', () => {
+  it('comments with the run link and applies the in-progress label to a GitHub issue', async () => {
+    const comments: { externalId: string; body: string }[] = []
+    const labels: { externalId: string; label: string }[] = []
+    const svc = new IssueWritebackService({
+      // Both writeback flags OFF: pickup is intake semantics, not settings-gated.
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+      commentOnGitHubIssue: async (_ws, externalId, body) =>
+        void comments.push({ externalId, body }),
+      labelGitHubIssue: async (_ws, externalId, label) => void labels.push({ externalId, label }),
+    })
+    await svc.onIssuePickedUp('ws', 'blk_1', {
+      runUrl: 'https://app.example.test/run/1',
+      inProgressLabel: 'bot-working',
+    })
+    expect(comments).toHaveLength(1)
+    expect(comments[0]!.body).toContain('https://app.example.test/run/1')
+    expect(labels).toEqual([{ externalId: 'acme/web#3', label: 'bot-working' }])
+  })
+
+  it('defaults the GitHub label to in-progress when the schedule names none', async () => {
+    const labels: string[] = []
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+      commentOnGitHubIssue: async () => {},
+      labelGitHubIssue: async (_ws, _id, label) => void labels.push(label),
+    })
+    await svc.onIssuePickedUp('ws', 'blk_1', {})
+    expect(labels).toEqual(['in-progress'])
+  })
+
+  it('transitions a Jira issue into the In Progress (indeterminate) category', async () => {
+    const calls: { method: string; url: string; body: string | undefined }[] = []
+    const fetchImpl = async (
+      url: string,
+      init: { method: string; headers: Record<string, string>; body?: string },
+    ) => {
+      calls.push({ method: init.method, url, body: init.body })
+      if (url.endsWith('/transitions') && init.method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({
+            transitions: [
+              { id: '11', to: { statusCategory: { key: 'indeterminate' } } },
+              { id: '31', to: { statusCategory: { key: 'done' } } },
+            ],
+          }),
+        }
+      }
+      return { ok: true, status: 204, text: async () => '', json: async () => null }
+    }
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([{ ...githubIssue('PROJ-1'), source: 'jira' }]),
+      resolveJiraConnection: async () => ({
+        baseUrl: 'https://acme.atlassian.net',
+        accountEmail: 'a@b.c',
+        apiToken: 'tok',
+      }),
+      fetchImpl,
+    })
+    await svc.onIssuePickedUp('ws', 'blk_1', {})
+    const postTransition = calls.find((c) => c.url.endsWith('/transitions') && c.method === 'POST')
+    expect(postTransition).toBeDefined()
+    // The pickup mark lands in In Progress, NOT the resolve (Done) transition.
+    expect(postTransition!.body).toContain('"id":"11"')
+    expect(calls.find((c) => c.url.endsWith('/comment'))).toBeDefined()
+  })
+
+  it('isolates a failing issue so the others are still marked', async () => {
+    const labels: string[] = []
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([githubIssue('acme/web#1'), githubIssue('acme/web#2')]),
+      commentOnGitHubIssue: async (_ws, externalId) => {
+        if (externalId === 'acme/web#1') throw new Error('boom')
+      },
+      labelGitHubIssue: async (_ws, externalId) => void labels.push(externalId),
+    })
+    await svc.onIssuePickedUp('ws', 'blk_1', {})
+    expect(labels).toEqual(['acme/web#2'])
+  })
+
+  it('does nothing when the block has no linked issue', async () => {
+    const comments: string[] = []
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([]),
+      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
+    })
+    await svc.onIssuePickedUp('ws', 'blk_1', {})
+    expect(comments).toHaveLength(0)
   })
 })

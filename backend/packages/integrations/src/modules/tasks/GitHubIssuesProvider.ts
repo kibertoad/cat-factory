@@ -4,6 +4,7 @@ import {
   type GitHubClient,
   type GitHubInstallation,
   type GitHubInstallationRepository,
+  type IssueIntakeQuery,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchRepoScope,
@@ -153,6 +154,47 @@ export class GitHubIssuesProvider implements TaskSourceProvider {
       })
     }
     return out.slice(0, 20)
+  }
+
+  /**
+   * Issue-intake predicate search: one repo-scoped search-API call with every
+   * expressible predicate compiled into the query text (open-only, labels, type,
+   * title fragment — see {@link githubIssuesLogic.buildGitHubIntakeQuery}),
+   * ordered oldest-first via the API's `created-asc` sort. The already-worked
+   * exclusion list is the one predicate GitHub search can't express, so the call
+   * overscans by the exclusion count (bounded by the API's 100/page) and filters
+   * the excluded ids from the single response — never a per-candidate lookup.
+   */
+  async searchIssues(
+    _credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
+  ): Promise<TaskSearchResult[]> {
+    const installation = await this.deps.installations.getByWorkspace(workspaceId)
+    if (!installation) return []
+    const excluded = new Set(query.excludeExternalIds ?? [])
+    const overscan = Math.min(query.limit + excluded.size, 100)
+    const hits = await this.deps.githubClient.searchIssues(
+      installation.installationId,
+      githubIssuesLogic.buildGitHubIntakeQuery(query),
+      overscan,
+      'created-asc',
+    )
+    const out: TaskSearchResult[] = []
+    for (const hit of hits) {
+      const externalId = githubIssuesLogic.githubIssueExternalId(hit)
+      if (excluded.has(externalId)) continue
+      out.push({
+        source: 'github',
+        externalId,
+        title: hit.title,
+        url: hit.url,
+        status: hit.state,
+        excerpt: '',
+      })
+      if (out.length >= query.limit) break
+    }
+    return out
   }
 
   /**

@@ -1098,6 +1098,16 @@ function selectRecurringDeps(
         target.parsed.number,
       )
     }
+    writebackDeps.labelGitHubIssue = async (workspaceId, externalId, label) => {
+      const target = await resolveIssue(workspaceId, externalId)
+      if (!target) return
+      await githubClient.applyIssueLabel?.(
+        target.installationId,
+        { owner: target.parsed.owner, repo: target.parsed.repo },
+        target.parsed.number,
+        label,
+      )
+    }
   }
   // Jira: read the workspace's stored connection credentials (when the tasks
   // integration's encryption key is configured).

@@ -219,6 +219,9 @@ export class RecurringPipelineService {
       name: input.name,
       recurrence,
       onDemand: input.onDemand,
+      // Issue-intake scope + predicates (persisted verbatim; Phase E's schedule
+      // validation enforces presence + a connected source for a bug-intake pipeline).
+      ...(input.issueIntake ? { issueIntake: input.issueIntake } : {}),
       enabled: input.enabled,
       lastRunAt: null,
       // First fire is one interval out, rolled into the allowed window. Stored even for an
@@ -252,8 +255,13 @@ export class RecurringPipelineService {
       assertSchedulable(pipeline)
     }
     const recurrence = patch.recurrence ?? existing.recurrence
+    // `issueIntake` is a tri-state patch: omitted = unchanged, null = clear, value = replace.
+    const issueIntake =
+      patch.issueIntake === undefined ? existing.issueIntake : (patch.issueIntake ?? undefined)
+    const { issueIntake: _prior, ...retained } = existing
     const updated: PipelineSchedule = {
-      ...existing,
+      ...retained,
+      ...(issueIntake ? { issueIntake } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.pipelineId !== undefined ? { pipelineId: patch.pipelineId } : {}),
       ...(patch.recurrence !== undefined ? { recurrence } : {}),

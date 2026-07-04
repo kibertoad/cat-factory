@@ -7447,6 +7447,78 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         expect(after.body.blocks.find((b) => b.id === created.body.blockId)).toBeUndefined()
       })
 
+      it('round-trips the issue-intake config through create, update, and clear', async () => {
+        // `issueIntake` (bug-triage Phase D) is a persisted JSON column on
+        // `pipeline_schedules`, so this pins the column mapping on BOTH runtimes —
+        // a facade that drops it on save would leave every bug-intake fire scopeless.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const issueIntake = {
+          source: 'jira',
+          board: { jiraProjectKey: 'PROJ' },
+          predicates: { titleFragment: 'crash', labels: ['bug'], issueType: 'Bug' },
+        }
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: 'pl_dep_update',
+            name: 'Bug triage',
+            recurrence,
+            issueIntake,
+          },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.issueIntake).toEqual(issueIntake)
+
+        // The config survives a persistence round-trip (list re-reads the row).
+        const listed = await app.call<PipelineSchedule[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines`,
+        )
+        expect(listed.body.find((s) => s.id === created.body.id)?.issueIntake).toEqual(issueIntake)
+
+        // PATCH replaces the config…
+        const replaced = await app.call<PipelineSchedule>(
+          'PATCH',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+          {
+            issueIntake: {
+              source: 'github',
+              board: { githubRepo: 'octo/app' },
+              predicates: {},
+              inProgressLabel: 'bot-working',
+            },
+          },
+        )
+        expect(replaced.status).toBe(200)
+        expect(replaced.body.issueIntake?.source).toBe('github')
+        expect(replaced.body.issueIntake?.inProgressLabel).toBe('bot-working')
+
+        // …an unrelated PATCH leaves it untouched, and null clears it.
+        const renamed = await app.call<PipelineSchedule>(
+          'PATCH',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+          { name: 'Renamed' },
+        )
+        expect(renamed.body.issueIntake?.source).toBe('github')
+        const cleared = await app.call<PipelineSchedule>(
+          'PATCH',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+          { issueIntake: null },
+        )
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.issueIntake).toBeUndefined()
+        const after = await app.call<PipelineSchedule[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines`,
+        )
+        expect(after.body.find((s) => s.id === created.body.id)?.issueIntake).toBeUndefined()
+      })
+
       it('run-now starts an execution on the reused block and records run history', async () => {
         const app = harness.makeApp({ confidence: 1 })
         const { workspace } = await app.createWorkspace()

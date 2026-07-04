@@ -161,4 +161,13 @@ export class D1TaskRepository implements TaskRepository {
       .bind(blockId, workspaceId, source, externalId)
       .run()
   }
+
+  async unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE tasks SET linked_block_id = NULL WHERE workspace_id = ? AND linked_block_id = ?',
+      )
+      .bind(workspaceId, blockId)
+      .run()
+  }
 }

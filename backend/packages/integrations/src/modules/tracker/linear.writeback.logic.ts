@@ -63,3 +63,12 @@ export interface LinearWorkflowState {
 export function pickCompletedStateId(states: LinearWorkflowState[]): string | null {
   return states.find((s) => s.type === 'completed' && s.id)?.id ?? null
 }
+
+/**
+ * Pick the id of the team's **started**-type workflow state (Linear's "In
+ * Progress" category), or null if none exists — the intake pickup's in-progress
+ * mark, mirroring {@link pickCompletedStateId}.
+ */
+export function pickStartedStateId(states: LinearWorkflowState[]): string | null {
+  return states.find((s) => s.type === 'started' && s.id)?.id ?? null
+}

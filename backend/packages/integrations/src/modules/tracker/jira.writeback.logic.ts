@@ -17,11 +17,15 @@ export interface JiraTransition {
 }
 
 /**
- * Pick the transition that moves an issue into Jira's standard **Done** status
- * category (`to.statusCategory.key === 'done'`), or null if none is available.
- * Auto-detection only — no per-project mapping. Returns the first matching
- * transition, which is the conventional resolve action in a standard workflow.
+ * Pick the transition that moves an issue into one of Jira's standard status
+ * categories: `done` (resolve on merge) or `indeterminate` (Jira's "In
+ * Progress" category — the intake pickup mark). Auto-detection only — no
+ * per-project mapping. Returns the first matching transition, the conventional
+ * action in a standard workflow, or null if none is available.
  */
-export function pickDoneTransition(transitions: JiraTransition[]): JiraTransition | null {
-  return transitions.find((t) => t.to?.statusCategory?.key === 'done' && t.id) ?? null
+export function pickTransitionByCategory(
+  transitions: JiraTransition[],
+  category: 'indeterminate' | 'done',
+): JiraTransition | null {
+  return transitions.find((t) => t.to?.statusCategory?.key === category && t.id) ?? null
 }

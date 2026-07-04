@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildGitHubIntakeQuery,
   buildGitHubIssueSearchQuery,
   detectExactGitHubIssueRef,
   githubIssueUrl,
@@ -141,5 +142,33 @@ describe('detectExactGitHubIssueRef', () => {
 
   it('returns null for free-text search phrases', () => {
     expect(detectExactGitHubIssueRef('login bug', scope)).toBeNull()
+  })
+})
+
+describe('buildGitHubIntakeQuery', () => {
+  it('compiles every predicate into repo-scoped open-issue search text', () => {
+    expect(
+      buildGitHubIntakeQuery({
+        board: { githubRepo: 'octo/app' },
+        issueType: 'Bug',
+        labels: ['triage', 'needs repro'],
+        titleFragment: 'crash on save',
+        limit: 5,
+      }),
+    ).toBe(
+      'repo:octo/app is:open type:"Bug" label:"triage" label:"needs repro" in:title crash on save',
+    )
+  })
+
+  it('omits absent predicates but always filters to open issues', () => {
+    expect(buildGitHubIntakeQuery({ board: { githubRepo: 'octo/app' }, limit: 5 })).toBe(
+      'repo:octo/app is:open',
+    )
+  })
+
+  it('drops embedded quotes from qualifier values', () => {
+    expect(buildGitHubIntakeQuery({ board: {}, labels: ['a"b'], limit: 5 })).toBe(
+      'is:open label:"ab"',
+    )
   })
 })

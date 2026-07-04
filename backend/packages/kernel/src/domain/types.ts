@@ -342,6 +342,7 @@ export type {
   // Recurring-pipeline (scheduled run) shapes.
   ScheduleTemplate,
   Recurrence,
+  IssueIntakeConfig,
   PipelineSchedule,
   ScheduleRun,
   CreateScheduleInput,

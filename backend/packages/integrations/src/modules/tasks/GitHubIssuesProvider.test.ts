@@ -15,10 +15,12 @@ function fakeClient(opts: {
   issues?: Record<string, GitHubIssueDetail>
 }) {
   const searchCalls: string[] = []
+  const searchOrders: (string | undefined)[] = []
   const issueCalls: string[] = []
   const client = {
-    async searchIssues(_installationId: number, query: string) {
+    async searchIssues(_installationId: number, query: string, _limit?: number, order?: string) {
       searchCalls.push(query)
+      searchOrders.push(order)
       return opts.hits ?? []
     },
     async getIssue(_installationId: number, ref: { owner: string; repo: string }, n: number) {
@@ -28,7 +30,7 @@ function fakeClient(opts: {
       return found
     },
   } as unknown as GitHubClient
-  return { client, searchCalls, issueCalls }
+  return { client, searchCalls, searchOrders, issueCalls }
 }
 
 const installations = {
@@ -154,5 +156,77 @@ describe('GitHubIssuesProvider.search', () => {
 
     expect(issueCalls).toEqual([])
     expect(results).toEqual([])
+  })
+})
+
+describe('GitHubIssuesProvider.searchIssues (issue intake)', () => {
+  const hit = (number: number): GitHubIssueSearchHit => ({
+    owner: 'kibertoad',
+    repo: 'simple-service',
+    number,
+    title: `Issue ${number}`,
+    state: 'open',
+    url: `u${number}`,
+  })
+
+  it('compiles the predicates into one oldest-first search call', async () => {
+    const { client, searchCalls, searchOrders } = fakeClient({ hits: [hit(1), hit(2)] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      {
+        board: { githubRepo: 'kibertoad/simple-service' },
+        issueType: 'Bug',
+        labels: ['triage'],
+        titleFragment: 'crash',
+        limit: 2,
+      },
+      'ws1',
+    )
+
+    expect(searchCalls).toEqual([
+      'repo:kibertoad/simple-service is:open type:"Bug" label:"triage" in:title crash',
+    ])
+    expect(searchOrders).toEqual(['created-asc'])
+    expect(results.map((r) => r.externalId)).toEqual([
+      'kibertoad/simple-service#1',
+      'kibertoad/simple-service#2',
+    ])
+  })
+
+  it('filters the already-worked exclusion list and still honors the limit', async () => {
+    const { client } = fakeClient({ hits: [hit(1), hit(2), hit(3)] })
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations })
+
+    const results = await provider.searchIssues(
+      {},
+      {
+        board: { githubRepo: 'kibertoad/simple-service' },
+        excludeExternalIds: ['kibertoad/simple-service#1'],
+        limit: 1,
+      },
+      'ws1',
+    )
+
+    expect(results.map((r) => r.externalId)).toEqual(['kibertoad/simple-service#2'])
+  })
+
+  it('returns nothing when the workspace has no installation', async () => {
+    const { client, searchCalls } = fakeClient({ hits: [hit(1)] })
+    const noInstall = {
+      async getByWorkspace() {
+        return null
+      },
+      async listActive() {
+        return []
+      },
+    } as unknown as GitHubInstallationRepository
+    const provider = new GitHubIssuesProvider({ githubClient: client, installations: noInstall })
+
+    const results = await provider.searchIssues({}, { board: {}, limit: 3 }, 'ws1')
+
+    expect(results).toEqual([])
+    expect(searchCalls).toEqual([])
   })
 })
