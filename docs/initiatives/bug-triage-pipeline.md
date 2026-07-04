@@ -30,6 +30,13 @@ and unmerged** (`mergeable_state: dirty` — conflicts with `main`), so Phase B 
 checkouts, notably Phase F's investigator) are blocked on that merge, not just on the
 code existing. See the Phase B row notes for details.
 
+**Update (2026-07-04):** Phases C and D are implemented, both stacked on the #752 branch
+(Phase C via [PR #761](https://github.com/kibertoad/cat-factory/pull/761), Phase D via
+[PR #766](https://github.com/kibertoad/cat-factory/pull/766)) — so the whole stack lands when #752's conflict
+with `main` is resolved and the chain merges. Next up: Phase E (the `bug-intake` step +
+schedule validation + SPA intake section), which consumes Phase D's ports directly and,
+unlike F–H, does not need the multi-repo checkouts.
+
 ## Target pattern
 
 Reference implementations to copy, per piece:
@@ -159,13 +166,49 @@ Notes carried forward (mirrored in the service-connections tracker's Phase 4 row
 
 ### Phase D — issue-intake foundations (design §3, ports + persistence)
 
+Implemented in [PR #766](https://github.com/kibertoad/cat-factory/pull/766) (branch
+`claude/bug-triage-initiative-en124b`, stacked on the #752 branch and targeting it, like Phase C's #761).
+
 | Item                                                                                                        | Status |
 | ----------------------------------------------------------------------------------------------------------- | ------ |
-| `TaskSourceProvider.searchIssues` + `IssueIntakeQuery`; Jira JQL / GitHub qualifiers / Linear filter impls  | todo   |
-| `PipelineSchedule.issueIntake` config: contracts + `pipeline_schedules` column, D1 ⇄ Drizzle migrations     | todo   |
-| `IssueWritebackProvider.onIssuePickedUp` (comment + in-progress transition, 3 vendors, best-effort)         | todo   |
-| Jira `pickTransitionByCategory` / Linear `pickStartedStateId` / GitHub `inProgressLabel` logic + unit tests | todo   |
-| `TaskLinkService.replaceForBlock` (unlink previous fire's issue, link the new one)                          | todo   |
+| `TaskSourceProvider.searchIssues` + `IssueIntakeQuery`; Jira JQL / GitHub qualifiers / Linear filter impls  | done   |
+| `PipelineSchedule.issueIntake` config: contracts + `pipeline_schedules` column, D1 ⇄ Drizzle migrations     | done   |
+| `IssueWritebackProvider.onIssuePickedUp` (comment + in-progress transition, 3 vendors, best-effort)         | done   |
+| Jira `pickTransitionByCategory` / Linear `pickStartedStateId` / GitHub `inProgressLabel` logic + unit tests | done   |
+| `TaskLinkService.replaceForBlock` (unlink previous fire's issue, link the new one)                          | done   |
+
+Notes for Phase E (which consumes all of this):
+
+- **`searchIssues(credentials, query, workspaceId)`** — the port takes `workspaceId` as a third
+  param (beyond the design's two-arg sketch) for the same reason `search` does: the GitHub
+  provider authenticates out-of-band from the workspace's App installation and would otherwise
+  leak across tenants. Jira/Linear ignore it.
+- **Exclusion pushdown varies by vendor**: Jira gets `issuekey NOT IN (…)` in the JQL (ids
+  validated against the key shape — a malformed/foreign id is dropped, never embedded); GitHub
+  and Linear can't express it (no issue-number qualifier / no identifier filter), so both
+  overscan by the exclusion count (bounded at the vendors' 100/page) and filter the response.
+  Phase E's intake step should keep the exclusion list small (it already is: only issues linked
+  to blocks).
+- **GitHub oldest-first** rides the search API's `sort=created&order=asc` params (a new optional
+  `order?: 'created-asc'` on `GitHubClient.searchIssues`) — the in-query `sort:` syntax is a
+  web-UI affordance the REST API ignores. **Linear oldest-first** uses the
+  `issues(sort: [{ createdAt: { order: Ascending } }])` argument + a deterministic client-side
+  re-sort of the page (nodes carry `createdAt`).
+- **`issueIntake` PATCH is tri-state** (`updateScheduleSchema`): omitted = unchanged, `null` =
+  clear, object = replace. `RecurringPipelineService.create/update` persist it verbatim — the
+  "required + source connected when the pipeline has `bug-intake`" validation is Phase E's row,
+  NOT done here.
+- **`onIssuePickedUp(workspaceId, blockId, info)`** takes `info.inProgressLabel` (threaded from
+  the schedule's `issueIntake.inProgressLabel`; the service defaults it to
+  `DEFAULT_IN_PROGRESS_LABEL = 'in-progress'`). It is deliberately NOT gated on the workspace
+  writeback toggles — claiming the issue where it was filed is the intake step's semantics.
+  `GitHubClient.applyIssueLabel` is an optional client capability (like `listSubIssues`):
+  ensure-create the label (tolerating 422 already-exists) then add it to the issue.
+- **`TaskRepository.unlinkAllFromBlock`** is a single `UPDATE … WHERE linked_block_id = ?` on
+  both runtimes (never a loop of point-writes); it's classified `pending` in the Node
+  mothership allow-list spec (fires on the mothership-owned recurring run path, not the SPA).
+- Conformance pins the `issueIntake` column round-trip (create → list → replace → unrelated
+  patch → clear) on all three facades (`defineMiscConformance` → "recurring pipelines").
 
 ### Phase E — `bug-intake` step (design §3, engine + SPA)
 

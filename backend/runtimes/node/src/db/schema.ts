@@ -709,6 +709,9 @@ export const pipelineSchedules = pgTable(
     enabled: integer('enabled').notNull().default(1),
     // Manual-only schedule: never auto-fired by the sweeper (`listDue` filters `on_demand = 0`).
     on_demand: integer('on_demand').notNull().default(0),
+    // Nullable JSON issue-intake config (mirror of D1 migration 0038): source + board
+    // scope + predicates for a pipeline with a `bug-intake` step.
+    issue_intake: text('issue_intake'),
     last_run_at: bigint('last_run_at', { mode: 'number' }),
     next_run_at: bigint('next_run_at', { mode: 'number' }).notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

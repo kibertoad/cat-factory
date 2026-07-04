@@ -7,7 +7,10 @@ import {
   type TaskRepository,
   type TrackerSettingsRepository,
 } from '@cat-factory/kernel'
-import { buildJiraCommentPayload, pickDoneTransition } from '../tracker/jira.writeback.logic.js'
+import {
+  buildJiraCommentPayload,
+  pickTransitionByCategory,
+} from '../tracker/jira.writeback.logic.js'
 import {
   LINEAR_COMMENT_CREATE_MUTATION,
   LINEAR_ISSUE_ID_QUERY,
@@ -15,7 +18,7 @@ import {
   LINEAR_ISSUE_UPDATE_MUTATION,
   buildLinearCommentVariables,
   buildLinearStateUpdateVariables,
-  pickCompletedStateId,
+  pickStateIdByType,
 } from '../tracker/linear.writeback.logic.js'
 import type {
   FetchLike,
@@ -54,6 +57,12 @@ export interface IssueWritebackServiceDependencies {
    */
   closeGitHubIssue?: (workspaceId: string, externalId: string) => Promise<void>
   /**
+   * Apply a label to a GitHub issue (creating the label if absent) identified by
+   * its `owner/repo#number` external id — the intake pickup's in-progress mark
+   * (GitHub has no native workflow status). Absent → the mark passes through.
+   */
+  labelGitHubIssue?: (workspaceId: string, externalId: string, label: string) => Promise<void>
+  /**
    * Resolve the workspace's Jira credentials, or null when Jira isn't configured.
    * Reuses the same seam as `TicketTrackerService`. Absent → Jira writeback passes through.
    */
@@ -66,6 +75,9 @@ export interface IssueWritebackServiceDependencies {
   /** HTTP transport for the Jira/Linear calls (each runtime exposes a global `fetch`). */
   fetchImpl?: FetchLike
 }
+
+/** The GitHub in-progress label applied on pickup when the schedule doesn't name one. */
+export const DEFAULT_IN_PROGRESS_LABEL = 'in-progress'
 
 export class IssueWritebackService implements IssueWritebackProvider {
   constructor(private readonly deps: IssueWritebackServiceDependencies) {}
@@ -96,6 +108,25 @@ export class IssueWritebackService implements IssueWritebackProvider {
     await this.forEachIssue(issues, async (issue) => {
       await this.comment(workspaceId, issue, body)
       await this.resolve(workspaceId, issue)
+    })
+  }
+
+  async onIssuePickedUp(
+    workspaceId: string,
+    blockId: string,
+    info: { runUrl?: string; inProgressLabel?: string },
+  ): Promise<void> {
+    // Deliberately NOT gated on the workspace writeback settings: claiming the
+    // issue where it was filed is the intake step's semantics, not a courtesy
+    // (see the port doc). Still best-effort per issue, like every hook here.
+    const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
+    if (issues.length === 0) return
+    const body = info.runUrl
+      ? `🤖 Taken by cat-factory — this issue is being worked autonomously: ${info.runUrl}`
+      : '🤖 Taken by cat-factory — this issue is being worked autonomously.'
+    await this.forEachIssue(issues, async (issue) => {
+      await this.comment(workspaceId, issue, body)
+      await this.markInProgress(workspaceId, issue, info.inProgressLabel)
     })
   }
 
@@ -130,11 +161,38 @@ export class IssueWritebackService implements IssueWritebackProvider {
       return
     }
     if (issue.source === 'jira') {
-      await this.resolveJira(workspaceId, issue.externalId)
+      await this.transitionJira(workspaceId, issue.externalId, 'done')
       return
     }
     if (issue.source === 'linear') {
-      await this.resolveLinear(workspaceId, issue.externalId)
+      await this.transitionLinear(workspaceId, issue.externalId, 'completed')
+    }
+  }
+
+  /**
+   * Mark a picked-up issue in-progress: the vendor's in-progress workflow
+   * transition (Jira's `indeterminate` status category / Linear's `started`
+   * state), or the in-progress label for GitHub, which has no native status.
+   */
+  private async markInProgress(
+    workspaceId: string,
+    issue: TaskRecord,
+    inProgressLabel: string | undefined,
+  ): Promise<void> {
+    if (issue.source === 'github') {
+      await this.deps.labelGitHubIssue?.(
+        workspaceId,
+        issue.externalId,
+        inProgressLabel ?? DEFAULT_IN_PROGRESS_LABEL,
+      )
+      return
+    }
+    if (issue.source === 'jira') {
+      await this.transitionJira(workspaceId, issue.externalId, 'indeterminate')
+      return
+    }
+    if (issue.source === 'linear') {
+      await this.transitionLinear(workspaceId, issue.externalId, 'started')
     }
   }
 
@@ -163,14 +221,22 @@ export class IssueWritebackService implements IssueWritebackProvider {
     )
   }
 
-  /** Resolve a Linear issue: look up its UUID + team states, then transition to completed. */
-  private async resolveLinear(workspaceId: string, identifier: string): Promise<void> {
+  /**
+   * Transition a Linear issue: look up its UUID + team states, pick the target
+   * state (`completed` on resolve, `started` on pickup), then `issueUpdate`.
+   */
+  private async transitionLinear(
+    workspaceId: string,
+    identifier: string,
+    stateType: 'completed' | 'started',
+  ): Promise<void> {
     const lookup = (await this.linearRequest(workspaceId, LINEAR_ISSUE_RESOLVE_LOOKUP_QUERY, {
       id: identifier,
     })) as { issue?: { id?: string; team?: { states?: { nodes?: unknown[] } } } } | null
     const issueId = lookup?.issue?.id
-    const stateId = pickCompletedStateId(
-      (lookup?.issue?.team?.states?.nodes ?? []) as Parameters<typeof pickCompletedStateId>[0],
+    const stateId = pickStateIdByType(
+      (lookup?.issue?.team?.states?.nodes ?? []) as Parameters<typeof pickStateIdByType>[0],
+      stateType,
     )
     if (!issueId || !stateId) return
     await this.linearRequest(
@@ -202,12 +268,21 @@ export class IssueWritebackService implements IssueWritebackProvider {
     )
   }
 
-  private async resolveJira(workspaceId: string, key: string): Promise<void> {
+  /**
+   * Transition a Jira issue into a standard status category: `done` on resolve,
+   * `indeterminate` (In Progress) on pickup. Lists the issue's available
+   * transitions and fires the first one landing in the category.
+   */
+  private async transitionJira(
+    workspaceId: string,
+    key: string,
+    category: 'indeterminate' | 'done',
+  ): Promise<void> {
     const path = `issue/${encodeURIComponent(key)}/transitions`
     const list = (await this.jiraRequest(workspaceId, path, { method: 'GET' })) as {
-      transitions?: Parameters<typeof pickDoneTransition>[0]
+      transitions?: Parameters<typeof pickTransitionByCategory>[0]
     } | null
-    const transition = pickDoneTransition(list?.transitions ?? [])
+    const transition = pickTransitionByCategory(list?.transitions ?? [], category)
     if (!transition?.id) return
     await this.jiraRequest(workspaceId, path, {
       method: 'POST',

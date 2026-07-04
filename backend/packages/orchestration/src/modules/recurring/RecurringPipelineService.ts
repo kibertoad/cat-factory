@@ -219,6 +219,9 @@ export class RecurringPipelineService {
       name: input.name,
       recurrence,
       onDemand: input.onDemand,
+      // Issue-intake scope + predicates (persisted verbatim; Phase E's schedule
+      // validation enforces presence + a connected source for a bug-intake pipeline).
+      ...(input.issueIntake ? { issueIntake: input.issueIntake } : {}),
       enabled: input.enabled,
       lastRunAt: null,
       // First fire is one interval out, rolled into the allowed window. Stored even for an
@@ -262,6 +265,12 @@ export class RecurringPipelineService {
       ...(patch.recurrence !== undefined
         ? { nextRunAt: computeNextRun(this.clock.now(), recurrence) }
         : {}),
+    }
+    // `issueIntake` is a tri-state patch: omitted = unchanged (kept by `...existing`),
+    // null = clear (drop the optional key), value = replace.
+    if (patch.issueIntake !== undefined) {
+      if (patch.issueIntake) updated.issueIntake = patch.issueIntake
+      else delete updated.issueIntake
     }
     await this.schedules.upsert(workspaceId, updated)
     if (patch.name !== undefined) {

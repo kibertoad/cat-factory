@@ -1,4 +1,5 @@
 import type {
+  IssueIntakeQuery,
   TaskComment,
   TaskContent,
   TaskDependencyLink,
@@ -97,6 +98,85 @@ export const LINEAR_SEARCH_ISSUES_QUERY = `query SearchIssues($term: String!) {
     nodes { identifier title url state { name } }
   }
 }`
+
+/**
+ * Issue-intake predicate search. The predicates travel as an `IssueFilter`
+ * variable (see {@link buildLinearIntakeFilter}); `sort` asks Linear for
+ * oldest-created-first so the page window IS the oldest matching issues (a
+ * client-side sort of a newest-first page would pick the oldest of the newest —
+ * wrong for a backlog larger than one page). Nodes carry `createdAt` so the
+ * mapper can enforce the ordering deterministically regardless.
+ */
+export const LINEAR_INTAKE_ISSUES_QUERY = `query IntakeIssues($filter: IssueFilter, $first: Int!, $after: String) {
+  issues(filter: $filter, first: $first, after: $after, sort: [{ createdAt: { order: Ascending } }]) {
+    nodes { identifier title url createdAt state { name } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`
+
+/**
+ * Bounded page walk for issue-intake overscan: the already-worked (excluded) issues
+ * cluster at the front of the oldest-first results, so page through (bounded) rather
+ * than let a first page full of them starve the pickup.
+ */
+export const LINEAR_INTAKE_PAGE_CAP = 5
+
+/**
+ * Compile an intake query's predicates onto a Linear `IssueFilter`: the team
+ * scope, open-only (state type not completed/canceled), every label present
+ * (one `labels.some` clause per label, AND-ed), and the title fragment as
+ * `containsIgnoreCase`. Linear has no issue-type notion, so `issueType` is
+ * ignored (teams label their bugs — the `labels` predicate covers it). The
+ * already-worked exclusion list is not expressible on the human identifier;
+ * the provider filters it from a bounded overscan (see the mapper).
+ */
+export function buildLinearIntakeFilter(query: IssueIntakeQuery): Record<string, unknown> {
+  const filter: Record<string, unknown> = {
+    state: { type: { nin: ['completed', 'canceled'] } },
+  }
+  if (query.board.linearTeamId) filter.team = { id: { eq: query.board.linearTeamId } }
+  if (query.titleFragment) filter.title = { containsIgnoreCase: query.titleFragment }
+  const labels = query.labels ?? []
+  if (labels.length > 0) {
+    filter.and = labels.map((label) => ({ labels: { some: { name: { eq: label } } } }))
+  }
+  return filter
+}
+
+/** One node of the intake `issues` connection (the slice we read). */
+export interface LinearIntakeNode extends LinearSearchNode {
+  createdAt?: string
+}
+
+/** One page of the intake `issues` connection (nodes + the cursor for the overscan walk). */
+export interface LinearIntakePage {
+  issues?: { nodes?: LinearIntakeNode[]; pageInfo?: LinearPageInfo | null }
+}
+
+/**
+ * Map an intake `issues` payload onto lean hits: drop the excluded (already
+ * worked) identifiers, order oldest-created-first, and cap at `limit`.
+ */
+export function mapLinearIntakeResults(
+  data: { issues?: { nodes?: LinearIntakeNode[] } },
+  limit: number,
+  excludeExternalIds: string[] = [],
+): TaskSearchResult[] {
+  const excluded = new Set(excludeExternalIds.map((id) => id.toUpperCase()))
+  const nodes = (data.issues?.nodes ?? []).filter(
+    (node): node is LinearIntakeNode & { identifier: string } =>
+      !!node.identifier && !excluded.has(node.identifier.toUpperCase()),
+  )
+  nodes.sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))
+  return nodes.slice(0, limit).map((node) => ({
+    source: 'linear' as const,
+    externalId: node.identifier,
+    title: node.title ?? '(untitled)',
+    url: node.url ?? `https://linear.app/issue/${node.identifier}`,
+    status: node.state?.name ?? '',
+    excerpt: '',
+  }))
+}
 
 /** List the connection's teams (for the ticket-filing team picker). */
 export const LINEAR_TEAMS_QUERY = `query Teams { teams(first: 250) { nodes { id name key } } }`

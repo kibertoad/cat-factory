@@ -16,4 +16,19 @@ export interface IssueWritebackProvider {
   onPullRequestOpened(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void>
   /** A task's PR merged — comment + close its linked tracker issue(s) as resolved. */
   onPullRequestMerged(workspaceId: string, block: Block, pr: PullRequestRef): Promise<void>
+  /**
+   * The recurring `bug-intake` step just picked the block's linked issue up —
+   * post a "taken by cat-factory" comment (with the run/board link when given)
+   * and mark the issue in-progress: the vendor's in-progress workflow transition
+   * (Jira in-progress status category / Linear `started` state), or for GitHub —
+   * which has no native status — apply `inProgressLabel` (default `in-progress`),
+   * creating the label if absent. Unlike the PR hooks this is NOT gated on the
+   * workspace writeback settings: the pickup mark is intake semantics (the whole
+   * point is claiming the issue where it was filed), not an optional courtesy.
+   */
+  onIssuePickedUp(
+    workspaceId: string,
+    blockId: string,
+    info: { runUrl?: string; inProgressLabel?: string },
+  ): Promise<void>
 }

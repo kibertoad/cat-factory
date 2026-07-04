@@ -1769,6 +1769,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
               target.parsed.number,
             )
           },
+          labelGitHubIssue: async (workspaceId, externalId, label) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.applyIssueLabel?.(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+              label,
+            )
+          },
         }
       : {}),
     ...(tasks.taskConnectionRepository

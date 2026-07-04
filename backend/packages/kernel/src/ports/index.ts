@@ -204,6 +204,7 @@ export type {
   TaskCredentials,
   TaskContent,
   TaskSearchRepoScope,
+  IssueIntakeQuery,
   NormalizedTaskConnection,
   TaskSourceProvider,
   TaskSourceRegistry,
