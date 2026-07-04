@@ -1,5 +1,44 @@
 # @cat-factory/agents
 
+## 0.32.0
+
+### Minor Changes
+
+- e5ddaa4: Cache document-backed prompt-fragment bodies through the app caching seam
+  (caching-layer initiative, slice 2). A new `AppCaches.fragmentDocumentBody`
+  group cache serves a living fragment's external Confluence/Notion/GitHub/Figma/
+  Zeplin/Linear body, replacing the hand-rolled `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS`
+  in `FragmentLibraryService`: a run reads the cached body instead of blocking on a
+  live page fetch, and an entry entering its refresh window runs the source's cheap
+  version probe — keeping the cached body when the page hasn't moved, reloading in
+  the background when it has.
+
+  To support the probe, `DocumentContent` now carries an opaque `version` token and
+  `DocumentSourceProvider`/`DocumentContentResolver` gain a `probeVersion` method
+  (metadata-only, strictly cheaper than a full fetch), implemented across all
+  document providers. The self-verifying cache stays enabled on the Cloudflare
+  Worker (bounded staleness via the probe), unlike the mutable-state fragment
+  catalog.
+
+  Behavior change (pre-1.0, no back-compat): the durable `prompt_fragments.body` is
+  now the offline fallback + management-view content, refreshed only by an explicit
+  create/refresh; the live run-time body flows through the cache. Without a cache
+  wired, a run serves the persisted body and does not re-resolve live.
+
+- 6213771: Add a per-`DocKind` document template registry (WS1 of the documentation-type task
+  initiative). Each document kind now carries a structured template — required and optional
+  sections with per-section authoring guidance — that is the single source of truth for the
+  kind's expected shape. The templates are woven into the `doc-outliner` prompt (the outline
+  must cover the required sections) and the `doc-writer` prompt (start from the rendered
+  skeleton), replacing the previous one-line structure hint. A deployment can override a
+  kind's template through the public `registerDocTemplate` seam (an import side effect,
+  mirroring `registerPromptFragment`).
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
 ## 0.31.0
 
 ### Minor Changes

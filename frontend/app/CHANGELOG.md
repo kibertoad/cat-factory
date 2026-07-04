@@ -1,5 +1,37 @@
 # @cat-factory/app
 
+## 0.87.3
+
+### Patch Changes
+
+- e73285e: UX papercuts (docs/initiatives/ux-papercuts.md): stop leaking raw internal identifiers into
+  the review and consensus windows (UX-36/37).
+
+  - The requirements- and clarity-review windows now render the reviewer's model through
+    `models.labelForRef(...)` (friendly `<label> · <provider>` label) instead of the raw
+    `provider:model` id, matching the pipeline step surfaces; it falls back to the bare ref when
+    the catalog hasn't loaded, so there is no regression.
+  - The consensus session window renders the step's `agentKind` through `agentKindMeta(...).label`
+    (a human title) instead of the raw enum, and each participant's model through
+    `models.labelForRef(...)` instead of the raw `modelId`.
+
+## 0.87.2
+
+### Patch Changes
+
+- 0d78224: UX papercuts (docs/initiatives/ux-papercuts.md): clipboard-feedback shared primitive
+  (UX-38/39).
+
+  - New `useCopyToClipboard()` composable wraps VueUse's `useClipboard` and always toasts the
+    outcome, only claiming success once the write actually landed — so a copy in an insecure
+    context or with a denied permission surfaces a failure toast instead of a silent no-op.
+  - All previously-silent copy handlers now route through it: `StepMetadataCard`/`StepRunMeta`
+    (run id), `AgentStepDetail` (raw output), `KubernetesEngineForm` (auto-setup command); the
+    origin pattern in `StepContainerStatus` is refactored onto the composable.
+  - New reusable `common/CopyButton.vue` (title + aria-label) makes error/detail surfaces
+    copyable: the failure stack-trace `<pre>` (`FailureDetail`, so both `AgentFailureCard` and
+    `AgentFailureHistory`), the consensus failure banner, and the gate failure summary.
+
 ## 0.87.1
 
 ### Patch Changes

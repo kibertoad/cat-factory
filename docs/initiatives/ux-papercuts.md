@@ -218,8 +218,8 @@ per-file patches:
 | UX-33 | P1  | todo   | Typed review answers lost when window closes without blur/save                                                   |
 | UX-34 | P2  | todo   | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
 | UX-35 | P2  | todo   | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
-| UX-36 | P2  | todo   | Raw model id rendered verbatim in review windows                                                                 |
-| UX-37 | P2  | todo   | Internal `agentKind` enum + raw model id leak in consensus window                                                |
+| UX-36 | P2  | done   | Raw model id rendered verbatim in review windows                                                                 |
+| UX-37 | P2  | done   | Internal `agentKind` enum + raw model id leak in consensus window                                                |
 | UX-38 | P2  | done   | Clipboard copies give no feedback and swallow failures                                                           |
 | UX-39 | P2  | done   | Agent/provider errors have no copy button                                                                        |
 | UX-40 | P2  | todo   | Inspector "Run" disabled with no explanation                                                                     |
@@ -249,13 +249,15 @@ per-file patches:
   `composables/useStepTimer.ts` is wired only into the step-detail overlay. A step
   that hasn't emitted subtasks reads as hung. Fix: surface `durationLabel` inline
   on the active step.
-- **UX-36 — Raw model ref.** `RequirementsReviewWindow.vue:811`,
-  `ClarityReviewWindow.vue:496` render `{{ review.model }}` verbatim while other
-  surfaces use `models.labelForRef(...)` (`StepMetadataCard.vue:49`,
-  `StepRunMeta.vue:36`).
-- **UX-37 — Consensus leaks internals.** `consensus/ConsensusSessionWindow.vue:116`
-  prints `session.agentKind` raw in the subtitle; `:200` shows participant
-  `p.modelId` raw. Fix: `agentKindMeta(...).label` + `models.labelForRef`.
+- **UX-36 — Raw model ref. DONE.** `RequirementsReviewWindow.vue` and
+  `ClarityReviewWindow.vue` now render the reviewer model via
+  `models.labelForRef(review.model) ?? review.model` (the friendly `<label> · <provider>`
+  string the pipeline surfaces use — `StepMetadataCard`/`StepRunMeta`), falling back to the
+  bare ref when the catalog hasn't loaded.
+- **UX-37 — Consensus leaks internals. DONE.** `consensus/ConsensusSessionWindow.vue` renders
+  the session subtitle via `agentKindMeta(session.agentKind).label` and each participant's
+  model via `models.labelForRef(p.modelId) ?? p.modelId` instead of the raw enum / raw
+  `modelId`.
 - **UX-38 — Silent clipboard. DONE.** `StepContainerStatus.vue`'s copy-with-toast pattern
   is extracted into the shared `useCopyToClipboard()` composable (VueUse `useClipboard` +
   a success/failure toast; it only claims success once the write actually landed). Every
