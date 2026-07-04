@@ -2108,9 +2108,10 @@
       "testEnvBackend": {
         "label": "Où s'exécutent les environnements de test",
         "local-compose": "docker-compose dans le conteneur",
-        "environment-provider": "Fournisseur d'environnements"
+        "environment-provider": "Fournisseur d'environnements",
+        "composeDesc": "Démarre le docker-compose.yml du dépôt sur un démon Docker local comme URL du Testeur. Idéal pour les applications locales basées sur Compose. Prend en charge les images préconstruites ou la construction depuis les sources ; nécessite un démon Docker, donc uniquement pour les déploiements locaux."
       },
-      "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime: aucune connexion requise (le conteneur de l'exécution doit prendre en charge Docker-in-Docker).",
+      "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime : aucune connexion requise (le conteneur d’exécution doit prendre en charge Docker-in-Docker). Configurez le service, le port et la source de l’image (image préconstruite ou construction depuis les sources) dans les paramètres d’environnement du service.",
       "engine": {
         "local-k3s": "k3s local",
         "remote-kubernetes": "Kubernetes distant"

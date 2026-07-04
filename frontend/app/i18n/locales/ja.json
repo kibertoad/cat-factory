@@ -1618,9 +1618,9 @@
         "environment-provider": "カスタム HTTP プロバイダー",
         "environment-providerDesc": "自前の HTTP 管理 API を通じて一時的な環境をプロビジョニングします。",
         "compose": "Docker Compose プレビュー環境",
-        "composeDesc": "リポジトリ自身の docker-compose.yml をローカルの Docker デーモンで起動し、テスターの URL として使用します。ローカルの Compose ベースのアプリに最適です。イメージベースのスタックのみ対応。Docker デーモンが必要なため、ローカルデプロイメント専用です。"
+        "composeDesc": "リポジトリ自身の docker-compose.yml をローカルの Docker デーモンで起動し、テスターの URL として使用します。ローカルの Compose ベースのアプリに最適です。ビルド済みイメージまたはソースからのビルドに対応。Docker デーモンが必要なため、ローカルデプロイのみ。"
       },
-      "dockerComposeInfo": "Docker Compose サービスはランタイムのローカル Docker 上で起動します。接続は不要です（実行のコンテナが Docker-in-Docker をサポートする必要があります）。",
+      "dockerComposeInfo": "Docker Compose サービスはランタイムのローカル Docker 上で起動します。接続は不要です（実行コンテナが Docker-in-Docker をサポートしている必要があります）。サービス、ポート、イメージソース（ビルド済みを取得するかソースからビルドするか）はサービスの環境設定で構成してください。",
       "engine": {
         "local-k3s": "ローカル k3s",
         "remote-kubernetes": "リモート Kubernetes"
