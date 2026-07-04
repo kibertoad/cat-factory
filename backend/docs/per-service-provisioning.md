@@ -45,12 +45,12 @@ configured_.
 `provisionType` (`provisionTypeSchema`, `backend/packages/contracts/src/environments.ts`) is
 one of:
 
-| Type             | Service declares                                                                                  | Meaning                                                                |
-| ---------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs | deploy Kubernetes manifests into a per-PR namespace                    |
-| `docker-compose` | a compose path (+ a `localDevOnly` flag)                                                          | run a local docker-compose stack on the runtime's Docker               |
-| `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                        | hand off to a workspace-/code-registered custom backend                |
-| `infraless`      | nothing                                                                                           | no environment — the `deployer` records a no-op, the Tester needs none |
+| Type             | Service declares                                                                                  | Meaning                                                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kubernetes`     | a **manifest source** (colocated path or a separate repo) + a `renderer` + optional render inputs | deploy Kubernetes manifests into a per-PR namespace                                                                                                       |
+| `docker-compose` | a compose path (+ a `localDevOnly` flag, + an optional `composeBuild` flag)                       | run a local docker-compose stack on the runtime's Docker (pull pre-built images, or **build from source** — clone the PR head and `docker compose build`) |
+| `custom`         | a `manifestId` from the catalog (+ optional manifest path)                                        | hand off to a workspace-/code-registered custom backend                                                                                                   |
+| `infraless`      | nothing                                                                                           | no environment — the `deployer` records a no-op, the Tester needs none                                                                                    |
 
 An **undeclared** service (no `provisioning`) falls through to the legacy single-connection
 path via the compat bridge, so pre-existing workspaces keep provisioning unchanged.

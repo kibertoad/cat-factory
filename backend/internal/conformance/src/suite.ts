@@ -3920,9 +3920,18 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // facade that didn't open its env-connection store to the `compose` kind, diverges here.
         // Registered by reference with a fake runtime (never invoked on the connect/describe
         // paths) so the assertion needs no real daemon.
+        // The fake runtime carries the optional build-mode `checkout`/`writeCheckoutFile` seam too
+        // (recorded, never invoked on the connect/describe paths asserted here) — it composes the
+        // same way the real local runtime does, and the build config below must persist regardless.
+        const checkouts: { cloneUrl: string; ref: string }[] = []
         const fakeRuntime: ComposeRuntime = {
           compose: async () => ({ code: 0, stdout: '', stderr: '' }),
           writeProjectFile: async () => '',
+          checkout: async (_project, target) => {
+            checkouts.push({ cloneUrl: target.cloneUrl, ref: target.ref })
+            return { dir: '/tmp/checkout' }
+          },
+          writeCheckoutFile: async () => '',
         }
         const backendRegistries = createBackendRegistries()
         backendRegistries.environmentBackendRegistry.register(
@@ -3939,7 +3948,15 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           auth: { type: 'none' },
           provision: { method: 'POST', pathTemplate: '' },
           response: {},
-          providerConfig: { service: 'web', port: '8080', composePath: 'docker-compose.yml' },
+          // Build-from-source config: the `build` flag + build timeout must survive the manifest
+          // JSON column round-trip identically on both stores (D1 ⇄ Drizzle).
+          providerConfig: {
+            service: 'web',
+            port: '8080',
+            composePath: 'docker-compose.yml',
+            build: 'true',
+            buildTimeoutMinutes: '20',
+          },
         }
         const registered = await call<{ kind: string; providerId: string; secretKeys: string[] }>(
           'POST',
@@ -3954,11 +3971,13 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         const got = await call<{
           connection: {
             kind: string
-            config?: { manifest?: { providerConfig?: { service?: string } } }
+            config?: { manifest?: { providerConfig?: { service?: string; build?: string } } }
           } | null
         }>('GET', `${base}/connection`)
         expect(got.body.connection?.kind).toBe('compose')
         expect(got.body.connection?.config?.manifest?.providerConfig?.service).toBe('web')
+        // The build-mode flag round-trips through the store on every facade.
+        expect(got.body.connection?.config?.manifest?.providerConfig?.build).toBe('true')
 
         // Advertised in the snapshot so the SPA lists it (with its when-to-use guidance).
         const snap = await call<{ environmentBackendKinds?: { kind: string }[] }>(
@@ -3969,15 +3988,19 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
           expect.arrayContaining(['compose']),
         )
 
-        // The descriptor-driven connect form exposes the flat fields (service + port required).
+        // The descriptor-driven connect form exposes the flat fields (service + port required) +
+        // the build-from-source selector, so the build toggle ships on every facade's connect UI.
         const descr = await call<{ kind: string; configFields: { key: string }[] }>(
           'GET',
           `${base}/provider?kind=compose`,
         )
         expect(descr.status).toBe(200)
         expect(descr.body.configFields.map((f) => f.key)).toEqual(
-          expect.arrayContaining(['service', 'port']),
+          expect.arrayContaining(['service', 'port', 'build']),
         )
+        // Registering + describing a build-mode connection must never clone (a clone only happens
+        // when a run actually provisions the env).
+        expect(checkouts).toHaveLength(0)
       })
 
       it('surfaces a deployer EnvironmentProvider failure as an `environment` run failure on every facade', async () => {

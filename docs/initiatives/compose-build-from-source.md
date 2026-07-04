@@ -1,6 +1,6 @@
 # Initiative: Docker Compose build-from-source preview envs
 
-**Status:** in progress (pilot in flight) · **Owner:** environments · **Started:** 2026-07-04
+**Status:** slices 0–4 landed (build mode usable end-to-end on the local facade) · **Owner:** environments · **Started:** 2026-07-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -63,8 +63,8 @@ token})` + `writeCheckoutFile(project, relPath, content)`, mirroring the optiona
 | 0   | Tracker doc                                                                                                                                                    | ✅ done | (this) |
 | 1   | **PILOT**: contracts flag + shared mode-aware predicates + `ComposeRuntime.checkout` (local impl) + `req.clone` sync seam + provider build branch + unit tests | ✅ done |        |
 | 2   | Content-aware autodetection (`findCompose`/`composeRecommendation` set `composeBuild`)                                                                         | ✅ done |        |
-| 3   | UI: `build` describeConfig field (renders in the connect form) + i18n parity (7 locales)                                                                      | ✅ done |        |
-| 4   | Conformance (fake-runtime checkout/build recording + build-path assertion) + docs                                                                              | ⬜ todo |        |
+| 3   | UI: `build` describeConfig field (renders in the connect form) + i18n parity (7 locales)                                                                       | ✅ done |        |
+| 4   | Conformance (build-mode config round-trip + `describeConfig` build field, both facades) + docs                                                                 | ✅ done |        |
 
 ## Conventions / gotchas carried between iterations
 
