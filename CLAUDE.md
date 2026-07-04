@@ -5,6 +5,38 @@ Orientation for working in this repo. High-level product docs live in
 `backend/docs/`. This file captures the **runtime flows** that are spread across
 many files and are otherwise slow to re-derive.
 
+## Clean, long-term maintainable architecture over quick solutions
+
+**Default to the clean, well-factored design — not the fastest thing that passes.** This
+repo optimizes for long-term maintainability, so when a quick hack and a proper solution
+diverge, take the proper one even when it costs more up front. This is the governing
+principle behind many of the specific rules below; when in doubt, resolve the ambiguity in
+favor of the design a future maintainer would thank you for.
+
+- **Fix causes, not symptoms.** When something breaks, trace it to the root and correct it
+  there rather than patching over it at the call site with a special-case, a `try/catch`
+  swallow, a defensive `if`, or a magic constant. A local workaround that leaves the
+  underlying flaw in place is a failed fix, not a completed one.
+- **Respect the existing seams.** Extend behaviour through the established ports, registries,
+  and public seams (`registerAgentKind`, `registerGate`, `registerPipeline`, the kernel
+  ports, the runtime `gateways`) instead of reaching around them or bolting on a parallel
+  path. Copy the shape of the nearest good citizen rather than inventing a one-off.
+- **No shortcuts that create debt.** Do not hard-code what should be configured, duplicate
+  what should be shared, widen a type to `any` to dodge a real modelling problem, or leave a
+  half-wired feature behind a TODO. If the clean solution needs a new port/method/table, add
+  it (mirrored across runtimes) — that is preferred over a loop of point-reads, a facade
+  that only wires one runtime, or a copy-pasted variant of existing machinery.
+- **Prefer deleting to accreting.** Since backwards compatibility is explicitly a non-goal
+  (see below), remove the obsolete path rather than keeping it alongside the new one — clean
+  beats compatible here.
+
+Concrete expressions of this principle appear throughout: **no N+1 repository access**
+(batch/reuse, add a port method rather than looping point-reads), **keep the runtimes
+symmetric** (land the proper cross-runtime change, never a one-facade shortcut), **backwards
+compatibility is NOT a goal** (prefer the clean shape, drop the legacy one), and **adding a
+gate is a new registry entry, not a copy of the machinery**. Reach for the durable design
+these encode even in situations they don't name explicitly.
+
 ## Fixing an existing PR (review findings AND CI failures) — push to ITS OWN branch
 
 When you are asked to act on an existing PR — whether that's **addressing review
