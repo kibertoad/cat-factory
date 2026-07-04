@@ -569,12 +569,45 @@ tsconfig.build.json"` script, AND a **`"prepublishOnly": "pnpm run build"`** hoo
   packages are not.)
 - **Add a changeset** (`pnpm changeset`) — CI's `changeset status` gate fails the PR
   otherwise. A brand-new package still needs an initial-release changeset.
+- **Add a row to README.md's repository-layout tables** — CI's
+  `node scripts/check-package-catalog.mjs` guard fails the `Build & typecheck` job for any
+  workspace package missing from the map. (This is what bit the `@cat-factory/caching`
+  pilot PR.)
+- **Check knip knows about any dynamically-loaded dependency** — a dep referenced only via
+  an opaque dynamic import (`import('pkg' as string)`) is invisible to knip's static
+  analysis and fails `pnpm lint:knip` as "unused"; add an `ignoreDependencies` entry with a
+  comment in `knip.jsonc` (the `ioredis`/`layered-loader` pattern).
 - **Keep the runtimes symmetric** if the package is a shared behaviour both facades must
   wire (see "Keep the runtimes symmetric").
 
 After wiring, verify with a clean build + a publish dry-run from the package dir:
 `rm -rf dist && pnpm publish --dry-run --no-git-checks` — it must run `prepublishOnly`,
 rebuild `dist/`, and list the compiled files in the tarball.
+
+## Run the CI guard scripts locally before committing
+
+CI's `Build & typecheck` job runs a set of fast repo guards BEYOND build/typecheck/tests,
+and a locally-green branch fails CI when one of them is skipped. **Before committing —
+always after adding/renaming a package, touching dependencies, or bumping the harness —
+run the guards your change class can trip:**
+
+- `node scripts/check-package-catalog.mjs` — every workspace package must have a row in
+  README.md's repository-layout tables.
+- `pnpm exec changeset status --since=origin/main` — every changed versioned package needs
+  a changeset (run after committing locally; it diffs git refs).
+- `pnpm lint:knip` — unused files/deps/exports (run after `pnpm build`); remember
+  dynamically-imported deps need a `knip.jsonc` ignore entry.
+- `pnpm lint:monorepo` (sherif) — cross-package dependency-version consistency.
+- `pnpm check:publish` (publint + attw, after `pnpm build`) — publish-artifact integrity
+  for every publishable package.
+- `node scripts/check-runner-image-tag.mjs --since origin/main` — harness image-tag
+  consistency, whenever anything image-affecting changed.
+- `pnpm lint:fix` (whole tree, per the formatting rule above) and
+  `pnpm exec turbo run typecheck --filter=<each touched package>` (typecheck covers tests,
+  which the build configs exclude).
+
+The full `pnpm test:run` matrix is CI's job; the guards above are cheap enough to run
+every time and catch the failures a plain build+test loop misses.
 
 ## Execution flow (the canonical async + observable pattern)
 
