@@ -567,7 +567,7 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     expect(rec.repoCliHint).toBeUndefined()
   })
 
-  it('layers a bare dev.yml base with its OS-specific overrides (lokalise docker/dev.yml shape)', async () => {
+  it('layers a bare dev.yml base with its OS-specific overrides (acme docker/dev.yml shape)', async () => {
     const reader = makeReader({
       'docker/dev.yml': 'services:\n  app:\n    image: registry/app\n',
       'docker/dev.wsl.override.yml': 'services:\n  app: {}\n',
@@ -614,10 +614,10 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
   it('recommends external networks the compose file expects to pre-exist', async () => {
     const reader = makeReader({
       'compose.yaml':
-        'services:\n  app:\n    image: nginx\n    networks: [lokalise-net]\nnetworks:\n  lokalise-net:\n    external: true\n',
+        'services:\n  app:\n    image: nginx\n    networks: [acme-net]\nnetworks:\n  acme-net:\n    external: true\n',
     })
     const rec = await detectKubernetesProvisioning(reader)
-    expect(rec.provisioning.recipe?.externalNetworks).toEqual(['lokalise-net'])
+    expect(rec.provisioning.recipe?.externalNetworks).toEqual(['acme-net'])
     expect(rec.notes.some((n) => n.field === 'externalNetworks')).toBe(true)
     // A shared-stack binding is nudged (but no ref is fabricated — no stacks exist yet).
     expect(rec.notes.some((n) => n.field === 'sharedStackRefs')).toBe(true)
@@ -670,17 +670,17 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
   it('surfaces SQL seed dumps (nested one level) as low-confidence candidates, fullest pre-selected', async () => {
     const reader = makeReader({
       'compose.yaml': 'services:\n  app:\n    image: nginx\n',
-      'deployment/lokalise-db-dummy/lokalise-dummy.sql': 'INSERT ...',
-      'deployment/lokalise-db-dummy/lokalise-pre-dummy.sql': 'CREATE ...',
+      'deployment/acme-db-dummy/acme-dummy.sql': 'INSERT ...',
+      'deployment/acme-db-dummy/acme-pre-dummy.sql': 'CREATE ...',
     })
     const rec = await detectKubernetesProvisioning(reader)
     expect(rec.seedDumpCandidates?.map((c) => c.path).sort()).toEqual([
-      'deployment/lokalise-db-dummy/lokalise-dummy.sql',
-      'deployment/lokalise-db-dummy/lokalise-pre-dummy.sql',
+      'deployment/acme-db-dummy/acme-dummy.sql',
+      'deployment/acme-db-dummy/acme-pre-dummy.sql',
     ])
     // The full dummy dump outranks the "pre" (schema-ish) dump.
     const pick = rec.seedDumpCandidates?.find((c) => c.recommended)
-    expect(pick?.path).toBe('deployment/lokalise-db-dummy/lokalise-dummy.sql')
+    expect(pick?.path).toBe('deployment/acme-db-dummy/acme-dummy.sql')
     // Never auto-applied into the recipe — the wizard confirms.
     expect(rec.provisioning.recipe?.setupSteps).toBeUndefined()
     expect(rec.notes.some((n) => n.field === 'seedDump')).toBe(true)
@@ -706,29 +706,29 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     expect(rec.repoCliHint).toEqual({ path: 'Makefile', kind: 'makefile' })
   })
 
-  // The pilot acceptance fixture: a lokalise-main-shaped complex compose repo (sanitized) exercising
+  // The pilot acceptance fixture: a acme-main-shaped complex compose repo (sanitized) exercising
   // every slice-2 extension at once — layered OS overrides, an external network, profiles, env-file
   // templates, a nested seed dump, and the repo's own imperative CLI.
-  it('detects the full lokalise-main-shaped stack recipe end to end', async () => {
+  it('detects the full acme-main-shaped stack recipe end to end', async () => {
     const reader = makeReader({
       'docker/dev.yml':
         'services:\n' +
         '  app:\n' +
         '    image: registry/app\n' +
         '    profiles: [full]\n' +
-        '    networks: [lokalise-net]\n' +
+        '    networks: [acme-net]\n' +
         '  cockroach:\n' +
         '    image: cockroachdb/cockroach\n' +
         '    profiles: [peer]\n' +
         'networks:\n' +
-        '  lokalise-net:\n' +
+        '  acme-net:\n' +
         '    external: true\n',
       'docker/dev.wsl.override.yml': 'services:\n  app: {}\n',
       'docker/dev.mac.override.yml': 'services:\n  app: {}\n',
       '.env.dev.local-dist': 'DATABASE_URL=\n',
       '.split.yaml.dist': 'flags: {}\n',
-      'deployment/lokalise-db-dummy/lokalise-dummy.sql': 'INSERT ...',
-      'deployment/lokalise-db-dummy/lokalise-pre-dummy.sql': 'CREATE ...',
+      'deployment/acme-db-dummy/acme-dummy.sql': 'INSERT ...',
+      'deployment/acme-db-dummy/acme-pre-dummy.sql': 'CREATE ...',
       'bin/dev-console': '#!/usr/bin/env bash',
     })
     const rec = await detectKubernetesProvisioning(reader)
@@ -737,7 +737,7 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     expect(rec.provisioning.composePath).toBe('docker/dev.yml')
     expect(rec.provisioning.recipe).toEqual({
       composeFiles: ['docker/dev.yml'],
-      externalNetworks: ['lokalise-net'],
+      externalNetworks: ['acme-net'],
       envFiles: [
         { template: '.env.dev.local-dist', target: '.env.dev.local' },
         { template: '.split.yaml.dist', target: '.split.yaml' },
@@ -755,7 +755,7 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     ])
     expect(rec.seedDumpCandidates).toHaveLength(2)
     expect(rec.seedDumpCandidates?.find((c) => c.recommended)?.path).toBe(
-      'deployment/lokalise-db-dummy/lokalise-dummy.sql',
+      'deployment/acme-db-dummy/acme-dummy.sql',
     )
     expect(rec.repoCliHint).toEqual({ path: 'bin/dev-console', kind: 'repo-cli' })
   })
