@@ -1614,6 +1614,11 @@
       "deselect": "Odznacz / zamknij inspektora",
       "deleteBlock": "Usuń wybrany blok",
       "help": "Pokaż tę ściągę"
+    },
+    "kaizenModelBanner": {
+      "title": "Kaizen nie może oceniać przy obecnym modelu",
+      "body": "Agent Kaizen jest włączony, ale model, którym miałby oceniać, nie może uruchomić oceniającego w trybie inline (model dostępny tylko w subskrypcji bez uprzęży inline lub model nieskonfigurowany). Ocenianie jest pomijane, dopóki nie wskażesz dla Kaizen zgodnego modelu obsługiwanego przez dostawcę.",
+      "action": "Ustaw model Kaizen"
     }
   },
   "settings": {
@@ -1648,7 +1653,8 @@
         "filterPlaceholder": "Filtruj agentów…",
         "noAgentsMatch": "Żaden agent nie pasuje do \"{filter}\".",
         "saveChanges": "Zapisz zmiany",
-        "createPreset": "Utwórz ustawienie"
+        "createPreset": "Utwórz ustawienie",
+        "kaizenIndividualWarning": "Kaizen jest ustawiony na {model}, który jest dostępny wyłącznie w ramach subskrypcji indywidualnej. Oceniający Kaizen to wywołanie inline i nie może go użyć, więc ocenianie zostanie pominięte. Przypisz do Kaizen model obsługiwany przez dostawcę (klucz bezpośredni, OpenRouter lub Cloudflare AI)."
       },
       "toast": {
         "setDefaultFailed": "Nie udało się ustawić domyślnego ustawienia",

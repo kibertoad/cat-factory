@@ -1881,6 +1881,9 @@ function createKaizenModule(deps: CoreDependencies): KaizenModule | undefined {
             modelPresetId,
           )
       : undefined,
+    // Lets the grader skip a run (rather than fail on the degraded routing default) when the
+    // workspace's Kaizen model can't drive the inline grading call.
+    resolveProviderCapabilities: deps.resolveProviderCapabilities,
   })
   return { service }
 }

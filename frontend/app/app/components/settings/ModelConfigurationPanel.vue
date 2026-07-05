@@ -205,6 +205,18 @@ function overrideLabel(kind: AgentKind): string {
   return id ? modelLabel(id) : t('settings.modelConfiguration.editor.baseModel')
 }
 
+// The model Kaizen grading resolves to under the preset being edited (`overrides.kaizen ??
+// base`). The Kaizen grader is an inline LLM call, so a model that is usable ONLY via an
+// individual subscription can't drive it — grading is skipped for such a model. Warn the
+// user so they pick a provider-backed model for the Kaizen override.
+const kaizenModelId = computed(() =>
+  editor.value ? (editor.value.overrides['kaizen'] ?? editor.value.baseModelId) : undefined,
+)
+const kaizenModelIndividualOnly = computed(() => {
+  const m = models.getModel(kaizenModelId.value)
+  return !!m && m.available === true && m.inlineUsable === false
+})
+
 async function save() {
   const e = editor.value
   if (!e) return
@@ -457,6 +469,20 @@ function fail(title: string, e: unknown) {
                   <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     {{ t('settings.modelConfiguration.editor.perAgentOverrides') }}
                   </span>
+                </div>
+                <div
+                  v-if="kaizenModelIndividualOnly"
+                  class="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-950/40 p-3 text-[13px] text-amber-200/90"
+                >
+                  <UIcon
+                    name="i-lucide-triangle-alert"
+                    class="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+                  />
+                  <span>{{
+                    t('settings.modelConfiguration.editor.kaizenIndividualWarning', {
+                      model: modelLabel(kaizenModelId),
+                    })
+                  }}</span>
                 </div>
                 <UInput
                   v-model="filter"

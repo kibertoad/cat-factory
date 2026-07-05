@@ -1,6 +1,7 @@
 import { listModelsContract, listWorkspaceModelsContract } from '@cat-factory/contracts'
 import {
   effectiveCatalogWith,
+  isModelUsableInline,
   localSelectableModels,
   openRouterSelectableModels,
 } from '@cat-factory/kernel'
@@ -48,14 +49,20 @@ export function modelController(): Hono<AppEnv> {
       ? await container.openRouterCatalog.capabilitiesFor(workspaceId)
       : []
     const costFor = modelCostResolver(withDynamicPrices(container.config.spend, openRouter))
-    return c.json(
-      effectiveCatalogWith(
-        [...localSelectableModels(local), ...openRouterSelectableModels(openRouter)],
-        caps,
-        costFor,
-      ),
-      200,
-    )
+    // Annotate each option with inline-usability (can it drive the reviewers / brainstorm /
+    // estimator / Kaizen grader?). A subscription-only model this deployment can't run inline is
+    // `available` but not `inlineUsable`; the predicate is the deployment's inline-harness seam
+    // (set only in local mode's ambient CLI), so subscription models correctly stay usable there.
+    const runsInline = container.config.agents.inlineHarnessRef
+    const catalog = effectiveCatalogWith(
+      [...localSelectableModels(local), ...openRouterSelectableModels(openRouter)],
+      caps,
+      costFor,
+    ).map((option) => ({
+      ...option,
+      inlineUsable: isModelUsableInline(option.id, caps, runsInline),
+    }))
+    return c.json(catalog, 200)
   })
 
   return app

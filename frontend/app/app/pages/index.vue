@@ -9,6 +9,7 @@ import GitHubPatBanner from '~/components/layout/GitHubPatBanner.vue'
 import AiProvidersBanner from '~/components/layout/AiProvidersBanner.vue'
 import ProviderConfigBanner from '~/components/layout/ProviderConfigBanner.vue'
 import InfraSetupBanner from '~/components/layout/InfraSetupBanner.vue'
+import KaizenModelBanner from '~/components/layout/KaizenModelBanner.vue'
 // Always-mounted, fast-path surfaces (opened frequently during a run / board edits, or
 // store-driven so they must react from anywhere — kept eager for snappy open/close).
 import PipelineBuilder from '~/components/pipeline/PipelineBuilder.vue'
@@ -275,6 +276,8 @@ watch(
       <AiProvidersBanner />
       <ProviderConfigBanner />
       <InfraSetupBanner />
+      <!-- Kaizen is on but its resolved model can't drive the inline grader. -->
+      <KaizenModelBanner />
     </div>
 
     <!-- Resolving whether the GitHub App is installed, before we decide what to show. -->

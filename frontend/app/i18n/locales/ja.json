@@ -1614,6 +1614,11 @@
       "deselect": "選択を解除 / インスペクターを閉じる",
       "deleteBlock": "選択したブロックを削除",
       "help": "このチートシートを表示"
+    },
+    "kaizenModelBanner": {
+      "title": "Kaizen は現在のモデルでは評価できません",
+      "body": "Kaizen エージェントは有効ですが、評価に使うモデルではインライン評価を実行できません（インラインハーネスのないサブスクリプション専用モデル、または未設定のモデル）。互換性のあるプロバイダー提供のモデルを Kaizen に指定するまで、評価はスキップされます。",
+      "action": "Kaizen のモデルを設定"
     }
   },
   "settings": {
@@ -1648,7 +1653,8 @@
         "filterPlaceholder": "エージェントを絞り込み…",
         "noAgentsMatch": "\"{filter}\" に一致するエージェントはありません。",
         "saveChanges": "変更を保存",
-        "createPreset": "プリセットを作成"
+        "createPreset": "プリセットを作成",
+        "kaizenIndividualWarning": "Kaizen は {model} に設定されていますが、これは個人サブスクリプションでのみ利用できます。Kaizen の評価はインライン呼び出しのため使用できず、評価はスキップされます。Kaizen にはプロバイダー提供のモデル（直接キー、OpenRouter、または Cloudflare AI）を割り当ててください。"
       },
       "toast": {
         "setDefaultFailed": "デフォルトプリセットを設定できませんでした",
