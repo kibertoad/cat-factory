@@ -3,6 +3,7 @@ import {
   type UpdateUserSettingsInput,
   type UserSettings,
 } from '@cat-factory/contracts'
+import { ValidationError } from '@cat-factory/kernel'
 import type { UserSettingsRepository } from '@cat-factory/kernel'
 
 export interface UserSettingsServiceDependencies {
@@ -12,6 +13,13 @@ export interface UserSettingsServiceDependencies {
    * changes, so the new ceiling takes effect immediately.
    */
   onUserBudgetChanged?: (userId: string) => void
+  /**
+   * The operator hard ceiling on the user-tier budget (`BUDGET_MAX_MONTHLY_PER_USER`), or
+   * null/undefined when uncapped. Enforced on write so a submitted value can't exceed the
+   * cap (the docs promise server-side enforcement; the gate additionally clamps at read
+   * time). A late-bound getter so it tracks the live pricing config.
+   */
+  resolveUserBudgetCap?: () => number | null | undefined
 }
 
 /**
@@ -33,6 +41,12 @@ export class UserSettingsService {
         'spendMonthlyLimit' in input
           ? (input.spendMonthlyLimit ?? null)
           : current.spendMonthlyLimit,
+    }
+    const cap = this.deps.resolveUserBudgetCap?.()
+    if (next.spendMonthlyLimit != null && cap != null && next.spendMonthlyLimit > cap) {
+      throw new ValidationError(
+        `User monthly budget (${next.spendMonthlyLimit}) exceeds the operator cap (${cap}).`,
+      )
     }
     await this.deps.userSettingsRepository.upsert(userId, next)
     this.deps.onUserBudgetChanged?.(userId)

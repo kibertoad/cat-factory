@@ -12,12 +12,64 @@ import { logger as sharedLogger } from '../../observability/logger.js'
 import type { EnvironmentBackendRegistry, RunnerBackendRegistry } from '@cat-factory/integrations'
 import type {
   BackendKindOption,
+  BudgetCaps,
   CustomAgentKind,
   InfraSetup,
+  SpendStatus,
+  UserSettings,
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
+import type { ServerContainer } from '../../http/env.js'
+
+/**
+ * Assemble the account- and user-tier spend widgets for a snapshot: the account-tier
+ * status (across the owning account's workspaces), the signed-in caller's user-tier
+ * status + editable settings, and the operator hard caps. Shared by the GET snapshot and
+ * the POST-create response so the two can't drift on which tier fields they carry.
+ *
+ * The caller's `user_settings` row is read ONCE and its configured limit fed into
+ * `userStatus`, so the user tier isn't read twice. Each tier's status read is best-effort:
+ * an optional budget widget must never 500 the whole board load, so a read failure (e.g. a
+ * scope-denied persistence RPC in a misconfigured mothership) degrades that tier to absent.
+ */
+async function assembleBudgetTiers(
+  container: ServerContainer,
+  opts: { accountId: string | null | undefined; viewerUserId: string | undefined },
+): Promise<{
+  accountSpend?: SpendStatus
+  userSpend?: SpendStatus
+  userSettings?: UserSettings
+  budgetCaps: BudgetCaps
+}> {
+  const { accountId, viewerUserId } = opts
+  const viewerUserSettings =
+    viewerUserId && container.userSettings
+      ? await container.userSettings.service.get(viewerUserId).catch(() => undefined)
+      : undefined
+  const [accountSpend, userSpend] = await Promise.all([
+    accountId
+      ? container.spendService.accountStatus(accountId).catch(() => null)
+      : Promise.resolve(null),
+    viewerUserId
+      ? container.spendService
+          .userStatus(
+            viewerUserId,
+            viewerUserSettings
+              ? { configuredLimit: viewerUserSettings.spendMonthlyLimit }
+              : undefined,
+          )
+          .catch(() => null)
+      : Promise.resolve(null),
+  ])
+  return {
+    ...(accountSpend ? { accountSpend } : {}),
+    ...(userSpend ? { userSpend } : {}),
+    ...(viewerUserSettings ? { userSettings: viewerUserSettings } : {}),
+    budgetCaps: container.spendService.budgetCaps(),
+  }
+}
 
 /**
  * The agent config-contribution catalog for a snapshot: the descriptors contributed
@@ -251,15 +303,21 @@ export function workspaceController(): Hono<AppEnv> {
     }
 
     const snapshot = await container.workspaceService.create(body, user?.id ?? null, accountId)
-    const [spend, infraSetup] = await Promise.all([
+    // Carry the SAME tiered-budget fields the GET snapshot attaches (budgetCaps + the
+    // account/user tier status + editable settings), because the SPA hydrates its stores
+    // directly from this create response — omitting them would leave a freshly-created
+    // workspace with no operator caps / tier meters until a separate snapshot refresh.
+    const [spend, infraSetup, budgetTiers] = await Promise.all([
       container.spendService.status(snapshot.workspace.id),
       snapshotInfraSetup(container, snapshot.workspace.id),
+      assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
     return c.json(
       {
         ...snapshot,
         spend,
+        ...budgetTiers,
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
@@ -273,6 +331,9 @@ export function workspaceController(): Hono<AppEnv> {
   buildHonoRoute(app, getWorkspaceContract, async (c) => {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
+    // The workspace's owning account, resolved ONCE and reused for both the shared-service
+    // catalog (below) and the account-tier budget widget (a single lookup, not two).
+    const budgetAccountId = await container.workspaceService.accountOf(workspaceId)
     // Every ingredient below is an independent read keyed by the workspace id (only the
     // service catalog chains on the owning account), so they run concurrently: the
     // board-load latency is the slowest read, not the sum of ~15 sequential round-trips.
@@ -336,14 +397,8 @@ export function workspaceController(): Hono<AppEnv> {
       container.initiatives?.service.list(workspaceId),
       container.settings?.service.get(workspaceId),
       container.services?.service.listMounts(workspaceId),
-      container.services
-        ? container.workspaceService
-            .accountOf(workspaceId)
-            .then((accountId) =>
-              accountId !== undefined
-                ? container.services!.service.listForAccount(accountId)
-                : undefined,
-            )
+      container.services && budgetAccountId !== undefined
+        ? container.services.service.listForAccount(budgetAccountId)
         : undefined,
       snapshotInfraSetup(container, workspaceId),
       container.github ? container.github.service.listRepos(workspaceId) : undefined,
@@ -373,19 +428,11 @@ export function workspaceController(): Hono<AppEnv> {
 
     // Tiered budgets: the account-tier status (this workspace's owning account) and the
     // signed-in caller's user-tier status + editable settings, plus the operator hard caps.
-    // Each tier's status is null when that tier is inactive (no configured limit + no cap).
-    const viewerUserId = c.get('user')?.id
-    const budgetAccountId = await container.workspaceService.accountOf(workspaceId)
-    const [accountSpend, userSpend, viewerUserSettings] = await Promise.all([
-      budgetAccountId
-        ? container.spendService.accountStatus(budgetAccountId)
-        : Promise.resolve(null),
-      viewerUserId ? container.spendService.userStatus(viewerUserId) : Promise.resolve(null),
-      viewerUserId && container.userSettings
-        ? container.userSettings.service.get(viewerUserId)
-        : Promise.resolve(undefined),
-    ])
-    const budgetCaps = container.spendService.budgetCaps()
+    // Each tier's status is absent when that tier is inactive (no configured limit + no cap).
+    const budgetTiers = await assembleBudgetTiers(container, {
+      accountId: budgetAccountId,
+      viewerUserId: c.get('user')?.id,
+    })
 
     return c.json(
       {
@@ -393,10 +440,7 @@ export function workspaceController(): Hono<AppEnv> {
         blocks: redacted.blocks,
         executions: redacted.executions,
         spend,
-        ...(accountSpend ? { accountSpend } : {}),
-        ...(userSpend ? { userSpend } : {}),
-        ...(viewerUserSettings ? { userSettings: viewerUserSettings } : {}),
-        budgetCaps,
+        ...budgetTiers,
         ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
         ...(redacted.notifications ? { notifications: redacted.notifications } : {}),

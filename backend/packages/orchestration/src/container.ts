@@ -2357,6 +2357,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
     onAccountBudgetChanged: (accountId) => spendServiceRef?.invalidateAccountLimit(accountId),
+    // Reject an account budget above the operator cap on write (late-bound: spendService
+    // is built below, and the cap is a static deployment fact once it is).
+    resolveAccountBudgetCap: () => spendServiceRef?.budgetCaps().accountMonthlyLimitMax,
   })
   const userService = new UserService({
     userRepository: dependencies.userRepository,
@@ -2413,6 +2416,8 @@ export function createCore(dependencies: CoreDependencies): Core {
         service: new UserSettingsService({
           userSettingsRepository: dependencies.userSettingsRepository,
           onUserBudgetChanged: (userId) => spendService.invalidateUserLimit(userId),
+          // Reject a user budget above the operator cap on write.
+          resolveUserBudgetCap: () => spendService.budgetCaps().userMonthlyLimitMax,
         }),
       }
     : undefined

@@ -269,9 +269,19 @@ export class SpendService {
     }
   }
 
-  /** The USER tier's status, or null when the tier is inactive (no limit and no cap). */
-  async userStatus(userId: string): Promise<SpendStatus | null> {
-    const limit = await this.resolveUserLimit(userId)
+  /**
+   * The USER tier's status, or null when the tier is inactive (no limit and no cap).
+   * `preloaded` lets a caller that already holds the user's settings (e.g. the snapshot
+   * assembly, which reads the same row for the editable `userSettings` field) pass the
+   * configured limit in, so this doesn't re-read the `user_settings` row.
+   */
+  async userStatus(
+    userId: string,
+    preloaded?: { configuredLimit: number | null },
+  ): Promise<SpendStatus | null> {
+    const limit = preloaded
+      ? effectiveTierLimit(preloaded.configuredLimit, this.pricing.userMonthlyLimitCap)
+      : await this.resolveUserLimit(userId)
     if (!Number.isFinite(limit)) return null
     const periodStart = startOfMonthUtc(this.clock.now())
     const totals = await this.tokenUsageRepository.totalsSinceForUser(userId, periodStart)

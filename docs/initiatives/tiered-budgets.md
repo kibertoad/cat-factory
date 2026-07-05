@@ -58,21 +58,21 @@ inert in a single-user local deployment.
 
 ## Per-item status
 
-| Area        | Item                                                                   | Status |
-| ----------- | ---------------------------------------------------------------------- | ------ |
-| contracts   | `accountSchema` / `updateAccountSchema` + `spendMonthlyLimit`          | done   |
-| contracts   | `user-settings.ts` + route contracts                                   | done   |
-| contracts   | `snapshot.ts`: `accountSpend`/`userSpend`/`userSettings`/`budgetCaps`  | done   |
-| kernel      | `token-usage.ts`: columns + account/user rollups                       | done   |
-| kernel      | `account-repositories.ts`: `spendMonthlyLimit`                         | done   |
-| kernel      | `user-settings-repositories.ts` (new)                                  | done   |
-| spend       | `SpendPricing` caps + `SpendService` tiers                             | done   |
-| runtimes    | D1 migration `0042_tiered_budgets.sql` + repos                         | done   |
-| runtimes    | Drizzle schema + migration + repos                                     | done   |
-| server      | `AccountService` / `UserSettingsService` / controllers                 | done   |
-| server      | snapshot assembly (`WorkspaceController`)                              | done   |
-| config      | env vars in Node + Cloudflare loaders; wiring                          | done   |
-| frontend    | three-tier budget UI + stores + i18n                                   | done   |
-| conformance | account/user attribution + tiered enforcement                          | done   |
-| docs        | `docs/environment-variables.md`                                        | done   |
-| release     | changesets                                                             | done   |
+| Area        | Item                                                                  | Status |
+| ----------- | --------------------------------------------------------------------- | ------ |
+| contracts   | `accountSchema` / `updateAccountSchema` + `spendMonthlyLimit`         | done   |
+| contracts   | `user-settings.ts` + route contracts                                  | done   |
+| contracts   | `snapshot.ts`: `accountSpend`/`userSpend`/`userSettings`/`budgetCaps` | done   |
+| kernel      | `token-usage.ts`: columns + account/user rollups                      | done   |
+| kernel      | `account-repositories.ts`: `spendMonthlyLimit`                        | done   |
+| kernel      | `user-settings-repositories.ts` (new)                                 | done   |
+| spend       | `SpendPricing` caps + `SpendService` tiers                            | done   |
+| runtimes    | D1 migration `0042_tiered_budgets.sql` + repos                        | done   |
+| runtimes    | Drizzle schema + migration + repos                                    | done   |
+| server      | `AccountService` / `UserSettingsService` / controllers                | done   |
+| server      | snapshot assembly (`WorkspaceController`)                             | done   |
+| config      | env vars in Node + Cloudflare loaders; wiring                         | done   |
+| frontend    | three-tier budget UI + stores + i18n                                  | done   |
+| conformance | account/user attribution + tiered enforcement                         | done   |
+| docs        | `docs/environment-variables.md`                                       | done   |
+| release     | changesets                                                            | done   |

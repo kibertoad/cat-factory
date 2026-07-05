@@ -296,6 +296,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   // OWN row (the `selfUser` rule requires args[0] to equal the token's userId), so both the
   // read (snapshot + spend gate) and the write (the user's own budget edit) are safe over RPC —
   // no admin gating is involved, unlike the account-tier budget (see accountRepository note).
+  // Invariant: the user-tier gate/snapshot always passes the CALLER's own userId here — a run's
+  // initiator is the mothership laptop's signed-in user (single-user token), and the snapshot
+  // passes the viewer's id — so `selfUser` matches by construction. If that ever diverged the
+  // read would be denied (404 → the remote proxy throws); the snapshot assembly reads these
+  // best-effort (degrading the tier to absent) so a scope mismatch can't 500 the board load.
   userSettingsRepository: {
     get: { scope: { kind: 'selfUser', arg: 0 } },
     upsert: { scope: { kind: 'selfUser', arg: 0 } },

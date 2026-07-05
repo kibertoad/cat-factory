@@ -4,7 +4,7 @@
 // user tiers are monthly ceilings that gate a run when EITHER is exhausted. When the
 // operator sets a hard cap env var, the account/user input cannot exceed it and the cap is
 // shown here. See docs/initiatives/tiered-budgets.md.
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, type Ref } from 'vue'
 
 const { t, n } = useI18n()
 const toast = useToast()
@@ -16,7 +16,36 @@ const workspace = useWorkspaceStore()
 
 const caps = computed(() => workspace.budgetCaps)
 const capCurrency = computed(() => caps.value?.currency ?? 'EUR')
-const money = (value: number) => n(value, { key: 'currency', currency: capCurrency.value })
+// Format an amount in a given currency. The account/user tiers are in the base pricing
+// currency (`capCurrency`); the workspace tier is in its OWN overridden `spend.currency`, so
+// its callers pass that in — otherwise a USD workspace on a EUR deployment renders `€` on USD.
+const money = (value: number, currency: string = capCurrency.value) =>
+  n(value, { key: 'currency', currency })
+
+// Persist one tier's budget: save, toast success, then best-effort refresh the snapshot AFTER
+// the save has succeeded. A transient snapshot-refresh failure must NOT report a persisted
+// budget as failed (the spend meter also catches up on the next pushed snapshot); a genuine
+// save rejection surfaces its message so the user sees why (e.g. the operator hard-cap reject).
+async function runSave(saving: Ref<boolean>, save: () => Promise<unknown>) {
+  saving.value = true
+  try {
+    await save()
+    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaved'), color: 'success' })
+    try {
+      await useWorkspaceStore().refresh()
+    } catch {
+      // ignore — the budget is persisted; the meter will catch up on the next snapshot.
+    }
+  } catch (e) {
+    toast.add({
+      title: t('settings.workspaceSettings.toast.budgetSaveFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      color: 'error',
+    })
+  } finally {
+    saving.value = false
+  }
+}
 
 // ---- Workspace tier -------------------------------------------------------
 const wsDraft = reactive({ spendCurrency: '', spendMonthlyLimit: '' })
@@ -28,23 +57,16 @@ function hydrateWorkspace() {
 watch(() => settingsStore.settings, hydrateWorkspace, { immediate: true })
 
 const savingWorkspace = ref(false)
-async function saveWorkspace() {
-  savingWorkspace.value = true
+function saveWorkspace() {
   const raw = String(wsDraft.spendMonthlyLimit ?? '').trim()
-  try {
-    await settingsStore.update({
+  return runSave(savingWorkspace, () =>
+    settingsStore.update({
       spendCurrency: wsDraft.spendCurrency.trim()
         ? wsDraft.spendCurrency.trim().toUpperCase()
         : null,
       spendMonthlyLimit: raw === '' ? null : Number(raw),
-    })
-    await useWorkspaceStore().refresh()
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaved'), color: 'success' })
-  } catch {
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaveFailed'), color: 'error' })
-  } finally {
-    savingWorkspace.value = false
-  }
+    }),
+  )
 }
 
 // ---- Account tier ---------------------------------------------------------
@@ -66,19 +88,13 @@ const accountOverCap = computed(
     Number(accountDraft.value) > accountCap.value,
 )
 const savingAccount = ref(false)
-async function saveAccount() {
-  if (!account.value || accountOverCap.value) return
-  savingAccount.value = true
+function saveAccount() {
+  const acc = account.value
+  if (!acc || accountOverCap.value) return
   const raw = accountDraft.value.trim()
-  try {
-    await accounts.setSpendMonthlyLimit(account.value.id, raw === '' ? null : Number(raw))
-    await useWorkspaceStore().refresh()
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaved'), color: 'success' })
-  } catch {
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaveFailed'), color: 'error' })
-  } finally {
-    savingAccount.value = false
-  }
+  return runSave(savingAccount, () =>
+    accounts.setSpendMonthlyLimit(acc.id, raw === '' ? null : Number(raw)),
+  )
 }
 
 // ---- User tier ------------------------------------------------------------
@@ -98,19 +114,12 @@ const userOverCap = computed(
     Number(userDraft.value) > userCap.value,
 )
 const savingUser = ref(false)
-async function saveUser() {
+function saveUser() {
   if (userOverCap.value) return
-  savingUser.value = true
   const raw = userDraft.value.trim()
-  try {
-    await userSettingsStore.update({ spendMonthlyLimit: raw === '' ? null : Number(raw) })
-    await useWorkspaceStore().refresh()
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaved'), color: 'success' })
-  } catch {
-    toast.add({ title: t('settings.workspaceSettings.toast.budgetSaveFailed'), color: 'error' })
-  } finally {
-    savingUser.value = false
-  }
+  return runSave(savingUser, () =>
+    userSettingsStore.update({ spendMonthlyLimit: raw === '' ? null : Number(raw) }),
+  )
 }
 </script>
 
@@ -154,8 +163,8 @@ async function saveUser() {
       <div v-if="workspace.spend" class="text-[11px] text-slate-400">
         {{
           t('settings.workspaceSettings.budget.spent', {
-            spent: money(workspace.spend.costSpent),
-            limit: money(workspace.spend.costLimit),
+            spent: money(workspace.spend.costSpent, workspace.spend.currency),
+            limit: money(workspace.spend.costLimit, workspace.spend.currency),
           })
         }}
       </div>
