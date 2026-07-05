@@ -45,7 +45,15 @@ export const useExecutionStore = defineStore('execution', () => {
    *     can't revert a just-terminal run to `running`. A terminal run emits nothing
    *     further, so a regression here would strand the UI until an unrelated refresh.
    *   - DROP: a run a live event just ADDED that the (older) snapshot never saw — keep it
-   *     rather than silently dropping it.
+   *     rather than silently dropping it, but ONLY when the snapshot has no run for its block.
+   *
+   * The block-scoped caveat on DROP matters because a retry/restart REPLACES a block's run
+   * with a fresh one under a NEW id (the old run is deleted server-side), so the two attempts
+   * can't be reconciled by id or `rev`. Since there is exactly one run per block, a cached-only
+   * run whose block the snapshot already covers is that superseded predecessor — drop it.
+   * Preserving it would leave the dead `failed` run shadowing the running one in the by-block
+   * projection (`agentRuns.byBlock`, last-write-wins), keeping the failure banner up and its
+   * empty trail hiding the retry's carried-forward failure history.
    */
   function hydrate(next: ExecutionInstance[], workspaceId: string) {
     const sameWorkspace = hydratedWorkspaceId === workspaceId
@@ -55,12 +63,15 @@ export const useExecutionStore = defineStore('execution', () => {
       return
     }
     const incomingIds = new Set(next.map((e) => e.id))
+    const incomingBlocks = new Set(next.map((e) => e.blockId))
     const held = new Map(instances.value.map((e) => [e.id, e]))
     const reconciled = next.map((incoming) => {
       const current = held.get(incoming.id)
       return current && revOf(current) > revOf(incoming) ? current : incoming
     })
-    const preserved = [...held.values()].filter((e) => !incomingIds.has(e.id))
+    const preserved = [...held.values()].filter(
+      (e) => !incomingIds.has(e.id) && !incomingBlocks.has(e.blockId),
+    )
     instances.value = [...reconciled, ...preserved]
   }
 

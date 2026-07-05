@@ -76,6 +76,24 @@ describe('execution store snapshot/event reconcile', () => {
     expect(store.getInstance('e1')?.rev).toBe(2)
   })
 
+  it('drops a superseded failed run when a retry replaces it under a new id (same block)', () => {
+    // A failed run for a block is cached...
+    store.hydrate(
+      [{ id: 'e_old', blockId: 'b1', steps: [], status: 'failed', rev: 1 } as never],
+      'ws1',
+    )
+    // ...then a retry mints a FRESH run (new id) for the SAME block and deletes the old one
+    // server-side. The post-retry snapshot carries only the new running run.
+    store.hydrate(
+      [{ id: 'e_new', blockId: 'b1', steps: [], status: 'running', rev: 1 } as never],
+      'ws1',
+    )
+    // The dead predecessor must not linger and shadow the running run in the by-block projection.
+    expect(store.getInstance('e_old')).toBeUndefined()
+    expect(store.getInstance('e_new')?.status).toBe('running')
+    expect(store.getByBlock('b1')?.id).toBe('e_new')
+  })
+
   it('a workspace switch replaces the cache outright (no cross-board leak)', () => {
     store.hydrate([run('e1', 1, 'running')], 'ws1')
     store.upsert(run('e2', 1, 'running'))
