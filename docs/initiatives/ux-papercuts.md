@@ -75,16 +75,16 @@ per-file patches:
 | UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                 |
 | UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
 | UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                 |
-| UX-07 | P2  | done        | Pipeline dropped on blank canvas gives no feedback                            |
-| UX-08 | P2  | done        | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
-| UX-09 | P2  | done        | Double-clicking a frame/epic is a dead no-op                                  |
+| UX-07 | P2  | done (#847) | Pipeline dropped on blank canvas gives no feedback                            |
+| UX-08 | P2  | done (#847) | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
+| UX-09 | P2  | done (#847) | Double-clicking a frame/epic is a dead no-op                                  |
 | UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                   |
 | UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                      |
 | UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                            |
 | UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
-| UX-14 | P3  | done        | No reset-zoom-to-100%; zoom readout not clickable                             |
-| UX-15 | P3  | done        | Zoom/LOD readout hidden below `sm` breakpoint                                 |
-| UX-16 | P3  | done        | Zoom buttons don't disable at min/max                                         |
+| UX-14 | P3  | done (#847) | No reset-zoom-to-100%; zoom readout not clickable                             |
+| UX-15 | P3  | done (#847) | Zoom/LOD readout hidden below `sm` breakpoint                                 |
+| UX-16 | P3  | done (#847) | Zoom buttons don't disable at min/max                                         |
 | UX-17 | P3  | todo        | Desktop frame-resize grips are an 8px hit target                              |
 
 - **UX-01 — No undo after delete. DONE.** `stores/board.ts` `removeBlock` now
