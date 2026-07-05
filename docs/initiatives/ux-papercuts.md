@@ -9,7 +9,9 @@ cluster (UX-32/33/34); the async-state / realtime / error-surfacing section E in
 (UX-70..UX-77 — offline indicator, retrying refresh/resync, self-healing preview poll,
 retry affordances, sticky remedy toasts); the accessibility icon-labeling / keyboard /
 focus / reduced-motion cluster (UX-62..66 — the `IconButton` primitive, keyboard-operable
-mini-steps, focus-visible rings, reduced-motion guards). This
+mini-steps, focus-visible rings, reduced-motion guards); the secret-input reveal cluster
+(UX-19/20 — the `SecretInput` primitive: every password field and every plaintext secret
+textarea now masks by default with an eye toggle). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -145,8 +147,8 @@ per-file patches:
 | ID    | Sev | Status | Finding                                                                            |
 | ----- | --- | ------ | ---------------------------------------------------------------------------------- |
 | UX-18 | P1  | todo   | Content-heavy modals discard all typed input on Escape/backdrop click              |
-| UX-19 | P2  | todo   | No show/hide toggle on any password/secret field (systemic)                        |
-| UX-20 | P2  | todo   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
+| UX-19 | P2  | done   | No show/hide toggle on any password/secret field (systemic)                        |
+| UX-20 | P2  | done   | Provider API key entered in a plaintext, unmasked textarea (several surfaces)      |
 | UX-21 | P2  | todo   | `unlinkSource` (fragment library) destroys a synced source with no confirmation    |
 | UX-22 | P2  | todo   | Reset-password validation is submit-only, no inline feedback                       |
 | UX-23 | P2  | todo   | Slack member-mapping rows keyed by index; incomplete rows silently dropped on save |
@@ -166,20 +168,24 @@ per-file patches:
   credential modals. Fix: dirty flag + confirm-before-discard, or
   non-dismissible-when-dirty. This is the single most damaging papercut for
   heavy users. (Review-window variant: UX-33; settings variant: UX-58.)
-- **UX-19 — No reveal toggle.** Bare `type="password"` with no eye toggle at:
-  `auth/LoginScreen.vue:323,394`, `auth/ResetPasswordScreen.vue:79,88`,
-  `documents/DocumentSourceConnectModal.vue:108`, `settings/UserSecretsSection.vue:210-215`,
-  `settings/ObservabilityConnectionPanel.vue:197-210,257,268`,
-  `settings/LocalModelEndpointsPanel.vue:275`, `slack/SlackPanel.vue:189-195`,
-  `providers/PersonalCredentialModal.vue:114`. Users pasting long tokens can't
-  verify them — a leading cause of invalid-credential retries. Fix: shared
-  trailing-slot eye toggle on `UInput`.
-- **UX-20 — Plaintext secret textareas.** `providers/ApiKeysSection.vue:325-333`,
-  `providers/VendorCredentialsModal.vue:217-224`,
-  `settings/OpenRouterCatalogPanel.vue:278-285`,
-  `providers/PersonalSubscriptionSection.vue:235-243` — live vendor keys render
-  fully visible (shoulder-surf / screen-share leakage), inconsistent with the
-  masked fields in UX-19's list. Fix: mask by default + reveal toggle.
+- **UX-19 — No reveal toggle. DONE.** A shared `common/SecretInput.vue` primitive (mirroring
+  `IconButton`/`CopyButton`) wraps `UInput` with a masked default (`type="password"`) and a
+  trailing eye-toggle button (labeled + `aria-pressed` via the new `common.reveal`/`common.hide`
+  keys) so a user can verify a pasted token — the leading cause of invalid-credential retries.
+  Every bare `type="password"` field now routes through it: both auth screens
+  (`LoginScreen`, `ResetPasswordScreen`), the descriptor-driven `DocumentSourceConnectModal` +
+  `UserSecretsSection` (via a `:secret` prop that preserves the `field.secret`-conditional
+  masking), `ObservabilityConnectionPanel` (Datadog + PagerDuty + incident.io),
+  `LocalModelEndpointsPanel`, `SlackPanel`, `PersonalCredentialModal`, and the
+  audit-missed surfaces `AccountDeploymentSettings` (Slack/Linear/web-search/content-storage),
+  `AccountTeamSettings` (email key), `KubernetesEnvironmentForm`/`KubernetesEngineForm`,
+  `ProviderManifestEditor`, `PackageRegistriesPanel`. When `secret` is false it degrades to a
+  plain text input with no toggle.
+- **UX-20 — Plaintext secret textareas. DONE.** The four fully-visible secret `UTextarea`s
+  (`ApiKeysSection`, `VendorCredentialsModal`, `OpenRouterCatalogPanel`,
+  `PersonalSubscriptionSection`) are converted to the same masked-by-default `SecretInput`, so
+  live vendor keys no longer render in cleartext (shoulder-surf / screen-share leakage). These
+  keys are single-line tokens, so the single-line masked input + reveal is the correct shape.
 - **UX-21 — Unguarded unlink.** `fragments/FragmentLibraryManager.vue:233-240`
   (button :502-508) fires immediately, while sibling `removeFragment` (:124-140)
   routes through `confirm()`. Fix: same confirm dialog.
@@ -431,16 +437,16 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 ## F. Accessibility, keyboard & theming
 
-| ID    | Sev | Status | Finding                                                                                  |
-| ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
+| ID    | Sev | Status      | Finding                                                                                  |
+| ----- | --- | ----------- | ---------------------------------------------------------------------------------------- |
 | UX-62 | P1  | done (#841) | Icon-only close/action buttons with no accessible name (widespread)                      |
 | UX-63 | P2  | done (#841) | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
 | UX-64 | P2  | done (#841) | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
 | UX-65 | P2  | done (#841) | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
 | UX-66 | P2  | done (#841) | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
-| UX-67 | P2  | todo   | No light mode / system color-scheme support; palette hardcoded                           |
-| UX-68 | P3  | todo   | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
-| UX-69 | P3  | todo   | Board nodes not in the tab order — no keyboard path to a specific card                   |
+| UX-67 | P2  | todo        | No light mode / system color-scheme support; palette hardcoded                           |
+| UX-68 | P3  | todo        | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
+| UX-69 | P3  | todo        | Board nodes not in the tab order — no keyboard path to a specific card                   |
 
 - **UX-62 — Unlabeled icon buttons. DONE.** Every icon-only dismiss button that had
   neither `aria-label` nor `title` now routes through the new shared `common/IconButton.vue`
@@ -587,6 +593,16 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   WCAG 2.4.7). Decorative infinite CSS animations must be silenced under
   `@media (prefers-reduced-motion: reduce)` — but leave `animate-spin` loaders alone, their
   motion is their meaning.
+- **Secret/password fields go through `common/SecretInput.vue` (never a bare
+  `<UInput type="password">` or a plaintext secret `<UTextarea>`).** The primitive masks by
+  default and adds a trailing eye toggle (labeled `common.reveal`/`common.hide`,
+  `aria-pressed`), forwarding every other UInput prop/listener via `$attrs`. Bind it with
+  `v-model` exactly like `UInput`. For descriptor-driven fields whose secrecy is data-dependent
+  pass `:secret="!!field.secret"` (falsy → a plain unmasked text input, no toggle) — do NOT rely
+  on the `secret` default of `true`, which would mask a non-secret field. A single-line masked
+  input is the right shape even for long tokens (the four UX-20 `UTextarea`s were single-line
+  vendor keys); reserve a real `UTextarea` for genuinely multi-line secrets (e.g. a PEM key),
+  which this primitive does not cover.
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).

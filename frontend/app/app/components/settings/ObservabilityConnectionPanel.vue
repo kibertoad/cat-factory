@@ -7,6 +7,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { ObservabilityProviderKind } from '~/types/releaseHealth'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -194,17 +195,11 @@ const connectedLabel = computed(() => {
               <UInput v-model="datadog.site" placeholder="datadoghq.com" class="w-full" />
             </UFormField>
             <UFormField :label="t('settings.observabilityConnection.datadog.apiKey')">
-              <UInput
-                v-model="datadog.apiKey"
-                type="password"
-                placeholder="DD-API-KEY"
-                class="w-full"
-              />
+              <SecretInput v-model="datadog.apiKey" placeholder="DD-API-KEY" class="w-full" />
             </UFormField>
             <UFormField :label="t('settings.observabilityConnection.datadog.appKey')">
-              <UInput
+              <SecretInput
                 v-model="datadog.appKey"
-                type="password"
                 placeholder="DD-APPLICATION-KEY"
                 class="w-full"
               />
@@ -254,7 +249,7 @@ const connectedLabel = computed(() => {
           </p>
 
           <UFormField :label="t('settings.observabilityConnection.incident.pagerDutyToken')">
-            <UInput v-model="pagerDuty.apiToken" type="password" class="w-full" />
+            <SecretInput v-model="pagerDuty.apiToken" class="w-full" />
           </UFormField>
           <UFormField :label="t('settings.observabilityConnection.incident.pagerDutyFromEmail')">
             <UInput
@@ -265,7 +260,7 @@ const connectedLabel = computed(() => {
             />
           </UFormField>
           <UFormField :label="t('settings.observabilityConnection.incident.incidentIoKey')">
-            <UInput v-model="incidentIo.apiKey" type="password" class="w-full" />
+            <SecretInput v-model="incidentIo.apiKey" class="w-full" />
           </UFormField>
 
           <div class="flex gap-2">

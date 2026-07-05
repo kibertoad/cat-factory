@@ -7,6 +7,7 @@
 import { computed, ref, watch } from 'vue'
 import type { ProviderConfigField, UserSecretKind } from '~/types/userSecrets'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -207,9 +208,9 @@ async function remove() {
             "
             :help="field.help"
           >
-            <UInput
+            <SecretInput
               v-model="values[field.key]"
-              :type="field.secret ? 'password' : 'text'"
+              :secret="!!field.secret"
               class="font-mono"
               :placeholder="field.placeholder"
             />

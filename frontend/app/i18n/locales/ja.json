@@ -40,6 +40,8 @@
       "reconfigureHint": "後で再設定できます。"
     },
     "copied": "クリップボードにコピーしました",
+    "reveal": "表示",
+    "hide": "非表示",
     "disconnect": "切断",
     "copyFailed": "クリップボードにコピーできませんでした",
     "revoke": "取り消す",

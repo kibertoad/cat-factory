@@ -16,6 +16,7 @@
 //    account); admin-only, enforced server-side. Surfaced from account/team settings.
 import { computed, ref, watch } from 'vue'
 import type { ApiKey, ApiKeyProvider } from '~/types/domain'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const props = withDefaults(defineProps<{ accountId?: string; category?: 'direct' | 'proxy' }>(), {
   category: 'direct',
@@ -323,12 +324,11 @@ async function remove(k: ApiKey) {
         />
       </UFormField>
       <UFormField :label="t('providers.apiKeys.keyField')">
-        <UTextarea
+        <SecretInput
           v-model="key"
-          :rows="2"
           :disabled="needsSignIn"
           :placeholder="t('providers.apiKeys.keyPlaceholder')"
-          class="font-mono"
+          class="w-full font-mono"
         />
       </UFormField>
       <div class="flex justify-end">
