@@ -2,8 +2,6 @@ node_modules/
 .env
 test-results/
 playwright-report/
-blob-report/
-all-blob-reports/
 playwright/.cache/
 # local-only browser-path override used to validate against a preinstalled Chromium
 playwright.local.config.ts
