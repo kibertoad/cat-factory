@@ -190,7 +190,7 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   // MULTI-REPO coding body carrying each reference as a READ-ONLY spec (repo only — no newBranch/pr)
   // plus a "Reference repositories" system-prompt section naming the sibling directories.
   const REFERENCE_REPOS: NonNullable<AgentRunContext['referenceRepos']> = [
-    { githubId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' },
+    { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' },
   ]
 
   it('doc-writer emits read-only referenceRepos + a reference section', async () => {
@@ -225,6 +225,32 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('a non-reference kind (coder) ignores referenceRepos on the context (kind gate)', async () => {
     await executor.startJob({ ...context('coder'), referenceRepos: REFERENCE_REPOS })
     expect(captured[0]!.spec.referenceRepos).toBeUndefined()
+  })
+
+  it('drops a reference that collides with the primary or another reference (sibling-dir dedup)', async () => {
+    // The primary repo is `acme/widgets`. A reference pointing at it — or a duplicate reference —
+    // would claim the same `owner__name` sibling directory as an existing leg, so the second clone
+    // would fail into a non-empty dir. The executor dedups by that key, keeping only `design-system`.
+    await executor.startJob({
+      ...context('doc-writer'),
+      referenceRepos: [
+        { repoId: 999, owner: 'ACME', name: 'Widgets', defaultBranch: 'main' }, // == primary, dropped
+        { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' },
+        { repoId: 112, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' }, // dup, dropped
+      ],
+    })
+    const spec = captured[0]!.spec
+    expect(spec.referenceRepos).toEqual([
+      {
+        repo: {
+          owner: 'acme',
+          name: 'design-system',
+          baseBranch: 'trunk',
+          cloneUrl: 'https://github.com/acme/design-system.git',
+          provider: 'github',
+        },
+      },
+    ])
   })
 
   it('folds a tuned kind’s loosen-only guard overrides into the job body', async () => {

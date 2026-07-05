@@ -1087,22 +1087,39 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // the doc-writer clones each attached repo as a READ-ONLY sibling checkout it may read but
     // never writes to. The spec carries NO branch/PR fields, so it is structurally unpushable;
     // the harness clones it at its own default branch and skips it in the push phase. Auth reuses
-    // the already-minted installation/PAT `ghToken` (a reference repo surfaced by the picker is by
-    // definition reachable by it), so no extra token mint. A reference repo may be outside the
+    // the run's already-resolved `ghToken` (the run initiator's own token when they have one, per
+    // `mintInstallationToken`), so no extra token mint. A reference repo may be outside the
     // workspace projection, so its clone identity comes straight from the persisted attachment.
+    // Provider-neutral: the clone URL + provider come from `resolveRepoOrigin` (the same
+    // deployment-level seam the primary rides), so a GitLab deployment clones from GitLab.
     let referenceRepos: { repo: Record<string, unknown> }[] | undefined
     let referenceReposSection: string | undefined
     const attachedReferenceRepos = context.referenceRepos ?? []
     if (attachedReferenceRepos.length > 0 && REFERENCE_REPO_KINDS.has(context.agentKind)) {
       const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
-      const targets: RepoTarget[] = attachedReferenceRepos.map((r) => ({
-        installationId: r.installationId ?? repo.installationId,
-        owner: r.owner,
-        name: r.name,
-        baseBranch: r.defaultBranch,
-      }))
-      referenceRepos = targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) }))
-      referenceReposSection = renderReferenceReposSection(repo, targets)
+      // Dedup against the primary and each other by the harness's sibling-checkout key
+      // (`owner/name`, case-insensitive — it maps to the `owner__name` clone directory): two legs
+      // claiming the same directory would make the second `git clone` fail into a non-empty dir.
+      // A reference pointing at the doc task's OWN repo is therefore dropped (it is already the
+      // primary checkout), and duplicate attachments collapse to one.
+      const siblingKey = (owner: string, name: string) => `${owner}/${name}`.toLowerCase()
+      const seen = new Set<string>([siblingKey(repo.owner, repo.name)])
+      const targets: RepoTarget[] = []
+      for (const r of attachedReferenceRepos) {
+        const key = siblingKey(r.owner, r.name)
+        if (seen.has(key)) continue
+        seen.add(key)
+        targets.push({
+          installationId: r.connectionId ?? repo.installationId,
+          owner: r.owner,
+          name: r.name,
+          baseBranch: r.defaultBranch,
+        })
+      }
+      if (targets.length > 0) {
+        referenceRepos = targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) }))
+        referenceReposSection = renderReferenceReposSection(repo, targets)
+      }
     }
 
     const { body, kind } = buildKindBody(

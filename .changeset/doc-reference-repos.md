@@ -25,7 +25,15 @@ repos become extra sibling checkouts it may read but can never write to.
 - **Any accessible repo, by name fragment.** A reference need not be a board service or in the
   workspace's synced projection: the inspector picker reuses the SAME server-side, debounced repo
   search as the add-service modal (extracted into a shared `useRepoSearch` composable), so any repo
-  the GitHub App installation or the signed-in user's PAT can reach can be attached.
+  the workspace's VCS connection or the signed-in user's PAT can reach can be attached.
+- **Provider-neutral by construction.** The `ReferenceRepo` identity mirrors the kernel's VCS
+  vocabulary (`repoId` / `owner` / `name` / `defaultBranch` / `connectionId`, per `VcsRepoRef` /
+  `VcsConnectionRef`) rather than GitHub-specific names, and the clone URL + provider come from the
+  deployment-level `ResolveRepoOrigin` seam the primary already rides — so a GitLab deployment
+  clones references from GitLab with no extra wiring.
+- **Deduped against the primary.** A reference pointing at the doc task's own repo (or a duplicate
+  attachment) is dropped by the shared sibling-checkout key, so it can't collide with an existing
+  clone directory and fail the run.
 - **Symmetric persistence.** New `reference_repos` JSON column on `blocks`, mirrored across the D1
   and Drizzle stores with a cross-runtime conformance round-trip assertion.
 

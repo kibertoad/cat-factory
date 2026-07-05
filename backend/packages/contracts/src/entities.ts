@@ -75,24 +75,35 @@ export type PeerPullRequest = v.InferOutput<typeof peerPullRequestSchema>
  * solutions as a reference) but NEVER writes to — no branch, no commit, no PR. Unlike an
  * involved service ({@link blockSchema.entries.involvedServiceIds}), a reference repo is
  * not a board service and need not be in the workspace's synced repo projection: it may be
- * ANY repo the GitHub App installation (hosted) or the configured PAT (local) can reach, so
- * its clone identity is stored self-contained here rather than resolved from the projection.
+ * ANY repo the workspace's VCS connection (hosted) or the configured PAT (local) can reach,
+ * so its clone identity is stored self-contained here rather than resolved from the projection.
+ *
+ * Provider-neutral by construction: the fields mirror the kernel's VCS identity vocabulary
+ * (`VcsRepoRef` / `VcsConnectionRef`), NOT GitHub-specific names — the concrete provider is a
+ * deployment-level fact resolved server-side when the clone URL is built (see `ResolveRepoOrigin`
+ * in `@cat-factory/server`), so a GitHub or GitLab deployment persists the same shape.
  */
 export const referenceRepoSchema = v.object({
-  /** The repo's numeric GitHub id (stable identity across renames). */
-  githubId: v.number(),
-  /** The repo owner (org/user login). */
+  /**
+   * The provider's canonical repo identity (GitHub numeric id / GitLab project id). Numeric on
+   * every provider this platform surfaces through the available-repos picker (`repoId` in the
+   * kernel's `VcsRepoRef` is stringly-typed to also admit path ids; the picker uses the numeric
+   * form for both).
+   */
+  repoId: v.number(),
+  /** The repo owner (org/user login, or GitLab group). */
   owner: v.string(),
-  /** The repo name. */
+  /** The repo name (or GitLab project). */
   name: v.string(),
   /** The branch the reference checkout is cloned at (the repo's default branch). */
   defaultBranch: v.string(),
   /**
-   * The App installation that can access this repo, when known. Absent for a repo reachable
-   * only via the run initiator's PAT (local mode / a `personal`-badged search hit), which is
-   * cloned with the PAT rather than an installation token.
+   * The VCS connection that can access this repo, when known (GitHub App installation / GitLab
+   * connection id — the `connectionId` of the kernel's `VcsConnectionRef`). Absent for a repo
+   * reachable only via the run initiator's own token (local mode / a `personal`-badged search
+   * hit), which is cloned with that token rather than the workspace connection's.
    */
-  installationId: v.optional(v.number()),
+  connectionId: v.optional(v.number()),
 })
 export type ReferenceRepo = v.InferOutput<typeof referenceRepoSchema>
 

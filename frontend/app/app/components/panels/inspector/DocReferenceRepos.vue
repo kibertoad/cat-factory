@@ -5,6 +5,7 @@
 // user's PAT) can reach may be attached, so this reuses the SAME server-side, debounced repo
 // search as the add-service picker (`useRepoSearch`), not a filter over the synced projection.
 import type { Block, GitHubAvailableRepo, ReferenceRepo } from '~/types/domain'
+import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -22,7 +23,10 @@ const {
 } = useRepoSearch()
 
 const attached = computed<ReferenceRepo[]>(() => props.block.referenceRepos ?? [])
-const attachedIds = computed(() => new Set(attached.value.map((r) => r.githubId)))
+// Keyed by the provider-neutral repo id. The search results are `GitHubAvailableRepo`s (whose id
+// field is `githubId`), so a menu item's `githubId` is compared against this set of `repoId`s —
+// the same numeric id space on every provider.
+const attachedIds = computed(() => new Set(attached.value.map((r) => r.repoId)))
 
 // Menu items: the searched repos, an already-attached one disabled so it can't be added twice.
 const repoItems = computed(() =>
@@ -49,16 +53,16 @@ watch(pickedId, (id) => {
 
 function toReference(repo: GitHubAvailableRepo): ReferenceRepo {
   return {
-    githubId: repo.githubId,
+    repoId: repo.githubId,
     owner: repo.owner,
     name: repo.name,
     // A repo with no reported default branch is rare; fall back to `main` so the clone has a ref.
     defaultBranch: repo.defaultBranch ?? 'main',
-    // A repo the App reaches carries the workspace installation; a PAT-only (`personal`) repo has
-    // none, so the run clones it with the initiator's token instead.
+    // A repo the workspace connection reaches carries that connection; a PAT-only (`personal`) repo
+    // has none, so the run clones it with the initiator's own token instead.
     ...(repo.personal || !github.connection
       ? {}
-      : { installationId: github.connection.installationId }),
+      : { connectionId: github.connection.installationId }),
   }
 }
 
@@ -69,9 +73,9 @@ function attach(repo: GitHubAvailableRepo) {
   resetRepoSearch()
 }
 
-function detach(githubId: number) {
+function detach(repoId: number) {
   board.updateBlock(props.block.id, {
-    referenceRepos: attached.value.filter((r) => r.githubId !== githubId),
+    referenceRepos: attached.value.filter((r) => r.repoId !== repoId),
   })
 }
 </script>
@@ -88,7 +92,7 @@ function detach(githubId: number) {
     <div v-if="attached.length" class="mb-1.5 flex flex-wrap gap-1">
       <UBadge
         v-for="r in attached"
-        :key="r.githubId"
+        :key="r.repoId"
         size="sm"
         variant="soft"
         color="neutral"
@@ -102,7 +106,7 @@ function detach(githubId: number) {
           icon="i-lucide-x"
           :aria-label="t('inspector.referenceRepos.remove', { repo: `${r.owner}/${r.name}` })"
           data-testid="reference-repo-remove"
-          @click="detach(r.githubId)"
+          @click="detach(r.repoId)"
         />
       </UBadge>
     </div>
@@ -122,14 +126,11 @@ function detach(githubId: number) {
       data-testid="reference-repo-search"
     >
       <template #empty>
-        <span v-if="belowMinChars">
-          {{
-            t('github.addService.searchMinChars', { min: REPO_SEARCH_MIN_LEN }, REPO_SEARCH_MIN_LEN)
-          }}
-        </span>
-        <span v-else-if="!repoLoading">{{
-          t('github.addService.noMatches', { query: repoQuery })
-        }}</span>
+        <RepoSearchEmpty
+          :below-min-chars="belowMinChars"
+          :loading="repoLoading"
+          :query="repoQuery"
+        />
       </template>
     </UInputMenu>
     <div v-else class="text-[11px] text-slate-500">

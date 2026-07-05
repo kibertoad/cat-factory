@@ -272,9 +272,9 @@ export interface AgentRunContext {
    * Read-only reference repositories attached to a document-authoring task (the doc-writer
    * agent) — lifted verbatim by the engine from the task block's `referenceRepos`. The
    * executor turns these into read-only sibling checkouts the agent may read but never write
-   * to. Each carries its own clone identity (owner/name/defaultBranch/installationId), so a
-   * repo outside the workspace's synced projection can still be cloned. Absent for non-doc
-   * tasks or a task with none attached.
+   * to. Each carries its own provider-neutral clone identity (repoId/owner/name/defaultBranch/
+   * connectionId), so a repo outside the workspace's synced projection can still be cloned.
+   * Absent for non-doc tasks or a task with none attached.
    */
   referenceRepos?: ReferenceRepo[]
   /**

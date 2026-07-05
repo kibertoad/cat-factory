@@ -1088,13 +1088,13 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         // this asserts it survives PATCH + a fresh snapshot read, and that clearing writes NULL
         // (an empty array comes back absent), on D1 and Postgres alike.
         const referenceRepos = [
-          { githubId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'main' },
+          { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'main' },
           {
-            githubId: 222,
+            repoId: 222,
             owner: 'acme',
             name: 'api-conventions',
             defaultBranch: 'trunk',
-            installationId: 42,
+            connectionId: 42,
           },
         ]
         const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {

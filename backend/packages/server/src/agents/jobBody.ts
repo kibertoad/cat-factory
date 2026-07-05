@@ -290,12 +290,11 @@ export function buildRegisteredAgentBody(
           ...(opensPr ? { pr } : {}),
         }))
       : undefined
-    // Read-only reference repos (doc-writer): cloned as siblings with NO branch/PR fields, so
-    // the harness clones each and skips it in the push phase. Independent of the multi-repo
-    // fan-out above (references are never writable), so they carry no `newBranch`/`pr`.
-    const referenceRepos = parts.referenceRepos?.length
-      ? parts.referenceRepos.map((r) => ({ repo: r.repo }))
-      : undefined
+    // Read-only reference repos (doc-writer): forwarded as-is — already `{ repo }`-shaped with NO
+    // branch/PR fields (unlike the peer legs above, which add `newBranch`/`pr`), so the harness
+    // clones each and skips it in the push phase. Kept as its own binding so the `undefined`-when-
+    // empty spread below reads the same as `peerRepos`.
+    const referenceRepos = parts.referenceRepos?.length ? parts.referenceRepos : undefined
     return {
       kind: 'agent',
       body: {
@@ -377,6 +376,17 @@ function siblingCheckoutDir(owner: string, name: string): string {
 }
 
 /**
+ * The `` `owner/name` → `owner__name/` `` fragment naming a repo and its sibling checkout
+ * directory. Shared by every multi-repo prompt section (the involved-services workspace section
+ * AND the doc-writer reference section) so the repo→directory mapping is written ONE way — a
+ * divergent format in any renderer would point the agent at a directory the harness names
+ * differently.
+ */
+function siblingRepoLabel(owner: string, name: string): string {
+  return `\`${owner}/${name}\` → \`${siblingCheckoutDir(owner, name)}/\``
+}
+
+/**
  * Render the "Multi-repo workspace" system-prompt section for a multi-service coding run
  * (service-connections phase 3). Names the primary repo (the task's own service) and, for
  * every involved connected service, WHICH repo + subdirectory it lives in and its role (the
@@ -452,13 +462,12 @@ export function renderMultiRepoWorkspaceSection(
   ]
   const describe = (checkout: RepoCheckout): string => {
     const { owner, name } = checkout.target
-    const dir = `\`${siblingCheckoutDir(owner, name)}/\``
     const own =
       checkout.primary && checkout.target.serviceDirectory
         ? ` (this service lives in \`${checkout.target.serviceDirectory}/\` within it)`
         : ''
     const coLocated = involvedLines(checkout)
-    const head = `- \`${owner}/${name}\` → ${dir}${
+    const head = `- ${siblingRepoLabel(owner, name)}${
       checkout.primary ? " (PRIMARY — the task's own service)" : ''
     }${own}`
     return coLocated ? `${head}\n${coLocated}` : head
@@ -487,26 +496,37 @@ function appendSections(base: string, sections: (string | undefined)[]): string 
  * MUST stay byte-identical to {@link siblingCheckoutDir}.
  */
 export function renderReferenceReposSection(primary: RepoTarget, references: RepoTarget[]): string {
-  const primaryDir = siblingCheckoutDir(primary.owner, primary.name)
   const own = primary.serviceDirectory
-    ? ` (this service lives in \`${primary.serviceDirectory}/\`)`
+    ? ` (write the document under \`${primary.serviceDirectory}/\` within it)`
     : ''
   const lines = [
     '## Reference repositories',
     '',
-    'This task has reference repositories attached, so more than one repository is checked out. Each',
+    'This task has reference repositories attached, so MORE THAN ONE repository is checked out. Each',
     'is a SIBLING directory under your working directory (the workspace root); the root itself is NOT',
-    'a git repository. Write the document in YOUR repository below and commit it there (the platform',
-    'opens the pull request). The other repositories are READ-ONLY reference material: read them to',
-    'reuse existing solutions, conventions, and structure while drafting, but you must NEVER edit,',
-    'commit, or push anything in them — they are inputs to read, not code to change.',
+    'a git repository. Write the document in YOUR repository below.',
     '',
-    `Your repository (write the document here): \`${primary.owner}/${primary.name}\` → \`${primaryDir}/\`${own}`,
+    // The doc-writer's base prompt assumes a single-repo run where the platform commits for it. With
+    // reference repos the run is multi-repo (the platform stages only ALREADY-TRACKED files), so the
+    // agent MUST commit the new document itself — restated here to override the base prompt and match
+    // the harness's own multi-repo guidance. Any file path in your instructions is relative to your
+    // repository's directory below, NOT the workspace root.
+    'IMPORTANT — this overrides any earlier instruction that the platform commits your file for you:',
+    'because more than one repository is checked out, you must stage and commit the document YOURSELF',
+    "inside your repository's directory (`cd` into it, `git add` the new file, then commit). The",
+    'platform still opens the pull request. Any target path in your instructions is relative to your',
+    "repository's directory below, not the workspace root.",
+    '',
+    'The other repositories are READ-ONLY reference material: read them to reuse existing solutions,',
+    'conventions, and structure while drafting, but you must NEVER edit, commit, or push anything in',
+    'them — they are inputs to read, not code to change.',
+    '',
+    `Your repository (write the document here): ${siblingRepoLabel(primary.owner, primary.name)}${own}`,
     '',
     'Read-only reference checkouts:',
   ]
   for (const ref of references) {
-    lines.push(`- \`${ref.owner}/${ref.name}\` → \`${siblingCheckoutDir(ref.owner, ref.name)}/\``)
+    lines.push(`- ${siblingRepoLabel(ref.owner, ref.name)}`)
   }
   return lines.join('\n')
 }

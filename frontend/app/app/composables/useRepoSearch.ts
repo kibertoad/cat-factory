@@ -55,7 +55,11 @@ export function useRepoSearch(fetcher?: RepoFetcher) {
   function reset() {
     search.value = ''
     results.value = []
+    // Bump the token so an in-flight fetch's result/finally is ignored — and clear `loading`
+    // ourselves, since that same in-flight `finally` will now skip its `mine === seq` guard and
+    // would otherwise leave the spinner stuck on until the next search completes.
     seq++
+    loading.value = false
   }
 
   return { search, query, belowMinChars, results, loading, reset }

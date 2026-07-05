@@ -12,6 +12,7 @@
 // more than one, a subset of the repo's services).
 import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
+import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
@@ -305,18 +306,11 @@ function done() {
                   />
                 </template>
                 <template #empty>
-                  <span v-if="belowMinChars">
-                    {{
-                      t(
-                        'github.addService.searchMinChars',
-                        { min: REPO_SEARCH_MIN_LEN },
-                        REPO_SEARCH_MIN_LEN,
-                      )
-                    }}
-                  </span>
-                  <span v-else-if="!repoLoading">{{
-                    t('github.addService.noMatches', { query: repoQueryRaw })
-                  }}</span>
+                  <RepoSearchEmpty
+                    :below-min-chars="belowMinChars"
+                    :loading="repoLoading"
+                    :query="repoQueryRaw"
+                  />
                 </template>
               </UInputMenu>
             </div>
