@@ -22,6 +22,7 @@ import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
 import { presetsApi } from './api/presets'
+import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
 import { recurringApi } from './api/recurring'
@@ -112,6 +113,7 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...sharedStacksApi(ctx),
     ...providerConnectionsApi(ctx),
     ...infraHandlersApi(ctx),
     ...initiativeApi(ctx),

@@ -80,6 +80,7 @@ import type {
 } from '@cat-factory/kernel'
 import type {
   MergePresetRepository,
+  SharedStackRepository,
   WorkspaceSettingsRepository,
   ModelPresetRepository,
   ServiceFragmentDefaultsRepository,
@@ -154,11 +155,13 @@ import {
   RunnerPoolConnectionService,
   ProvisioningLogRecorder,
   ProvisioningLogService,
+  SharedStackService,
   SlackConnectionService,
   SlackSettingsService,
   SlackMemberMappingService,
   defaultEnvironmentBackendRegistry,
   defaultRunnerBackendRegistry,
+  type ComposeRuntime,
   type CustomManifestTypeRegistry,
   type DeployJobClient,
   type EnvironmentBackendRegistry,
@@ -758,6 +761,14 @@ export interface CoreDependencies {
   packageRegistrySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
+  /** A workspace's shared stacks (long-lived compose infra a consumer environment attaches to). */
+  sharedStackRepository?: SharedStackRepository
+  /**
+   * The host Docker seam a shared stack's bring-up/teardown drives. Wired ONLY on the local
+   * facade (host daemon); absent elsewhere ⇒ shared-stack CRUD works but the lifecycle endpoints
+   * refuse (the documented compose runtime-binding exception).
+   */
+  composeRuntime?: ComposeRuntime
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
   // Flat repository fields like every other feature; both runtime facades contribute
   // them by spreading one sandbox-owned `Partial<CoreDependencies>` mixin (the
@@ -982,6 +993,11 @@ export interface MergePresetsModule {
   service: MergePresetService
 }
 
+/** The shared-stacks feature's service, present only when its repository is wired. */
+export interface SharedStacksModule {
+  service: SharedStackService
+}
+
 /** The Sandbox feature's services, present only when its repositories are wired. */
 export interface SandboxModule {
   /** Management CRUD (prompt versions, fixtures, experiments). */
@@ -1107,6 +1123,8 @@ export interface Core {
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   mergePresets?: MergePresetsModule
+  /** Present only when the shared-stack repository is wired (see CoreDependencies). */
+  sharedStacks?: SharedStacksModule
   /** Present only when the Sandbox repositories are wired (see CoreDependencies). */
   sandbox?: SandboxModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
@@ -2004,6 +2022,25 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
 }
 
 /**
+ * Assemble the shared-stacks module when its repository is present. The `composeRuntime` is
+ * optional — wired only on the local facade, so CRUD works everywhere but the lifecycle
+ * (ensureUp/teardown) refuses without a host daemon (the documented compose runtime-binding
+ * exception). Persistence is fully runtime-symmetric.
+ */
+function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | undefined {
+  const { sharedStackRepository } = deps
+  if (!sharedStackRepository) return undefined
+  const service = new SharedStackService({
+    sharedStackRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    ...(deps.composeRuntime ? { composeRuntime: deps.composeRuntime } : {}),
+  })
+  return { service }
+}
+
+/**
  * Assemble the Sandbox module when its five repositories are present (both runtime
  * facades wire them together). Reuses the requirements reviewer's inline model config —
  * the per-scope provider resolver, the routing default ref, and the block-model resolver
@@ -2341,6 +2378,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
+  const sharedStacks = createSharedStacksModule(dependencies)
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
@@ -2553,6 +2591,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
+    ...(sharedStacks ? { sharedStacks } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),

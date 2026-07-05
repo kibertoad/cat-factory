@@ -10,39 +10,30 @@ import type {
   ProvisionedEnvironment,
   RunRepoContext,
 } from '@cat-factory/kernel'
-import type {
-  RecipeHealthGate,
-  RecipeStep,
-  RecipeStepRecorder,
-  StackRecipe,
-} from '@cat-factory/kernel'
+import type { RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
 import {
   type ComposeEnvironmentConfig,
   type ComposeRuntime,
   DEFAULT_RECIPE_HEALTH_GATE,
   checkoutDepthFor,
   classifyComposePs,
-  composeExecArgs,
   composeFileDir,
   healthGateIntervalMs,
   healthGateTimeoutMs,
-  matchesHttpExpectation,
   parseComposeEnvConfig,
   parseHostPort,
   prepareComposeProject,
   prepareRecipeComposeFiles,
   recipeCheckoutPathIssues,
   recipeProfilesEnv,
-  recipeStepIntervalMs,
-  recipeStepTimeoutMs,
   renderEnvMap,
   renderTemplate,
   resolveProjectName,
   resolveRecipeComposeFiles,
   tailOutput,
   templateVars,
-  waitFileExecArgs,
 } from './compose-environment.logic.js'
+import { runHealthGate, runRecipeStep } from './recipe-runner.js'
 
 // Native Docker Compose ephemeral-environment provider. It brings the PR repo's OWN
 // `docker-compose.yml` up on a local Docker daemon under a per-PR project name, publishes the
@@ -617,7 +608,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     // Ordered setup steps, then the terminal health gate. The first failure tears down + surfaces.
     for (const step of recipe.setupSteps ?? []) {
       const started = Date.now()
-      const result = await this.runRecipeStep(step, { scope, env, project, config })
+      const result = await runRecipeStep(step, { runtime: this.runtime, scope, env, project })
       await this.logStep(record, step.name, started, result)
       if (!result.ok) {
         await this.safeDown(project)
@@ -626,7 +617,15 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     }
     const gate = recipe.healthGate ?? DEFAULT_RECIPE_HEALTH_GATE
     const gateStarted = Date.now()
-    const gateResult = await this.runHealthGate(gate, { scope, env })
+    const gateResult = await runHealthGate(
+      gate,
+      { runtime: this.runtime, scope, env },
+      {
+        timeoutMs: healthGateTimeoutMs(gate),
+        intervalMs: healthGateIntervalMs(gate),
+        shortTimeoutMs: SHORT_TIMEOUT_MS,
+      },
+    )
     await this.logStep(record, `health gate (${gate.kind})`, gateStarted, gateResult)
     if (!gateResult.ok) {
       await this.safeDown(project)
@@ -684,163 +683,6 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     return null
   }
 
-  /** Run one recipe setup/teardown step, returning a normalized verdict (never throws). */
-  private async runRecipeStep(
-    step: RecipeStep,
-    ctx: {
-      scope: string[]
-      env: Record<string, string>
-      project: string
-      config: ComposeEnvironmentConfig
-    },
-  ): Promise<StepResult> {
-    const timeoutMs = recipeStepTimeoutMs(step)
-    try {
-      switch (step.kind) {
-        case 'compose-exec': {
-          const res = await this.runtime.compose(composeExecArgs(ctx.scope, step), {
-            env: ctx.env,
-            timeoutMs,
-            ...(step.stdinFile
-              ? { stdin: { project: ctx.project, checkoutFile: step.stdinFile } }
-              : {}),
-          })
-          return res.code === 0
-            ? { ok: true }
-            : { ok: false, error: tailOutput(res.stderr || res.stdout) || `exit ${res.code}` }
-        }
-        case 'copy-file': {
-          await this.runtime.copyCheckoutFile!(ctx.project, step.from, step.to)
-          return { ok: true }
-        }
-        case 'wait-http':
-          return this.pollUntil(timeoutMs, recipeStepIntervalMs(step), () =>
-            this.probeHttp(step.url, step),
-          )
-        case 'wait-file':
-          return this.pollUntil(timeoutMs, recipeStepIntervalMs(step), () =>
-            this.probeFile(step, ctx),
-          )
-        case 'host-command': {
-          // Guarded up front by `checkHostCommandsAllowed`, so `hostCommand` is present here.
-          const res = await this.runtime.hostCommand!(ctx.project, step.command, {
-            ...(step.workdir ? { workdir: step.workdir } : {}),
-            env: ctx.env,
-            timeoutMs,
-          })
-          return res.code === 0
-            ? { ok: true }
-            : { ok: false, error: tailOutput(res.stderr || res.stdout) || `exit ${res.code}` }
-        }
-        default:
-          // `isStackRecipe` is a structural guard, not a re-validation, so a stale/hand-edited
-          // config can carry an unknown step kind. Return a clean verdict rather than falling off
-          // the switch and returning `undefined` (which would crash the caller's `!result.ok`).
-          return {
-            ok: false,
-            error: `unsupported recipe step kind '${(step as { kind?: string }).kind ?? 'unknown'}'`,
-          }
-      }
-    } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  }
-
-  /** Run the terminal health gate until it passes or its budget elapses (never throws). */
-  private async runHealthGate(
-    gate: RecipeHealthGate,
-    ctx: { scope: string[]; env: Record<string, string> },
-  ): Promise<StepResult> {
-    const timeoutMs = healthGateTimeoutMs(gate)
-    const intervalMs = healthGateIntervalMs(gate)
-    if (gate.kind === 'http') {
-      return this.pollUntil(timeoutMs, intervalMs, () => this.probeHttp(gate.url, gate))
-    }
-    if (gate.kind === 'compose-exec') {
-      return this.pollUntil(timeoutMs, intervalMs, async () => {
-        const res = await this.runtime.compose(
-          composeExecArgs(ctx.scope, { service: gate.service, command: gate.command }),
-          { env: ctx.env, timeoutMs: SHORT_TIMEOUT_MS },
-        )
-        return {
-          done: res.code === 0,
-          error: tailOutput(res.stderr || res.stdout) || `exit ${res.code}`,
-        }
-      })
-    }
-    // compose-healthy: poll `ps` until the stack is ready / a service crashed.
-    return this.pollUntil(timeoutMs, intervalMs, async () => {
-      const ps = await this.runtime.compose([...ctx.scope, 'ps', '-a', '--format', 'json'], {
-        env: ctx.env,
-        timeoutMs: SHORT_TIMEOUT_MS,
-      })
-      const status = ps.code === 0 ? classifyComposePs(ps.stdout) : 'provisioning'
-      if (status === 'ready') return { done: true }
-      if (status === 'failed')
-        return { done: false, fatal: true, error: 'a service is unhealthy or crashed' }
-      return { done: false, error: 'stack not healthy yet' }
-    })
-  }
-
-  /** Probe a URL once for a `wait-http` step / `http` gate; a network error is a non-fatal retry. */
-  private async probeHttp(
-    url: string,
-    opts: { expectStatus?: number; expectBodyContains?: string },
-  ): Promise<ProbeResult> {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(SHORT_TIMEOUT_MS) })
-      // Read the body only when a substring is required; otherwise release it so the poll doesn't
-      // leave an unconsumed body pinning the connection on every re-probe.
-      let body = ''
-      if (opts.expectBodyContains) body = await res.text()
-      else await res.body?.cancel()
-      return matchesHttpExpectation(res.status, body, opts)
-        ? { done: true }
-        : { done: false, error: `HTTP ${res.status}` }
-    } catch (err) {
-      return { done: false, error: err instanceof Error ? err.message : String(err) }
-    }
-  }
-
-  /** Probe a `wait-file` step once — in a container (`test -f`) or the checkout. */
-  private async probeFile(
-    step: Extract<RecipeStep, { kind: 'wait-file' }>,
-    ctx: { scope: string[]; env: Record<string, string>; project: string },
-  ): Promise<ProbeResult> {
-    if (step.service) {
-      const res = await this.runtime.compose(waitFileExecArgs(ctx.scope, step.service, step.path), {
-        env: ctx.env,
-        timeoutMs: SHORT_TIMEOUT_MS,
-      })
-      return res.code === 0 ? { done: true } : { done: false, error: `not present yet` }
-    }
-    const exists = (await this.runtime.checkoutFileExists?.(ctx.project, step.path)) ?? false
-    return exists ? { done: true } : { done: false, error: `not present yet` }
-  }
-
-  /**
-   * Poll `attempt` until it reports `done` (success) or `fatal` (a definitive failure — stop early),
-   * or the budget elapses (timeout failure). Attempts at least once; sleeps `intervalMs` between tries.
-   */
-  private async pollUntil(
-    timeoutMs: number,
-    intervalMs: number,
-    attempt: () => Promise<ProbeResult>,
-  ): Promise<StepResult> {
-    const deadline = Date.now() + timeoutMs
-    let lastError = 'timed out'
-    for (;;) {
-      const res = await attempt()
-      if (res.done) return { ok: true }
-      if (res.fatal) return { ok: false, error: res.error ?? 'failed' }
-      lastError = res.error ?? lastError
-      if (Date.now() + intervalMs >= deadline) {
-        return { ok: false, error: `timed out after ${timeoutMs}ms (${lastError})` }
-      }
-      await sleep(intervalMs)
-    }
-  }
-
   /** Best-effort per-step provisioning-log entry (never throws; no-op when no recorder is wired). */
   private async logStep(
     record: RecipeStepRecorder | undefined,
@@ -861,23 +703,4 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       // best-effort: a log-write failure must never break the provision.
     }
   }
-}
-
-/** A normalized recipe-step verdict. */
-interface StepResult {
-  ok: boolean
-  detail?: string
-  error?: string
-}
-
-/** One poll attempt's outcome: `done` (satisfied), `fatal` (stop early), else keep polling. */
-interface ProbeResult {
-  done: boolean
-  fatal?: boolean
-  error?: string
-}
-
-/** Sleep `ms` between poll attempts (host-side; recipe execution is local-facade only). */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }

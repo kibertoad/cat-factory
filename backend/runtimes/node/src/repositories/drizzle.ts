@@ -36,6 +36,8 @@ import type {
   IncidentEnrichmentConnectionRepository,
   MergePresetRepository,
   MergeThresholdPreset,
+  SharedStack,
+  SharedStackRepository,
   ObservabilityConnectionRecord,
   ObservabilityConnectionRepository,
   ObservabilityProviderKind,
@@ -176,6 +178,7 @@ import {
   emailConnections,
   llmCallMetrics,
   provisioningLog,
+  sharedStacks,
   memberships,
   mergeThresholdPresets,
   releaseHealthConfigs,
@@ -3442,6 +3445,114 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
   }
 }
 
+function parseSharedStackJson<T>(json: string, fallback: T): T {
+  try {
+    const parsed = JSON.parse(json)
+    return parsed as T
+  } catch {
+    return fallback
+  }
+}
+
+function rowToSharedStack(row: typeof sharedStacks.$inferSelect): SharedStack {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    cloneUrl: row.clone_url,
+    gitRef: row.git_ref,
+    composeFiles: parseSharedStackJson<SharedStack['composeFiles']>(row.compose_files, []),
+    composeProfiles: parseSharedStackJson<SharedStack['composeProfiles']>(row.compose_profiles, []),
+    envFiles: parseSharedStackJson<SharedStack['envFiles']>(row.env_files, []),
+    managedNetworks: parseSharedStackJson<SharedStack['managedNetworks']>(row.managed_networks, []),
+    setupSteps: parseSharedStackJson<SharedStack['setupSteps']>(row.setup_steps, []),
+    healthGate: row.health_gate
+      ? parseSharedStackJson<SharedStack['healthGate']>(row.health_gate, null)
+      : null,
+    allowHostCommands: row.allow_host_commands === 1,
+    status: row.status as SharedStack['status'],
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * A workspace's shared stacks over Postgres (the Drizzle mirror of the Worker's
+ * `D1SharedStackRepository`, migration 0041). JSON-shaped fields are stored as text JSON and
+ * `allow_host_commands` as 0/1; behaviourally identical to the D1 repo so the cross-runtime
+ * conformance suite asserts the same round-trip.
+ */
+export class DrizzleSharedStackRepository implements SharedStackRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<SharedStack | null> {
+    const rows = await this.db
+      .select()
+      .from(sharedStacks)
+      .where(and(eq(sharedStacks.workspace_id, workspaceId), eq(sharedStacks.id, id)))
+      .limit(1)
+    return rows[0] ? rowToSharedStack(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<SharedStack[]> {
+    const rows = await this.db
+      .select()
+      .from(sharedStacks)
+      .where(eq(sharedStacks.workspace_id, workspaceId))
+      .orderBy(sharedStacks.created_at)
+    return rows.map(rowToSharedStack)
+  }
+
+  async upsert(workspaceId: string, stack: SharedStack): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: stack.id,
+      name: stack.name,
+      clone_url: stack.cloneUrl,
+      git_ref: stack.gitRef,
+      compose_files: JSON.stringify(stack.composeFiles),
+      compose_profiles: JSON.stringify(stack.composeProfiles),
+      env_files: JSON.stringify(stack.envFiles),
+      managed_networks: JSON.stringify(stack.managedNetworks),
+      setup_steps: JSON.stringify(stack.setupSteps),
+      health_gate: stack.healthGate ? JSON.stringify(stack.healthGate) : null,
+      allow_host_commands: stack.allowHostCommands ? 1 : 0,
+      status: stack.status,
+      last_error: stack.lastError,
+      created_at: stack.createdAt,
+      updated_at: stack.updatedAt,
+    }
+    await this.db
+      .insert(sharedStacks)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [sharedStacks.workspace_id, sharedStacks.id],
+        set: {
+          name: values.name,
+          clone_url: values.clone_url,
+          git_ref: values.git_ref,
+          compose_files: values.compose_files,
+          compose_profiles: values.compose_profiles,
+          env_files: values.env_files,
+          managed_networks: values.managed_networks,
+          setup_steps: values.setup_steps,
+          health_gate: values.health_gate,
+          allow_host_commands: values.allow_host_commands,
+          status: values.status,
+          last_error: values.last_error,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(sharedStacks)
+      .where(and(eq(sharedStacks.workspace_id, workspaceId), eq(sharedStacks.id, id)))
+  }
+}
+
 // ---- Sandbox (parallel prompt/model testing surface; migration 0012) --------
 // The Drizzle mirror of the Worker's five `D1Sandbox*Repository` classes. JSON-shaped
 // fields are stored as text JSON, parsed defensively; behaviourally identical to the D1
@@ -4345,6 +4456,7 @@ export interface CoreRepositories {
   brainstormSessionRepository: BrainstormSessionRepository
   initiativeRepository: InitiativeRepository
   mergePresetRepository: MergePresetRepository
+  sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
   packageRegistryConnectionRepository: PackageRegistryConnectionRepository
@@ -4387,6 +4499,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     initiativeRepository: new DrizzleInitiativeRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
+    sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
     packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),

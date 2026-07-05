@@ -1984,6 +1984,44 @@
         "removeFailed": "Impossible de supprimer l'entrée du registre"
       }
     },
+    "sharedStacks": {
+      "tab": "Shared stacks",
+      "intro": "Long-lived compose infrastructure (databases, brokers, search, mail) brought up once per workspace and reused across runs and pull requests. A test environment attaches to a stack's managed network. Bringing a stack up runs on a local Docker deployment; on other backends you can still manage the definition.",
+      "stackNoun": "shared stack",
+      "status": {
+        "stopped": "Stopped",
+        "starting": "Starting",
+        "running": "Running",
+        "failed": "Failed"
+      },
+      "list": {
+        "heading": "Configured stacks",
+        "start": "Start",
+        "stop": "Stop",
+        "remove": "Delete stack"
+      },
+      "add": {
+        "heading": "Add a shared stack",
+        "name": "Name",
+        "cloneUrl": "Repository clone URL",
+        "cloneUrlHelp": "The git repository the stack's compose files live in.",
+        "gitRef": "Branch or tag (optional)",
+        "composeFiles": "Compose files",
+        "composeFilesHelp": "Comma-separated, repo-relative, in override order.",
+        "composeProfiles": "Compose profiles (optional)",
+        "managedNetworks": "Managed networks (optional)",
+        "managedNetworksHelp": "Networks this stack creates and owns for consumers to attach to.",
+        "allowHostCommands": "Allow host-command setup steps",
+        "save": "Add stack"
+      },
+      "toast": {
+        "created": "Shared stack added",
+        "createFailed": "Could not add the shared stack",
+        "startFailed": "Could not start the shared stack",
+        "stopFailed": "Could not stop the shared stack",
+        "removeFailed": "Could not delete the shared stack"
+      }
+    },
     "localMode": {
       "title": "Mode local",
       "intro": "Réglage de l'exécuteur de conteneurs local, stocké sur le déploiement de cette machine (il a remplacé les variables d'environnement {poolVars} / {harnessVars}). L'enregistrement redimensionne le pool à chaud en direct, sans redémarrage nécessaire; les exécutions en cours conservent le conteneur qu'elles détiennent déjà.",

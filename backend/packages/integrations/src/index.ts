@@ -276,6 +276,11 @@ export {
   type ComposeEnvironmentConfig,
 } from './modules/compose/compose-environment.logic.js'
 export * as composeEnvironmentLogic from './modules/compose/compose-environment.logic.js'
+// Shared stacks: the lifecycle service (CRUD everywhere + host-Docker bring-up on the local facade).
+export {
+  SharedStackService,
+  type SharedStackServiceDependencies,
+} from './modules/sharedStack/SharedStackService.js'
 // Unified provisioning event log: the best-effort recorder every spin-up/down site
 // writes through, and the read service behind the "View logs" drawers + run details.
 export {

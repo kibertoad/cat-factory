@@ -1165,6 +1165,34 @@ export const mergeThresholdPresets = pgTable(
   ],
 )
 
+// Shared stacks — long-lived compose infra a per-PR consumer environment attaches to over an
+// external network (mirror of D1 migration 0041's `shared_stacks`). JSON-shaped columns
+// (`compose_files`/`compose_profiles`/`env_files`/`managed_networks`/`setup_steps`/
+// `health_gate`) are `text` JSON; `allow_host_commands` is 0/1 to mirror D1. Behaviourally
+// identical to the D1 repo so the cross-runtime conformance suite asserts the same round-trip.
+export const sharedStacks = pgTable(
+  'shared_stacks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    clone_url: text('clone_url').notNull(),
+    git_ref: text('git_ref'),
+    compose_files: text('compose_files').notNull().default('[]'),
+    compose_profiles: text('compose_profiles').notNull().default('[]'),
+    env_files: text('env_files').notNull().default('[]'),
+    managed_networks: text('managed_networks').notNull().default('[]'),
+    setup_steps: text('setup_steps').notNull().default('[]'),
+    health_gate: text('health_gate'),
+    allow_host_commands: integer('allow_host_commands').notNull().default(0),
+    status: text('status').notNull().default('stopped'),
+    last_error: text('last_error'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
+)
+
 // Sandbox (parallel prompt/model testing surface). Lives in a DEDICATED Postgres
 // `sandbox` schema (the analogue of the Worker's separate `SANDBOX_DB` D1 database), so
 // the tables are unprefixed (`sandbox.prompt_versions`, …) — the schema is the namespace.
