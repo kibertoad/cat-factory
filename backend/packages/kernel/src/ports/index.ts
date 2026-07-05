@@ -46,6 +46,7 @@ export type {
 } from './service-repositories.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export type { RequirementReviewRepository } from './requirement-review-repositories.js'
+export type { DocInterviewRepository } from './doc-interview-repositories.js'
 export type { InitiativeRepository } from './initiative-repositories.js'
 export type {
   KaizenGradingRepository,
@@ -249,6 +250,8 @@ export type {
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
   ProvisionedEnvironment,
+  RecipeStepLog,
+  RecipeStepRecorder,
   ProvisionFields,
   SecretResolver,
   RepoFileReader,
@@ -428,6 +431,7 @@ export type {
   SlackMemberMappingRepository,
 } from './slack-repositories.js'
 export type { MergePresetRepository } from './merge-preset-repositories.js'
+export type { SharedStackRepository } from './shared-stack-repositories.js'
 export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 export type {
   SandboxPromptVersionRepository,

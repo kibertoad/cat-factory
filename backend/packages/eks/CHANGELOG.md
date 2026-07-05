@@ -1,5 +1,68 @@
 # @cat-factory/eks
 
+## 0.1.8
+
+### Patch Changes
+
+- Updated dependencies [accb8ec]
+  - @cat-factory/contracts@0.104.0
+  - @cat-factory/kernel@0.95.0
+  - @cat-factory/integrations@0.70.1
+
+## 0.1.7
+
+### Patch Changes
+
+- Updated dependencies [cd435d1]
+  - @cat-factory/contracts@0.103.0
+  - @cat-factory/kernel@0.94.0
+  - @cat-factory/integrations@0.70.0
+
+## 0.1.6
+
+### Patch Changes
+
+- 77bc73c: Update dependencies to the latest versions within the supply-chain release-age
+  window. The Vercel AI SDK family stays within the `ai@6` / `@ai-sdk/*` majors
+  that `workers-ai-provider@^3` peers require (`ai@6.0.219`,
+  `@ai-sdk/anthropic@3.0.92`, `@ai-sdk/openai@3.0.80`,
+  `@ai-sdk/openai-compatible@2.0.56`, `@ai-sdk/provider@3.0.13`,
+  `@ai-sdk/amazon-bedrock@4.0.128`). Other bumps include `@hono/node-server`,
+  `pg-boss`, `undici`, `markdown-it`, `@aws-sdk/client-s3`, `@clack/prompts`,
+  `@types/node`, and eligible transitive dependencies. `@cloudflare/workers-types`
+  is held at `4.x` because `wrangler@4` peers on `^4`.
+- Updated dependencies [77bc73c]
+- Updated dependencies [076d02f]
+  - @cat-factory/integrations@0.69.1
+  - @cat-factory/kernel@0.93.0
+  - @cat-factory/contracts@0.102.0
+
+## 0.1.5
+
+### Patch Changes
+
+- Updated dependencies [029a689]
+- Updated dependencies [029a689]
+  - @cat-factory/contracts@0.101.1
+  - @cat-factory/integrations@0.69.0
+  - @cat-factory/kernel@0.92.0
+
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [f6399cf]
+  - @cat-factory/integrations@0.68.0
+
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [2e4d883]
+  - @cat-factory/contracts@0.101.0
+  - @cat-factory/kernel@0.91.0
+  - @cat-factory/integrations@0.67.1
+
 ## 0.1.2
 
 ### Patch Changes

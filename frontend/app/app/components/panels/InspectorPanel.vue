@@ -323,7 +323,11 @@ const showOriginalDescription = ref(false)
             variant="ghost"
             size="xs"
             :icon="showOriginalDescription ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-            @click="showOriginalDescription = !showOriginalDescription"
+            @click="
+              () => {
+                showOriginalDescription = !showOriginalDescription
+              }
+            "
           >
             {{ t('panels.inspector.originalDescriptionFrozen') }}
           </UButton>

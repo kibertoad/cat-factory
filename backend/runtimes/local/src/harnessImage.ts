@@ -17,12 +17,14 @@
 // CLAUDE.md "Any change that affects the runner image MUST bump the image tag". The image and
 // the backend are a matched set and must be released together.
 
+import { isOffValue } from './envFlags.js'
+
 /**
  * The harness image this backend release is matched to. Keep the tag in sync with
  * `@cat-factory/executor-harness`'s version (the value CI tags the published image with, and
  * the same tag `deploy/backend` pins). Bump it whenever the harness image bumps.
  */
-export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.34.10'
+export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.35.0'
 
 /**
  * The effective harness image ref: an explicit `LOCAL_HARNESS_IMAGE` wins (a custom build, a
@@ -32,17 +34,13 @@ export function resolveHarnessImage(env: NodeJS.ProcessEnv): string {
   return env.LOCAL_HARNESS_IMAGE?.trim() || RECOMMENDED_HARNESS_IMAGE
 }
 
-/** Values that explicitly DISABLE the boot refresh — the same convention as `LOCAL_NATIVE_AGENTS`. */
-const REFRESH_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
-
 /**
  * Resolve the boot-refresh mode from `LOCAL_HARNESS_IMAGE_REFRESH`. Any off-style value
- * (`false`/`0`/`off`/`no`/`none`/`disabled`, matching the repo's other flags) disables the
- * pull; unset or anything else refreshes.
+ * (`false`/`0`/`off`/`no`/`none`/`disabled`, matching the repo's other flags via
+ * {@link isOffValue}) disables the pull; unset or anything else refreshes.
  */
 export function resolveRefreshMode(env: NodeJS.ProcessEnv): 'pull' | 'off' {
-  const raw = env.LOCAL_HARNESS_IMAGE_REFRESH?.trim().toLowerCase()
-  return raw && REFRESH_OFF_VALUES.has(raw) ? 'off' : 'pull'
+  return isOffValue(env.LOCAL_HARNESS_IMAGE_REFRESH) ? 'off' : 'pull'
 }
 
 /** One container-CLI invocation, normalised to an exit status + captured stdout. */

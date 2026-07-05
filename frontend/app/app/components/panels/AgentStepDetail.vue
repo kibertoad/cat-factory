@@ -403,7 +403,11 @@ async function copyOutput() {
                   :icon="showProvisioning ? 'i-lucide-chevron-up' : 'i-lucide-scroll-text'"
                   variant="ghost"
                   size="xs"
-                  @click="showProvisioning = !showProvisioning"
+                  @click="
+                    () => {
+                      showProvisioning = !showProvisioning
+                    }
+                  "
                 >
                   {{
                     showProvisioning

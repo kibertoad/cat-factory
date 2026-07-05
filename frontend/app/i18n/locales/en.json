@@ -876,6 +876,12 @@
       "involvedServicesHint": "Connected services directly involved in this task: each spins up as an ephemeral environment alongside this task's own service, and the coding agent may change their repositories too.",
       "involvedServicesEmpty": "No connected services. Connect services on the service frame to select them here.",
       "involvedServiceStale": "No longer connected to this task's service; it is dropped on the next change."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {
@@ -2155,6 +2161,52 @@
         "removeFailed": "Could not remove the registry entry"
       }
     },
+    "sharedStacks": {
+      "tab": "Shared stacks",
+      "intro": "Long-lived compose infrastructure (databases, brokers, search, mail) brought up once per workspace and reused across runs and pull requests. A test environment attaches to a stack's managed network. Bringing a stack up runs on a local Docker deployment; on other backends you can still manage the definition.",
+      "stackNoun": "shared stack",
+      "status": {
+        "stopped": "Stopped",
+        "starting": "Starting",
+        "running": "Running",
+        "failed": "Failed"
+      },
+      "list": {
+        "heading": "Configured stacks",
+        "start": "Start",
+        "stop": "Stop",
+        "edit": "Edit",
+        "remove": "Delete stack"
+      },
+      "add": {
+        "heading": "Add a shared stack",
+        "name": "Name",
+        "cloneUrl": "Repository clone URL",
+        "cloneUrlHelp": "The git repository the stack's compose files live in.",
+        "gitRef": "Branch or tag (optional)",
+        "composeFiles": "Compose files",
+        "composeFilesHelp": "Comma-separated, repo-relative, in override order.",
+        "composeProfiles": "Compose profiles (optional)",
+        "managedNetworks": "Managed networks (optional)",
+        "managedNetworksHelp": "Networks this stack creates and owns for consumers to attach to.",
+        "allowHostCommands": "Allow host-command setup steps",
+        "save": "Add stack"
+      },
+      "edit": {
+        "heading": "Edit shared stack",
+        "save": "Save changes",
+        "cancel": "Cancel"
+      },
+      "toast": {
+        "created": "Shared stack added",
+        "createFailed": "Could not add the shared stack",
+        "updated": "Shared stack updated",
+        "updateFailed": "Could not update the shared stack",
+        "startFailed": "Could not start the shared stack",
+        "stopFailed": "Could not stop the shared stack",
+        "removeFailed": "Could not delete the shared stack"
+      }
+    },
     "localMode": {
       "title": "Local mode",
       "intro": "Tuning for the local container runner, stored on this machine's deployment (it replaced the {poolVars} / {harnessVars} env vars). Saving resizes the warm pool live, no restart needed; in-flight runs keep the container they already hold.",
@@ -2716,6 +2768,22 @@
     "confirmDisconnect": {
       "title": "Disconnect Slack?",
       "body": "Slack notifications will stop until you reconnect."
+    }
+  },
+  "docInterview": {
+    "title": "Refine the document",
+    "subtitle": "Answer the interviewer's questions so it can shape the document",
+    "intro": "The interviewer is refining this document before it's written. Answer its questions to shape the scope, audience and structure, then continue — or proceed to draft with what it has.",
+    "empty": "No interview found for this block.",
+    "brief": "Authoring brief",
+    "converged": "No questions are pending. The interviewer has what it needs and the document is being drafted.",
+    "answerPlaceholder": "Your answer",
+    "hint": "Continue lets the interviewer ask follow-ups; Proceed drafts with the answers so far.",
+    "proceed": "Proceed to draft",
+    "continue": "Continue",
+    "status": {
+      "awaiting": "Awaiting answers",
+      "done": "Done"
     }
   },
   "documents": {

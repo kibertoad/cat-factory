@@ -14,6 +14,7 @@ import { humanReviewApi } from './api/humanReview'
 import { humanTestApi } from './api/humanTest'
 import { infraHandlersApi } from './api/infraHandlers'
 import { initiativeApi } from './api/initiative'
+import { docInterviewApi } from './api/docInterview'
 import { visualConfirmApi } from './api/visualConfirm'
 import { kaizenApi } from './api/kaizen'
 import { localSettingsApi } from './api/localSettings'
@@ -21,6 +22,7 @@ import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
 import { presetsApi } from './api/presets'
+import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
 import { provisioningLogsApi } from './api/provisioningLogs'
 import { recurringApi } from './api/recurring'
@@ -111,9 +113,11 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...sharedStacksApi(ctx),
     ...providerConnectionsApi(ctx),
     ...infraHandlersApi(ctx),
     ...initiativeApi(ctx),
+    ...docInterviewApi(ctx),
     ...provisioningLogsApi(ctx),
     ...releaseHealthApi(ctx),
     ...packageRegistriesApi(ctx),

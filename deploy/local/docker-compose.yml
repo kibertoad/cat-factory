@@ -1,10 +1,21 @@
-# Local-mode supporting services. Only Postgres is needed: the orchestrator itself
-# runs as a plain Node process on the host (so it can drive the local container runtime
-# to spawn one executor-harness container per agent job), and the agent jobs are launched
-# by the LocalContainerRunnerTransport (Docker/Podman/OrbStack/Colima/Apple `container`,
-# per LOCAL_CONTAINER_RUNTIME) — not defined here.
+# Local-mode supporting services. The orchestrator itself runs as a plain Node process on
+# the host (so it can drive the local container runtime to spawn one executor-harness
+# container per agent job) — the agent jobs are launched by the LocalContainerRunnerTransport
+# (Docker/Podman/OrbStack/Colima/Apple `container`, per LOCAL_CONTAINER_RUNTIME), not here.
 #
-#   docker compose up -d postgres   # or: pnpm db:up
+# Two long-lived dependencies live here:
+#   - postgres  — the sole datastore.
+#   - searxng   — self-hosted web search, ON BY DEFAULT: the backend web-search proxy points
+#                 at it (WEB_SEARCH_SEARXNG_URL), so agents get web search with zero per-account
+#                 key entry. The host process reaches it at http://localhost:8080; agent
+#                 containers never touch it directly.
+#
+# searxng sits behind the `web-search` compose profile so a bare `docker compose up` never starts
+# it unasked — `pnpm up` opts in, and running web search off is `pnpm db:up` (postgres only), which
+# pairs with `LOCAL_WEB_SEARCH=off` on the backend.
+#
+#   pnpm up                                     # postgres + searxng (docker compose --profile web-search up -d)
+#   pnpm db:up                                  # postgres only      (docker compose up -d postgres)
 #   DATABASE_URL=postgres://cat:cat@localhost:5432/catfactory pnpm start
 services:
   postgres:
@@ -22,6 +33,26 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # SearXNG powers local web search. The official image disables the JSON API by default, so
+  # ./searxng/settings.yml enables `search.formats: [html, json]` (the proxy queries format=json)
+  # and turns off the bot limiter (the backend queries it programmatically).
+  # Pinned to an immutable date-based tag (NOT `:latest`) so a rerun never silently pulls a
+  # different build; bump it deliberately to a newer `searxng/searxng` tag when updating.
+  searxng:
+    # Behind the `web-search` profile: only `docker compose --profile web-search up` (i.e. `pnpm
+    # up`) starts it, so a plain `docker compose up` / `pnpm db:up` runs Postgres alone — matching
+    # a backend started with `LOCAL_WEB_SEARCH=off`.
+    profiles:
+      - web-search
+    image: searxng/searxng:2026.7.5-a6438586a
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8080/
+    restart: unless-stopped
 
 volumes:
   cat-factory-pg:

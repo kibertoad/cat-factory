@@ -269,6 +269,9 @@ export const blocks = pgTable(
     // beyond its own service (JSON array of frame block ids) — spun up as ephemeral
     // environments too; the coding agent may change their repos.
     involved_service_ids: text('involved_service_ids'),
+    // Task-level (document tasks): read-only reference repos for the `doc-writer` agent —
+    // serialized JSON array of { githubId, owner, name, defaultBranch, installationId? }.
+    reference_repos: text('reference_repos'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),
@@ -774,6 +777,32 @@ export const requirementReviews = pgTable(
   ],
 )
 
+// Interactive document-interview sessions (WS5; mirror of D1 migration 0040): one live session
+// per document-authoring block. The Q&A transcript lives as a JSON array (text) in `qa`;
+// `round`/`max_rounds` track the iterative interview loop; `brief` is the synthesized authoring
+// brief the writer starts from once the interview converges.
+export const docInterviewSessions = pgTable(
+  'doc_interview_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    status: text('status').notNull(),
+    round: integer('round').notNull().default(0),
+    max_rounds: integer('max_rounds').notNull().default(4),
+    qa: text('qa').notNull().default('[]'),
+    brief: text('brief'),
+    model: text('model'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // getByBlock looks up a block's sessions (newest wins), mirroring D1 migration 0040.
+    index('idx_doc_interview_sessions_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
 // Kaizen gradings (mirror of D1 migration 0015): one row per (run, step) recording the
 // post-run grade + recommendations the Kaizen agent produced. Recommendations are a JSON
 // array column. The unique (execution_id, step_index) index keeps scheduling idempotent.
@@ -1137,6 +1166,34 @@ export const mergeThresholdPresets = pgTable(
     // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
     index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
   ],
+)
+
+// Shared stacks — long-lived compose infra a per-PR consumer environment attaches to over an
+// external network (mirror of D1 migration 0041's `shared_stacks`). JSON-shaped columns
+// (`compose_files`/`compose_profiles`/`env_files`/`managed_networks`/`setup_steps`/
+// `health_gate`) are `text` JSON; `allow_host_commands` is 0/1 to mirror D1. Behaviourally
+// identical to the D1 repo so the cross-runtime conformance suite asserts the same round-trip.
+export const sharedStacks = pgTable(
+  'shared_stacks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    clone_url: text('clone_url').notNull(),
+    git_ref: text('git_ref'),
+    compose_files: text('compose_files').notNull().default('[]'),
+    compose_profiles: text('compose_profiles').notNull().default('[]'),
+    env_files: text('env_files').notNull().default('[]'),
+    managed_networks: text('managed_networks').notNull().default('[]'),
+    setup_steps: text('setup_steps').notNull().default('[]'),
+    health_gate: text('health_gate'),
+    allow_host_commands: integer('allow_host_commands').notNull().default(0),
+    status: text('status').notNull().default('stopped'),
+    last_error: text('last_error'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
 
 // Sandbox (parallel prompt/model testing surface). Lives in a DEDICATED Postgres

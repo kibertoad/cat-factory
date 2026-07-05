@@ -95,7 +95,15 @@ async function create() {
     </template>
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton color="neutral" variant="ghost" @click="open = false">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          @click="
+            () => {
+              open = false
+            }
+          "
+        >
           {{ t('common.cancel') }}
         </UButton>
         <UButton

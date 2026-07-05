@@ -8,6 +8,7 @@ import { useExecutionStore } from '~/stores/execution'
 import { useAgentRunsStore } from '~/stores/agentRuns'
 import { useNotificationsStore } from '~/stores/notifications'
 import { useMergePresetsStore } from '~/stores/mergePresets'
+import { useSharedStacksStore } from '~/stores/sharedStacks'
 import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
 import { useAgentConfigStore } from '~/stores/agentConfig'
 import { useModelPresetsStore } from '~/stores/modelPresets'
@@ -84,6 +85,7 @@ export const useWorkspaceStore = defineStore(
         useConsensusStore().reset()
         useGitHubStore().reset()
         useInitiativesStore().reset()
+        useDocInterviewStore().reset()
         // The fragment picker catalog is per-board (the merged tenant catalog), so drop
         // it too — the next inspector open re-fetches it for the switched-to board rather
         // than showing the previous board's (or a raw-id placeholder for) fragments.
@@ -106,6 +108,7 @@ export const useWorkspaceStore = defineStore(
         snapshot.mergePresets ?? [],
         snapshot.mergePresetCatalogVersions,
       )
+      useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
       useWorkspaceSettingsStore().hydrate(snapshot.settings)
       useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
       useModelPresetsStore().hydrate(snapshot.modelPresets ?? [])

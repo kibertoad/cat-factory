@@ -14,6 +14,10 @@ import type { ProviderConnectionKind } from '~/types/providerConnections'
 import InfrastructureBackendPicker from '~/components/settings/InfrastructureBackendPicker.vue'
 import InfraHandlersConfigurator from '~/components/settings/InfraHandlersConfigurator.vue'
 import LocalContainerPoolSettings from '~/components/settings/LocalContainerPoolSettings.vue'
+import SharedStacksPanel from '~/components/settings/SharedStacksPanel.vue'
+
+// The shared-stacks tab uses its own slot key beyond the provider-connection kinds.
+type InfraTabValue = ProviderConnectionKind | 'shared-stacks'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -37,7 +41,7 @@ const agentsAvailable = computed(() => (auth.infrastructure?.execution.available
 const envsAvailable = computed(() => (auth.infrastructure?.testEnv.available.length ?? 0) > 0)
 
 const tabs = computed(() => {
-  const out: { value: ProviderConnectionKind; label: string; icon: string; slot: string }[] = []
+  const out: { value: InfraTabValue; label: string; icon: string; slot: string }[] = []
   if (agentsAvailable.value)
     out.push({
       value: 'runner-pool',
@@ -52,10 +56,19 @@ const tabs = computed(() => {
       icon: 'i-lucide-cloud',
       slot: 'environment',
     })
+  // Shared stacks are long-lived compose infra a Tester environment attaches to, so they live
+  // alongside the test-environment config (shown wherever an environment backend is available).
+  if (envsAvailable.value)
+    out.push({
+      value: 'shared-stacks',
+      label: t('settings.sharedStacks.tab'),
+      icon: 'i-lucide-layers',
+      slot: 'shared-stacks',
+    })
   return out
 })
 
-const activeTab = ref<ProviderConnectionKind>(ui.infrastructureTab)
+const activeTab = ref<InfraTabValue>(ui.infrastructureTab)
 
 // Honour the deep-linked tab each time the window opens, falling back to the first available
 // tab if the requested one is off.
@@ -123,6 +136,9 @@ watch([tabs, () => store.loaded], () => {
                    the engine + connection per provision type, plus the custom-type catalog. -->
               <InfraHandlersConfigurator />
             </div>
+          </template>
+          <template #shared-stacks>
+            <SharedStacksPanel />
           </template>
         </UTabs>
 

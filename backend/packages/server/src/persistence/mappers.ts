@@ -88,6 +88,8 @@ export interface BlockRow {
   service_connections?: string | null
   /** Task-level: connected service frames directly involved in the task, JSON array of ids. */
   involved_service_ids?: string | null
+  /** Task-level: read-only reference repos for the `doc-writer` agent, JSON array. */
+  reference_repos?: string | null
   created_by: string | null
   responsible_product_user_id: string | null
   /** Task-level: the task-estimator's triage (complexity/risk/impact), JSON object. */
@@ -488,6 +490,22 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
         out.peer_pull_requests = p.peerPullRequests?.length
           ? JSON.stringify(p.peerPullRequests)
           : null
+      }
+    },
+  },
+  // A doc task's read-only reference repos for the `doc-writer` agent. Patch treats an empty
+  // array as "clear them" (write NULL, not "[]"), mirroring the other JSON-array block columns.
+  {
+    read: (row, out) => {
+      if (row.reference_repos != null)
+        out.referenceRepos = JSON.parse(row.reference_repos as string)
+    },
+    insert: (b, out) => {
+      out.reference_repos = b.referenceRepos?.length ? JSON.stringify(b.referenceRepos) : null
+    },
+    patch: (p, out) => {
+      if (p.referenceRepos !== undefined) {
+        out.reference_repos = p.referenceRepos?.length ? JSON.stringify(p.referenceRepos) : null
       }
     },
   },

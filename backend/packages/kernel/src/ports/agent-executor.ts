@@ -10,6 +10,7 @@ import type {
   InstanceSize,
   PullRequestRef,
   PeerPullRequest,
+  ReferenceRepo,
   ServiceProvisioning,
   StepSubtasks,
   StreamedFollowUp,
@@ -191,6 +192,13 @@ export interface AgentRunContext {
      * Absent ⇒ only the built-in exemplars (if any) are surfaced.
      */
     docExemplars?: { title: string; url: string; excerpt: string }[]
+    /**
+     * The synthesized authoring brief from the interactive document-interview session (WS5),
+     * present when the `doc-interviewer` step ran and converged for this task. The doc-writer
+     * folds it into its prompt as the refined spec to write from (in place of the raw outline).
+     * Absent ⇒ no interview ran (or none converged); the writer uses the outline/description.
+     */
+    docInterviewBrief?: string
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]
@@ -260,6 +268,15 @@ export interface AgentRunContext {
     description?: string
     envUrl?: string
   }[]
+  /**
+   * Read-only reference repositories attached to a document-authoring task (the doc-writer
+   * agent) — lifted verbatim by the engine from the task block's `referenceRepos`. The
+   * executor turns these into read-only sibling checkouts the agent may read but never write
+   * to. Each carries its own provider-neutral clone identity (repoId/owner/name/defaultBranch/
+   * connectionId), so a repo outside the workspace's synced projection can still be cloned.
+   * Absent for non-doc tasks or a task with none attached.
+   */
+  referenceRepos?: ReferenceRepo[]
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.

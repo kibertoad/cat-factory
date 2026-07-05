@@ -1,0 +1,1 @@
+ALTER TABLE "blocks" ADD COLUMN "reference_repos" text;

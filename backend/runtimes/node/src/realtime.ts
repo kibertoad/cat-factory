@@ -6,6 +6,7 @@ import type {
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
+  DocInterviewSession,
   EnvConfigRepairJob,
   ExecutionInstance,
   Initiative,
@@ -196,6 +197,10 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
 
   async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
     this.publish(workspaceId, { type: 'initiative', initiative, at: Date.now() })
+  }
+
+  async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
+    this.publish(workspaceId, { type: 'docInterview', session, at: Date.now() })
   }
 
   private publish(

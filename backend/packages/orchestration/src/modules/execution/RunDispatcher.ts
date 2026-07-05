@@ -43,6 +43,7 @@ import {
   ConflictError,
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
+  DOC_INTERVIEWER_AGENT_KIND,
   getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
   INITIATIVE_COMMITTER_AGENT_KIND,
@@ -127,6 +128,7 @@ import { HumanTestController } from './HumanTestController.js'
 import { MergeResolver } from './MergeResolver.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import type { InitiativeInterviewController } from './InitiativeInterviewController.js'
+import type { DocInterviewController } from './DocInterviewController.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { StepGraph } from './StepGraph.js'
 import { TesterController } from './TesterController.js'
@@ -260,6 +262,8 @@ export interface RunDispatcherDeps {
   architectureBrainstormKind: ReviewKind<BrainstormSession>
   /** The interactive-planning interviewer gate (slice 2); absent → the step passes through. */
   initiativeInterviewController?: InitiativeInterviewController
+  /** The interactive document-interview gate (WS5); absent → the step passes through. */
+  docInterviewController?: DocInterviewController
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
   ticketTrackerProvider?: TicketTrackerProvider
@@ -320,6 +324,7 @@ export class RunDispatcher {
   private readonly requirementsBrainstormKind: ReviewKind<BrainstormSession>
   private readonly architectureBrainstormKind: ReviewKind<BrainstormSession>
   private readonly initiativeInterviewController?: InitiativeInterviewController
+  private readonly docInterviewController?: DocInterviewController
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly ticketTrackerProvider?: TicketTrackerProvider
@@ -372,6 +377,7 @@ export class RunDispatcher {
     this.requirementsBrainstormKind = deps.requirementsBrainstormKind
     this.architectureBrainstormKind = deps.architectureBrainstormKind
     this.initiativeInterviewController = deps.initiativeInterviewController
+    this.docInterviewController = deps.docInterviewController
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
     this.ticketTrackerProvider = deps.ticketTrackerProvider
@@ -2482,6 +2488,20 @@ export class RunDispatcher {
               // advances rather than wedging (an initiative pipeline can't meaningfully run
               // without the store, but never leave the run stuck).
               this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
+      },
+      // The `doc-interviewer` step converses with the human to refine a document's scope /
+      // structure — an inline LLM gate that PARKS the run on a decision-wait while they answer
+      // through the interview window, then synthesizes an authoring brief onto its session and
+      // advances (see {@link DocInterviewController}). Pass-through when the interviewer isn't
+      // wired (no model), so document pipelines + conformance run unchanged off the raw outline.
+      {
+        kind: DOC_INTERVIEWER_AGENT_KIND,
+        order: 114,
+        canHandle: ({ step }) => step.agentKind === DOC_INTERVIEWER_AGENT_KIND,
+        handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+          this.docInterviewController
+            ? this.docInterviewController.evaluate(workspaceId, instance, step, block, isFinalStep)
+            : this.recordStepResult(workspaceId, instance, step, isFinalStep, { output: '' }),
       },
       // The `initiative-committer` step persists an APPROVED initiative plan: it runs
       // strictly after the planner's human gate, flips the entity to `executing`, and

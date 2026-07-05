@@ -109,6 +109,7 @@ import {
   WebCryptoPersonalSecretCipher,
   logger,
   buildInfrastructureCapabilities,
+  createDefaultWebSearchUpstream,
   createScopedModelProviderResolver,
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
@@ -117,6 +118,7 @@ import {
   type MintInstallationToken,
   type PersistenceRegistry,
   type ServerContainer,
+  type WebSearchUpstream,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
@@ -199,6 +201,7 @@ import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMe
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
@@ -208,6 +211,7 @@ import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessio
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
 import {
   D1SandboxPromptVersionRepository,
   D1SandboxFixtureRepository,
@@ -685,6 +689,10 @@ function selectMergeLifecycleDeps(
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     mergePresetRepository: new D1MergePresetRepository({ db }),
+    // Shared stacks (long-lived compose infra a consumer environment attaches to). CRUD +
+    // persistence are runtime-symmetric; the Worker never brings a stack UP (no host daemon),
+    // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".
+    sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
@@ -1357,6 +1365,19 @@ function buildOpenRouterCatalogService(
   })
 }
 
+// The deployment-wide trusted web-search upstream for CONTAINER agents, built from this
+// facade's own `WEB_SEARCH_*` env — the fallback the search proxy uses when a run's account
+// configured none of its own (see `createDefaultWebSearchUpstream` in @cat-factory/server).
+// Public endpoints only on workerd (no loopback-SearXNG story); kept symmetric with the Node
+// facade so a stock Cloudflare deployment can also set a deployment-wide default.
+function buildDefaultWebSearchUpstream(env: Env): WebSearchUpstream | undefined {
+  return createDefaultWebSearchUpstream({
+    braveApiKey: env.WEB_SEARCH_BRAVE_API_KEY,
+    searxngUrl: env.WEB_SEARCH_SEARXNG_URL,
+    searxngApiKey: env.WEB_SEARCH_SEARXNG_API_KEY,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
@@ -1405,18 +1426,24 @@ function buildContainerExecutor(
     return registry.installationToken(installationId)
   }
 
-  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
-  // its account actually has a usable upstream (else the tool would just fail/return
-  // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  // Advertise Pi's `web_search` tool to a run only when a usable upstream exists — either the
+  // deployment-wide default below (⇒ always on) or the run's account has its own keys (else the
+  // tool would just fail/return nothing). The per-account check runs off the account-settings
+  // store (its own short-TTL cache).
   const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
+  const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
   const webSearchSettings = buildAccountSettings(env, db, clock)
-  const resolveWebSearchEnabled = webSearchSettings
-    ? async (workspaceId: string): Promise<boolean> => {
-        const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
-        if (!accountId) return false
-        return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
-      }
-    : undefined
+  const resolveWebSearchEnabled =
+    defaultWebSearchUpstream || webSearchSettings
+      ? async (workspaceId: string): Promise<boolean> => {
+          // A deployment default serves every account, so the tool is on regardless.
+          if (defaultWebSearchUpstream) return true
+          if (!webSearchSettings) return false
+          const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+          if (!accountId) return false
+          return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
+        }
+      : undefined
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -1736,6 +1763,7 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
+    docInterviewRepository: new D1DocInterviewRepository({ db }),
     kaizenGradingRepository: new D1KaizenGradingRepository({ db }),
     kaizenVerifiedComboRepository: new D1KaizenVerifiedComboRepository({ db }),
     clarityReviewRepository: new D1ClarityReviewRepository({ db }),
@@ -2242,6 +2270,11 @@ export function buildContainer(
   // content-storage resolvers are derived from it in the domain composition root.
   const accountSettings = buildAccountSettings(env, db, clock, contentStorageCapability)
 
+  // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
+  // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+  // Kept symmetric with the Node facade; absent unless the operator sets a `WEB_SEARCH_*` var.
+  const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
+
   // Resolve the binary-artifact store for a workspace's account from its content-storage
   // settings (the blob backend is per-account; the metadata is the shared D1 store). Without
   // `accountSettings` (no encryption key) every workspace falls back to the runtime default
@@ -2436,6 +2469,11 @@ export function buildContainer(
   return {
     ...createCore(dependencies),
     config,
+    // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
+    // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+    // Surfaced on the ServerContainer here (not part of `CoreDependencies`, so `createCore` doesn't
+    // carry it) — kept symmetric with the Node facade.
+    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
     // Hosted source-control PAT login: a user signs in with their OWN GitHub/GitLab PAT (the
     // shared `/auth/pat` flow resolves it to an account, held to the login/org/domain allowlist).
     // GitHub always; GitLab when configured. Mirrors the Node facade so a GitLab-only Worker

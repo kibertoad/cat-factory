@@ -130,6 +130,7 @@ import {
   buildInfrastructureCapabilities,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  createDefaultWebSearchUpstream,
   makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -1675,9 +1676,21 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
       recordPrompts: config.observability.recordPrompts,
     }),
   )
-  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
-  // its account actually has a usable upstream (else the tool would just fail/return
-  // nothing). Resolved per run off a dedicated account-settings instance (short-TTL cache).
+  // A deployment-wide trusted web-search upstream, built from this facade's own `WEB_SEARCH_*`
+  // env, used by the search proxy as a fallback when a run's account has no web-search config
+  // (local mode defaults `WEB_SEARCH_SEARXNG_URL` to its self-hosted SearXNG). Distinct from the
+  // harness's own `SEARXNG_URL`/`BRAVE_SEARCH_API_KEY` runner-pool autodetect — those are for
+  // self-hosted pool containers; these keys stay on the backend. Surfaced on the ServerContainer
+  // below and read by `WebSearchProxyController`.
+  const defaultWebSearchUpstream = createDefaultWebSearchUpstream({
+    braveApiKey: env.WEB_SEARCH_BRAVE_API_KEY,
+    searxngUrl: env.WEB_SEARCH_SEARXNG_URL,
+    searxngApiKey: env.WEB_SEARCH_SEARXNG_API_KEY,
+  })
+  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when a
+  // usable upstream exists — either the deployment default above (⇒ always on) or the run's
+  // account has its own keys (else the tool would just fail/return nothing). The per-account
+  // check runs off a dedicated account-settings instance (short-TTL cache).
   const webSearchAccountKey = env.ENCRYPTION_KEY?.trim()
   const webSearchAccountSettings = webSearchAccountKey
     ? new AccountSettingsService({
@@ -1689,13 +1702,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         clock,
       })
     : undefined
-  const resolveWebSearchEnabled = webSearchAccountSettings
-    ? async (workspaceId: string): Promise<boolean> => {
-        const accountId = await repos.workspaceRepository.accountOf(workspaceId)
-        if (!accountId) return false
-        return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
-      }
-    : undefined
+  const resolveWebSearchEnabled =
+    defaultWebSearchUpstream || webSearchAccountSettings
+      ? async (workspaceId: string): Promise<boolean> => {
+          // A deployment default serves every account, so the tool is on regardless.
+          if (defaultWebSearchUpstream) return true
+          if (!webSearchAccountSettings) return false
+          const accountId = await repos.workspaceRepository.accountOf(workspaceId)
+          if (!accountId) return false
+          return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
+        }
+      : undefined
   // Private package registries (npm private orgs, GitHub Packages): sealed per-workspace
   // entries decrypted only at container dispatch, rendered by the harness into ~/.npmrc.
   // The cipher is shared by the dispatch resolver here and the management service below.
@@ -2232,6 +2249,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
+    // reuses the requirements reviewer's model config resolved just below.
+    docInterviewRepository: repos.docInterviewRepository,
     // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
     // facade, so the engine schedules gradings at run completion and the background sweep
     // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.
@@ -2248,6 +2268,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     mergePresetRepository: repos.mergePresetRepository,
+    // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
+    // unconditionally like the merge presets so the CRUD API works identically on both
+    // runtimes; the bring-up (`ensureUp`) needs a host daemon, so plain Node has no
+    // `composeRuntime` — the local facade injects one via `overrides.composeRuntime`.
+    sharedStackRepository: repos.sharedStackRepository,
     // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
     // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
     // reviewer model config below. The container body never enumerates the five repos.
@@ -2547,6 +2572,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   return {
     ...createCore(dependencies),
     config,
+    // The deployment-wide trusted web-search upstream (built from `WEB_SEARCH_*` env above),
+    // read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
     // The same checkout-free repo resolver the engine binds pre/post-ops with, surfaced so
     // the shared service-spec read controller can read the `spec/` artifact off main.
     resolveRunRepoContext: dependencies.resolveRunRepoContext,

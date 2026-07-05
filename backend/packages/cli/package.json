@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/cli",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Bootstrap CLI for the Agent Architecture Board: scaffold a local-mode deployment (Node/local backend + frontend SPA) on your own machine — generates the crypto secrets, populates and gitignores the .env files, and mints a GitHub/GitLab personal access token by opening the browser at the right pre-scoped URL.",
   "keywords": [
     "bootstrap",
@@ -43,12 +43,12 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@clack/prompts": "^1.6.0"
+    "@clack/prompts": "^1.7.0"
   },
   "devDependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "typescript": "7.0.1-rc",
     "valibot": "^1.4.2",
     "vitest": "^4.1.9"

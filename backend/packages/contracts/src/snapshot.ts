@@ -21,6 +21,7 @@ import { customAgentKindSchema } from './agent-presentation.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
+import { sharedStackSchema } from './shared-stacks.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
 // It lives in its own module because it references both ./entities and
@@ -77,6 +78,13 @@ export const workspaceSnapshotSchema = v.object({
    * auto-merge policy from). Attached by the worker, so optional on the wire.
    */
   mergePresets: v.optional(v.array(mergeThresholdPresetSchema)),
+  /**
+   * The workspace's shared stacks (long-lived compose infra a consumer environment
+   * attaches to over an external network — the acme-shared-services shape). Carried in
+   * the snapshot so the Infrastructure window renders the library + each stack's live
+   * status on load. Attached by the facade, so optional on the wire.
+   */
+  sharedStacks: v.optional(v.array(sharedStackSchema)),
   /**
    * The catalog of agent config-contribution descriptors (the task-level parameters
    * the registered agent kinds surface, e.g. the Tester's environment). The board

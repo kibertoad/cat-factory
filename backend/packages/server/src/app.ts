@@ -18,6 +18,7 @@ import { githubWebhookController } from './modules/github/GitHubWebhookControlle
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
+import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
 import { workspaceSettingsController } from './modules/settings/WorkspaceSettingsController.js'
 import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
@@ -35,6 +36,7 @@ import { promptFragmentController } from './modules/promptFragments/PromptFragme
 import { recurringPipelineController } from './modules/recurring/RecurringPipelineController.js'
 import { trackerSettingsController } from './modules/recurring/TrackerSettingsController.js'
 import { requirementReviewController } from './modules/requirements/RequirementReviewController.js'
+import { docInterviewController } from './modules/docInterview/DocInterviewController.js'
 import { followUpController } from './modules/followUp/FollowUpController.js'
 import { kaizenController } from './modules/kaizen/KaizenController.js'
 import { humanTestController } from './modules/humanTest/HumanTestController.js'
@@ -139,6 +141,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   // gate; 503 when no blob storage is configured.
   app.route('/workspaces/:workspaceId', artifactController())
   app.route('/workspaces/:workspaceId', requirementReviewController())
+  app.route('/workspaces/:workspaceId', docInterviewController())
   app.route('/workspaces/:workspaceId', followUpController())
   app.route('/workspaces/:workspaceId', kaizenController())
   app.route('/workspaces/:workspaceId', humanTestController())
@@ -150,6 +153,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
+  app.route('/workspaces/:workspaceId', sharedStackController())
   app.route('/workspaces/:workspaceId', sandboxController())
   app.route('/workspaces/:workspaceId', workspaceSettingsController())
   app.route('/workspaces/:workspaceId', releaseHealthController())

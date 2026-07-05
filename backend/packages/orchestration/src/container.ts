@@ -66,6 +66,7 @@ import type {
   EnvConfigRepairRunner,
 } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { DocInterviewRepository } from '@cat-factory/kernel'
 import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository, BrainstormStage } from '@cat-factory/kernel'
@@ -79,6 +80,7 @@ import type {
 } from '@cat-factory/kernel'
 import type {
   MergePresetRepository,
+  SharedStackRepository,
   WorkspaceSettingsRepository,
   ModelPresetRepository,
   ServiceFragmentDefaultsRepository,
@@ -153,11 +155,13 @@ import {
   RunnerPoolConnectionService,
   ProvisioningLogRecorder,
   ProvisioningLogService,
+  SharedStackService,
   SlackConnectionService,
   SlackSettingsService,
   SlackMemberMappingService,
   defaultEnvironmentBackendRegistry,
   defaultRunnerBackendRegistry,
+  type ComposeRuntime,
   type CustomManifestTypeRegistry,
   type DeployJobClient,
   type EnvironmentBackendRegistry,
@@ -168,6 +172,7 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { DocInterviewService } from './modules/docInterview/DocInterviewService.js'
 import {
   TesterQualityReviewService,
   type TesterQualityReviewer,
@@ -598,6 +603,15 @@ export interface CoreDependencies {
   // PRDs and tracker issues into the reviewed requirements.
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Persistence for the interactive document-interview feature (WS5). Mirrors
+   * `requirementReviewRepository`: both runtime facades wire it unconditionally. The
+   * doc-interview service reuses the requirements reviewer's model config below, and it is
+   * also read by the agent-context builder to fold the synthesized brief into the writer's
+   * context. The interviewer LLM is optional within the module (a document pipeline runs off
+   * the raw outline when no model is wired).
+   */
+  docInterviewRepository?: DocInterviewRepository
+  /**
    * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
    * library). Both runtime facades wire both repos unconditionally. The Kaizen module
    * assembles whenever they are present; the LLM grader resolves its model for the `kaizen`
@@ -747,6 +761,20 @@ export interface CoreDependencies {
   packageRegistrySecretCipher?: SecretCipher
   /** Resolves a task's merge threshold preset (auto-merge ceilings + CI attempt budget). */
   mergePresetRepository?: MergePresetRepository
+  /** A workspace's shared stacks (long-lived compose infra a consumer environment attaches to). */
+  sharedStackRepository?: SharedStackRepository
+  /**
+   * The host Docker seam a shared stack's bring-up/teardown drives. Wired ONLY on the local
+   * facade (host daemon); absent elsewhere ⇒ shared-stack CRUD works but the lifecycle endpoints
+   * refuse (the documented compose runtime-binding exception).
+   */
+  composeRuntime?: ComposeRuntime
+  /**
+   * The VCS token a shared stack's bring-up clones its repo with (for a private `cloneUrl`). Wired
+   * on the local facade from the same source-control PAT the agent containers push with; absent ⇒
+   * unauthenticated clone (public repos only).
+   */
+  sharedStackCloneToken?: string
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
   // Flat repository fields like every other feature; both runtime facades contribute
   // them by spreading one sandbox-owned `Partial<CoreDependencies>` mixin (the
@@ -971,6 +999,11 @@ export interface MergePresetsModule {
   service: MergePresetService
 }
 
+/** The shared-stacks feature's service, present only when its repository is wired. */
+export interface SharedStacksModule {
+  service: SharedStackService
+}
+
 /** The Sandbox feature's services, present only when its repositories are wired. */
 export interface SandboxModule {
   /** Management CRUD (prompt versions, fixtures, experiments). */
@@ -1096,6 +1129,8 @@ export interface Core {
   slack?: SlackModule
   /** Present only when the merge-preset repository is wired (see CoreDependencies). */
   mergePresets?: MergePresetsModule
+  /** Present only when the shared-stack repository is wired (see CoreDependencies). */
+  sharedStacks?: SharedStacksModule
   /** Present only when the Sandbox repositories are wired (see CoreDependencies). */
   sandbox?: SandboxModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
@@ -1586,6 +1621,38 @@ function createTesterQualityReviewer(
   })
 }
 
+/**
+ * Build the interactive document-interview service (WS5). Self-contained (owns its session
+ * store + the inline LLM); resolves its model exactly like the requirements reviewer (block
+ * pin → workspace per-kind default → routing default). Returns `undefined` when no session
+ * store is wired, so the `doc-interviewer` step passes through in unconfigured facades / tests.
+ * The LLM is optional within the service (the `enabled` getter is false without a model), so a
+ * store-but-no-model deployment still short-circuits the interviewer.
+ */
+function createDocInterviewService(deps: CoreDependencies): DocInterviewService | undefined {
+  const { docInterviewRepository } = deps
+  if (!docInterviewRepository) return undefined
+  return new DocInterviewService({
+    docInterviewRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
+}
+
 function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
@@ -1968,6 +2035,26 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
 }
 
 /**
+ * Assemble the shared-stacks module when its repository is present. The `composeRuntime` is
+ * optional — wired only on the local facade, so CRUD works everywhere but the lifecycle
+ * (ensureUp/teardown) refuses without a host daemon (the documented compose runtime-binding
+ * exception). Persistence is fully runtime-symmetric.
+ */
+function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | undefined {
+  const { sharedStackRepository } = deps
+  if (!sharedStackRepository) return undefined
+  const service = new SharedStackService({
+    sharedStackRepository,
+    workspaceRepository: deps.workspaceRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    ...(deps.composeRuntime ? { composeRuntime: deps.composeRuntime } : {}),
+    ...(deps.sharedStackCloneToken ? { cloneToken: deps.sharedStackCloneToken } : {}),
+  })
+  return { service }
+}
+
+/**
  * Assemble the Sandbox module when its five repositories are present (both runtime
  * facades wire them together). Reuses the requirements reviewer's inline model config —
  * the per-scope provider resolver, the routing default ref, and the block-model resolver
@@ -2305,6 +2392,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
+  const sharedStacks = createSharedStacksModule(dependencies)
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
@@ -2358,6 +2446,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     notifications?.service,
     fragmentLibrary,
   )
+  const docInterview = createDocInterviewService(dependencies)
   const clarity = createClarityModule(dependencies, notifications?.service)
   const brainstorm = createBrainstormModule(dependencies, notifications?.service)
   // Built before the execution engine so the engine's terminal hook can schedule a
@@ -2408,6 +2497,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         }
       : undefined,
     requirementReviewService: requirements?.service,
+    docInterviewService: docInterview,
     // The test quality-control companion's inline reviewer, resolved like every other inline
     // review (block pin → workspace preset → routing default). Built only when a model
     // provider is available; absent → the Tester gate's QC step is a pass-through.
@@ -2516,6 +2606,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(notifications ? { notifications } : {}),
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
+    ...(sharedStacks ? { sharedStacks } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),

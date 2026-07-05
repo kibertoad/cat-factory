@@ -1,5 +1,121 @@
 # @cat-factory/contracts
 
+## 0.104.0
+
+### Minor Changes
+
+- accb8ec: feat(docs): attach read-only reference repositories to a document-authoring task
+
+  Let a document-type task carry a list of **reference repositories** the `doc-writer` agent clones
+  READ-ONLY while it drafts, so it can reuse existing solutions in those repos as a reference. The
+  writer is already containerized (`container-coding`), so no interim step is needed — the reference
+  repos become extra sibling checkouts it may read but can never write to.
+
+  - **Read-only by construction.** Reference repos flow through a NEW `referenceRepos` block field,
+    separate from the writable `involvedServiceIds`/`fanOutMultiRepo` path. The harness job spec
+    carries no branch/PR fields for a reference, the multi-repo coder clones it at its base branch
+    with no work branch, and the push phase skips it — three independent layers, so a reference repo
+    is structurally impossible to push to. Its clone URL is host-allowlisted like every other repo.
+  - **Any accessible repo, by name fragment.** A reference need not be a board service or in the
+    workspace's synced projection: the inspector picker reuses the SAME server-side, debounced repo
+    search as the add-service modal (extracted into a shared `useRepoSearch` composable), so any repo
+    the workspace's VCS connection or the signed-in user's PAT can reach can be attached.
+  - **Provider-neutral by construction.** The `ReferenceRepo` identity mirrors the kernel's VCS
+    vocabulary (`repoId` / `owner` / `name` / `defaultBranch` / `connectionId`, per `VcsRepoRef` /
+    `VcsConnectionRef`) rather than GitHub-specific names, and the clone URL + provider come from the
+    deployment-level `ResolveRepoOrigin` seam the primary already rides — so a GitLab deployment
+    clones references from GitLab with no extra wiring.
+  - **Deduped against the primary.** A reference pointing at the doc task's own repo (or a duplicate
+    attachment) is dropped by the shared sibling-checkout key, so it can't collide with an existing
+    clone directory and fail the run.
+  - **Symmetric persistence.** New `reference_repos` JSON column on `blocks`, mirrored across the D1
+    and Drizzle stores with a cross-runtime conformance round-trip assertion.
+
+  Bumps `@cat-factory/executor-harness` (new read-only reference-leg support in the coding harness) —
+  the runner image tag pins and `RECOMMENDED_HARNESS_IMAGE` are bumped in lockstep.
+
+## 0.103.0
+
+### Minor Changes
+
+- cd435d1: Shared stacks (stack-recipes-and-shared-stacks initiative, slice 4): a workspace-scoped,
+  long-lived compose stack a per-PR consumer environment attaches to over an external network
+  (the acme-shared-services shape). Adds the `SharedStack` contract + `SharedStackRepository`
+  port, the D1 ⇄ Drizzle `shared_stacks` table with a cross-runtime conformance round-trip, a
+  `SharedStackService` lifecycle (CRUD everywhere + host-Docker `ensureUp`/`teardown` on the local
+  facade, reusing the compose recipe-runner), the `GET|POST|PATCH|DELETE /workspaces/:ws/shared-stacks`
+  (+ `ensure-up`/`teardown`) controller, and a "Shared stacks" panel in the Infrastructure window.
+  Bringing a stack up is local-facade-bound (host daemon), the documented compose exception to
+  runtime symmetry; persistence stays fully symmetric.
+
+## 0.102.0
+
+### Minor Changes
+
+- 076d02f: feat(documents): interactive document-review sessions (doc-task WS5)
+
+  Between the outline and the draft, a document-authoring run now converses with the requester
+  instead of a single binary approve/revise gate. A new inline `doc-interviewer` step (inserted
+  after `doc-outliner` in `pl_document`, replacing the outline's human gate) asks a small batch of
+  clarifying questions about scope, audience and structure, parks the run on the standard durable
+  decision-wait while the human answers through a dedicated window, and iterates (up to a round
+  cap) until it synthesizes a refined **authoring brief** the `doc-writer`/`doc-finalizer` start
+  from (folded into their context via the agent-context builder).
+
+  The park/answer/resume/advance spine is now a shared `InterviewGateController<TEntity>`
+  parameterized by an `InterviewGateKind` strategy; both the document interviewer and the
+  interactive-planning (initiative) interviewer ride it, so the two gates can't drift. A document
+  task has no owning entity row, so its transcript is persisted in its own `doc_interview_sessions`
+  table — mirrored across D1 ⇄ Drizzle with a cross-runtime conformance assertion. The interview
+  window is wired through the universal result-view seam (`doc-interview`) and updates live over a
+  new `docInterview` workspace event. Pass-through when no interviewer model is wired, so document
+  pipelines run unchanged.
+
+  Hardening: a re-run of a document task now clears the block's prior session before interviewing
+  (so it starts clean instead of reusing a stale, already-converged one), the converged brief is
+  folded only into the two kinds that consume it (`doc-writer`/`doc-finalizer`), and a non-final
+  interviewer pass that returns neither questions nor a brief fails the run loudly instead of
+  silently skipping the interview with an empty brief.
+
+  Breaking: `pl_document` bumps to version 3 (the reseed offer), and its step indices shift (the
+  interviewer is inserted at index 2), so in-flight runs on the old shape should be restarted.
+
+## 0.101.1
+
+### Patch Changes
+
+- 029a689: chore(environments): genericize the stack-recipes pilot name in code + fixtures
+
+  Replace the real company name used as the stack-recipes pilot with the neutral `acme`
+  placeholder across the code comments and detection test fixtures (`acme-main`, `acme-net`,
+  `deployment/acme-db-dummy/*.sql`, …). Behaviour-neutral: the detection fixtures rename both
+  the input and the expected assertion in lockstep, so the golden tests are unchanged.
+
+## 0.101.0
+
+### Minor Changes
+
+- 2e4d883: Initiative presets — slice 1: preset contracts, kernel registry, and entity extensions.
+
+  - **contracts** (`initiative-preset.ts`): the serialisable, SPA-facing preset vocabulary —
+    `InitiativePresetField` (the `ProviderConfigField` family plus `checkbox-group`, `path`, and
+    single-condition `showWhen` visibility), `InitiativePresetDescriptor` (form + planning-pipeline
+    binding + interview/human-review/fragment/policy defaults + a derived `probe` flag), and the pure
+    helpers `isSafeRepoDirPath`, `isPresetFieldVisible`, and `validateInitiativePresetInputs`
+    (returns `string[]` — empty ⇒ valid). The bounded `InitiativePresetInputs` record + the item
+    `spawn` decoration bag (`taskTypeFields`/`fragmentIds`/`agentConfig`/`gates`) live in
+    `initiative.ts` (with the entity that persists them) to avoid a valibot import cycle.
+  - **contracts** (`initiative.ts`): the `Initiative` entity gains optional `presetId` +
+    `presetInputs` (frozen at create), and both the tracker item and the planner draft item gain the
+    optional `spawn` bag. All ride the existing JSON `doc` blob — no migration, runtime-symmetric.
+  - **kernel** (`initiative-preset-registry.ts`): the module-global `registerInitiativePreset` seam
+    (mirroring the pipeline / gate registries) carrying the descriptor plus the `detect` / `seedPlan`
+    code hooks and per-agent-kind `promptAdditions`. Ships the built-in `preset_generic` strangler
+    default (always resolvable) and `initiativePresetDescriptors()`, which derives each descriptor's
+    wire `probe` flag from the presence of a `detect` hook.
+
+  Additive only — an initiative with no `presetId` keeps today's behaviour byte-for-byte.
+
 ## 0.100.0
 
 ### Minor Changes
@@ -36,7 +152,7 @@
 
   Add the declarative `StackRecipe` shape to the `docker-compose` branch of `ServiceProvisioning`
   plus the recommendation-shape extensions the detector (slice 2) will populate — the contracts
-  foundation for provisioning complex multi-step compose repos (the lokalise-main pilot).
+  foundation for provisioning complex multi-step compose repos (the acme-main pilot).
 
   - New optional `recipe` field on `serviceProvisioningSchema` (`stackRecipeSchema`): ordered
     `-f` `composeFiles` layering, `composeProfiles`, `envFiles` materialization (template →

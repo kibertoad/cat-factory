@@ -36,6 +36,8 @@ import type {
   IncidentEnrichmentConnectionRepository,
   MergePresetRepository,
   MergeThresholdPreset,
+  SharedStack,
+  SharedStackRepository,
   ObservabilityConnectionRecord,
   ObservabilityConnectionRepository,
   ObservabilityProviderKind,
@@ -65,6 +67,9 @@ import type {
   RequirementReviewItem,
   RequirementRecommendation,
   RequirementReviewRepository,
+  DocInterviewSession,
+  DocInterviewQa,
+  DocInterviewRepository,
   KaizenGrading,
   KaizenGradingStatus,
   KaizenGradingRepository,
@@ -173,6 +178,7 @@ import {
   emailConnections,
   llmCallMetrics,
   provisioningLog,
+  sharedStacks,
   memberships,
   mergeThresholdPresets,
   releaseHealthConfigs,
@@ -180,6 +186,7 @@ import {
   pipelineSchedules,
   pipelines,
   requirementReviews,
+  docInterviewSessions,
   kaizenGradings,
   kaizenVerifiedCombos,
   clarityReviews,
@@ -2531,6 +2538,103 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
   }
 }
 
+type DocInterviewRow = typeof docInterviewSessions.$inferSelect
+
+function rowToDocInterviewSession(row: DocInterviewRow): DocInterviewSession {
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    status: row.status as DocInterviewSession['status'],
+    round: row.round,
+    maxRounds: row.max_rounds,
+    qa: parseJsonArray<DocInterviewQa>(row.qa),
+    brief: row.brief,
+    model: row.model,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Interactive document-interview sessions over Postgres (the Drizzle mirror of the Worker's
+ * `D1DocInterviewRepository`, migration 0040). The Q&A live as a JSON array in `qa`; the service
+ * keeps at most one live session per block, so `getByBlock` returns the latest. Behaviourally
+ * identical to the D1 repo so the cross-runtime conformance suite asserts the same interview
+ * brief substitution against both stores.
+ */
+export class DrizzleDocInterviewRepository implements DocInterviewRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<DocInterviewSession | null> {
+    const rows = await this.db
+      .select()
+      .from(docInterviewSessions)
+      .where(
+        and(
+          eq(docInterviewSessions.workspace_id, workspaceId),
+          eq(docInterviewSessions.block_id, blockId),
+        ),
+      )
+      .orderBy(desc(docInterviewSessions.created_at))
+      .limit(1)
+    return rows[0] ? rowToDocInterviewSession(rows[0]) : null
+  }
+
+  async get(workspaceId: string, id: string): Promise<DocInterviewSession | null> {
+    const rows = await this.db
+      .select()
+      .from(docInterviewSessions)
+      .where(
+        and(eq(docInterviewSessions.workspace_id, workspaceId), eq(docInterviewSessions.id, id)),
+      )
+      .limit(1)
+    return rows[0] ? rowToDocInterviewSession(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, session: DocInterviewSession): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: session.id,
+      block_id: session.blockId,
+      status: session.status,
+      round: session.round,
+      max_rounds: session.maxRounds,
+      qa: JSON.stringify(session.qa ?? []),
+      brief: session.brief,
+      model: session.model,
+      created_at: session.createdAt,
+      updated_at: session.updatedAt,
+    }
+    await this.db
+      .insert(docInterviewSessions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [docInterviewSessions.workspace_id, docInterviewSessions.id],
+        set: {
+          block_id: values.block_id,
+          status: values.status,
+          round: values.round,
+          max_rounds: values.max_rounds,
+          qa: values.qa,
+          brief: values.brief,
+          model: values.model,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(docInterviewSessions)
+      .where(
+        and(
+          eq(docInterviewSessions.workspace_id, workspaceId),
+          eq(docInterviewSessions.block_id, blockId),
+        ),
+      )
+  }
+}
+
 type KaizenGradingRow = typeof kaizenGradings.$inferSelect
 
 function rowToKaizenGrading(row: KaizenGradingRow): KaizenGrading {
@@ -3338,6 +3442,132 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
           eq(mergeThresholdPresets.is_default, 0),
         ),
       )
+  }
+}
+
+// Shape-guarded parsers matching the D1 mirror (`D1SharedStackRepository`) EXACTLY, so a
+// malformed/hand-edited JSON column coerces identically on both stores (a non-array ⇒ `[]`, a
+// non-object health gate ⇒ `null`) rather than the Node facade handing the domain a raw value the
+// Worker would have dropped — the "keep the runtimes symmetric" guarantee holds for bad data too.
+function parseSharedStackArray<T>(json: string): T[] {
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? (parsed as T[]) : []
+  } catch {
+    return []
+  }
+}
+
+function parseSharedStackHealthGate(json: string | null): SharedStack['healthGate'] {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json)
+    return parsed && typeof parsed === 'object'
+      ? (parsed as NonNullable<SharedStack['healthGate']>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+function rowToSharedStack(row: typeof sharedStacks.$inferSelect): SharedStack {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    cloneUrl: row.clone_url,
+    gitRef: row.git_ref,
+    composeFiles: parseSharedStackArray<SharedStack['composeFiles'][number]>(row.compose_files),
+    composeProfiles: parseSharedStackArray<SharedStack['composeProfiles'][number]>(
+      row.compose_profiles,
+    ),
+    envFiles: parseSharedStackArray<SharedStack['envFiles'][number]>(row.env_files),
+    managedNetworks: parseSharedStackArray<SharedStack['managedNetworks'][number]>(
+      row.managed_networks,
+    ),
+    setupSteps: parseSharedStackArray<SharedStack['setupSteps'][number]>(row.setup_steps),
+    healthGate: parseSharedStackHealthGate(row.health_gate),
+    allowHostCommands: row.allow_host_commands === 1,
+    status: row.status as SharedStack['status'],
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * A workspace's shared stacks over Postgres (the Drizzle mirror of the Worker's
+ * `D1SharedStackRepository`, migration 0041). JSON-shaped fields are stored as text JSON and
+ * `allow_host_commands` as 0/1; behaviourally identical to the D1 repo so the cross-runtime
+ * conformance suite asserts the same round-trip.
+ */
+export class DrizzleSharedStackRepository implements SharedStackRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, id: string): Promise<SharedStack | null> {
+    const rows = await this.db
+      .select()
+      .from(sharedStacks)
+      .where(and(eq(sharedStacks.workspace_id, workspaceId), eq(sharedStacks.id, id)))
+      .limit(1)
+    return rows[0] ? rowToSharedStack(rows[0]) : null
+  }
+
+  async list(workspaceId: string): Promise<SharedStack[]> {
+    const rows = await this.db
+      .select()
+      .from(sharedStacks)
+      .where(eq(sharedStacks.workspace_id, workspaceId))
+      .orderBy(sharedStacks.created_at)
+    return rows.map(rowToSharedStack)
+  }
+
+  async upsert(workspaceId: string, stack: SharedStack): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: stack.id,
+      name: stack.name,
+      clone_url: stack.cloneUrl,
+      git_ref: stack.gitRef,
+      compose_files: JSON.stringify(stack.composeFiles),
+      compose_profiles: JSON.stringify(stack.composeProfiles),
+      env_files: JSON.stringify(stack.envFiles),
+      managed_networks: JSON.stringify(stack.managedNetworks),
+      setup_steps: JSON.stringify(stack.setupSteps),
+      health_gate: stack.healthGate ? JSON.stringify(stack.healthGate) : null,
+      allow_host_commands: stack.allowHostCommands ? 1 : 0,
+      status: stack.status,
+      last_error: stack.lastError,
+      created_at: stack.createdAt,
+      updated_at: stack.updatedAt,
+    }
+    await this.db
+      .insert(sharedStacks)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [sharedStacks.workspace_id, sharedStacks.id],
+        set: {
+          name: values.name,
+          clone_url: values.clone_url,
+          git_ref: values.git_ref,
+          compose_files: values.compose_files,
+          compose_profiles: values.compose_profiles,
+          env_files: values.env_files,
+          managed_networks: values.managed_networks,
+          setup_steps: values.setup_steps,
+          health_gate: values.health_gate,
+          allow_host_commands: values.allow_host_commands,
+          status: values.status,
+          last_error: values.last_error,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async remove(workspaceId: string, id: string): Promise<void> {
+    await this.db
+      .delete(sharedStacks)
+      .where(and(eq(sharedStacks.workspace_id, workspaceId), eq(sharedStacks.id, id)))
   }
 }
 
@@ -4236,6 +4466,7 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
+  docInterviewRepository: DocInterviewRepository
   kaizenGradingRepository: KaizenGradingRepository
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   consensusSessionRepository: ConsensusSessionRepository
@@ -4243,6 +4474,7 @@ export interface CoreRepositories {
   brainstormSessionRepository: BrainstormSessionRepository
   initiativeRepository: InitiativeRepository
   mergePresetRepository: MergePresetRepository
+  sharedStackRepository: SharedStackRepository
   workspaceSettingsRepository: WorkspaceSettingsRepository
   observabilityConnectionRepository: ObservabilityConnectionRepository
   packageRegistryConnectionRepository: PackageRegistryConnectionRepository
@@ -4277,6 +4509,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
+    docInterviewRepository: new DrizzleDocInterviewRepository(db),
     kaizenGradingRepository: new DrizzleKaizenGradingRepository(db),
     kaizenVerifiedComboRepository: new DrizzleKaizenVerifiedComboRepository(db),
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),
@@ -4284,6 +4517,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     brainstormSessionRepository: new DrizzleBrainstormSessionRepository(db),
     initiativeRepository: new DrizzleInitiativeRepository(db),
     mergePresetRepository: new DrizzleMergePresetRepository(db),
+    sharedStackRepository: new DrizzleSharedStackRepository(db),
     workspaceSettingsRepository: new DrizzleWorkspaceSettingsRepository(db),
     observabilityConnectionRepository: new DrizzleObservabilityConnectionRepository(db),
     packageRegistryConnectionRepository: new DrizzlePackageRegistryConnectionRepository(db),

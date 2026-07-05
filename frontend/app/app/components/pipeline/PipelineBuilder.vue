@@ -762,7 +762,11 @@ async function clone(p: Pipeline) {
               :color="showArchived ? 'primary' : 'neutral'"
               variant="ghost"
               size="xs"
-              @click="showArchived = !showArchived"
+              @click="
+                () => {
+                  showArchived = !showArchived
+                }
+              "
             >
               {{
                 showArchived
@@ -987,7 +991,16 @@ async function clone(p: Pipeline) {
 
     <template #footer>
       <div class="flex w-full items-center justify-end gap-2">
-        <UButton color="neutral" variant="ghost" size="sm" @click="addAgentOpen = false">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          @click="
+            () => {
+              addAgentOpen = false
+            }
+          "
+        >
           {{ t('common.cancel') }}
         </UButton>
         <UButton

@@ -97,7 +97,15 @@ function goConnect() {
             {{ t('providers.personalCredential.connectBody', { vendor: vendorLabel }) }}
           </p>
           <div class="flex justify-end gap-2">
-            <UButton color="neutral" variant="ghost" @click="open = false">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              @click="
+                () => {
+                  open = false
+                }
+              "
+            >
               {{ t('providers.personalCredential.cancel') }}
             </UButton>
             <UButton icon="i-lucide-shield-check" @click="goConnect()">
@@ -120,7 +128,15 @@ function goConnect() {
             />
           </UFormField>
           <div class="flex justify-end gap-2">
-            <UButton color="neutral" variant="ghost" @click="open = false">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              @click="
+                () => {
+                  open = false
+                }
+              "
+            >
               {{ t('providers.personalCredential.cancel') }}
             </UButton>
             <UButton :loading="busy" :disabled="password.length < 6" @click="submit()">

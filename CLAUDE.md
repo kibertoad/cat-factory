@@ -249,6 +249,48 @@ Full model: [`docs/initiatives/caching-layer.md`](./docs/initiatives/caching-lay
 Keep the runtimes symmetric (the slice + its invalidation land for both facades at once) and add
 a conformance assertion for any cached behaviour a facade could get wrong.
 
+## Git-provider-agnostic (VCS) naming & patterns — never re-hardcode GitHub
+
+The platform talks to **multiple VCS providers** (`github` + `gitlab`, extensible). The
+GitHub-only origins are being strangled behind a **provider-neutral VCS layer**, so any NEW
+repo/connection identity you model, or any clone/PR path you touch, MUST be provider-agnostic.
+Reintroducing GitHub-specific names or a hard-coded `github.com` / `provider: 'github'` in a
+shared path is a bug, not a shortcut — it silently breaks GitLab deployments (local mode is
+GitLab-capable).
+
+- **Use the neutral identity vocabulary for new types** (`backend/packages/kernel/src/domain/vcs-types.ts`):
+  `VcsProvider` (`'github' | 'gitlab'`, + `VCS_PROVIDERS` / `isVcsProvider`), `VcsRepoRef`
+  (`{ repoId, owner, repo }`), `VcsConnectionRef` (`{ provider, connectionId }`). A persisted or
+  wire type that identifies a repo/connection names its fields **`repoId` / `connectionId` /
+  `provider`**, NEVER `githubId` / `installationId`. GitHub maps on via `githubConnectionRef(id)` /
+  `githubInstallationId(conn)` (`connectionId = String(installationId)`, `repoId = String(numericId)`),
+  which are the ONLY place the GitHub shape of those ids is known. `@cat-factory/contracts` sits
+  below kernel, so it mirrors the union as `vcsProviderSchema` (keep the member lists in step).
+  (The `ReferenceRepo` doc-task type is the reference good citizen — `repoId`/`connectionId`, no
+  GitHub names.)
+- **Provider is a DEPLOYMENT-level fact, resolved through `ResolveRepoOrigin`**
+  (`@cat-factory/server`, `ContainerAgentExecutor.ts`), which maps a repo → `{ cloneUrl, provider }`.
+  It defaults to `github.com`; a GitLab/local deployment injects a builder emitting the configured
+  host + `provider: 'gitlab'`. So in ANY clone/dispatch path, ride `this.deps.resolveRepoOrigin ??
+githubRepoOrigin` and pass `origin.provider` through to the harness `RepoSpec` (which carries the
+  `provider` discriminator) — do NOT build a `https://github.com/...` URL or stamp `provider:
+'github'` yourself. A new repo leg (peer, reference, …) copies the primary's origin resolution.
+- **GitLab is ADAPTED INTO the (still GitHub-named) canonical client**, not bolted on beside it:
+  `@cat-factory/gitlab`'s `FetchGitLabClient` implements the kernel `VcsClient` port, and
+  `vcsBackedGitHubClient` presents that `VcsClient` as a `GitHubClient` so the GitHub-shaped service
+  layer (`GitHubSyncService.listAvailableRepos`, the projection, the pickers) works unchanged on
+  GitLab. The engine reads gates/merge/`RepoFiles` through **`engineVcsClient` (`githubClient ??
+gitlabEngineClient`)**, wired in every facade — keep it distinct from the App-only `githubClient`
+  (GitHub-issue-specific consumers must NOT get the GitLab fallback, or a GitLab deployment offers a
+  dead "GitHub Issues" source). Frontend repo discovery is the GitHub-shaped store
+  (`useGitHubStore` / `listGitHubAvailableRepos`) that returns GitLab projects via the adapter —
+  there is no separate GitLab store; do not add one.
+- **The migration is incremental** — the kernel _ports_ are neutralized, but many _entity_ types
+  (`GitHubRepo`, the `github_repos`/`github_installations` projection tables) are still GitHub-named
+  and reused as-is (their shapes aren't GitHub-specific; "Phase 1 … folds the entity names too"). So
+  copy the **neutral** shape for new surfaces even though older ones haven't migrated — do not cite an
+  un-migrated neighbour as license to name a new field `githubId`.
+
 ## Resolving conflicting Drizzle migrations (post-merge)
 
 The Node facade's Postgres migrations (`backend/runtimes/node/drizzle/`) use **drizzle-kit

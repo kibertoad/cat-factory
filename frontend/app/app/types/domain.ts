@@ -28,6 +28,7 @@ export type {
   DocKindFieldSpec,
   Block,
   PullRequestRef,
+  ReferenceRepo,
   CloudProvider,
   InstanceSize,
   ProvisionType,
@@ -138,3 +139,4 @@ export type * from './services'
 export type * from './recurring'
 export type * from './tracker'
 export type * from './initiative'
+export type * from './doc-interview'

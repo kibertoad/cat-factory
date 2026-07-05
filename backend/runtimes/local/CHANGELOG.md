@@ -1,5 +1,253 @@
 # @cat-factory/local-server
 
+## 0.51.0
+
+### Minor Changes
+
+- accb8ec: feat(docs): attach read-only reference repositories to a document-authoring task
+
+  Let a document-type task carry a list of **reference repositories** the `doc-writer` agent clones
+  READ-ONLY while it drafts, so it can reuse existing solutions in those repos as a reference. The
+  writer is already containerized (`container-coding`), so no interim step is needed — the reference
+  repos become extra sibling checkouts it may read but can never write to.
+
+  - **Read-only by construction.** Reference repos flow through a NEW `referenceRepos` block field,
+    separate from the writable `involvedServiceIds`/`fanOutMultiRepo` path. The harness job spec
+    carries no branch/PR fields for a reference, the multi-repo coder clones it at its base branch
+    with no work branch, and the push phase skips it — three independent layers, so a reference repo
+    is structurally impossible to push to. Its clone URL is host-allowlisted like every other repo.
+  - **Any accessible repo, by name fragment.** A reference need not be a board service or in the
+    workspace's synced projection: the inspector picker reuses the SAME server-side, debounced repo
+    search as the add-service modal (extracted into a shared `useRepoSearch` composable), so any repo
+    the workspace's VCS connection or the signed-in user's PAT can reach can be attached.
+  - **Provider-neutral by construction.** The `ReferenceRepo` identity mirrors the kernel's VCS
+    vocabulary (`repoId` / `owner` / `name` / `defaultBranch` / `connectionId`, per `VcsRepoRef` /
+    `VcsConnectionRef`) rather than GitHub-specific names, and the clone URL + provider come from the
+    deployment-level `ResolveRepoOrigin` seam the primary already rides — so a GitLab deployment
+    clones references from GitLab with no extra wiring.
+  - **Deduped against the primary.** A reference pointing at the doc task's own repo (or a duplicate
+    attachment) is dropped by the shared sibling-checkout key, so it can't collide with an existing
+    clone directory and fail the run.
+  - **Symmetric persistence.** New `reference_repos` JSON column on `blocks`, mirrored across the D1
+    and Drizzle stores with a cross-runtime conformance round-trip assertion.
+
+  Bumps `@cat-factory/executor-harness` (new read-only reference-leg support in the coding harness) —
+  the runner image tag pins and `RECOMMENDED_HARNESS_IMAGE` are bumped in lockstep.
+
+### Patch Changes
+
+- Updated dependencies [accb8ec]
+  - @cat-factory/contracts@0.104.0
+  - @cat-factory/kernel@0.95.0
+  - @cat-factory/server@0.88.0
+  - @cat-factory/orchestration@0.77.0
+  - @cat-factory/executor-harness@1.35.0
+  - @cat-factory/node-server@0.79.0
+  - @cat-factory/agents@0.39.2
+  - @cat-factory/gitlab@0.7.11
+  - @cat-factory/integrations@0.70.1
+
+## 0.50.0
+
+### Minor Changes
+
+- cd435d1: Shared stacks (stack-recipes-and-shared-stacks initiative, slice 4): a workspace-scoped,
+  long-lived compose stack a per-PR consumer environment attaches to over an external network
+  (the acme-shared-services shape). Adds the `SharedStack` contract + `SharedStackRepository`
+  port, the D1 ⇄ Drizzle `shared_stacks` table with a cross-runtime conformance round-trip, a
+  `SharedStackService` lifecycle (CRUD everywhere + host-Docker `ensureUp`/`teardown` on the local
+  facade, reusing the compose recipe-runner), the `GET|POST|PATCH|DELETE /workspaces/:ws/shared-stacks`
+  (+ `ensure-up`/`teardown`) controller, and a "Shared stacks" panel in the Infrastructure window.
+  Bringing a stack up is local-facade-bound (host daemon), the documented compose exception to
+  runtime symmetry; persistence stays fully symmetric.
+
+### Patch Changes
+
+- Updated dependencies [cd435d1]
+  - @cat-factory/contracts@0.103.0
+  - @cat-factory/kernel@0.94.0
+  - @cat-factory/integrations@0.70.0
+  - @cat-factory/orchestration@0.76.0
+  - @cat-factory/server@0.87.0
+  - @cat-factory/node-server@0.78.0
+  - @cat-factory/agents@0.39.1
+  - @cat-factory/gitlab@0.7.10
+  - @cat-factory/executor-harness@1.34.12
+
+## 0.49.0
+
+### Minor Changes
+
+- c435c09: Local mode ships an on-by-default self-hosted SearXNG web-search upstream.
+
+  Web search for container agents is a backend proxy (`/v1/web-search/search`) that resolves its
+  upstream from the run's per-account settings — so local mode previously had no web search until a
+  developer hand-entered keys. This adds a **deployment-level trusted default upstream** the proxy
+  falls back to when the account has none, and wires a self-hosted SearXNG as that default in local
+  mode (on by default, disable with `LOCAL_WEB_SEARCH=off`).
+
+  - **server**: `SearxngWebSearchUpstream` gains a `trusted` flag that trusts only the deployment's
+    own configured origin (its base URL — which may be loopback/LAN — and same-origin redirects)
+    while a CROSS-origin redirect stays SSRF-guarded, so a trusted-but-compromised upstream can't
+    pivot to an internal/metadata host; redirect/credential-stripping/byte-cap protection is
+    unchanged. New `createDefaultWebSearchUpstream(...)` (trusted counterpart to
+    `createWebSearchUpstream`). `ServerContainer` gains optional `defaultWebSearchUpstream`, which
+    `WebSearchProxyController` uses as the fallback when the account resolves no upstream (the
+    account path still wins and stays SSRF-guarded; neither ⇒ the unchanged empty-result degrade).
+  - **node-server & worker**: both facades build the default from `WEB_SEARCH_BRAVE_API_KEY` /
+    `WEB_SEARCH_SEARXNG_URL` / `WEB_SEARCH_SEARXNG_API_KEY`, surface it on the container, and
+    advertise Pi's `web_search` tool whenever a default exists (or the account has keys). A stock
+    Node **or Cloudflare** deployment can now set a deployment-wide default (Brave or a public
+    self-hosted SearXNG); each facade carries a proxy-fallback parity test.
+  - **local-server**: `applyLocalDefaults` points `WEB_SEARCH_SEARXNG_URL` at the local SearXNG
+    (`http://localhost:8080`) unless `LOCAL_WEB_SEARCH=off`; the `deploy/local` docker-compose gains a
+    pinned `searxng` service (behind a `web-search` profile) + a `settings.yml` enabling the JSON API.
+
+  The only Cloudflare-specific gap is the loopback-SearXNG story (no localhost container on workerd),
+  which is inherently local-only; the runtime-neutral Brave/public-SearXNG default is now symmetric.
+
+### Patch Changes
+
+- Updated dependencies [c435c09]
+  - @cat-factory/server@0.86.0
+  - @cat-factory/node-server@0.77.0
+  - @cat-factory/executor-harness@1.34.12
+
+## 0.48.0
+
+### Minor Changes
+
+- 076d02f: feat(documents): interactive document-review sessions (doc-task WS5)
+
+  Between the outline and the draft, a document-authoring run now converses with the requester
+  instead of a single binary approve/revise gate. A new inline `doc-interviewer` step (inserted
+  after `doc-outliner` in `pl_document`, replacing the outline's human gate) asks a small batch of
+  clarifying questions about scope, audience and structure, parks the run on the standard durable
+  decision-wait while the human answers through a dedicated window, and iterates (up to a round
+  cap) until it synthesizes a refined **authoring brief** the `doc-writer`/`doc-finalizer` start
+  from (folded into their context via the agent-context builder).
+
+  The park/answer/resume/advance spine is now a shared `InterviewGateController<TEntity>`
+  parameterized by an `InterviewGateKind` strategy; both the document interviewer and the
+  interactive-planning (initiative) interviewer ride it, so the two gates can't drift. A document
+  task has no owning entity row, so its transcript is persisted in its own `doc_interview_sessions`
+  table — mirrored across D1 ⇄ Drizzle with a cross-runtime conformance assertion. The interview
+  window is wired through the universal result-view seam (`doc-interview`) and updates live over a
+  new `docInterview` workspace event. Pass-through when no interviewer model is wired, so document
+  pipelines run unchanged.
+
+  Hardening: a re-run of a document task now clears the block's prior session before interviewing
+  (so it starts clean instead of reusing a stale, already-converged one), the converged brief is
+  folded only into the two kinds that consume it (`doc-writer`/`doc-finalizer`), and a non-final
+  interviewer pass that returns neither questions nor a brief fails the run loudly instead of
+  silently skipping the interview with an empty brief.
+
+  Breaking: `pl_document` bumps to version 3 (the reseed offer), and its step indices shift (the
+  interviewer is inserted at index 2), so in-flight runs on the old shape should be restarted.
+
+### Patch Changes
+
+- 77bc73c: Update dependencies to the latest versions within the supply-chain release-age
+  window. The Vercel AI SDK family stays within the `ai@6` / `@ai-sdk/*` majors
+  that `workers-ai-provider@^3` peers require (`ai@6.0.219`,
+  `@ai-sdk/anthropic@3.0.92`, `@ai-sdk/openai@3.0.80`,
+  `@ai-sdk/openai-compatible@2.0.56`, `@ai-sdk/provider@3.0.13`,
+  `@ai-sdk/amazon-bedrock@4.0.128`). Other bumps include `@hono/node-server`,
+  `pg-boss`, `undici`, `markdown-it`, `@aws-sdk/client-s3`, `@clack/prompts`,
+  `@types/node`, and eligible transitive dependencies. `@cloudflare/workers-types`
+  is held at `4.x` because `wrangler@4` peers on `^4`.
+- Updated dependencies [77bc73c]
+- Updated dependencies [076d02f]
+- Updated dependencies [77bc73c]
+  - @cat-factory/agents@0.39.0
+  - @cat-factory/integrations@0.69.1
+  - @cat-factory/kernel@0.93.0
+  - @cat-factory/orchestration@0.75.0
+  - @cat-factory/server@0.85.0
+  - @cat-factory/node-server@0.76.0
+  - @cat-factory/contracts@0.102.0
+  - @cat-factory/executor-harness@1.34.12
+  - @cat-factory/gitlab@0.7.9
+
+## 0.47.0
+
+### Minor Changes
+
+- 029a689: feat(environments): stack-recipe execution engine (shared-stacks initiative, slice 3)
+
+  Teach the Docker Compose environment provider to run a declarative STACK RECIPE — the imperative
+  bring-up of a complex multi-repo/multi-service stack (the acme-main pilot) expressed as data.
+  The recipe is service-owned (`ServiceProvisioning.recipe`, landed slice 1) and now reaches the
+  provider: `resolveProviderForType` folds it into the compose handler's `providerConfig.recipe` at
+  provision time (the compose analogue of merging a kube `manifestSource`), so the provider keys
+  purely on the persisted, merged config. Runtime-bound to the local facade (needs a host daemon) —
+  the documented compose exception to runtime symmetry; the contracts + persistence stay symmetric.
+
+  - **Multi-`-f` layering + profiles + env files** — `recipe.composeFiles` are read, `{{var}}`-
+    rendered, host-escape-checked and port-neutralized per layer (concurrent per-PR stacks never
+    collide), then written beside their originals in the checkout and passed as ordered `-f`s;
+    `recipe.composeProfiles` drives `COMPOSE_PROFILES`; `recipe.envFiles` materialize committed
+    templates into their gitignored targets before `up` (`.env.dev.local-dist` → `.env.dev.local`).
+  - **Setup-step runner** — ordered `setupSteps` after `up -d` (no `--wait` — readiness is the
+    recipe gate, since these stacks rarely declare healthchecks): `compose-exec` (composer install,
+    migrations, cache warmup; seed import pipes a `.sql` dump via stdin), `copy-file`, `wait-http`,
+    `wait-file` (container `test -f` or checkout), and the opt-in `host-command` (refused unless the
+    workspace handler sets `allowHostCommands`). Each step has its own timeout budget.
+  - **Terminal health gate** — `compose-healthy` (default, poll `ps`), `http`, or `compose-exec`
+    (e.g. `bin/console monitor:health`), polled until it passes or its budget elapses.
+  - **Per-step provisioning log** — the provider streams a `recordStep` entry per step (env file,
+    `up`, each setup step, health gate) into the environment provisioning log, so the "View logs"
+    drawer shows which step is running / died. Any step's failure tears the half-up stack down for a
+    clean retry and surfaces the step's own error as the deployer step's `lastError`.
+
+  New optional `ComposeRuntime` seams (implemented by the local docker-CLI runtime): `compose`
+  stdin-streaming, `copyCheckoutFile`, `checkoutFileExists`, `hostCommand`. All compose safety lines
+  carry over (host-escape guard on every recipe path, `include:`/cross-file `extends`/`privileged`
+  refused). Fixture-driven unit tests cover the new pure helpers and the provider recipe flow
+  (layering, env files, steps, stdin seed, HTTP gate, host-command opt-in, failure teardown).
+  Recipe `teardownSteps` execution is deferred (the recipe schema carries them; `down -v` remains
+  the teardown for now).
+
+### Patch Changes
+
+- Updated dependencies [029a689]
+- Updated dependencies [029a689]
+  - @cat-factory/contracts@0.101.1
+  - @cat-factory/integrations@0.69.0
+  - @cat-factory/kernel@0.92.0
+  - @cat-factory/agents@0.38.2
+  - @cat-factory/gitlab@0.7.8
+  - @cat-factory/orchestration@0.74.3
+  - @cat-factory/server@0.84.3
+  - @cat-factory/node-server@0.75.3
+  - @cat-factory/executor-harness@1.34.10
+
+## 0.46.2
+
+### Patch Changes
+
+- Updated dependencies [f6399cf]
+  - @cat-factory/integrations@0.68.0
+  - @cat-factory/orchestration@0.74.2
+  - @cat-factory/server@0.84.2
+  - @cat-factory/node-server@0.75.2
+  - @cat-factory/executor-harness@1.34.10
+
+## 0.46.1
+
+### Patch Changes
+
+- Updated dependencies [2e4d883]
+  - @cat-factory/contracts@0.101.0
+  - @cat-factory/kernel@0.91.0
+  - @cat-factory/agents@0.38.1
+  - @cat-factory/gitlab@0.7.7
+  - @cat-factory/integrations@0.67.1
+  - @cat-factory/orchestration@0.74.1
+  - @cat-factory/server@0.84.1
+  - @cat-factory/node-server@0.75.1
+  - @cat-factory/executor-harness@1.34.10
+
 ## 0.46.0
 
 ### Minor Changes

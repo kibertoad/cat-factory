@@ -10,9 +10,9 @@
 // pinned to a subdirectory. When the selected repo is a monorepo, the user
 // browses its tree and picks the service's directory before adding (and may add
 // more than one, a subset of the repo's services).
-import { refDebounced } from '@vueuse/core'
 import type { FrameRepoType, GitHubAvailableRepo } from '~/types/domain'
 import GitHubConnect from '~/components/github/GitHubConnect.vue'
+import RepoSearchEmpty from '~/components/github/RepoSearchEmpty.vue'
 import RepoTreeBrowser from '~/components/github/RepoTreeBrowser.vue'
 import ServiceTestConfig from '~/components/panels/inspector/ServiceTestConfig.vue'
 import ServiceFragments from '~/components/panels/inspector/ServiceFragments.vue'
@@ -89,32 +89,26 @@ function toRepoItem(r: GitHubAvailableRepo) {
   return { label: `${r.owner}/${r.name}${suffix}`, value: r.githubId, disabled: onBoard }
 }
 
-const repoItems = computed(() => github.availableRepos.map(toRepoItem))
+// Server-side, debounced, min-length-gated repo search (a wide App install / PAT can expose
+// hundreds of repos, too many to prefetch and filter in the browser). Shared with the doc-task
+// reference-repo picker via `useRepoSearch`; `repoResults` is this picker's own result list, so
+// the two never clobber each other. Nothing is fetched on open — the field prompts for more
+// characters below the gate; granting the App access needs no manual refresh (the next search
+// hits GitHub live).
+const {
+  search: repoSearch,
+  query: repoQueryRaw,
+  belowMinChars,
+  results: repoResults,
+  loading: repoLoading,
+  reset: resetRepoSearch,
+} = useRepoSearch()
 
-// A wide App install (or a PAT) can expose hundreds of repos, far too many to prefetch and
-// filter in the browser — so the picker searches SERVER-SIDE. Nothing is fetched on open;
-// once the user types at least MIN_SEARCH_LEN characters the (debounced) query is sent to
-// the backend, which returns only the `owner/name` matches. Below the gate the list stays
-// empty and the field prompts for more characters.
-const MIN_SEARCH_LEN = 3
-const repoSearch = ref('')
-const repoSearchDebounced = refDebounced(repoSearch, 250)
-// Trimmed for display + the min-length gate; the backend matches case-insensitively.
-const repoQueryRaw = computed(() => repoSearchDebounced.value.trim())
-
-// True while the query is too short to search — the picker shows the "type N chars" hint.
-const belowMinChars = computed(() => repoQueryRaw.value.length < MIN_SEARCH_LEN)
+const repoItems = computed(() => repoResults.value.map(toRepoItem))
 
 // The selected repo, captured when picked (below). The loaded list is volatile — a later
-// search replaces it — so the selection can't be derived from `availableRepos` after the fact.
+// search replaces it — so the selection can't be derived from the results after the fact.
 const selectedRepo = ref<GitHubAvailableRepo | undefined>(undefined)
-
-// Fetch matches server-side as the debounced query changes; below the gate clear the list
-// so stale matches don't linger (the hint shows instead). Granting the App access needs no
-// manual refresh — the next search hits GitHub live, with no cached list to invalidate.
-watch(repoQueryRaw, (q) => {
-  void github.loadAvailableRepos(q.length >= MIN_SEARCH_LEN ? q : '')
-})
 
 // The server already filtered, so the matches ARE the loaded repos (empty below the gate).
 const queryMatches = computed(() => (belowMinChars.value ? [] : repoItems.value))
@@ -148,7 +142,7 @@ function toggleMonorepo(value: boolean) {
 watch(selectedRepoId, (id) => {
   if (id === undefined) selectedRepo.value = undefined
   else {
-    const found = github.availableRepos.find((r) => r.githubId === id)
+    const found = repoResults.value.find((r) => r.githubId === id)
     if (found) selectedRepo.value = found
   }
   isMonorepo.value = selectedRepo.value?.isMonorepo === true
@@ -161,7 +155,7 @@ function resetSelection() {
   selectedDirectory.value = undefined
   isMonorepo.value = false
   configuredBlockId.value = undefined
-  repoSearch.value = ''
+  resetRepoSearch()
   selectedType.value = 'service'
 }
 
@@ -296,7 +290,7 @@ function done() {
                 :items="repoMenuItems"
                 :ignore-filter="true"
                 value-key="value"
-                :loading="github.loadingAvailable"
+                :loading="repoLoading"
                 icon="i-lucide-search"
                 :placeholder="t('github.addService.searchPlaceholder')"
                 class="w-full"
@@ -312,14 +306,11 @@ function done() {
                   />
                 </template>
                 <template #empty>
-                  <span v-if="belowMinChars">
-                    {{
-                      t('github.addService.searchMinChars', { min: MIN_SEARCH_LEN }, MIN_SEARCH_LEN)
-                    }}
-                  </span>
-                  <span v-else-if="!github.loadingAvailable">{{
-                    t('github.addService.noMatches', { query: repoQueryRaw })
-                  }}</span>
+                  <RepoSearchEmpty
+                    :below-min-chars="belowMinChars"
+                    :loading="repoLoading"
+                    :query="repoQueryRaw"
+                  />
                 </template>
               </UInputMenu>
             </div>

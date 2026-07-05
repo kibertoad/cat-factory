@@ -25,6 +25,7 @@ import FollowUpWindow from '~/components/followUp/FollowUpWindow.vue'
 import MergerResultView from '~/components/panels/MergerResultView.vue'
 import InitiativeTrackerWindow from '~/components/initiative/InitiativeTrackerWindow.vue'
 import InitiativePlanningWindow from '~/components/initiative/InitiativePlanningWindow.vue'
+import DocInterviewWindow from '~/components/docs/DocInterviewWindow.vue'
 
 const ui = useUiStore()
 
@@ -59,6 +60,9 @@ const STEP_RESULT_VIEWS: Record<string, Component> = {
   // as the planner step's result view.
   'initiative-tracker': InitiativeTrackerWindow,
   'initiative-planning': InitiativePlanningWindow,
+  // The interactive document-interview gate (WS5): the interviewer's clarifying questions +
+  // answer / continue / proceed, opened as the `doc-interviewer` step's result view.
+  'doc-interview': DocInterviewWindow,
 }
 
 const active = computed<Component | null>(() => {

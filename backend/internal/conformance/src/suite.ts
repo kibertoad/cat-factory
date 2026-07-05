@@ -1077,6 +1077,52 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(unconnected.status).toBe(422)
       })
 
+      it("round-trips a task's read-only reference repos (the JSON column) on every store", async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // `referenceRepos` is a DOCUMENT-task-only JSON column carrying the doc-writer agent's
+        // read-only reference repos, each a self-contained clone identity (NOT resolved from
+        // the repo projection). BoardService.update drops it on any non-document block, so the
+        // round-trip is asserted on a real document task: a runtime that forgot to map the
+        // column drops it on write, so this checks it survives PATCH + a fresh snapshot read,
+        // and that clearing writes NULL (an empty array comes back absent), on D1 and Postgres.
+        const doc = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Author the API guide',
+          taskType: 'document',
+        })
+        expect(doc.status).toBe(201)
+        const docId = doc.body.id
+
+        const referenceRepos = [
+          { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'main' },
+          {
+            repoId: 222,
+            owner: 'acme',
+            name: 'api-conventions',
+            defaultBranch: 'trunk',
+            connectionId: 42,
+          },
+        ]
+        const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${docId}`, {
+          referenceRepos,
+        })
+        expect(set.status).toBe(200)
+        expect(set.body.referenceRepos).toEqual(referenceRepos)
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === docId)?.referenceRepos).toEqual(referenceRepos)
+
+        // Clearing with an empty array writes NULL, so the field comes back absent (mirroring
+        // the other JSON-array block columns' empty-is-null convention).
+        const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${docId}`, {
+          referenceRepos: [],
+        })
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.referenceRepos).toBeUndefined()
+      })
+
       it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
         // Service-connections phase 3: a coder run over a task with a connected involved service
         // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`
@@ -4165,6 +4211,61 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         // Unlinking clears the tag — the built-in template resumes for the kind.
         await repo.clearRole(ws, 'github', 'docs/templates/rfc-b.md')
         expect(await repo.getRoleLink(ws, 'template', 'rfc')).toBeNull()
+      })
+
+      it('persists an interactive document-interview session identically (WS5)', async () => {
+        // The interactive-interview session (WS5) is written by the interviewer LLM (off in
+        // conformance), so — like the role-link probe above — exercise the persistence through
+        // the repository directly. Asserting upsert / getByBlock-newest-wins / get / deleteByBlock
+        // here means a facade that maps a column differently (D1 vs Drizzle) fails a shared test.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const ws = workspace.id
+        const repo = app.docInterviewRepository()
+
+        // A fresh block has no session.
+        expect(await repo.getByBlock(ws, 'task_doc')).toBeNull()
+
+        // Round-trip an `awaiting` session with a pending question.
+        await repo.upsert(ws, {
+          id: 'dis-1',
+          blockId: 'task_doc',
+          status: 'awaiting',
+          round: 1,
+          maxRounds: 4,
+          qa: [{ id: 'diq-1', question: 'Who is the audience?', answer: '' }],
+          brief: null,
+          model: 'openai:gpt',
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        })
+        const loaded = await repo.getByBlock(ws, 'task_doc')
+        expect(loaded?.status).toBe('awaiting')
+        expect(loaded?.round).toBe(1)
+        expect(loaded?.qa).toEqual([{ id: 'diq-1', question: 'Who is the audience?', answer: '' }])
+        expect(await repo.get(ws, 'dis-1')).not.toBeNull()
+
+        // An upsert on the same id converges it (answered digest + synthesized brief).
+        await repo.upsert(ws, {
+          id: 'dis-1',
+          blockId: 'task_doc',
+          status: 'done',
+          round: 2,
+          maxRounds: 4,
+          qa: [{ id: 'diq-1', question: 'Who is the audience?', answer: 'Platform engineers' }],
+          brief: '# Authoring brief\n\nWrite for platform engineers.',
+          model: 'openai:gpt',
+          createdAt: 1_000,
+          updatedAt: 2_000,
+        })
+        const done = await repo.getByBlock(ws, 'task_doc')
+        expect(done?.status).toBe('done')
+        expect(done?.brief).toContain('platform engineers')
+        expect(done?.qa[0]?.answer).toBe('Platform engineers')
+
+        // deleteByBlock clears the block's session(s).
+        await repo.deleteByBlock(ws, 'task_doc')
+        expect(await repo.getByBlock(ws, 'task_doc')).toBeNull()
       })
     })
 

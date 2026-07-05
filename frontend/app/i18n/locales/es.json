@@ -833,6 +833,12 @@
       "involvedServicesHint": "Servicios conectados directamente involucrados en esta tarea: cada uno se levanta como un entorno efímero junto al servicio propio de la tarea, y el agente de código puede modificar también sus repositorios.",
       "involvedServicesEmpty": "No hay servicios conectados. Conecta servicios en el marco del servicio para seleccionarlos aquí.",
       "involvedServiceStale": "Ya no está conectado al servicio de esta tarea; se eliminará con el próximo cambio."
+    },
+    "referenceRepos": {
+      "title": "Repositorios de referencia",
+      "remove": "Quitar {repo}",
+      "connectFirst": "Conecta GitHub para adjuntar repositorios de referencia.",
+      "hint": "El escritor de documentos los clona en modo de solo lectura para reutilizar soluciones existentes como referencia al redactar. Nunca los modifica."
     }
   },
   "panels": {
@@ -1984,6 +1990,52 @@
         "removeFailed": "No se pudo eliminar la entrada del registro"
       }
     },
+    "sharedStacks": {
+      "tab": "Stacks compartidos",
+      "intro": "Infraestructura de Compose de larga duración (bases de datos, brokers, búsqueda, correo) que se levanta una vez por espacio de trabajo y se reutiliza en todas las ejecuciones y pull requests. Un entorno de pruebas se conecta a la red gestionada de un stack. Levantar un stack requiere un despliegue local de Docker; en otros backends puedes gestionar igualmente la definición.",
+      "stackNoun": "stack compartido",
+      "status": {
+        "stopped": "Detenido",
+        "starting": "Iniciando",
+        "running": "En ejecución",
+        "failed": "Con errores"
+      },
+      "list": {
+        "heading": "Stacks configurados",
+        "start": "Iniciar",
+        "stop": "Detener",
+        "edit": "Editar",
+        "remove": "Eliminar stack"
+      },
+      "add": {
+        "heading": "Añadir un stack compartido",
+        "name": "Nombre",
+        "cloneUrl": "URL de clonación del repositorio",
+        "cloneUrlHelp": "El repositorio git donde viven los archivos de Compose del stack.",
+        "gitRef": "Rama o etiqueta (opcional)",
+        "composeFiles": "Archivos de Compose",
+        "composeFilesHelp": "Separados por comas, relativos al repositorio, en orden de anulación.",
+        "composeProfiles": "Perfiles de Compose (opcional)",
+        "managedNetworks": "Redes gestionadas (opcional)",
+        "managedNetworksHelp": "Redes que este stack crea y posee para que los consumidores se conecten.",
+        "allowHostCommands": "Permitir pasos de configuración con comandos del host",
+        "save": "Añadir stack"
+      },
+      "edit": {
+        "heading": "Editar stack compartido",
+        "save": "Guardar cambios",
+        "cancel": "Cancelar"
+      },
+      "toast": {
+        "created": "Stack compartido añadido",
+        "createFailed": "No se pudo añadir el stack compartido",
+        "updated": "Stack compartido actualizado",
+        "updateFailed": "No se pudo actualizar el stack compartido",
+        "startFailed": "No se pudo iniciar el stack compartido",
+        "stopFailed": "No se pudo detener el stack compartido",
+        "removeFailed": "No se pudo eliminar el stack compartido"
+      }
+    },
     "localMode": {
       "title": "Modo local",
       "intro": "Ajustes del ejecutor de contenedores local, almacenados en el despliegue de esta máquina (reemplazó las variables de entorno {poolVars} / {harnessVars}). Guardar redimensiona el grupo en caliente en vivo, sin necesidad de reiniciar; las ejecuciones en curso conservan el contenedor que ya tienen.",
@@ -2643,6 +2695,22 @@
     "confirmDisconnect": {
       "title": "¿Desconectar Slack?",
       "body": "Las notificaciones de Slack se detendrán hasta que vuelvas a conectar."
+    }
+  },
+  "docInterview": {
+    "title": "Refinar el documento",
+    "subtitle": "Responde a las preguntas del entrevistador para dar forma al documento",
+    "intro": "El entrevistador está refinando este documento antes de redactarlo. Responde a sus preguntas para definir el alcance, el público y la estructura, y luego continúa — o procede a redactar con lo que tiene.",
+    "empty": "No se encontró ninguna entrevista para este bloque.",
+    "brief": "Resumen de redacción",
+    "converged": "No hay preguntas pendientes. El entrevistador tiene lo que necesita y el documento se está redactando.",
+    "answerPlaceholder": "Tu respuesta",
+    "hint": "Continuar permite al entrevistador hacer preguntas de seguimiento; Proceder redacta con las respuestas actuales.",
+    "proceed": "Proceder a redactar",
+    "continue": "Continuar",
+    "status": {
+      "awaiting": "Esperando respuestas",
+      "done": "Hecho"
     }
   },
   "documents": {
