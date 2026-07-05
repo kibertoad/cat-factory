@@ -98,6 +98,21 @@ export class StepGraph {
   }
 
   /**
+   * The index of the nearest step BEFORE `index` matching `predicate`, or -1 when none does — the
+   * backward-scan half of a loop-back (its {@link rerunRange} counterpart re-runs the found range).
+   * Kept here beside `rerunRange` / {@link companionProducerIndex} so a loop-back's "find the step
+   * to rewind to" lives in one place; the human-test gate uses it to locate its upstream `deployer`.
+   */
+  nearestStepIndexBefore(
+    steps: readonly PipelineStep[],
+    index: number,
+    predicate: (step: PipelineStep) => boolean,
+  ): number {
+    for (let i = index - 1; i >= 0; i--) if (predicate(steps[i]!)) return i
+    return -1
+  }
+
+  /**
    * Loop a producer step back for rework and re-run every step from it up to and
    * including the companion at `companionIndex`: each one is reset (crucially clearing
    * stale container job handles so an intermediate container step re-dispatches fresh

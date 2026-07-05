@@ -99,6 +99,13 @@ function fakeDeps(over: Partial<HumanTestControllerDeps> = {}): HumanTestControl
         inst.steps[from]!.state = 'working'
         inst.currentStep = from
       }),
+      // Mimics StepGraph.nearestStepIndexBefore: nearest preceding step matching the predicate.
+      nearestStepIndexBefore: vi.fn(
+        (steps: PipelineStep[], index: number, predicate: (s: PipelineStep) => boolean) => {
+          for (let i = index - 1; i >= 0; i--) if (predicate(steps[i]!)) return i
+          return -1
+        },
+      ),
     } as never,
     clockNow: () => 1000,
     ...over,

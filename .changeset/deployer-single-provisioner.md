@@ -11,9 +11,16 @@ correctness so a `kubernetes`/`custom` service can no longer dead-end inside the
 
 - **Deployer in every tester/human-test built-in pipeline.** A type-aware `deployer` is seeded
   before the first tester / human-test / playwright step in the 12 relevant built-ins. It
-  provisions ONLY `kubernetes`/`custom` (or an undeclared service on a workspace with a legacy
-  connection) and is a fast **no-op** for `docker-compose`/`infraless`/frontend frames — so the
-  injection is safe everywhere. Touched built-ins get a `version` bump (reseed offer).
+  provisions `kubernetes`/`custom`, a `docker-compose` service with a resolvable compose handler,
+  or an undeclared service on a workspace with a legacy connection, and is a fast **no-op** for
+  `infraless`/frontend frames (and for `docker-compose` with no compose handler configured yet) — so
+  the injection is safe everywhere. Touched built-ins get a `version` bump (reseed offer).
+- **Docker-compose provisions through the Deployer** (single-provisioner direction) whenever a
+  compose handler resolves; the Tester then targets that provisioned env (`testerInfraSpec` already
+  prefers a provisioned URL for any type). Until the shared-stacks compose-connection setup wizard
+  lands, docker-compose with no handler stays a Deployer no-op and the Tester falls back to its
+  in-container compose bring-up (no regression). See the initiative trackers for the full
+  centralization owed once the wizard ships.
 - **`human-test` no longer self-provisions.** The gate READS the environment the upstream Deployer
   provisioned (the one env is shared by the AI tester + the human), and its recreate / fix-loop /
   pull-main rebuild now **loops back to the Deployer** to re-provision, rather than standing up its

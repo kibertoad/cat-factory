@@ -430,7 +430,11 @@ export class HumanTestController {
     block: Block,
   ): Promise<AdvanceResult> {
     const humanTestIndex = instance.currentStep
-    const deployerIndex = this.nearestDeployerBefore(instance.steps, humanTestIndex)
+    const deployerIndex = this.deps.stepGraph.nearestStepIndexBefore(
+      instance.steps,
+      humanTestIndex,
+      (s) => isDeployStep(s.agentKind),
+    )
     const ht = step.humanTest!
     if (deployerIndex < 0) {
       return this.degrade(
@@ -441,6 +445,12 @@ export class HumanTestController {
         'No Deployer step precedes this gate, so the environment cannot be rebuilt automatically; test against the PR branch and confirm here.',
       )
     }
+    // Reclaim the CURRENT env's real infra before rebuilding (best-effort): the deployer re-run
+    // supersedes the registry row, but for a non-deterministic external id (e.g. a SHA-scoped
+    // namespace on the async placeholder path) supersede can't identity-match it, so without an
+    // eager teardown each rebuild would orphan the prior namespace until the TTL reaper. A no-op
+    // when no env is currently held (e.g. a fixer-complete loop-back already dropped it).
+    await this.teardownCurrent(workspaceId, ht)
     // `resetStepForRerun` clears a step's transient fields but not `humanTest`, so re-seed it
     // explicitly: preserve the fix-attempt budget + round history (the cap lives on `attempts`), and
     // set `provisioning` so the re-entry (once the deployer settles) reads the freshly-rebuilt env.
@@ -458,14 +468,6 @@ export class HumanTestController {
     await this.deps.stateMachine.persistInstance(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     return { kind: 'continue' }
-  }
-
-  /** The index of the nearest `deployer` step before `index`, or -1 when none precedes it. */
-  private nearestDeployerBefore(steps: readonly PipelineStep[], index: number): number {
-    for (let i = index - 1; i >= 0; i--) {
-      if (isDeployStep(steps[i]!.agentKind)) return i
-    }
-    return -1
   }
 
   /** Park in degraded (manual) mode: no live env, but the human can still test + confirm. */

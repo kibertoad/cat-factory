@@ -54,19 +54,19 @@ reshaped it:
 
 ## Per-item status
 
-| #    | Item                                                                                                                                                                | Where                                                                                                                                                                                         | Status                                                                     |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| B2   | Resolve provider from the env RECORD's `provisionType`/`engine` (not workspace-primary) in teardown + refresh                                                       | `EnvironmentConnectionService.resolveProviderForRecord`; `EnvironmentTeardownService.teardownRecord`; `EnvironmentProvisioningService.refreshStatus`                                          | done                                                                       |
-| B1   | Teardown-on-supersede with identity compare (best-effort; TTL backstop)                                                                                             | `environments.logic.ts` (`shouldTeardownSuperseded` + tests), `EnvironmentProvisioningService.supersedePriorEnvironment` (+ `environmentTeardown` dep, wired in `orchestration/container.ts`) | done                                                                       |
-| E    | Clear `deploy*`/`container` in `resetStepForRerun` + add `rerunRange` for the loop-back                                                                             | `StepGraph`                                                                                                                                                                                   | done                                                                       |
-| A1   | Type-aware deployer: provision only when there's an env (k8s/custom OR undeclared-with-legacy-connection); skip compose/infraless/undeclared-no-connection/frontend | `RunDispatcher.advanceDeployerFrames`, `EnvironmentProvisioningService.hasLegacyConnection`                                                                                                   | done                                                                       |
-| A2   | Inject a single `deployer` before the first tester/human-test/playwright in 12 built-ins; version bumps                                                             | `kernel/src/domain/seed.ts`                                                                                                                                                                   | done                                                                       |
-| A3   | Run-start guard: k8s/custom + consumer + no enabled deployer earlier ⇒ refuse (`deployer_required_before_tester`)                                                   | `tester-infra.logic.ts` (`needsDeployerBeforeConsumer` + tests), `ExecutionService.assertDeployerBeforeConsumer`, `contracts` `CONFLICT_REASONS`                                              | done                                                                       |
-| HT   | human-test stops self-provisioning; reads Deployer env; recreate/fix-loop/pull-main loop back to Deployer                                                           | `HumanTestController`, `ExecutionService` (`readEnvironment` seam), `RunDispatcher` (poll delegations removed), `StepGraph.rerunRange`                                                        | done                                                                       |
-| GATE | Named-step pipeline authoring (`definePipeline`) replacing index-aligned `gates`/`enabled` arrays                                                                   | `kernel/src/domain/seed.ts` (+ `seed.test.ts`)                                                                                                                                                | done                                                                       |
-| FE   | `SYSTEM_AGENT_META['deployer']` + localized `deployer_required_before_tester` conflict (8 locales)                                                                  | `frontend .../catalog.ts`, `usePipelineErrorToast.ts`, `i18n/locales/*`                                                                                                                       | done                                                                       |
-| CONF | Cross-runtime conformance for the injected deployer + human-test read/loop-back                                                                                     | `internal/conformance`                                                                                                                                                                        | traced-preserved (validated in CI — can't run workerd/Postgres on Windows) |
-| CS   | Changeset for touched published packages                                                                                                                            | `.changeset/deployer-single-provisioner.md`                                                                                                                                                   | done                                                                       |
+| #    | Item                                                                                                                                                                                                                                          | Where                                                                                                                                                                                         | Status                                                                      |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| B2   | Resolve provider from the env RECORD's `provisionType`/`engine` (not workspace-primary) in teardown + refresh                                                                                                                                 | `EnvironmentConnectionService.resolveProviderForRecord`; `EnvironmentTeardownService.teardownRecord`; `EnvironmentProvisioningService.refreshStatus`                                          | done                                                                        |
+| B1   | Teardown-on-supersede with identity compare (best-effort; TTL backstop)                                                                                                                                                                       | `environments.logic.ts` (`shouldTeardownSuperseded` + tests), `EnvironmentProvisioningService.supersedePriorEnvironment` (+ `environmentTeardown` dep, wired in `orchestration/container.ts`) | done                                                                        |
+| E    | Clear `deploy*`/`container` in `resetStepForRerun` + add `rerunRange` for the loop-back                                                                                                                                                       | `StepGraph`                                                                                                                                                                                   | done                                                                        |
+| A1   | Type-aware deployer: provision when there's an env — `k8s`/`custom`, `docker-compose` WITH a resolvable compose handler, OR undeclared-with-legacy-connection; skip `infraless`/undeclared-no-connection/frontend/compose-with-no-handler-yet | `RunDispatcher.advanceDeployerFrames`, `EnvironmentProvisioningService.hasLegacyConnection`/`canProvision`                                                                                    | done (compose centralization gated on the shared-stacks wizard — see below) |
+| A2   | Inject a single `deployer` before the first tester/human-test/playwright in 12 built-ins; version bumps                                                                                                                                       | `kernel/src/domain/seed.ts`                                                                                                                                                                   | done                                                                        |
+| A3   | Run-start guard: k8s/custom + consumer + no enabled deployer earlier ⇒ refuse (`deployer_required_before_tester`)                                                                                                                             | `tester-infra.logic.ts` (`needsDeployerBeforeConsumer` + tests), `ExecutionService.assertDeployerBeforeConsumer`, `contracts` `CONFLICT_REASONS`                                              | done                                                                        |
+| HT   | human-test stops self-provisioning; reads Deployer env; recreate/fix-loop/pull-main loop back to Deployer                                                                                                                                     | `HumanTestController`, `ExecutionService` (`readEnvironment` seam), `RunDispatcher` (poll delegations removed), `StepGraph.rerunRange`                                                        | done                                                                        |
+| GATE | Named-step pipeline authoring (`definePipeline`) replacing index-aligned `gates`/`enabled` arrays                                                                                                                                             | `kernel/src/domain/seed.ts` (+ `seed.test.ts`)                                                                                                                                                | done                                                                        |
+| FE   | `SYSTEM_AGENT_META['deployer']` + localized `deployer_required_before_tester` conflict (8 locales)                                                                                                                                            | `frontend .../catalog.ts`, `usePipelineErrorToast.ts`, `i18n/locales/*`                                                                                                                       | done                                                                        |
+| CONF | Cross-runtime conformance for the injected deployer + human-test read/loop-back                                                                                                                                                               | `internal/conformance`                                                                                                                                                                        | traced-preserved (validated in CI — can't run workerd/Postgres on Windows)  |
+| CS   | Changeset for touched published packages                                                                                                                                                                                                      | `.changeset/deployer-single-provisioner.md`                                                                                                                                                   | done                                                                        |
 
 Follow-up (spun out, not in this PR): **extensible custom-gate config** — see
 [`extensible-custom-gate-config.md`](./extensible-custom-gate-config.md).
@@ -83,10 +83,16 @@ Follow-up (spun out, not in this PR): **extensible custom-gate config** — see
   config-change leak). `infraless` flip / `supersedeForBlock` passes `next=null` ⇒ teardown.
   `persistFailedEnvironment` passes no `next` ⇒ tombstone-only (never tear down the prior on a
   FAILED new provision).
-- **Env is ALWAYS ready when human-test is first reached** — the Deployer step only completes on a
-  `ready` env (a primary-frame failure is terminal). So `begin` reads synchronously and parks; a
-  not-ready/absent env (e.g. infraless/skip) degrades to manual mode. No provisioning-poll on
-  human-test any more.
+- **Env should be ready when human-test is first reached** — the Deployer step completes with the
+  primary frame recorded `ready` (a primary-frame failure is terminal), so `begin` reads
+  synchronously and parks; a not-ready/absent env (e.g. infraless/skip) degrades to manual mode. No
+  provisioning-poll on human-test any more. **Caveat + fix (review finding):** the Deployer records
+  the primary frame `ready` for ANY non-`failed` handle, so an async provider whose env is still
+  `provisioning` at settle-time would leave a stale `provisioning` env RECORD that nothing re-polls
+  once the step completes — which used to degrade human-test to manual mode against a stale
+  snapshot. The `readEnvironment` seam (`ExecutionService`) now RECONCILES the live provider status
+  (`refreshStatus`) whenever the stored record isn't `ready`, so a slow-but-now-ready env reads
+  ready; an env still genuinely provisioning/failed degrades as before.
 - **Deployer injection point:** after `mocker` (where present), before the first `tester-*` /
   `human-test` / `playwright`. `pipelineShape.ts` enforces only COMPANION adjacency, so this is
   safe; the deployer is not a companion and never splits a companion/producer pair.
@@ -95,6 +101,61 @@ Follow-up (spun out, not in this PR): **extensible custom-gate config** — see
   to the primary (acceptable, pre-existing limitation).
 - Keep the runtimes symmetric: no schema change here (no new columns/ports), so the change is pure
   service/engine + seed logic; conformance covers the shared behaviour.
+
+## Docker-compose centralization (dependency on the shared-stacks wizard)
+
+The north-star: the **Deployer provisions everything — service AND surrounding infra — so testers
+just test against a pre-provisioned env**, with the provisioning logic centralized in one place.
+The `stack-recipes-and-shared-stacks` initiative (landing in parallel on `main`) made
+`docker-compose` a real provider (recipe execution + shared-stack attach + preflights), running
+through `EnvironmentProvisioningService.startProvision`. The Tester already prefers a provisioned
+env for ANY type (`server`'s `testerInfraSpec` → `environment: 'ephemeral'` whenever an `envUrl`
+exists), so once the Deployer provisions the compose env the Tester targets it automatically.
+
+**What this slice does:** `advanceDeployerFrames` routes `docker-compose` through the Deployer
+**when a compose handler resolves** (`canProvision` → `resolveHandlerForType('docker-compose')`).
+So a workspace that has configured a compose connection gets its per-PR compose stack provisioned by
+the Deployer (single provisioner), and the Tester targets it.
+
+**Hard dependency — the compose-connection setup wizard (shared-stacks slice 7, `todo`):** a
+docker-compose **handler/connection** is created/saved by that wizard. Until it lands, no
+docker-compose handler resolves, so the injected Deployer is a **safe no-op** for docker-compose and
+the Tester falls back to its **in-container compose bring-up** (`decideTesterInfra`'s DinD path +
+the `local` branch in `testerInfraSpec` + the harness `docker compose up`). This is deliberate:
+requiring a handler now (and removing the fallback) would make every docker-compose run FAIL at the
+Deployer until the wizard exists — a regression. The fallback keeps docker-compose testing working
+in the interim with zero regression.
+
+**Intended final state (owed once the wizard lands — tracked in the shared-stacks tracker's
+"Interaction with the Deployer" section):** make the Deployer the SOLE compose provisioner —
+
+1. `decideTesterInfra`: `docker-compose` → handler-based like `kubernetes`/`custom` (drop the DinD /
+   `compose-unconfigured` branches);
+2. extend `needsDeployerBeforeConsumer` + `assertTesterInfraConfigured`'s `needsHandler` to
+   `docker-compose`, so a compose chain that reaches a tester with no enabled Deployer is refused
+   up-front (same fail-fast as k8s/custom);
+3. drop the `local`/`composePath` branch in `server`'s `testerInfraSpec` (unreachable once every
+   compose env is Deployer-provisioned); and
+4. retire the harness's in-container `docker compose up` (`executor-harness/src/agent.ts`) in a
+   later image-bumping slice.
+
+## Post-merge review-findings addressed
+
+Addressed in the same round as the `origin/main` merge (findings from a PR review of this branch):
+
+- **Stale `provisioning` env degraded human-test** — `readEnvironment` now reconciles live status
+  (see the "Env should be ready…" gotcha above).
+- **Loop-back orphaned the prior env** — `HumanTestController.loopBackToDeployer` now tears the
+  current env down (best-effort) BEFORE re-running the Deployer, so a non-deterministic (e.g.
+  SHA-scoped) namespace isn't orphaned until the TTL reaper on every rebuild.
+- **Non-actionable run-start error** — the `deployer_required_before_tester` message now leads with
+  the doable remedy (reseed the built-in pipeline + start a new run, or set the service to
+  docker-compose/infraless) rather than "add a Deployer step" (`deployer` is a `SYSTEM_AGENT_META`
+  display kind, not a palette-addable archetype). Same message covers the retry/restart case (a
+  pre-upgrade run whose stored steps predate the Deployer injection is refused on retry — intended
+  fail-fast, resolved by starting a fresh run on the reseeded pipeline).
+- **Duplicated backward step-scan** — the loop-back's "nearest preceding deployer" scan moved onto
+  `StepGraph.nearestStepIndexBefore` (beside `rerunRange` / `companionProducerIndex`).
 
 ## Deferred (not in this slice)
 

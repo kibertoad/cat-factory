@@ -524,6 +524,40 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                                                                                                                         | todo   |        |
 | S3  | _Stretch_: Windows-host bridge for `host-command` steps (WSL invocation shim)                                                                                                                                                                          | todo   |        |
 
+## Interaction with the Deployer (`deployer-single-provisioner`)
+
+The **deployer-single-provisioner** initiative made the `deployer` step the SINGLE environment
+provisioner and injects one before the first tester / human-test / playwright in every built-in
+pipeline (so consumers depend on a pre-provisioned env rather than standing infra up themselves).
+That path now provisions `docker-compose` **through the Deployer's `startProvision`** — i.e. this
+initiative's compose provider (recipe execution + `sharedStackRefs` ensure-first + preflights) runs
+inside the Deployer step, and the Tester targets the resulting env (`testerInfraSpec` already
+prefers a provisioned `envUrl` for any type).
+
+**Current transitional behaviour (until slice 7 lands):** the Deployer only routes docker-compose
+through `startProvision` when a compose **handler/connection resolves** (`EnvironmentProvisioningService.canProvision`
+→ `resolveHandlerForType('docker-compose')`). A compose connection is created/saved by **slice 7's
+wizard** ("save" step); until then no docker-compose handler resolves, so the injected Deployer is a
+safe **no-op** for docker-compose and the Tester falls back to its **in-container compose bring-up**
+(`decideTesterInfra`'s DinD path + the `local` branch in `testerInfraSpec`). This keeps docker-compose
+testing working today with zero regression.
+
+**Follow-up owed by slice 7 (wizard):** once the wizard configures/saves a docker-compose
+connection, docker-compose services provision through the Deployer end-to-end (recipe + shared
+stacks + preflights), and the in-container compose bring-up becomes a dead fallback. At that point:
+
+- make the Deployer the SOLE compose provisioner — require a resolvable handler for a docker-compose
+  service and REMOVE the in-container fallback (`decideTesterInfra` docker-compose → handler-based
+  like `kubernetes`/`custom`; drop the `local`/`composePath` branch in `server`'s `testerInfraSpec`;
+  extend `needsDeployerBeforeConsumer` + `assertTesterInfraConfigured`'s `needsHandler` to
+  docker-compose so a compose chain with no Deployer is refused up-front like k8s/custom); and
+- the harness's `docker compose up` bring-up (`executor-harness/src/agent.ts`, gated by the job
+  body's `environment: 'local'`) becomes unreachable and can be retired in a later image-bumping
+  slice.
+
+See `docs/initiatives/deployer-single-provisioner.md` ("Docker-compose centralization") for the
+Deployer-side gate this pairs with.
+
 ## Validation plan (no human testing)
 
 Both acme repos are accessible programmatically (local clones at `C:\sources\acme-main`

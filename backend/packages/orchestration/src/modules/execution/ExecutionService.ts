@@ -738,7 +738,25 @@ export class ExecutionService {
         ? {
             readEnvironment: async (ws, block) => {
               const frame = await this.contextBuilder.resolveServiceFrame(ws, block.id)
-              return environmentProvisioning.getHandleForBlock(ws, block.id, frame?.id)
+              const handle = await environmentProvisioning.getHandleForBlock(
+                ws,
+                block.id,
+                frame?.id,
+              )
+              // Reconcile against the LIVE provider status when the stored record isn't yet
+              // `ready`: the deployer records an async provider's env as `provisioning`, and nothing
+              // re-polls that row once the deployer step completes, so a slow-but-now-ready env
+              // would otherwise read stale and wrongly degrade the gate to manual mode. One refresh
+              // reconciles it; an env still genuinely provisioning / failed degrades as before.
+              // Best-effort — keep the stored handle if the status read throws.
+              if (handle && handle.status !== 'ready') {
+                try {
+                  return await environmentProvisioning.refreshStatus(ws, handle.id)
+                } catch {
+                  return handle
+                }
+              }
+              return handle
             },
           }
         : {}),
@@ -1133,8 +1151,8 @@ export class ExecutionService {
     throw new ConflictError(
       `This service provisions a '${service!.provisioning!.type}' environment, but this pipeline ` +
         'has no Deployer step before its first Tester / human-test step, so the environment would ' +
-        'never be stood up. Add a Deployer step before the Tester, or set the service to ' +
-        'docker-compose / infraless.',
+        'never be stood up. Reseed this pipeline to the latest built-in (which includes a Deployer) ' +
+        'and start a new run, or set the service to docker-compose / infraless.',
       'deployer_required_before_tester',
       { provisionType: service!.provisioning!.type },
     )

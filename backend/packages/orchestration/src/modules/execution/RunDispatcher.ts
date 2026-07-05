@@ -1433,21 +1433,32 @@ export class RunDispatcher {
       // Every frame settled: finish the step (all ready → done; a primary failure short-circuited).
       return this.completeDeployerStep(workspaceId, instance, step, isFinalStep, targets)
     }
-    // The deployer provisions ONLY when the frame actually has an environment to stand up:
+    // The deployer is the SINGLE environment provisioner: it stands the frame's env up whenever
+    // there is genuinely one to stand up, so every downstream consumer (tester / human-test /
+    // playwright) can depend on a pre-provisioned env rather than standing infra up itself:
     //  - a DECLARED `kubernetes`/`custom` type (resolved through its per-type handler), OR
+    //  - a DECLARED `docker-compose` type on a workspace with a compose handler configured — the
+    //    per-PR compose stack is provisioned HERE (attaching shared stacks / running preflights),
+    //    and the tester then targets that provisioned env (see `testerInfraSpec`). With NO compose
+    //    handler yet configured it stays a no-op and the tester falls back to its in-container
+    //    compose bring-up (removable once the compose-connection setup flow lands), OR
     //  - an UNDECLARED frame on a workspace with a legacy single-connection registered (the compat
     //    bridge — preserved so existing single-connection deployments keep provisioning).
-    // Every other frame stands nothing up HERE — `docker-compose` (the tester brings the compose
-    // stack up in-container), `infraless`/none, an undeclared frame with NO connection, or a
-    // frontend frame — so the deployer records `{status:'skipped'}` and re-enters for the next
-    // frame. This makes the deployer a safe NO-OP prefix that can be injected before every
-    // tester/human-test step without failing services that never configured provisioning.
+    // Every other frame stands nothing up HERE — `infraless`/none, an undeclared frame with NO
+    // connection, or a frontend frame — so the deployer records `{status:'skipped'}` and re-enters
+    // for the next frame. This makes the deployer a safe NO-OP prefix that can be injected before
+    // every tester/human-test step without failing services that never configured provisioning.
     const provisionType = next.provisioning?.type
     const declaresEnv = provisionType === 'kubernetes' || provisionType === 'custom'
+    const composeEnv =
+      provisionType === 'docker-compose' &&
+      next.provisioning !== undefined &&
+      ((await this.environmentProvisioning?.canProvision(workspaceId, next.provisioning))?.ok ??
+        false)
     const legacyEnv =
       provisionType === undefined &&
       (await this.environmentProvisioning?.hasLegacyConnection(workspaceId))
-    if (!declaresEnv && !legacyEnv) {
+    if (!declaresEnv && !composeEnv && !legacyEnv) {
       await this.environmentProvisioning?.supersedeForBlock(workspaceId, block.id, next.frameId)
       step.deployEnvs = { ...done, [next.frameId]: { status: 'skipped' } }
       // Persist this frame's TERMINAL outcome BEFORE processing the next frame, so a crash/replay
