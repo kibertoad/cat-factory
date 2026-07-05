@@ -293,4 +293,44 @@ describe('HttpRunnerPoolProvider', () => {
     expect(view.result?.custom).toEqual(custom)
     expect(view.result?.summary).toBe('wrote the spec')
   })
+
+  it('forwards a subscription harness’s per-call telemetry (callMetrics)', async () => {
+    // Claude Code / Codex bypass the LLM proxy, so the harness lifts per-call metrics onto
+    // `result.callMetrics` for the backend to record into `llm_call_metrics`. The
+    // Cloudflare/local transports return the harness view verbatim, so a pool proxying the
+    // executor-harness MUST pass `callMetrics` through too — dropping it silently lost ALL
+    // harness telemetry on a runner-pool backend (a facade-parity divergence). A malformed
+    // entry is discarded rather than injected.
+    const good = {
+      model: 'claude-opus-4-8',
+      promptText: '[{"role":"user","content":"u"}]',
+      messageCount: 1,
+      responseText: 'hi',
+      reasoningText: '',
+      inputTokens: 120,
+      cachedInputTokens: 20,
+      outputTokens: 30,
+      finishReason: 'end_turn',
+    }
+    capture('/api/jobs/job-9', 'GET', {
+      state: 'succeeded',
+      result: {
+        summary: 'coded',
+        callMetrics: [good, { promptText: 'not a full metric' }],
+      },
+    })
+    const provider = new HttpRunnerPoolProvider()
+    const withResult: RunnerPoolManifest = {
+      ...manifest,
+      response: { ...manifest.response, resultPath: 'result' },
+    }
+    const view = await provider.poll({
+      manifest: withResult,
+      jobId: 'job-9',
+      resolveSecret: () => 't',
+    })
+    expect(view.state).toBe('done')
+    // The well-formed entry survives with every field; the malformed one is dropped.
+    expect(view.result?.callMetrics).toEqual([good])
+  })
 })
