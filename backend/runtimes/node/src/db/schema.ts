@@ -1340,12 +1340,17 @@ export const documents = pgTable(
     body: text('body').notNull().default(''),
     content_hash: text('content_hash').notNull().default(''),
     linked_block_id: text('linked_block_id'),
+    // Workspace+DocKind role link (WS1 items 2–4), alongside `linked_block_id`: `template` |
+    // `exemplar` scoped to `doc_kind`. Nullable — a plain imported / block-linked doc has neither.
+    role: text('role'),
+    doc_kind: text('doc_kind'),
     synced_at: bigint('synced_at', { mode: 'number' }).notNull(),
     deleted_at: bigint('deleted_at', { mode: 'number' }),
   },
   (t) => [
     primaryKey({ columns: [t.workspace_id, t.source, t.external_id] }),
     index('idx_documents_block').on(t.workspace_id, t.linked_block_id),
+    index('idx_documents_role').on(t.workspace_id, t.role, t.doc_kind),
   ],
 )
 

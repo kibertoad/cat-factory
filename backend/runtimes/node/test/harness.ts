@@ -37,6 +37,7 @@ import {
   createDrizzleRepositories,
 } from '../src/repositories/drizzle.js'
 import { DrizzleNotificationRepository } from '../src/repositories/notifications.js'
+import { DrizzleDocumentRepository } from '../src/repositories/documents.js'
 import { createApp } from '../src/server.js'
 
 const BASE = 'https://cat-factory.test'
@@ -350,6 +351,7 @@ export function makeConformanceApp(
     agentRunRepository: () => container.agentRunRepository,
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
+    documentRepository: () => new DrizzleDocumentRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

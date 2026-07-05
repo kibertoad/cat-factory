@@ -210,7 +210,10 @@
           "label": "Options to compare",
           "placeholder": "The options to weigh against each other"
         },
-        "apiSurface": { "label": "API surface", "placeholder": "The endpoints or surface in scope" }
+        "apiSurface": {
+          "label": "API surface",
+          "placeholder": "The endpoints or surface in scope"
+        }
       },
       "optional": "optional",
       "pipeline": "Pipeline",
@@ -1634,6 +1637,9 @@
         "localRunners": {
           "label": "My local runners",
           "description": "Your own-machine model runners (Ollama, LM Studio, vLLM…)."
+        },
+        "documentTemplates": {
+          "label": "Templates & examples"
         }
       }
     }
@@ -2772,6 +2778,25 @@
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
       "attached": "Document attached",
       "attachFailed": "Could not attach"
+    },
+    "templates": {
+      "title": "Document templates & examples",
+      "intro": "Point a document kind at your own template and example documents. They must be imported first via the Documents integration. A template's sections replace the built-in skeleton for that kind; the examples guide the author agents.",
+      "kindLabel": "Document kind",
+      "importFirst": "Import a document first — a template or example is one of your imported documents.",
+      "importButton": "Import a document",
+      "templateHeading": "Template",
+      "templateHint": "Overrides the built-in {kind} skeleton. One template per kind.",
+      "templateEmpty": "Using the built-in template.",
+      "exemplarsHeading": "Examples to emulate",
+      "exemplarsHint": "Good examples the author agents study, added to the built-in set.",
+      "exemplarsEmpty": "No examples linked.",
+      "pickLabel": "Imported document",
+      "pickPlaceholder": "Choose an imported document…",
+      "setTemplate": "Set as template",
+      "addExemplar": "Add example",
+      "remove": "Remove",
+      "linkFailed": "Couldn't update the document link"
     }
   },
   "tasks": {

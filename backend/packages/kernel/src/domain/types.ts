@@ -89,6 +89,7 @@ export type {
   UserSecretDescriptor,
   // Document-source integration projections + planning shapes.
   DocumentSourceKind,
+  DocumentLinkRole,
   DocumentSourceDescriptor,
   CredentialField,
   DocumentConnection,

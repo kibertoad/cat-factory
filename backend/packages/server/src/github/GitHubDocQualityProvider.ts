@@ -2,11 +2,16 @@ import type {
   BlockRepository,
   DocQualityProvider,
   DocQualityReport,
+  DocumentRepository,
   GitHubClient,
   RepoFiles,
 } from '@cat-factory/kernel'
 import { analyzeDocStructure, resolveDocLinkPath } from '@cat-factory/kernel'
-import { docTemplateFor, requiredSectionTitles, resolveDocumentTarget } from '@cat-factory/agents'
+import {
+  requiredSectionTitles,
+  resolveDocTemplate,
+  resolveDocumentTarget,
+} from '@cat-factory/agents'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import { makeRepoFiles } from '../agents/repoFiles.js'
 
@@ -16,6 +21,13 @@ export interface GitHubDocQualityProviderDependencies {
   resolveRepoTarget: ResolveRepoTarget
   /** Reads the block's document fields (kind + target path) and its PR ref. */
   blockRepository: BlockRepository
+  /**
+   * Optional: the document projections store. When wired, the gate resolves the workspace's
+   * linked TEMPLATE for the block's kind (WS1) and checks against ITS sections — the same
+   * override the doc-authoring prompts followed, so the writer and the gate never disagree.
+   * Absent (or no template linked) ⇒ the built-in `docTemplateFor(kind)` skeleton.
+   */
+  documentRepository?: DocumentRepository
 }
 
 /**
@@ -69,9 +81,16 @@ export class GitHubDocQualityProvider implements DocQualityProvider {
       }
     }
 
+    // Resolve the kind's effective template through the SAME seam the prompts use: prefer the
+    // workspace's linked `role: 'template'` document's parsed sections, else the built-in skeleton.
+    const linkedTemplate = await this.deps.documentRepository?.getRoleLink(
+      workspaceId,
+      'template',
+      docKind,
+    )
     const analysis = analyzeDocStructure({
       content: file.content,
-      requiredSections: requiredSectionTitles(docTemplateFor(docKind)),
+      requiredSections: requiredSectionTitles(resolveDocTemplate(docKind, linkedTemplate?.body)),
     })
 
     const findings: string[] = [

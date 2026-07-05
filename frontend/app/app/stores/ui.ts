@@ -56,6 +56,9 @@ export const useUiStore = defineStore('ui', () => {
     source: DocumentSourceKind | null
     targetFrameId: string | null
   } | null>(null)
+  // The workspace+DocKind template / exemplar management modal (WS1). A single boolean —
+  // it manages every kind's links in one place.
+  const documentTemplates = ref(false)
   const spawnPreview = ref<{
     source: DocumentSourceKind
     externalId: string
@@ -389,6 +392,13 @@ export const useUiStore = defineStore('ui', () => {
   }
   function closeDocumentImport() {
     documentImport.value = null
+  }
+  function openDocumentTemplates() {
+    resetHubReturn()
+    documentTemplates.value = true
+  }
+  function closeDocumentTemplates() {
+    documentTemplates.value = false
   }
   function openSpawnPreview(
     source: DocumentSourceKind,
@@ -796,6 +806,7 @@ export const useUiStore = defineStore('ui', () => {
     decisionContext,
     documentConnect,
     documentImport,
+    documentTemplates,
     spawnPreview,
     taskConnect,
     taskImport,
@@ -866,6 +877,8 @@ export const useUiStore = defineStore('ui', () => {
     closeDocumentConnect,
     openDocumentImport,
     closeDocumentImport,
+    openDocumentTemplates,
+    closeDocumentTemplates,
     openSpawnPreview,
     closeSpawnPreview,
     openTaskConnect,

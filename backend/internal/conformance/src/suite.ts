@@ -25,7 +25,7 @@ import {
   clearRegisteredPromptFragments,
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
-import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { defaultAgentKindRegistry, resolveDocTemplate } from '@cat-factory/agents'
 import {
   composeEnvironmentBackend,
   createBackendRegistries,
@@ -42,6 +42,7 @@ import type {
   CiStatusProvider,
   DeployCloneTarget,
   DocQualityProvider,
+  DocumentRecord,
   EnvironmentProvider,
   GateProbe,
   Notification,
@@ -4086,6 +4087,83 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(del.status).toBe(204)
         const afterDelete = await call<{ connections: unknown[] }>('GET', `${base}/connections`)
         expect(afterDelete.body.connections).toEqual([])
+      })
+
+      it('persists workspace+DocKind template (singular) and exemplar (multi) role links', async () => {
+        // WS1 items 2–4: the role-tagged document links a workspace attaches to a DocKind. The
+        // link WRITE path needs an imported document row (import needs a live source the dev-open
+        // HTTP path can't reach), so drive the persistence through the repository probe — asserting
+        // template singular-replace, exemplar multi, the management list, and the parsed-template
+        // override behave identically on D1 and Postgres.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const ws = workspace.id
+        const repo = app.documentRepository()
+        const doc = (externalId: string, title: string, body: string): DocumentRecord => ({
+          workspaceId: ws,
+          source: 'github',
+          externalId,
+          title,
+          url: `https://github.com/o/r/blob/HEAD/${externalId}`,
+          excerpt: '',
+          body,
+          contentHash: '',
+          linkedBlockId: null,
+          role: null,
+          docKind: null,
+          syncedAt: 1_000,
+          deletedAt: null,
+        })
+        await repo.upsert(
+          doc(
+            'docs/templates/rfc-a.md',
+            'RFC template A',
+            '# RFC\n\n## Summary\n\n## Motivation\n\n## Rollout',
+          ),
+        )
+        await repo.upsert(
+          doc('docs/templates/rfc-b.md', 'RFC template B', '# RFC\n\n## Abstract\n\n## Design'),
+        )
+        await repo.upsert(
+          doc('docs/examples/good-rfc.md', 'A great RFC', '# Example RFC\n\n## Summary'),
+        )
+
+        // Link A as the rfc template.
+        await repo.clearRoleForKind(ws, 'template', 'rfc')
+        await repo.setRole(ws, 'github', 'docs/templates/rfc-a.md', 'template', 'rfc')
+        const tplA = await repo.getRoleLink(ws, 'template', 'rfc')
+        expect(tplA?.externalId).toBe('docs/templates/rfc-a.md')
+        // The linked template's parsed sections become the kind's effective template — the SAME
+        // override the doc-quality gate resolves, so the writer and gate never disagree.
+        expect(resolveDocTemplate('rfc', tplA!.body).sections.map((s) => s.title)).toEqual([
+          'Summary',
+          'Motivation',
+          'Rollout',
+        ])
+
+        // Relinking a new template for the kind REPLACES the prior one (singular per kind).
+        await repo.clearRoleForKind(ws, 'template', 'rfc')
+        await repo.setRole(ws, 'github', 'docs/templates/rfc-b.md', 'template', 'rfc')
+        expect((await repo.getRoleLink(ws, 'template', 'rfc'))?.externalId).toBe(
+          'docs/templates/rfc-b.md',
+        )
+        expect((await repo.get(ws, 'github', 'docs/templates/rfc-a.md'))?.role).toBeNull()
+
+        // Exemplars are additive (multi-valued per kind).
+        await repo.setRole(ws, 'github', 'docs/examples/good-rfc.md', 'exemplar', 'rfc')
+        expect((await repo.listRoleLinks(ws, 'exemplar', 'rfc')).map((d) => d.externalId)).toEqual([
+          'docs/examples/good-rfc.md',
+        ])
+
+        // The management list surfaces every role-tagged document (template + exemplars).
+        const all = await repo.listRoleLinksByWorkspace(ws)
+        expect(new Set(all.map((d) => `${d.role}:${d.externalId}`))).toEqual(
+          new Set(['template:docs/templates/rfc-b.md', 'exemplar:docs/examples/good-rfc.md']),
+        )
+
+        // Unlinking clears the tag — the built-in template resumes for the kind.
+        await repo.clearRole(ws, 'github', 'docs/templates/rfc-b.md')
+        expect(await repo.getRoleLink(ws, 'template', 'rfc')).toBeNull()
       })
     })
 

@@ -1874,6 +1874,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,
+        // The gate resolves a workspace-linked template (WS1) for the block's kind, so it checks
+        // against the SAME sections the doc-writer followed. Undefined in db-less mothership mode
+        // (the run-path role reads are proxied via the persistence RPC instead) → built-in template.
+        documentRepository: db ? new DrizzleDocumentRepository(db) : undefined,
       }),
     )
     githubGateDeps = {

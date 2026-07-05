@@ -1,4 +1,10 @@
-import type { DocumentRecord, DocumentRepository, DocumentSourceKind } from '@cat-factory/kernel'
+import type {
+  DocKind,
+  DocumentLinkRole,
+  DocumentRecord,
+  DocumentRepository,
+  DocumentSourceKind,
+} from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -12,6 +18,8 @@ interface DocumentRow {
   body: string
   content_hash: string | null
   linked_block_id: string | null
+  role: string | null
+  doc_kind: string | null
   synced_at: number
   deleted_at: number | null
 }
@@ -27,6 +35,8 @@ function rowToRecord(row: DocumentRow): DocumentRecord {
     body: row.body,
     contentHash: row.content_hash ?? '',
     linkedBlockId: row.linked_block_id,
+    role: (row.role as DocumentLinkRole | null) ?? null,
+    docKind: (row.doc_kind as DocKind | null) ?? null,
     syncedAt: row.synced_at,
     deletedAt: row.deleted_at,
   }
@@ -128,6 +138,85 @@ export class D1DocumentRepository implements DocumentRepository {
         'UPDATE documents SET linked_block_id = ? WHERE workspace_id = ? AND source = ? AND external_id = ?',
       )
       .bind(blockId, workspaceId, source, externalId)
+      .run()
+  }
+
+  async getRoleLink(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<DocumentRecord | null> {
+    const row = await this.db
+      .prepare(
+        'SELECT * FROM documents WHERE workspace_id = ? AND role = ? AND doc_kind = ? AND deleted_at IS NULL ORDER BY synced_at DESC LIMIT 1',
+      )
+      .bind(workspaceId, role, docKind)
+      .first<DocumentRow>()
+    return row ? rowToRecord(row) : null
+  }
+
+  async listRoleLinks(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<DocumentRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        'SELECT * FROM documents WHERE workspace_id = ? AND role = ? AND doc_kind = ? AND deleted_at IS NULL ORDER BY synced_at DESC',
+      )
+      .bind(workspaceId, role, docKind)
+      .all<DocumentRow>()
+    return results.map(rowToRecord)
+  }
+
+  async listRoleLinksByWorkspace(workspaceId: string): Promise<DocumentRecord[]> {
+    const { results } = await this.db
+      .prepare(
+        'SELECT * FROM documents WHERE workspace_id = ? AND role IS NOT NULL AND deleted_at IS NULL ORDER BY synced_at DESC',
+      )
+      .bind(workspaceId)
+      .all<DocumentRow>()
+    return results.map(rowToRecord)
+  }
+
+  async setRole(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE documents SET role = ?, doc_kind = ? WHERE workspace_id = ? AND source = ? AND external_id = ?',
+      )
+      .bind(role, docKind, workspaceId, source, externalId)
+      .run()
+  }
+
+  async clearRole(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE documents SET role = NULL, doc_kind = NULL WHERE workspace_id = ? AND source = ? AND external_id = ?',
+      )
+      .bind(workspaceId, source, externalId)
+      .run()
+  }
+
+  async clearRoleForKind(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE documents SET role = NULL, doc_kind = NULL WHERE workspace_id = ? AND role = ? AND doc_kind = ?',
+      )
+      .bind(workspaceId, role, docKind)
       .run()
   }
 }

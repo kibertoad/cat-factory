@@ -1,6 +1,6 @@
 # Initiative: documentation-type task improvements
 
-**Status:** in progress (WS1 item 1 + WS2 + WS3 landed) · **Owner:** core · **Started:** 2026-07-04
+**Status:** in progress (WS1 item 1 + WS2 + WS3 + WS4 landed) · **Owner:** core · **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -185,8 +185,8 @@ two: backend loop, then UI).
 | 7   | Style fragments as review criteria for `doc-reviewer`                                                                                                                                                                                     | WS2        | done   | #787      |
 | 8   | Kind-specific `taskTypeFields` (contracts) + `docBriefSection` folding                                                                                                                                                                    | WS3        | done   | (this PR) |
 | 9   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                                                                                                                                   | WS3        | done   | (this PR) |
-| 10  | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                                                                                                                                         | WS4        | todo   |           |
-| 11  | Insert gate into `pl_document`/`pl_document_quick` + catalog version bump + conformance assertion                                                                                                                                         | WS4        | todo   |           |
+| 10  | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                                                                                                                                         | WS4        | done   | #798      |
+| 11  | Insert gate into `pl_document`/`pl_document_quick` + catalog version bump + conformance assertion                                                                                                                                         | WS4        | done   | #798      |
 | 12  | Interactive session backend: parked decision-wait loop + iteration cap + persistence (D1 ⇄ Drizzle) + conformance                                                                                                                         | WS5        | todo   |           |
 | 13  | Interactive session UI window via the result-view seam + i18n                                                                                                                                                                             | WS5        | todo   |           |
 

@@ -192,7 +192,10 @@
           "label": "Karşılaştırılacak seçenekler",
           "placeholder": "Birbirine karşı tartılacak seçenekler"
         },
-        "apiSurface": { "label": "API yüzeyi", "placeholder": "Kapsamdaki uç noktalar veya yüzey" }
+        "apiSurface": {
+          "label": "API yüzeyi",
+          "placeholder": "Kapsamdaki uç noktalar veya yüzey"
+        }
       },
       "optional": "isteğe bağlı",
       "pipeline": "İşlem hattı",
@@ -1581,6 +1584,9 @@
         "localRunners": {
           "label": "Yerel runner'larım",
           "description": "Kendi makinenizdeki model runner'ları (Ollama, LM Studio, vLLM…)."
+        },
+        "documentTemplates": {
+          "label": "Şablonlar ve örnekler"
         }
       }
     },
@@ -2711,6 +2717,25 @@
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
       "attached": "Belge eklendi",
       "attachFailed": "Eklenemedi"
+    },
+    "templates": {
+      "title": "Belge şablonları ve örnekleri",
+      "intro": "Bir belge türüne kendi şablonunuzu ve örnek belgelerinizi atayın. Önce Belgeler entegrasyonu ile içe aktarılmaları gerekir. Bir şablonun bölümleri, o türün yerleşik iskeletinin yerini alır; örnekler yazar aracılara rehberlik eder.",
+      "kindLabel": "Belge türü",
+      "importFirst": "Önce bir belge içe aktarın — şablon veya örnek, içe aktardığınız belgelerden biridir.",
+      "importButton": "Belge içe aktar",
+      "templateHeading": "Şablon",
+      "templateHint": "{kind} için yerleşik iskeletin yerini alır. Tür başına bir şablon.",
+      "templateEmpty": "Yerleşik şablon kullanılıyor.",
+      "exemplarsHeading": "Örnek alınacak belgeler",
+      "exemplarsHint": "Yazar aracıların incelediği iyi örnekler, yerleşik kümeye eklenir.",
+      "exemplarsEmpty": "Bağlı örnek yok.",
+      "pickLabel": "İçe aktarılan belge",
+      "pickPlaceholder": "İçe aktarılan bir belge seçin…",
+      "setTemplate": "Şablon olarak ayarla",
+      "addExemplar": "Örnek ekle",
+      "remove": "Kaldır",
+      "linkFailed": "Belge bağlantısı güncellenemedi"
     }
   },
   "tasks": {

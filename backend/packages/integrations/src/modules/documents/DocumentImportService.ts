@@ -31,6 +31,8 @@ export function toSourceDocument(record: DocumentRecord): SourceDocument {
     url: record.url,
     excerpt: record.excerpt,
     linkedBlockId: record.linkedBlockId,
+    role: record.role,
+    docKind: record.docKind,
     syncedAt: record.syncedAt,
   }
 }
@@ -88,6 +90,10 @@ export class DocumentImportService {
       body: content.body,
       contentHash: hash,
       linkedBlockId: existing?.linkedBlockId ?? null,
+      // Role links (template/exemplar) are owned by the link write path, not import — preserve
+      // any existing tag across a re-import (the repo's upsert also leaves these columns alone).
+      role: existing?.role ?? null,
+      docKind: existing?.docKind ?? null,
       syncedAt: this.deps.clock.now(),
       deletedAt: null,
     }

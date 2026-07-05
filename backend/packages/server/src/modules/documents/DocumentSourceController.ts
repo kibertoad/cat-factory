@@ -4,12 +4,15 @@ import {
   documentSourceKindSchema,
   importDocumentContract,
   linkDocumentContract,
+  linkDocumentForKindContract,
   listDocumentConnectionsContract,
+  listDocumentRoleLinksContract,
   listDocumentSourcesContract,
   listDocumentsContract,
   planDocumentContract,
   searchDocumentsContract,
   spawnDocumentContract,
+  unlinkDocumentForKindContract,
   type DocumentSourceKind,
 } from '@cat-factory/contracts'
 import * as v from 'valibot'
@@ -164,6 +167,39 @@ export function documentSourceController(): Hono<AppEnv> {
       externalId,
     )
     return c.json(document, 201)
+  })
+
+  // ---- workspace+DocKind template / exemplar links (WS1 items 2–4) --------
+
+  // Every role-tagged document in the workspace (drives the template/exemplar management panel).
+  buildHonoRoute(app, listDocumentRoleLinksContract, async (c) => {
+    const documents = requireDocuments(c)
+    if (!documents) return unavailable(c)
+    return c.json(await documents.linkService.listRoleLinks(param(c, 'workspaceId')), 200)
+  })
+
+  // Tag an imported page as the workspace's template (singular per kind) or exemplar for a kind.
+  buildHonoRoute(app, linkDocumentForKindContract, async (c) => {
+    const documents = requireDocuments(c)
+    if (!documents) return unavailable(c)
+    const { source, externalId, role, docKind } = c.req.valid('json')
+    const document = await documents.linkService.linkForKind(
+      param(c, 'workspaceId'),
+      source,
+      externalId,
+      role,
+      docKind,
+    )
+    return c.json(document, 201)
+  })
+
+  // Clear a document's role tag (built-in template resumes for the kind / exemplar drops).
+  buildHonoRoute(app, unlinkDocumentForKindContract, async (c) => {
+    const documents = requireDocuments(c)
+    if (!documents) return unavailable(c)
+    const { source, externalId } = c.req.valid('json')
+    await documents.linkService.unlinkForKind(param(c, 'workspaceId'), source, externalId)
+    return c.body(null, 204)
   })
 
   return app

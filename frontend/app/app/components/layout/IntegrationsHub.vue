@@ -194,7 +194,18 @@ const groups = computed<IntegrationGroup[]>(() => {
         onClick: () => go(() => ui.openDocumentImport(null)),
       })
     }
-    out.push({ title: t('layout.integrationsHub.groups.documents'), items: docs })
+    // Per-DocKind template + exemplar links are workspace CONFIG over the imported corpus, not an
+    // integration to connect — so they sit as a quiet footer link under the sources.
+    out.push({
+      title: t('layout.integrationsHub.groups.documents'),
+      items: docs,
+      footerLink: {
+        key: 'doc:templates',
+        icon: 'i-lucide-file-badge',
+        label: t('layout.integrationsHub.items.documentTemplates.label'),
+        onClick: () => go(() => ui.openDocumentTemplates()),
+      },
+    })
   }
 
   // --- Task trackers (dynamic sources: Jira / GitHub) ------------------------
