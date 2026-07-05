@@ -3,7 +3,8 @@
     "loading": "Yükleniyor…",
     "loadingBoard": "Pano yükleniyor…",
     "backendUnreachable": "Arka uca ulaşılamıyor",
-    "reconnecting": "Yeniden bağlanılıyor…"
+    "reconnecting": "Yeniden bağlanılıyor…",
+    "offline": "Canlı güncellemeler alınmıyor"
   },
   "language": {
     "switcher": "Dil",
@@ -81,6 +82,7 @@
       "moveFailed": "Taşınamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
+      "unlinkFailed": "Bağımlılık kaldırılamadı",
       "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
       "deleted": "\"{name}\" silindi",
       "moved": "\"{name}\" taşındı"
@@ -1052,6 +1054,7 @@
     "loadingContext": "Sağlanan bağlam yükleniyor…",
     "noCalls": "Bu çalışma için kaydedilmiş model çağrısı yok.",
     "noContext": "Bu çalışma için saklanmış aracı bağlamı yok. Çalışma alanında 'Tam aracı bağlamını sakla' etkinleştirildiğinde her gönderim için yakalanır.",
+    "contextError": "Sağlanan bağlam yüklenemedi.",
     "summary": {
       "calls": "Çağrılar",
       "tokensInOut": "Token (giriş / çıkış)",

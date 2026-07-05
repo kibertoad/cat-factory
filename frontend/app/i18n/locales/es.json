@@ -3,7 +3,8 @@
     "loading": "Cargando…",
     "loadingBoard": "Cargando tablero…",
     "backendUnreachable": "No se puede conectar con el backend",
-    "reconnecting": "Reconectando…"
+    "reconnecting": "Reconectando…",
+    "offline": "No se reciben actualizaciones en vivo"
   },
   "language": {
     "switcher": "Idioma",
@@ -81,6 +82,7 @@
       "moveFailed": "No se pudo mover",
       "deleteFailed": "No se pudo eliminar",
       "linkFailed": "No se pudieron vincular las tareas",
+      "unlinkFailed": "No se pudo eliminar la dependencia",
       "recurringDeleteFailed": "No se pudo eliminar el pipeline recurrente",
       "deleted": "\"{name}\" eliminado",
       "moved": "\"{name}\" movido"
@@ -1052,6 +1054,7 @@
     "loadingContext": "Cargando contexto proporcionado…",
     "noCalls": "No se registraron llamadas al modelo en esta ejecución.",
     "noContext": "No se almacenó contexto del agente para esta ejecución. Se captura por despacho cuando el espacio de trabajo tiene activado 'Almacenar contexto completo del agente'.",
+    "contextError": "No se pudo cargar el contexto proporcionado.",
     "summary": {
       "calls": "Llamadas",
       "tokensInOut": "Tokens (entrada / salida)",

@@ -3,7 +3,8 @@
     "loading": "Ładowanie…",
     "loadingBoard": "Ładowanie tablicy…",
     "backendUnreachable": "Nie można połączyć się z backendem",
-    "reconnecting": "Ponowne łączenie…"
+    "reconnecting": "Ponowne łączenie…",
+    "offline": "Brak aktualizacji na żywo"
   },
   "language": {
     "switcher": "Język",
@@ -81,6 +82,7 @@
       "moveFailed": "Nie udało się przenieść",
       "deleteFailed": "Nie udało się usunąć",
       "linkFailed": "Nie udało się powiązać zadań",
+      "unlinkFailed": "Nie udało się usunąć zależności",
       "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u",
       "deleted": "Usunięto \"{name}\"",
       "moved": "Przeniesiono \"{name}\""
@@ -1052,6 +1054,7 @@
     "loadingContext": "Ładowanie dostarczonego kontekstu…",
     "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
     "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
+    "contextError": "Nie udało się załadować dostarczonego kontekstu.",
     "summary": {
       "calls": "Wywołania",
       "tokensInOut": "Tokeny (we / wy)",

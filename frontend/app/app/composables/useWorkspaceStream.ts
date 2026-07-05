@@ -31,6 +31,17 @@ export function useWorkspaceStream() {
   const apiBase = useRuntimeConfig().public.apiBase
 
   const connected = ref(false)
+  // Have we EVER been fully live (connected AND reconciled) for the current workspace? Drives the
+  // "reconnecting" vs "never connected" distinction in the banner. Set together with `connected`
+  // AFTER the on-open resync settles — NOT at `onopen` — so the initial resync window (socket open
+  // but not yet announced) can't be mistaken for a re-connection and flash the amber banner.
+  const everConnected = ref(false)
+  // The very first handshake keeps failing (proxy/firewall blocks WS while REST works, or the
+  // ticket mint throws) — the board loaded over REST but will never go live. Flagged after a
+  // few failed attempts so the banner can say "not receiving live updates" instead of nothing.
+  const connectionFailed = ref(false)
+  // Failed connect attempts before we ever go live gates the offline flag above.
+  const INITIAL_FAIL_ATTEMPTS = 3
 
   let socket: WebSocket | null = null
   let stopped = false
@@ -41,9 +52,29 @@ export function useWorkspaceStream() {
   // http→ws, https→wss (apiBase is an absolute origin, see nuxt.config.ts).
   const wsBase = String(apiBase).replace(/^http/, 'ws')
 
+  // A coarse board refresh (the resync on reconnect, and the `board` event fan-out) must not be
+  // left silently stale by ONE transient failure: retry a few times with backoff so a blip
+  // self-heals. Bounded (the socket-level reconnect + the offline banner are the backstop for a
+  // genuine outage). Aborts between attempts if the stream stopped or the workspace switched.
+  const REFRESH_MAX_ATTEMPTS = 4
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+  async function refreshWithRetry(workspaceId: string): Promise<void> {
+    for (let i = 0; i < REFRESH_MAX_ATTEMPTS; i++) {
+      if (stopped || workspace.workspaceId !== workspaceId) return
+      try {
+        await workspace.refresh()
+        return
+      } catch {
+        if (i < REFRESH_MAX_ATTEMPTS - 1) await sleep(Math.min(4_000, 400 * 2 ** i))
+      }
+    }
+  }
+
   function debouncedBoardRefresh() {
+    const workspaceId = workspace.workspaceId
+    if (!workspaceId) return
     if (boardDebounce) clearTimeout(boardDebounce)
-    boardDebounce = setTimeout(() => void workspace.refresh(), 300)
+    boardDebounce = setTimeout(() => void refreshWithRetry(workspaceId), 300)
   }
 
   function onMessage(raw: string) {
@@ -143,6 +174,7 @@ export function useWorkspaceStream() {
 
     socket.onopen = () => {
       attempt = 0
+      connectionFailed.value = false
       // Resync on (re)connect BEFORE announcing `connected`: any event missed while
       // disconnected is reconciled first. The snapshot carries `bootstrapJobs` +
       // executions, so one refresh rehydrates agentRuns too — a missed terminal event
@@ -157,18 +189,20 @@ export function useWorkspaceStream() {
       // live "bootstrapping…" badge flickers out with no further board event to restore
       // it. Anything acting on a `connected` board (a user, or an e2e spec gating on
       // `data-connected`) then does so only after this reconcile, so a lagging resync
-      // can't drop the state that action produces. `connected` is still set on failure
-      // (we ARE connected; a transient refresh error must not wedge the indicator/tests).
-      void workspace
-        .refresh()
-        .catch(() => {})
-        .finally(() => {
-          // A workspace switch (or stop()) may have happened while the refresh was in
-          // flight — don't announce a connection for a socket we've since abandoned.
-          if (!stopped && socket && workspace.workspaceId === workspaceId) {
-            connected.value = true
-          }
-        })
+      // can't drop the state that action produces. The resync RETRIES on a transient
+      // failure (`refreshWithRetry`) so a reconnect no longer presents as fully live while
+      // silently missing everything from the outage; `connected` is still set even if every
+      // retry fails (we ARE connected; a refresh error must not wedge the indicator/tests).
+      void refreshWithRetry(workspaceId).finally(() => {
+        // A workspace switch (or stop()) may have happened while the refresh was in
+        // flight — don't announce a connection for a socket we've since abandoned.
+        if (!stopped && socket && workspace.workspaceId === workspaceId) {
+          // Flip `everConnected` here (not at onopen): only now are we "fully live", so a later
+          // drop reads as a real re-connection while this initial resync window does not.
+          everConnected.value = true
+          connected.value = true
+        }
+      })
     }
     socket.onmessage = (e) => onMessage(typeof e.data === 'string' ? e.data : '')
     socket.onclose = () => {
@@ -181,6 +215,10 @@ export function useWorkspaceStream() {
   function scheduleReconnect() {
     if (stopped) return
     socket = null
+    // If we've never gone live and keep failing, flag the board as offline so the banner can
+    // surface a "not receiving live updates" state (a REST-only board otherwise looks fine but
+    // silently never updates). Reset the moment a socket opens (see `onopen`).
+    if (!everConnected.value && attempt + 1 >= INITIAL_FAIL_ATTEMPTS) connectionFailed.value = true
     const delay = Math.min(30_000, 500 * 2 ** attempt) // 0.5s → 30s cap
     attempt += 1
     reconnectTimer = setTimeout(connect, delay)
@@ -188,6 +226,11 @@ export function useWorkspaceStream() {
 
   function start() {
     stopped = false
+    // Reset the per-workspace connection lifecycle so a switch to a NEW workspace whose socket
+    // fails is flagged offline on its own merits, not masked by the previous workspace's history.
+    attempt = 0
+    everConnected.value = false
+    connectionFailed.value = false
     connect()
   }
 
@@ -201,5 +244,5 @@ export function useWorkspaceStream() {
   }
 
   onScopeDispose(stop)
-  return { start, stop, connected }
+  return { start, stop, connected, everConnected, connectionFailed }
 }

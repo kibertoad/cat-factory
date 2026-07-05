@@ -243,6 +243,8 @@ const stream = useWorkspaceStream()
 // in the template would not unwrap, since `stream` is a plain object). Drives the headless
 // `workspace-stream` readiness marker the e2e suite waits on.
 const streamConnected = computed(() => stream.connected.value)
+const streamEverConnected = computed(() => stream.everConnected.value)
+const streamConnectionFailed = computed(() => stream.connectionFailed.value)
 watch(
   () => workspace.workspaceId,
   (id) => {
@@ -320,7 +322,11 @@ watch(
         />
         <BoardToolbar />
         <SpendWarningBanner />
-        <ConnectionStatusBanner :connected="streamConnected" />
+        <ConnectionStatusBanner
+          :connected="streamConnected"
+          :ever-connected="streamEverConnected"
+          :connection-failed="streamConnectionFailed"
+        />
         <InspectorPanel />
         <!-- Code-split focus view. The fade lives here (not inside the component) so the
              leave animation still plays when `focusBlockId` clears and the v-if unmounts

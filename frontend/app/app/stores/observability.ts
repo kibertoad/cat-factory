@@ -28,6 +28,12 @@ export const useObservabilityStore = defineStore('observability', () => {
   const contextByExecution = ref<Record<string, AgentContextSnapshot[]>>({})
   /** Execution ids whose context is currently loading. */
   const contextLoading = ref<Set<string>>(new Set())
+  /**
+   * Last context-load error message per execution id, or null. Distinguishes a genuine fetch
+   * failure from a run with no captured context: without this, a swallowed error rendered as
+   * the "no context stored" empty state — indistinguishable from success-with-nothing.
+   */
+  const contextErrors = ref<Record<string, string | null>>({})
   /** Per-execution-id performed-search-query list (newest first). */
   const searchQueriesByExecution = ref<Record<string, AgentSearchQuery[]>>({})
   /** Execution ids whose search queries are currently loading. */
@@ -133,11 +139,17 @@ export const useObservabilityStore = defineStore('observability', () => {
   async function loadContext(executionId: string) {
     if (!workspace.workspaceId) return
     withFlag(contextLoading, executionId, true)
+    contextErrors.value = { ...contextErrors.value, [executionId]: null }
     try {
       const { snapshots } = await api.getAgentContext(workspace.requireId(), executionId)
       contextByExecution.value = { ...contextByExecution.value, [executionId]: snapshots }
-    } catch {
-      // Best-effort: the panel shows an empty state; nothing is persisted client-side.
+    } catch (err) {
+      // Record the error so the panel can offer a retry instead of masquerading the failure as
+      // the "no context stored" empty state.
+      contextErrors.value = {
+        ...contextErrors.value,
+        [executionId]: err instanceof Error ? err.message : 'Failed to load context',
+      }
     } finally {
       withFlag(contextLoading, executionId, false)
     }
@@ -199,6 +211,7 @@ export const useObservabilityStore = defineStore('observability', () => {
     appendCall,
     downloadExport,
     contextByExecution,
+    contextErrors,
     contextFor,
     isContextLoading,
     loadContext,
