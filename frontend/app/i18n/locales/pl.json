@@ -688,12 +688,7 @@
         "urlSource": "Sugerowane źródło adresu URL środowiska: {source}. Zarządza tym handler przestrzeni roboczej; ustaw to tam.",
         "namespace": "Manifesty ustalają przestrzeń nazw \"{namespace}\"; zaleca się jej przestrzeganie w handlerze przestrzeni roboczej.",
         "confidenceHigh": "Wykryto",
-        "confidenceLow": "Sugestia",
-        "unavailable": {
-          "title": "Środowiska efemeryczne nie są włączone",
-          "body": "Automatyczne wykrywanie odczytuje to repozytorium, aby zaproponować konfigurację środowiska testowego (Kubernetes lub Docker Compose), ale integracja środowisk efemerycznych jest wyłączona dla tego wdrożenia. Jest to niezależne od połączenia z GitHub. Osoba zarządzająca serwerem musi ją włączyć (ustawić ENVIRONMENTS_ENABLED oraz klucz szyfrowania); wtedy automatyczne wykrywanie i udostępnianie staną się dostępne.",
-          "docs": "Jak włączyć środowiska efemeryczne"
-        }
+        "confidenceLow": "Sugestia"
       },
       "customManifestPathHint": "Wypełniane wartością domyślną typu po jego wybraniu. Użyj Wykryj, aby znaleźć istniejący manifest w repozytorium.",
       "generateManifest": {

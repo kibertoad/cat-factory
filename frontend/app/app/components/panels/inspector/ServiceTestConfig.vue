@@ -290,16 +290,7 @@ const detecting = ref(false)
 // message (the backend now raises an actionable one for an unreadable repo) so the user sees why
 // detection failed instead of a fixed, vague line.
 const detectError = ref<string | null>(null)
-// Set instead of `detectError` when detection fails because the ephemeral-environment
-// integration is turned off for this deployment (the backend 503s with code `unavailable`).
-// That's a deployment-level toggle, NOT a repo/GitHub problem, so it gets its own actionable
-// panel (what's off + how to enable it + a docs link) rather than the generic red line.
-const detectUnavailable = ref(false)
 const detectResult = ref<ProvisioningRecommendation | null>(null)
-// Where enabling the ephemeral-environment integration is documented (a deployment-level
-// toggle set by whoever runs the server, so there is no in-app config page to link to).
-const ENVIRONMENTS_DOCS_URL =
-  'https://github.com/kibertoad/cat-factory/blob/main/backend/docs/environments-integration.md'
 // Advisory, LOCAL-ONLY selection: which compose `services:` key the user picked. It is NOT persisted
 // (the compose backend targets the file, not a single service), so it lives only in component state
 // and merely drives the chip highlight. Without it the highlight would compare `composePath` — which
@@ -313,7 +304,6 @@ watch(
   () => {
     detectResult.value = null
     detectError.value = null
-    detectUnavailable.value = false
     pickedComposeService.value = null
   },
 )
@@ -331,7 +321,6 @@ async function detectFromRepo() {
   }
   detecting.value = true
   detectError.value = null
-  detectUnavailable.value = false
   try {
     const rec = await infra.detectProvisioning({
       owner: repo.owner,
@@ -362,18 +351,12 @@ async function detectFromRepo() {
       if (rec.provisioning.type === 'kubernetes') seedKubeSource(rec.provisioning.manifestSource)
     }
   } catch (e) {
-    // A 503 `unavailable` means the ephemeral-environment integration is off for this deployment
-    // (not a repo read fault) — show the dedicated "how to enable it" panel instead of a red line.
-    if (apiErrorEnvelope(e)?.code === 'unavailable') {
-      detectUnavailable.value = true
-    } else {
-      // Surface the server's real message (an actionable "couldn't read the repo — check App access"
-      // for a read fault), falling back to the generic line only when none is available.
-      detectError.value =
-        apiErrorEnvelope(e)?.message ??
-        (e instanceof Error ? e.message : null) ??
-        t('inspector.testConfig.detect.error')
-    }
+    // Surface the server's real message (an actionable "couldn't read the repo — check App access"
+    // for a read fault), falling back to the generic line only when none is available.
+    detectError.value =
+      apiErrorEnvelope(e)?.message ??
+      (e instanceof Error ? e.message : null) ??
+      t('inspector.testConfig.detect.error')
   } finally {
     detecting.value = false
   }
@@ -512,28 +495,6 @@ function setSize(value: InstanceSize) {
       <p v-if="detectError" class="text-[11px] text-rose-300/80">
         {{ detectError }}
       </p>
-
-      <!-- The ephemeral-environment integration is off for this deployment. Say exactly what's
-           missing (it's separate from the GitHub connection), what enables it, and link the docs. -->
-      <div
-        v-if="detectUnavailable"
-        class="space-y-1 rounded border border-amber-500/30 bg-amber-500/5 p-2"
-      >
-        <p class="text-[11px] font-medium text-amber-300/90">
-          {{ t('inspector.testConfig.detect.unavailable.title') }}
-        </p>
-        <p class="text-[11px] leading-snug text-slate-400">
-          {{ t('inspector.testConfig.detect.unavailable.body') }}
-        </p>
-        <a
-          :href="ENVIRONMENTS_DOCS_URL"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="inline-block text-[11px] text-primary-400 underline hover:text-primary-300"
-        >
-          {{ t('inspector.testConfig.detect.unavailable.docs') }}
-        </a>
-      </div>
 
       <template v-if="detectResult && !detecting">
         <p

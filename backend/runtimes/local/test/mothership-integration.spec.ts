@@ -106,14 +106,13 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
         LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
         LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
-        // Opt the local node into the ephemeral-environment integration so `createCore` builds
-        // the provisioning service — that is what makes `AgentContextBuilder` actually resolve
-        // the block's environment per dispatch (`environmentRegistryRepository.getByBlock`,
-        // which returns null when none is provisioned) over the RPC. Without it the env repos
-        // route remotely but are never reached on the run path, so the remote `getByBlock` read
-        // would be unit-tested only, never exercised end-to-end. The mothership already enables
-        // it (MOTHERSHIP_ENV), so the remote registry actually wires the repo.
-        ENVIRONMENTS_ENABLED: 'true',
+        // The ephemeral-environment integration wires from ENCRYPTION_KEY (always set here),
+        // so `createCore` builds the provisioning service — that is what makes
+        // `AgentContextBuilder` actually resolve the block's environment per dispatch
+        // (`environmentRegistryRepository.getByBlock`, which returns null when none is
+        // provisioned) over the RPC. Without the key the env repos route remotely but are
+        // never reached on the run path, so the remote `getByBlock` read would be unit-tested
+        // only, never exercised end-to-end. The mothership assembles it the same way.
       },
       overrides: { agentExecutor: new FakeAgentExecutor() },
       // The built-in default model preset routes every kind to a Cloudflare-served model, so the

@@ -688,12 +688,7 @@
         "urlSource": "Önerilen ortam URL kaynağı: {source}. Bunu çalışma alanı işleyicisi yönetir; oradan ayarlayın.",
         "namespace": "Manifestler \"{namespace}\" ad alanını sabitliyor; çalışma alanı işleyicisinde buna uymanız önerilir.",
         "confidenceHigh": "Algılandı",
-        "confidenceLow": "Öneri",
-        "unavailable": {
-          "title": "Geçici ortamlar etkin değil",
-          "body": "Otomatik algılama, bir test ortamı (Kubernetes veya Docker Compose) yapılandırması önermek için bu depoyu okur, ancak geçici ortam entegrasyonu bu dağıtımda kapalıdır. Bu, GitHub bağlantınızdan ayrıdır. Sunucuyu çalıştıran kişi bunu etkinleştirmelidir (ENVIRONMENTS_ENABLED ve bir şifreleme anahtarı ayarlayın); ardından otomatik algılama ve sağlama kullanılabilir hale gelir.",
-          "docs": "Geçici ortamlar nasıl etkinleştirilir"
-        }
+        "confidenceLow": "Öneri"
       },
       "customManifestPathHint": "Türü seçtiğinizde varsayılan değeriyle doldurulur. Depodaki mevcut bir manifesti bulmak için Algıla'yı kullanın.",
       "generateManifest": {

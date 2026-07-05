@@ -4,7 +4,9 @@ Let a workspace plug in its **own** ephemeral/preview-environment tooling so a
 `deployer` agent can provision an environment and a `tester` agent can run against
 it. The integration is declarative and **API-only**: you describe your self-rolled
 management API as an HTTP manifest — there are no provider presets and no code to
-write. It is **opt-in** and wired exactly like the GitHub/Confluence modules.
+write. It assembles wherever the shared encryption key is set (the same "always on
+where the key is present" model as documents/tasks); nothing provisions until a
+workspace registers a connection and its pipeline runs a `deployer`/`tester` step.
 
 This is the **sibling** of the [self-hosted runner pool](./runner-pool-integration.md):
 same manifest machinery (auth schemes, `{{var}}` templating, dot-path response
@@ -48,14 +50,14 @@ manifest_id)`), and a service selects its type/source independently of the works
 
 ## Enabling it
 
-The feature is off unless enabled **and** a service-level encryption key is set
-(per-tenant credentials are always stored encrypted — there is no plaintext
-fallback):
+The module assembles wherever a service-level encryption key is set (per-tenant
+credentials are always stored encrypted — there is no plaintext fallback). That key is
+already required service-wide (the always-on document/task sources fail config load
+without it), so there is nothing extra to turn on — register a connection and add a
+`deployer`/`tester` step to a pipeline. To keep environments out of a pipeline, omit
+those steps.
 
 ```sh
-# wrangler.toml
-ENVIRONMENTS_ENABLED = "true"
-
 # Credentials are sealed with the shared service-level master key (≥32 bytes, base64),
 # which is already required service-wide (a secret):
 openssl rand -base64 32 | wrangler secret put ENCRYPTION_KEY

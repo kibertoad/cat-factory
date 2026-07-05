@@ -688,12 +688,7 @@
         "urlSource": "Source d'URL d'environnement suggérée : {source}. Le gestionnaire de l'espace de travail la contrôle ; définissez-la là.",
         "namespace": "Les manifestes fixent l'espace de noms « {namespace} » ; il est recommandé de le respecter sur le gestionnaire de l'espace de travail.",
         "confidenceHigh": "Détecté",
-        "confidenceLow": "Suggestion",
-        "unavailable": {
-          "title": "Les environnements éphémères ne sont pas activés",
-          "body": "La détection automatique lit ce dépôt pour proposer une configuration d'environnement de test (Kubernetes ou Docker Compose), mais l'intégration des environnements éphémères est désactivée pour ce déploiement. C'est distinct de votre connexion GitHub. La personne qui gère le serveur doit l'activer (définir ENVIRONMENTS_ENABLED et une clé de chiffrement) ; la détection automatique et le provisionnement deviennent alors disponibles.",
-          "docs": "Comment activer les environnements éphémères"
-        }
+        "confidenceLow": "Suggestion"
       },
       "customManifestPathHint": "Prérempli avec la valeur par défaut du type lors de sa sélection. Utilisez Détecter pour localiser un manifeste existant dans le dépôt.",
       "generateManifest": {

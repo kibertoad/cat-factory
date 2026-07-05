@@ -190,9 +190,13 @@ export interface TasksConfig {
 }
 
 export interface EnvironmentsConfig {
-  /** Opt-in flag. Requires an encryption key (no silent plaintext fallback). */
-  enabled: boolean
-  /** Service-level master key (base64) backing credential encryption at rest. */
+  /**
+   * Service-level master key (base64) backing credential encryption at rest. The
+   * module assembles whenever this is present (there is no separate enable flag) — the
+   * same "always on where the key is set" model as documents/tasks. Whether a workspace
+   * actually provisions anything is governed by whether it registered a connection and
+   * whether its pipeline includes a `deployer`/`tester` step, not by a deployment toggle.
+   */
   encryptionKey?: string
   /**
    * Hostnames exempt from the strict public-https URL guard, for a TRUSTED in-house
@@ -329,7 +333,7 @@ export interface AppConfig {
   documents: DocumentsConfig
   /** Task-source integration config; always on where the runtime serves task sources. */
   tasks: TasksConfig
-  /** Environment provider integration config; `enabled` is false unless opted in. */
+  /** Environment provider integration config; assembles wherever an encryption key is set. */
   environments: EnvironmentsConfig
   /** Self-hosted runner-pool config; `enabled` is false unless opted in. */
   runners: RunnerPoolConfig

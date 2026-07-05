@@ -99,7 +99,6 @@ const SUT_ENV: NodeJS.ProcessEnv = {
   ENCRYPTION_KEY,
   AUTH_SESSION_SECRET: SESSION_SECRET,
   SLACK_ENABLED: 'true',
-  ENVIRONMENTS_ENABLED: 'true',
   PROMPT_LIBRARY_ENABLED: 'true',
   DOCUMENT_SOURCES: 'confluence,notion,github,figma,zeplin,linear',
 }

@@ -254,8 +254,8 @@ gets something to test against:
   container pool) and the Tester tests the returned URL. Runtime-independent (it's just
   HTTP), offloads the heavy infra, and is the way to run the Tester on Apple `container`.
 
-The environment provider is opt-in and identical to the cloud facades: set
-`ENVIRONMENTS_ENABLED=true` (+ `ENCRYPTION_KEY`) and register a connection in the UI.
+The environment provider is identical to the cloud facades: it is available wherever
+`ENCRYPTION_KEY` is set (always, in local mode) — just register a connection in the UI.
 Without it, ephemeral tasks have no URL to test — fine on a DinD-capable runtime (use
 Local instead), but on Apple `container` a Tester with neither a provider nor a no-infra
 service is refused at start.
