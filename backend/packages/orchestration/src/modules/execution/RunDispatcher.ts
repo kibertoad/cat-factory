@@ -467,6 +467,9 @@ export class RunDispatcher {
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
         if (handle.model) step.model = handle.model
+        // Surface web-search availability + provider on the step (run details), resolved
+        // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
+        if (handle.search) step.search = handle.search
         // The dispatch returned, so the container is up and the job is accepted; the
         // live phase + the container id/url arrive on the first poll.
         step.container = { status: 'up' }

@@ -1,5 +1,85 @@
 # @cat-factory/kernel
 
+## 0.98.0
+
+### Minor Changes
+
+- bf31df7: Stack recipes & shared stacks (slice 8): the opt-in environment analyst.
+
+  Adds an `environment-analyst` agent kind — the LLM half of environment auto-detection. Where the deterministic detector reads a repo checkout-free and can only see mechanical facts (compose layering, external networks, env-file pairs), the analyst is a read-only `container-explore` agent that CLONES the repo and reads the imperative bring-up a scan can't (README / Makefile / `bin/*` CLIs / setup scripts / seed dumps) to draft a declarative Docker Compose stack recipe — setup steps, prerequisites and a health gate — each grounded in a source citation. It returns the draft on `result.custom` (rendered by the shared `generic-structured` view); it never writes the repo. The draft is NON-BINDING: the setup wizard (slice 7) will merge it over the deterministic recommendation and nothing is applied until the human confirms.
+
+  - Contracts: `AnalystRecipeDraft` / `AnalystRecipeNote` / `AnalystCitation` (`environment-analyst.ts`) — a lenient LLM-output shape (a proposed `StackRecipe` + per-field provenance + summary) that degrades field-by-field on a partially-malformed reply.
+  - Agents: the `environment-analyst` kind (registered through the public `AgentKindRegistry` seam, pre-loaded by `defaultAgentKindRegistry()`), with its schema-derived structured output (`failOnUnusableFinal`, so an empty reply fails loudly rather than yielding an empty draft).
+  - Kernel: a seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`) the wizard runs against a service frame, mirroring `pl_blueprint`.
+
+  No persistence change — the analyst rides the execution engine and the existing `provisioning` blob, so no migration and no runtime asymmetry. The draft-merge + wizard trigger UI land with the wizard (slice 7).
+
+### Patch Changes
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+
+## 0.97.0
+
+### Minor Changes
+
+- 6f9d935: Stack recipes & shared stacks (slice 6): preflight prerequisite checks with guided remediation.
+
+  A stack recipe can now declare machine `prerequisites: PreflightRef[]` — automated PROBE + human REMEDIATION checks for the inherently-manual one-time machine setup a complex compose repo needs (docker daemon reachable, free disk / RAM, container-registry login state, VPN reachability, mkcert CA, hosts-file entries, an env-file secrets marker). They are re-run at provision start: a failing REQUIRED check fails the provision fast with its copy-paste remediation in the provisioning log, instead of a mystery deep inside a 40-image pull (a non-required check is advisory — a warning). A `POST /workspaces/:ws/preflights/run` endpoint runs an arbitrary set of checks for the setup wizard's live re-check.
+
+  - Contracts: `PreflightCheckId` / `PreflightParams` / `PreflightRef` / `PreflightResult` (`preflights.ts`) + `prerequisites` on `stackRecipeSchema`; the `runPreflightsContract` route.
+  - Kernel: the runtime-bound `PreflightHostProbes` seam + `PreflightProbeOutcome`, and a `runPreflights` seam on `ProvisionEnvironmentRequest`.
+  - Integrations: `PreflightService` (runtime-neutral orchestration over the probe seam) + provision-start enforcement in `ComposeEnvironmentProvider`.
+  - Server: `PreflightController`.
+  - Local facade: `createDockerPreflightProbes` (the host probes over the docker CLI + `node:*`), wired only where the compose runtime is (a Docker-family host daemon). The probes are runtime-bound (local facade only, the documented compose exception); the declaration + API are runtime-neutral and the recipe rides the existing `provisioning` blob, so there is no migration. On the Worker / plain Node the preflight API 503s and a recipe that declares prerequisites fails loudly at provision.
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+
+## 0.96.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+- dd6df12: feat(environments): attach per-PR compose stacks to their shared stacks (shared-stacks slice 5)
+
+  Wire a stack recipe's `sharedStackRefs` + `externalNetworks` through to the per-PR consumer
+  environment, so a complex compose repo can reach the long-lived shared infra it depends on (the
+  acme `acme-net` shape). This is the provider-integration slice of the stack-recipes initiative.
+
+  - **Provider-before-consumer bring-up.** `SharedStackService.ensureRefsUp(workspaceId, refs)`
+    brings each referenced shared stack up (via the idempotent `ensureUp`) IN ORDER and returns the
+    deduped union of the Docker networks they own — or a blocking `error` (never a throw) for a
+    missing ref, a failed bring-up, or a deployment with no host daemon. It is exposed to the compose
+    provider as the new `ProvisionEnvironmentRequest.ensureSharedStacks` seam (a kernel
+    `SharedStackEnsureResult`), bound in `EnvironmentProvisioningService.buildProvisionRequest`.
+  - **External-network attach.** `ComposeEnvironmentProvider.provisionRecipe` ensures the shared
+    stacks up (streaming one `shared stacks (N)` provisioning-log step) and then attaches the per-PR
+    project to `externalNetworks ∪ managedNetworks` via a new pure `attachExternalNetworks` folded
+    into `prepareRecipeComposeFiles`: each network not already declared external across the merged
+    `-f` layers is declared top-level `{ external: true }` and joined by every service (preserving
+    the implicit `default` connectivity; skipping a `network_mode`-pinned service). The attach
+    reasons about the MERGED stack (all `-f` layers together), not each layer in isolation, so it
+    never re-adds `default` to a service the base intentionally scoped, never lands `networks` on a
+    service whose `network_mode` sits in another layer (which compose rejects at `up`), and refuses —
+    rather than silently overwrites — a requested network whose name collides with a project-owned
+    network in the recipe.
+  - Execution stays local-facade-bound (the documented compose runtime-binding exception); the recipe
+    rides the existing persisted `provisioning` blob, so there is no migration. A recipe that
+    references shared stacks on a deployment without the lifecycle wired fails loudly.
+
+### Patch Changes
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+  - @cat-factory/contracts@0.105.0
+
 ## 0.95.0
 
 ### Minor Changes

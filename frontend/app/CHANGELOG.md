@@ -1,5 +1,136 @@
 # @cat-factory/app
 
+## 0.96.4
+
+### Patch Changes
+
+- 168b11f: UX papercuts — secret/password inputs mask by default with a reveal toggle (section B, UX-19/UX-20)
+
+  - **UX-19 (P2): every password/secret field gets a show/hide toggle.** New shared
+    `common/SecretInput.vue` primitive (mirroring `common/IconButton.vue` / `common/CopyButton.vue`)
+    wraps `UInput` with a masked default (`type="password"`) and a trailing eye-toggle button —
+    labeled and `aria-pressed` via the new `common.reveal` / `common.hide` keys — so a user can
+    verify a pasted token, the leading cause of invalid-credential retries. It forwards every other
+    UInput prop/listener via `$attrs` and binds with `v-model` exactly like `UInput`. Every bare
+    `type="password"` field now routes through it: both auth screens (`LoginScreen`,
+    `ResetPasswordScreen`), the descriptor-driven `DocumentSourceConnectModal` +
+    `UserSecretsSection` (via a `:secret` prop that preserves the `field.secret`-conditional
+    masking), `ObservabilityConnectionPanel`, `LocalModelEndpointsPanel`, `SlackPanel`,
+    `PersonalCredentialModal`, plus the audit-missed surfaces `AccountDeploymentSettings`,
+    `AccountTeamSettings`, `KubernetesEnvironmentForm` / `KubernetesEngineForm`,
+    `ProviderManifestEditor`, and `PackageRegistriesPanel`.
+  - **UX-20 (P2): plaintext secret textareas are masked.** The four fully-visible secret
+    `UTextarea`s (`ApiKeysSection`, `VendorCredentialsModal`, `OpenRouterCatalogPanel`,
+    `PersonalSubscriptionSection`) are converted to the same masked-by-default `SecretInput`, so
+    live vendor keys no longer render in cleartext (shoulder-surf / screen-share leakage).
+
+  Adds `common.reveal` / `common.hide` message keys across all eight locales.
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+
+## 0.96.3
+
+### Patch Changes
+
+- 398ca72: UX papercuts — accessibility: icon-button labeling, keyboard, focus & reduced motion (section F, UX-62..UX-66)
+
+  - **UX-62/63 (P1/P2): icon-only buttons are named by construction.** New shared
+    `common/IconButton.vue` primitive (mirroring `common/CopyButton.vue`) requires a `label`
+    and applies it as BOTH `title` (pointer tooltip) and `aria-label` (screen readers),
+    forwarding all other UButton props/listeners via `$attrs`. Every previously-unlabeled
+    dismiss button now routes through it with `t('common.close')`: the block focus view,
+    clarity / brainstorm / requirements review windows, the inspector, and the service-spec
+    window. This replaces the ad-hoc mix of title-only / aria-only / nothing with one
+    enforceable convention.
+  - **UX-64 (P2): the task card's mini pipeline steps are keyboard-operable.** The clickable
+    `<div>` is now a real `<button type="button">` — focusable, Enter/Space-activatable, with
+    a `focus-visible` ring — instead of a pointer-only, screen-reader-invisible target.
+  - **UX-65 (P2): hand-rolled inputs have a visible focus ring.** The textareas that only
+    swapped their border hue on focus (human-test, follow-up, gate human-review, both
+    visual-confirmation notes) now add `focus-visible:ring-2` (fixing the WCAG 2.4.7
+    hue-only-focus failure).
+  - **UX-66 (P2): decorative animations respect `prefers-reduced-motion`.** A
+    `@media (prefers-reduced-motion: reduce)` block silences the infinite attention pulses
+    (blocked / decision-needed halo, PR-ready halo, the active-step and follow-up halos) and
+    the marching-ants edge animation. Loading spinners are intentionally left animating — a
+    spinner's motion is its meaning.
+
+## 0.96.2
+
+### Patch Changes
+
+- Updated dependencies [6f9d935]
+  - @cat-factory/contracts@0.106.0
+
+## 0.96.1
+
+### Patch Changes
+
+- 8b1fae5: UX papercuts — async state, realtime & error surfacing (section E, UX-70..UX-77)
+
+  - **UX-70 (P1): a board that never goes live is no longer silently frozen.** After a few
+    failed initial WebSocket handshakes (proxy/firewall blocking WS while REST works, or a
+    ticket-mint failure), `useWorkspaceStream` flags the connection as failed and
+    `ConnectionStatusBanner` shows a distinct "not receiving live updates" strip — separate
+    from the amber reconnecting strip (which only appears once we've actually been live).
+  - **UX-71 (P2): a `board` event's coarse refresh no longer silently swallows failures.**
+    It now retries with backoff (aborting on stream-stop / workspace-switch), so one
+    transient failure can't leave the board stale (a materialised module never appearing).
+  - **UX-72 (P2): a reconnect that fails to reconcile now retries.** The on-open resync uses
+    the same retrying refresh instead of a swallowed `.catch(() => {})`, so a reconnect no
+    longer presents as fully live while missing everything from the outage. `connected` is
+    still announced even if every retry fails (we are connected).
+  - **UX-73 (P2): a `starting` preview no longer wedges on a transient poll error.** The
+    preview store keeps polling through blips up to a small cap (self-heals when the runtime
+    recovers), then surfaces the error and stops — instead of leaving the amber "Starting…"
+    spinning forever with no recovery.
+  - **UX-74 (P2): the service-spec window's error state has a Retry.** No more
+    close-and-reopen as the only escape.
+  - **UX-75 (P3): the observability panel distinguishes a context-load failure from an empty
+    run.** A failed provided-context load now shows an error-with-retry state instead of
+    masquerading as "no context stored"; the model-activity error state also gained a Retry.
+  - **UX-76 (P3): `removeDependency` surfaces failures.** It's wrapped in try/catch like its
+    sibling `toggleDependency`, toasting on failure instead of rejecting unhandled.
+  - **UX-77 (P3): actionable error toasts are sticky.** The "Configure AI" / "Configure
+    storage" remedy toasts no longer auto-dismiss and take their one-click fix with them.
+
+## 0.96.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+- e5b9462: Fix a retried run leaving its stale "Run failed" banner up (and its carried-forward failure history hidden). After a retry replaces a block's failed run with a fresh run under a new id, the execution store's snapshot reconcile was preserving the now-deleted predecessor, which then shadowed the running run in the by-block projection. Drop a cached-only run whose block the incoming snapshot already covers so the banner clears on restart and the "previous errors" history surfaces on the task inspector.
+- d17a2fc: UX papercuts — the requirements & clarity review windows (UX-32/33/34)
+
+  - **UX-32 (P1): the review gate is no longer unadvanceable below `lg`.** The action rail
+    (Proceed / Incorporate / Re-review / Redo / resolve-exceeded) used to live in an
+    `aside` that was `hidden` below the `lg` breakpoint, so on a laptop split-screen or
+    tablet the human could answer findings but had no visible way to advance the gate. The
+    rail is now a right-hand column on wide screens and a bottom action bar below `lg`
+    (never hidden); the purely-informational stats collapse away below `lg` to keep the bar
+    compact.
+  - **UX-33 (P1): typed answers are no longer lost on close.** Closing a review window (X,
+    backdrop, or Escape) now flushes any typed-but-unblurred answer before the view tears
+    down. `useResultView` grew an `onClose` hook so all three close paths flush through one
+    seam; the flush snapshots the review up front so it survives the reactive state going
+    null on close.
+  - **UX-34 (P2): the two review windows now share one save model.** The clarity window
+    auto-saves answers on blur (seeding each textarea from the recorded reply), matching the
+    requirements window, instead of requiring an explicit "Save answer" click — so muscle
+    memory from one no longer silently drops data in the other.
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+  - @cat-factory/contracts@0.105.0
+
 ## 0.95.1
 
 ### Patch Changes

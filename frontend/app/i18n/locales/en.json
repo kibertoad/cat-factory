@@ -3,7 +3,8 @@
     "loading": "Loading…",
     "loadingBoard": "Loading board…",
     "backendUnreachable": "Can't reach the backend",
-    "reconnecting": "Reconnecting…"
+    "reconnecting": "Reconnecting…",
+    "offline": "Not receiving live updates"
   },
   "language": {
     "switcher": "Language",
@@ -20,6 +21,8 @@
     "retry": "Retry",
     "copy": "Copy",
     "copied": "Copied to clipboard",
+    "reveal": "Reveal",
+    "hide": "Hide",
     "delete": "Delete",
     "remove": "Remove",
     "confirm": {
@@ -96,6 +99,7 @@
       "moveFailed": "Could not move",
       "deleteFailed": "Could not delete",
       "linkFailed": "Could not link tasks",
+      "unlinkFailed": "Could not remove dependency",
       "recurringDeleteFailed": "Could not delete recurring pipeline",
       "deleted": "Deleted \"{name}\"",
       "moved": "Moved \"{name}\""
@@ -1007,6 +1011,8 @@
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
+      "executionHistory": "Execution history",
+      "hideExecutionHistory": "Hide execution history",
       "editingConclusions": "Editing the conclusions",
       "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
       "noProseOutput": "This agent produced no prose output.",
@@ -1094,6 +1100,7 @@
     "loadingContext": "Loading provided context…",
     "noCalls": "No model calls recorded for this run.",
     "noContext": "No agent context stored for this run. It is captured per dispatch when the workspace has 'Store full agent context' enabled.",
+    "contextError": "Could not load the provided context.",
     "summary": {
       "calls": "Calls",
       "tokensInOut": "Tokens (in / out)",
@@ -1140,6 +1147,16 @@
       "systemPrompt": "System prompt",
       "userPrompt": "User prompt",
       "details": "Details"
+    },
+    "webSearch": "Web search",
+    "loadingSearch": "Loading web searches…",
+    "noSearch": "No web searches recorded for this run. Queries are captured when web search runs and the workspace has 'Store full agent context' enabled.",
+    "search": {
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "provider": "Provider",
+      "resultsCount": "{count} result | {count} results",
+      "queriesTitle": "Performed searches"
     }
   },
   "auth": {
@@ -3326,8 +3343,6 @@
       "description": "Noun label heading the recorded reply to a finding (the answer that was given), not the verb."
     },
     "answerPlaceholder": "Answer this finding…",
-    "refineAnswerPlaceholder": "Refine your answer…",
-    "saveAnswer": "Save answer",
     "dismissIrrelevant": "Dismiss as irrelevant",
     "reopen": "Reopen",
     "docHeading": "Clarified bug report",

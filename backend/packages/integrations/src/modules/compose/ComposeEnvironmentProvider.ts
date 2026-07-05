@@ -10,7 +10,8 @@ import type {
   ProvisionedEnvironment,
   RunRepoContext,
 } from '@cat-factory/kernel'
-import type { RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import type { PreflightRef, RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import {
   type ComposeEnvironmentConfig,
   type ComposeRuntime,
@@ -483,6 +484,12 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     const hostCmdIssue = this.checkHostCommandsAllowed(recipe, config)
     if (hostCmdIssue) return this.failed(project, hostCmdIssue)
 
+    // Re-run the machine PREREQUISITE checks (VPN / registry login / daemon / disk / mkcert / hosts /
+    // secrets) FIRST — before the daemon / clone / shared-stack work — so a failed required check
+    // fails fast with its remediation instead of a mystery deep inside a 40-image pull.
+    const preflightIssue = await this.runPreflights(req, recipe, record)
+    if (preflightIssue) return this.failed(project, preflightIssue)
+
     const image = config.imageTemplate ? renderTemplate(config.imageTemplate, inputs) : undefined
     const vars = templateVars(inputs, project, image)
     // The compose invocation env: the templated `envTemplate` plus `COMPOSE_PROFILES`.
@@ -508,8 +515,19 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       if (!file) return this.failed(project, `No docker-compose file found at '${path}'`)
       inputsFiles.push({ path, text: renderTemplate(file.content, vars) })
     }
+
+    // Provider-before-consumer: bring the referenced SHARED STACKS up FIRST and collect the managed
+    // Docker networks they own, so the per-PR project can attach to them as `external: true` (the
+    // acme `acme-net` shape). A shared stack is long-lived + idempotent, so this is a cheap liveness
+    // probe once it's up. The consumer attaches to the union of those networks + the recipe's own
+    // declared `externalNetworks`; `prepareRecipeComposeFiles` skips any a layer already wires.
+    const managed = await this.ensureSharedStacks(req, recipe, project, record)
+    if ('error' in managed) return this.failed(project, managed.error)
+    const attachNetworks = [...new Set([...(recipe.externalNetworks ?? []), ...managed.networks])]
+
     const prepared = prepareRecipeComposeFiles(inputsFiles, config.service, config.port, {
       baseDepth,
+      ...(attachNetworks.length > 0 ? { attachNetworks } : {}),
     })
     if (prepared.issues.length > 0) {
       return this.failed(
@@ -652,6 +670,74 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
       access: null,
       fields: { project, url, hostPort: String(hostPort), scheme },
     }
+  }
+
+  /**
+   * Bring the recipe's referenced SHARED STACKS up (provider-before-consumer) and return the
+   * managed Docker networks they own, streaming one provisioning-log step for the ensure. A recipe
+   * with no `sharedStackRefs` returns no networks with no daemon work. A recipe that DECLARES refs
+   * on a deployment where the shared-stack lifecycle isn't wired (`req.ensureSharedStacks` absent —
+   * no host daemon) fails loudly rather than silently ignoring them. A resolution / bring-up
+   * failure comes back as a blocking `error` (never a throw), tearing nothing down — the stacks
+   * are long-lived, so a half-brought-up stack is left for a retry / manual inspection.
+   */
+  private async ensureSharedStacks(
+    req: ProvisionEnvironmentRequest,
+    recipe: StackRecipe,
+    project: string,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<{ networks: string[] } | { error: string }> {
+    const refs = recipe.sharedStackRefs ?? []
+    if (refs.length === 0) return { networks: [] }
+    if (!req.ensureSharedStacks) {
+      return {
+        error: `This stack recipe references shared stack(s) (${refs.join(', ')}), but shared-stack orchestration is not available on this deployment (it needs a host Docker daemon).`,
+      }
+    }
+    const started = Date.now()
+    const result = await req.ensureSharedStacks(refs)
+    await this.logStep(record, `shared stacks (${refs.length})`, started, {
+      ok: result.ok,
+      ...(result.ok
+        ? { detail: result.networks.length ? `networks: ${result.networks.join(', ')}` : undefined }
+        : { error: result.error }),
+    })
+    return result.ok
+      ? { networks: result.networks }
+      : { error: `Shared stacks could not be brought up: ${result.error}` }
+  }
+
+  /**
+   * Re-run the recipe's machine PREREQUISITE checks (`recipe.prerequisites`) at provision start,
+   * streaming one provisioning-log step per check, and return a blocking message when any REQUIRED
+   * check fails (with its detail + remediation) — else null. A recipe with no prerequisites is a
+   * no-op. A recipe that DECLARES prerequisites on a deployment where the host-probe runtime isn't
+   * wired (`req.runPreflights` absent — no host daemon) fails loudly rather than silently skipping a
+   * declared safety gate, mirroring `ensureSharedStacks`.
+   */
+  private async runPreflights(
+    req: ProvisionEnvironmentRequest,
+    recipe: StackRecipe,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    const refs = recipe.prerequisites ?? []
+    if (refs.length === 0) return null
+    if (!req.runPreflights) {
+      return `This stack recipe declares preflight prerequisite check(s), but preflight checks are not available on this deployment (they need a host Docker daemon).`
+    }
+    const started = Date.now()
+    const results = await req.runPreflights(refs as PreflightRef[])
+    // Stream each check as its own provisioning-log entry so the "View logs" drawer shows which
+    // prerequisite is red (a `warn` is advisory — logged as a success with a note, not a failure).
+    for (const r of results) {
+      await this.logStep(record, `preflight: ${r.title}`, started, {
+        ok: r.status !== 'fail',
+        ...(r.detail ? { detail: r.status === 'warn' ? `warn: ${r.detail}` : r.detail } : {}),
+        ...(r.status === 'fail' ? { error: r.detail ?? 'failed' } : {}),
+      })
+    }
+    const blocking = preflightBlockingFailures(results)
+    return blocking.length > 0 ? formatPreflightFailure(blocking) : null
   }
 
   /**

@@ -10,6 +10,7 @@
 import { parseOutputOutline } from '~/utils/agentOutput'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import type {
   RequirementRecommendation,
   RequirementReview,
@@ -59,6 +60,10 @@ const { open, blockId, instanceId, stepIndex, close } = useResultView('requireme
     docCollapsedOverride.value = null
     void requirements.load(id)
   },
+  // Closing the window (X, backdrop, Escape) must not silently drop an answer the user typed
+  // but never blurred out of. Flush before the view tears down; flushDrafts captures the
+  // review up front so the persist survives blockId going null on close (UX-33).
+  onClose: () => void flushDrafts(),
 })
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const review = computed<RequirementReview | null>(() =>
@@ -167,23 +172,29 @@ function notifyError(title: string, e: unknown) {
 // the recorded reply (see the watch below); editing and blurring persists it. Persist only
 // when the trimmed draft actually differs from what's already recorded, so blurring an
 // untouched field is a no-op.
-async function persistDraft(item: RequirementReviewItem) {
-  if (!review.value || frozen.value) return
+async function persistDraft(
+  item: RequirementReviewItem,
+  r: RequirementReview | null = review.value,
+) {
+  if (!r || frozen.value) return
   const text = (drafts.value[item.id] ?? '').trim()
   if (!text || text === (item.reply ?? '').trim()) return
   try {
-    await requirements.reply(review.value, item.id, text)
+    await requirements.reply(r, item.id, text)
   } catch (e) {
     notifyError(t('requirements.errors.saveAnswer'), e)
   }
 }
 
-// Persist every dirty draft before an action that consumes the answers, so a value the
-// user typed but never blurred out of isn't lost.
+// Persist every dirty draft before an action that consumes the answers (or on window close),
+// so a value the user typed but never blurred out of isn't lost. Snapshots the review up front
+// and threads it through, so the persist completes even if the window closes mid-flush (the
+// reactive `review` goes null the moment the view tears down).
 async function flushDrafts() {
-  if (!review.value) return
-  for (const item of review.value.items) {
-    if (item.status === 'open' || item.status === 'answered') await persistDraft(item)
+  const r = review.value
+  if (!r) return
+  for (const item of r.items) {
+    if (item.status === 'open' || item.status === 'answered') await persistDraft(item, r)
   }
 }
 
@@ -479,11 +490,18 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               :step-index="stepIndex"
               @restarted="close"
             />
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
+            <IconButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :label="t('common.close')"
+              @click="close"
+            />
           </div>
         </header>
 
-        <div class="flex min-h-0 flex-1">
+        <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
           <!-- main column -->
           <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
             <i18n-t
@@ -842,10 +860,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </template>
           </div>
 
-          <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
+          <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`
+               (never hidden — the gate is otherwise unadvanceable on a laptop split-screen /
+               tablet, UX-32). The informational stats collapse away below `lg` to keep the
+               bottom bar compact; the actions themselves always show. -->
+          <aside
+            class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+          >
             <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="review" class="space-y-2 text-xs text-slate-400">
+              <div v-if="review" class="hidden space-y-2 text-xs text-slate-400 lg:block">
                 <div class="flex items-center justify-between">
                   <span>{{ t('requirements.stats.findings') }}</span>
                   <span class="text-slate-300">{{ review.items.length }}</span>

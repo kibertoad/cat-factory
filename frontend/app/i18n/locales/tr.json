@@ -3,7 +3,8 @@
     "loading": "Yükleniyor…",
     "loadingBoard": "Pano yükleniyor…",
     "backendUnreachable": "Arka uca ulaşılamıyor",
-    "reconnecting": "Yeniden bağlanılıyor…"
+    "reconnecting": "Yeniden bağlanılıyor…",
+    "offline": "Canlı güncellemeler alınmıyor"
   },
   "language": {
     "switcher": "Dil",
@@ -39,6 +40,8 @@
       "reconfigureHint": "Bunu daha sonra yeniden yapılandırabilirsiniz."
     },
     "copied": "Panoya kopyalandı",
+    "reveal": "Göster",
+    "hide": "Gizle",
     "disconnect": "Bağlantıyı kes",
     "copyFailed": "Panoya kopyalanamadı",
     "revoke": "İptal et",
@@ -81,6 +84,7 @@
       "moveFailed": "Taşınamadı",
       "deleteFailed": "Silinemedi",
       "linkFailed": "Görevler bağlanamadı",
+      "unlinkFailed": "Bağımlılık kaldırılamadı",
       "recurringDeleteFailed": "Yinelenen pipeline silinemedi",
       "deleted": "\"{name}\" silindi",
       "moved": "\"{name}\" taşındı"
@@ -964,6 +968,8 @@
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
+      "executionHistory": "Yürütme geçmişi",
+      "hideExecutionHistory": "Yürütme geçmişini gizle",
       "editingConclusions": "Sonuçlar düzenleniyor",
       "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
       "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",
@@ -1051,6 +1057,7 @@
     "loadingContext": "Sağlanan bağlam yükleniyor…",
     "noCalls": "Bu çalışma için kaydedilmiş model çağrısı yok.",
     "noContext": "Bu çalışma için saklanmış aracı bağlamı yok. Çalışma alanında 'Tam aracı bağlamını sakla' etkinleştirildiğinde her gönderim için yakalanır.",
+    "contextError": "Sağlanan bağlam yüklenemedi.",
     "summary": {
       "calls": "Çağrılar",
       "tokensInOut": "Token (giriş / çıkış)",
@@ -1097,6 +1104,16 @@
       "systemPrompt": "Sistem istemi",
       "userPrompt": "Kullanıcı istemi",
       "details": "Ayrıntılar"
+    },
+    "webSearch": "Web araması",
+    "loadingSearch": "Web aramaları yükleniyor…",
+    "noSearch": "Bu çalıştırma için web araması kaydedilmedi. Sorgular, web araması çalıştığında ve çalışma alanında 'Tam aracı bağlamını depola' etkinleştirildiğinde yakalanır.",
+    "search": {
+      "available": "Kullanılabilir",
+      "unavailable": "Kullanılamıyor",
+      "provider": "Sağlayıcı",
+      "resultsCount": "{count} sonuç | {count} sonuç",
+      "queriesTitle": "Yapılan aramalar"
     }
   },
   "auth": {
@@ -3231,8 +3248,6 @@
     "reReviewingStage": "Güncellenen hata raporu yeniden inceleniyor… Bunu kapatabilirsiniz, yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
     "answerLabel": "Yanıt",
     "answerPlaceholder": "Bu bulguyu yanıtlayın…",
-    "refineAnswerPlaceholder": "Yanıtınızı iyileştirin…",
-    "saveAnswer": "Yanıtı kaydet",
     "dismissIrrelevant": "İlgisiz olarak göz ardı et",
     "reopen": "Yeniden aç",
     "docHeading": "Netleştirilmiş hata raporu",

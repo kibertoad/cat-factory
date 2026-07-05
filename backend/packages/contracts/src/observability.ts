@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { webSearchProviderSchema } from './entities.js'
 
 // Wire contracts for LLM observability — the per-call detail behind the board's
 // step rollups (see `stepMetricsSchema` in entities). The proxy records one of
@@ -232,3 +233,30 @@ export const agentContextSnapshotSchema = v.object({
   extras: v.record(v.string(), v.unknown()),
 })
 export type AgentContextSnapshot = v.InferOutput<typeof agentContextSnapshotSchema>
+
+// ---------------------------------------------------------------------------
+// Agent-search-query observability: one row per web search a container agent
+// performed through the backend search proxy. Recorded best-effort, gated by the
+// same double switch as agent-context snapshots (the deployment `LLM_RECORD_PROMPTS`
+// AND the per-workspace `storeAgentContext` setting), and pruned on the same
+// telemetry retention window. Surfaced on demand in the observability drill-down.
+// ---------------------------------------------------------------------------
+
+/** One web search a container agent performed during a run, via the search proxy. */
+export const agentSearchQuerySchema = v.object({
+  id: v.string(),
+  workspaceId: v.string(),
+  /** The run this search belongs to. */
+  executionId: v.string(),
+  /** The agent kind that issued the search (`coder`, `ci-fixer`, …). */
+  agentKind: v.string(),
+  /** The upstream backend that served the search, or null when it couldn't be resolved. */
+  provider: v.nullable(webSearchProviderSchema),
+  /** The search query text as issued to the upstream. */
+  query: v.string(),
+  /** How many results the upstream returned (0 on an upstream failure). */
+  resultCount: v.number(),
+  /** When the search was performed (epoch ms). */
+  createdAt: v.number(),
+})
+export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>

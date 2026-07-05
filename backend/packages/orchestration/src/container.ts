@@ -49,7 +49,12 @@ import type {
   TaskRepository,
   TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { EnvironmentProvider, RunnerPoolProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
+import type {
+  EnvironmentProvider,
+  PreflightHostProbes,
+  RunnerPoolProvider,
+  UrlSafetyPolicy,
+} from '@cat-factory/kernel'
 import type {
   CustomManifestTypeRepository,
   EnvironmentConnectionRepository,
@@ -131,6 +136,7 @@ import { SpendService, DEFAULT_SPEND_PRICING, type SpendPricing } from '@cat-fac
 import type { OpenRouterModelMeta } from '@cat-factory/contracts'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
+import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
 import {
   GitHubInstallationService,
   RepoProvisioningService,
@@ -153,6 +159,7 @@ import {
   EnvironmentTeardownService,
   EnvironmentUserHandlerService,
   RunnerPoolConnectionService,
+  PreflightService,
   ProvisioningLogRecorder,
   ProvisioningLogService,
   SharedStackService,
@@ -359,6 +366,13 @@ export interface CoreDependencies {
    * container-agent executor for the write path. Absent → no agent context is stored.
    */
   agentContextObservability?: AgentContextObservabilityService
+  /**
+   * Agent-search-query observability sink, built by the facade (it needs the same
+   * search-query repository the search proxy records through). When present the engine
+   * re-exposes it for the read endpoint; the facade also injects it into the web-search
+   * proxy for the write path. Absent → no search queries are stored.
+   */
+  searchQueryObservability?: SearchQueryObservabilityService
   /**
    * Optional external LLM trace sink (e.g. Langfuse). When wired, the observability
    * service fans every recorded call out to it as a generation. Opt-in and default-off;
@@ -775,6 +789,13 @@ export interface CoreDependencies {
    * unauthenticated clone (public repos only).
    */
   sharedStackCloneToken?: string
+  /**
+   * The host-bound PREFLIGHT probes (docker daemon / disk / RAM / registry login / reachability /
+   * mkcert / hosts / secrets marker). Wired ONLY on the local facade (a host daemon); present ⇒ the
+   * preflight module + API are built and a stack recipe's `prerequisites` are enforced at provision
+   * start. Absent ⇒ the preflight API 503s and a recipe that declares prerequisites fails loudly.
+   */
+  preflightHostProbes?: PreflightHostProbes
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
   // Flat repository fields like every other feature; both runtime facades contribute
   // them by spreading one sandbox-owned `Partial<CoreDependencies>` mixin (the
@@ -1004,6 +1025,11 @@ export interface SharedStacksModule {
   service: SharedStackService
 }
 
+/** The preflight feature's service, present only when the host-probe seam is wired (local facade). */
+export interface PreflightsModule {
+  service: PreflightService
+}
+
 /** The Sandbox feature's services, present only when its repositories are wired. */
 export interface SandboxModule {
   /** Management CRUD (prompt versions, fixtures, experiments). */
@@ -1089,6 +1115,8 @@ export interface Core {
   llmObservability?: LlmObservabilityService
   /** Present only when the agent-context snapshot repository is wired (see CoreDependencies). */
   agentContextObservability?: AgentContextObservabilityService
+  /** Present only when the agent-search-query repository is wired (see CoreDependencies). */
+  searchQueryObservability?: SearchQueryObservabilityService
   /** Present only when the GitHub integration is configured (see CoreDependencies). */
   github?: GitHubModule
   /** Present only when the document-source integration is configured (see CoreDependencies). */
@@ -1131,6 +1159,8 @@ export interface Core {
   mergePresets?: MergePresetsModule
   /** Present only when the shared-stack repository is wired (see CoreDependencies). */
   sharedStacks?: SharedStacksModule
+  /** Present only when the host-probe seam is wired (local facade — see CoreDependencies). */
+  preflight?: PreflightsModule
   /** Present only when the Sandbox repositories are wired (see CoreDependencies). */
   sandbox?: SandboxModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
@@ -1395,6 +1425,8 @@ function createEnvironmentsModule(
   deps: CoreDependencies,
   provisioningLog: ProvisioningLogRecorder | undefined,
   eventPublisher: ExecutionEventPublisher | undefined,
+  sharedStackService: SharedStackService | undefined,
+  preflightService: PreflightService | undefined,
 ): EnvironmentsModule | undefined {
   const { environmentConnectionRepository, environmentRegistryRepository, secretCipher } = deps
   if (!environmentConnectionRepository || !environmentRegistryRepository || !secretCipher) {
@@ -1516,6 +1548,17 @@ function createEnvironmentsModule(
     ...(deps.resolveDeployCloneTarget
       ? { resolveDeployCloneTarget: deps.resolveDeployCloneTarget }
       : {}),
+    // A compose stack recipe's `sharedStackRefs` are brought up (provider-before-consumer) through
+    // the shared-stack service, whose managed networks the compose provider attaches the per-PR
+    // project to. Wired only when the shared-stacks module exists (its repository is present on
+    // every facade); the lifecycle itself refuses without a host daemon.
+    ...(sharedStackService
+      ? { ensureSharedStacks: (ws, refs) => sharedStackService.ensureRefsUp(ws, refs) }
+      : {}),
+    // A compose stack recipe's `prerequisites` are re-run at provision start through the preflight
+    // service, whose host probes exist only on the local facade; absent ⇒ a recipe that declares
+    // them fails loudly instead of silently skipping a machine-prerequisite gate.
+    ...(preflightService ? { runPreflights: (_ws, refs) => preflightService.run(refs) } : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
   return {
@@ -2052,6 +2095,17 @@ function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | 
 }
 
 /**
+ * Assemble the preflight module when the host-probe seam is present — wired ONLY on the local
+ * facade (a host Docker daemon), the documented compose runtime-binding exception. Absent elsewhere
+ * ⇒ the preflight API 503s and a stack recipe that declares `prerequisites` fails loudly at
+ * provision (rather than silently skipping a declared machine-prerequisite gate).
+ */
+function createPreflightModule(deps: CoreDependencies): PreflightsModule | undefined {
+  if (!deps.preflightHostProbes) return undefined
+  return { service: new PreflightService({ hostProbes: deps.preflightHostProbes }) }
+}
+
+/**
  * Assemble the Sandbox module when its five repositories are present (both runtime
  * facades wire them together). Reuses the requirements reviewer's inline model config —
  * the per-scope provider resolver, the routing default ref, and the block-model resolver
@@ -2363,10 +2417,21 @@ export function createCore(dependencies: CoreDependencies): Core {
         service: new ProvisioningLogService({ repository: dependencies.provisioningLogRepository }),
       }
     : undefined
+  // Built before the environments module so a compose stack recipe's `sharedStackRefs` can be
+  // brought up (provider-before-consumer) through this service during provisioning. Persistence is
+  // runtime-symmetric (present on every facade); the lifecycle only runs where a host daemon is
+  // wired (`composeRuntime` — the local facade), else `ensureRefsUp` returns a clean error.
+  const sharedStacks = createSharedStacksModule(dependencies)
+  // Built before the environments module so a compose stack recipe's `prerequisites` are re-run at
+  // provision start through this service. The host probes exist only on the local facade; absent ⇒
+  // a recipe that declares prerequisites fails loudly (the preflight API 503s too).
+  const preflight = createPreflightModule(dependencies)
   const environments = createEnvironmentsModule(
     dependencies,
     provisioningLogRecorder,
     executionEventPublisher,
+    sharedStacks?.service,
+    preflight?.service,
   )
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
@@ -2389,7 +2454,6 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
-  const sharedStacks = createSharedStacksModule(dependencies)
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).
@@ -2587,6 +2651,9 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(dependencies.agentContextObservability
       ? { agentContextObservability: dependencies.agentContextObservability }
       : {}),
+    ...(dependencies.searchQueryObservability
+      ? { searchQueryObservability: dependencies.searchQueryObservability }
+      : {}),
     ...(github ? { github } : {}),
     ...(documents ? { documents } : {}),
     ...(tasks ? { tasks } : {}),
@@ -2603,6 +2670,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
     ...(sharedStacks ? { sharedStacks } : {}),
+    ...(preflight ? { preflight } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),

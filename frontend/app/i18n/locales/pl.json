@@ -3,7 +3,8 @@
     "loading": "Ładowanie…",
     "loadingBoard": "Ładowanie tablicy…",
     "backendUnreachable": "Nie można połączyć się z backendem",
-    "reconnecting": "Ponowne łączenie…"
+    "reconnecting": "Ponowne łączenie…",
+    "offline": "Brak aktualizacji na żywo"
   },
   "language": {
     "switcher": "Język",
@@ -39,6 +40,8 @@
       "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
+    "reveal": "Pokaż",
+    "hide": "Ukryj",
     "disconnect": "Rozłącz",
     "copyFailed": "Nie udało się skopiować do schowka",
     "revoke": "Unieważnij",
@@ -81,6 +84,7 @@
       "moveFailed": "Nie udało się przenieść",
       "deleteFailed": "Nie udało się usunąć",
       "linkFailed": "Nie udało się powiązać zadań",
+      "unlinkFailed": "Nie udało się usunąć zależności",
       "recurringDeleteFailed": "Nie udało się usunąć cyklicznego pipeline'u",
       "deleted": "Usunięto \"{name}\"",
       "moved": "Przeniesiono \"{name}\""
@@ -964,6 +968,8 @@
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
+      "executionHistory": "Historia wykonania",
+      "hideExecutionHistory": "Ukryj historię wykonania",
       "editingConclusions": "Edytowanie wniosków",
       "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
       "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",
@@ -1051,6 +1057,7 @@
     "loadingContext": "Ładowanie dostarczonego kontekstu…",
     "noCalls": "Brak zarejestrowanych wywołań modelu dla tego uruchomienia.",
     "noContext": "Brak zapisanego kontekstu agenta dla tego uruchomienia. Jest on przechwytywany przy każdym wysłaniu, gdy w obszarze roboczym włączono opcję 'Przechowuj pełny kontekst agenta'.",
+    "contextError": "Nie udało się załadować dostarczonego kontekstu.",
     "summary": {
       "calls": "Wywołania",
       "tokensInOut": "Tokeny (we / wy)",
@@ -1097,6 +1104,16 @@
       "systemPrompt": "Prompt systemowy",
       "userPrompt": "Prompt użytkownika",
       "details": "Szczegóły"
+    },
+    "webSearch": "Wyszukiwanie w sieci",
+    "loadingSearch": "Ładowanie wyszukań w sieci…",
+    "noSearch": "Nie zarejestrowano wyszukań w sieci dla tego uruchomienia. Zapytania są rejestrowane, gdy wyszukiwanie w sieci jest uruchomione, a przestrzeń robocza ma włączone „Przechowuj pełny kontekst agenta”.",
+    "search": {
+      "available": "Dostępne",
+      "unavailable": "Niedostępne",
+      "provider": "Dostawca",
+      "resultsCount": "{count} wynik | {count} wyniki | {count} wyników",
+      "queriesTitle": "Wykonane wyszukiwania"
     }
   },
   "auth": {
@@ -3219,8 +3236,6 @@
     "reReviewingStage": "Ponowna recenzja zaktualizowanego zgłoszenia błędu… Możesz to zamknąć, powiadomimy Cię tylko, jeśli potrzebne będą dodatkowe informacje.",
     "answerLabel": "Odpowiedź",
     "answerPlaceholder": "Odpowiedz na tę uwagę…",
-    "refineAnswerPlaceholder": "Dopracuj swoją odpowiedź…",
-    "saveAnswer": "Zapisz odpowiedź",
     "dismissIrrelevant": "Odrzuć jako nieistotne",
     "reopen": "Otwórz ponownie",
     "docHeading": "Doprecyzowane zgłoszenie błędu",

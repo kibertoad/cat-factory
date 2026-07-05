@@ -557,7 +557,18 @@ export const useBoardStore = defineStore('board', () => {
     const t = getBlock(targetId)
     if (!t || !t.dependsOn.includes(sourceId)) return
     // the backend exposes a single toggle; the edge exists, so toggling removes it
-    upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
+    try {
+      upsert(await api.toggleDependency(useWorkspaceStore().requireId(), targetId, { sourceId }))
+    } catch (e) {
+      // Mirror `toggleDependency`: a failure must surface (and leave the edge visible) rather
+      // than rejecting unhandled with no feedback.
+      toast.add({
+        title: tr('board.toast.unlinkFailed'),
+        description: e instanceof Error ? e.message : String(e),
+        icon: 'i-lucide-triangle-alert',
+        color: 'error',
+      })
+    }
   }
 
   return {

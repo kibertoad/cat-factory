@@ -8,6 +8,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import type { NotificationType } from '~/types/notifications'
 import type { SlackMemberMappingEntry, SlackMemberRole, SlackRoute } from '~/types/slack'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const ui = useUiStore()
 const slack = useSlackStore()
@@ -188,13 +189,7 @@ async function saveMapping() {
               {{ t('slack.connect.orPasteToken') }}
             </span>
             <div class="flex gap-2">
-              <UInput
-                v-model="tokenInput"
-                size="sm"
-                class="flex-1"
-                type="password"
-                placeholder="xoxb-…"
-              />
+              <SecretInput v-model="tokenInput" size="sm" class="flex-1" placeholder="xoxb-…" />
               <UButton
                 color="primary"
                 variant="soft"

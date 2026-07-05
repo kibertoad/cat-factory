@@ -8,6 +8,7 @@
 import { computed, ref, watch } from 'vue'
 import { LOCAL_RUNNER_DEFAULTS, LOCAL_RUNNER_LABELS, type LocalRunner } from '~/types/localModels'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -276,9 +277,8 @@ async function remove(p: LocalRunner) {
           </UFormField>
 
           <UFormField :label="t('settings.localModelEndpoints.apiKeyOptional')">
-            <UInput
+            <SecretInput
               v-model="apiKey"
-              type="password"
               class="font-mono"
               :placeholder="
                 existing?.hasApiKey

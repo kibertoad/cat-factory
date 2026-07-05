@@ -81,6 +81,12 @@ export type {
   RecordAgentContextInput,
 } from './agent-context.js'
 export type {
+  AgentSearchQuery,
+  AgentSearchQueryRecorder,
+  AgentSearchQueryRepository,
+  RecordAgentSearchQueryInput,
+} from './agent-search-queries.js'
+export type {
   LlmGenerationEvent,
   LlmToolSpan,
   LlmToolSpanContext,
@@ -252,6 +258,7 @@ export type {
   ProvisionedEnvironment,
   RecipeStepLog,
   RecipeStepRecorder,
+  SharedStackEnsureResult,
   ProvisionFields,
   SecretResolver,
   RepoFileReader,
@@ -265,6 +272,7 @@ export type {
   RepairAgentRequest,
   RepairAgentSpec,
 } from './environment-provider.js'
+export type { PreflightProbeOutcome, PreflightHostProbes } from './preflight.js'
 export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-policy.js'
 export type {
   EnvironmentConnectionRecord,

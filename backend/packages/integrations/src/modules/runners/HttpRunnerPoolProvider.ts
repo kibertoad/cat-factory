@@ -1,5 +1,6 @@
 import type {
   ConnectionTestResult,
+  HarnessCallMetric,
   ProviderConfigField,
   RunnerDispatchRequest,
   RunnerJobResult,
@@ -487,6 +488,51 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
       inputTokens: (usage as { inputTokens: number }).inputTokens,
       outputTokens: (usage as { outputTokens: number }).outputTokens,
     }
+  }
+  // A subscription harness's per-call telemetry (Claude Code / Codex, whose traffic bypasses
+  // the LLM proxy). A pool proxying the executor-harness verbatim carries these in its result
+  // envelope; dropping them here would silently lose all `llm_call_metrics` rows on a
+  // pool-backed run while the Cloudflare/local transports (which return the harness view
+  // verbatim) record them — a facade-parity divergence.
+  const callMetrics = coerceCallMetrics(o.callMetrics)
+  if (callMetrics.length) out.callMetrics = callMetrics
+  return out
+}
+
+/**
+ * Coerce a scheduler's `callMetrics` array into the canonical {@link HarnessCallMetric}
+ * shape, keeping only well-formed entries (the required string/number fields), so a
+ * malformed envelope can never inject junk into the telemetry sink. Mirrors the harness's
+ * producer field-for-field; a missing optional `model` is passed through when present.
+ */
+function coerceCallMetrics(raw: unknown): HarnessCallMetric[] {
+  if (!Array.isArray(raw)) return []
+  const out: HarnessCallMetric[] = []
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue
+    const e = entry as Record<string, unknown>
+    if (
+      typeof e.promptText !== 'string' ||
+      typeof e.responseText !== 'string' ||
+      typeof e.reasoningText !== 'string' ||
+      typeof e.messageCount !== 'number' ||
+      typeof e.inputTokens !== 'number' ||
+      typeof e.cachedInputTokens !== 'number' ||
+      typeof e.outputTokens !== 'number'
+    ) {
+      continue
+    }
+    out.push({
+      ...(typeof e.model === 'string' ? { model: e.model } : {}),
+      promptText: e.promptText,
+      messageCount: e.messageCount,
+      responseText: e.responseText,
+      reasoningText: e.reasoningText,
+      inputTokens: e.inputTokens,
+      cachedInputTokens: e.cachedInputTokens,
+      outputTokens: e.outputTokens,
+      finishReason: typeof e.finishReason === 'string' ? e.finishReason : null,
+    })
   }
   return out
 }

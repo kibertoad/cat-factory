@@ -79,8 +79,9 @@ const ITEM_ICON: Record<string, string> = {
       {{ t('board.task.buildSteps') }}
     </div>
     <div v-for="(s, i) in steps" :key="i" class="rounded bg-slate-900/60 px-1.5 py-1">
-      <div
-        class="flex cursor-pointer items-center gap-1"
+      <button
+        type="button"
+        class="flex w-full cursor-pointer items-center gap-1 rounded text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
         :title="`${agentKindMeta(s.agentKind).label} — ${agentKindMeta(s.agentKind).description}\n${t('board.task.clickToViewStep')}`"
         @click.stop="openStep(i)"
       >
@@ -116,7 +117,7 @@ const ITEM_ICON: Record<string, string> = {
               : STATE_META[s.state].color,
           }"
         />
-      </div>
+      </button>
 
       <!-- pending approval gate: jump straight to the conclusions reader. Suppressed
            while a reviewer gate is folding/re-reviewing in the background (no human needed). -->

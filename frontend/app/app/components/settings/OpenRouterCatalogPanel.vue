@@ -10,6 +10,7 @@
 import { computed, ref, watch } from 'vue'
 import type { OpenRouterModelMeta } from '~/types/openrouter'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -276,11 +277,10 @@ function manageKeys() {
             </UFormField>
           </div>
           <UFormField :label="t('settings.openRouterCatalog.apiKey')">
-            <UTextarea
+            <SecretInput
               v-model="keyValue"
-              :rows="2"
               placeholder="paste your OpenRouter key (sk-or-…)"
-              class="font-mono"
+              class="w-full font-mono"
             />
           </UFormField>
           <div class="flex justify-end">

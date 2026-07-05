@@ -4,6 +4,7 @@ import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -300,9 +301,8 @@ async function disconnectEmail() {
             :placeholder="t('layout.accountTeam.email.fromPlaceholder')"
             class="w-full"
           />
-          <UInput
+          <SecretInput
             v-model="emailApiKey"
-            type="password"
             :placeholder="t('layout.accountTeam.email.apiKeyPlaceholder')"
             class="w-full"
           />

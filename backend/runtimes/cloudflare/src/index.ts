@@ -12,6 +12,7 @@ import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimit
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/D1AgentContextSnapshotRepository'
+import { D1AgentSearchQueryRepository } from './infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
@@ -162,6 +163,7 @@ export default {
           agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({
             db: telemetryDb,
           }),
+          agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
           pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
           passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
           // Prune the separate provisioning-log database when its binding is present.

@@ -3,7 +3,8 @@
     "loading": "Chargement…",
     "loadingBoard": "Chargement du tableau…",
     "backendUnreachable": "Impossible de joindre le backend",
-    "reconnecting": "Reconnexion…"
+    "reconnecting": "Reconnexion…",
+    "offline": "Mises à jour en direct non reçues"
   },
   "language": {
     "switcher": "Langue",
@@ -39,6 +40,8 @@
       "reconfigureHint": "Vous pourrez le reconfigurer plus tard."
     },
     "copied": "Copié dans le presse-papiers",
+    "reveal": "Afficher",
+    "hide": "Masquer",
     "disconnect": "Déconnecter",
     "copyFailed": "Échec de la copie dans le presse-papiers",
     "revoke": "Révoquer",
@@ -81,6 +84,7 @@
       "moveFailed": "Impossible de déplacer",
       "deleteFailed": "Impossible de supprimer",
       "linkFailed": "Impossible de lier les tâches",
+      "unlinkFailed": "Impossible de supprimer la dépendance",
       "recurringDeleteFailed": "Impossible de supprimer le pipeline récurrent",
       "deleted": "\"{name}\" supprimé",
       "moved": "\"{name}\" déplacé"
@@ -964,6 +968,8 @@
       "companionCapDetail": "Effectuer un tour de retravail automatique supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
       "infraAttempts": "Tentatives d'infrastructure",
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
+      "executionHistory": "Historique d'exécution",
+      "hideExecutionHistory": "Masquer l'historique d'exécution",
       "editingConclusions": "Modification des conclusions",
       "editConclusionsPlaceholder": "Modifiez les conclusions de l'agent ; vos modifications sont enregistrées lorsque vous approuvez…",
       "noProseOutput": "Cet agent n'a produit aucune sortie en texte libre.",
@@ -1051,6 +1057,7 @@
     "loadingContext": "Chargement du contexte fourni…",
     "noCalls": "Aucun appel de modèle enregistré pour cette exécution.",
     "noContext": "Aucun contexte d'agent stocké pour cette exécution. Il est capturé à chaque dispatch lorsque l'espace de travail a activé 'Stocker le contexte complet de l'agent'.",
+    "contextError": "Impossible de charger le contexte fourni.",
     "summary": {
       "calls": "Appels",
       "tokensInOut": "Tokens (entrée / sortie)",
@@ -1097,6 +1104,16 @@
       "systemPrompt": "Prompt système",
       "userPrompt": "Prompt utilisateur",
       "details": "Détails"
+    },
+    "webSearch": "Recherche web",
+    "loadingSearch": "Chargement des recherches web…",
+    "noSearch": "Aucune recherche web enregistrée pour cette exécution. Les requêtes sont capturées lorsque la recherche web s'exécute et que l'espace de travail a activé « Stocker le contexte complet de l'agent ».",
+    "search": {
+      "available": "Disponible",
+      "unavailable": "Indisponible",
+      "provider": "Fournisseur",
+      "resultsCount": "{count} résultat | {count} résultats",
+      "queriesTitle": "Recherches effectuées"
     }
   },
   "auth": {
@@ -3219,8 +3236,6 @@
     "reReviewingStage": "Nouvelle relecture du rapport de bogue mis à jour… Vous pouvez fermer ceci, nous vous avertirons seulement si plus d'informations sont nécessaires.",
     "answerLabel": "Réponse",
     "answerPlaceholder": "Répondez à ce constat…",
-    "refineAnswerPlaceholder": "Affinez votre réponse…",
-    "saveAnswer": "Enregistrer la réponse",
     "dismissIrrelevant": "Écarter comme non pertinent",
     "reopen": "Rouvrir",
     "docHeading": "Rapport de bogue clarifié",

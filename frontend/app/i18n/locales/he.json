@@ -3,7 +3,8 @@
     "loading": "טוען…",
     "loadingBoard": "טוען לוח…",
     "backendUnreachable": "לא ניתן להתחבר לבקאנד",
-    "reconnecting": "מתחבר מחדש…"
+    "reconnecting": "מתחבר מחדש…",
+    "offline": "לא מתקבלים עדכונים חיים"
   },
   "language": {
     "switcher": "שפה",
@@ -39,6 +40,8 @@
       "reconfigureHint": "אפשר להגדיר זאת שוב מאוחר יותר."
     },
     "copied": "הועתק ללוח",
+    "reveal": "הצג",
+    "hide": "הסתר",
     "disconnect": "נתק",
     "copyFailed": "לא ניתן להעתיק ללוח",
     "revoke": "לבטל",
@@ -81,6 +84,7 @@
       "moveFailed": "לא ניתן היה להעביר",
       "deleteFailed": "לא ניתן היה למחוק",
       "linkFailed": "לא ניתן היה לקשר משימות",
+      "unlinkFailed": "לא ניתן להסיר את התלות",
       "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר",
       "deleted": "\"{name}\" נמחק",
       "moved": "\"{name}\" הועבר"
@@ -964,6 +968,8 @@
       "companionCapDetail": "בצע סבב עיבוד אוטומטי נוסף, המשך לשלב הבא תוך קבלת הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
       "infraAttempts": "ניסיונות תשתית",
       "hideInfraAttempts": "הסתר ניסיונות תשתית",
+      "executionHistory": "היסטוריית הרצה",
+      "hideExecutionHistory": "הסתר היסטוריית הרצה",
       "editingConclusions": "עריכת המסקנות",
       "editConclusionsPlaceholder": "ערוך את מסקנות הסוכן; העריכות שלך נשמרות כשתאשר…",
       "noProseOutput": "סוכן זה לא הפיק פלט טקסטואלי.",
@@ -1051,6 +1057,7 @@
     "loadingContext": "טוען את ההקשר שסופק…",
     "noCalls": "לא נרשמו קריאות מודל עבור ריצה זו.",
     "noContext": "לא אוחסן הקשר סוכן עבור ריצה זו. הוא נלכד בכל שיגור כשבסביבת העבודה מופעל 'אחסן הקשר סוכן מלא'.",
+    "contextError": "לא ניתן לטעון את ההקשר שסופק.",
     "summary": {
       "calls": "קריאות",
       "tokensInOut": "טוקנים (נכנס / יוצא)",
@@ -1097,6 +1104,16 @@
       "systemPrompt": "פרומפט מערכת",
       "userPrompt": "פרומפט משתמש",
       "details": "פרטים"
+    },
+    "webSearch": "חיפוש באינטרנט",
+    "loadingSearch": "טוען חיפושי אינטרנט…",
+    "noSearch": "לא נרשמו חיפושי אינטרנט עבור הרצה זו. שאילתות נלכדות כאשר חיפוש האינטרנט פועל וכאשר במרחב העבודה מופעל 'אחסון הקשר סוכן מלא'.",
+    "search": {
+      "available": "זמין",
+      "unavailable": "לא זמין",
+      "provider": "ספק",
+      "resultsCount": "תוצאה {count} | {count} תוצאות",
+      "queriesTitle": "חיפושים שבוצעו"
     }
   },
   "auth": {
@@ -3230,8 +3247,6 @@
     "reReviewingStage": "בודק מחדש את דוח הבאג המעודכן… תוכל לסגור את זה, נודיע לך רק אם נדרש קלט נוסף.",
     "answerLabel": "תשובה",
     "answerPlaceholder": "ענה על ממצא זה…",
-    "refineAnswerPlaceholder": "חדד את התשובה שלך…",
-    "saveAnswer": "שמור תשובה",
     "dismissIrrelevant": "דחה כלא רלוונטי",
     "reopen": "פתח מחדש",
     "docHeading": "דוח באג מובהר",

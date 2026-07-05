@@ -3,6 +3,7 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { CryptoIdGenerator } from '../../src/infrastructure/runtime'
 import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repositories/D1AgentContextSnapshotRepository'
+import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
@@ -37,6 +38,7 @@ function deps() {
     commitRepository: new D1CommitProjectionRepository({ db }),
     llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
     agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
     clock,
     policy: POLICY,
   }
@@ -234,6 +236,7 @@ describe('storage retention sweep', () => {
       commits: 0,
       llmCallMetrics: 0,
       agentContextSnapshots: 0,
+      agentSearchQueries: 0,
       scheduleRuns: 0,
       provisioningLog: 0,
       passwordResetTokens: 0,

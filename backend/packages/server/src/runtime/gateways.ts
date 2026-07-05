@@ -1,3 +1,4 @@
+import type { WebSearchProvider } from '@cat-factory/contracts'
 import type { Logger } from '../observability/logger.js'
 
 // Runtime "gateway" seams: the differentiator capabilities a controller needs but
@@ -155,6 +156,8 @@ export interface WebSearchResponse {
  * own provider key. Absent ⇒ the proxy route is not enabled (no container web search).
  */
 export interface WebSearchUpstream {
+  /** Which backend serves this upstream, surfaced on the run details + search telemetry. */
+  readonly provider: WebSearchProvider
   /** Run a web search server-side, returning results in the normalised shape. */
   search(query: string, opts?: { count?: number; signal?: AbortSignal }): Promise<WebSearchResponse>
 }

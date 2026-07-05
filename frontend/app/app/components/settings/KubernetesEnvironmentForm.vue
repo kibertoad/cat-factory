@@ -10,6 +10,7 @@
 // driven (see docs/initiatives/descriptor-driven-infra-forms.md).
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
+import SecretInput from '~/components/common/SecretInput.vue'
 import type { ProviderConnection } from '~/types/providerConnections'
 
 const props = defineProps<{
@@ -253,7 +254,7 @@ function optional(label: string): string {
       :label="t('settings.providerConnection.kubernetesEnv.apiToken')"
       :help="t('settings.providerConnection.kubernetesEnv.apiTokenHelp')"
     >
-      <UInput v-model="apiToken" type="password" class="font-mono" />
+      <SecretInput v-model="apiToken" class="w-full font-mono" />
     </UFormField>
 
     <!-- Manifest source: where the per-PR resources are read from. -->
