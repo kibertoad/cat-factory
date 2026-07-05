@@ -108,7 +108,12 @@ export async function startLocal(
   }
 
   return start({
-    env,
+    // The LOCALIZED env, not the raw one: `start()` builds the shared app via `createApp`,
+    // whose CORS middleware reads `env.ENVIRONMENT` / `env.CORS_ALLOWED_ORIGINS` DIRECTLY
+    // (not via AppConfig). Passing the raw env would drop every `applyLocalDefaults` default
+    // for those direct reads — the reason the SPA hit a CORS wall until the operator set
+    // CORS_ALLOWED_ORIGINS by hand. `buildLocalContainer` re-applies the defaults idempotently.
+    env: localized,
     host: options.host,
     agentKindRegistry: options.agentKindRegistry,
     buildContainer: (o) => buildLocalContainer(o),
