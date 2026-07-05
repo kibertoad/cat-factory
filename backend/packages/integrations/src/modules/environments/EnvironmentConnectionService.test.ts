@@ -615,13 +615,31 @@ describe('EnvironmentConnectionService — detect read faults', () => {
     await expect(
       service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r' }),
     ).rejects.toMatchObject({ code: 'validation' })
+    // A GitHub-pinned input gets the GitHub-specific "Contents: read" guidance.
     await expect(
       service.detectServiceProvisioning('ws1', {
         owner: 'o',
         repo: 'r',
         directory: 'services/api',
+        provider: 'github',
       }),
     ).rejects.toThrow(/Contents: read/)
+  })
+
+  it('tailors the read-fault guidance to the pinned VCS provider (never hardcodes GitHub)', async () => {
+    const service = detectService()
+    // GitLab-pinned ⇒ GitLab-specific guidance, NOT a "GitHub App"/"Contents: read" instruction
+    // the user has no equivalent for.
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r', provider: 'gitlab' }),
+    ).rejects.toThrow(/read_repository/)
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r', provider: 'gitlab' }),
+    ).rejects.not.toThrow(/GitHub App/)
+    // No provider pinned (⇒ the workspace's connected provider) stays neutral — no GitHub-only term.
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r' }),
+    ).rejects.not.toThrow(/GitHub App|Contents: read/)
   })
 
   it('maps an unreadable repo to an actionable validation error (frontend config)', async () => {

@@ -77,6 +77,26 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 // surface lands (slices 4–5). See docs/initiatives/per-service-provision-types.md.
 // ---------------------------------------------------------------------------
 
+/**
+ * The provider-specific "check the credential has read access" clause of the auto-detect
+ * read-fault guidance. Kept provider-neutral in the shared detect path: name a GitHub-only
+ * concept ("GitHub App", "Contents: read") ONLY when the detect input actually pinned GitHub,
+ * so a GitLab deployment (local mode is GitLab-capable) isn't told to fix a permission it has
+ * no equivalent for. Absent provider (⇒ the workspace's connected provider) stays neutral.
+ */
+function repoAccessHint(provider?: 'github' | 'gitlab'): string {
+  if (provider === 'gitlab') {
+    return 'Confirm the connected GitLab token still has "read_repository" scope and access to this project'
+  }
+  if (provider === 'github') {
+    return (
+      'Confirm the GitHub App still has "Contents: read" access to this repository ' +
+      "(re-check the installation's repository access)"
+    )
+  }
+  return 'Confirm the connected VCS credential still has read access to this repository'
+}
+
 /** Map a resolved engine back to the provision type it serves. */
 function engineToProvisionType(engine: InfraEngine): ProvisionType {
   switch (engine) {
@@ -728,7 +748,13 @@ export class EnvironmentConnectionService {
    * unhelpful outcome this replaces. A clean miss (nothing found, no fault) returns normally.
    */
   private async mapRepoReadError<T>(
-    input: { owner: string; repo: string; directory?: string; gitRef?: string },
+    input: {
+      owner: string
+      repo: string
+      directory?: string
+      gitRef?: string
+      provider?: 'github' | 'gitlab'
+    },
     run: () => Promise<T>,
   ): Promise<T> {
     try {
@@ -739,9 +765,8 @@ export class EnvironmentConnectionService {
       const at = input.gitRef ? ` at "${input.gitRef}"` : ''
       throw new ValidationError(
         `Could not read ${input.owner}/${input.repo}${where}${at} to auto-detect. ` +
-          `Confirm the GitHub App still has "Contents: read" access to this repository (re-check the ` +
-          `installation's repository access, and the branch exists) and that you are not rate-limited, ` +
-          `then retry. Underlying error: ${err.reason}`,
+          `${repoAccessHint(input.provider)}, that the branch exists, and that you are not ` +
+          `rate-limited, then retry. Underlying error: ${err.reason}`,
       )
     }
   }
