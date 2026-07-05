@@ -35,7 +35,7 @@ const assessment = (over: Partial<MergeAssessment> = {}): MergeAssessment => ({
 })
 
 function makeResolver(over: Partial<MergeResolverDeps> & { preset?: typeof PRESET } = {}) {
-  const finalizeMerge = over.finalizeMerge ?? vi.fn().mockResolvedValue(undefined)
+  const finalizeMerge = over.finalizeMerge ?? vi.fn().mockResolvedValue({ kind: 'merged' })
   const update = vi.fn().mockResolvedValue(undefined)
   const raise = vi.fn().mockResolvedValue(undefined)
   const deps: MergeResolverDeps = {
@@ -114,6 +114,20 @@ describe('MergeResolver.resolveMergerStep', () => {
     // A within-threshold assessment has no exceeded axes even when the merge fails.
     expect(decision?.exceededAxes).toEqual([])
     expect(raise).toHaveBeenCalledOnce()
+  })
+
+  it('records `merge_partial` (no second review card) when a multi-repo merge lands only some PRs', async () => {
+    const { resolver, raise } = makeResolver({
+      // finalizeMerge already blocked the block + raised the enumerated partial-merge card.
+      finalizeMerge: vi
+        .fn()
+        .mockResolvedValue({ kind: 'partial', merged: ['own service'], unmerged: ['org/email'] }),
+    })
+    const decision = await resolver.resolveMergerStep('ws', INSTANCE, assessment())
+    expect(decision).toMatchObject({ outcome: 'awaiting_review', reason: 'merge_partial' })
+    expect(decision?.exceededAxes).toEqual([])
+    // The resolver must NOT raise its own review notification — finalizeMerge owns the card.
+    expect(raise).not.toHaveBeenCalled()
   })
 
   it('returns null (nothing to record) when the block cannot be loaded', async () => {

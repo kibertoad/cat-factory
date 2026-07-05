@@ -204,6 +204,7 @@ export type {
   TaskCredentials,
   TaskContent,
   TaskSearchRepoScope,
+  IssueIntakeQuery,
   NormalizedTaskConnection,
   TaskSourceProvider,
   TaskSourceRegistry,
@@ -366,8 +367,8 @@ export type {
   ProviderModelCatalogRepository,
 } from './provider-model-catalog-repositories.js'
 export type { BoardWritePort } from './board-operations.js'
-export type { PullRequestMerger } from './pr-merger.js'
-export type { CiCheck, CiStatusReport, CiStatusProvider } from './ci-status.js'
+export type { PullRequestMerger, MergePrEntry, MergeAllOutcome } from './pr-merger.js'
+export type { CiCheck, RepoCiStatus, CiStatusReport, CiStatusProvider } from './ci-status.js'
 export type {
   ReviewThread,
   PullRequestComment,
@@ -412,6 +413,7 @@ export type {
 export type { LocalSettingsRecord, LocalSettingsRepository } from './local-settings-repositories.js'
 export type {
   MergeabilityVerdict,
+  RepoMergeability,
   MergeabilityReport,
   PullRequestMergeabilityProvider,
 } from './pr-mergeability.js'

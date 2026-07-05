@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { taskSourceKindSchema } from './tasks.js'
 
 // ---------------------------------------------------------------------------
 // Recurring-pipeline wire contracts. A *pipeline schedule* attaches a reusable
@@ -18,6 +19,44 @@ import * as v from 'valibot'
 /** Template a schedule was created from; drives the seeded block description. */
 export const scheduleTemplateSchema = v.picklist(['dep-update', 'tech-debt', 'custom'])
 export type ScheduleTemplate = v.InferOutput<typeof scheduleTemplateSchema>
+
+const intakePredicateStringSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
+
+/**
+ * Issue-intake configuration for a schedule whose pipeline pulls work from the
+ * workspace's issue tracker (the `bug-intake` step of the bug-triage pipeline).
+ * The pipeline stays generic; WHICH tracker board and WHICH predicates are
+ * per-schedule. Credentials are the workspace's existing task connection — this
+ * carries only the scope + filters.
+ */
+export const issueIntakeConfigSchema = v.object({
+  /** Which connected task source the intake searches. */
+  source: taskSourceKindSchema,
+  /** The vendor's "board"/project scope; exactly the field for `source` is meaningful. */
+  board: v.object({
+    /** Jira project key, e.g. `PROJ`. */
+    jiraProjectKey: v.optional(intakePredicateStringSchema),
+    /** Linear team id (UUID). */
+    linearTeamId: v.optional(intakePredicateStringSchema),
+    /** GitHub repository as `owner/name`. */
+    githubRepo: v.optional(intakePredicateStringSchema),
+  }),
+  /** Which open issues qualify. All present predicates must match. */
+  predicates: v.object({
+    /** Substring that must appear in the issue title. */
+    titleFragment: v.optional(intakePredicateStringSchema),
+    /** Label(s) that must ALL be present on the issue. */
+    labels: v.optional(v.array(intakePredicateStringSchema)),
+    /** Issue type name (Jira issue type / GitHub org issue type). Intake defaults to `bug`. */
+    issueType: v.optional(intakePredicateStringSchema),
+  }),
+  /**
+   * GitHub only: the label applied to mark a picked-up issue in-progress (GitHub
+   * has no native workflow status). Absent ⇒ `in-progress`.
+   */
+  inProgressLabel: v.optional(intakePredicateStringSchema),
+})
+export type IssueIntakeConfig = v.InferOutput<typeof issueIntakeConfigSchema>
 
 const hourOfDaySchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(23))
 const weekdaySchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(6))
@@ -71,6 +110,8 @@ export const pipelineScheduleSchema = v.object({
   recurrence: recurrenceSchema,
   /** Manual-only: never auto-fired by the sweeper; may use an individual-usage model. */
   onDemand: v.boolean(),
+  /** Issue-intake scope + predicates, for a pipeline with a `bug-intake` step. */
+  issueIntake: v.optional(issueIntakeConfigSchema),
   enabled: v.boolean(),
   lastRunAt: v.nullable(v.number()),
   nextRunAt: v.number(),
@@ -112,6 +153,8 @@ export const createScheduleSchema = v.object({
    * use an individual-usage subscription model (unlocked per run-now by the initiator).
    */
   onDemand: v.optional(v.boolean(), false),
+  /** Issue-intake scope + predicates (required by Phase E's validation for a `bug-intake` pipeline). */
+  issueIntake: v.optional(issueIntakeConfigSchema),
   enabled: v.optional(v.boolean(), true),
   /**
    * The prompt/description for the reused on-board task block — the same free-text a
@@ -127,6 +170,8 @@ export const updateScheduleSchema = v.object({
   name: v.optional(scheduleNameSchema),
   pipelineId: v.optional(v.string()),
   recurrence: v.optional(recurrenceSchema),
+  /** New intake config, or null to clear it. Omitted ⇒ unchanged. */
+  issueIntake: v.optional(v.nullable(issueIntakeConfigSchema)),
   enabled: v.optional(v.boolean()),
 })
 export type UpdateScheduleInput = v.InferOutput<typeof updateScheduleSchema>

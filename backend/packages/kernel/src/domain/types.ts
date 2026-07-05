@@ -27,6 +27,7 @@ export type {
   Position,
   PromptFragment,
   PullRequestRef,
+  PeerPullRequest,
   SpendStatus,
   StepApproval,
   StepReviewComment,
@@ -341,6 +342,7 @@ export type {
   // Recurring-pipeline (scheduled run) shapes.
   ScheduleTemplate,
   Recurrence,
+  IssueIntakeConfig,
   PipelineSchedule,
   ScheduleRun,
   CreateScheduleInput,

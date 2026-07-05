@@ -454,6 +454,24 @@ function coerceRunnerResult(raw: unknown): Partial<RunnerJobResult> {
     if (typeof o[k] === 'string') out[k] = o[k] as string
   }
   if (typeof o.pushed === 'boolean') out.pushed = o.pushed
+  // Multi-repo run's peer PRs (service-connections phase 3): keep only well-formed entries
+  // (a repo + prUrl + branch string), passing the optional frameId through. Absent for a
+  // single-repo run — so a pool proxying the executor-harness verbatim carries them intact.
+  if (Array.isArray(o.peerPullRequests)) {
+    const peers = (o.peerPullRequests as unknown[])
+      .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+      .filter(
+        (x) =>
+          typeof x.repo === 'string' && typeof x.prUrl === 'string' && typeof x.branch === 'string',
+      )
+      .map((x) => ({
+        repo: x.repo as string,
+        prUrl: x.prUrl as string,
+        branch: x.branch as string,
+        ...(typeof x.frameId === 'string' ? { frameId: x.frameId } : {}),
+      }))
+    if (peers.length) out.peerPullRequests = peers
+  }
   // The single structured work-product channel (carried as `unknown` on the port — the
   // engine validates). `custom` is what every manifest-driven `agent` kind returns its
   // doc on; it MUST pass through or the engine never coerces the doc.

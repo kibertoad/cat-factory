@@ -1,5 +1,5 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
+import { type AgentKindRegistry, FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
 import { FRONTEND_WIREMOCK_PORT, resolveFrontendServePort } from '@cat-factory/contracts'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 
@@ -378,7 +378,11 @@ export function mergerUserPrompt(context: AgentRunContext, repo: RepoTarget): st
  * used to build. The released PR already merged into the base branch (its work branch is
  * gone), so the agent is on the base branch and is told how to find the merged commit.
  */
-export function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): string {
+export function onCallUserPrompt(
+  context: AgentRunContext,
+  repo: RepoTarget,
+  registry: AgentKindRegistry,
+): string {
   const prNumber = context.block.pullRequest?.number
   const headBranch = context.block.pullRequest?.branch
   const pr = prNumber !== undefined ? `#${prNumber}` : ''
@@ -392,7 +396,7 @@ export function onCallUserPrompt(context: AgentRunContext, repo: RepoTarget): st
       : `Find the most recent merge/feature commit with \`git log --oneline -n 50\` and inspect ` +
         `it with \`git show <sha>\`.`
   return [
-    userPromptFor(context, { materialized: true }),
+    userPromptFor(context, registry, { materialized: true }),
     '',
     `You are on the base branch \`${repo.baseBranch}\`, which already contains the released ` +
       `pull request ${pr}. ${locate} Correlate that change with the regression evidence above. ` +

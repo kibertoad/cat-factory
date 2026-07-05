@@ -24,6 +24,7 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { SANDBOX_REPO_FIXTURE_KINDS } from '@cat-factory/contracts'
 import {
   expandMatrix,
@@ -56,6 +57,8 @@ export interface SandboxRunServiceDependencies {
   workspaceRepository: WorkspaceRepository
   idGenerator: IdGenerator
   clock: Clock
+  /** App-owned agent-kind registry, for the live baseline system-prompt read. */
+  agentKindRegistry: AgentKindRegistry
   /** Per-scope model provider (the DB-backed key pool). Preferred over the static one. */
   modelProviderResolver?: ModelProviderResolver
   /** Static model provider (e.g. a fake in tests / conformance). */
@@ -294,7 +297,7 @@ export class SandboxRunService {
     workspaceId: string,
     experiment: SandboxExperiment,
   ): Promise<Map<string, ResolvedPrompt>> {
-    const baselines = listBaselines(this.deps.clock.now())
+    const baselines = listBaselines(this.deps.clock.now(), this.deps.agentKindRegistry)
     const map = new Map<string, ResolvedPrompt>()
     for (const id of new Set(experiment.matrix.promptVersionIds)) {
       if (id.startsWith('baseline:')) {

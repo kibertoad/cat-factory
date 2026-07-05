@@ -1,46 +1,40 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import {
-  clearRegisteredAgentKinds,
-  registerAgentKind,
-  registeredAgentPresentation,
-  registeredAgentStep,
-  registeredKindRequiresContainer,
-  registeredPostOps,
-  registeredPreOps,
-} from './registry.js'
+import { describe, expect, it } from 'vitest'
+import { AgentKindRegistry } from './registry.js'
 
 // The agent-definition extension fields added on top of the kind registry:
 // presentation (frontend metadata), the agent-step surface, and the pre/post-op hooks.
+// Each test news a fresh, app-owned registry (no module-global to clear).
 
 describe('agent-definition registry fields', () => {
-  afterEach(() => clearRegisteredAgentKinds())
-
   it('derives the container requirement from a container agent surface', () => {
-    registerAgentKind({ kind: 'org-inline', systemPrompt: 'x', agent: { surface: 'inline' } })
-    registerAgentKind({
+    const registry = new AgentKindRegistry()
+    registry.register({ kind: 'org-inline', systemPrompt: 'x', agent: { surface: 'inline' } })
+    registry.register({
       kind: 'org-explore',
       systemPrompt: 'x',
       agent: { surface: 'container-explore', output: { kind: 'structured' } },
     })
-    registerAgentKind({
+    registry.register({
       kind: 'org-coding',
       systemPrompt: 'x',
       agent: { surface: 'container-coding', clone: { branch: 'pr' } },
     })
-    expect(registeredKindRequiresContainer('org-inline')).toBe(false)
-    expect(registeredKindRequiresContainer('org-explore')).toBe(true)
-    expect(registeredKindRequiresContainer('org-coding')).toBe(true)
+    expect(registry.requiresContainer('org-inline')).toBe(false)
+    expect(registry.requiresContainer('org-explore')).toBe(true)
+    expect(registry.requiresContainer('org-coding')).toBe(true)
   })
 
   it('still honours an explicit requiresContainer flag', () => {
-    registerAgentKind({ kind: 'org-repo', systemPrompt: 'x', requiresContainer: true })
-    expect(registeredKindRequiresContainer('org-repo')).toBe(true)
+    const registry = new AgentKindRegistry()
+    registry.register({ kind: 'org-repo', systemPrompt: 'x', requiresContainer: true })
+    expect(registry.requiresContainer('org-repo')).toBe(true)
   })
 
   it('exposes the agent step spec, presentation, and pre/post-op hooks', () => {
+    const registry = new AgentKindRegistry()
     const preOp = async () => {}
     const postOp = async () => {}
-    registerAgentKind({
+    registry.register({
       kind: 'security-auditor',
       systemPrompt: 'You audit.',
       agent: { surface: 'container-explore', output: { kind: 'structured', repair: true } },
@@ -55,22 +49,23 @@ describe('agent-definition registry fields', () => {
         resultView: 'generic-structured',
       },
     })
-    expect(registeredAgentStep('security-auditor')).toEqual({
+    expect(registry.agentStep('security-auditor')).toEqual({
       surface: 'container-explore',
       output: { kind: 'structured', repair: true },
     })
-    expect(registeredPreOps('security-auditor')).toEqual([preOp])
-    expect(registeredPostOps('security-auditor')).toEqual([postOp])
-    expect(registeredAgentPresentation('security-auditor')?.label).toBe('Security Auditor')
-    expect(registeredAgentPresentation('security-auditor')?.resultView).toBe('generic-structured')
+    expect(registry.preOps('security-auditor')).toEqual([preOp])
+    expect(registry.postOps('security-auditor')).toEqual([postOp])
+    expect(registry.presentation('security-auditor')?.label).toBe('Security Auditor')
+    expect(registry.presentation('security-auditor')?.resultView).toBe('generic-structured')
   })
 
   it('returns empty / undefined for kinds that did not opt in', () => {
-    registerAgentKind({ kind: 'bare', systemPrompt: 'x' })
-    expect(registeredAgentStep('bare')).toBeUndefined()
-    expect(registeredPreOps('bare')).toEqual([])
-    expect(registeredPostOps('bare')).toEqual([])
-    expect(registeredAgentPresentation('bare')).toBeUndefined()
-    expect(registeredAgentPresentation('never-registered')).toBeUndefined()
+    const registry = new AgentKindRegistry()
+    registry.register({ kind: 'bare', systemPrompt: 'x' })
+    expect(registry.agentStep('bare')).toBeUndefined()
+    expect(registry.preOps('bare')).toEqual([])
+    expect(registry.postOps('bare')).toEqual([])
+    expect(registry.presentation('bare')).toBeUndefined()
+    expect(registry.presentation('never-registered')).toBeUndefined()
   })
 })

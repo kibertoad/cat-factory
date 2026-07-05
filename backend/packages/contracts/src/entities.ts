@@ -52,6 +52,24 @@ export const pullRequestRefSchema = v.object({
 export type PullRequestRef = v.InferOutput<typeof pullRequestRefSchema>
 
 /**
+ * A pull request the container "implementer" agent opened in a CONNECTED service's repo
+ * during a multi-repo run (the service-connections initiative, phase 3): the coding agent
+ * clones every involved service's repo as a sibling checkout and opens one PR per repo it
+ * actually changed. The task's OWN-service PR stays on {@link blockSchema.pullRequest}
+ * (singular); this array carries the PRs opened in the PEER repos, each attributed to the
+ * repo (`owner/name`) and the involved service frame it belongs to.
+ */
+export const peerPullRequestSchema = v.object({
+  /** The peer repo the PR was opened in, `owner/name`. */
+  repo: v.string(),
+  /** The involved service frame's block id this repo resolved from, when known. */
+  frameId: v.optional(v.string()),
+  /** The PR link itself, same shape as the own-service {@link pullRequestRefSchema}. */
+  ref: pullRequestRefSchema,
+})
+export type PeerPullRequest = v.InferOutput<typeof peerPullRequestSchema>
+
+/**
  * Per-task override for an issue-tracker writeback action (see the workspace-level
  * `writebackCommentOnPrOpen` / `writebackResolveOnMerge` in tracker settings).
  * `on`/`off` force the behaviour for this task; absent ⇒ inherit the workspace setting.
@@ -222,6 +240,14 @@ export const blockSchema = v.object({
    */
   pullRequest: v.optional(pullRequestRefSchema),
   /**
+   * PRs the implementer opened in CONNECTED services' repos during a multi-repo run
+   * (service-connections phase 3), one per involved-service repo it actually changed.
+   * The own-service PR stays on {@link pullRequest}; this is engine-written (never
+   * client-patchable) beside it, so single-repo readers stay untouched and only the
+   * multi-repo-aware paths read {@link allPullRequests}. Absent for a single-repo task.
+   */
+  peerPullRequests: v.optional(v.array(peerPullRequestSchema)),
+  /**
    * Id of the merge threshold preset selected for this task (see
    * {@link mergeThresholdPresetSchema}). Drives the `merger` step's auto-merge
    * decision and the CI-fixer attempt budget. Absent means "use the workspace's
@@ -287,6 +313,24 @@ export const blockSchema = v.object({
   accessDenied: v.optional(v.boolean()),
 })
 export type Block = v.InferOutput<typeof blockSchema>
+
+/**
+ * Every pull request a block's implementation opened, own-service first then any peer
+ * repos (service-connections phase 3). The single source of truth for callers that must
+ * act across ALL of a multi-repo task's PRs (phase-4 CI aggregation / merge-all); every
+ * single-repo reader keeps reading {@link Block.pullRequest} directly. The own-service
+ * entry carries no `repo`/`frameId` (its repo is the task's own service); peers carry both.
+ */
+export function allPullRequests(
+  block: Pick<Block, 'pullRequest' | 'peerPullRequests'>,
+): { repo?: string; frameId?: string; ref: PullRequestRef }[] {
+  const out: { repo?: string; frameId?: string; ref: PullRequestRef }[] = []
+  if (block.pullRequest) out.push({ ref: block.pullRequest })
+  for (const peer of block.peerPullRequests ?? []) {
+    out.push({ repo: peer.repo, ...(peer.frameId ? { frameId: peer.frameId } : {}), ref: peer.ref })
+  }
+  return out
+}
 
 /**
  * A curated best-practice "prompt fragment" (e.g. Node performance, React state
@@ -785,6 +829,11 @@ export const gateFailingCheckSchema = v.object({
    * failed run's logs. Null when GitHub didn't report one.
    */
   url: v.optional(v.nullable(v.string())),
+  /**
+   * The repo (owner/name) this check belongs to, on a MULTI-REPO block — so the UI can group
+   * failing checks by service. Absent on a single-repo block (there is only the own repo).
+   */
+  repo: v.optional(v.string()),
 })
 export type GateFailingCheck = v.InferOutput<typeof gateFailingCheckSchema>
 
@@ -836,8 +885,30 @@ export const gateStepStateSchema = v.object({
   attempts: v.number(),
   /** Ceiling on attempts, resolved from the task's merge preset at step start. */
   maxAttempts: v.number(),
-  /** The PR head commit being gated, once resolved. */
+  /** The PR head commit being gated, once resolved (the own-service PR on a multi-repo block). */
   headSha: v.optional(v.nullable(v.string())),
+  /**
+   * Per-PR head commits for a MULTI-REPO block (service-connections phase 4), keyed by repo
+   * full name (owner/name) — own-service PR plus each peer-service PR. Set by the CI /
+   * conflicts gates whose precheck aggregates across every PR the task opened. Absent for a
+   * single-repo block (the scalar {@link headSha} is the only head).
+   */
+  headShas: v.optional(v.nullable(v.record(v.string(), v.string()))),
+  /**
+   * The repo the conflicts gate's most recent `fail` verdict found conflicted, so the
+   * single-repo conflict-resolver is dispatched at THAT repo (own-service or a peer) rather
+   * than always the own-service one. Absent ⇒ the own-service repo. Only the conflicts gate
+   * sets it (the CI-fixer runs across all repos, so the CI gate leaves it undefined).
+   */
+  conflictTarget: v.optional(
+    v.nullable(
+      v.object({
+        repo: v.string(),
+        frameId: v.optional(v.string()),
+        branch: v.optional(v.string()),
+      }),
+    ),
+  ),
   /**
    * The most recent precheck verdict, so the UI can show why the gate is looping
    * (failing → a helper is fixing) vs idle-passing. Set on every probe.

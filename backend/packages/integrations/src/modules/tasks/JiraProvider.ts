@@ -1,6 +1,7 @@
 import {
   ValidationError,
   atlassianLogic,
+  type IssueIntakeQuery,
   type TaskComment,
   type TaskContent,
   type TaskCredentials,
@@ -279,15 +280,37 @@ export class JiraProvider implements TaskSourceProvider {
   }
 
   async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
+    return this.searchByJql(credentials, jiraLogic.buildJiraSearchJql(query), 20)
+  }
+
+  /**
+   * Issue-intake predicate search: every predicate (project, open-only, type,
+   * labels, title fragment, the already-worked exclusion list) is compiled into
+   * one JQL query ordered oldest-first, so Jira returns exactly the eligible
+   * candidates — see {@link jiraLogic.buildJiraIntakeJql}.
+   */
+  async searchIssues(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<TaskSearchResult[]> {
+    return this.searchByJql(credentials, jiraLogic.buildJiraIntakeJql(query), query.limit)
+  }
+
+  /** Run a JQL search and map the hits (shared by the free-text and intake searches). */
+  private async searchByJql(
+    credentials: TaskCredentials,
+    rawJql: string,
+    limit: number,
+  ): Promise<TaskSearchResult[]> {
     const base = credentials.baseUrl!.replace(/\/+$/, '')
     // Re-validate the stored base before fetching with the workspace's credentials
     // (defense-in-depth against a base that became unsafe since connect time).
     atlassianLogic.assertSafeAtlassianBaseUrl(base)
-    const jql = encodeURIComponent(jiraLogic.buildJiraSearchJql(query))
+    const jql = encodeURIComponent(rawJql)
     // `/rest/api/3/search/jql` is the current enhanced-search endpoint; the legacy
     // GET `/rest/api/3/search` was removed by Atlassian (May 2025). The `issues[]`
     // response shape is unchanged, so `parseJiraSearchResults` still applies.
-    const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary,status&maxResults=20`
+    const url = `${base}/rest/api/3/search/jql?jql=${jql}&fields=summary,status&maxResults=${limit}`
     const auth = btoa(`${credentials.accountEmail}:${credentials.apiToken}`)
 
     const res = await fetch(url, {

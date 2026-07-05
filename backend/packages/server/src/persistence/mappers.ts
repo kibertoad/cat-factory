@@ -3,6 +3,7 @@ import type {
   AgentFailure,
   Block,
   ExecutionInstance,
+  IssueIntakeConfig,
   Pipeline,
   PipelineStep,
   ResolvedFrontendBinding,
@@ -14,6 +15,7 @@ import {
   blockLevelSchema,
   blockStatusSchema,
   executionStatusSchema,
+  issueIntakeConfigSchema,
   resolvedFrontendBindingSchema,
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
@@ -468,6 +470,27 @@ const blockFields: FieldMapper<Block, BlockPatch>[] = [
       }
     },
   },
+  // The PRs a multi-repo run opened in connected services' repos (engine-written beside the
+  // own-service `pullRequest`). Patch treats an empty array as "clear them", mirroring the
+  // other JSON-array block columns.
+  {
+    read: (row, out) => {
+      if (row.peer_pull_requests != null)
+        out.peerPullRequests = JSON.parse(row.peer_pull_requests as string)
+    },
+    insert: (b, out) => {
+      out.peer_pull_requests = b.peerPullRequests?.length
+        ? JSON.stringify(b.peerPullRequests)
+        : null
+    },
+    patch: (p, out) => {
+      if (p.peerPullRequests !== undefined) {
+        out.peer_pull_requests = p.peerPullRequests?.length
+          ? JSON.stringify(p.peerPullRequests)
+          : null
+      }
+    },
+  },
   // `createdBy` is set at insert time and never patched. LEGACY: a pre-#94 numeric id is
   // dropped to null on read (see the LEGACY USER-ID REPAIR note; remove after 2026-07-15).
   legacyUserIdField('createdBy'),
@@ -570,6 +593,31 @@ export function rowToPipeline(row: PipelineRow): Pipeline {
     ...(row.public ? { public: true } : {}),
     ...(row.availability ? { availability: row.availability as Pipeline['availability'] } : {}),
   }
+}
+
+/**
+ * Parse a `pipeline_schedules.issue_intake` JSON column (D1 migration 0038 ⇄ the
+ * Drizzle `issue_intake` column) onto the schedule's `issueIntake`. Lenient by
+ * design: NULL, malformed JSON, or a shape that no longer matches the contract
+ * reads as "no intake config" rather than failing every schedule read — the
+ * schedule validation (Phase E) re-establishes a valid config on the next edit.
+ * Shared by both runtimes' schedule repos so the column can't drift.
+ */
+export function parseIssueIntakeColumn(
+  value: string | null | undefined,
+): IssueIntakeConfig | undefined {
+  if (!value) return undefined
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return is(issueIntakeConfigSchema, parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Serialize a schedule's `issueIntake` for the `issue_intake` column (absent ⇒ NULL). */
+export function serializeIssueIntakeColumn(config: IssueIntakeConfig | undefined): string | null {
+  return config ? JSON.stringify(config) : null
 }
 
 /**

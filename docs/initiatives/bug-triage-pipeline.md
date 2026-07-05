@@ -30,6 +30,13 @@ and unmerged** (`mergeable_state: dirty` — conflicts with `main`), so Phase B 
 checkouts, notably Phase F's investigator) are blocked on that merge, not just on the
 code existing. See the Phase B row notes for details.
 
+**Update (2026-07-04):** Phases C and D are implemented, both stacked on the #752 branch
+(Phase C via [PR #761](https://github.com/kibertoad/cat-factory/pull/761), Phase D via
+[PR #766](https://github.com/kibertoad/cat-factory/pull/766)) — so the whole stack lands when #752's conflict
+with `main` is resolved and the chain merges. Next up: Phase E (the `bug-intake` step +
+schedule validation + SPA intake section), which consumes Phase D's ports directly and,
+unlike F–H, does not need the multi-repo checkouts.
+
 ## Target pattern
 
 Reference implementations to copy, per piece:
@@ -130,49 +137,163 @@ through `runMultiRepoCoding` — that path is covered only by
 
 ### Phase C — multi-PR gates + merger (= service-connections Phase 4; update that tracker too)
 
-| Item                                                                                                   | Status |
-| ------------------------------------------------------------------------------------------------------ | ------ |
-| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | todo   |
-| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | todo   |
-| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | todo   |
-| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | todo   |
-| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | todo   |
+Implemented in **PR #761** (branched off #752 for the multi-repo checkouts, targets #752). Kept
+to the "Phase B only for harness edits" convention — **zero harness changes / no image bump**: the
+ci-fixer fans out by reusing the existing `runMultiRepoCoding` sibling-checkout path via a widened
+`peerRepos` job body (the `coder`-only multi-repo dispatch gate now also fires for `ci-fixer`).
+
+| Item                                                                                                   | Status                                     |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                       |
+| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | done (detection + `conflictTarget`; see †) |
+| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (merge-all; combined-diff, see ‡)     |
+| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                       |
+| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate cross-runtime; §)       |
+
+Notes carried forward (mirrored in the service-connections tracker's Phase 4 rows):
+
+- **† Conflict-resolver peer targeting** — the conflicts gate detects conflicts across every PR and
+  stashes the first conflicted repo on `step.gate.conflictTarget`; dispatching the resolver AT a
+  peer repo is a follow-up. A peer-only conflict now fast-fails to the manual-resolution give-up
+  (the gate returns `escalatable: false` so the engine doesn't burn the attempt budget on the
+  own-repo resolver that can't reach it) rather than looping the wrong resolver. Relevant to
+  Phase F/G, which reuse the gate helpers.
+- **‡ Merger combined-diff** — the engine merges ALL PRs in provider-before-consumer order, but the
+  `merger` agent still scores the own-repo diff only (scoring the combined sibling-workspace diff
+  needs a harness bump — deferred to keep this phase harness-free).
+- **§** — multi-repo CI aggregation runs on both runtimes in conformance; merge-all ordering +
+  provider fan-out are unit-tested (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`).
 
 ### Phase D — issue-intake foundations (design §3, ports + persistence)
 
+Implemented in [PR #766](https://github.com/kibertoad/cat-factory/pull/766) (branch
+`claude/bug-triage-initiative-en124b`, stacked on the #752 branch and targeting it, like Phase C's #761).
+
 | Item                                                                                                        | Status |
 | ----------------------------------------------------------------------------------------------------------- | ------ |
-| `TaskSourceProvider.searchIssues` + `IssueIntakeQuery`; Jira JQL / GitHub qualifiers / Linear filter impls  | todo   |
-| `PipelineSchedule.issueIntake` config: contracts + `pipeline_schedules` column, D1 ⇄ Drizzle migrations     | todo   |
-| `IssueWritebackProvider.onIssuePickedUp` (comment + in-progress transition, 3 vendors, best-effort)         | todo   |
-| Jira `pickTransitionByCategory` / Linear `pickStartedStateId` / GitHub `inProgressLabel` logic + unit tests | todo   |
-| `TaskLinkService.replaceForBlock` (unlink previous fire's issue, link the new one)                          | todo   |
+| `TaskSourceProvider.searchIssues` + `IssueIntakeQuery`; Jira JQL / GitHub qualifiers / Linear filter impls  | done   |
+| `PipelineSchedule.issueIntake` config: contracts + `pipeline_schedules` column, D1 ⇄ Drizzle migrations     | done   |
+| `IssueWritebackProvider.onIssuePickedUp` (comment + in-progress transition, 3 vendors, best-effort)         | done   |
+| Jira `pickTransitionByCategory` / Linear `pickStartedStateId` / GitHub `inProgressLabel` logic + unit tests | done   |
+| `TaskLinkService.replaceForBlock` (unlink previous fire's issue, link the new one)                          | done   |
+
+Notes for Phase E (which consumes all of this):
+
+- **`searchIssues(credentials, query, workspaceId)`** — the port takes `workspaceId` as a third
+  param (beyond the design's two-arg sketch) for the same reason `search` does: the GitHub
+  provider authenticates out-of-band from the workspace's App installation and would otherwise
+  leak across tenants. Jira/Linear ignore it.
+- **Exclusion pushdown varies by vendor**: Jira gets `issuekey NOT IN (…)` in the JQL (ids
+  validated against the key shape — a malformed/foreign id is dropped, never embedded); GitHub
+  and Linear can't express it (no issue-number qualifier / no identifier filter), so both
+  overscan by the exclusion count (bounded at the vendors' 100/page) and filter the response.
+  Phase E's intake step should keep the exclusion list small (it already is: only issues linked
+  to blocks).
+- **GitHub oldest-first** rides the search API's `sort=created&order=asc` params (a new optional
+  `order?: 'created-asc'` on `GitHubClient.searchIssues`) — the in-query `sort:` syntax is a
+  web-UI affordance the REST API ignores. **Linear oldest-first** uses the
+  `issues(sort: [{ createdAt: { order: Ascending } }])` argument + a deterministic client-side
+  re-sort of the page (nodes carry `createdAt`).
+- **`issueIntake` PATCH is tri-state** (`updateScheduleSchema`): omitted = unchanged, `null` =
+  clear, object = replace. `RecurringPipelineService.create/update` persist it verbatim — the
+  "required + source connected when the pipeline has `bug-intake`" validation is Phase E's row,
+  NOT done here.
+- **`onIssuePickedUp(workspaceId, blockId, info)`** takes `info.inProgressLabel` (threaded from
+  the schedule's `issueIntake.inProgressLabel`; the service defaults it to
+  `DEFAULT_IN_PROGRESS_LABEL = 'in-progress'`). It is deliberately NOT gated on the workspace
+  writeback toggles — claiming the issue where it was filed is the intake step's semantics.
+  `GitHubClient.applyIssueLabel` is an optional client capability (like `listSubIssues`):
+  ensure-create the label (tolerating 422 already-exists) then add it to the issue.
+- **`TaskRepository.unlinkAllFromBlock`** is a single `UPDATE … WHERE linked_block_id = ?` on
+  both runtimes (never a loop of point-writes); it's classified `pending` in the Node
+  mothership allow-list spec (fires on the mothership-owned recurring run path, not the SPA).
+- Conformance pins the `issueIntake` column round-trip (create → list → replace → unrelated
+  patch → clear) on all three facades (`defineMiscConformance` → "recurring pipelines").
 
 ### Phase E — `bug-intake` step (design §3, engine + SPA)
 
+Implemented in [PR #770](https://github.com/kibertoad/cat-factory/pull/770) (branch
+`claude/bug-triage-phase-2-hyi9pg`, branched off the #752 branch for the Phase D foundations it
+consumes, and targeting it, like Phase C's #761 / Phase D's #766). Zero harness changes / no
+image bump — the step is backend TypeScript over the Phase D ports.
+
 | Item                                                                                          | Status |
 | --------------------------------------------------------------------------------------------- | ------ |
-| Step handler: predicate search + batched projection dedupe + oldest-first pick                | todo   |
-| Pickup: import → replace-link → rewrite block title/description → `onIssuePickedUp`           | todo   |
-| No-match: skip all remaining steps, run completes successfully, no notification               | todo   |
-| Schedule validation: `issueIntake` required + source connected when pipeline has `bug-intake` | todo   |
-| SPA: intake config section in `RecurringPipelineModal.vue` + i18n (all locales)               | todo   |
-| Conformance: intake pickup + no-match no-op on both runtimes (fake task source)               | todo   |
+| Step handler: predicate search + batched projection dedupe + oldest-first pick                | done   |
+| Pickup: import → replace-link → rewrite block title/description → `onIssuePickedUp`           | done   |
+| No-match: skip all remaining steps, run completes successfully, no notification               | done   |
+| Schedule validation: `issueIntake` required + source connected when pipeline has `bug-intake` | done   |
+| SPA: intake config section in `RecurringPipelineModal.vue` + i18n (all locales)               | done   |
+| Conformance: intake pickup + no-match no-op on both runtimes (fake task source)               | done   |
+
+Notes for Phase F/G/H (which build on this step):
+
+- **`BugIntakeService`** (`@cat-factory/integrations`) owns the read-and-claim half (resolve the
+  schedule's `issueIntake` by block → `searchIssues` → dedupe against the one batched
+  `listByWorkspace` read → import + `replaceForBlock`), returning a pickup or a `null` outcome.
+  The engine (`RunDispatcher.runBugIntake`) owns the block-reseed + best-effort `onIssuePickedUp`
+  writeback + the completion. It is wired into the engine ONLY when task sources are configured
+  (a `TasksModule.bugIntakeService`, threaded through `ExecutionService` like `issueWriteback`).
+- **The no-match / no-source path completes the run** via `RunDispatcher.completeRunSkippingRemaining`
+  — mark this step's output, mark every remaining step `skipped`, finalize the block `done`. It
+  reuses `skipGatedStep`'s terminal machinery; there is deliberately NO new gate/notification.
+- **`BUG_INTAKE_AGENT_KIND`** is now exported from `pipelineShape.ts` (with a
+  `pipelineHasEnabledBugIntake` helper) as the single source of truth shared by the launch
+  constraint, the schedule intake-config validation, and the engine handler.
+- **Intake dedupe uses `TaskRepository.listByWorkspace`** filtered to `linkedBlockId && source`
+  — one batched projection read, not a per-candidate lookup. The reused block's own previous-fire
+  link is in the exclusion set (the search runs BEFORE `replaceForBlock` drops it), so a still-open
+  prior bug isn't immediately re-picked.
+- **Validation home**: the `issueIntake`-required + connected-source check lives in
+  `RecurringPipelineService` (create/update), NOT `assertPipelineLaunchable` (which has no access
+  to the schedule config or the workspace's connections). It's skipped for the connected-source
+  half when no task-connection service is wired; the presence check always runs.
 
 ### Phase F — investigation + clarification (design §4–5)
 
-**Blocked on Phase B merging** (needs `peerRepos`/`resolveRepoTargets`), and note
-PR #752's fan-out is currently gated to `IMPLEMENTER_AGENT_KIND` (`'coder'`) only
-(`ContainerAgentExecutor`) — this phase must extend that gate to include
-`bug-investigator`, not assume `peerRepos` is already wired for every container kind.
+Implemented on branch `claude/bug-triaging-initiative-tif4vb`, stacked on the #752 branch (for
+the multi-repo checkouts it extends) and targeting it, like Phases C/D/E. **Harness change +
+image bump** (`1.34.5` → `1.34.6`): the read-only multi-repo explore path is a genuine new
+harness capability (the explore mode dropped `peerRepos` — it only ever cloned one repo), so
+unlike Phases C–E this phase is NOT harness-free. Pins synced via `pnpm sync:image-tags`.
 
 | Item                                                                                                     | Status |
 | -------------------------------------------------------------------------------------------------------- | ------ |
-| `bug-investigator` → structured `container-explore` kind (same id) + valibot schema + peerRepos checkout | todo   |
-| Post-completion resolver: prose digest → `step.output`, structured → `step.custom`                       | todo   |
-| `clarity-review` seeding from investigator `questions` + auto-pass on `clarity === 'clear'`              | todo   |
-| `IssueWritebackProvider.postQuestions` tracker comment on park (best-effort)                             | todo   |
-| Conformance: clear → no park; needs_clarification → park + resume on answer                              | todo   |
+| `bug-investigator` → structured `container-explore` kind (same id) + valibot schema + peerRepos checkout | done   |
+| Post-completion resolver: prose digest → `step.output`, structured → `step.custom`                       | done   |
+| `clarity-review` seeding from investigator `questions` + auto-pass on `clarity === 'clear'`              | done   |
+| `IssueWritebackProvider.postQuestions` tracker comment on park (best-effort)                             | done   |
+| Conformance: clear → no park; needs_clarification → park + resume on answer                              | done   |
+
+Notes for Phase G/H (which build on this):
+
+- **`bug-investigator` is a registered kind now**, not a ROLES entry — it self-registers from
+  `@cat-factory/agents` (`agents/kinds/bug-investigator.ts`), exporting the lenient
+  `bugInvestigation` valibot schema (`clarity` / `summary` / `rootCauseHypotheses` /
+  `affectedRepos` / `suggestedReproductions` / `questions`). Its read-only guardrail +
+  final-answer-in-reply directives auto-append (the `applySurfaceDirectives` seam), so the
+  registered `systemPrompt` is just the core role. Phase G's `repro-test` copies this shape.
+- **The digest resolver is a BUILT-IN inline resolver** in `RunDispatcher.buildStepResolverRegistry`
+  (`phase: 'post-completion'`, `renderInvestigationDigest`), NOT a `registerStepResolver` call —
+  it is a platform kind, so it lives with the other built-in resolvers (merger / blueprints /
+  task-estimator), not the public seam. The digest is how the investigation reaches downstream
+  container steps: `priorOutputs` carries only `step.output`, so the structured `step.custom`
+  alone would be invisible to the estimator / repro-test / coder.
+- **The clarity seed is model-independent** — `ClarityReviewService.seedReview` builds the review
+  from the investigator's structured triage with `model: null` and no LLM call, sharing the base
+  `persistInitialReview` dispose/notify tail. So the clarity gate's `enabled()` is now
+  **store-based** (`!!clarityReviewService`), not model-based: it activates whenever the store is
+  wired, and the LLM review/incorporate/re-review paths degrade gracefully when no model is wired
+  (no investigation + no model ⇒ the gate auto-passes, the old pass-through). This is why the
+  conformance park/resume test works with NO reviewer model.
+- **The multi-repo fan-out gate** (`MULTI_REPO_FANOUT_KINDS` in `ContainerAgentExecutor`) now
+  includes `bug-investigator`. Phase G's `repro-test` (a `container-coding` kind) must be added
+  too when a bug spans repos — but it rides the EXISTING coding `runMultiRepoCoding` path (opens
+  PRs), NOT the new read-only `runMultiRepoExplore` one.
+- **The read-only harness path** (`runMultiRepoExplore` in `executor-harness/src/agent.ts`) is
+  deliberately simpler than `runMultiRepoCoding`: clone siblings, run once at root, parse the
+  result — no work branches, no push, no PR. The explore result-parsing is now shared with the
+  single-repo path via `finalizeExploreResult`.
 
 ### Phase G — `repro-test` agent (design §7–8)
 
@@ -223,18 +344,19 @@ also needs adding to the (currently `coder`-only) multi-repo fan-out gate from P
   the same PR (the locale-parity CI gate).
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
   with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
-- **Phase B's multi-repo fan-out (PR #752) is gated to the `coder` kind only** — dropping
-  `serviceDirectory` scoping and building `peerRepos`/the multi-repo prompt section fires
-  only for `IMPLEMENTER_AGENT_KIND`. Phases F and G (`bug-investigator`,
-  `repro-test`) are container kinds that also want sibling checkouts for a
-  multi-service bug, so each must widen that gate rather than assume `peerRepos` is
-  already wired for every kind — check `ContainerAgentExecutor` when Phase F/G start.
-- **The harness's multi-repo path (`runMultiRepoCoding`) is deliberately simpler than the
-  single-repo `runCodingAgent`** (per PR #752 / service-connections.md's carried-forward
-  notes): no mid-run checkpoints, no warm pool, no follow-up streaming. `bug-investigator`
-  and `repro-test` will run through this same simpler path once multi-repo, not the
-  richer single-repo one — don't design Phase F/G around checkpoint/streaming behaviour
-  that only exists on the single-repo side.
+- **The multi-repo fan-out gate (`MULTI_REPO_FANOUT_KINDS` in `ContainerAgentExecutor`) now
+  covers `coder`, `ci-fixer` AND `bug-investigator`** (Phase F widened it). Phase G's
+  `repro-test` (a `container-coding` kind) must be added too when a bug spans repos. Note the
+  investigator is READ-ONLY: Phase F also had to teach the HARNESS to clone peers in explore
+  mode (`runMultiRepoExplore`) — the coding fan-out (`runMultiRepoCoding`) opens PRs and was
+  the only multi-repo path before. `repro-test` rides the EXISTING coding path (it commits),
+  so it needs no new harness path — just the gate entry.
+- **The harness's multi-repo paths are deliberately simpler than the single-repo ones**: the
+  coding fan-out (`runMultiRepoCoding`, per PR #752) has no mid-run checkpoints / warm pool /
+  follow-up streaming, and the read-only explore fan-out (`runMultiRepoExplore`, Phase F) just
+  clones siblings + runs once at root + parses (no branches/push/PR). `repro-test` will run
+  through the coding path once multi-repo — don't design Phase G around checkpoint/streaming
+  behaviour that only exists on the single-repo side.
 - Phase 4 of service-connections (= Phase C here) must also extend the gate-helper agents
   (`ci-fixer`, `conflict-resolver`) to emit `peerRepos` — PR #752 only wired the `coder`
   path; the `ci`/`conflicts` gates' helper dispatch (`onPr`) doesn't yet know about peers.

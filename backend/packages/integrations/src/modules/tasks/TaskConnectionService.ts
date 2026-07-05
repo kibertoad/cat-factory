@@ -212,6 +212,19 @@ export class TaskConnectionService {
     return row?.enabled ?? true
   }
 
+  /**
+   * Whether a source is USABLE for the workspace right now — the `available && enabled` the
+   * settings/import UI offers: available (a connected credentialed source, or the installed
+   * GitHub App for the credentialless GitHub Issues source) AND not toggled off. This is the
+   * gate a `bug-intake` schedule needs; {@link isEnabled} alone is NOT enough, because it
+   * defaults ON for a never-connected source (no settings row), so it would accept intake from
+   * a source that has no connection to search. An unknown/unconfigured source ⇒ `false`.
+   */
+  async isOffered(workspaceId: string, source: TaskSourceKind): Promise<boolean> {
+    const state = (await this.listSourceStates(workspaceId)).find((s) => s.source === source)
+    return !!state?.available && !!state.enabled
+  }
+
   /** Enable or disable a source for the workspace (the per-workspace toggle). */
   async setEnabled(workspaceId: string, source: TaskSourceKind, enabled: boolean): Promise<void> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)

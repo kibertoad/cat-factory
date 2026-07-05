@@ -66,6 +66,13 @@ export interface HarnessCallMetric {
 export interface RunnerJobResult {
   prUrl?: string
   branch?: string
+  /**
+   * PRs a multi-repo coding job opened in CONNECTED services' repos (service-connections
+   * phase 3): one per involved-service repo it actually changed, beside the own-service
+   * `prUrl`/`branch`. The executor's `toRunResult` lifts these onto `AgentRunResult`. Absent
+   * for a single-repo run.
+   */
+  peerPullRequests?: { repo: string; frameId?: string; prUrl: string; branch: string }[]
   summary?: string
   error?: string
   /** A repo-bootstrap job's pushed default branch (the bootstrap coding flow's product). */

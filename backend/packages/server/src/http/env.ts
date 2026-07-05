@@ -21,6 +21,7 @@ import type {
   UserSecretService,
 } from '@cat-factory/integrations'
 import type { Core } from '@cat-factory/orchestration'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
@@ -65,6 +66,13 @@ export interface ServerContainer extends Core {
    */
   environmentBackendRegistry: EnvironmentBackendRegistry
   runnerBackendRegistry: RunnerBackendRegistry
+  /**
+   * The app-owned agent-kind registry (built-ins + any a deployment registered by
+   * reference). The workspace snapshot reads it to project the custom-kind palette + the
+   * agent-config catalog; the controllers thread the SAME instance the engine + executors
+   * use. Always present — the facade attaches it alongside the backend registries.
+   */
+  agentKindRegistry: AgentKindRegistry
   /**
    * Resolve a block's run repo (installation + repo + default branch) bound to a
    * checkout-free {@link RepoFiles}. The engine uses it to run a registered kind's

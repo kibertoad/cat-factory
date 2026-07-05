@@ -72,6 +72,32 @@ export interface TaskSearchRepoScope {
   repo: string
 }
 
+/**
+ * A predicate search for issue intake (the recurring `bug-intake` step): find
+ * **open** issues on one vendor board matching the schedule's predicates,
+ * **oldest first** (deterministic pickup order). Providers push every predicate
+ * into the vendor query wherever the vendor can express it (JQL / GitHub search
+ * qualifiers / a Linear GraphQL filter) — never fetch-all-then-filter.
+ */
+export interface IssueIntakeQuery {
+  /** The vendor's "board"/project scope; exactly the field for the provider's source is read. */
+  board: { jiraProjectKey?: string; linearTeamId?: string; githubRepo?: string }
+  /** Substring that must appear in the issue title. */
+  titleFragment?: string
+  /** Label(s) that must ALL be present on the issue. */
+  labels?: string[]
+  /** Issue type name (Jira issue type / GitHub org issue type). Sources without a type notion ignore it. */
+  issueType?: string
+  /**
+   * External ids to skip — issues already imported AND linked to a block (being
+   * or been worked). Pushed into the vendor query where expressible (Jira
+   * `issuekey NOT IN`), else filtered from a bounded overscan.
+   */
+  excludeExternalIds?: string[]
+  /** Max hits to return. Small — the intake step picks exactly one. */
+  limit: number
+}
+
 /** The result of validating + normalizing connect credentials. */
 export interface NormalizedTaskConnection {
   /** The credential bag to persist (trimmed/normalized). */
@@ -115,6 +141,19 @@ export interface TaskSourceProvider {
     query: string,
     workspaceId: string,
     scope?: TaskSearchRepoScope,
+  ): Promise<TaskSearchResult[]>
+  /**
+   * Predicate search for issue intake: open issues on the query's board matching
+   * every predicate, oldest-first, at most `query.limit` lean hits (the returned
+   * `externalId`s are valid import refs). Optional: a provider without it cannot
+   * back a `bug-intake` schedule. `workspaceId` serves the same per-workspace
+   * out-of-band authentication as {@link TaskSourceProvider.search} (the GitHub
+   * App ignores `credentials` and scopes to the workspace's installation).
+   */
+  searchIssues?(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+    workspaceId: string,
   ): Promise<TaskSearchResult[]>
   /**
    * Live "check setup" probe: actually authenticate against the source and read a

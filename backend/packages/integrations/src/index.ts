@@ -98,6 +98,12 @@ export {
   type TaskLinkServiceDependencies,
 } from './modules/tasks/TaskLinkService.js'
 export {
+  BugIntakeService,
+  type BugIntakeServiceDependencies,
+  type BugIntakeOutcome,
+  type BugIntakePickup,
+} from './modules/tasks/BugIntakeService.js'
+export {
   MapTaskSourceRegistry,
   type TaskContextView,
   renderTaskContext,
@@ -122,6 +128,7 @@ export * as linearCreateLogic from './modules/tracker/linear.create.logic.js'
 export * as linearWritebackLogic from './modules/tracker/linear.writeback.logic.js'
 export { extractReferences, type ExtractedReferences } from './modules/corpus/references.logic.js'
 export {
+  DEFAULT_IN_PROGRESS_LABEL,
   IssueWritebackService,
   type IssueWritebackServiceDependencies,
 } from './modules/writeback/IssueWritebackService.js'

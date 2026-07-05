@@ -1,5 +1,5 @@
 import type { AgentExecutor, AgentRunContext, AgentRunResult, Block } from '@cat-factory/kernel'
-import { composeSystemPrompt, systemPromptFor } from '@cat-factory/agents'
+import { composeSystemPrompt, defaultAgentKindRegistry, systemPromptFor } from '@cat-factory/agents'
 import { promptFragmentCatalogSchema, type PromptFragment } from '@cat-factory/contracts'
 import { FRAGMENTS } from '@cat-factory/prompt-fragments'
 import * as v from 'valibot'
@@ -74,7 +74,7 @@ describe('prompt fragments', () => {
   })
 
   describe('composeSystemPrompt', () => {
-    const base = systemPromptFor('coder')
+    const base = systemPromptFor('coder', defaultAgentKindRegistry())
 
     it('appends the bodies of known fragments under a standards header', () => {
       const node = FRAGMENTS.find((f) => f.id === 'node.performance')!

@@ -80,7 +80,12 @@ export {
 } from './agents/ContainerEnvConfigRepairer.js'
 export {
   buildResolveRepoTarget,
+  buildResolveRepoTargets,
   type ResolveRepoTargetDependencies,
+  type ResolveRepoTargetsDependencies,
+  type ResolveRepoTargets,
+  type ResolvedRepoTargets,
+  type RepoCheckout,
 } from './agents/resolveRepoTarget.js'
 // The checkout-free RepoFiles facade over the wired GitHubClient + the engine-facing
 // run-repo resolver each facade threads into the core for a registered kind's pre/post-ops.

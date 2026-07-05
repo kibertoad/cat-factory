@@ -9,6 +9,7 @@ import type {
   FrontendConfig,
   InstanceSize,
   PullRequestRef,
+  PeerPullRequest,
   ServiceProvisioning,
   StepSubtasks,
   StreamedFollowUp,
@@ -306,6 +307,14 @@ export interface AgentRunResult {
    * a PR); the engine records it on the block so the board can link to it.
    */
   pullRequest?: PullRequestRef
+  /**
+   * PRs the container "implementer" opened in CONNECTED services' repos during a multi-repo
+   * run (service-connections phase 3) — one per involved-service repo it actually changed,
+   * attributed to the repo (`owner/name`) and its involved service frame. The own-service PR
+   * stays on {@link pullRequest}; the engine records these on the block's `peerPullRequests`
+   * beside it. Absent for a single-repo run.
+   */
+  peerPullRequests?: PeerPullRequest[]
   /**
    * The service → modules blueprint tree a Blueprinter step produced.
    * The engine strictly validates it and reconciles it onto the board (in place).

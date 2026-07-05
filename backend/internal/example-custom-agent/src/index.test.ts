@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  clearRegisteredAgentKinds,
-  registeredAgentKind,
-  registeredAgentStep,
-  registeredKindRequiresContainer,
-  registeredPostOps,
-} from '@cat-factory/agents'
+import { type AgentKindRegistry, defaultAgentKindRegistry } from '@cat-factory/agents'
 import type { CommitFilesInput, GateStepState, RepoFiles } from '@cat-factory/kernel'
 import {
   clearRegisteredGates,
@@ -29,17 +23,18 @@ import {
   wireLicenseProvider,
 } from './index.js'
 
-// The package self-registers on import (side effect), but tests clear the global registries
-// for isolation — so register fresh before each test and clean up after.
+// Agent kinds live on an app-owned registry (a fresh instance per test — no global to clear).
+// The pipeline/gate/step-resolver registries are still module-global, so clear those for
+// isolation and re-register before each test.
+let registry: AgentKindRegistry
 beforeEach(() => {
-  clearRegisteredAgentKinds()
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
-  registerExampleCustomAgents()
+  registry = defaultAgentKindRegistry()
+  registerExampleCustomAgents(registry)
 })
 afterEach(() => {
-  clearRegisteredAgentKinds()
   clearRegisteredPipelines()
   clearRegisteredGates()
   clearRegisteredStepResolvers()
@@ -49,14 +44,14 @@ afterEach(() => {
 
 describe('example custom agents', () => {
   it('registers both kinds with the right surfaces', () => {
-    expect(registeredAgentKind(ORG_REVIEWER_KIND)).toBeTruthy()
-    expect(registeredAgentStep(ORG_REVIEWER_KIND)?.surface).toBe('inline')
-    expect(registeredKindRequiresContainer(ORG_REVIEWER_KIND)).toBe(false)
+    expect(registry.get(ORG_REVIEWER_KIND)).toBeTruthy()
+    expect(registry.agentStep(ORG_REVIEWER_KIND)?.surface).toBe('inline')
+    expect(registry.requiresContainer(ORG_REVIEWER_KIND)).toBe(false)
 
-    expect(registeredAgentStep(SECURITY_AUDITOR_KIND)?.surface).toBe('container-explore')
-    expect(registeredAgentStep(SECURITY_AUDITOR_KIND)?.output?.kind).toBe('structured')
+    expect(registry.agentStep(SECURITY_AUDITOR_KIND)?.surface).toBe('container-explore')
+    expect(registry.agentStep(SECURITY_AUDITOR_KIND)?.output?.kind).toBe('structured')
     // A container surface implies the container requirement without `requiresContainer`.
-    expect(registeredKindRequiresContainer(SECURITY_AUDITOR_KIND)).toBe(true)
+    expect(registry.requiresContainer(SECURITY_AUDITOR_KIND)).toBe(true)
   })
 
   it('exposes presentation so the kinds become first-class palette blocks', () => {
@@ -66,20 +61,18 @@ describe('example custom agents', () => {
       expect(validCategories.has(def.presentation?.category ?? '')).toBe(true)
     }
     // The two reviewers are review blocks; the license-fixer helper is a build block.
-    expect(registeredAgentKind(ORG_REVIEWER_KIND)?.presentation?.category).toBe('review')
-    expect(registeredAgentKind(SECURITY_AUDITOR_KIND)?.presentation?.category).toBe('review')
-    expect(registeredAgentKind(LICENSE_FIXER_KIND)?.presentation?.category).toBe('build')
+    expect(registry.get(ORG_REVIEWER_KIND)?.presentation?.category).toBe('review')
+    expect(registry.get(SECURITY_AUDITOR_KIND)?.presentation?.category).toBe('review')
+    expect(registry.get(LICENSE_FIXER_KIND)?.presentation?.category).toBe('build')
     // The auditor opens the shared generic structured viewer.
-    expect(registeredAgentKind(SECURITY_AUDITOR_KIND)?.presentation?.resultView).toBe(
-      'generic-structured',
-    )
+    expect(registry.get(SECURITY_AUDITOR_KIND)?.presentation?.resultView).toBe('generic-structured')
   })
 
   it('registers the license-check gate, escalating to the license-fixer helper kind', () => {
     const registered = registeredGateFactories()
     expect(registered.map((g) => g.kind)).toContain(LICENSE_CHECK_KIND)
     // The helper is itself a registered agent kind (a container-coding fixer).
-    expect(registeredAgentStep(LICENSE_FIXER_KIND)?.surface).toBe('container-coding')
+    expect(registry.agentStep(LICENSE_FIXER_KIND)?.surface).toBe('container-coding')
 
     // Build the gate with a throwaway context; without a wired provider it passes through.
     const gate = registered.find((g) => g.kind === LICENSE_CHECK_KIND)!.factory(stubGateContext())
@@ -166,7 +159,7 @@ describe('example custom agents', () => {
     // No report on the branch yet (getFile → null), so the idempotency guard lets the commit through.
     const getFile = vi.fn(async () => null)
     const repo = { getFile, commitFiles } as unknown as RepoFiles
-    const [postOp] = registeredPostOps(SECURITY_AUDITOR_KIND)
+    const [postOp] = registry.postOps(SECURITY_AUDITOR_KIND)
     expect(postOp).toBeTruthy()
 
     await postOp!({
@@ -184,7 +177,7 @@ describe('example custom agents', () => {
   })
 
   it('post-op is idempotent: skips the commit when the report on the branch is unchanged', async () => {
-    const [postOp] = registeredPostOps(SECURITY_AUDITOR_KIND)
+    const [postOp] = registry.postOps(SECURITY_AUDITOR_KIND)
     const assessment = { risk: 0.1, summary: 'Clean', findings: [] }
     // The branch already holds the byte-identical render the post-op would produce.
     const existing = renderComplianceReport(assessment)
@@ -204,7 +197,7 @@ describe('example custom agents', () => {
   it('post-op is a no-op when the agent returned nothing parseable', async () => {
     const commitFiles = vi.fn(async () => ({ sha: 'sha' }))
     const repo = { commitFiles } as unknown as RepoFiles
-    const [postOp] = registeredPostOps(SECURITY_AUDITOR_KIND)
+    const [postOp] = registry.postOps(SECURITY_AUDITOR_KIND)
     await postOp!({
       repo,
       branch: 'cat-factory/blk_1',

@@ -198,7 +198,17 @@
       "submit": "Yinelenen pipeline ekle",
       "addFailedTitle": "Yinelenen pipeline eklenemedi",
       "onDemand": "İstek üzerine (yalnızca manuel)",
-      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir."
+      "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir.",
+      "intake": "Sorun alımı",
+      "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
+      "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
+      "intakeGithubRepo": "Depo",
+      "intakeTitleFragment": "Başlık şunu içerir",
+      "intakeTitleFragmentPlaceholder": "örn. crash",
+      "intakeLabels": "Etiketler",
+      "intakeLabelsPlaceholder": "virgülle ayrılmış",
+      "intakeIssueType": "Sorun türü",
+      "intakeInProgressLabel": "Devam ediyor etiketi"
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",
@@ -811,7 +821,8 @@
         "auto_merge_disabled": "{preset} ön ayarı her PR'yi bir kişiye yönlendirir, bu yüzden bu PR inceleme bekliyor.",
         "no_rationale": "Birleştirici PR'yi puanladı ancak bir gerekçe vermedi, bu yüzden karara otomatik birleştirme için güvenilemedi; PR bir kişinin birleştirmesini bekliyor.",
         "no_assessment": "Birleştirici ayrıştırılabilir bir değerlendirme döndürmedi, bu yüzden PR bir kişinin birleştirmesini bekliyor.",
-        "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor."
+        "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",
+        "merge_partial": "Görevin bazı pull request'leri birleştirildi ancak sonraki biri birleştirilemedi, bu yüzden değişiklik bir kişinin çoklu depo birleştirmesini tamamlamasını veya geri almasını bekliyor."
       },
       "scores": "Puanlar",
       "axis": {

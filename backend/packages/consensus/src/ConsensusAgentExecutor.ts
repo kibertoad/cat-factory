@@ -16,8 +16,10 @@ import {
   isAsyncAgentExecutor,
 } from '@cat-factory/kernel'
 import {
+  type AgentKindRegistry,
   type AgentRouting,
   composeBlockSystemPrompt,
+  defaultAgentKindRegistry,
   resolveAgentConfig,
   resolveInlineModelRef,
   systemPromptFor,
@@ -74,6 +76,12 @@ export interface ConsensusAgentExecutorDependencies {
   logger?: { info(obj: unknown, msg?: string): void; warn?(obj: unknown, msg?: string): void }
   /** Inject the LLM call (tests); defaults to the Vercel AI SDK wrapper. */
   generate?: GenerateFn
+  /**
+   * The app-owned agent-kind registry: consulted for consensus eligibility (a registered
+   * kind's traits) and the participants' base system/goal prompts. Defaults to a fresh
+   * {@link defaultAgentKindRegistry} (built-ins only) when a facade doesn't inject one.
+   */
+  agentKindRegistry?: AgentKindRegistry
 }
 
 const STRATEGIES: Record<ConsensusStrategy, (input: StrategyInput) => Promise<StrategyResult>> = {
@@ -94,6 +102,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
   private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
   private readonly now: () => number
   private readonly generate: GenerateFn
+  private readonly agentKindRegistry: AgentKindRegistry
 
   constructor(deps: ConsensusAgentExecutorDependencies) {
     if (!deps.modelProviderResolver && !deps.modelProvider) {
@@ -103,6 +112,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     this.resolveBlockModel = deps.resolveBlockModel ?? (() => undefined)
     this.now = deps.now ?? (() => Date.now())
     this.generate = deps.generate ?? defaultGenerate
+    this.agentKindRegistry = deps.agentKindRegistry ?? defaultAgentKindRegistry()
   }
 
   /**
@@ -116,7 +126,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
   private consensusActive(context: AgentRunContext): boolean {
     const cfg = context.consensus
     if (!cfg || !cfg.enabled) return false
-    if (!isConsensusEligible(context.agentKind)) return false
+    if (!isConsensusEligible(context.agentKind, this.agentKindRegistry)) return false
     if (cfg.participants.length < 2) return false
     return decideConsensusMode(context.block.estimate, cfg.gating) === 'consensus'
   }
@@ -176,10 +186,10 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const base = await this.baseRef(context)
     const config = resolveAgentConfig(this.deps.agentRouting, context.agentKind)
     const baseSystem = composeBlockSystemPrompt(
-      config.system ?? systemPromptFor(context.agentKind),
+      config.system ?? systemPromptFor(context.agentKind, this.agentKindRegistry),
       context.block,
     )
-    const goalPrompt = userPromptFor(context)
+    const goalPrompt = userPromptFor(context, this.agentKindRegistry)
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
       const ref = this.refForModelId(p.modelId, base)

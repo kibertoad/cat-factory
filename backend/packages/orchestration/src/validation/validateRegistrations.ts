@@ -1,8 +1,4 @@
-import {
-  registeredAgentKinds,
-  registeredKindRequiresContainer,
-  registeredStructuredOutput,
-} from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   CI_FIXER_AGENT_KIND,
   CONFLICT_RESOLVER_AGENT_KIND,
@@ -48,6 +44,11 @@ export interface RegistrationProblem {
 
 /** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
 export interface ValidateRegistrationsOptions {
+  /**
+   * The app-owned agent-kind registry to validate (the facade's injected instance). Required:
+   * without it there are no registered kinds to cross-check the gates/pipelines against.
+   */
+  agentKindRegistry: AgentKindRegistry
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -72,13 +73,14 @@ export interface ValidateRegistrationsOptions {
  * want to log warnings without aborting. {@link validateRegistrations} throws on any `error`.
  */
 export function collectRegistrationProblems(
-  opts: ValidateRegistrationsOptions = {},
+  opts: ValidateRegistrationsOptions,
 ): RegistrationProblem[] {
   const knownResultViewIds = opts.knownResultViewIds ?? RESULT_VIEW_ID_SET
   const builtInHelperKinds = opts.builtInHelperKinds ?? BUILT_IN_HELPER_KINDS
+  const registry = opts.agentKindRegistry
   const problems: RegistrationProblem[] = []
 
-  const agentKinds = registeredAgentKinds()
+  const agentKinds = registry.all()
   const registeredKindIds = new Set(agentKinds.map((d) => d.kind))
   const gateKinds = new Set(registeredGateFactories().map((g) => g.kind))
 
@@ -99,7 +101,7 @@ export function collectRegistrationProblems(
     }
     const helperOk =
       builtInHelperKinds.has(helperKind) ||
-      (registeredKindIds.has(helperKind) && registeredKindRequiresContainer(helperKind))
+      (registeredKindIds.has(helperKind) && registry.requiresContainer(helperKind))
     if (!helperOk) {
       problems.push({
         severity: 'error',
@@ -132,7 +134,7 @@ export function collectRegistrationProblems(
   for (const def of agentKinds) {
     const hasPostOps = (def.postOps?.length ?? 0) > 0
     const declaresStructured =
-      def.agent?.output?.kind === 'structured' || registeredStructuredOutput(def.kind) !== undefined
+      def.agent?.output?.kind === 'structured' || registry.structuredOutput(def.kind) !== undefined
     if (hasPostOps && def.agent && !declaresStructured) {
       problems.push({
         severity: 'warn',
@@ -176,7 +178,7 @@ export function collectRegistrationProblems(
  * problem and logging `warn`-severity ones. Call once at facade boot, after every `register*`
  * import side effect + provider wiring, before serving requests.
  */
-export function validateRegistrations(opts: ValidateRegistrationsOptions = {}): void {
+export function validateRegistrations(opts: ValidateRegistrationsOptions): void {
   const problems = collectRegistrationProblems(opts)
   if (opts.onWarn) {
     for (const w of problems.filter((p) => p.severity === 'warn')) opts.onWarn(w)
@@ -196,7 +198,7 @@ export function validateRegistrations(opts: ValidateRegistrationsOptions = {}): 
 let validated = false
 
 /** Run {@link validateRegistrations} at most once per process. Safe to call from a per-request build. */
-export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions = {}): void {
+export function validateRegistrationsOnce(opts: ValidateRegistrationsOptions): void {
   if (validated) return
   // Flip the guard only AFTER a clean validation. Setting it first would poison the guard on a
   // throw: on the Worker (where this runs inside `fetch` on the first request) a misconfigured

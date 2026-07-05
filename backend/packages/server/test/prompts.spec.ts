@@ -11,6 +11,9 @@ import {
   testerInfraSpec,
   UI_TEST_REPORT_SHAPE_HINT,
 } from '../src/agents/prompts.js'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
+
+const agentKindRegistry = defaultAgentKindRegistry()
 
 // Characterisation tests pinning the per-kind prompt material that was extracted verbatim
 // from ContainerAgentExecutor.ts into prompts.ts. They lock in the deterministic prompt
@@ -108,6 +111,7 @@ describe('onCallUserPrompt', () => {
         },
       }),
       repo,
+      agentKindRegistry,
     )
     expect(p).toContain('#7')
     expect(p).toContain('git log --oneline -n 50')

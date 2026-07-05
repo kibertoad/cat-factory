@@ -23,9 +23,15 @@ import {
   ConflictError,
   CredentialRequiredError,
   requireWorkspace,
+  ValidationError,
 } from '@cat-factory/kernel'
+import type { IssueIntakeConfig } from '@cat-factory/contracts'
+import type { TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
-import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
+import {
+  assertPipelineLaunchable,
+  pipelineHasEnabledBugIntake,
+} from '../pipelines/pipelineShape.js'
 import { computeNextRun } from './schedule.logic.js'
 
 export interface RecurringPipelineServiceDependencies {
@@ -45,6 +51,13 @@ export interface RecurringPipelineServiceDependencies {
    */
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
+  /**
+   * Resolves whether a task source is a connected/enabled source for the workspace, so a
+   * `bug-intake` pipeline's schedule can be validated to carry an `issueIntake` config pointed at a
+   * usable source. Absent (no task sources wired on this deployment) → only the presence check
+   * runs (there is no connection registry to consult).
+   */
+  taskConnectionService?: TaskConnectionService
 }
 
 /**
@@ -103,6 +116,7 @@ export class RecurringPipelineService {
   private readonly clock: Clock
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
+  private readonly taskConnectionService?: TaskConnectionService
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -115,10 +129,43 @@ export class RecurringPipelineService {
     this.clock = deps.clock
     this.serviceRepository = deps.serviceRepository
     this.workspaceMountRepository = deps.workspaceMountRepository
+    this.taskConnectionService = deps.taskConnectionService
   }
 
   private requireWorkspace(workspaceId: string) {
     return requireWorkspace(this.workspaceRepository, workspaceId)
+  }
+
+  /**
+   * A `bug-intake` pipeline pulls its work from the schedule's tracker board, so attaching one
+   * REQUIRES an `issueIntake` config whose source is a connected task source — otherwise every
+   * fire would silently no-op. Validated at both launch boundaries (create / update). A pipeline
+   * with no enabled `bug-intake` step imposes no requirement (an unrelated schedule may still
+   * carry an `issueIntake` config harmlessly). When no task-connection service is wired (no task
+   * sources on this deployment) the connected-source check is skipped; the presence check stands.
+   */
+  private async assertIntakeConfigured(
+    workspaceId: string,
+    pipeline: Pipeline,
+    issueIntake: IssueIntakeConfig | undefined,
+  ): Promise<void> {
+    if (!pipelineHasEnabledBugIntake(pipeline.agentKinds, pipeline.enabled)) return
+    if (!issueIntake) {
+      throw new ValidationError(
+        "A 'bug-intake' pipeline needs an issue-intake configuration (source, board and predicates) on its schedule.",
+      )
+    }
+    // `isOffered` (available AND enabled), NOT `isEnabled`: the toggle defaults ON for a
+    // never-connected source (no settings row), so `isEnabled` would wave through a source that
+    // has no connection to search — the exact silent-no-op this guard exists to reject.
+    if (
+      this.taskConnectionService &&
+      !(await this.taskConnectionService.isOffered(workspaceId, issueIntake.source))
+    ) {
+      throw new ValidationError(
+        `The '${issueIntake.source}' task source is not connected for this workspace — connect it before scheduling bug intake from it.`,
+      )
+    }
   }
 
   async list(workspaceId: string): Promise<PipelineSchedule[]> {
@@ -172,6 +219,7 @@ export class RecurringPipelineService {
       input.pipelineId,
     )
     assertSchedulable(pipeline)
+    await this.assertIntakeConfigured(workspaceId, pipeline, input.issueIntake)
     // A CADENCE schedule is defined by its cadence: reject a missing one (before any block is
     // materialised) rather than silently inventing a hidden every-24h/UTC schedule that fires
     // at a time the user never chose. Only an on-demand schedule may omit a recurrence.
@@ -219,6 +267,9 @@ export class RecurringPipelineService {
       name: input.name,
       recurrence,
       onDemand: input.onDemand,
+      // Issue-intake scope + predicates (persisted verbatim; Phase E's schedule
+      // validation enforces presence + a connected source for a bug-intake pipeline).
+      ...(input.issueIntake ? { issueIntake: input.issueIntake } : {}),
       enabled: input.enabled,
       lastRunAt: null,
       // First fire is one interval out, rolled into the allowed window. Stored even for an
@@ -243,13 +294,14 @@ export class RecurringPipelineService {
   ): Promise<PipelineSchedule> {
     await this.requireWorkspace(workspaceId)
     const existing = assertFound(await this.schedules.get(workspaceId, id), 'Schedule', id)
+    let changedPipeline: Pipeline | undefined
     if (patch.pipelineId !== undefined) {
-      const pipeline = assertFound(
+      changedPipeline = assertFound(
         await this.pipelineRepository.get(workspaceId, patch.pipelineId),
         'Pipeline',
         patch.pipelineId,
       )
-      assertSchedulable(pipeline)
+      assertSchedulable(changedPipeline)
     }
     const recurrence = patch.recurrence ?? existing.recurrence
     const updated: PipelineSchedule = {
@@ -262,6 +314,26 @@ export class RecurringPipelineService {
       ...(patch.recurrence !== undefined
         ? { nextRunAt: computeNextRun(this.clock.now(), recurrence) }
         : {}),
+    }
+    // `issueIntake` is a tri-state patch: omitted = unchanged (kept by `...existing`),
+    // null = clear (drop the optional key), value = replace.
+    if (patch.issueIntake !== undefined) {
+      if (patch.issueIntake) updated.issueIntake = patch.issueIntake
+      else delete updated.issueIntake
+    }
+    // Re-validate the intake requirement whenever the pipeline or the intake config changed, over
+    // the EFFECTIVE pipeline (the patched one, else the existing schedule's) and the merged config
+    // — so clearing `issueIntake` on a bug-intake schedule (or pointing it at a disconnected source)
+    // is rejected up front rather than silently no-opping every future fire.
+    if (patch.pipelineId !== undefined || patch.issueIntake !== undefined) {
+      const effectivePipeline =
+        changedPipeline ??
+        assertFound(
+          await this.pipelineRepository.get(workspaceId, existing.pipelineId),
+          'Pipeline',
+          existing.pipelineId,
+        )
+      await this.assertIntakeConfigured(workspaceId, effectivePipeline, updated.issueIntake)
     }
     await this.schedules.upsert(workspaceId, updated)
     if (patch.name !== undefined) {

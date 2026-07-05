@@ -1,0 +1,1 @@
+ALTER TABLE "blocks" ADD COLUMN "peer_pull_requests" text;

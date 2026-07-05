@@ -15,6 +15,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, requireWorkspace, ValidationError } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type {
   CreateSandboxExperimentInput,
   CreateSandboxFixtureInput,
@@ -97,6 +98,8 @@ export interface SandboxServiceDependencies {
   workspaceRepository: WorkspaceRepository
   idGenerator: IdGenerator
   clock: Clock
+  /** App-owned agent-kind registry, for the live baseline system-prompt read. */
+  agentKindRegistry: AgentKindRegistry
   /** The routing default model ref, used to default an experiment's judge model. */
   defaultModelRef?: ModelRef
 }
@@ -133,7 +136,7 @@ export class SandboxService {
   /** The shipped baselines (synthetic) followed by stored candidate versions. */
   async listPrompts(workspaceId: string, agentKind?: string): Promise<SandboxPromptVersion[]> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const baselines = listBaselines(this.deps.clock.now())
+    const baselines = listBaselines(this.deps.clock.now(), this.deps.agentKindRegistry)
     const candidates = agentKind
       ? await this.deps.sandboxPromptVersionRepository.listByKind(workspaceId, agentKind)
       : await this.deps.sandboxPromptVersionRepository.list(workspaceId)
@@ -181,7 +184,9 @@ export class SandboxService {
       labels: input.labels ?? [],
     }
     if (input.parentId.startsWith('baseline:')) {
-      const baseline = listBaselines(this.deps.clock.now()).find((b) => b.id === input.parentId)
+      const baseline = listBaselines(this.deps.clock.now(), this.deps.agentKindRegistry).find(
+        (b) => b.id === input.parentId,
+      )
       if (!baseline) throw new ValidationError(`Unknown baseline prompt "${input.parentId}"`)
       const meta = sandboxKindMeta(baseline.agentKind)
       const version = firstVersionFromBaseline(
@@ -331,7 +336,7 @@ export class SandboxService {
 
   /** Resolve the shipped baseline a clone derives from (by base-prompt id, else by kind). */
   private resolveBaseline(agentKind: string, basePromptId: string | null): SandboxPromptVersion {
-    const baselines = listBaselines(this.deps.clock.now())
+    const baselines = listBaselines(this.deps.clock.now(), this.deps.agentKindRegistry)
     const wantedId = basePromptId ? `baseline:${basePromptId}` : baselineVersionId(agentKind)
     const source =
       baselines.find((b) => b.id === wantedId) ?? baselines.find((b) => b.agentKind === agentKind)

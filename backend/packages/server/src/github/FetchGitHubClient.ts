@@ -66,6 +66,8 @@ const API_VERSION = '2022-11-28'
 const ACCEPT = 'application/vnd.github+json'
 const PER_PAGE = 100
 const MAX_PAGES = 10
+/** Neutral default colour for a label we create on the fly (GitHub requires a colour). */
+const DEFAULT_LABEL_COLOR = 'ededed'
 
 export interface FetchGitHubClientDependencies {
   /**
@@ -648,10 +650,21 @@ export class FetchGitHubClient implements GitHubClient {
     installationId: number,
     query: string,
     limit = 20,
+    order?: 'created-asc',
+    page = 1,
   ): Promise<GitHubIssueSearchHit[]> {
     const q = encodeURIComponent(`${query} is:issue`)
     const per = Math.min(Math.max(limit, 1), 100)
-    const { json } = await this.request(`/search/issues?q=${q}&per_page=${per}`, { installationId })
+    // Oldest-first (issue intake) rides the search API's sort/order params — the
+    // in-query `sort:` syntax is a web-UI affordance the REST API doesn't honor.
+    const sort = order === 'created-asc' ? '&sort=created&order=asc' : ''
+    const pageParam = page > 1 ? `&page=${page}` : ''
+    const { json } = await this.request(
+      `/search/issues?q=${q}&per_page=${per}${sort}${pageParam}`,
+      {
+        installationId,
+      },
+    )
     const items = ((json as { items?: GhSearchIssueItem[] } | null)?.items ?? []).filter(
       (i) => !i.pull_request,
     )
@@ -1107,6 +1120,33 @@ export class FetchGitHubClient implements GitHubClient {
       installationId,
       method: 'PATCH',
       body: { state: 'closed', state_reason: 'completed' },
+    })
+  }
+
+  async applyIssueLabel(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void> {
+    // Ensure the label exists first — a 422 means it already does, which is fine.
+    // (Relying on the add-labels endpoint to auto-create is undocumented behaviour.)
+    // GitHub's create-label endpoint requires BOTH `name` and `color`; omitting the
+    // colour makes every create fail 422 (missing field), which the catch below would
+    // otherwise mistake for "already exists" — so send a neutral default colour.
+    try {
+      await this.request(`/repos/${ref.owner}/${ref.repo}/labels`, {
+        installationId,
+        method: 'POST',
+        body: { name: label, color: DEFAULT_LABEL_COLOR },
+      })
+    } catch (err) {
+      if (!(err instanceof GitHubApiError && err.status === 422)) throw err
+    }
+    await this.request(`/repos/${ref.owner}/${ref.repo}/issues/${number}/labels`, {
+      installationId,
+      method: 'POST',
+      body: { labels: [label] },
     })
   }
 

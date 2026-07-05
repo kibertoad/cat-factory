@@ -51,6 +51,95 @@ describe('parseAgentJob', () => {
     ).toThrow(/repo\.provider/)
   })
 
+  // Multi-repo coding (service-connections phase 3): the peer-repo list is validated + its
+  // clone URLs host-allowlisted exactly like the primary repo.
+  it('parses peerRepos (validated + host-allowlisted like the primary)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'email',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/email.git',
+          },
+          frameId: 'frame-email',
+          newBranch: 'cat-factory/blk',
+          pr: { title: 'Wire email', body: 'body' },
+        },
+      ],
+    })
+    expect(job.peerRepos).toHaveLength(1)
+    expect(job.peerRepos?.[0]).toMatchObject({
+      frameId: 'frame-email',
+      newBranch: 'cat-factory/blk',
+      repo: { owner: 'acme', name: 'email' },
+      pr: { title: 'Wire email' },
+    })
+  })
+
+  it('rejects a peer repo whose clone URL host is not allow-listed (token-exfil guard)', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        peerRepos: [
+          {
+            repo: {
+              owner: 'evil',
+              name: 'x',
+              baseBranch: 'main',
+              cloneUrl: 'https://evil.example.com/evil/x.git',
+            },
+            newBranch: 'cat-factory/blk',
+          },
+        ],
+      }),
+    ).toThrow(/peerRepos\[0\]\.repo\.cloneUrl/)
+  })
+
+  it('validates newBranch on a peer repo when present (a malformed one throws)', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        peerRepos: [
+          {
+            repo: { ...base.repo, name: 'email', cloneUrl: 'https://github.com/acme/email.git' },
+            newBranch: '',
+          },
+        ],
+      }),
+    ).toThrow(/peerRepos\[0\]\.newBranch/)
+  })
+
+  it('parses a READ-ONLY explore peer repo (no newBranch / no pr — bug-investigator fan-out)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'explore',
+      output: { kind: 'structured' },
+      peerRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'email',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/email.git',
+          },
+          frameId: 'frame-email',
+        },
+      ],
+    })
+    expect(job.peerRepos).toHaveLength(1)
+    expect(job.peerRepos?.[0]).toMatchObject({ frameId: 'frame-email', repo: { name: 'email' } })
+    // A read-only explore peer carries no work branch and no PR — it exists only to be read.
+    expect(job.peerRepos?.[0]?.newBranch).toBeUndefined()
+    expect(job.peerRepos?.[0]?.pr).toBeUndefined()
+  })
+
   it('accepts a structured explore job', () => {
     const job = parseAgentJob({
       ...base,

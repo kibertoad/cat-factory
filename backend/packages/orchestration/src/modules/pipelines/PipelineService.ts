@@ -19,7 +19,11 @@ import type {
 } from '@cat-factory/kernel'
 import type { IdGenerator } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
-import { assertPipelineLaunchable, validatePipelineShape } from './pipelineShape.js'
+import {
+  assertPipelineLaunchable,
+  pipelineHasEnabledBugIntake,
+  validatePipelineShape,
+} from './pipelineShape.js'
 
 /**
  * The post-release-health gate watches a released PR's observability signals, so it is
@@ -228,6 +232,24 @@ export class PipelineService {
       if (schedules.some((s) => s.pipelineId === id)) {
         throw new ConflictError(
           'This pipeline is attached to a recurring schedule, so it cannot be made one-off. Detach the schedule first.',
+        )
+      }
+    }
+    // The other pipeline-edit dual of the schedule-attach gate: adding (or enabling) a `bug-intake`
+    // step pulls each attached schedule's work from its `issueIntake` config, so a schedule with no
+    // config would then silently no-op every fire. `RecurringPipelineService` guards this at the
+    // schedule boundary, but a pipeline edit never re-runs that validation — reject here instead,
+    // pointing the user at the schedule. Only relevant once the edit yields an enabled bug-intake
+    // step; a schedule with a config is untouched.
+    if (
+      pipelineHasEnabledBugIntake(agentKinds, enabled) &&
+      (input.agentKinds || input.enabled) &&
+      this.pipelineScheduleRepository
+    ) {
+      const schedules = await this.pipelineScheduleRepository.list(workspaceId)
+      if (schedules.some((s) => s.pipelineId === id && !s.issueIntake)) {
+        throw new ConflictError(
+          'This pipeline is attached to a recurring schedule with no issue-intake configuration, so a bug-intake step cannot be enabled. Configure issue intake on the schedule first.',
         )
       }
     }

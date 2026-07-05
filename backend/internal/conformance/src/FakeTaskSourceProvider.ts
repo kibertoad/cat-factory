@@ -1,4 +1,5 @@
 import type {
+  IssueIntakeQuery,
   TaskContent,
   TaskCredentials,
   TaskSearchResult,
@@ -35,6 +36,8 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   /** Canned search hits + recorded queries, for the search endpoint tests. */
   searchResults: TaskSearchResult[] = []
   readonly searchCalls: { credentials: TaskCredentials; query: string }[] = []
+  /** Recorded issue-intake (`bug-intake`) queries, for the intake-step tests. */
+  readonly intakeCalls: { credentials: TaskCredentials; query: IssueIntakeQuery }[] = []
   /** Canned setup-check verdict + recorded calls, for the diagnostics endpoint tests. */
   diagnostic: Omit<TaskSourceDiagnostic, 'source'> = { ok: true, status: 'ready', message: 'ok' }
   readonly diagnoseCalls: { workspaceId: string; credentials: TaskCredentials | null }[] = []
@@ -98,6 +101,41 @@ export class FakeTaskSourceProvider implements TaskSourceProvider {
   async search(credentials: TaskCredentials, query: string): Promise<TaskSearchResult[]> {
     this.searchCalls.push({ credentials, query })
     return this.searchResults
+  }
+
+  /**
+   * Issue-intake predicate search (the `bug-intake` step): derive hits from the registered
+   * issues in insertion (oldest-first) order, honouring the exclusion list + the title/label
+   * predicates, capped at `limit`. Deterministic and network-free, so the shared conformance
+   * suite can drive intake pickup + the no-match no-op against a controlled backlog.
+   */
+  async searchIssues(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<TaskSearchResult[]> {
+    this.intakeCalls.push({ credentials, query })
+    const excluded = new Set((query.excludeExternalIds ?? []).map((id) => id.toUpperCase()))
+    const hits: TaskSearchResult[] = []
+    for (const issue of this.issues.values()) {
+      if (excluded.has(issue.externalId.toUpperCase())) continue
+      if (
+        query.titleFragment &&
+        !issue.title.toLowerCase().includes(query.titleFragment.toLowerCase())
+      ) {
+        continue
+      }
+      if (query.labels?.length && !query.labels.every((l) => issue.labels.includes(l))) continue
+      hits.push({
+        source: this.kind,
+        externalId: issue.externalId,
+        title: issue.title,
+        url: issue.url,
+        status: issue.status,
+        excerpt: '',
+      })
+      if (hits.length >= query.limit) break
+    }
+    return hits
   }
 
   async diagnose(input: {

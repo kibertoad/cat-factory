@@ -55,22 +55,42 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
 
 | Item                                                                                                     | Status |
 | -------------------------------------------------------------------------------------------------------- | ------ |
-| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | todo   |
-| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | todo   |
-| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | todo   |
-| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | todo   |
-| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | todo   |
-| Conformance: two-repo coding run records both PRs on both runtimes                                       | todo   |
+| `resolveRepoTargets` (plural) beside the singular resolver; dedupe by repo; monorepo `serviceDirectory`s | done   |
+| `AgentJob.peerRepos` + sibling-checkout workspace layout in the harness (image bump)                     | done   |
+| Push/PR fan-out: same `cat-factory/<blockId>` branch per repo, PR only for dirty repos                   | done   |
+| `AgentRunResult.peerPullRequests` + `block.peerPullRequests` + `allPullRequests(block)` helper           | done   |
+| Multi-repo prompt section (peer roles from connection descriptions) + `AGENTS.md` note                   | done   |
+| Conformance: two-repo coding run records both PRs on both runtimes                                       | done   |
 
 ### Phase 4 — gates + merger generalization (design in the doc, §Phase 4)
 
-| Item                                                                                                   | Status |
-| ------------------------------------------------------------------------------------------------------ | ------ |
-| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | todo   |
-| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | todo   |
-| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | todo   |
-| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | todo   |
-| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | todo   |
+Implemented in **PR #761** (branch off #752). **Zero harness edits** (per the bug-triage
+tracker convention): the ci-fixer reuses the existing `runMultiRepoCoding` sibling-checkout
+harness path via a widened `peerRepos` job body — no runner-image bump. `step.gate.headShas` /
+`conflictTarget` ride the existing gate-state JSON (no migration).
+
+| Item                                                                                                   | Status                                     |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| CI gate aggregates across PRs (`step.gate.headShas` map); fixer runs in the sibling-checkout container | done                                       |
+| Conflicts gate per PR; single-repo conflict-resolver dispatched at the first conflicted repo           | done (detection + `conflictTarget`; see †) |
+| Merger: combined-diff assessment + all-green-then-merge-all in provider-first order                    | done (merge-all; combined-diff, see ‡)     |
+| Mid-sequence merge failure → block `blocked` + notification enumerating merged vs unmerged             | done                                       |
+| Conformance: multi-PR gate + merge-all behaviour on both runtimes                                      | done (CI aggregate cross-runtime; §)       |
+
+- **† Conflict-resolver peer-repo targeting.** The conflicts gate now probes mergeability across
+  every PR and records the first conflicted repo on `step.gate.conflictTarget`. Dispatching the
+  single-repo conflict-resolver AT a peer repo (vs the own repo) is a follow-up: a peer-only
+  conflict fast-fails to the "resolve manually" give-up — the gate returns `escalatable: false`
+  so the engine skips the own-repo resolver (which can't reach the peer) instead of burning the
+  whole attempt budget on it — rather than auto-resolving. The own-repo conflict path is unchanged.
+- **‡ Merger combined-diff.** The engine merges ALL PRs (`orderPrsForMerge`), but the `merger`
+  agent still scores only the own-repo diff (unchanged harness — zero-harness-edit rule). Scoring
+  the combined sibling-workspace diff needs a harness bump and is a follow-up.
+- **§ Merge-all conformance.** Multi-repo CI aggregation + ci-fixer escalation is asserted on both
+  runtimes in the conformance suite; the merge-all ordering + provider fan-out are unit-tested
+  (`mergeOrder.logic.test.ts`, `multiRepoGateProviders.spec.ts`). A full merge-all conformance case
+  needs a fake `PullRequestMerger` wired through the harness (the merger isn't a gate provider) — a
+  follow-up.
 
 ## Conventions & gotchas carried between iterations
 
@@ -96,3 +116,54 @@ shaped and validated end to end: consumer-side JSON edges on the frame block
   the asymmetry is deliberate.
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
   with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
+- **Phase 3 carried-forward notes:**
+  - `resolveRepoTargets` (`@cat-factory/server`, beside the singular resolver) shares the same
+    store deps, hoists the installation + projection reads ONCE and batches involved frames via
+    `serviceRepository.listByFrameBlocks` — do NOT loop the singular resolver per frame (N+1).
+    It returns `RepoCheckout[]` (primary first) deduped by `owner/name`; each carries the
+    involved frames co-located in it (`involved[]`) so a monorepo hosting several involved
+    services is ONE checkout with all their subdirs noted for the prompt.
+  - The fan-out is gated to the `coder` implementer (`IMPLEMENTER_AGENT_KIND` in
+    `ContainerAgentExecutor`) and only when `context.involvedServices` is non-empty. In
+    multi-service mode the primary's `serviceDirectory` scoping is DROPPED so the agent works at
+    the repo root and can reach every involved subtree (co-located monorepo services included);
+    the "Multi-repo workspace" prompt section (`renderMultiRepoWorkspaceSection`) names where
+    each service lives. Phase 4 must extend this to the gate helpers (`ci-fixer` etc.) which are
+    still single-repo (they take the `onPr` path, which does NOT emit `peerRepos`).
+  - The harness multi-repo flow (`runMultiRepoCoding`) is deliberately simpler than the
+    single-repo `runCodingAgent`: NO mid-run checkpoint pushes, NO warm-pool persistent checkout,
+    NO follow-up streaming. If phase 4 needs any of those across repos, generalize there.
+  - `peerPullRequests` is engine-written (RunDispatcher), NOT in `updateBlockSchema`; the JSON
+    column uses the empty-array-clears mapper pattern. The conformance test exercises the
+    RECORDING + round-trip (the fake reports peer PRs); the resolve→peerRepos dispatch path is
+    unit-tested in `resolveRepoTarget.spec.ts` + the server job-body specs (the fake never runs
+    the harness). Phase 4's CI/merge-all reads `allPullRequests(block)`.
+- **Phase 3 review-fix follow-ups (PR #752 review; the coordination + prompt fixes LANDED,
+  the items below are the deliberately-deferred remainder):**
+  - **Landed** (see the review-fixes commit): the sibling checkout dir is now deterministic
+    (`owner__name`) and computed identically in the harness (`siblingDir`, `coding-agent.ts`)
+    and the backend prompt (`siblingCheckoutDir`, `jobBody.ts`) so the prompt never names a
+    directory that doesn't exist; `renderMultiRepoWorkspaceSection` renders a distinct
+    "multi-service repository" (single-repo, one PR) shape when there are no peer checkouts
+    instead of falsely claiming siblings; the multi-repo prompt tells the agent to commit
+    INSIDE each repo dir (the workspace root is not a git repo — untracked files are lost);
+    `streamFollowUps` is no longer advertised on the multi-repo path (which never tails the
+    sentinel); resumed multi-repo legs refresh from base like the single-repo path; a run
+    whose own service was a no-op but a peer changed surfaces the peer PRs in its output; and
+    the multi-repo dispatch reuses the already-resolved primary `RepoTarget` (no second
+    installation read / ancestry walk).
+  - **Deferred — all-frame peer-PR attribution.** A shared-monorepo peer checkout can carry
+    `>1` involved frame (`RepoCheckout.involved[]`), but the peer PR is attributed to only
+    `involved[0].frameId` end-to-end (`PeerRepoSpec.frameId`, `peerPullRequestSchema.frameId`,
+    the gate `conflictTarget`, `mergeOrder`). Phase 4 keys its gates + merge-order off the
+    SINGULAR `frameId`, so widening the whole chain to `frameIds[]` (contracts → kernel →
+    harness → server → gates → mergeOrder + tests) is its own isolated change, not a rider on
+    the review fixes. Until then a monorepo hosting several involved services links its single
+    PR to just the first frame.
+  - **Deferred — `runMultiRepoCoding` ⇄ `runCodingAgent` duplication.** The multi-repo flow
+    re-implements the no-op-result object, the `hasWork`/resumed-branch detection, and the
+    involved-frame level resolution rather than sharing helpers with the single-repo path /
+    `walkToRepo`. Extract shared `noChangesResult` / `computeHasWork` / `resolveLevel` helpers
+    when Phase 4 next touches these flows. Multi-repo clone + push/PR are also still sequential
+    per repo (could be `Promise.all`), and it still lacks mid-run checkpoint pushing (the
+    documented first-cut simplification) — an evicted large multi-repo run re-runs from scratch.

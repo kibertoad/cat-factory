@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { serve } from '@hono/node-server'
 import {
+  type AgentKindRegistry,
   DEFAULT_APP_CACHES_PROFILE,
   NodeRealtimeHub,
   createApp,
@@ -42,6 +43,13 @@ export async function startLocal(
   options: {
     env?: NodeJS.ProcessEnv
     host?: string
+    /**
+     * App-owned DI seam for custom agent kinds — a deployment news a
+     * `defaultAgentKindRegistry()`, registers its own kinds on it, and passes it here.
+     * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
+     * Absent → the built-in-only default.
+     */
+    agentKindRegistry?: AgentKindRegistry
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
@@ -96,12 +104,13 @@ export async function startLocal(
   // state lives on the mothership and runs are driven by the in-process work runner. Take the
   // dedicated boot path instead of the Node facade's `start()` (which requires Postgres).
   if (isMothershipMode(localized)) {
-    return startLocalMothership(localized, options.host)
+    return startLocalMothership(localized, options.host, options.agentKindRegistry)
   }
 
   return start({
     env,
     host: options.host,
+    agentKindRegistry: options.agentKindRegistry,
     buildContainer: (o) => buildLocalContainer(o),
     // Pass the repo projection through live: local mode seeds `github_repos` via the
     // out-of-process `link-repo` CLI and runs single-node with no invalidation bus, so an
@@ -132,6 +141,7 @@ export async function startLocal(
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host?: string,
+  agentKindRegistry?: AgentKindRegistry,
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   logger.info(
     { mothership: env.LOCAL_MOTHERSHIP_URL },
@@ -142,10 +152,11 @@ async function startLocalMothership(
   // mode is always single-node, so the bare hub IS the real-time sink — no cross-node
   // propagator (Redis) is wired here.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildLocalContainer({ env, realtimeSink: realtimeHub })
+  const container = buildLocalContainer({ env, realtimeSink: realtimeHub, agentKindRegistry })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
   validateRegistrationsOnce({
+    agentKindRegistry: container.agentKindRegistry,
     onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
   })
 

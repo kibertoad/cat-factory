@@ -110,6 +110,16 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
       custom: result.custom,
     }
   }
+  // PRs a multi-repo run opened in connected services' repos (service-connections phase 3),
+  // beside the own-service PR. Lifted onto `AgentRunResult.peerPullRequests` for the engine
+  // to record on the block; absent for a single-repo run.
+  const peerPullRequests = mapPeerPullRequests(result.peerPullRequests)
+  // The peer PRs a multi-repo run opened, rendered for the human-readable output. Shared by
+  // BOTH the own-PR branch and the no-own-PR branch below, so a run whose own service was a
+  // no-op but a peer changed still lists the peer PR(s) instead of reading "No changes …".
+  const peerNote = peerPullRequests?.length
+    ? `\n${peerPullRequests.map((p) => `PR (${p.repo}): ${p.ref.url}`).join('\n')}`
+    : ''
   // A coding job that opened a PR (the coder + any PR-opening coding agent): surface the PR
   // STRUCTURALLY so the engine records it on the block and the board links to it. Checked
   // BEFORE `pushed` — a coding run reports BOTH `pushed:true` AND `prUrl`, so the PR must win
@@ -117,7 +127,7 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
   if (result.prUrl) {
     const summary = result.summary?.trim() || 'Implementation complete.'
     return {
-      output: `${summary}\n\nPR: ${result.prUrl}`,
+      output: `${summary}\n\nPR: ${result.prUrl}${peerNote}`,
       pullRequest: {
         url: result.prUrl,
         ...(prNumberFromUrl(result.prUrl) !== undefined
@@ -125,20 +135,50 @@ export function toRunResult(result: RunnerJobResult, agentKind?: string): AgentR
           : {}),
         ...(result.branch ? { branch: result.branch } : {}),
       },
+      ...(peerPullRequests?.length ? { peerPullRequests } : {}),
     }
   }
   // An in-place coding job with no PR (ci-fixer / fixer / conflict-resolver): it pushed back
   // onto the existing branch (or was a clean no-op). The engine's CI / conflicts gate
   // re-checks the real signal regardless; map to a sensible output. The agent's own summary
-  // is used when present (e.g. the conflict-resolver's "Resolved merge conflicts …").
+  // is used when present (e.g. the conflict-resolver's "Resolved merge conflicts …"). A
+  // multi-repo run whose OWN service was a no-op but a peer changed still surfaces the peer PRs
+  // (both structurally and in the rendered output via `peerNote`).
   if (result.pushed !== undefined) {
+    const base =
+      result.summary?.trim() ||
+      (result.pushed
+        ? 'Pushed changes to the branch.'
+        : peerPullRequests?.length
+          ? 'No changes in the primary repository.'
+          : 'No changes were produced.')
     return {
-      output:
-        result.summary?.trim() ||
-        (result.pushed ? 'Pushed changes to the branch.' : 'No changes were produced.'),
+      output: `${base}${peerNote}`,
+      ...(peerPullRequests?.length ? { peerPullRequests } : {}),
     }
   }
   return { output: result.summary?.trim() || 'Implementation complete.' }
+}
+
+/**
+ * Map a multi-repo run's peer-PR entries (harness `{ repo, frameId?, prUrl, branch }`) into
+ * the engine's `AgentRunResult.peerPullRequests` (`{ repo, frameId?, ref: PullRequestRef }`),
+ * deriving the PR number from the URL like the own-service PR. Returns undefined when the run
+ * reported none, so a single-repo run's result is byte-identical to before.
+ */
+function mapPeerPullRequests(
+  peers: RunnerJobResult['peerPullRequests'],
+): AgentRunResult['peerPullRequests'] | undefined {
+  if (!peers?.length) return undefined
+  return peers.map((p) => ({
+    repo: p.repo,
+    ...(p.frameId ? { frameId: p.frameId } : {}),
+    ref: {
+      url: p.prUrl,
+      ...(prNumberFromUrl(p.prUrl) !== undefined ? { number: prNumberFromUrl(p.prUrl) } : {}),
+      ...(p.branch ? { branch: p.branch } : {}),
+    },
+  }))
 }
 
 /** Extract the PR number from a GitHub pull-request URL (`.../pull/42`). */

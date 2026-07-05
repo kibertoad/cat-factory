@@ -20,6 +20,7 @@ import type {
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
 import { CODE_AWARE_TRAIT, DOC_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   boundServiceFrameIds,
   buildFrontendRunNotes,
@@ -114,6 +115,8 @@ export interface AgentContextBuilderDeps {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   accountRepository: AccountRepository
+  /** App-owned agent-kind registry: drives the `code-aware` fragment-folding decision. */
+  agentKindRegistry: AgentKindRegistry
   documents?: DocumentRepository
   /**
    * Optional: canonicalise a URL named in a block's description to the (source,
@@ -547,7 +550,10 @@ export class AgentContextBuilder {
     // reused across dispatches (a gate/tester host, then its code-aware helper, then a
     // re-test) must not keep reporting a prior round's fragments: a non-code-aware kind
     // receives none, so clear it here rather than leaving a stale selection behind.
-    if (!hasTrait(agentKind, CODE_AWARE_TRAIT) && !hasTrait(agentKind, DOC_AWARE_TRAIT)) {
+    if (
+      !hasTrait(agentKind, CODE_AWARE_TRAIT, this.deps.agentKindRegistry) &&
+      !hasTrait(agentKind, DOC_AWARE_TRAIT, this.deps.agentKindRegistry)
+    ) {
       step.selectedFragmentIds = undefined
       return null
     }
