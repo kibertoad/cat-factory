@@ -607,4 +607,12 @@ const ITEM_ICON: Record<string, string> = {
 .followup-blink {
   animation: followup-blink 1.4s ease-in-out infinite;
 }
+/* These decorative attention halos carry no information the static state lacks, so
+   silence them under prefers-reduced-motion (matches the board-pulse rule in main.css). */
+@media (prefers-reduced-motion: reduce) {
+  .step-active,
+  .followup-blink {
+    animation: none;
+  }
+}
 </style>

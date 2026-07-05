@@ -12,6 +12,7 @@ import type {
   RequirementPriority,
   SpecModule,
 } from '~/types/spec'
+import IconButton from '~/components/common/IconButton.vue'
 
 const { t } = useI18n()
 const board = useBoardStore()
@@ -176,7 +177,14 @@ function kindLabel(item: RequirementItem): string {
                 {{ t('spec.mode.gherkin') }}
               </UButton>
             </div>
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
+            <IconButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :label="t('common.close')"
+              @click="close"
+            />
           </div>
         </header>
 

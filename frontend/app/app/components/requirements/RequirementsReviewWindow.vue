@@ -10,6 +10,7 @@
 import { parseOutputOutline } from '~/utils/agentOutput'
 import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import type {
   RequirementRecommendation,
   RequirementReview,
@@ -489,7 +490,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               :step-index="stepIndex"
               @restarted="close"
             />
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
+            <IconButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :label="t('common.close')"
+              @click="close"
+            />
           </div>
         </header>
 
