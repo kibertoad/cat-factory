@@ -48,14 +48,14 @@ export { DEFAULT_APP_CACHES_PROFILE, type AppCachesProfile } from '@cat-factory/
 export { createNodeGateways } from './gateways.js'
 export { createNodeModelProviderResolver } from './modelProvider.js'
 
-// Installation-level extension points (mirroring the Worker facade): a deployment —
-// typically a proprietary org package — registers custom agent kinds and predefined
-// pipelines at startup (before `start()`), and the shared prompt catalog / workspace
-// seeding pick them up. Bedrock-style model providers mix in via createNodeModelProvider.
+// Installation-level extension point (mirroring the Worker facade): a deployment news a
+// `defaultAgentKindRegistry()`, registers its own kinds on it by reference, and injects it
+// through `buildNodeContainer`/`start()`'s `agentKindRegistry` option — the app-owned DI seam
+// that replaces the old module-global `registerAgentKind` side effect. Bedrock-style model
+// providers mix in via createNodeModelProvider.
 export {
-  registerAgentKind,
-  registerAgentKinds,
-  clearRegisteredAgentKinds,
+  AgentKindRegistry,
+  defaultAgentKindRegistry,
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'

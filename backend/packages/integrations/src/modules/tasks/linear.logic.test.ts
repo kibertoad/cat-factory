@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildLinearIntakeFilter,
   linearIssueSearchHit,
   mapLinearChildIds,
   mapLinearComments,
+  mapLinearIntakeResults,
   mapLinearIssue,
   mapLinearRelations,
   mapLinearSearchResults,
@@ -173,5 +175,60 @@ describe('mapLinearTeams', () => {
       { id: 't1', name: 'Engineering', key: 'ENG' },
       { id: 't2', name: 't2', key: '' },
     ])
+  })
+})
+
+describe('buildLinearIntakeFilter', () => {
+  it('compiles every predicate onto one IssueFilter', () => {
+    expect(
+      buildLinearIntakeFilter({
+        board: { linearTeamId: 'team-uuid' },
+        titleFragment: 'crash',
+        labels: ['bug', 'triage'],
+        limit: 5,
+      }),
+    ).toEqual({
+      state: { type: { nin: ['completed', 'canceled'] } },
+      team: { id: { eq: 'team-uuid' } },
+      title: { containsIgnoreCase: 'crash' },
+      and: [
+        { labels: { some: { name: { eq: 'bug' } } } },
+        { labels: { some: { name: { eq: 'triage' } } } },
+      ],
+    })
+  })
+
+  it('always filters to open issues even with no predicates', () => {
+    expect(buildLinearIntakeFilter({ board: {}, limit: 5 })).toEqual({
+      state: { type: { nin: ['completed', 'canceled'] } },
+    })
+  })
+})
+
+describe('mapLinearIntakeResults', () => {
+  const payload = {
+    issues: {
+      nodes: [
+        { identifier: 'ENG-9', title: 'newest', url: 'u9', createdAt: '2026-03-01T00:00:00Z' },
+        { identifier: 'ENG-1', title: 'oldest', url: 'u1', createdAt: '2026-01-01T00:00:00Z' },
+        { identifier: 'ENG-5', title: 'middle', url: 'u5', createdAt: '2026-02-01T00:00:00Z' },
+      ],
+    },
+  }
+
+  it('orders oldest-created-first and caps at the limit', () => {
+    const hits = mapLinearIntakeResults(payload, 2)
+    expect(hits.map((h) => h.externalId)).toEqual(['ENG-1', 'ENG-5'])
+    expect(hits[0]!.source).toBe('linear')
+  })
+
+  it('drops excluded identifiers case-insensitively', () => {
+    const hits = mapLinearIntakeResults(payload, 5, ['eng-1'])
+    expect(hits.map((h) => h.externalId)).toEqual(['ENG-5', 'ENG-9'])
+  })
+
+  it('tolerates an empty/malformed payload', () => {
+    expect(mapLinearIntakeResults({}, 3)).toEqual([])
+    expect(mapLinearIntakeResults({ issues: { nodes: [{}] } }, 3)).toEqual([])
   })
 })

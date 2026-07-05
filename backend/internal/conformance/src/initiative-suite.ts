@@ -179,6 +179,67 @@ export function defineInitiativeSuite(
       expect(read).toEqual(advanced)
     })
 
+    it('round-trips harvested follow-ups + a promoted item through the CAS (slice 4)', async () => {
+      // Slice 4's curation state — an open harvested follow-up, one promoted into a real item
+      // (status `promoted` + `promotedItemId` back-reference), and the new item it produced —
+      // rides the entity's `doc` blob, so both stores must (de)serialise the nested arrays intact.
+      const { initiatives } = makeRepos()
+      const { ws, block, id } = ids()
+      await initiatives.insert(ws, initiative({ id, blockId: block, slug: 'curation' }))
+      const curated: Initiative = {
+        ...initiative({ id, blockId: block, slug: 'curation' }),
+        status: 'executing',
+        items: [
+          {
+            id: 'item-1',
+            phaseId: 'phase-1',
+            title: 'Convert the gate registry',
+            description: 'Move registerGate to app-owned DI.',
+            dependsOn: [],
+            estimate: { complexity: 0.4, risk: 0.2, impact: 0.6, rationale: 'contained' },
+            status: 'pending',
+          },
+          {
+            id: 'item-promoted',
+            phaseId: 'phase-1',
+            title: 'Extract the shared helper',
+            description: 'promoted from a follow-up',
+            dependsOn: [],
+            status: 'pending',
+          },
+        ],
+        followUps: [
+          {
+            id: 'ifu-child-fu-1',
+            at: 6,
+            sourceItemId: 'item-1',
+            title: 'Extract the shared helper',
+            detail: 'the parser is duplicated',
+            status: 'promoted',
+            promotedItemId: 'item-promoted',
+          },
+          {
+            id: 'ifu-open',
+            at: 7,
+            sourceItemId: null,
+            title: 'Add a metric',
+            detail: '',
+            status: 'open',
+          },
+        ],
+        rev: 1,
+        updatedAt: 2,
+      }
+      expect(await initiatives.compareAndSwap(ws, curated, 0)).toBe(true)
+
+      const read = await initiatives.get(ws, id)
+      expect(read).toEqual(curated)
+      expect(read!.followUps!.find((f) => f.id === 'ifu-child-fu-1')).toMatchObject({
+        status: 'promoted',
+        promotedItemId: 'item-promoted',
+      })
+    })
+
     it('delete removes the entity', async () => {
       const { initiatives } = makeRepos()
       const { ws, block, id } = ids()

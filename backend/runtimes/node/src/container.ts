@@ -1,5 +1,7 @@
 import {
   AiAgentExecutor,
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
   LlmFragmentSelector,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
@@ -92,6 +94,7 @@ import {
   type MintInstallationToken,
   type ResolveRepoOrigin,
   type ResolveRepoTarget,
+  type ResolveRepoTargets,
   type ResolveRunnerTransport,
   type ServerContainer,
   CompositeAgentExecutor,
@@ -119,6 +122,7 @@ import {
   WebCryptoWebhookVerifier,
   buildInfrastructureCapabilities,
   buildResolveRepoTarget,
+  buildResolveRepoTargets,
   makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -661,6 +665,14 @@ export interface NodeContainerOptions {
    */
   backendRegistries?: BackendRegistries
   /**
+   * The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
+   * Rides its OWN option (not the integrations `BackendRegistries` bundle) since it's owned by
+   * `@cat-factory/agents`. Defaults to `defaultAgentKindRegistry()`. The SAME instance is
+   * threaded into the executors, `createCore`, and the ServerContainer's snapshot projection;
+   * the conformance suite injects a pre-loaded one to assert the seam is symmetric.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  /**
    * Skip wrapping the resolved transport with the provisioning-log decorator. A sibling
    * facade that pre-wraps each transport branch with its OWN subsystem tag (local mode
    * tags the per-run container vs the runner pool separately) sets this so
@@ -771,12 +783,14 @@ function buildNodeContainerExecutor(
   config: AppConfig,
   appRegistry: GitHubAppRegistry | undefined,
   resolveRepoTarget: ResolveRepoTarget,
+  resolveRepoTargets: ResolveRepoTargets,
   resolveTransport: ResolveRunnerTransport | null,
   resolveWorkspaceModelDefault: (
     workspaceId: string,
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>,
+  agentKindRegistry: AgentKindRegistry,
   mintInstallationTokenOverride?: (installationId: number) => Promise<string>,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
@@ -818,6 +832,9 @@ function buildNodeContainerExecutor(
     resolveBlockModel: config.agents.resolveBlockModel,
     resolveWorkspaceModelDefault,
     resolveRepoTarget,
+    // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
+    // change out across the task's own repo + each connected involved-service repo.
+    resolveRepoTargets,
     ...(resolveAccountId ? { resolveAccountId } : {}),
     mintInstallationToken,
     // Ensure the shared per-task work branch up front so every agent (including the
@@ -898,6 +915,7 @@ function buildNodeContainerExecutor(
     llmTraceSink: buildLangfuseSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    agentKindRegistry,
   })
 }
 
@@ -1332,6 +1350,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     customManifestTypeRegistry,
     userSecretKindRegistry,
   } = options.backendRegistries ?? createBackendRegistries()
+  // The app-owned agent-kind registry: the injected instance (so a deployment's custom kinds
+  // are visible) else the built-ins-only default. The SAME instance flows to the executors,
+  // createCore and the ServerContainer snapshot projection.
+  const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):
@@ -1476,6 +1498,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
+    agentKindRegistry,
   })
 
   // Persistence the container-execution path needs (built from the same db). The
@@ -1514,6 +1537,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
     // module + bootstrapper invalidate the same bag on every projection write.
     repoProjectionCache: options.caches?.repoProjection,
+  })
+
+  // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
+  // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
+  // resolves the involved frames in one query). Fed to the container executor so the
+  // implementer can fan a cross-service change out across sibling checkouts.
+  const resolveRepoTargets = buildResolveRepoTargets({
+    installationRepository: githubInstallationRepository,
+    repoProjectionRepository,
+    blockRepository: repos.blockRepository,
+    serviceRepository: repos.serviceRepository,
   })
 
   // Best-effort recorder for the provisioning event log (its own Postgres schema).
@@ -1663,8 +1697,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     config,
     appRegistry,
     resolveRepoTarget,
+    resolveRepoTargets,
     resolveTransport,
     resolveWorkspaceModelDefault,
+    agentKindRegistry,
     options.mintInstallationToken,
     subscriptions,
     personalSubscriptions,
@@ -1681,7 +1717,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // route to the container (and fail loudly when its prerequisites are unconfigured).
   // Optionally wrapped with the consensus mechanism below (after the event publisher
   // is built, so live consensus pushes ride the same hub).
-  const standardAgentExecutor = new CompositeAgentExecutor(inline, container)
+  const standardAgentExecutor = new CompositeAgentExecutor(inline, container, agentKindRegistry)
 
   // GitHub-issue tracker: file the tech-debt pipeline's issue through the workspace's
   // own GitHub App installation (per-tenant), resolving the service's repo from the
@@ -1766,6 +1802,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
               target.installationId,
               { owner: target.parsed.owner, repo: target.parsed.repo },
               target.parsed.number,
+            )
+          },
+          labelGitHubIssue: async (workspaceId, externalId, label) => {
+            const target = await resolveWritebackIssue(workspaceId, externalId)
+            if (!target) return
+            await githubClient.applyIssueLabel?.(
+              target.installationId,
+              { owner: target.parsed.owner, repo: target.parsed.repo },
+              target.parsed.number,
+              label,
             )
           },
         }
@@ -1968,6 +2014,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         ...(config.agents.inlineHarnessRef ? { runsInline: config.agents.inlineHarnessRef } : {}),
         sessionRepository: repos.consensusSessionRepository,
         ...(executionEventPublisher ? { eventPublisher: executionEventPublisher } : {}),
+        agentKindRegistry,
       }))
     : standardAgentExecutor
 
@@ -2091,6 +2138,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
+    // The app-owned agent-kind registry (built-ins + any deployment-registered kinds); the
+    // engine reads it (traits / inline-surface / pre-post-op hooks) and re-exposes it on Core.
+    agentKindRegistry,
     // The code-defined custom provision-type catalog, merged with the workspace rows by
     // `listCustomTypes` so a programmatically-registered type surfaces in the infra editor + the
     // per-service provisioning picker.

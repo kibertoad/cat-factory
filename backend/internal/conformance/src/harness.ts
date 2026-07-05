@@ -1,3 +1,4 @@
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
 import type { TesterQualityReviewer } from '@cat-factory/orchestration'
@@ -15,6 +16,7 @@ import type {
   ResolveRunRepoContext,
   RunRepoContext,
   Service,
+  TaskSourceProvider,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
@@ -356,6 +358,14 @@ export interface ConformanceAppOptions {
    */
   backendRegistries?: BackendRegistries
   /**
+   * Inject the app-owned agent-kind registry, pre-loaded with a CUSTOM kind, so the suite can
+   * assert a deployment-registered kind resolves identically on EVERY runtime (its prompt +
+   * pre/post-op hooks + snapshot projection) — replacing the old module-global registration.
+   * Each facade harness threads the SAME instance into its container build AND the shared
+   * {@link FakeAgentExecutor}. Absent → the facade's default built-ins-only registry.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  /**
    * Inject the test quality-control companion's inline reviewer (a deterministic fake in the
    * suite) so the full QC loop — audit a Tester report, loop the Tester on gaps, settle on an
    * adequate report — is driven on EVERY runtime without a real model. Each facade harness
@@ -363,4 +373,14 @@ export interface ConformanceAppOptions {
    * absent ⇒ the facade's model-derived reviewer (a pass-through with no model wired).
    */
   testerQualityReviewer?: TesterQualityReviewer
+  /**
+   * Override the facade's default fake task-source providers with pre-seeded ones, so the suite
+   * can drive the recurring `bug-intake` step against a controlled issue backlog — intake pickup
+   * (a matching issue is imported, linked and seeds the block) and the no-match no-op (the run
+   * completes with every remaining step skipped) — on EVERY runtime. Each facade harness threads
+   * this into its `taskSourceProviders` core dep in place of its built-in fakes; the suite holds
+   * the same {@link FakeTaskSourceProvider} instance to seed issues + inspect the recorded intake
+   * query. Absent → the facade's default fakes.
+   */
+  taskSourceProviders?: TaskSourceProvider[]
 }

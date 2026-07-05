@@ -1,10 +1,10 @@
 import type { AgentRunContext, AgentStepSpec, RunnerDispatchKind } from '@cat-factory/kernel'
 import {
+  type AgentKindRegistry,
   composeBlockSystemPrompt,
   FOLLOW_UP_GUIDANCE,
   isContainerBackedCompanion,
   isReadOnlyAgentKind,
-  registeredAgentStep,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -44,6 +44,7 @@ import {
   UI_TEST_REPORT_SHAPE_HINT,
 } from './prompts.js'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
+import type { RepoCheckout } from './resolveRepoTarget.js'
 
 /**
  * The pieces a per-kind job body is assembled from, computed once per dispatch in
@@ -62,6 +63,20 @@ export interface KindBodyParts {
   repo: RepoTarget
   workBranch: string
   workBranchReady: boolean
+  /**
+   * Peer repos to clone as siblings and open a PR in during a MULTI-REPO run
+   * (service-connections phase 3) — each an origin-resolved harness `RepoSpec` plus the
+   * involved service frame it belongs to. The coding body adds the shared work branch + the
+   * same PR shape as the primary. Present only for the implementer on a task whose involved
+   * connected services resolve to DISTINCT repos; the harness ignores it for other kinds.
+   */
+  peerRepos?: { repo: Record<string, unknown>; frameId?: string }[]
+  /**
+   * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
+   * where each involved service lives, how the checkouts are laid out). Appended to the coding
+   * implementer's system prompt in a multi-service run; absent otherwise.
+   */
+  multiRepoSection?: string
 }
 
 /**
@@ -75,11 +90,12 @@ export interface KindBodyParts {
 export function buildKindBody(
   context: AgentRunContext,
   parts: KindBodyParts,
+  registry: AgentKindRegistry,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   // `parts` (common/webTools/workBranch/workBranchReady) is consumed by
   // `buildRegisteredAgentBody`/`buildMigratedBuiltInBody`, not directly here.
   const baseRoleSystemPrompt = composeBlockSystemPrompt(
-    systemPromptFor(context.agentKind),
+    systemPromptFor(context.agentKind, registry),
     context.block,
   )
   // When the future-looking Follow-up companion is enabled for this (coder) step, append
@@ -93,9 +109,9 @@ export function buildKindBody(
   // A registered (custom or migrated) kind that declares an `agent` step dispatches
   // through the generic, manifest-driven `agent` harness kind — no per-kind case here.
   // Built-in kinds (below) still carry their bespoke bodies until they are migrated.
-  const registeredStep = registeredAgentStep(context.agentKind)
+  const registeredStep = registry.agentStep(context.agentKind)
   if (registeredStep) {
-    return buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt)
+    return buildRegisteredAgentBody(context, parts, registeredStep, roleSystemPrompt, registry)
   }
 
   // Built-in container kinds migrated onto the generic, manifest-driven `agent` harness
@@ -107,7 +123,7 @@ export function buildKindBody(
   // backend-side in `toRunResult`), the `tester` (read-only structured explore with
   // docker-compose infra stand-up), and the conflict-resolver (coding with a `mergeBase`).
   // The default coder dispatches the generic coding agent at the end of this method.
-  const migrated = buildMigratedBuiltInBody(context, parts, roleSystemPrompt)
+  const migrated = buildMigratedBuiltInBody(context, parts, roleSystemPrompt, registry)
   if (migrated) return migrated
 
   // Container-backed companions (reviewer / doc-reviewer): a read-only explore that clones
@@ -123,6 +139,7 @@ export function buildKindBody(
       parts,
       { surface: 'container-explore', clone: { branch: 'pr' }, output: { kind: 'structured' } },
       roleSystemPrompt,
+      registry,
     )
   }
 
@@ -145,6 +162,7 @@ export function buildKindBody(
       parts,
       { surface: 'container-explore' },
       roleSystemPrompt,
+      registry,
     )
   }
 
@@ -163,6 +181,7 @@ export function buildKindBody(
     parts,
     { surface: 'container-coding', clone: { branch: 'work' } },
     roleSystemPrompt,
+    registry,
   )
 }
 
@@ -180,13 +199,14 @@ export function buildRegisteredAgentBody(
   parts: KindBodyParts,
   step: AgentStepSpec,
   roleSystemPrompt: string,
+  registry: AgentKindRegistry,
   /**
    * The concrete task prompt. Defaults to the generic `userPromptFor` (block context +
    * prior outputs) — the same prompt a registered custom kind gets. A migrated built-in
    * (merger / on-call) overrides it with its bespoke, JSON-instructing prompt so its
    * body matches the old per-kind handler's.
    */
-  userPrompt: string = userPromptFor(context, { materialized: true }),
+  userPrompt: string = userPromptFor(context, registry, { materialized: true }),
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } {
   const { common, webTools, repo, workBranch, workBranchReady } = parts
   const prBranch = context.block.pullRequest?.branch
@@ -203,42 +223,71 @@ export function buildRegisteredAgentBody(
   if (step.surface === 'container-coding') {
     // `pr` clone ⇒ work in place on the PR branch and push back (fixer-like, no new PR);
     // otherwise branch off base onto the work branch, push it and open a PR (coder-like).
+    const pr = {
+      title: `${context.block.title} (${context.pipelineName})`,
+      body: prBody(context),
+    }
+    // Multi-repo fan-out (service-connections phases 3–4): clone each connected involved-service
+    // repo as a sibling. The implementer (`!onPr`) opens the SAME work branch + an equivalent PR
+    // in each; the ci-fixer (`onPr`) RESUMES those same peer work branches to push fixes onto the
+    // existing peer PRs (no new PR — so no `pr` on its peer legs). The peer set is gated upstream
+    // to the coder + ci-fixer kinds (see MULTI_REPO_FANOUT_KINDS); the conflict-resolver never
+    // reaches here with peers set (it stays single-repo, targeting the one conflicted repo).
+    const peerRepos = parts.peerRepos?.length
+      ? parts.peerRepos.map((p) => ({
+          repo: p.repo,
+          ...(p.frameId ? { frameId: p.frameId } : {}),
+          newBranch: workBranch,
+          ...(onPr ? {} : { pr }),
+        }))
+      : undefined
     return {
       kind: 'agent',
       body: {
         ...common,
         mode: 'coding',
-        systemPrompt: roleSystemPrompt,
+        systemPrompt: parts.multiRepoSection
+          ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
+          : roleSystemPrompt,
         userPrompt,
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
         ...(onPr ? {} : { newBranch: workBranch }),
         pushBranch: onPr ? (prBranch ?? workBranch) : workBranch,
-        ...(onPr
-          ? { noChangesIsError: false }
-          : {
-              pr: {
-                title: `${context.block.title} (${context.pipelineName})`,
-                body: prBody(context),
-              },
-            }),
+        ...(onPr ? { noChangesIsError: false } : { pr }),
+        ...(peerRepos ? { peerRepos } : {}),
         ...(step.clone?.full ? { full: true } : {}),
-        // The Coder (follow-up companion enabled) streams forward-looking items out via
-        // the sentinel file; tell the harness to tail it. Only on the implementer path.
-        ...(context.followUpCompanion && !onPr ? { streamFollowUps: true } : {}),
+        // The Coder (follow-up companion enabled) streams forward-looking items out via the
+        // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
+        // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
+        // sentinel, so advertising it there would spend prompt tokens on items that are silently
+        // discarded. The co-located-only case has no `peerRepos`, so it keeps follow-ups on.
+        ...(context.followUpCompanion && !onPr && !peerRepos ? { streamFollowUps: true } : {}),
         ...webTools,
       },
     }
   }
 
   // container-explore (read-only): prose, or a structured JSON object as `custom`.
+  // Multi-repo (service-connections phase 3, read-only): a fan-out kind (today the
+  // `bug-investigator`) clones each connected involved-service repo as a SIBLING checkout so
+  // it can read across every repo the bug touches. Unlike the coding path there is no
+  // `newBranch`/`pr` — the peers are read, never pushed — so the harness's read-only
+  // `runMultiRepoExplore` just clones them (`{ repo, frameId }`) and runs the agent at the
+  // workspace root. The layout section names each repo/subdir + role.
+  const explorePeers = parts.peerRepos?.length
+    ? parts.peerRepos.map((p) => ({ repo: p.repo, ...(p.frameId ? { frameId: p.frameId } : {}) }))
+    : undefined
   return {
     kind: 'agent',
     body: {
       ...common,
       mode: 'explore',
-      systemPrompt: roleSystemPrompt,
+      systemPrompt: parts.multiRepoSection
+        ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
+        : roleSystemPrompt,
       userPrompt,
       branch: exploreBranch,
+      ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(step.clone?.full ? { full: true } : {}),
       ...(step.output?.kind === 'structured'
         ? {
@@ -253,6 +302,118 @@ export function buildRegisteredAgentBody(
       ...webTools,
     },
   }
+}
+
+/** Sanitise an owner/name segment for a sibling checkout directory. MUST match the harness's
+ * `safeDirSegment` (executor-harness `coding-agent.ts`) — see {@link siblingCheckoutDir}. */
+function safeDirSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, '-') || '_'
+}
+
+/**
+ * The sibling checkout directory the harness creates for a repo under the multi-repo workspace
+ * root. MUST stay byte-identical to the harness's `siblingDir` (`owner__name`, computed in
+ * executor-harness `coding-agent.ts`): the two are independent, so a divergent rule would name a
+ * directory in the agent's prompt that does not exist on disk (the agent would edit the wrong
+ * repo). GitHub owners contain no `_`, so `owner__name` is collision-free across the deduped set.
+ */
+function siblingCheckoutDir(owner: string, name: string): string {
+  return `${safeDirSegment(owner)}__${safeDirSegment(name)}`
+}
+
+/**
+ * Render the "Multi-repo workspace" system-prompt section for a multi-service coding run
+ * (service-connections phase 3). Names the primary repo (the task's own service) and, for
+ * every involved connected service, WHICH repo + subdirectory it lives in and its role (the
+ * connection `description`, carried on `involvedServices`). Two involved services sharing a
+ * monorepo appear under the one repo with their distinct subdirectories; a service co-located
+ * in the primary's own repo is noted under the primary.
+ *
+ * Two shapes, because the runtime layout genuinely differs:
+ *  - **Distinct peers** (≥1 non-primary checkout): the harness (`runMultiRepoCoding`) clones each
+ *    repo as a SIBLING under the workspace root (the cwd), so the section names each repo's sibling
+ *    directory (matching the harness's `siblingDir`) and tells the agent to commit inside each.
+ *  - **Co-located only** (all involved services live in the primary's own repo): there is a SINGLE
+ *    checkout (the harness takes the ordinary single-repo path with cwd at the repo root), so the
+ *    section must NOT claim sibling directories — it describes the shared repo's subdirectories and
+ *    a single PR instead.
+ */
+export function renderMultiRepoWorkspaceSection(
+  checkouts: RepoCheckout[],
+  involvedServices: NonNullable<AgentRunContext['involvedServices']>,
+): string {
+  const roleByFrame = new Map(involvedServices.map((s) => [s.frameId, s]))
+  const primary = checkouts.find((c) => c.primary)
+  const hasPeers = checkouts.some((c) => !c.primary)
+
+  const involvedLines = (checkout: RepoCheckout): string =>
+    checkout.involved
+      .map((inv) => {
+        const role = roleByFrame.get(inv.frameId)
+        const title = role?.title ?? inv.frameId
+        const where = inv.serviceDirectory ? ` in \`${inv.serviceDirectory}/\`` : ''
+        const why = role?.description ? ` — ${role.description}` : ''
+        return `    - involved: ${title}${where}${why}`
+      })
+      .join('\n')
+
+  // Co-located-only: one repo, many services in subdirectories. No sibling checkouts, one PR.
+  if (!hasPeers) {
+    const lines = [
+      '## Multi-service repository',
+      '',
+      'This task spans MORE THAN ONE service, but they all live in the SAME repository. Your',
+      'working directory is that repository root. Make the cross-service change coherently across',
+      'the subdirectories below and commit it yourself (stage any new files too — anything left',
+      'untracked is lost); it ships as a SINGLE pull request.',
+      '',
+      'Services in this repository:',
+    ]
+    if (primary) {
+      const { owner, name } = primary.target
+      const own = primary.target.serviceDirectory
+        ? ` — the task's own service lives in \`${primary.target.serviceDirectory}/\``
+        : ''
+      lines.push(`- \`${owner}/${name}\`${own}`)
+      const involved = involvedLines(primary)
+      if (involved) lines.push(involved)
+    }
+    return lines.join('\n')
+  }
+
+  const lines = [
+    '## Multi-repo workspace',
+    '',
+    'This task spans MORE THAN ONE repository. Each repository below is checked out as a SIBLING',
+    'directory under your working directory (the workspace root); the root itself is NOT a git',
+    'repository. Make the cross-service change coherently across the repositories that need it.',
+    "Commit your own changes INSIDE each repository's directory (stage new files too — the",
+    'platform will not add untracked files for you, so anything left untracked is lost), and run',
+    "each repository's own build/test commands inside that repository's directory. Each repository",
+    'you change is opened as a SEPARATE pull request; leave a repository untouched if the task does',
+    'not require changing it.',
+    '',
+    'Repositories:',
+  ]
+  const describe = (checkout: RepoCheckout): string => {
+    const { owner, name } = checkout.target
+    const dir = `\`${siblingCheckoutDir(owner, name)}/\``
+    const own =
+      checkout.primary && checkout.target.serviceDirectory
+        ? ` (this service lives in \`${checkout.target.serviceDirectory}/\` within it)`
+        : ''
+    const coLocated = involvedLines(checkout)
+    const head = `- \`${owner}/${name}\` → ${dir}${
+      checkout.primary ? " (PRIMARY — the task's own service)" : ''
+    }${own}`
+    return coLocated ? `${head}\n${coLocated}` : head
+  }
+  if (primary) lines.push(describe(primary))
+  for (const checkout of checkouts) {
+    if (checkout.primary) continue
+    lines.push(describe(checkout))
+  }
+  return lines.join('\n')
 }
 
 /**
@@ -275,6 +436,7 @@ export function buildMigratedBuiltInBody(
   context: AgentRunContext,
   parts: KindBodyParts,
   roleSystemPrompt: string,
+  registry: AgentKindRegistry,
 ): { body: Record<string, unknown>; kind: RunnerDispatchKind } | undefined {
   const { repo } = parts
   const prBranch = context.block.pullRequest?.branch
@@ -296,6 +458,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
         },
         BLUEPRINT_SYSTEM_PROMPT,
+        registry,
         blueprintUserPrompt(),
       )
     // The spec-writer maintains the prescriptive `spec/` document. It now runs as a
@@ -324,6 +487,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
         },
         SPEC_WRITER_SYSTEM_PROMPT,
+        registry,
         specWriterUserPrompt(context),
       )
     // The initiative analyst explores the repository (read-only, base branch — an
@@ -338,6 +502,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-explore', clone: { branch: 'base' } },
         INITIATIVE_ANALYST_SYSTEM_PROMPT,
+        registry,
         initiativeAnalystUserPrompt(context),
       )
     // The initiative planner explores the repository (read-only, base branch — an
@@ -362,6 +527,7 @@ export function buildMigratedBuiltInBody(
           },
         },
         INITIATIVE_PLANNER_SYSTEM_PROMPT,
+        registry,
         initiativePlannerUserPrompt(context),
       )
     // In-place fixers: clone the PR head branch, push fixes back onto it (no new PR);
@@ -373,6 +539,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-coding', clone: { branch: 'pr' } },
         roleSystemPrompt,
+        registry,
       )
     case FIXER_AGENT_KIND:
       if (!prBranch) throw new Error('Fixer needs the implementation PR branch to push fixes to')
@@ -381,6 +548,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-coding', clone: { branch: 'pr' } },
         roleSystemPrompt,
+        registry,
       )
     // The conflict-resolver clones the PR head branch (full history), merges the base in
     // to surface the conflicts, resolves them and pushes back onto the SAME branch (no new
@@ -406,6 +574,7 @@ export function buildMigratedBuiltInBody(
         parts,
         { surface: 'container-coding', clone: { branch: 'pr', full: true } },
         roleSystemPrompt,
+        registry,
         `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
       )
       return { kind: built.kind, body: { ...built.body, mergeBase: repo.baseBranch } }
@@ -422,6 +591,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: MERGE_ASSESSMENT_SHAPE_HINT },
         },
         MERGER_SYSTEM_PROMPT,
+        registry,
         mergerUserPrompt(context, repo),
       )
     // The on-call agent clones the BASE branch (full, to locate + diff the merged
@@ -439,7 +609,8 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: ON_CALL_ASSESSMENT_SHAPE_HINT },
         },
         composeBlockSystemPrompt(ON_CALL_SYSTEM_PROMPT, context.block),
-        onCallUserPrompt(context, repo),
+        registry,
+        onCallUserPrompt(context, repo, registry),
       )
     // The tester clones the PR head branch (read-only — it makes NO commits), stands up
     // its dependencies (locally via the service's docker-compose, or against the
@@ -461,6 +632,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: TEST_REPORT_SHAPE_HINT },
         },
         roleSystemPrompt,
+        registry,
       )
       return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
     }
@@ -479,6 +651,7 @@ export function buildMigratedBuiltInBody(
           output: { kind: 'structured', shapeHint: UI_TEST_REPORT_SHAPE_HINT },
         },
         roleSystemPrompt,
+        registry,
       )
       return { kind: built.kind, body: { ...built.body, infra: testerInfraSpec(context) } }
     }

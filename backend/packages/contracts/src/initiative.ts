@@ -317,6 +317,56 @@ export const answerInitiativeQuestionSchema = v.object({
 })
 export type AnswerInitiativeQuestionInput = v.InferOutput<typeof answerInitiativeQuestionSchema>
 
+// ---- Follow-up triage + item/policy editing (slice 4) ----------------------
+// Mid-flight human curation of an executing initiative. A follow-up harvested from a spawned
+// task's run (see `initiativeFollowUpSchema`) is either PROMOTED into a real tracker item (a
+// new `pending` item the loop then spawns) or DISMISSED. Items and the execution policy can
+// also be edited directly (retry/skip a stuck item, retitle/re-scope a not-yet-started one,
+// retune concurrency + pipeline rules). Every write goes through the same rev-CAS single-writer
+// path as the loop, so a human edit and a live tick can't clobber each other.
+
+/**
+ * Promote an `open` follow-up into a real tracker item: appends a new `pending` item to the
+ * named phase (spawned by the loop like any other), and flips the follow-up `promoted` with a
+ * `promotedItemId` back-reference. Title/description default to the follow-up's when omitted.
+ */
+export const promoteInitiativeFollowUpSchema = v.object({
+  /** The phase the new item belongs to (must reference an existing `phases[].id`). */
+  phaseId: idField,
+  /** Item title; defaults to the follow-up's title when omitted. */
+  title: v.optional(titleField),
+  /** Item description; defaults to the follow-up's detail when omitted. */
+  description: v.optional(proseField),
+  /** Planner-style estimate driving pipeline selection (absent ⇒ policy fallback). */
+  estimate: v.optional(initiativeEstimateSchema),
+  /** Explicit pipeline override; absent ⇒ the policy's rules decide. */
+  pipelineId: v.optional(idField),
+  /** Intra-initiative item ids that must be `done`/`skipped` before this item may start. */
+  dependsOn: v.optional(v.array(idField)),
+})
+export type PromoteInitiativeFollowUpInput = v.InferOutput<typeof promoteInitiativeFollowUpSchema>
+
+/**
+ * Edit one tracker item and/or drive its status. Content edits (`title`/`description`/
+ * `estimate`/`pipelineId`/`dependsOn`) apply only to a not-yet-settled item that is not in
+ * flight (`pending`/`blocked`) — an in-flight/settled item's spawned task already carries its
+ * own copy. `action` unsticks a halted phase: `retry` returns a `blocked` item to `pending`
+ * (the next sweep re-spawns it), `skip` settles it `skipped`.
+ */
+export const updateInitiativeItemSchema = v.object({
+  title: v.optional(titleField),
+  description: v.optional(proseField),
+  estimate: v.optional(initiativeEstimateSchema),
+  pipelineId: v.optional(idField),
+  dependsOn: v.optional(v.array(idField)),
+  action: v.optional(v.picklist(['retry', 'skip'])),
+})
+export type UpdateInitiativeItemInput = v.InferOutput<typeof updateInitiativeItemSchema>
+
+/** Replace an executing initiative's execution policy (concurrency + pipeline rules). */
+export const updateInitiativePolicySchema = initiativeExecutionPolicySchema
+export type UpdateInitiativePolicyInput = v.InferOutput<typeof updateInitiativePolicySchema>
+
 // ---- In-repo tracker artifact ----------------------------------------------
 // The loop mirrors the entity into the target repo so the plan travels with the
 // code, following the blueprint artifact pattern: a canonical JSON file, a

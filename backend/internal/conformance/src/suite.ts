@@ -20,11 +20,12 @@ import {
   type Workspace,
   type WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import { allPullRequests } from '@cat-factory/contracts'
 import {
   clearRegisteredPromptFragments,
   registerPromptFragment,
 } from '@cat-factory/prompt-fragments'
-import { clearRegisteredAgentKinds, registerAgentKind } from '@cat-factory/agents'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import {
   composeEnvironmentBackend,
   createBackendRegistries,
@@ -61,6 +62,7 @@ import {
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from './harness.js'
 import { FakeTesterQualityReviewer } from './FakeTesterQualityReviewer.js'
+import { FakeTaskSourceProvider } from './FakeTaskSourceProvider.js'
 
 // Binary-storage start-gate helpers (see the `visual-confirmation` / UI-tester tests).
 // The Worker test env binds R2 (storage ON by default) while Node/local default to OFF and
@@ -1072,6 +1074,83 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(unconnected.status).toBe(422)
       })
 
+      it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
+        // Service-connections phase 3: a coder run over a task with a connected involved service
+        // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`
+        // beside the own-service PR; the engine records BOTH on the block. This asserts the
+        // full recording + JSON-column round-trip on D1 and Postgres (the fake stands in for
+        // the container — the resolveRepoTargets/peerRepos dispatch path is unit-tested in the
+        // server package). `allPullRequests` then sees the own PR first, then the peer.
+        const app = harness.makeApp({
+          asyncKinds: ['coder'],
+          asyncPolls: 1,
+          pullRequest: {
+            url: 'https://gh/acme/auth/pull/1',
+            number: 1,
+            branch: 'cat-factory/task_login',
+          },
+          peerPullRequests: [
+            {
+              repo: 'acme/email',
+              frameId: 'blk_email',
+              ref: {
+                url: 'https://gh/acme/email/pull/7',
+                number: 7,
+                branch: 'cat-factory/task_login',
+              },
+            },
+          ],
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        // Connect blk_auth → a provider frame and mark it involved in the task (realistic setup;
+        // the recording itself is driven by what the fake reports, not the resolution).
+        const provider = await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          position: { x: 900, y: 900 },
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, {
+          serviceConnections: [
+            { serviceBlockId: provider.body.id, description: 'sends mail via it' },
+          ],
+        })
+        await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          involvedServiceIds: [provider.body.id],
+        })
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Implement',
+          agentKinds: ['coder'],
+        })
+        const start = await app.call<ExecutionInstance>(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/executions`,
+          { pipelineId: pipeline.body.id },
+        )
+        expect(start.status).toBe(201)
+        await app.drive(wsId)
+
+        const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        const task = snap.body.blocks.find((b) => b.id === 'task_login')!
+        expect(task.pullRequest?.url).toBe('https://gh/acme/auth/pull/1')
+        expect(task.peerPullRequests).toEqual([
+          {
+            repo: 'acme/email',
+            frameId: 'blk_email',
+            ref: {
+              url: 'https://gh/acme/email/pull/7',
+              number: 7,
+              branch: 'cat-factory/task_login',
+            },
+          },
+        ])
+        expect(allPullRequests(task)).toEqual([
+          { ref: task.pullRequest },
+          { repo: 'acme/email', frameId: 'blk_email', ref: task.peerPullRequests![0]!.ref },
+        ])
+      })
+
       it('rejects a dependency edge that would create a cycle', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
@@ -1570,8 +1649,6 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
     })
 
     describe('registered custom kind pre/post-ops', () => {
-      afterEach(() => clearRegisteredAgentKinds())
-
       // A registered custom agent kind decomposes into preOps → agent → postOps, with the
       // deterministic repo work (read a baseline artifact, render + commit files) running
       // as BACKEND TypeScript over the checkout-free RepoFiles port — never in a container.
@@ -1600,12 +1677,27 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           },
         }
 
-        registerAgentKind({
+        // App-owned DI: a deployment news a registry (pre-loaded with the built-ins) and
+        // registers its kind on it BY REFERENCE, then injects the SAME instance into the
+        // container build — no module-global, no `clear*()`. The suite threads it through
+        // `makeApp`'s `agentKindRegistry` option (into both the container and the fake).
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.register({
           kind: 'conformance-auditor',
           systemPrompt: 'You audit the service for compliance.',
           // A read-only container-explore step returning structured JSON (surfaced as
           // `result.custom`) — exactly the generic manifest-driven `agent` dispatch.
           agent: { surface: 'container-explore', output: { kind: 'structured' } },
+          // Presentation makes it a first-class palette block, so the workspace snapshot's
+          // custom-kind projection advertises it (the snapshot assertion below).
+          presentation: {
+            label: 'Conformance Auditor',
+            icon: 'i-lucide-shield-check',
+            color: '#10b981',
+            description: 'Audits the service for compliance.',
+            category: 'review',
+            resultView: 'generic-structured',
+          },
           // PRE-op: read a baseline artifact (no checkout). Proves pre-ops run + are bound
           // to the resolved branch.
           preOps: [
@@ -1634,10 +1726,21 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
         const app = harness.makeApp(
           { customResult: { findings: 'all clear' } },
-          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }) },
+          { resolveRunRepoContext: async () => ({ repo, baseBranch: 'main' }), agentKindRegistry },
         )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
+
+        // The registered kind is advertised in the workspace snapshot's custom-kind palette on
+        // every runtime — proving the injected instance reaches the HTTP snapshot projection,
+        // not just the engine (the module-global registration this replaces used to do this).
+        const snap = await app.call<{ customAgentKinds?: { kind: string }[] }>(
+          'GET',
+          `/workspaces/${wsId}`,
+        )
+        expect(
+          (snap.body.customAgentKinds ?? []).some((k) => k.kind === 'conformance-auditor'),
+        ).toBe(true)
 
         const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
           name: 'Compliance audit',
@@ -1668,11 +1771,12 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       afterEach(() => {
         clearRegisteredGates()
         clearRegisteredStepResolvers()
-        clearRegisteredAgentKinds()
         // The built-in gates (ci / conflicts / post-release-health) live in the SAME registry
         // as the test's `license-check` gate, so clearing wipes them too — restore them so
         // later assertions (and a real harness build) still see the platform's own gates.
         registerBuiltinGates()
+        // NOTE: the agent-kind registry is now app-owned (per-test instance injected via
+        // `makeApp({ agentKindRegistry })`), so there is nothing global to clear here.
       })
 
       // A deployment-registered polling gate is the OTHER half of the extension story
@@ -1684,8 +1788,9 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       // built-in `ci`→`ci-fixer` gate, with the provider faked in-test (no real GitHub).
 
       // The custom gate's helper is just a registered agent kind — no new dispatch path.
-      const registerLicenseFixer = (): void =>
-        registerAgentKind({
+      // Registered on a per-test app-owned registry (injected via makeApp), not a global.
+      const registerLicenseFixer = (registry: ReturnType<typeof defaultAgentKindRegistry>): void =>
+        registry.register({
           kind: 'license-fixer',
           systemPrompt: 'You add missing license headers and push.',
           agent: { surface: 'container-coding', clone: { branch: 'pr' } },
@@ -1721,9 +1826,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       }
 
       it('passes through on a clean precheck without spinning up the helper', async () => {
-        registerLicenseFixer()
+        const agentKindRegistry = defaultAgentKindRegistry()
+        registerLicenseFixer(agentKindRegistry)
         registerLicenseGate([true]) // clean on first probe
-        const app = harness.makeApp({ asyncKinds: ['coder', 'license-fixer'] })
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'license-fixer'] },
+          { agentKindRegistry },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -1746,12 +1855,16 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       })
 
       it('escalates to the helper on a red precheck, then advances when it re-probes clean', async () => {
-        registerLicenseFixer()
+        const agentKindRegistry = defaultAgentKindRegistry()
+        registerLicenseFixer(agentKindRegistry)
         registerLicenseGate([false, true]) // red first, clean after the fixer ran
-        const app = harness.makeApp({
-          asyncKinds: ['coder', 'license-fixer'],
-          pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
-        })
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'license-fixer'],
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/login' },
+          },
+          { agentKindRegistry },
+        )
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -1778,7 +1891,8 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
       // the engine merges registered resolvers into the (built-in merger) resolver registry
       // and runs them in recordStepResult, identically on every runtime.
       it('runs a registered step resolver after its agent step completes', async () => {
-        registerAgentKind({
+        const agentKindRegistry = defaultAgentKindRegistry()
+        agentKindRegistry.register({
           kind: 'conformance-auditor',
           systemPrompt: 'You audit.',
           agent: { surface: 'container-explore', output: { kind: 'structured' } },
@@ -1788,7 +1902,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           applies: (result) => result.custom !== undefined,
           resolve: async () => ({ output: 'resolver-rewrote-this' }),
         }))
-        const app = harness.makeApp({ customResult: { ok: true } })
+        const app = harness.makeApp({ customResult: { ok: true } }, { agentKindRegistry })
         const { workspace } = await app.createWorkspace()
         const wsId = workspace.id
 
@@ -1829,14 +1943,42 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
             const green = greens[Math.min(i, greens.length - 1)] ?? true
             i += 1
             return {
-              headSha: 'sha',
-              checks: [
+              repos: [
                 {
-                  name: 'build',
-                  status: 'completed',
-                  conclusion: green ? 'success' : 'failure',
-                  url: null,
+                  repo: 'o/r',
+                  headSha: 'sha',
+                  checks: [
+                    {
+                      name: 'build',
+                      status: 'completed',
+                      conclusion: green ? 'success' : 'failure',
+                      url: null,
+                    },
+                  ],
                 },
+              ],
+            }
+          },
+        }
+      }
+
+      // A multi-repo (service-connections phase 4) fake CI provider: the task opened an
+      // own-service PR AND one peer PR, and the gate aggregates the verdict across BOTH. Each
+      // repo's greenness is supplied per probe (a queue; last entry repeats) so a test can drive
+      // "peer red → own green" then "both green".
+      const makeFakeMultiRepoCi = (rounds: [boolean, boolean][]): CiStatusProvider => {
+        let i = 0
+        return {
+          getStatus: async () => {
+            const [ownGreen, peerGreen] = rounds[Math.min(i, rounds.length - 1)] ?? [true, true]
+            i += 1
+            const checks = (green: boolean, name: string) => [
+              { name, status: 'completed', conclusion: green ? 'success' : 'failure', url: null },
+            ]
+            return {
+              repos: [
+                { repo: 'o/own', headSha: 'ownsha', checks: checks(ownGreen, 'own-build') },
+                { repo: 'o/peer', headSha: 'peersha', checks: checks(peerGreen, 'peer-build') },
               ],
             }
           },
@@ -1905,6 +2047,58 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         // Tester attempt's concerns, surfaced per-runtime.
         expect(attempt?.instructions).toBeTruthy()
         expect(attempt?.failingChecks?.map((c) => c.name)).toEqual(['build'])
+      })
+
+      it('aggregates CI across a multi-repo task: a red PEER PR escalates, both green advances', async () => {
+        // Service-connections phase 4: a cross-service task opens one PR per changed repo, and the
+        // CI gate aggregates the verdict across ALL of them. Here the OWN PR is green but a PEER
+        // PR is red on the first probe → the gate must NOT advance (a red peer fails the gate),
+        // escalate the ci-fixer once, then advance when the re-probe sees both green. The per-repo
+        // head shas are persisted on the gate state so the UI can group checks by service.
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'ci-fixer'],
+            pooledContainer: true,
+            pullRequest: {
+              url: 'https://github.com/o/own/pull/1',
+              number: 1,
+              branch: 'feat/login',
+            },
+          },
+          // round 1: own green, peer RED → fail+escalate; round 2: both green → advance
+          {
+            gateProviders: {
+              ciStatus: makeFakeMultiRepoCi([
+                [true, false],
+                [true, true],
+              ]),
+            },
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'ci')!
+        expect(step.state).toBe('done')
+        // The red PEER PR fails the aggregate verdict → one ci-fixer attempt.
+        expect(step.gate?.attempts).toBe(1)
+        // Both repos' heads are tracked on the multi-repo gate state.
+        expect(step.gate?.headShas).toMatchObject({ 'o/own': 'ownsha', 'o/peer': 'peersha' })
+        // The failing round names the failing peer check (with its repo).
+        const failing = step.gate?.attemptLog?.[0]?.failingChecks ?? []
+        expect(failing.map((c) => c.name)).toContain('peer-build')
+        expect(failing.find((c) => c.name === 'peer-build')?.repo).toBe('o/peer')
       })
     })
 
@@ -7318,6 +7512,78 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         expect(after.body.blocks.find((b) => b.id === created.body.blockId)).toBeUndefined()
       })
 
+      it('round-trips the issue-intake config through create, update, and clear', async () => {
+        // `issueIntake` (bug-triage Phase D) is a persisted JSON column on
+        // `pipeline_schedules`, so this pins the column mapping on BOTH runtimes —
+        // a facade that drops it on save would leave every bug-intake fire scopeless.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const issueIntake = {
+          source: 'jira',
+          board: { jiraProjectKey: 'PROJ' },
+          predicates: { titleFragment: 'crash', labels: ['bug'], issueType: 'Bug' },
+        }
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: 'pl_dep_update',
+            name: 'Bug triage',
+            recurrence,
+            issueIntake,
+          },
+        )
+        expect(created.status).toBe(201)
+        expect(created.body.issueIntake).toEqual(issueIntake)
+
+        // The config survives a persistence round-trip (list re-reads the row).
+        const listed = await app.call<PipelineSchedule[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines`,
+        )
+        expect(listed.body.find((s) => s.id === created.body.id)?.issueIntake).toEqual(issueIntake)
+
+        // PATCH replaces the config…
+        const replaced = await app.call<PipelineSchedule>(
+          'PATCH',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+          {
+            issueIntake: {
+              source: 'github',
+              board: { githubRepo: 'octo/app' },
+              predicates: {},
+              inProgressLabel: 'bot-working',
+            },
+          },
+        )
+        expect(replaced.status).toBe(200)
+        expect(replaced.body.issueIntake?.source).toBe('github')
+        expect(replaced.body.issueIntake?.inProgressLabel).toBe('bot-working')
+
+        // …an unrelated PATCH leaves it untouched, and null clears it.
+        const renamed = await app.call<PipelineSchedule>(
+          'PATCH',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+          { name: 'Renamed' },
+        )
+        expect(renamed.body.issueIntake?.source).toBe('github')
+        const cleared = await app.call<PipelineSchedule>(
+          'PATCH',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}`,
+          { issueIntake: null },
+        )
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.issueIntake).toBeUndefined()
+        const after = await app.call<PipelineSchedule[]>(
+          'GET',
+          `/workspaces/${wsId}/recurring-pipelines`,
+        )
+        expect(after.body.find((s) => s.id === created.body.id)?.issueIntake).toBeUndefined()
+      })
+
       it('run-now starts an execution on the reused block and records run history', async () => {
         const app = harness.makeApp({ confidence: 1 })
         const { workspace } = await app.createWorkspace()
@@ -7364,6 +7630,154 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
           `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
         )
         expect(again.status).toBe(200)
+      })
+
+      it('bug-intake picks up a matching issue, seeds the block, and drives to completion', async () => {
+        // A Jira fake source, CONNECTED (so it is `offered` — available + enabled — which the
+        // schedule intake-config validation requires), pre-loaded with an open bug. The suite holds
+        // the instance to seed the backlog + inspect the recorded query.
+        const source = new FakeTaskSourceProvider('jira')
+        source.set('42', { title: 'Login crashes on submit', labels: ['bug'], status: 'open' })
+        const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        // Connect the source so it counts as a usable intake source (the fake accepts any creds).
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+
+        // A recurring pipeline whose first step is `bug-intake`; a trailing `architect` step
+        // proves the run advances past intake when an issue is picked up.
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Bug triage',
+          agentKinds: ['bug-intake', 'architect'],
+          availability: 'recurring',
+        })
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Nightly bug triage',
+            recurrence,
+            issueIntake: {
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
+              predicates: { titleFragment: 'crash', labels: ['bug'] },
+            },
+          },
+        )
+        expect(created.status).toBe(201)
+        const blockId = created.body.blockId
+
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+
+        const driven = await app.drive(wsId)
+        const run = driven.find((e) => e.blockId === blockId)
+        expect(run?.status).toBe('done')
+        // The intake step recorded the pickup, and NEITHER step was skipped (the fix work ran).
+        const intakeStep = run?.steps.find((s) => s.agentKind === 'bug-intake')
+        expect(intakeStep?.output).toContain('42')
+        expect(intakeStep?.skipped).toBeFalsy()
+        expect(run?.steps.find((s) => s.agentKind === 'architect')?.skipped).toBeFalsy()
+
+        // The search ran with the schedule's predicates pushed into the intake query.
+        expect(source.intakeCalls).toHaveLength(1)
+        expect(source.intakeCalls[0]!.query.titleFragment).toBe('crash')
+
+        // The reused block was reseeded from the picked issue (title keyed by the external id).
+        const block = await app.blockRepository().get(wsId, blockId)
+        expect(block?.title).toContain('42')
+        expect(block?.title).toContain('Login crashes on submit')
+      })
+
+      it('bug-intake with no matching issue completes the run, skipping the remaining steps', async () => {
+        // The backlog holds only a NON-matching issue (wrong title), so nothing qualifies. A
+        // CONNECTED Jira source (the schedule validation requires an offered source).
+        const source = new FakeTaskSourceProvider('jira')
+        source.set('7', { title: 'Update docs', labels: ['bug'], status: 'open' })
+        const app = harness.makeApp({ confidence: 1 }, { taskSourceProviders: [source] })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Bug triage',
+          agentKinds: ['bug-intake', 'architect'],
+          availability: 'recurring',
+        })
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: pipeline.body.id,
+            name: 'Nightly bug triage',
+            recurrence,
+            issueIntake: {
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
+              predicates: { titleFragment: 'crash' },
+            },
+          },
+        )
+        const blockId = created.body.blockId
+        const blockBefore = await app.blockRepository().get(wsId, blockId)
+
+        await app.call('POST', `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`)
+        const driven = await app.drive(wsId)
+        const run = driven.find((e) => e.blockId === blockId)
+
+        // The run completes SUCCESSFULLY, with the trailing step skipped (nothing to fix).
+        expect(run?.status).toBe('done')
+        const intakeStep = run?.steps.find((s) => s.agentKind === 'bug-intake')
+        expect(intakeStep?.skipped).toBeFalsy()
+        expect(intakeStep?.output).toContain('No matching')
+        expect(run?.steps.find((s) => s.agentKind === 'architect')?.skipped).toBe(true)
+
+        // No issue was picked up, so the block's title is untouched, the block is finalized `done`
+        // (NOT `pr_ready`), and — since nothing was worked and no PR opened — the no-op raises NO
+        // `pipeline_complete` "confirm + merge" notification.
+        const blockAfter = await app.blockRepository().get(wsId, blockId)
+        expect(blockAfter?.title).toBe(blockBefore?.title)
+        expect(blockAfter?.status).toBe('done')
+        const notes = await app.notificationRepository().listOpen(wsId)
+        expect(notes.some((n) => n.blockId === blockId)).toBe(false)
+      })
+
+      it('rejects a bug-intake schedule with no issue-intake configuration', async () => {
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Bug triage',
+          agentKinds: ['bug-intake', 'architect'],
+          availability: 'recurring',
+        })
+        // Attaching it to a schedule with no `issueIntake` is refused up front (every fire would
+        // otherwise silently no-op — nothing to pull work from).
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          { frameId: 'blk_auth', pipelineId: pipeline.body.id, name: 'Nightly', recurrence },
+        )
+        expect(created.status).toBe(422)
       })
 
       it('persists an on-demand schedule (no cadence) and fires it via run-now', async () => {
@@ -7483,6 +7897,121 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
         )
         expect(cleared.body.trackerCommentOnPrOpen ?? null).toBeNull()
         expect(cleared.body.trackerResolveOnMerge).toBe('off')
+      })
+    })
+
+    // The `bug-investigator` is a structured `container-explore` kind whose `clarity`/`questions`
+    // drive the downstream `clarity-review` gate (phase F): `clear` auto-passes with no human
+    // park; `needs_clarification` seeds one finding per question and parks the run for a human.
+    // The seed is DETERMINISTIC — no reviewer model — so the gate behaves identically on every
+    // runtime (conformance wires no reviewer model), which is exactly what these assert.
+    describe('bug-triage investigation + clarification (phase F)', () => {
+      type SeededReview = {
+        id: string
+        status: string
+        items: { id: string; status: string; detail: string }[]
+      }
+      const investigatorResult = (over: Record<string, unknown>): Record<string, unknown> => ({
+        clarity: 'clear',
+        summary: 'The submit handler swallows the validation error.',
+        rootCauseHypotheses: ['Unhandled promise rejection in onSubmit'],
+        affectedRepos: [],
+        suggestedReproductions: ['Submit the form with an empty email'],
+        questions: [],
+        ...over,
+      })
+
+      it('auto-passes the clarity gate when the investigator reports the report is clear', async () => {
+        const app = harness.makeApp({ customResult: investigatorResult({ clarity: 'clear' }) })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Triage & investigate',
+          agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+
+        // Clear ⇒ no park: the run drives straight through the clarity gate to the architect.
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'architect')?.state).toBe('done')
+
+        // The investigator recorded its structured triage on `step.custom`, and the
+        // post-completion resolver rendered a prose digest onto `step.output` (what the
+        // downstream `priorOutputs` carries).
+        const investigator = exec.steps.find((s) => s.agentKind === 'bug-investigator')!
+        expect((investigator.custom as { clarity?: string } | undefined)?.clarity).toBe('clear')
+        expect(investigator.output).toContain('Investigation summary')
+        expect(investigator.output).toContain('swallows the validation error')
+
+        // The clarity review auto-passed (settled `incorporated`, no findings, no model).
+        const review = await app.call<SeededReview | null>(
+          'GET',
+          `/workspaces/${wsId}/blocks/task_login/clarity-review`,
+        )
+        expect(review.body?.status).toBe('incorporated')
+        expect(review.body?.items ?? []).toHaveLength(0)
+      })
+
+      it('parks the clarity gate for a human on needs_clarification, then resumes on proceed', async () => {
+        const app = harness.makeApp({
+          customResult: investigatorResult({
+            clarity: 'needs_clarification',
+            questions: ['What are the exact reproduction steps?', 'Which browser and version?'],
+          }),
+        })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Triage & investigate',
+          agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+
+        // needs_clarification ⇒ the gate seeds one finding per question and PARKS the run.
+        let exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('blocked')
+        expect(exec.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe(
+          'waiting_decision',
+        )
+        expect(exec.steps.find((s) => s.agentKind === 'architect')?.state).not.toBe('done')
+
+        // The seeded review carries one OPEN finding per investigator question — no LLM ran.
+        const review = await app.call<SeededReview | null>(
+          'GET',
+          `/workspaces/${wsId}/blocks/task_login/clarity-review`,
+        )
+        expect(review.body?.status).toBe('ready')
+        const items = review.body?.items ?? []
+        expect(items).toHaveLength(2)
+        expect(items.every((i) => i.status === 'open')).toBe(true)
+        expect(items.map((i) => i.detail)).toContain('Which browser and version?')
+
+        // Resume: dismiss both questions, then proceed — advancing the parked run (no model).
+        for (const item of items) {
+          const dismissed = await app.call(
+            'PATCH',
+            `/workspaces/${wsId}/clarity-reviews/${review.body!.id}/items/${item.id}`,
+            { status: 'dismissed' },
+          )
+          expect(dismissed.status).toBe(200)
+        }
+        const proceeded = await app.call(
+          'POST',
+          `/workspaces/${wsId}/blocks/task_login/clarity-review/proceed`,
+        )
+        expect(proceeded.status).toBe(200)
+
+        exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe('done')
+        expect(exec.steps.find((s) => s.agentKind === 'architect')?.state).toBe('done')
       })
     })
 

@@ -1,18 +1,23 @@
 import type {
   Block,
+  ExecutionInstance,
   Initiative,
   InitiativeExecutionPolicy,
+  InitiativeFollowUp,
   InitiativeItem,
   InitiativeItemStatus,
   InitiativePhase,
   InitiativePlanDraft,
   InitiativeQa,
+  PromoteInitiativeFollowUpInput,
+  UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
 import {
   INITIATIVE_ITEM_TERMINAL_STATUSES,
   INITIATIVE_PROSE_MAX,
   INITIATIVE_SHORT_MAX,
+  INITIATIVE_TITLE_MAX,
 } from '@cat-factory/contracts'
 
 // Pure initiative computations — no IO, no ports — reused by the InitiativeService,
@@ -50,6 +55,30 @@ export function assertInitiativeShapeAllowed(block: Block, agentKinds: readonly 
 }
 
 /**
+ * Assert the item dependency graph is acyclic (DFS with a visiting set). Shared by the
+ * plan-draft validation and the mid-flight item edit ({@link applyItemEdit}) so a re-scoped
+ * `dependsOn` can't smuggle a cycle past the trust boundary — two mutually-dependent items
+ * would each fail {@link itemDependenciesMet} forever, deadlocking the phase (and the whole
+ * initiative, which can then never settle). Throws {@link ValidationError} on the first cycle.
+ */
+function assertAcyclicItems(
+  items: ReadonlyArray<{ id: string; dependsOn?: readonly string[] }>,
+): void {
+  const deps = new Map(items.map((i) => [i.id, i.dependsOn ?? []]))
+  const done = new Set<string>()
+  const visiting = new Set<string>()
+  const visit = (id: string): void => {
+    if (done.has(id)) return
+    if (visiting.has(id)) throw new ValidationError(`Dependency cycle through item '${id}'`)
+    visiting.add(id)
+    for (const dep of deps.get(id) ?? []) visit(dep)
+    visiting.delete(id)
+    done.add(id)
+  }
+  for (const id of deps.keys()) if (id) visit(id)
+}
+
+/**
  * Validate a plan draft's internal references: unique phase/item ids, every item
  * pointing at a declared phase, dependencies pointing at declared items, and an
  * acyclic dependency graph. Throws {@link ValidationError} on the first violation.
@@ -84,19 +113,8 @@ export function validatePlanDraft(draft: InitiativePlanDraft): void {
       }
     }
   }
-  // Cycle check over the dependency edges (DFS with a visiting set).
-  const deps = new Map(draft.items.map((i) => [i.id ?? '', i.dependsOn ?? []]))
-  const done = new Set<string>()
-  const visiting = new Set<string>()
-  const visit = (id: string): void => {
-    if (done.has(id)) return
-    if (visiting.has(id)) throw new ValidationError(`Dependency cycle through item '${id}'`)
-    visiting.add(id)
-    for (const dep of deps.get(id) ?? []) visit(dep)
-    visiting.delete(id)
-    done.add(id)
-  }
-  for (const id of deps.keys()) if (id) visit(id)
+  // Cycle check over the dependency edges (shared with the mid-flight item edit).
+  assertAcyclicItems(draft.items.map((i) => ({ id: i.id ?? '', dependsOn: i.dependsOn })))
 }
 
 /** Assign a unique slug-derived id, suffixing `-2`, `-3`, … on collision. */
@@ -554,4 +572,265 @@ export function applyRevertClaim(
 /** Whether an item currently holds an active concurrency slot. Exported for the loop's math. */
 export function itemIsActive(item: InitiativeItem): boolean {
   return INITIATIVE_ITEM_ACTIVE_STATUSES.has(item.status)
+}
+
+// ---------------------------------------------------------------------------
+// Follow-up harvest + human curation (slice 4) — pure transforms over the entity's
+// `followUps`/`deviations`/`items`/`policy`. A settling child run's forward-looking
+// follow-ups (and, on failure, its cause) are HARVESTED onto the initiative; a human then
+// PROMOTES a follow-up into a real item or DISMISSES it, and can retry/skip/re-scope items or
+// retune the policy. The InitiativeService wraps each in the CAS `mutate`, and the harvest is
+// idempotent (stable follow-up ids) so a durable-driver replay of the settling run's poke folds
+// nothing twice.
+// ---------------------------------------------------------------------------
+
+const clampTitle = (s: string): string => s.trim().slice(0, INITIATIVE_TITLE_MAX)
+const clampProse = (s: string): string => s.trim().slice(0, INITIATIVE_PROSE_MAX)
+
+/**
+ * Guard: mid-flight human curation (promote / dismiss / item edit / policy edit) is only valid
+ * while the initiative is still `executing` — the same status gate `pause`/`resume`/`cancel`
+ * enforce and the tracker UI's `editable` reflects. Checked inside the CAS transform (on the
+ * freshly-read entity) so a concurrent cancel/pause can't be raced past. Curating a settled
+ * (`done`/`cancelled`) or not-yet-approved initiative would append items the loop never spawns
+ * and flip completion invariants on an already-terminal entity.
+ */
+function assertCurationAllowed(initiative: Initiative): void {
+  if (initiative.status !== 'executing') {
+    throw new ConflictError(
+      `Initiative is ${initiative.status}; curation is only allowed while it is executing`,
+    )
+  }
+}
+
+/** One forward-looking follow-up lifted off a settling child run, before it becomes a tracker entry. */
+export interface HarvestedFollowUp {
+  /** Stable id of the child run's follow-up item — the harvest id derives from it, for idempotency. */
+  sourceId: string
+  title: string
+  detail: string
+  /** The coder's optional proposed approach, folded into the harvested detail. */
+  suggestedAction?: string | null
+}
+
+/** Everything the loop folds onto the initiative when a spawned child run settles. */
+export interface InitiativeRunHarvest {
+  /** The spawned child task block whose run settled — maps to the item via `item.blockId`. */
+  childBlockId: string
+  /** Forward-looking follow-ups the run surfaced (from its coder step). */
+  followUps: HarvestedFollowUp[]
+  /** The run's failure cause, when it failed — enriches the item's note (the deviation reads it). */
+  failure?: { kind: string; detail: string } | null
+}
+
+/**
+ * Extract the harvest payload from a settling child run: every `follow_up`-kind item its coder
+ * step surfaced (questions are per-task clarifications, not initiative work) plus the failure
+ * cause when it failed. Pure over the instance already in hand at the terminal emit, so the
+ * harvest costs no extra read.
+ */
+export function extractRunHarvest(instance: ExecutionInstance): InitiativeRunHarvest {
+  const followUps: HarvestedFollowUp[] = []
+  for (const step of instance.steps) {
+    for (const item of step.followUps?.items ?? []) {
+      if (item.kind !== 'follow_up') continue
+      followUps.push({
+        sourceId: item.id,
+        title: item.title,
+        detail: item.detail ?? '',
+        suggestedAction: item.suggestedAction ?? null,
+      })
+    }
+  }
+  const failure =
+    instance.status === 'failed' && instance.failure
+      ? { kind: instance.failure.kind, detail: instance.failure.message }
+      : null
+  return { childBlockId: instance.blockId, followUps, failure }
+}
+
+/** A stable, idField-valid id for a harvested follow-up, so re-harvesting the same run is a no-op. */
+export function harvestFollowUpId(childBlockId: string, sourceId: string): string {
+  return `ifu-${initiativeSlug(`${childBlockId}-${sourceId}`)}`
+}
+
+/**
+ * Fold a settling child run's harvest onto the initiative: append each not-yet-seen follow-up as
+ * an `open` tracker follow-up (idempotent by {@link harvestFollowUpId}), and — when the run
+ * failed — stamp the owning item's `note` with the real cause so the reconcile-driven deviation
+ * records WHY it blocked. Content-identical ⇒ returns the input unchanged (the CAS short-circuits).
+ */
+export function applyRunHarvest(
+  initiative: Initiative,
+  harvest: InitiativeRunHarvest,
+  now: number,
+): Initiative {
+  const item = (initiative.items ?? []).find((i) => i.blockId === harvest.childBlockId)
+  const sourceItemId = item?.id ?? null
+  const seen = new Set((initiative.followUps ?? []).map((f) => f.id))
+  const additions: InitiativeFollowUp[] = []
+  for (const fu of harvest.followUps) {
+    const id = harvestFollowUpId(harvest.childBlockId, fu.sourceId)
+    if (seen.has(id)) continue
+    seen.add(id)
+    const detail = [fu.detail, fu.suggestedAction ? `Suggested: ${fu.suggestedAction}` : '']
+      .filter((s) => s.trim().length > 0)
+      .join('\n\n')
+    additions.push({
+      id,
+      at: now,
+      sourceItemId,
+      title: clampTitle(fu.title),
+      detail: detail.slice(0, INITIATIVE_SHORT_MAX),
+      status: 'open',
+    })
+  }
+  let items = initiative.items ?? []
+  if (item && harvest.failure) {
+    const note = `Run failed (${harvest.failure.kind}): ${harvest.failure.detail}`
+      .trim()
+      .slice(0, INITIATIVE_SHORT_MAX)
+    if (item.note !== note) items = items.map((i) => (i.id === item.id ? { ...i, note } : i))
+  }
+  if (additions.length === 0 && items === (initiative.items ?? [])) return initiative
+  return {
+    ...initiative,
+    items,
+    followUps: [...(initiative.followUps ?? []), ...additions],
+  }
+}
+
+/**
+ * Promote an `open` follow-up into a real `pending` tracker item under `input.phaseId` (the loop
+ * spawns it like any other), flipping the follow-up `promoted` with a `promotedItemId`
+ * back-reference. A follow-up that is already promoted/dismissed is a no-op (returns unchanged, so
+ * a double-submit is harmless). Throws {@link ValidationError} on an unknown follow-up / phase /
+ * dependency.
+ */
+export function applyPromoteFollowUp(
+  initiative: Initiative,
+  followUpId: string,
+  input: PromoteInitiativeFollowUpInput,
+): Initiative {
+  assertCurationAllowed(initiative)
+  const followUp = (initiative.followUps ?? []).find((f) => f.id === followUpId)
+  if (!followUp) throw new ValidationError(`Unknown follow-up '${followUpId}'`)
+  if (followUp.status !== 'open') return initiative
+  if (!(initiative.phases ?? []).some((p) => p.id === input.phaseId)) {
+    throw new ValidationError(`Unknown phase '${input.phaseId}'`)
+  }
+  const itemIds = new Set((initiative.items ?? []).map((i) => i.id))
+  for (const dep of input.dependsOn ?? []) {
+    if (!itemIds.has(dep)) throw new ValidationError(`Depends on unknown item '${dep}'`)
+  }
+  const newId = uniqueSlugId(input.title ?? followUp.title, new Set(itemIds))
+  const newItem: InitiativeItem = {
+    id: newId,
+    phaseId: input.phaseId,
+    title: clampTitle(input.title ?? followUp.title),
+    description: clampProse(input.description ?? followUp.detail ?? ''),
+    dependsOn: input.dependsOn ?? [],
+    ...(input.estimate ? { estimate: input.estimate } : {}),
+    ...(input.pipelineId ? { pipelineId: input.pipelineId } : {}),
+    status: 'pending',
+  }
+  return {
+    ...initiative,
+    items: [...(initiative.items ?? []), newItem],
+    followUps: (initiative.followUps ?? []).map((f) =>
+      f.id === followUpId ? { ...f, status: 'promoted' as const, promotedItemId: newId } : f,
+    ),
+  }
+}
+
+/** Dismiss an `open` follow-up (waved off, not worth an item). A no-op once already settled. */
+export function applyDismissFollowUp(initiative: Initiative, followUpId: string): Initiative {
+  assertCurationAllowed(initiative)
+  const followUp = (initiative.followUps ?? []).find((f) => f.id === followUpId)
+  if (!followUp) throw new ValidationError(`Unknown follow-up '${followUpId}'`)
+  if (followUp.status !== 'open') return initiative
+  return {
+    ...initiative,
+    followUps: (initiative.followUps ?? []).map((f) =>
+      f.id === followUpId ? { ...f, status: 'dismissed' as const } : f,
+    ),
+  }
+}
+
+/**
+ * Edit one tracker item and/or drive its status. Content edits apply only to a not-yet-settled,
+ * not-in-flight item (`pending`/`blocked`) — an in-flight/settled item's spawned task already
+ * carries its own copy, so editing it here would silently diverge. `action` unsticks a halted
+ * phase: `retry` returns a `blocked` item to `pending` (clearing its dead block link + note),
+ * `skip` settles a `pending`/`blocked` item `skipped`. Throws on an unknown item / illegal edit.
+ */
+export function applyItemEdit(
+  initiative: Initiative,
+  itemId: string,
+  input: UpdateInitiativeItemInput,
+): Initiative {
+  assertCurationAllowed(initiative)
+  const item = (initiative.items ?? []).find((i) => i.id === itemId)
+  if (!item) throw new ValidationError(`Unknown item '${itemId}'`)
+
+  const hasContentEdit =
+    input.title !== undefined ||
+    input.description !== undefined ||
+    input.estimate !== undefined ||
+    input.pipelineId !== undefined ||
+    input.dependsOn !== undefined
+  const editable = item.status === 'pending' || item.status === 'blocked'
+  if (hasContentEdit && !editable) {
+    throw new ConflictError(
+      `Item '${itemId}' is ${item.status}; only a pending or blocked item can be edited`,
+    )
+  }
+  if (input.dependsOn) {
+    const itemIds = new Set((initiative.items ?? []).map((i) => i.id))
+    for (const dep of input.dependsOn) {
+      if (dep === itemId) throw new ValidationError(`Item '${itemId}' cannot depend on itself`)
+      if (!itemIds.has(dep)) throw new ValidationError(`Depends on unknown item '${dep}'`)
+    }
+  }
+
+  let next: InitiativeItem = {
+    ...item,
+    ...(input.title !== undefined ? { title: clampTitle(input.title) } : {}),
+    ...(input.description !== undefined ? { description: clampProse(input.description) } : {}),
+    ...(input.estimate !== undefined ? { estimate: input.estimate } : {}),
+    ...(input.pipelineId !== undefined ? { pipelineId: input.pipelineId } : {}),
+    ...(input.dependsOn !== undefined ? { dependsOn: input.dependsOn } : {}),
+  }
+
+  if (input.action === 'skip') {
+    if (!editable) {
+      throw new ConflictError(
+        `Item '${itemId}' is ${item.status}; only pending/blocked can be skipped`,
+      )
+    }
+    next = { ...next, status: 'skipped' }
+  } else if (input.action === 'retry') {
+    if (item.status !== 'blocked') {
+      throw new ConflictError(
+        `Only a blocked item can be retried (item '${itemId}' is ${item.status})`,
+      )
+    }
+    next = { ...next, status: 'pending', blockId: null, note: undefined }
+  }
+
+  const items = (initiative.items ?? []).map((i) => (i.id === itemId ? next : i))
+  // A re-scoped `dependsOn` must keep the graph acyclic — same guard the plan draft enforces,
+  // so an edit can't introduce a mutual dependency that would deadlock the phase.
+  if (input.dependsOn) assertAcyclicItems(items)
+  return { ...initiative, items }
+}
+
+/** Replace the execution policy (concurrency + pipeline rules). Pipeline-id existence is validated
+ *  by the service against the pipeline repository before this runs. */
+export function applyPolicyEdit(
+  initiative: Initiative,
+  policy: InitiativeExecutionPolicy,
+): Initiative {
+  assertCurationAllowed(initiative)
+  return { ...initiative, policy }
 }

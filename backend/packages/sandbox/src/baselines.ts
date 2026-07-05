@@ -1,4 +1,5 @@
 import { PROMPT_VERSIONS, promptVersionLabel, systemPromptFor } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { SandboxFixtureKind } from '@cat-factory/contracts'
 import type { SandboxPromptVersion } from '@cat-factory/kernel'
 import type { SandboxTaskType } from './rubrics.js'
@@ -95,12 +96,18 @@ export function sandboxKindMeta(agentKind: string): SandboxAgentKindMeta | undef
 }
 
 /** The current shipped system-prompt text + `id@vN` label for a catalog kind. */
-export function baselinePromptText(meta: SandboxAgentKindMeta): { text: string; label: string } {
+export function baselinePromptText(
+  meta: SandboxAgentKindMeta,
+  registry: AgentKindRegistry,
+): { text: string; label: string } {
   if (meta.basePromptId && meta.basePromptId in PROMPT_VERSIONS) {
     const versioned = PROMPT_VERSIONS[meta.basePromptId as keyof typeof PROMPT_VERSIONS]
     return { text: versioned.text, label: promptVersionLabel(versioned.id, versioned.version) }
   }
-  return { text: systemPromptFor(meta.agentKind), label: promptVersionLabel(meta.agentKind, 1) }
+  return {
+    text: systemPromptFor(meta.agentKind, registry),
+    label: promptVersionLabel(meta.agentKind, 1),
+  }
 }
 
 /**
@@ -108,9 +115,9 @@ export function baselinePromptText(meta: SandboxAgentKindMeta): { text: string; 
  * These are version 0, origin `baseline`, with no parent/lineage of their own — the prompt
  * browser groups them by agent kind and offers "clone" to start an editable candidate lineage.
  */
-export function listBaselines(now: number): SandboxPromptVersion[] {
+export function listBaselines(now: number, registry: AgentKindRegistry): SandboxPromptVersion[] {
   return SANDBOX_AGENT_KINDS.map((meta) => {
-    const { text, label } = baselinePromptText(meta)
+    const { text, label } = baselinePromptText(meta, registry)
     return {
       id: `baseline:${meta.basePromptId ?? meta.agentKind}`,
       lineageId: `baseline:${meta.basePromptId ?? meta.agentKind}`,

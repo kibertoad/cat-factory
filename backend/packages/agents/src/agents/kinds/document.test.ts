@@ -15,11 +15,12 @@ import {
   DOC_REVIEWER_KIND,
   DOC_WRITER_KIND,
 } from './document.js'
-import { registeredAgentStep, registeredKindRequiresContainer } from './registry.js'
+import { defaultAgentKindRegistry } from './registry.js'
 import { DOC_AWARE_TRAIT, hasTrait } from './traits.js'
 
-// Importing the package registers the document kinds as a side effect; ./document is imported
-// transitively here, so the registry is populated.
+// `defaultAgentKindRegistry()` pre-loads the built-in document kinds, so a fresh instance
+// exposes them (no module-global side effect).
+const registry = defaultAgentKindRegistry()
 
 function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
   return {
@@ -42,17 +43,17 @@ function ctx(overrides: Partial<AgentRunContext> = {}): AgentRunContext {
 
 describe('document agent kinds', () => {
   it('registers the inline research/outline kinds and container-coding writer/finalizer', () => {
-    expect(registeredAgentStep(DOC_RESEARCHER_KIND)?.surface).toBe('inline')
-    expect(registeredAgentStep(DOC_OUTLINER_KIND)?.surface).toBe('inline')
-    expect(registeredAgentStep(DOC_WRITER_KIND)?.surface).toBe('container-coding')
-    expect(registeredAgentStep(DOC_FINALIZER_KIND)?.surface).toBe('container-coding')
+    expect(registry.agentStep(DOC_RESEARCHER_KIND)?.surface).toBe('inline')
+    expect(registry.agentStep(DOC_OUTLINER_KIND)?.surface).toBe('inline')
+    expect(registry.agentStep(DOC_WRITER_KIND)?.surface).toBe('container-coding')
+    expect(registry.agentStep(DOC_FINALIZER_KIND)?.surface).toBe('container-coding')
     // The writer branches off base + opens a PR (coder-like); the finalizer polishes the PR.
-    expect(registeredAgentStep(DOC_WRITER_KIND)?.clone?.branch).toBe('work')
-    expect(registeredAgentStep(DOC_FINALIZER_KIND)?.clone?.branch).toBe('pr')
+    expect(registry.agentStep(DOC_WRITER_KIND)?.clone?.branch).toBe('work')
+    expect(registry.agentStep(DOC_FINALIZER_KIND)?.clone?.branch).toBe('pr')
     // Container kinds route to the container executor.
-    expect(registeredKindRequiresContainer(DOC_WRITER_KIND)).toBe(true)
-    expect(registeredKindRequiresContainer(DOC_FINALIZER_KIND)).toBe(true)
-    expect(registeredKindRequiresContainer(DOC_RESEARCHER_KIND)).toBe(false)
+    expect(registry.requiresContainer(DOC_WRITER_KIND)).toBe(true)
+    expect(registry.requiresContainer(DOC_FINALIZER_KIND)).toBe(true)
+    expect(registry.requiresContainer(DOC_RESEARCHER_KIND)).toBe(false)
   })
 
   it('marks every document-authoring kind (incl. the reviewer) doc-aware for style folding', () => {
@@ -66,7 +67,7 @@ describe('document agent kinds', () => {
       DOC_FINALIZER_KIND,
       DOC_REVIEWER_KIND,
     ]) {
-      expect(hasTrait(kind, DOC_AWARE_TRAIT)).toBe(true)
+      expect(hasTrait(kind, DOC_AWARE_TRAIT, registry)).toBe(true)
     }
   })
 
@@ -81,7 +82,7 @@ describe('document agent kinds', () => {
     // branch and read it — an inline review of the writer's summary reply is worthless.
     expect(isContainerBackedCompanion(DOC_REVIEWER_KIND)).toBe(true)
     // The system prompt tells it to read the checkout rather than judge from the reply.
-    const prompt = systemPromptFor(DOC_REVIEWER_KIND)
+    const prompt = systemPromptFor(DOC_REVIEWER_KIND, registry)
     expect(prompt).toContain('read-only checkout')
     expect(prompt).toContain('Do NOT judge from the')
     // It still emits the structured verdict JSON the engine parses.
@@ -89,7 +90,7 @@ describe('document agent kinds', () => {
   })
 
   it("specialises the writer's prompt on the task's docKind and target path", () => {
-    const prompt = userPromptFor(ctx(), { materialized: true })
+    const prompt = userPromptFor(ctx(), registry, { materialized: true })
     // The kind-specific structure guidance + the default target path are woven in.
     expect(prompt).toContain('Document kind: prd')
     expect(prompt).toContain('docs/prd/billing-service-prd.md')
@@ -97,7 +98,7 @@ describe('document agent kinds', () => {
   })
 
   it("weaves the docKind template's required sections into the outliner prompt", () => {
-    const prompt = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), {})
+    const prompt = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), registry, {})
     // The PRD template's required sections must be named as things the outline has to cover.
     expect(prompt).toContain('MUST cover these required sections')
     expect(prompt).toContain('Acceptance Criteria')
@@ -105,7 +106,7 @@ describe('document agent kinds', () => {
   })
 
   it('embeds the docKind template skeleton in the writer prompt', () => {
-    const prompt = userPromptFor(ctx(), { materialized: true })
+    const prompt = userPromptFor(ctx(), registry, { materialized: true })
     expect(prompt).toContain('template skeleton')
     // The skeleton is titled from the block and carries the required section headings.
     expect(prompt).toContain('# Billing Service PRD')
@@ -117,9 +118,9 @@ describe('document agent kinds', () => {
     // just the kind ("produce a product requirements document.") rather than re-listing every
     // section ("… document: Overview, Problem & Goals, …"). The researcher, which gets ONLY the
     // brief, keeps the full section list.
-    const writer = userPromptFor(ctx(), { materialized: true })
-    const outliner = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), {})
-    const researcher = userPromptFor(ctx({ agentKind: DOC_RESEARCHER_KIND }), {})
+    const writer = userPromptFor(ctx(), registry, { materialized: true })
+    const outliner = userPromptFor(ctx({ agentKind: DOC_OUTLINER_KIND }), registry, {})
+    const researcher = userPromptFor(ctx({ agentKind: DOC_RESEARCHER_KIND }), registry, {})
     expect(writer).toContain('produce a product requirements document.')
     expect(writer).not.toContain('a product requirements document:')
     expect(outliner).not.toContain('a product requirements document:')
@@ -136,6 +137,7 @@ describe('document agent kinds', () => {
           taskTypeFields: { docKind: 'rfc', targetPath: 'docs/rfcs/0001-foo.md' },
         },
       }),
+      registry,
       { materialized: true },
     )
     expect(prompt).toContain('docs/rfcs/0001-foo.md')
@@ -154,6 +156,7 @@ describe('document agent kinds', () => {
           },
         },
       }),
+      registry,
       { materialized: true },
     )
     // The PRD-specific fields are labelled and marked as required content for the writer.
@@ -171,6 +174,7 @@ describe('document agent kinds', () => {
           taskTypeFields: { docKind: 'adr', consideredOptions: 'A vs B vs C' },
         },
       }),
+      registry,
       { materialized: true },
     )
     expect(partial).toContain('Considered options: A vs B vs C')
@@ -178,6 +182,7 @@ describe('document agent kinds', () => {
     // No specifics set ⇒ no "Author-provided … specifics" line at all.
     const none = userPromptFor(
       ctx({ block: { ...ctx().block, taskTypeFields: { docKind: 'adr' } } }),
+      registry,
       { materialized: true },
     )
     expect(none).not.toContain('specifics')
@@ -186,11 +191,11 @@ describe('document agent kinds', () => {
   it('the container-coding writer is NOT told to put its answer in the reply (it commits)', () => {
     // FINAL_ANSWER_IN_REPLY is for inline/explore deliverable-is-the-reply kinds; the writer's
     // product is a pushed commit, so it must not get that directive.
-    expect(systemPromptFor(DOC_WRITER_KIND)).not.toContain(
+    expect(systemPromptFor(DOC_WRITER_KIND, registry)).not.toContain(
       'Your deliverable is the text of your FINAL reply',
     )
     // The inline outliner DOES (its prose reply is the deliverable).
-    expect(systemPromptFor(DOC_OUTLINER_KIND)).toContain(
+    expect(systemPromptFor(DOC_OUTLINER_KIND, registry)).toContain(
       'Your deliverable is the text of your FINAL reply',
     )
   })

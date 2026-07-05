@@ -23,6 +23,8 @@ import {
 } from '@cat-factory/kernel'
 import {
   AiAgentExecutor,
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
@@ -82,6 +84,7 @@ import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/c
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import {
   buildResolveRepoTarget as buildSharedResolveRepoTarget,
+  buildResolveRepoTargets as buildSharedResolveRepoTargets,
   ContainerEnvConfigRepairer,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -120,6 +123,7 @@ import { WorkersAiLlmUpstream } from './ai/WorkersAiLlmUpstream'
 import {
   ContainerAgentExecutor,
   type ResolveRepoTarget,
+  type ResolveRepoTargets,
   type ResolveRunnerTransport,
 } from './ai/ContainerAgentExecutor'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
@@ -348,6 +352,7 @@ function selectAgentExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  agentKindRegistry: AgentKindRegistry,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
   agentContextObservability?: AgentContextRecorder,
@@ -363,6 +368,7 @@ function selectAgentExecutor(
     // Opt-in provider web search for the inline design/research kinds (no-op unless
     // INLINE_WEB_SEARCH_ENABLED and an Anthropic/OpenAI model).
     webSearch: inlineWebSearchOptionsFromEnv(env),
+    agentKindRegistry,
   })
 
   // The sandbox MUST build — a null here means a prerequisite (GitHub App private
@@ -376,6 +382,7 @@ function selectAgentExecutor(
     db,
     clock,
     resolveTransport,
+    agentKindRegistry,
     subscriptions,
     personalSubscriptions,
     agentContextObservability,
@@ -392,7 +399,7 @@ function selectAgentExecutor(
 
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the
   // container.
-  return new CompositeAgentExecutor(inline, container)
+  return new CompositeAgentExecutor(inline, container, agentKindRegistry)
 }
 
 /** Truthy env flag (`true`/`1`/`yes`). */
@@ -413,6 +420,7 @@ function maybeWrapConsensus(
   config: AppConfig,
   db: D1Database,
   eventPublisher: ExecutionEventPublisher | undefined,
+  agentKindRegistry: AgentKindRegistry,
 ): AgentExecutor {
   if (!isTruthy(env.CONSENSUS_ENABLED)) return standard
   registerConsensusTraits()
@@ -424,6 +432,7 @@ function maybeWrapConsensus(
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     sessionRepository: new D1ConsensusSessionRepository({ db }),
     ...(eventPublisher ? { eventPublisher } : {}),
+    agentKindRegistry,
   })
 }
 
@@ -585,6 +594,22 @@ function buildAppRegistry(
  */
 function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
   return buildSharedResolveRepoTarget({
+    installationRepository: new D1GitHubInstallationRepository({ db }),
+    repoProjectionRepository: new D1RepoProjectionRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
+  })
+}
+
+/**
+ * The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
+ * connected involved-service repo, deduped. Wired from the SAME D1 repos as the singular
+ * resolver (the D1 service repo's batched `listByFrameBlocks` resolves the involved frames'
+ * repos in one query). Fed to the container executor so the implementer can fan a
+ * cross-service change out across sibling checkouts.
+ */
+function buildResolveRepoTargets(db: D1Database): ResolveRepoTargets {
+  return buildSharedResolveRepoTargets({
     installationRepository: new D1GitHubInstallationRepository({ db }),
     repoProjectionRepository: new D1RepoProjectionRepository({ db }),
     blockRepository: new D1BlockRepository({ db }),
@@ -1090,6 +1115,16 @@ function selectRecurringDeps(
         target.parsed.number,
       )
     }
+    writebackDeps.labelGitHubIssue = async (workspaceId, externalId, label) => {
+      const target = await resolveIssue(workspaceId, externalId)
+      if (!target) return
+      await githubClient.applyIssueLabel?.(
+        target.installationId,
+        { owner: target.parsed.owner, repo: target.parsed.repo },
+        target.parsed.number,
+        label,
+      )
+    }
   }
   // Jira: read the workspace's stored connection credentials (when the tasks
   // integration's encryption key is configured).
@@ -1309,6 +1344,7 @@ function buildContainerExecutor(
   db: D1Database,
   clock: Clock,
   resolveTransport: ResolveRunnerTransport | null,
+  agentKindRegistry: AgentKindRegistry,
   subscriptions?: ProviderSubscriptionService,
   personalSubscriptions?: PersonalSubscriptionService,
   agentContextObservability?: AgentContextRecorder,
@@ -1371,6 +1407,9 @@ function buildContainerExecutor(
     // (block-pinned > workspace per-kind default > env routing > env default).
     resolveWorkspaceModelDefault: buildResolveWorkspaceModelDefault(db),
     resolveRepoTarget,
+    // Multi-repo coding (service-connections phase 3): the implementer fans a cross-service
+    // change out across the task's own repo + each connected involved-service repo.
+    resolveRepoTargets: buildResolveRepoTargets(db),
     // Resolve the workspace's owning account so the proxy can lease account-scoped keys.
     resolveAccountId: (workspaceId) => new D1WorkspaceRepository({ db }).accountOf(workspaceId),
     mintInstallationToken,
@@ -1428,6 +1467,7 @@ function buildContainerExecutor(
     llmTraceSink: buildLangfuseSink(config),
     // Record the complete provided context per dispatch (best-effort, gated in the sink).
     ...(agentContextObservability ? { agentContextObservability } : {}),
+    agentKindRegistry,
   })
 }
 
@@ -2044,6 +2084,11 @@ export function buildContainer(
     overrides.customManifestTypeRegistry ?? defaultRegistries.customManifestTypeRegistry
   const userSecretKindRegistry =
     overrides.userSecretKindRegistry ?? defaultRegistries.userSecretKindRegistry
+  // The app-owned agent-kind registry (built-ins + any a deployment registered by reference).
+  // The SAME instance is threaded into the executors, createCore, the boot-time
+  // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
+  // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
+  const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
@@ -2234,6 +2279,7 @@ export function buildContainer(
           db,
           clock,
           resolveTransport,
+          agentKindRegistry,
           subscriptions,
           personalSubscriptions,
           agentContextObservability,
@@ -2242,7 +2288,9 @@ export function buildContainer(
         config,
         db,
         eventPublisher,
+        agentKindRegistry,
       ),
+    agentKindRegistry,
     workRunner: selectWorkRunner(env),
     executionEventPublisher: eventPublisher,
     spendPricing: config.spend,

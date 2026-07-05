@@ -242,6 +242,9 @@ export const blocks = pgTable(
     service_fragment_ids: text('service_fragment_ids'),
     model_id: text('model_id'),
     pull_request: text('pull_request'),
+    // Task-level: PRs a multi-repo run opened in connected services' repos beside the
+    // own-service `pull_request` — serialized JSON array of { repo, frameId?, ref }.
+    peer_pull_requests: text('peer_pull_requests'),
     merge_preset_id: text('merge_preset_id'),
     model_preset_id: text('model_preset_id'),
     pipeline_id: text('pipeline_id'),
@@ -706,6 +709,9 @@ export const pipelineSchedules = pgTable(
     enabled: integer('enabled').notNull().default(1),
     // Manual-only schedule: never auto-fired by the sweeper (`listDue` filters `on_demand = 0`).
     on_demand: integer('on_demand').notNull().default(0),
+    // Nullable JSON issue-intake config (mirror of D1 migration 0038): source + board
+    // scope + predicates for a pipeline with a `bug-intake` step.
+    issue_intake: text('issue_intake'),
     last_run_at: bigint('last_run_at', { mode: 'number' }),
     next_run_at: bigint('next_run_at', { mode: 'number' }).notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),

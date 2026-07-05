@@ -244,7 +244,17 @@
       "submit": "Añadir pipeline recurrente",
       "addFailedTitle": "No se pudo añadir la pipeline recurrente",
       "onDemand": "Bajo demanda (solo manual)",
-      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual."
+      "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual.",
+      "intake": "Admisión de incidencias",
+      "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
+      "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
+      "intakeGithubRepo": "Repositorio",
+      "intakeTitleFragment": "El título contiene",
+      "intakeTitleFragmentPlaceholder": "p. ej. crash",
+      "intakeLabels": "Etiquetas",
+      "intakeLabelsPlaceholder": "separadas por comas",
+      "intakeIssueType": "Tipo de incidencia",
+      "intakeInProgressLabel": "Etiqueta de en progreso"
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
@@ -857,7 +867,8 @@
         "auto_merge_disabled": "El preajuste {preset} envía todos los PR a una persona, así que este espera revisión.",
         "no_rationale": "El fusionador puntuó el PR pero no dio ninguna justificación, así que no se pudo confiar en el veredicto para fusionar automáticamente; el PR espera a que una persona lo fusione.",
         "no_assessment": "El fusionador no devolvió una evaluación analizable, por lo que el PR espera a que una persona lo fusione.",
-        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione."
+        "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione.",
+        "merge_partial": "Algunas de las solicitudes de incorporación de la tarea se fusionaron, pero una posterior no pudo, por lo que el cambio espera a que una persona termine o revierta la fusión multirrepositorio."
       },
       "scores": "Puntuaciones",
       "axis": {
@@ -4094,6 +4105,26 @@
       "hint": "Continuar permite al planificador hacer mas preguntas; Proceder planifica con las respuestas actuales.",
       "proceed": "Proceder a planificar",
       "continue": "Continuar"
+    },
+    "followUpStatus": {
+      "open": "Abierto",
+      "promoted": "Promovido",
+      "dismissed": "Descartado"
+    },
+    "curation": {
+      "promote": "Promover a elemento",
+      "promoteConfirm": "Crear elemento",
+      "dismiss": "Descartar",
+      "retry": "Reintentar",
+      "skip": "Omitir",
+      "edit": "Editar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "phaseField": "Fase",
+      "itemTitlePlaceholder": "Titulo del elemento (por defecto el del seguimiento)",
+      "maxConcurrentField": "Tareas concurrentes maximas",
+      "defaultPipelineField": "Pipeline por defecto",
+      "failed": "No se pudo actualizar la iniciativa"
     }
   }
 }

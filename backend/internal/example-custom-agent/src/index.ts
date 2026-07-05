@@ -1,5 +1,5 @@
-import type { AgentKindDefinition } from '@cat-factory/agents'
-import { defineStructuredOutput, registerAgentKinds } from '@cat-factory/agents'
+import type { AgentKindDefinition, AgentKindRegistry } from '@cat-factory/agents'
+import { defineStructuredOutput } from '@cat-factory/agents'
 import type { GateProbe, RepoOp, StepCompletionResolver } from '@cat-factory/kernel'
 import {
   defineProviderToken,
@@ -16,19 +16,19 @@ import * as v from 'valibot'
 //
 // This is what a proprietary "org agents" package looks like: it teaches the platform
 // two brand-new agent kinds and a pipeline that chains them — purely through the public
-// extension seams (`registerAgentKind` + `registerPipeline`) — and ships its mechanical
-// work as ordinary backend TypeScript. Crucially it requires ZERO changes to the
+// extension seams (the app-owned `AgentKindRegistry` + `registerPipeline`) — and ships its
+// mechanical work as ordinary backend TypeScript. Crucially it requires ZERO changes to the
 // executor-harness image: the container runs the generic LLM-over-a-checkout `agent` kind,
 // and the deterministic "render a report file + commit it" step is a backend POST-OP over
 // the checkout-free `RepoFiles` port (no clone, runtime-symmetric across Worker/Node/local).
 //
-// A deployment opts in by importing the package once for its side effect, exactly like a
-// model-provider mix-in:
+// A deployment opts in from its composition root by registering its kinds BY REFERENCE on
+// the `AgentKindRegistry` instance it injects into the facade build, then passing that same
+// instance in:
 //
-//   import '@cat-factory/example-custom-agent'   // registers the kinds + pipeline
-//
-// or by calling {@link registerExampleCustomAgents} explicitly (e.g. from a facade's
-// composition root, or a test that wants to control timing).
+//   const registry = defaultAgentKindRegistry()
+//   registerExampleCustomAgents(registry)        // registers the kinds + pipeline + gate
+//   start({ agentKindRegistry: registry })        // (or buildContainer / startLocal)
 //
 // See `backend/docs/custom-agents.md` for the full model.
 // ---------------------------------------------------------------------------
@@ -277,13 +277,15 @@ const auditorSummaryResolver: StepCompletionResolver = {
 }
 
 /**
- * Register the example kinds + the `pl_org_audit` pipeline that chains them, plus the
- * example `license-check` gate + the auditor summary resolver. Idempotent (registries
- * replace by id/kind), so importing the package and calling this explicitly are safe to
- * combine. Called automatically as an import side effect below.
+ * Register the example kinds on the app-owned {@link AgentKindRegistry} the composition root
+ * injects, plus the `pl_org_audit` pipeline that chains them and the example `license-check`
+ * gate + the auditor summary resolver (still on the module-global pipeline/gate/step-resolver
+ * registries — those registries have not migrated to app-owned DI yet). Idempotent (registries
+ * replace by id/kind). Called explicitly from a facade/test — there is no module-load side
+ * effect any more, since the agent-kind registry is an app-owned instance, not a global.
  */
-export function registerExampleCustomAgents(): void {
-  registerAgentKinds(EXAMPLE_AGENT_KINDS)
+export function registerExampleCustomAgents(registry: AgentKindRegistry): void {
+  registry.registerAll(EXAMPLE_AGENT_KINDS)
   registerPipeline({
     id: ORG_AUDIT_PIPELINE_ID,
     name: 'Org compliance audit',
@@ -332,6 +334,3 @@ export function registerExampleCustomAgents(): void {
   }))
   registerStepResolver(auditorSummaryResolver.kind, () => auditorSummaryResolver)
 }
-
-// Side-effect registration: `import '@cat-factory/example-custom-agent'` is enough.
-registerExampleCustomAgents()

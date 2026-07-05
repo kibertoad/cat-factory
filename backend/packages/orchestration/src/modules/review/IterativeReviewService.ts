@@ -214,21 +214,45 @@ export abstract class IterativeReviewService<
     const concernThreshold = opts.concernThreshold ?? 'none'
     const context = await this.gatherContext(workspaceId, block, opts)
     const { ref, items } = await this.runReviewer(workspaceId, block, context)
+    return this.persistInitialReview(workspaceId, block, items, `${ref.provider}:${ref.model}`, {
+      maxIterations,
+      concernThreshold,
+    })
+  }
+
+  /**
+   * Persist a fresh (iteration-1) review from ALREADY-PRODUCED items: dispose them, encode the
+   * disposition into `status` (auto-pass → `incorporated`; findings → `ready`/`exceeded`),
+   * replace any prior review for the block, and raise the findings notification unless it
+   * auto-passed. Extracted from {@link review} so a kind can seed the initial items WITHOUT the
+   * reviewer LLM (the clarity kind seeds them from an upstream investigator; `model` is then
+   * `null`) and still share this exact dispose/persist/notify tail.
+   */
+  protected async persistInitialReview(
+    workspaceId: string,
+    block: Block,
+    items: RequirementReviewItem[],
+    model: string | null,
+    opts: { maxIterations: number; concernThreshold: RequirementConcernLevel },
+  ): Promise<TReview> {
     const now = this.deps.clock.now()
-    const disposition = disposeReview(items, { iteration: 1, maxIterations, concernThreshold })
+    const disposition = disposeReview(items, {
+      iteration: 1,
+      maxIterations: opts.maxIterations,
+      concernThreshold: opts.concernThreshold,
+    })
     const review = this.newReview({
       id: this.deps.idGenerator.next(this.reviewIdPrefix),
-      blockId,
+      blockId: block.id,
       status: statusForDisposition(disposition),
       items,
-      model: `${ref.provider}:${ref.model}`,
+      model,
       iteration: 1,
-      maxIterations,
+      maxIterations: opts.maxIterations,
       createdAt: now,
       updatedAt: now,
     })
-
-    await this.repository.deleteByBlock(workspaceId, blockId)
+    await this.repository.deleteByBlock(workspaceId, block.id)
     await this.repository.upsert(workspaceId, review)
     if (disposition !== 'auto-pass') await this.notifyFindings(workspaceId, block, items.length)
     return review

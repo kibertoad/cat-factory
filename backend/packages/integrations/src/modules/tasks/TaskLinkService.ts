@@ -58,6 +58,35 @@ export class TaskLinkService {
   }
 
   /**
+   * Replace a block's linked issue: detach EVERYTHING currently linked to the
+   * block (one batched write), then attach the given issue. The recurring
+   * intake's link move — a schedule's reused block works a different issue every
+   * fire, and without the unlink the previous fires' issues would accumulate as
+   * stale agent context. The unlink is deliberately block-scoped (not "the issue
+   * the last fire linked"), so a manually-attached leftover is cleared too.
+   */
+  async replaceForBlock(
+    workspaceId: string,
+    blockId: string,
+    source: TaskSourceKind,
+    externalId: string,
+  ): Promise<SourceTask> {
+    const block: Block = assertFound(
+      await this.deps.blockRepository.get(workspaceId, blockId),
+      'Block',
+      blockId,
+    )
+    const task = assertFound(
+      await this.deps.taskRepository.get(workspaceId, source, externalId),
+      'Task',
+      externalId,
+    )
+    await this.deps.taskRepository.unlinkAllFromBlock(workspaceId, block.id)
+    await this.deps.taskRepository.linkBlock(workspaceId, source, externalId, block.id)
+    return toSourceTask({ ...task, linkedBlockId: block.id })
+  }
+
+  /**
    * Create a new board task from an already-imported issue, inside a container
    * (service frame or module), and link the issue to the new task for context.
    * The title/description are seeded from the issue; the issue stays the source
@@ -235,12 +264,12 @@ type IssueSeed = {
 }
 
 /** Seed the new task's title from the issue (keyed for traceability). */
-function issueTaskTitle(issue: IssueSeed): string {
+export function issueTaskTitle(issue: IssueSeed): string {
   return `${issue.externalId}: ${issue.title}`
 }
 
 /** Seed the new task's description: a source reference line + the issue body. */
-function issueTaskDescription(issue: IssueSeed): string {
+export function issueTaskDescription(issue: IssueSeed): string {
   const reference = `Imported from ${issue.url}`
   const body = issue.description.trim() || (issue.excerpt ?? '').trim()
   return body ? `${reference}\n\n${body}` : reference

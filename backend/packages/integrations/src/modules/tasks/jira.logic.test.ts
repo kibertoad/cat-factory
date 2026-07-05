@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildJiraChildrenJql,
+  buildJiraIntakeJql,
   isJiraEpicType,
   mapJiraIssueLinks,
   parseJiraRef,
@@ -80,5 +81,47 @@ describe('mapJiraIssueLinks', () => {
 describe('parseJiraRef (sanity)', () => {
   it('still resolves a bare key', () => {
     expect(parseJiraRef('proj-12')).toBe('PROJ-12')
+  })
+})
+
+describe('buildJiraIntakeJql', () => {
+  it('compiles every predicate into one open-issues query, oldest first', () => {
+    const jql = buildJiraIntakeJql({
+      board: { jiraProjectKey: 'PROJ' },
+      issueType: 'Bug',
+      labels: ['triage', 'backend'],
+      titleFragment: 'crash',
+      limit: 5,
+    })
+    expect(jql).toBe(
+      'project = "PROJ" AND statusCategory != Done AND issuetype = "Bug" AND ' +
+        'labels = "triage" AND labels = "backend" AND summary ~ "crash" ORDER BY created ASC',
+    )
+  })
+
+  it('omits absent predicates but always filters to open issues', () => {
+    expect(buildJiraIntakeJql({ board: {}, limit: 5 })).toBe(
+      'statusCategory != Done ORDER BY created ASC',
+    )
+  })
+
+  it('pushes the exclusion list into the query, dropping malformed keys', () => {
+    const jql = buildJiraIntakeJql({
+      board: { jiraProjectKey: 'PROJ' },
+      excludeExternalIds: ['PROJ-1', 'PROJ-2', 'not a key") OR (1=1', 'acme/web#3'],
+      limit: 5,
+    })
+    expect(jql).toContain('issuekey NOT IN (PROJ-1, PROJ-2)')
+    expect(jql).not.toContain('1=1')
+    expect(jql).not.toContain('acme/web')
+  })
+
+  it('escapes quotes in user-supplied predicate values', () => {
+    const jql = buildJiraIntakeJql({
+      board: { jiraProjectKey: 'PROJ' },
+      titleFragment: 'say "hi"',
+      limit: 5,
+    })
+    expect(jql).toContain('summary ~ "say \\"hi\\""')
   })
 })

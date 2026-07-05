@@ -1,0 +1,1 @@
+ALTER TABLE "pipeline_schedules" ADD COLUMN "issue_intake" text;

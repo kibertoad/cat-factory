@@ -131,11 +131,15 @@ export interface VcsClient {
     ref: VcsRepoRef,
     issueNumber: number,
   ): Promise<GitHubSubIssue[]>
-  /** Search issues visible to the connection by free text. */
+  /**
+   * Search issues visible to the connection by free text. `order` overrides the default
+   * ranking — `created-asc` sorts oldest-first (the issue-intake pickup order).
+   */
   searchIssues(
     connection: VcsConnectionRef,
     query: string,
     limit?: number,
+    order?: 'created-asc',
   ): Promise<GitHubIssueSearchHit[]>
   /** Code-search files visible to the connection. */
   searchCode(

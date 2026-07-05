@@ -244,7 +244,17 @@
       "submit": "Dodaj cykliczny pipeline",
       "addFailedTitle": "Nie udało się dodać cyklicznego pipeline’u",
       "onDemand": "Na żądanie (tylko ręcznie)",
-      "onDemandHint": "Uruchamia się tylko po ręcznym wyzwoleniu, bez harmonogramu. Ponieważ za każdym razem jesteś obecny, jego zadanie może korzystać z modelu subskrypcji do użytku indywidualnego."
+      "onDemandHint": "Uruchamia się tylko po ręcznym wyzwoleniu, bez harmonogramu. Ponieważ za każdym razem jesteś obecny, jego zadanie może korzystać z modelu subskrypcji do użytku indywidualnego.",
+      "intake": "Pobieranie zgłoszeń",
+      "intakeHint": "Każde uruchomienie wybiera jedno pasujące otwarte zgłoszenie z trackera i realizuje je od początku do końca.",
+      "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
+      "intakeGithubRepo": "Repozytorium",
+      "intakeTitleFragment": "Tytuł zawiera",
+      "intakeTitleFragmentPlaceholder": "np. crash",
+      "intakeLabels": "Etykiety",
+      "intakeLabelsPlaceholder": "oddzielone przecinkami",
+      "intakeIssueType": "Typ zgłoszenia",
+      "intakeInProgressLabel": "Etykieta w toku"
     },
     "failure": {
       "containerFailedToStart": "Nie udało się uruchomić kontenera",
@@ -857,7 +867,8 @@
         "auto_merge_disabled": "Ustawienie {preset} kieruje każdy PR do człowieka, więc ten czeka na przegląd.",
         "no_rationale": "Scalający ocenił PR, ale nie podał uzasadnienia, więc werdyktowi nie można było zaufać na tyle, by scalić automatycznie; PR czeka na scalenie przez człowieka.",
         "no_assessment": "Scalający nie zwrócił możliwej do przetworzenia oceny, więc PR czeka na scalenie przez człowieka.",
-        "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka."
+        "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka.",
+        "merge_partial": "Część pull requestów zadania została scalona, ale kolejnego nie udało się scalić, więc zmiana czeka, aż człowiek dokończy lub cofnie scalanie wielorepozytoryjne."
       },
       "scores": "Oceny",
       "axis": {
@@ -4094,6 +4105,26 @@
       "hint": "Kontynuuj pozwala planiscie zadac kolejne pytania; Przejdz do planowania planuje na podstawie dotychczasowych odpowiedzi.",
       "proceed": "Przejdz do planowania",
       "continue": "Kontynuuj"
+    },
+    "followUpStatus": {
+      "open": "Otwarte",
+      "promoted": "Awansowane",
+      "dismissed": "Odrzucone"
+    },
+    "curation": {
+      "promote": "Awansuj do elementu",
+      "promoteConfirm": "Utworz element",
+      "dismiss": "Odrzuc",
+      "retry": "Ponow",
+      "skip": "Pomin",
+      "edit": "Edytuj",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "phaseField": "Faza",
+      "itemTitlePlaceholder": "Tytul elementu (domyslnie z zadania nastepczego)",
+      "maxConcurrentField": "Maks. rownoczesnych zadan",
+      "defaultPipelineField": "Domyslny pipeline",
+      "failed": "Nie udalo sie zaktualizowac inicjatywy"
     }
   }
 }

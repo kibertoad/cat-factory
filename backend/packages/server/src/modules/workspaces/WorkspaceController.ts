@@ -5,11 +5,7 @@ import {
   listWorkspacesContract,
   updateWorkspaceContract,
 } from '@cat-factory/contracts'
-import {
-  configContributionCatalog,
-  registeredAgentKinds,
-  registeredKindRequiresContainer,
-} from '@cat-factory/agents'
+import { configContributionCatalog } from '@cat-factory/agents'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { logger as sharedLogger } from '../../observability/logger.js'
@@ -20,7 +16,7 @@ import type {
   InfraSetup,
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
-import type { AgentRouting } from '@cat-factory/agents'
+import type { AgentKindRegistry, AgentRouting } from '@cat-factory/agents'
 import type { ModelRef } from '@cat-factory/kernel'
 
 /**
@@ -29,10 +25,10 @@ import type { ModelRef } from '@cat-factory/kernel'
  * metadata derived from the agent registry; the board renders the subset whose
  * owning kind appears in a task's selected pipeline.
  */
-function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot) {
+function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot, registry: AgentKindRegistry) {
   const kinds = new Set<string>()
   for (const pipeline of snapshot.pipelines) for (const kind of pipeline.agentKinds) kinds.add(kind)
-  return configContributionCatalog(kinds)
+  return configContributionCatalog(kinds, registry)
 }
 
 /**
@@ -47,13 +43,14 @@ function snapshotAgentConfigCatalog(snapshot: WorkspaceSnapshot) {
  * (process-global registry), so identical for every workspace and every facade. Returns
  * undefined when none are registered, so the field is simply absent on the stock product.
  */
-function snapshotCustomAgentKinds(): CustomAgentKind[] | undefined {
-  const kinds = registeredAgentKinds()
+function snapshotCustomAgentKinds(registry: AgentKindRegistry): CustomAgentKind[] | undefined {
+  const kinds = registry
+    .all()
     .filter((def) => def.presentation)
     .map((def) => ({
       kind: def.kind,
       presentation: def.presentation!,
-      container: registeredKindRequiresContainer(def.kind),
+      container: registry.requiresContainer(def.kind),
     }))
   return kinds.length > 0 ? kinds : undefined
 }
@@ -258,12 +255,12 @@ export function workspaceController(): Hono<AppEnv> {
       container.spendService.status(snapshot.workspace.id),
       snapshotInfraSetup(container, snapshot.workspace.id),
     ])
-    const customAgentKinds = snapshotCustomAgentKinds()
+    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
     return c.json(
       {
         ...snapshot,
         spend,
-        agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
+        agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),
@@ -346,7 +343,7 @@ export function workspaceController(): Hono<AppEnv> {
       snapshotInfraSetup(container, workspaceId),
       container.github ? container.github.service.listRepos(workspaceId) : undefined,
     ])
-    const customAgentKinds = snapshotCustomAgentKinds()
+    const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
 
     // Redact service frames backed by a repo linked via ANOTHER member's personal PAT that this
     // viewer can't reach (fail closed): scrub the frame to a locked stub + drop its subtree, so
@@ -387,7 +384,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...(settings ? { settings } : {}),
         ...(mounts ? { mounts } : {}),
         ...(redacted.services ? { serviceCatalog: redacted.services } : {}),
-        agentConfigCatalog: snapshotAgentConfigCatalog(snapshot),
+        agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
         ...snapshotBackendKinds(container),

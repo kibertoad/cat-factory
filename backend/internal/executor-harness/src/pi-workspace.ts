@@ -209,6 +209,12 @@ export interface AgentRunSpec {
    * is present directly in the container env (the self-hosted runner-pool path).
    */
   webSearchProxy?: boolean
+  /**
+   * Multi-repo run (service-connections phase 3): the cwd (`dir`) is the WORKSPACE ROOT with
+   * every involved repo checked out as a sibling under it. Suppresses the single-repo monorepo
+   * note in AGENTS.md and adds the multi-repo mechanics note instead. Absent ⇒ single-repo.
+   */
+  multiRepo?: boolean
 }
 
 /**
@@ -274,6 +280,7 @@ export async function runAgentInWorkspace(
     guidance: spec.webToolsGuidance,
     serviceDirectory: spec.serviceDirectory,
     contextFiles,
+    ...(spec.multiRepo ? { multiRepo: true } : {}),
   })
   await writePiModelsConfig({ model: spec.model, proxyBaseUrl })
   const { signal, onActivity, onProgress, onSpan } = opts

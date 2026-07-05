@@ -328,7 +328,14 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   },
   slackSettingsRepository: { getByWorkspace: 'pending', upsert: 'pending' },
   slackMemberMappingRepository: { getByAccount: 'pending', upsert: 'pending' },
-  taskRepository: { upsert: 'pending', listByWorkspace: 'pending', linkBlock: 'pending' },
+  taskRepository: {
+    upsert: 'pending',
+    listByWorkspace: 'pending',
+    linkBlock: 'pending',
+    // The recurring intake's replace-link write — fires on the (mothership-owned) recurring
+    // run path, not from the SPA; stays mothership-internal like the other task writes.
+    unlinkAllFromBlock: 'pending',
+  },
   taskConnectionRepository: {
     decodeCredentials: 'helper',
     rowToRecord: 'helper',

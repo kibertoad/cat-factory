@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  clearRegisteredAgentKinds,
-  registerAgentKind,
-  registeredKindRequiresContainer,
+  AgentKindRegistry,
+  defaultAgentKindRegistry,
   systemPromptFor,
   userPromptFor,
 } from '@cat-factory/agents'
@@ -43,78 +42,82 @@ function ctx(agentKind: string): AgentRunContext {
 }
 
 describe('agent-kind registry', () => {
-  afterEach(() => clearRegisteredAgentKinds())
+  // App-owned DI: each test news a fresh registry (built-ins pre-loaded) — no global to clear.
+  let registry: AgentKindRegistry
+  beforeEach(() => {
+    registry = defaultAgentKindRegistry()
+  })
 
   it('uses a registered kind’s system prompt over the generic fallback', () => {
-    expect(systemPromptFor('org-auditor')).toContain('"org-auditor" agent') // generic fallback
-    registerAgentKind({ kind: 'org-auditor', systemPrompt: 'You audit for compliance.' })
-    expect(systemPromptFor('org-auditor')).toBe('You audit for compliance.')
+    expect(systemPromptFor('org-auditor', registry)).toContain('"org-auditor" agent') // generic fallback
+    registry.register({ kind: 'org-auditor', systemPrompt: 'You audit for compliance.' })
+    expect(systemPromptFor('org-auditor', registry)).toBe('You audit for compliance.')
   })
 
   it('supports a function-form system prompt', () => {
-    registerAgentKind({ kind: 'org-x', systemPrompt: (kind) => `Role for ${kind}.` })
-    expect(systemPromptFor('org-x')).toBe('Role for org-x.')
+    registry.register({ kind: 'org-x', systemPrompt: (kind) => `Role for ${kind}.` })
+    expect(systemPromptFor('org-x', registry)).toBe('Role for org-x.')
   })
 
   it('never shadows a built-in standard-phase kind', () => {
-    const before = systemPromptFor('architect')
-    registerAgentKind({ kind: 'architect', systemPrompt: 'hijacked' })
-    expect(systemPromptFor('architect')).toBe(before)
+    const before = systemPromptFor('architect', registry)
+    registry.register({ kind: 'architect', systemPrompt: 'hijacked' })
+    expect(systemPromptFor('architect', registry)).toBe(before)
   })
 
   it('uses a registered kind’s custom user prompt when provided', () => {
-    registerAgentKind({
+    registry.register({
       kind: 'org-auditor',
       systemPrompt: 'You audit.',
       userPrompt: (c) => `Audit ${c.block.title}`,
     })
-    expect(userPromptFor(ctx('org-auditor'))).toBe('Audit Widget')
+    expect(userPromptFor(ctx('org-auditor'), registry)).toBe('Audit Widget')
   })
 
   it('falls back to the generic user prompt when no builder is given', () => {
-    registerAgentKind({ kind: 'org-auditor', systemPrompt: 'You audit.' })
-    expect(userPromptFor(ctx('org-auditor'))).toContain('Block: Widget (service)')
+    registry.register({ kind: 'org-auditor', systemPrompt: 'You audit.' })
+    expect(userPromptFor(ctx('org-auditor'), registry)).toContain('Block: Widget (service)')
   })
 
   it('reports the container requirement only for kinds that opted in', () => {
-    registerAgentKind({ kind: 'org-inline', systemPrompt: 'inline' })
-    registerAgentKind({ kind: 'org-repo', systemPrompt: 'repo', requiresContainer: true })
-    expect(registeredKindRequiresContainer('org-inline')).toBe(false)
-    expect(registeredKindRequiresContainer('org-repo')).toBe(true)
-    expect(registeredKindRequiresContainer('coder')).toBe(false) // built-in, not registered
+    registry.register({ kind: 'org-inline', systemPrompt: 'inline' })
+    registry.register({ kind: 'org-repo', systemPrompt: 'repo', requiresContainer: true })
+    expect(registry.requiresContainer('org-inline')).toBe(false)
+    expect(registry.requiresContainer('org-repo')).toBe(true)
+    expect(registry.requiresContainer('coder')).toBe(false) // built-in, not registered
   })
 
   it('applies surface-driven directives so an author need not reason about them', () => {
     // container-explore: a read-only explore whose deliverable is its reply → BOTH the
     // read-only guardrail AND final-answer-in-reply (this is the gap the consolidation closes —
     // a registered explore kind used to miss the guardrail).
-    registerAgentKind({
+    registry.register({
       kind: 'org-explore',
       systemPrompt: 'You explore.',
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
     })
-    const explore = systemPromptFor('org-explore')
+    const explore = systemPromptFor('org-explore', registry)
     expect(explore).toContain('You explore.')
     expect(explore).toContain('READ-ONLY exploration') // READ_ONLY_GUARDRAIL
     expect(explore).toContain('visible content') // FINAL_ANSWER_IN_REPLY
 
     // inline: deliverable is the reply → final-answer only, no read-only guardrail.
-    registerAgentKind({
+    registry.register({
       kind: 'org-inline2',
       systemPrompt: 'You reply.',
       agent: { surface: 'inline' },
     })
-    const inline = systemPromptFor('org-inline2')
+    const inline = systemPromptFor('org-inline2', registry)
     expect(inline).toContain('visible content')
     expect(inline).not.toContain('READ-ONLY exploration')
 
     // container-coding: product is a pushed commit → neither directive.
-    registerAgentKind({
+    registry.register({
       kind: 'org-coding',
       systemPrompt: 'You code.',
       agent: { surface: 'container-coding', clone: { branch: 'pr' } },
     })
-    const coding = systemPromptFor('org-coding')
+    const coding = systemPromptFor('org-coding', registry)
     expect(coding).toBe('You code.')
   })
 
@@ -122,12 +125,12 @@ describe('agent-kind registry', () => {
     // Registering an id that shadows a built-in track (architect = design phase) is allowed; the
     // track prompt wins and already carries FINAL_ANSWER_IN_REPLY. The surface-driven directive
     // logic must NOT re-append it just because the kind is also in the registry → exactly one copy.
-    registerAgentKind({
+    registry.register({
       kind: 'architect',
       systemPrompt: 'Custom architect prompt.',
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
     })
-    const prompt = systemPromptFor('architect')
+    const prompt = systemPromptFor('architect', registry)
     // A once-per-copy phrase from FINAL_ANSWER_IN_REPLY (the directive text repeats "visible
     // content" internally, so that substring is not a per-copy counter).
     const marker = 'Your deliverable is the text of your FINAL reply'
@@ -221,9 +224,14 @@ describe('gate registry', () => {
 })
 
 describe('validateRegistrations', () => {
+  // A fresh, EMPTY registry per test (the built-ins would trip the "postOps without structured
+  // output" heuristic etc.), injected into the validator via its `agentKindRegistry` option.
+  let registry: AgentKindRegistry
+  beforeEach(() => {
+    registry = new AgentKindRegistry()
+  })
   afterEach(() => {
     clearRegisteredGates()
-    clearRegisteredAgentKinds()
     clearRegisteredPipelines()
   })
 
@@ -237,38 +245,46 @@ describe('validateRegistrations', () => {
   })
 
   it('passes when a gate escalates to a registered container-capable helper', () => {
-    registerAgentKind({
+    registry.register({
       kind: 'license-fixer',
       systemPrompt: 'fix',
       agent: { surface: 'container-coding', clone: { branch: 'pr' } },
     })
     registerGate('license-check', goodGate('license-fixer'))
-    expect(collectRegistrationProblems()).toEqual([])
-    expect(() => validateRegistrations()).not.toThrow()
+    expect(collectRegistrationProblems({ agentKindRegistry: registry })).toEqual([])
+    expect(() => validateRegistrations({ agentKindRegistry: registry })).not.toThrow()
   })
 
   it('accepts a built-in helper kind (ci-fixer) without a registered kind', () => {
     registerGate('license-check', goodGate('ci-fixer'))
-    expect(collectRegistrationProblems().filter((p) => p.severity === 'error')).toEqual([])
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry }).filter(
+        (p) => p.severity === 'error',
+      ),
+    ).toEqual([])
   })
 
   it('throws when a gate helperKind resolves to nothing', () => {
     registerGate('license-check', goodGate('does-not-exist'))
-    const problems = collectRegistrationProblems()
+    const problems = collectRegistrationProblems({ agentKindRegistry: registry })
     expect(problems.some((p) => p.code === 'gate_helper_unresolved')).toBe(true)
-    expect(() => validateRegistrations()).toThrow(/gate_helper_unresolved/)
-  })
-
-  it('rejects a helper that is registered but not container-capable', () => {
-    registerAgentKind({ kind: 'inline-helper', systemPrompt: 'x', agent: { surface: 'inline' } })
-    registerGate('license-check', goodGate('inline-helper'))
-    expect(collectRegistrationProblems().some((p) => p.code === 'gate_helper_unresolved')).toBe(
-      true,
+    expect(() => validateRegistrations({ agentKindRegistry: registry })).toThrow(
+      /gate_helper_unresolved/,
     )
   })
 
+  it('rejects a helper that is registered but not container-capable', () => {
+    registry.register({ kind: 'inline-helper', systemPrompt: 'x', agent: { surface: 'inline' } })
+    registerGate('license-check', goodGate('inline-helper'))
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry }).some(
+        (p) => p.code === 'gate_helper_unresolved',
+      ),
+    ).toBe(true)
+  })
+
   it('errors on an unknown resultView (no silent prose fallback)', () => {
-    registerAgentKind({
+    registry.register({
       kind: 'auditor',
       systemPrompt: 'audit',
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
@@ -281,19 +297,23 @@ describe('validateRegistrations', () => {
         resultView: 'no-such-view',
       },
     })
-    expect(collectRegistrationProblems().some((p) => p.code === 'unknown_result_view')).toBe(true)
+    expect(
+      collectRegistrationProblems({ agentKindRegistry: registry }).some(
+        (p) => p.code === 'unknown_result_view',
+      ),
+    ).toBe(true)
   })
 
   it('warns (does not throw) when postOps lack structured output', () => {
-    registerAgentKind({
+    registry.register({
       kind: 'render-only',
       systemPrompt: 'x',
       agent: { surface: 'container-explore', clone: { branch: 'pr' } },
       postOps: [async () => {}],
     })
-    const problems = collectRegistrationProblems()
+    const problems = collectRegistrationProblems({ agentKindRegistry: registry })
     expect(problems.some((p) => p.code === 'postops_without_structured_output')).toBe(true)
-    expect(() => validateRegistrations()).not.toThrow()
+    expect(() => validateRegistrations({ agentKindRegistry: registry })).not.toThrow()
   })
 })
 

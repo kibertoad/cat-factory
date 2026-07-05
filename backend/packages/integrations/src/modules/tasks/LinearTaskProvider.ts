@@ -1,5 +1,6 @@
 import {
   ValidationError,
+  type IssueIntakeQuery,
   type TaskContent,
   type TaskCredentials,
   type TaskSearchResult,
@@ -13,6 +14,8 @@ import {
   linearAuthFromCredentials,
 } from '../shared/linear.client.js'
 import {
+  LINEAR_INTAKE_ISSUES_QUERY,
+  LINEAR_INTAKE_PAGE_CAP,
   LINEAR_ISSUE_CHILDREN_QUERY,
   LINEAR_ISSUE_COMMENTS_QUERY,
   LINEAR_ISSUE_QUERY,
@@ -23,10 +26,14 @@ import {
   LINEAR_VIEWER_QUERY,
   type LinearChildrenPage,
   type LinearCommentsPage,
+  type LinearIntakeNode,
+  type LinearIntakePage,
   type LinearTeam,
+  buildLinearIntakeFilter,
   linearIssueSearchHit,
   mapLinearChildIds,
   mapLinearComments,
+  mapLinearIntakeResults,
   mapLinearIssue,
   mapLinearSearchResults,
   mapLinearTeams,
@@ -103,6 +110,45 @@ export class LinearTaskProvider implements TaskSourceProvider {
       out.push(hit)
     }
     return out
+  }
+
+  /**
+   * Issue-intake predicate search: the predicates travel as one GraphQL
+   * `IssueFilter` (team, open-only, labels, title fragment — see
+   * {@link buildLinearIntakeFilter}), asked for oldest-created-first. The
+   * already-worked exclusion list is the one predicate the filter can't express
+   * on the human identifier, so the call overscans by the exclusion count
+   * (bounded by Linear's 100/page) and drops the excluded ids in the mapper.
+   * Because the excluded issues are the oldest and cluster at the front, the
+   * overscan pages through (bounded by {@link LINEAR_INTAKE_PAGE_CAP}) so a first
+   * page filled with already-worked issues can't starve the pickup.
+   */
+  async searchIssues(
+    credentials: TaskCredentials,
+    query: IssueIntakeQuery,
+  ): Promise<TaskSearchResult[]> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const exclude = query.excludeExternalIds ?? []
+    const excluded = new Set(exclude.map((id) => id.toUpperCase()))
+    const filter = buildLinearIntakeFilter(query)
+    const first = Math.min(query.limit + exclude.length, 100)
+    const nodes: LinearIntakeNode[] = []
+    let after: string | undefined
+    for (let page = 0; page < LINEAR_INTAKE_PAGE_CAP; page++) {
+      const data = await client.query<LinearIntakePage>(LINEAR_INTAKE_ISSUES_QUERY, {
+        filter,
+        first,
+        after,
+      })
+      nodes.push(...(data.issues?.nodes ?? []))
+      const fresh = nodes.filter(
+        (n) => n.identifier && !excluded.has(n.identifier.toUpperCase()),
+      ).length
+      const pageInfo = data.issues?.pageInfo
+      if (fresh >= query.limit || !pageInfo?.hasNextPage || !pageInfo.endCursor) break
+      after = pageInfo.endCursor
+    }
+    return mapLinearIntakeResults({ issues: { nodes } }, query.limit, exclude)
   }
 
   /** Fetch one issue by identifier and project it as a lean search hit (for the exact-match path). */

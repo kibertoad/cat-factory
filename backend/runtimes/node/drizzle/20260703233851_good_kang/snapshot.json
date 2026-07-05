@@ -1,7 +1,8 @@
 {
   "dialect": "postgres",
-  "id": "b1f2e9df-1a67-432f-bff7-26ec79ecd52d",
+  "id": "4afc86d9-e92e-4f42-93c9-2a6d0c41f81f",
   "prevIds": [
+    "2bb2e5ac-5ccb-4c4c-9002-164e45620f10",
     "099cb959-0bd1-4779-8bc9-af7da2de443c"
   ],
   "version": "8",
@@ -1607,6 +1608,19 @@
       "generated": null,
       "identity": null,
       "name": "pull_request",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "blocks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "peer_pull_requests",
       "entityType": "columns",
       "schema": "public",
       "table": "blocks"

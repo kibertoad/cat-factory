@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { TASK_ESTIMATOR_AGENT_KIND } from '../prompts/roles.js'
-import { registeredAgentKind } from './registry.js'
+import type { AgentKindRegistry } from './registry.js'
 
 // Which execution surface a pipeline step's model runs on — the taxonomy the preset
 // satisfiability guard keys off. Only INLINE model steps need a special check: an inline
@@ -40,7 +40,7 @@ const INLINE_ENGINE_KINDS = new Set<string>([
  * and for any custom kind registered with an `inline` agent surface. Used by the start guard
  * to apply the stricter inline-model-usability check to exactly these steps.
  */
-export function isInlineModelStep(kind: AgentKind): boolean {
+export function isInlineModelStep(kind: AgentKind, registry: AgentKindRegistry): boolean {
   if (INLINE_ENGINE_KINDS.has(kind)) return true
-  return registeredAgentKind(kind)?.agent?.surface === 'inline'
+  return registry.get(kind)?.agent?.surface === 'inline'
 }

@@ -17,6 +17,34 @@ export {
   type ReviewDisposition,
 } from '../requirements/requirements.logic.js'
 
+/**
+ * Turn a bug investigator's structured `questions` into clarity-review findings WITHOUT an LLM
+ * pass — the seed the clarity gate parks on when the investigator flagged the report
+ * `needs_clarification`. Each question becomes one blocking (`high`) `question` finding the human
+ * answers/dismisses through the standard clarity window. Empty/blank questions are dropped; an
+ * all-blank list yields no items (so the gate auto-passes as if `clear`).
+ */
+export function buildSeededClarityItems(
+  questions: string[],
+  nextId: () => string,
+  now: number,
+): RequirementReviewItem[] {
+  return questions
+    .map((q) => q.trim())
+    .filter((q) => q.length > 0)
+    .map((q) => ({
+      id: nextId(),
+      category: 'question' as const,
+      severity: 'high' as const,
+      title: q.length > 80 ? `${q.slice(0, 77)}…` : q,
+      detail: q,
+      status: 'open' as const,
+      reply: null,
+      createdAt: now,
+      updatedAt: now,
+    }))
+}
+
 /** Everything the clarity reviewer reasons over: the bug report plus any investigation. */
 export interface ClarityContext {
   block: Pick<Block, 'title' | 'type' | 'description'>

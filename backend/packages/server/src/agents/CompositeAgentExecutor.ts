@@ -7,7 +7,11 @@ import {
   type AsyncAgentExecutor,
   isAsyncAgentExecutor,
 } from '@cat-factory/kernel'
-import { isContainerBackedCompanion, registeredKindRequiresContainer } from '@cat-factory/agents'
+import {
+  type AgentKindRegistry,
+  defaultAgentKindRegistry,
+  isContainerBackedCompanion,
+} from '@cat-factory/agents'
 
 // Routes each pipeline step to the right executor by agent kind. The kinds that
 // produce and commit files against a real checkout — implementation (`coder`),
@@ -101,12 +105,20 @@ const CONTAINER_KINDS = new Set([
 ])
 
 export class CompositeAgentExecutor implements AsyncAgentExecutor {
+  /** The app-owned agent-kind registry: decides whether a registered custom kind needs a container. */
+  private readonly registry: AgentKindRegistry
+
   constructor(
     private readonly inline: AgentExecutor,
     // null when no sandbox is wired — container kinds then fail loudly (see below)
     // rather than silently degrading to a useless one-shot inline call.
     private readonly container: AgentExecutor | null,
-  ) {}
+    // The app-owned agent-kind registry; defaults to the built-ins-only registry when a
+    // facade doesn't inject the shared instance (tests / no custom kinds).
+    registry: AgentKindRegistry = defaultAgentKindRegistry(),
+  ) {
+    this.registry = registry
+  }
 
   /**
    * The executor that handles a given step's kind. Container kinds REQUIRE a real
@@ -119,7 +131,7 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     // repo-operating agent), need a real checkout; everything else runs inline.
     const needsContainer =
       CONTAINER_KINDS.has(context.agentKind) ||
-      registeredKindRequiresContainer(context.agentKind) ||
+      this.registry.requiresContainer(context.agentKind) ||
       // Container-backed companions (reviewer / doc-reviewer) clone the producer's PR branch
       // and review the real repository, so they need a checkout exactly like a coding kind.
       isContainerBackedCompanion(context.agentKind)
@@ -161,7 +173,7 @@ export class CompositeAgentExecutor implements AsyncAgentExecutor {
     if (!this.container) return Promise.resolve(false)
     const needsContainer =
       CONTAINER_KINDS.has(context.agentKind) ||
-      registeredKindRequiresContainer(context.agentKind) ||
+      this.registry.requiresContainer(context.agentKind) ||
       isContainerBackedCompanion(context.agentKind)
     if (!needsContainer) return Promise.resolve(false)
     return this.container.isQuotaBased?.(context) ?? Promise.resolve(false)

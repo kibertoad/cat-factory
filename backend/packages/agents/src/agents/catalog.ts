@@ -11,11 +11,7 @@ import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
 import { mockFrontendSection, mockSystemPrompt } from './prompts/mock.js'
 import { testingSystemPrompt, testerEnvironmentSection } from './prompts/testing.js'
-import {
-  registeredAgentStep,
-  registeredSystemPrompt,
-  registeredUserPrompt,
-} from './kinds/registry.js'
+import type { AgentKindRegistry } from './kinds/registry.js'
 import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
 import { FINAL_ANSWER_IN_REPLY } from './prompts/shared.js'
@@ -37,16 +33,16 @@ import {
 // the tester/fixer track in ./prompts/testing, the companions in ./prompts/companion,
 // and the thin one-line roles + generic fallback in ./prompts/roles).
 
-export function systemPromptFor(kind: AgentKind): string {
-  const base = baseSystemPromptFor(kind)
+export function systemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
+  const base = baseSystemPromptFor(kind, registry)
   // Append the surface-driven directives (read-only guardrail + final-answer-in-reply) — see
   // {@link applySurfaceDirectives}. This is the single place that decision lives, so a
   // registered kind gets the SAME treatment a built-in does from its declared `agent.surface`.
-  const withDirectives = applySurfaceDirectives(base, kind)
+  const withDirectives = applySurfaceDirectives(base, kind, registry)
   // Fold in any guidance contributed by the kind's traits (e.g. the spec-aware kinds get
   // the in-repo-spec reading guidance). Marker traits like `code-aware` add nothing here —
   // their effect (folding the service's fragments) is applied by the execution engine.
-  const guidance = traitGuidanceFor(kind)
+  const guidance = traitGuidanceFor(kind, registry)
   return guidance.length ? `${withDirectives}\n\n${guidance.join('\n\n')}` : withDirectives
 }
 
@@ -68,11 +64,15 @@ export function systemPromptFor(kind: AgentKind): string {
  * already carries FINAL_ANSWER_IN_REPLY), not the registered one — so we gate `needsFinalAnswer`
  * on the base actually being the registered prompt, not merely on the kind being in the registry.
  */
-function applySurfaceDirectives(prompt: string, kind: AgentKind): string {
-  const surface = registeredAgentStep(kind)?.surface
+function applySurfaceDirectives(
+  prompt: string,
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): string {
+  const surface = registry.agentStep(kind)?.surface
   // True only when the base prompt is the one from the registry — i.e. no built-in track claimed
   // this kind. A built-in-track-owned id (even if also registered) already got the directive.
-  const usedRegisteredPrompt = prompt === registeredSystemPrompt(kind)
+  const usedRegisteredPrompt = prompt === registry.systemPrompt(kind)
   const needsGuardrail = isReadOnlyAgentKind(kind) || surface === 'container-explore'
   const needsFinalAnswer =
     usedRegisteredPrompt && (surface === 'inline' || surface === 'container-explore')
@@ -82,7 +82,7 @@ function applySurfaceDirectives(prompt: string, kind: AgentKind): string {
   return result
 }
 
-function baseSystemPromptFor(kind: AgentKind): string {
+function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
   // Companion kinds (reviewer, architect-companion, spec-companion, …) win over every
   // built-in track: they grade a prior step's output and return a JSON rating.
   const companion = companionSystemPrompt(kind)
@@ -104,7 +104,7 @@ function baseSystemPromptFor(kind: AgentKind): string {
   // surface-driven directives (FINAL_ANSWER_IN_REPLY / read-only guardrail) are applied
   // centrally in `systemPromptFor` via `applySurfaceDirectives`, so the raw registered
   // prompt is returned here as-is.
-  const registered = registeredSystemPrompt(kind)
+  const registered = registry.systemPrompt(kind)
   if (registered !== undefined) return registered
   return roleSystemPrompt(kind)
 }
@@ -154,13 +154,15 @@ function withRevision(prompt: string, context: AgentRunContext): string {
  */
 export function userPromptFor(
   context: AgentRunContext,
+  registry: AgentKindRegistry,
   opts: { materialized?: boolean } = {},
 ): string {
-  return withRevision(buildBaseUserPrompt(context, opts), context)
+  return withRevision(buildBaseUserPrompt(context, registry, opts), context)
 }
 
 function buildBaseUserPrompt(
   context: AgentRunContext,
+  registry: AgentKindRegistry,
   opts: { materialized?: boolean } = {},
 ): string {
   // Standard phases get their built-out, templated user prompt.
@@ -169,7 +171,7 @@ function buildBaseUserPrompt(
 
   // A registered custom kind may supply its own user prompt; otherwise it falls through
   // to the generic block-context prompt below, like any other non-standard-phase kind.
-  const registered = registeredUserPrompt(context)
+  const registered = registry.userPrompt(context)
   if (registered !== undefined) return registered
 
   const { block, pipelineName, priorOutputs, decisions, resolvedDecision } = context

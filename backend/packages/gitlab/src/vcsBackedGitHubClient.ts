@@ -99,7 +99,9 @@ export function asGitHubClient(options: VcsBackedGitHubClientOptions): GitHubCli
     listPullRequests: (i, ref, opts) => vcs.listPullRequests(conn(i), toRepoRef(ref), opts),
     listIssues: (i, ref, opts) => vcs.listIssues(conn(i), toRepoRef(ref), opts),
     getIssue: (i, ref, n) => vcs.getIssue(conn(i), toRepoRef(ref), n),
-    searchIssues: (i, query, limit) => vcs.searchIssues(conn(i), query, limit),
+    // `order` is honoured (oldest-first intake); `page` is not — GitLab search is a single
+    // bounded page here, so intake overscan on a GitLab-backed client is capped at one page.
+    searchIssues: (i, query, limit, order) => vcs.searchIssues(conn(i), query, limit, order),
     searchCode: (i, query, limit) => vcs.searchCode(conn(i), query, limit),
     listCommits: (i, ref, opts) => vcs.listCommits(conn(i), toRepoRef(ref), opts),
     listCheckRuns: (i, ref, sha) => vcs.listCheckRuns(conn(i), toRepoRef(ref), sha),

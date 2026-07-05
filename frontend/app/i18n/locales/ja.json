@@ -241,7 +241,17 @@
       "submit": "繰り返しパイプラインを追加",
       "addFailedTitle": "繰り返しパイプラインを追加できませんでした",
       "onDemand": "オンデマンド（手動のみ）",
-      "onDemandHint": "スケジュールはなく、手動で実行したときのみ動作します。毎回ユーザーが立ち会うため、タスクは個人利用のサブスクリプションモデルを使用できます。"
+      "onDemandHint": "スケジュールはなく、手動で実行したときのみ動作します。毎回ユーザーが立ち会うため、タスクは個人利用のサブスクリプションモデルを使用できます。",
+      "intake": "課題の取り込み",
+      "intakeHint": "各実行はトラッカーから条件に一致する未解決の課題を1件選び、最後まで対応します。",
+      "intakeNoSources": "課題を取り込むには、まずタスクソースを接続してください。",
+      "intakeGithubRepo": "リポジトリ",
+      "intakeTitleFragment": "タイトルに含む",
+      "intakeTitleFragmentPlaceholder": "例: crash",
+      "intakeLabels": "ラベル",
+      "intakeLabelsPlaceholder": "カンマ区切り",
+      "intakeIssueType": "課題タイプ",
+      "intakeInProgressLabel": "進行中ラベル"
     },
     "failure": {
       "containerFailedToStart": "コンテナの起動に失敗しました",
@@ -854,7 +864,8 @@
         "auto_merge_disabled": "{preset} プリセットはすべての PR を人に回すため、この PR はレビュー待ちです。",
         "no_rationale": "マージ担当は PR を採点しましたが根拠を示さなかったため、自動マージするには判定を信頼できませんでした。PR は人によるマージを待っています。",
         "no_assessment": "マージ担当が解析可能な評価を返さなかったため、PR は人によるマージを待っています。",
-        "merge_failed": "スコアは {preset} のしきい値内でしたが、自動マージを完了できなかった（例: ブランチ保護や競合）ため、PR は人によるマージを待っています。"
+        "merge_failed": "スコアは {preset} のしきい値内でしたが、自動マージを完了できなかった（例: ブランチ保護や競合）ため、PR は人によるマージを待っています。",
+        "merge_partial": "タスクの一部のプルリクエストはマージされましたが、後続の1つが失敗したため、変更は人が複数リポジトリのマージを完了するか元に戻すのを待っています。"
       },
       "scores": "スコア",
       "axis": {
@@ -4103,6 +4114,26 @@
       "hint": "「続行」でプランナーが追加の質問をします。「計画に進む」でこれまでの回答をもとに計画します。",
       "proceed": "計画に進む",
       "continue": "続行"
+    },
+    "followUpStatus": {
+      "open": "未対応",
+      "promoted": "項目化済み",
+      "dismissed": "却下"
+    },
+    "curation": {
+      "promote": "項目に昇格",
+      "promoteConfirm": "項目を作成",
+      "dismiss": "却下",
+      "retry": "再試行",
+      "skip": "スキップ",
+      "edit": "編集",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "phaseField": "フェーズ",
+      "itemTitlePlaceholder": "項目のタイトル（既定はフォローアップのもの）",
+      "maxConcurrentField": "最大同時実行タスク数",
+      "defaultPipelineField": "既定のパイプライン",
+      "failed": "イニシアチブを更新できませんでした"
     }
   }
 }

@@ -27,6 +27,7 @@ import { handleGitHubSyncBatch, reconcileStaleRepos } from './infrastructure/git
 import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { sweepBinaryArtifactRetention, validateRegistrationsOnce } from '@cat-factory/orchestration'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { DEFAULT_WORKSPACE_SETTINGS } from '@cat-factory/kernel'
 import { D1WorkspaceRepository } from './infrastructure/repositories/D1WorkspaceRepository'
 import { D1WorkspaceSettingsRepository } from './infrastructure/repositories/D1WorkspaceSettingsRepository'
@@ -57,19 +58,24 @@ export {
   type ModelRegistryFactory,
 } from './infrastructure/ai/registries'
 
-// Installation-level extension points for custom agent kinds and predefined pipelines
-// (alongside registerModelRegistry above): a deployment registers these at startup —
-// typically from a proprietary org package — and every prompt build, executor routing
-// decision and new-workspace seed picks them up.
+// Installation-level extension point for custom agent kinds (alongside registerModelRegistry
+// above): a deployment news a `defaultAgentKindRegistry()`, registers its own kinds on it by
+// reference, and injects it into `buildContainer`/`createApp` via the `agentKindRegistry`
+// override — the app-owned DI seam that replaces the old module-global `registerAgentKind`
+// side effect. Every prompt build + executor routing decision then reads that instance.
 export {
-  registerAgentKind,
-  registerAgentKinds,
-  clearRegisteredAgentKinds,
+  AgentKindRegistry,
+  defaultAgentKindRegistry,
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
 
-const app = createApp()
+// One app-owned agent-kind registry, shared by every per-request container (via the
+// `createApp` override) AND the boot-time validation below — so the check validates the SAME
+// instance the engine uses, matching the Node/local facades. A deployment injecting custom
+// kinds registers them on this instance (or overrides it) before the first request.
+const agentKindRegistry = defaultAgentKindRegistry()
+const app = createApp({ overrides: { agentKindRegistry } })
 
 /** Compact, log-friendly shape for an unknown caught value. */
 function errInfo(error: unknown): { message: string; stack?: string } {
@@ -126,6 +132,7 @@ export default {
   // it off the hot path (the Worker rebuilds its container per request, but this never re-runs).
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     validateRegistrationsOnce({
+      agentKindRegistry,
       onWarn: (problem) => logger.warn({ code: problem.code }, problem.message),
     })
     return app.fetch(request, env, ctx)

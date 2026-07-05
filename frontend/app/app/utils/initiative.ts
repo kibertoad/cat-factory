@@ -1,9 +1,18 @@
-import type { InitiativeItem, InitiativeItemStatus, InitiativeStatus } from '~/types/domain'
+import type {
+  InitiativeFollowUp,
+  InitiativeItem,
+  InitiativeItemStatus,
+  InitiativeStatus,
+} from '~/types/domain'
 
 // Shared initiative presentation vocabulary, so the board card, the inspector body and
 // the tracker window render statuses/progress from ONE source. The exhaustive
-// `Record<Enum, string>` maps keep the tier-2 typecheck guard live (a new status without
+// `Record<Enum, …>` maps keep the tier-2 typecheck guard live (a new status without
 // a label/chip fails the build) without triplicating it across the components.
+
+/** Nuxt UI badge/chip colour names — mirrors `UBadge`'s `color` prop union, so a chip map
+ *  types its values against it and the `:color` binding needs no cast. */
+type BadgeColor = 'error' | 'info' | 'primary' | 'secondary' | 'success' | 'warning' | 'neutral'
 
 /** Initiative lifecycle status → i18n label key. */
 export const INITIATIVE_STATUS_LABEL_KEYS: Record<InitiativeStatus, string> = {
@@ -16,7 +25,7 @@ export const INITIATIVE_STATUS_LABEL_KEYS: Record<InitiativeStatus, string> = {
 }
 
 /** Initiative lifecycle status → Nuxt UI badge colour. */
-export const INITIATIVE_STATUS_CHIPS: Record<InitiativeStatus, string> = {
+export const INITIATIVE_STATUS_CHIPS: Record<InitiativeStatus, BadgeColor> = {
   planning: 'neutral',
   awaiting_approval: 'warning',
   executing: 'info',
@@ -36,13 +45,27 @@ export const INITIATIVE_ITEM_STATUS_LABEL_KEYS: Record<InitiativeItemStatus, str
 }
 
 /** Tracker item status → Nuxt UI badge colour. */
-export const INITIATIVE_ITEM_STATUS_CHIPS: Record<InitiativeItemStatus, string> = {
+export const INITIATIVE_ITEM_STATUS_CHIPS: Record<InitiativeItemStatus, BadgeColor> = {
   pending: 'neutral',
   in_progress: 'info',
   pr_open: 'warning',
   done: 'success',
   blocked: 'error',
   skipped: 'neutral',
+}
+
+/** Follow-up triage status → i18n label key. Exhaustive so a new status fails the build. */
+export const INITIATIVE_FOLLOWUP_STATUS_LABEL_KEYS: Record<InitiativeFollowUp['status'], string> = {
+  open: 'initiative.followUpStatus.open',
+  promoted: 'initiative.followUpStatus.promoted',
+  dismissed: 'initiative.followUpStatus.dismissed',
+}
+
+/** Follow-up triage status → Nuxt UI badge colour. */
+export const INITIATIVE_FOLLOWUP_STATUS_CHIPS: Record<InitiativeFollowUp['status'], BadgeColor> = {
+  open: 'warning',
+  promoted: 'success',
+  dismissed: 'neutral',
 }
 
 /** Item statuses that count as settled — mirrors the backend terminal-status set. */

@@ -244,7 +244,17 @@
       "submit": "Ajouter la pipeline récurrente",
       "addFailedTitle": "Impossible d’ajouter la pipeline récurrente",
       "onDemand": "À la demande (manuel uniquement)",
-      "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel."
+      "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel.",
+      "intake": "Prise en charge des tickets",
+      "intakeHint": "Chaque exécution sélectionne un ticket ouvert correspondant dans le suivi et le traite de bout en bout.",
+      "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
+      "intakeGithubRepo": "Dépôt",
+      "intakeTitleFragment": "Le titre contient",
+      "intakeTitleFragmentPlaceholder": "ex. crash",
+      "intakeLabels": "Étiquettes",
+      "intakeLabelsPlaceholder": "séparées par des virgules",
+      "intakeIssueType": "Type de ticket",
+      "intakeInProgressLabel": "Étiquette en cours"
     },
     "failure": {
       "containerFailedToStart": "Le conteneur n’a pas pu démarrer",
@@ -857,7 +867,8 @@
         "auto_merge_disabled": "Le préréglage {preset} envoie chaque PR à une personne ; celle-ci attend donc une revue.",
         "no_rationale": "Le fusionneur a évalué la PR mais n'a donné aucune justification, le verdict n'a donc pas pu être approuvé pour une fusion automatique ; la PR attend une fusion par une personne.",
         "no_assessment": "Le fusionneur n'a pas renvoyé d'évaluation exploitable, la PR attend donc une fusion par une personne.",
-        "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne."
+        "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne.",
+        "merge_partial": "Certaines des pull requests de la tâche ont été fusionnées, mais une suivante n'a pas pu l'être, le changement attend donc qu'une personne termine ou annule la fusion multi-dépôt."
       },
       "scores": "Scores",
       "axis": {
@@ -4094,6 +4105,26 @@
       "hint": "Continuer permet au planificateur de poser des questions complementaires ; Proceder planifie avec les reponses actuelles.",
       "proceed": "Proceder a la planification",
       "continue": "Continuer"
+    },
+    "followUpStatus": {
+      "open": "Ouvert",
+      "promoted": "Promu",
+      "dismissed": "Rejete"
+    },
+    "curation": {
+      "promote": "Promouvoir en element",
+      "promoteConfirm": "Creer l'element",
+      "dismiss": "Rejeter",
+      "retry": "Reessayer",
+      "skip": "Ignorer",
+      "edit": "Modifier",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "phaseField": "Phase",
+      "itemTitlePlaceholder": "Titre de l'element (par defaut celui du suivi)",
+      "maxConcurrentField": "Taches simultanees maximales",
+      "defaultPipelineField": "Pipeline par defaut",
+      "failed": "Impossible de mettre a jour l'initiative"
     }
   }
 }

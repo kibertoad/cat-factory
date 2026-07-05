@@ -1,4 +1,5 @@
 import type {
+  IssueIntakeQuery,
   TaskDependencyLink,
   TaskSearchRepoScope,
   TaskSourceDescriptor,
@@ -158,6 +159,36 @@ export function buildGitHubIssueSearchQuery(query: string, scope?: TaskSearchRep
   if (!scope) return text
   const repoQualifier = `repo:${scope.owner}/${scope.repo}`
   return text ? `${repoQualifier} ${text}` : repoQualifier
+}
+
+/** Quote a user value for a GitHub search qualifier (`label:"needs triage"`); embedded quotes are dropped. */
+function quoteQualifierValue(value: string): string {
+  return `"${value.replace(/"/g, '').trim()}"`
+}
+
+/**
+ * Build the GitHub search text for an issue-intake predicate search: open issues
+ * in the configured repo matching every present predicate. Labels become
+ * `label:"…"` qualifiers (each must be present), the issue type the org-level
+ * `type:"…"` qualifier (repos without issue types simply match nothing for it —
+ * the conventional fallback is labelling bugs, which the `labels` predicate
+ * covers), and the title fragment `in:title` text. The adapter appends
+ * `is:issue`; oldest-first ordering is NOT in-query — the caller passes the
+ * search API's `created-asc` order (see `GitHubClient.searchIssues`). The
+ * already-worked exclusion list is not expressible in GitHub search; the
+ * provider filters it from a bounded overscan.
+ */
+export function buildGitHubIntakeQuery(query: IssueIntakeQuery): string {
+  const parts: string[] = []
+  if (query.board.githubRepo) parts.push(`repo:${query.board.githubRepo.trim()}`)
+  parts.push('is:open')
+  if (query.issueType) parts.push(`type:${quoteQualifierValue(query.issueType)}`)
+  for (const label of query.labels ?? []) parts.push(`label:${quoteQualifierValue(label)}`)
+  // Quote the fragment as a literal phrase so a value that happens to contain a search
+  // qualifier (e.g. `crash state:closed`) is matched as title text, not parsed as an
+  // extra qualifier that would silently contradict `is:open` or widen the repo scope.
+  if (query.titleFragment) parts.push(`in:title ${quoteQualifierValue(query.titleFragment)}`)
+  return parts.join(' ')
 }
 
 /**

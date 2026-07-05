@@ -1,6 +1,6 @@
 import { SPEC_FEATURES_DIR, SPEC_MODULES_DIR, SPEC_OVERVIEW_PATH } from '@cat-factory/contracts'
 import type { AgentKind } from '@cat-factory/kernel'
-import { registeredAgentKind } from './registry.js'
+import type { AgentKindRegistry } from './registry.js'
 
 // Agent traits: first-class, checkable CAPABILITIES an agent kind carries, beyond its
 // role prompt. A trait both marks a kind for engine behaviour (e.g. `code-aware` tells
@@ -155,17 +155,22 @@ export function clearRegisteredAgentTraits(): void {
   registerStandardTraits()
 }
 
-/** The traits a kind carries: its built-in set unioned with a registered custom kind's. */
-export function traitsFor(kind: AgentKind): Set<AgentTrait> {
+/**
+ * The traits a kind carries: its built-in set unioned with a registered kind's own `traits`
+ * (read off the app-owned {@link AgentKindRegistry}) and any extra assignments. The trait
+ * definition + assignment registries remain module-global (the separate "Agent traits" slice);
+ * only the agent-kind lookup rides the injected registry.
+ */
+export function traitsFor(kind: AgentKind, registry: AgentKindRegistry): Set<AgentTrait> {
   const traits = new Set<AgentTrait>(STANDARD_AGENT_TRAITS[kind] ?? [])
-  for (const trait of registeredAgentKind(kind)?.traits ?? []) traits.add(trait)
+  for (const trait of registry.get(kind)?.traits ?? []) traits.add(trait)
   for (const trait of assignedTraits.get(kind) ?? []) traits.add(trait)
   return traits
 }
 
 /** Whether `kind` carries `trait`. */
-export function hasTrait(kind: AgentKind, trait: AgentTrait): boolean {
-  return traitsFor(kind).has(trait)
+export function hasTrait(kind: AgentKind, trait: AgentTrait, registry: AgentKindRegistry): boolean {
+  return traitsFor(kind, registry).has(trait)
 }
 
 /**
@@ -173,9 +178,9 @@ export function hasTrait(kind: AgentKind, trait: AgentTrait): boolean {
  * into the kind's system prompt by `systemPromptFor`. Marker traits (no guidance, e.g.
  * `code-aware`) contribute nothing here.
  */
-export function traitGuidanceFor(kind: AgentKind): string[] {
+export function traitGuidanceFor(kind: AgentKind, registry: AgentKindRegistry): string[] {
   const lines: string[] = []
-  for (const trait of traitsFor(kind)) {
+  for (const trait of traitsFor(kind, registry)) {
     const guidance = traitRegistry.get(trait)?.guidance
     if (!guidance) continue
     lines.push(typeof guidance === 'function' ? guidance(kind) : guidance)

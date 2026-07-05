@@ -2,8 +2,7 @@ import type { AgentRunContext, DocKind } from '@cat-factory/kernel'
 import { CONTEXT_BUDGET, estimateTokens } from '@cat-factory/kernel'
 import type { DocKindFieldKey } from '@cat-factory/contracts'
 import { DOC_KIND_FIELDS } from '@cat-factory/contracts'
-import type { AgentKindDefinition } from './registry.js'
-import { registerAgentKinds } from './registry.js'
+import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { DOC_AWARE_TRAIT } from './traits.js'
 import { linkedContextSection } from '../prompts/standard.js'
 import {
@@ -344,12 +343,9 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
 ]
 
 /**
- * Register the document-authoring kinds. Idempotent (the registry replaces by kind), so calling
- * it explicitly and importing this module for its side effect are safe to combine.
+ * Register the document-authoring kinds on the given registry. Called by
+ * `defaultAgentKindRegistry()`; idempotent (the registry replaces by kind).
  */
-export function registerDocumentAgents(): void {
-  registerAgentKinds(DOCUMENT_AGENT_KINDS)
+export function registerDocumentAgents(registry: AgentKindRegistry): void {
+  registry.registerAll(DOCUMENT_AGENT_KINDS)
 }
-
-// Side-effect registration: importing `@cat-factory/agents` registers these first-class kinds.
-registerDocumentAgents()

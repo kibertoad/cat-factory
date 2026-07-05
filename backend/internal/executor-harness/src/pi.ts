@@ -141,6 +141,7 @@ export async function writeAgentsContext(
     guidance?: string
     serviceDirectory?: string
     contextFiles?: ContextFileInfo[]
+    multiRepo?: boolean
   } = {},
 ): Promise<void> {
   const dir = join(homedir(), '.pi', 'agent')
@@ -152,17 +153,43 @@ export async function writeAgentsContext(
   const webTools = opts.webSearch ? (opts.guidance ?? WEB_TOOLS_GUIDANCE) : ''
   // Tell the agent it's in a monorepo and which subtree is its service, so it scopes
   // its work (and its build/test commands) there. Only present when the dispatcher
-  // resolved a monorepo service directory; the agent's cwd already points at it.
-  const monorepo = opts.serviceDirectory ? monorepoGuidance(opts.serviceDirectory) : ''
+  // resolved a monorepo service directory; the agent's cwd already points at it. A
+  // MULTI-REPO run runs at the workspace root (cwd spans sibling checkouts), so the
+  // monorepo note is suppressed there — the multi-repo mechanics note replaces it.
+  const monorepo =
+    opts.serviceDirectory && !opts.multiRepo ? monorepoGuidance(opts.serviceDirectory) : ''
+  // Multi-repo mechanics note (service-connections phase 3): the concrete repo→role mapping
+  // is in the backend-composed system prompt above; this explains the shared MECHANICS (cwd
+  // is the workspace root, repos are sibling checkouts, one PR per dirty repo).
+  const multiRepo = opts.multiRepo ? MULTI_REPO_GUIDANCE : ''
   // Point the agent at any linked context the backend materialised into the checkout
   // (requirements / RFCs / PRDs / tracker issues) so it reads them on demand.
   const context = contextGuidance(opts.contextFiles ?? [])
   await writeFile(
     join(dir, 'AGENTS.md'),
-    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${webTools}${context}`,
+    `${systemPrompt}${BLUEPRINT_GUIDANCE}${SPEC_GUIDANCE}${TODO_GUIDANCE}${monorepo}${multiRepo}${webTools}${context}`,
     'utf8',
   )
 }
+
+/** The MULTI-REPO mechanics note appended to AGENTS.md when a run spans sibling checkouts. */
+const MULTI_REPO_GUIDANCE = `
+
+## Multi-repo workspace (work across sibling checkouts)
+
+This task spans MORE THAN ONE repository. Your working directory is the WORKSPACE ROOT, and
+each involved repository is checked out as a sibling directory directly under it. The workspace
+root itself is NOT a git repository — run git INSIDE each repository's directory. The system
+prompt above lists which repository is which and each one's role. Make the cross-service
+change coherently across every repository the task requires — a provider's API and its
+consumer's call site belong in the SAME piece of work. Run each repository's own build/test
+commands inside that repository's directory.
+
+Commit your own work inside each repository you change (\`cd\` into it, stage the files that
+belong — INCLUDING any new files you added — and commit). The platform will NOT add untracked
+files for you, so anything you leave uncommitted and untracked is lost. Each repository you
+change is opened as a SEPARATE pull request; leave a repository untouched if the task does not
+require changing it.`
 
 /** Directory in the checkout where linked-context files are materialised (see CONTEXT_DIR in agents). */
 export const CONTEXT_DIR = '.cat-context'

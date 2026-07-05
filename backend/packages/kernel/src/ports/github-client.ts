@@ -395,12 +395,19 @@ export interface GitHubClient {
   /**
    * Search issues visible to the installation by free text. `query` is the raw
    * GitHub search text; the adapter scopes it to issues (`is:issue`) and bounds
-   * the result count. Used by the GitHub-issues task source's search box.
+   * the result count. Used by the GitHub-issues task source's search box. `order`
+   * overrides the default best-match ranking — `created-asc` sorts oldest-first
+   * (the issue-intake pickup order), passed as the search API's `sort`/`order`
+   * params rather than in-query text. `page` (1-based) selects a result page for
+   * the intake overscan to walk past a run of already-worked issues that fills the
+   * first page, instead of starving the result.
    */
   searchIssues(
     installationId: number,
     query: string,
     limit?: number,
+    order?: 'created-asc',
+    page?: number,
   ): Promise<GitHubIssueSearchHit[]>
   /**
    * Code-search files visible to the installation. `query` is the raw GitHub
@@ -533,6 +540,21 @@ export interface GitHubClient {
    * already-closed issue is not an error.
    */
   closeIssue(installationId: number, ref: GitHubRepoRef, number: number): Promise<void>
+  /**
+   * Apply a label to an issue, creating the label in the repository first when it
+   * doesn't exist yet (a best-effort create that tolerates `already_exists`, then
+   * `POST /issues/{number}/labels`). Used by issue-tracker writeback to mark a
+   * picked-up GitHub issue in-progress — GitHub has no native workflow status, so
+   * the label IS the transition. Idempotent: re-applying a present label is not an
+   * error. Optional: a client/runtime without it omits it (the pickup writeback
+   * then comments without marking).
+   */
+  applyIssueLabel?(
+    installationId: number,
+    ref: GitHubRepoRef,
+    number: number,
+    label: string,
+  ): Promise<void>
   openPullRequest(
     installationId: number,
     ref: GitHubRepoRef,

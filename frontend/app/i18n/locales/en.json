@@ -262,7 +262,17 @@
       "submit": "Add recurring pipeline",
       "addFailedTitle": "Could not add recurring pipeline",
       "onDemand": "On-demand (manual only)",
-      "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model."
+      "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model.",
+      "intake": "Issue intake",
+      "intakeHint": "Each run picks one matching open issue from the tracker and works it end to end.",
+      "intakeNoSources": "Connect a task source first to pull issues from it.",
+      "intakeGithubRepo": "Repository",
+      "intakeTitleFragment": "Title contains",
+      "intakeTitleFragmentPlaceholder": "e.g. crash",
+      "intakeLabels": "Labels",
+      "intakeLabelsPlaceholder": "comma-separated",
+      "intakeIssueType": "Issue type",
+      "intakeInProgressLabel": "In-progress label"
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",
@@ -897,7 +907,8 @@
         "auto_merge_disabled": "The {preset} preset sends every PR to a human, so this one is waiting for review.",
         "no_rationale": "The merger scored the PR but gave no rationale, so the verdict could not be trusted to auto-merge; the PR is waiting for a human to merge.",
         "no_assessment": "The merger did not return a parseable assessment, so the PR is waiting for a human to merge.",
-        "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge."
+        "merge_failed": "The scores were within the {preset} thresholds, but the automatic merge could not complete (for example branch protection or a conflict), so the PR is waiting for a human to merge.",
+        "merge_partial": "Some of the task's pull requests merged, but a later one could not, so the change is waiting for a human to finish or revert the multi-repo merge."
       },
       "scores": "Scores",
       "axis": {
@@ -4209,6 +4220,26 @@
       "hint": "Continue lets the planner ask follow-ups; Proceed plans with the answers so far.",
       "proceed": "Proceed to plan",
       "continue": "Continue"
+    },
+    "followUpStatus": {
+      "open": "Open",
+      "promoted": "Promoted",
+      "dismissed": "Dismissed"
+    },
+    "curation": {
+      "promote": "Promote to item",
+      "promoteConfirm": "Create item",
+      "dismiss": "Dismiss",
+      "retry": "Retry",
+      "skip": "Skip",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "phaseField": "Phase",
+      "itemTitlePlaceholder": "Item title (defaults to the follow-up's)",
+      "maxConcurrentField": "Max concurrent tasks",
+      "defaultPipelineField": "Default pipeline",
+      "failed": "Could not update the initiative"
     }
   }
 }

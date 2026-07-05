@@ -13,10 +13,21 @@ export type RunOrigin = 'manual' | 'recurring'
 /**
  * The `bug-intake` engine step pulls one issue from the schedule's configured tracker board, so
  * it is meaningless without a schedule — a pipeline carrying it must be `'recurring'`. Kept as a
- * bare literal here (the kind itself is registered later, in the bug-triage engine phase); this
- * structural guard only needs the identifier.
+ * bare literal here (the step handler that registers it lives in the engine — see
+ * `RunDispatcher.buildStepHandlerRegistry`); this structural guard only needs the identifier.
+ * Exported so the recurring-schedule intake-config validation and the engine handler share ONE
+ * source of truth for the kind id.
  */
-const BUG_INTAKE_AGENT_KIND = 'bug-intake'
+export const BUG_INTAKE_AGENT_KIND = 'bug-intake'
+
+/**
+ * Whether a pipeline's ENABLED steps include a `bug-intake` step — the trigger for both the
+ * recurring-only launch constraint (above) and the schedule's `issueIntake`-required validation
+ * (`RecurringPipelineService`). A disabled `bug-intake` step never runs, so it imposes neither.
+ */
+export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: boolean[]): boolean {
+  return agentKinds.some((kind, i) => kind === BUG_INTAKE_AGENT_KIND && enabled?.[i] !== false)
+}
 
 /**
  * Structural validation shared by the pipeline builder (save) and the execution engine
@@ -195,9 +206,7 @@ export function assertPipelineLaunchable(
   enabled?: boolean[],
 ): void {
   const effective: PipelineAvailability = availability ?? 'both'
-  const hasEnabledBugIntake = agentKinds.some(
-    (kind, i) => kind === BUG_INTAKE_AGENT_KIND && enabled?.[i] !== false,
-  )
+  const hasEnabledBugIntake = pipelineHasEnabledBugIntake(agentKinds, enabled)
   if (hasEnabledBugIntake && effective !== 'recurring') {
     throw new ValidationError(
       `A pipeline with a '${BUG_INTAKE_AGENT_KIND}' step must be recurring — it pulls its work from a schedule's tracker board, so it cannot run as a one-off.`,

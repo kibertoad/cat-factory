@@ -34,14 +34,30 @@ function exceededAxesOf(assessment: MergeAssessment, preset: MergeThresholds): M
   return axes
 }
 
+/**
+ * The outcome of {@link MergeResolverDeps.finalizeMerge} — a task's real merge over ALL its
+ * pull requests (own-service + peers). A complete failure (nothing merged) still THROWS, so
+ * the single-repo path is unchanged (the resolver's catch falls back to a review card); a
+ * `partial` result means some PRs merged and a later one failed — cross-repo merges are
+ * non-atomic — which `finalizeMerge` already surfaced (block `blocked` + an enumerated
+ * notification), so the resolver only labels the decision.
+ */
+export type FinalizeMergeResult =
+  | { kind: 'merged' }
+  | { kind: 'partial'; merged: string[]; unmerged: string[] }
+
 /** The engine collaborators the merge resolver drives (kept on the engine, shared elsewhere). */
 export interface MergeResolverDeps {
   blockRepository: BlockRepository
   notificationService?: NotificationService
   /** The task's resolved merge-threshold preset (block pin → workspace default → built-in). */
   resolveMergePreset: (workspaceId: string, block: Block) => Promise<MergeThresholds>
-  /** Merge the block's PR for real then flip it `done` (throws on a blocked/failed merge). */
-  finalizeMerge: (workspaceId: string, blockId: string) => Promise<void>
+  /**
+   * Merge the block's PR(s) for real then flip it `done` — throws on a COMPLETE failure
+   * (nothing merged), returns `partial` when a multi-repo merge merged some then hit a
+   * failure (block left `blocked` + notified), else `merged`.
+   */
+  finalizeMerge: (workspaceId: string, blockId: string) => Promise<FinalizeMergeResult>
 }
 
 /**
@@ -104,11 +120,17 @@ export class MergeResolver {
 
     if (within) {
       try {
-        await this.deps.finalizeMerge(workspaceId, block.id)
+        const res = await this.deps.finalizeMerge(workspaceId, block.id)
+        if (res.kind === 'partial') {
+          // A multi-repo task merged some PRs but hit a failure part-way; `finalizeMerge`
+          // already left the block `blocked` and raised the enumerated partial-merge card, so
+          // the resolver only records the decision (no second review notification).
+          return { ...base, outcome: 'awaiting_review', reason: 'merge_partial', exceededAxes: [] }
+        }
         return { ...base, outcome: 'auto_merged', reason: 'within_thresholds', exceededAxes: [] }
       } catch {
-        // Auto-merge failed (e.g. branch protection / conflict): fall through to a
-        // review notification so a human can sort it out.
+        // Auto-merge failed outright (e.g. branch protection / conflict, or the first PR of a
+        // multi-repo task): fall through to a review notification so a human can sort it out.
         await this.raiseReviewAndBlock(workspaceId, instance, block, assessment)
         return { ...base, outcome: 'awaiting_review', reason: 'merge_failed', exceededAxes }
       }

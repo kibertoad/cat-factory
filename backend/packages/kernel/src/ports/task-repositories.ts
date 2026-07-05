@@ -98,4 +98,11 @@ export interface TaskRepository {
     externalId: string,
     blockId: string | null,
   ): Promise<void>
+  /**
+   * Detach EVERY issue currently linked to a block, across sources, in one write
+   * (`UPDATE … WHERE linked_block_id = ?` — never a loop of per-issue point
+   * writes). Used by the recurring intake's replace-link so a reused block's
+   * linked context never accumulates across fires.
+   */
+  unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void>
 }

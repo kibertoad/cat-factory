@@ -1,4 +1,5 @@
 import type {
+  IssueIntakeQuery,
   TaskDependencyLink,
   TaskSearchResult,
   TaskSourceDescriptor,
@@ -49,6 +50,31 @@ function escapeJql(query: string): string {
  */
 export function buildJiraSearchJql(query: string): string {
   return `text ~ "${escapeJql(query.trim())}" ORDER BY updated DESC`
+}
+
+/** A well-formed Jira issue key (`PROJ-123`) — the only shape allowed into a JQL `IN` list. */
+const JIRA_KEY = /^[A-Za-z][A-Za-z0-9]+-\d+$/
+
+/**
+ * Build the JQL for an issue-intake predicate search: open issues
+ * (`statusCategory != Done`) in the configured project matching every present
+ * predicate, oldest first. All predicates are pushed into the query (including
+ * the already-worked exclusion list, as `issuekey NOT IN`) so Jira does the
+ * filtering — never fetch-all-then-filter. Excluded ids are validated against
+ * the issue-key shape (and embedded unquoted, as JQL requires for keys), so a
+ * malformed stored id can't break — or inject into — the query.
+ */
+export function buildJiraIntakeJql(query: IssueIntakeQuery): string {
+  const clauses: string[] = []
+  if (query.board.jiraProjectKey)
+    clauses.push(`project = "${escapeJql(query.board.jiraProjectKey)}"`)
+  clauses.push('statusCategory != Done')
+  if (query.issueType) clauses.push(`issuetype = "${escapeJql(query.issueType)}"`)
+  for (const label of query.labels ?? []) clauses.push(`labels = "${escapeJql(label)}"`)
+  if (query.titleFragment) clauses.push(`summary ~ "${escapeJql(query.titleFragment)}"`)
+  const excluded = (query.excludeExternalIds ?? []).filter((id) => JIRA_KEY.test(id))
+  if (excluded.length > 0) clauses.push(`issuekey NOT IN (${excluded.join(', ')})`)
+  return `${clauses.join(' AND ')} ORDER BY created ASC`
 }
 
 interface JiraSearchResponse {

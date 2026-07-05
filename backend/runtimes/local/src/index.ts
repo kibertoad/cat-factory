@@ -48,12 +48,13 @@ export {
   type MothershipComposition,
 } from './mothership.js'
 
-// Installation-level extension points, re-exported for parity with the Node facade so
-// a local deployment can register custom agent kinds / pipelines before `startLocal()`.
+// Installation-level extension point, re-exported for parity with the Node facade: a local
+// deployment news a `defaultAgentKindRegistry()`, registers its own kinds on it by reference,
+// and injects it via `buildLocalContainer`/`startLocal()`'s `agentKindRegistry` option (the
+// app-owned DI seam that replaces the old module-global `registerAgentKind` side effect).
 export {
-  registerAgentKind,
-  registerAgentKinds,
-  clearRegisteredAgentKinds,
+  AgentKindRegistry,
+  defaultAgentKindRegistry,
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'

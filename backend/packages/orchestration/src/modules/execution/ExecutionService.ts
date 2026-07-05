@@ -14,6 +14,7 @@ import type {
   IssueWritebackProvider,
 } from '@cat-factory/kernel'
 import {
+  allPullRequests,
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   frameAllowsVisualPipeline,
   isLocalRunner,
@@ -21,12 +22,14 @@ import {
 } from '@cat-factory/contracts'
 import {
   BINARY_STORAGE_TRAIT,
+  bugInvestigation,
   companionFor,
   companionTargets,
   hasTrait,
   isCompanionKind,
   isInlineModelStep,
 } from '@cat-factory/agents'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunInitiatorScope } from '@cat-factory/kernel'
 import {
   assertPipelineLaunchable,
@@ -75,7 +78,8 @@ import { StepGraph } from './StepGraph.js'
 import { RunStateMachine, type KaizenScheduler } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { inferTechnicalLabel } from './technical.logic.js'
-import { MergeResolver } from './MergeResolver.js'
+import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
+import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { ReviewGateController, type ReviewKind } from './ReviewGateController.js'
 import {
   BrainstormActions,
@@ -92,7 +96,10 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
-import { assertInitiativeShapeAllowed } from '../initiative/initiative.logic.js'
+import {
+  type InitiativeRunHarvest,
+  assertInitiativeShapeAllowed,
+} from '../initiative/initiative.logic.js'
 import type { WorkspaceSettingsService } from '../settings/WorkspaceSettingsService.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
 import type { ClarityReviewService } from '../clarity/ClarityReviewService.js'
@@ -124,6 +131,7 @@ import type { InitiativeRepository, RequirementReviewRepository } from '@cat-fac
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import type {
+  BugIntakeService,
   EnvironmentProvisioningService,
   EnvironmentTeardownService,
 } from '@cat-factory/integrations'
@@ -155,6 +163,12 @@ export interface ExecutionServiceDependencies {
   idGenerator: IdGenerator
   clock: Clock
   agentExecutor: AgentExecutor
+  /**
+   * The app-owned agent-kind registry, threaded through to the trait/inline-surface checks
+   * and a registered kind's pre/post-op hooks. `createCore` defaults it to
+   * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
+   */
+  agentKindRegistry: AgentKindRegistry
   workRunner: WorkRunner
   executionEventPublisher: ExecutionEventPublisher
   boardService: BoardService
@@ -335,9 +349,14 @@ export interface ExecutionServiceDependencies {
    * Best-effort poke of the initiative execution loop (slice 3): called after a spawned task's
    * PR merges (`finalizeMerge`), so its owning initiative reconciles + advances immediately
    * rather than on the next cron sweep. Threaded through to the {@link RunStateMachine} for the
-   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired.
+   * symmetric terminal-run poke. Fire-and-forget; a no-op when initiatives are unwired. The
+   * optional `harvest` (slice 4) carries the settling run's follow-ups + failure cause.
    */
-  pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
   /**
    * Optional: raises human-actionable notifications (a PR needs a merge decision,
    * a no-merger pipeline finished, CI fixing gave up). Absent → those events still
@@ -386,6 +405,13 @@ export interface ExecutionServiceDependencies {
    * so the engine works unchanged when no tracker writeback is wired.
    */
   issueWriteback?: IssueWritebackProvider
+  /**
+   * Optional: the recurring `bug-intake` step's read-and-claim helper. When wired, a `bug-intake`
+   * step pulls one matching open issue from the schedule's configured tracker board, claims it, and
+   * seeds the reused block from it; absent (no task sources wired) → the step is a no-op that
+   * completes the run without touching the block, so the engine works unchanged.
+   */
+  bugIntakeService?: BugIntakeService
   /**
    * Optional: the LLM observability sink. When wired, each emit rolls the per-run
    * model-call aggregates onto the matching pipeline steps (`step.metrics`) so the
@@ -449,6 +475,8 @@ export class ExecutionService {
   /** The async instance/block state-machine spine (persist/emit/park/advance/finalize/fail). */
   private readonly runStateMachine: RunStateMachine
   private readonly agentExecutor: AgentExecutor
+  /** App-owned agent-kind registry (custom-kind traits/inline-surface + pre/post-op hooks). */
+  private readonly agentKindRegistry: AgentKindRegistry
   private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly board: BoardService
@@ -493,10 +521,15 @@ export class ExecutionService {
   // so the constructor forwards the destructured params straight to those collaborators.
   private readonly workspaceSettingsService?: WorkspaceSettingsService
   private readonly prMerger?: PullRequestMerger
+  private readonly notifications?: NotificationService
   private readonly mergePresetRepository?: MergePresetRepository
   private readonly issueWriteback?: IssueWritebackProvider
   private readonly subscriptionActivations?: SubscriptionActivationRepository
-  private readonly pokeInitiativeLoop?: (workspaceId: string, initiativeBlockId: string) => void
+  private readonly pokeInitiativeLoop?: (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ) => void
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
@@ -567,6 +600,7 @@ export class ExecutionService {
     mergePresetRepository,
     ticketTrackerProvider,
     issueWriteback,
+    bugIntakeService,
     subscriptionActivationRepository,
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
@@ -576,6 +610,7 @@ export class ExecutionService {
     assertAgentBackendConfigured,
     runInitiatorScope,
     pokeInitiativeLoop,
+    agentKindRegistry,
   }: ExecutionServiceDependencies) {
     // Forward-only: the run-initiator scope is consumed solely by RunDispatcher (below), so it
     // is hoisted to a local with its default applied rather than stored as a `this.` field.
@@ -603,6 +638,7 @@ export class ExecutionService {
       pokeInitiativeLoop,
     })
     this.agentExecutor = agentExecutor
+    this.agentKindRegistry = agentKindRegistry
     this.workRunner = workRunner
     this.events = executionEventPublisher
     this.board = boardService
@@ -615,6 +651,7 @@ export class ExecutionService {
       workspaceRepository,
       blockRepository,
       accountRepository,
+      agentKindRegistry,
       documents: documentRepository,
       documentUrlResolver,
       tasks: taskRepository,
@@ -748,6 +785,7 @@ export class ExecutionService {
       blockRepository,
       executionRepository,
       agentExecutor,
+      agentKindRegistry,
       workRunner,
       events: executionEventPublisher,
       idGenerator,
@@ -771,6 +809,7 @@ export class ExecutionService {
       environmentProvisioning,
       ticketTrackerProvider,
       issueWriteback,
+      bugIntakeService,
       notificationService,
       blueprintReconciler,
       initiativeService,
@@ -792,6 +831,7 @@ export class ExecutionService {
     )
     this.workspaceSettingsService = workspaceSettingsService
     this.prMerger = pullRequestMerger
+    this.notifications = notificationService
     this.mergePresetRepository = mergePresetRepository
     this.issueWriteback = issueWriteback
     this.subscriptionActivations = subscriptionActivationRepository
@@ -1030,7 +1070,8 @@ export class ExecutionService {
     workspaceId: string,
     agentKinds: readonly string[],
   ): Promise<void> {
-    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT))) return
+    if (!agentKinds.some((kind) => hasTrait(kind, BINARY_STORAGE_TRAIT, this.agentKindRegistry)))
+      return
     const resolve = this.resolveBinaryArtifactStore
     if (!resolve) return
     const store = await resolve(workspaceId)
@@ -1078,7 +1119,10 @@ export class ExecutionService {
     if (block.modelId) {
       // A block-level pin applies to every step; it must satisfy an inline step too when the
       // pipeline has one.
-      check(block.modelId, agentKinds.some(isInlineModelStep))
+      check(
+        block.modelId,
+        agentKinds.some((kind) => isInlineModelStep(kind, this.agentKindRegistry)),
+      )
     } else if (this.resolveWorkspaceModelDefault) {
       // Independent per-kind resolutions on the start path — run them concurrently.
       const ids = await Promise.all(
@@ -1086,7 +1130,9 @@ export class ExecutionService {
           this.resolveWorkspaceModelDefault!(workspaceId, kind, block.modelPresetId),
         ),
       )
-      agentKinds.forEach((kind, i) => check(ids[i], isInlineModelStep(kind)))
+      agentKinds.forEach((kind, i) =>
+        check(ids[i], isInlineModelStep(kind, this.agentKindRegistry)),
+      )
     }
     if (unconfigured.size > 0) {
       throw new ConflictError(
@@ -1904,27 +1950,78 @@ export class ExecutionService {
    */
   private buildClarityKind(): ReviewKind<ClarityReview> {
     const require = (): ClarityReviewService => {
-      if (!this.clarityReviewService?.enabled) {
+      if (!this.clarityReviewService) {
         throw new ConflictError('The clarity reviewer is not configured')
       }
       return this.clarityReviewService
     }
     return {
       agentKind: CLARITY_REVIEW_AGENT_KIND,
+      // Enabled whenever the clarity STORE is wired — the bug-triage seed/auto-pass path is
+      // deterministic (driven by the upstream investigator's structured triage) and needs no
+      // reviewer model, so the gate must activate even with no model configured. The LLM
+      // review/incorporate/re-review paths still resolve their own model (and degrade gracefully
+      // when unwired: no investigation + no model ⇒ the review closure auto-passes).
       entityName: 'Clarity review',
-      enabled: () => !!this.clarityReviewService?.enabled,
+      enabled: () => !!this.clarityReviewService,
       getForBlock: (ws, blockId) => require().getForBlock(ws, blockId),
-      review: async (ws, block, preset) =>
-        require().review(ws, block.id, {
-          maxIterations: preset.maxRequirementIterations,
-          concernThreshold: preset.maxRequirementConcernAllowed,
-          investigation: await this.investigationForBlock(ws, block.id),
-        }),
-      reReview: (ws, reviewId, preset) =>
-        require().reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed }),
+      review: async (ws, block, preset) => {
+        const svc = require()
+        const structured = await this.structuredInvestigationForBlock(ws, block.id)
+        let review: ClarityReview
+        if (structured) {
+          // An upstream structured `bug-investigator`: seed the gate from its triage — NO reviewer
+          // LLM. `clear` → auto-pass; `needs_clarification` → one blocking finding per question.
+          // The investigator explicitly asked for clarification, so those questions ALWAYS park
+          // for a human — the requirements-review concern tolerance (`maxRequirementConcernAllowed`,
+          // which governs the requirements reviewer, not bug triage) must not silently auto-pass
+          // them — hence a fixed `none` threshold here rather than the preset's.
+          review = await svc.seedReview(ws, block.id, {
+            clarity: structured.clarity,
+            questions: structured.questions,
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: 'none',
+          })
+        } else if (!svc.enabled) {
+          // No structured investigation and no reviewer model: nothing to review against, so
+          // auto-pass (equivalent to the old pass-through when the reviewer wasn't configured).
+          review = await svc.seedReview(ws, block.id, {
+            clarity: 'clear',
+            questions: [],
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+          })
+        } else {
+          review = await svc.review(ws, block.id, {
+            maxIterations: preset.maxRequirementIterations,
+            concernThreshold: preset.maxRequirementConcernAllowed,
+            investigation: await this.investigationForBlock(ws, block.id),
+          })
+        }
+        // Whenever the gate parks with open questions — from the deterministic seed OR the LLM
+        // reviewer — best-effort echo them onto the linked tracker issue (answers still arrive
+        // in-app). A settled/auto-passed review echoes nothing; a tracker outage never fails the run.
+        await this.echoClarityQuestions(ws, block.id, review)
+        return review
+      },
+      reReview: async (ws, reviewId, preset) => {
+        const svc = require()
+        // No reviewer model wired: a re-review can't run, so settle the loop (converge) instead of
+        // throwing — the deterministic seed path can reach a park with no model configured.
+        if (!svc.enabled) return svc.markIncorporated(ws, reviewId)
+        return svc.reReview(ws, reviewId, { concernThreshold: preset.maxRequirementConcernAllowed })
+      },
       incorporate: async (ws, blockId, reviewId, feedback) => {
+        const svc = require()
+        // No reviewer model: can't LLM-fold the answers into a clarified report, so settle the
+        // review as-is (the run advances on the raw report + the recorded answers) instead of
+        // throwing — keeps the model-free seed path resolvable.
+        if (!svc.enabled) {
+          await svc.markIncorporated(ws, reviewId)
+          return
+        }
         const investigation = await this.investigationForBlock(ws, blockId)
-        await require().incorporate(ws, reviewId, { feedback, investigation })
+        await svc.incorporate(ws, reviewId, { feedback, investigation })
       },
       markIncorporated: (ws, reviewId) => require().markIncorporated(ws, reviewId),
       markReReviewing: (ws, reviewId) => require().markReReviewing(ws, reviewId),
@@ -2104,6 +2201,56 @@ export class ExecutionService {
     return instance ? this.investigationFor(instance) : undefined
   }
 
+  /**
+   * The latest `bug-investigator` step's STRUCTURED triage on a run — its `clarity` verdict +
+   * `questions` — parsed leniently from `step.custom`. Drives the clarity gate's seed/auto-pass
+   * (see {@link buildClarityKind}): a structured investigator upstream means the gate seeds its
+   * findings from `questions` (or auto-passes on `clarity === 'clear'`) instead of running its
+   * own reviewer LLM. Undefined when no investigator ran or its result wasn't structured (an
+   * older prose investigator, or an unparseable reply) — the gate then falls back to the LLM path.
+   */
+  private structuredInvestigationFor(
+    instance: ExecutionInstance,
+  ): { clarity: 'clear' | 'needs_clarification'; questions: string[] } | undefined {
+    for (let i = instance.steps.length - 1; i >= 0; i--) {
+      const s = instance.steps[i]!
+      if (s.agentKind !== BUG_INVESTIGATOR_AGENT_KIND || s.custom === undefined) continue
+      const parsed = bugInvestigation.safeParse(s.custom)
+      if (!parsed) return undefined
+      return { clarity: parsed.clarity, questions: parsed.questions }
+    }
+    return undefined
+  }
+
+  /** Resolve a block's structured investigator triage via its current execution. */
+  private async structuredInvestigationForBlock(
+    workspaceId: string,
+    blockId: string,
+  ): Promise<{ clarity: 'clear' | 'needs_clarification'; questions: string[] } | undefined> {
+    const block = await this.blockRepository.get(workspaceId, blockId)
+    if (!block?.executionId) return undefined
+    const instance = await this.executionRepository.get(workspaceId, block.executionId)
+    return instance ? this.structuredInvestigationFor(instance) : undefined
+  }
+
+  /**
+   * Best-effort echo of a parked clarity review's open questions onto the block's linked tracker
+   * issue (see {@link IssueWritebackProvider.postQuestions}). Fires for BOTH the deterministic
+   * investigator seed and the LLM reviewer, so identical human-parked states behave the same. A
+   * settled/auto-passed review (status `incorporated`) or one with no open items echoes nothing,
+   * and a tracker outage never fails the run.
+   */
+  private async echoClarityQuestions(
+    workspaceId: string,
+    blockId: string,
+    review: ClarityReview,
+  ): Promise<void> {
+    if (!this.issueWriteback || review.status === 'incorporated') return
+    const questions = review.items.filter((i) => i.status === 'open').map((i) => i.detail)
+    if (questions.length === 0) return
+    await this.issueWriteback.postQuestions(workspaceId, blockId, questions).catch(() => {})
+  }
+
   // The clarity / human-testing / visual-confirmation gate-window actions now live on the
   // per-feature sub-facades (`clarityReview` / `humanTest` / `visualConfirm`); see the getters
   // above and {@link gate-window-facades}.
@@ -2168,24 +2315,57 @@ export class ExecutionService {
   }
 
   /**
-   * Merge a block's PR for real, then mark it `done`. The remote merge happens
-   * FIRST (via the {@link PullRequestMerger} port) and only on its success does the
-   * block flip to `done` — so `done` provably means "merged", not a board-only
-   * status. When no merger is wired (tests) this degrades to the old board-only
-   * flip. Throws if the remote merge fails so callers can fall back to a manual
-   * merge / review notification.
+   * Merge a block's PR(s) for real, then mark it `done`. The remote merge happens FIRST (via
+   * the {@link PullRequestMerger} port) and only on its success does the block flip to `done`
+   * — so `done` provably means "merged", not a board-only status. When no merger is wired
+   * (tests) this degrades to the old board-only flip.
+   *
+   * Multi-repo (service-connections phase 4): a cross-service task opens one PR per changed
+   * repo. All of them are merged in provider-before-consumer order (see {@link orderPrsForMerge}),
+   * stopping at the first failure. A COMPLETE failure (nothing merged) THROWS so the caller
+   * falls back to a review notification, exactly as the single-repo path did. A PARTIAL failure
+   * (some merged, then one failed — cross-repo merges are non-atomic) leaves the block `blocked`
+   * and raises an enumerated `merge_review` notification, and is reported to the caller as
+   * `partial` so it labels the decision without raising a second card.
    */
-  private async finalizeMerge(workspaceId: string, blockId: string): Promise<void> {
+  private async finalizeMerge(workspaceId: string, blockId: string): Promise<FinalizeMergeResult> {
     const block = await this.blockRepository.get(workspaceId, blockId)
-    if (!block) return
+    if (!block) return { kind: 'merged' }
     // Idempotent under durable-driver replays: a crash between the real merge and the
     // instance persist re-runs the merger resolver, and re-merging an already-merged PR
     // throws — which the resolver's fall-through would then misread as a failed merge
     // and downgrade the block to `pr_ready`. `done` already means "merged"; keep it.
-    if (block.status === 'done') return
-    if (this.prMerger && block.pullRequest) {
-      // Throws on a blocked/failed merge — the caller decides what to do next.
-      await this.prMerger.mergeForBlock(workspaceId, blockId)
+    if (block.status === 'done') return { kind: 'merged' }
+    // Same idempotency guard for a PARTIALLY-merged multi-repo task: the first pass merged some
+    // PRs, then one failed, so it left the block `blocked` and raised the enumerated card. A
+    // durable-driver replay must NOT re-run the merge — re-merging the already-merged PRs throws
+    // (GitHub 405) and would be misread as a TOTAL failure (`merged.length === 0` → throw → the
+    // resolver downgrades the block to `pr_ready` + raises a SECOND card). The merger step only
+    // ever enters `finalizeMerge` on an already-`blocked` block on such a replay (the manual
+    // `mergePr` path gates on `pr_ready`), so return the already-recorded partial outcome.
+    if (block.status === 'blocked') return { kind: 'partial', merged: [], unmerged: [] }
+    // Merge every PR the task opened (own-service + peers) — not just `block.pullRequest`, since a
+    // multi-repo task can have changed ONLY peer repos (own service untouched, no own PR).
+    const ordered = orderPrsForMerge(
+      allPullRequests(block).map((p) => ({
+        ...(p.repo ? { repo: p.repo } : {}),
+        ...(p.frameId ? { frameId: p.frameId } : {}),
+        ref: p.ref,
+      })),
+    )
+    if (this.prMerger && ordered.length > 0) {
+      const outcome = await this.prMerger.mergePullRequests(workspaceId, blockId, ordered)
+      if (outcome.failed) {
+        // Nothing merged → behave like the old single-PR throw so the caller raises a review.
+        if (outcome.merged.length === 0) throw new Error(outcome.failed.error)
+        // Partial: leave the block blocked and enumerate the split for a human to finish/revert.
+        const label = (e: { repo?: string }): string => e.repo ?? 'own service'
+        const merged = outcome.merged.map(label)
+        const unmerged = [outcome.failed.entry, ...outcome.skipped].map(label)
+        await this.blockRepository.update(workspaceId, blockId, { status: 'blocked' })
+        await this.raisePartialMergeNotification(workspaceId, block, merged, unmerged)
+        return { kind: 'partial', merged, unmerged }
+      }
     }
     await this.blockRepository.update(workspaceId, blockId, { status: 'done', progress: 1 })
     // Best-effort writeback: comment + close the task's linked tracker issue(s) as
@@ -2210,6 +2390,36 @@ export class ExecutionService {
       // doesn't emit a terminal run event). Fire-and-forget; the sweep is the backstop.
       if (block.initiativeId) this.pokeInitiativeLoop?.(workspaceId, block.initiativeId)
     }
+    return { kind: 'merged' }
+  }
+
+  /**
+   * Raise the `merge_review` card for a PARTIALLY-merged multi-repo task: some PRs merged, then
+   * an intermediate one failed. Cross-repo merges can't be atomic, so the human finishes or
+   * reverts the split by hand; the card enumerates which repos merged vs are still open.
+   */
+  private async raisePartialMergeNotification(
+    workspaceId: string,
+    block: Block,
+    merged: string[],
+    unmerged: string[],
+  ): Promise<void> {
+    if (!this.notifications) return
+    await this.notifications.raise(workspaceId, {
+      type: 'merge_review',
+      blockId: block.id,
+      executionId: block.executionId ?? null,
+      title: `Finish the multi-repo merge for "${block.title}"`,
+      body:
+        `Merged ${merged.length} PR(s) (${merged.join(', ')}) but could not merge ` +
+        `${unmerged.length} more (${unmerged.join(', ')}). Cross-repo merges aren't atomic — ` +
+        `merge the rest or revert the merged PR(s) by hand.`,
+      payload: {
+        mergedRepos: merged,
+        unmergedRepos: unmerged,
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+      },
+    })
   }
 
   /**

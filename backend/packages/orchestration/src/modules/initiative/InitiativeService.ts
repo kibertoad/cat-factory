@@ -6,8 +6,11 @@ import type {
   ExecutionEventPublisher,
   IdGenerator,
   Initiative,
+  InitiativeExecutionPolicy,
   InitiativeRepository,
   PipelineRepository,
+  PromoteInitiativeFollowUpInput,
+  UpdateInitiativeItemInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, assertFound, requireWorkspace } from '@cat-factory/kernel'
@@ -16,10 +19,14 @@ import { initiativeContentView } from '@cat-factory/agents'
 import { gridSlot } from '../board/board.logic.js'
 import {
   applyAnalysis,
+  applyDismissFollowUp,
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
+  applyItemEdit,
   applyPlanDraft,
+  applyPolicyEdit,
+  applyPromoteFollowUp,
   initiativeSlug,
   validatePlanDraft,
 } from './initiative.logic.js'
@@ -298,6 +305,91 @@ export class InitiativeService {
     summary: string,
   ): Promise<Initiative | null> {
     return this.mutate(workspaceId, blockId, (current) => applyAnalysis(current, summary))
+  }
+
+  // ---- Follow-up triage + item/policy editing (slice 4) -------------------
+  // Mid-flight human curation, keyed by initiative id (the tracker window / inspector operate
+  // on the loaded entity). Each resolves the id → block, then rides the same CAS `mutate` the
+  // loop uses, so a human edit and a live tick are serialised by the single-writer rev guard.
+  // The pure transforms throw ValidationError/ConflictError for illegal edits (unknown phase,
+  // editing an in-flight item) — mutate propagates them before any write.
+
+  /** Promote an `open` harvested follow-up into a new `pending` tracker item under a phase. */
+  async promoteFollowUp(
+    workspaceId: string,
+    initiativeId: string,
+    followUpId: string,
+    input: PromoteInitiativeFollowUpInput,
+  ): Promise<Initiative> {
+    if (input.pipelineId) await this.assertPipelineExists(workspaceId, input.pipelineId)
+    return this.mutateById(workspaceId, initiativeId, (current) =>
+      applyPromoteFollowUp(current, followUpId, input),
+    )
+  }
+
+  /** Dismiss a harvested follow-up without acting on it. */
+  async dismissFollowUp(
+    workspaceId: string,
+    initiativeId: string,
+    followUpId: string,
+  ): Promise<Initiative> {
+    return this.mutateById(workspaceId, initiativeId, (current) =>
+      applyDismissFollowUp(current, followUpId),
+    )
+  }
+
+  /** Edit one tracker item and/or drive its status (retry a blocked item / skip it). */
+  async updateItem(
+    workspaceId: string,
+    initiativeId: string,
+    itemId: string,
+    input: UpdateInitiativeItemInput,
+  ): Promise<Initiative> {
+    if (input.pipelineId) await this.assertPipelineExists(workspaceId, input.pipelineId)
+    return this.mutateById(workspaceId, initiativeId, (current) =>
+      applyItemEdit(current, itemId, input),
+    )
+  }
+
+  /** Replace an executing initiative's execution policy (concurrency + pipeline rules). */
+  async updatePolicy(
+    workspaceId: string,
+    initiativeId: string,
+    policy: InitiativeExecutionPolicy,
+  ): Promise<Initiative> {
+    await this.assertPipelineExists(workspaceId, policy.defaultPipelineId)
+    for (const rule of policy.rules ?? [])
+      await this.assertPipelineExists(workspaceId, rule.pipelineId)
+    return this.mutateById(workspaceId, initiativeId, (current) => applyPolicyEdit(current, policy))
+  }
+
+  /** Fail loudly when an edit names a pipeline that doesn't exist. No-op without a repo (tests). */
+  private async assertPipelineExists(workspaceId: string, pipelineId: string): Promise<void> {
+    const repo = this.deps.pipelineRepository
+    if (!repo) return
+    if (!(await repo.get(workspaceId, pipelineId))) {
+      throw new ValidationError(`Unknown pipeline '${pipelineId}'`)
+    }
+  }
+
+  /** Resolve an initiative id → its block, then apply a CAS transform (the id-keyed edit path).
+   *  Non-null by construction: the entity is asserted to exist, so the block-keyed mutate that
+   *  follows always finds it. */
+  private async mutateById(
+    workspaceId: string,
+    initiativeId: string,
+    transform: (current: Initiative) => Initiative,
+  ): Promise<Initiative> {
+    const initiative = assertFound(
+      await this.deps.initiativeRepository.get(workspaceId, initiativeId),
+      'Initiative',
+      initiativeId,
+    )
+    return assertFound(
+      await this.mutate(workspaceId, initiative.blockId, transform),
+      'Initiative',
+      initiativeId,
+    )
   }
 
   /**
