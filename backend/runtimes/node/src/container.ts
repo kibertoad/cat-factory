@@ -69,13 +69,16 @@ import {
   type LocalModelEndpointRepository,
   type ModelProviderResolver,
   type NotificationChannel,
+  type PersonalSubscriptionRepository,
   type ProviderApiKeyRepository,
+  type ProviderSubscriptionTokenRepository,
   type ProvisioningSubsystem,
   type RateLimitRepository,
   type RateLimitSnapshot,
   type ResolveUserGitHubToken,
   type RunnerPoolConnectionRepository,
   type RunnerPoolProvider,
+  type SubscriptionActivationRepository,
   type TaskConnectionRepository,
   type TaskSourceProvider,
   CompositeNotificationChannel,
@@ -493,17 +496,20 @@ export interface NodeContainerOptions {
    *
    * Mothership-mode service matrix (what `db: undefined` turns off vs. routes remotely):
    *   - Org/durable stores that were built directly from `db` (notifications, bootstrap,
-   *     env-config-repair, subscription-activation, GitHub projections, …) are routed through the
-   *     {@link pickRepoSource} seam, so they come from the remote registry ({@link repos}) instead
-   *     of the absent db — the board-load + run paths are covered (the Phase-3 merge gate, MET; see
+   *     env-config-repair, GitHub projections, …) are routed through the {@link pickRepoSource}
+   *     seam, so they come from the remote registry ({@link repos}) instead of the absent db — the
+   *     board-load + run paths are covered (the Phase-3 merge gate, MET; see
    *     docs/initiatives/mothership-mode.md). An org method the server-side allow-list does not yet
    *     expose returns a clean `unknown_method`, never an undefined-db `TypeError`.
-   *   - The per-user Postgres-only services turn themselves OFF (no local-sqlite bucket yet, PR 3):
-   *     subscriptions, user secrets, OpenRouter catalog, personal subscriptions. See
-   *     {@link buildNodeSubscriptionService} et al.
-   *   - The credential pool + local-model endpoints stay ON via the local `node:sqlite` override
-   *     seams below ({@link providerApiKeyRepository}/{@link localModelEndpointRepository}) — they
-   *     are db-independent by design, so they are NOT in the "off without db" set above.
+   *   - The per-user Postgres-only services that still lack a local-sqlite bucket turn themselves
+   *     OFF: user secrets + OpenRouter catalog. See {@link buildNodeUserSecretService} et al.
+   *   - The credential + subscription stores stay ON via the local `node:sqlite` override seams
+   *     below ({@link providerApiKeyRepository} / {@link localModelEndpointRepository} /
+   *     {@link providerSubscriptionTokenRepository} / {@link personalSubscriptionRepository} /
+   *     {@link subscriptionActivationRepository}) — laptop-local, leased + decrypted by the LOCAL
+   *     container executor, so they are NOT in the "off without db" set above. Local-mode settings
+   *     likewise come from the local `node:sqlite` singleton (wired in the local facade). See the
+   *     local-sqlite bucket pattern in the initiative doc.
    */
   db?: DrizzleDb
   /**
@@ -527,6 +533,29 @@ export interface NodeContainerOptions {
    * {@link db}.
    */
   localModelEndpointRepository?: LocalModelEndpointRepository
+  /**
+   * Override the per-workspace subscription-token pool repository (Claude Code / Codex / GLM
+   * credentials). Like {@link providerApiKeyRepository}, mothership mode injects the local
+   * `node:sqlite` credential store here so the pooled subscription tokens stay on the laptop
+   * (the LOCAL container executor leases + decrypts them, so they never reach the mothership).
+   * Undefined → the Drizzle repo over {@link db} (and the service turns off without either).
+   */
+  providerSubscriptionTokenRepository?: ProviderSubscriptionTokenRepository
+  /**
+   * Override the per-user individual-usage subscription repository (double-encrypted personal
+   * credentials). The local-sqlite credential seam for mothership mode; undefined → the Drizzle
+   * repo over {@link db}. Paired with {@link subscriptionActivationRepository} — the personal
+   * subscription service needs BOTH, and BOTH must come from the same store.
+   */
+  personalSubscriptionRepository?: PersonalSubscriptionRepository
+  /**
+   * Override the per-run personal-credential activation repository (short-lived, system-key-only
+   * re-encryptions). The local-sqlite credential seam for mothership mode; undefined → the Drizzle
+   * repo over {@link db} (routed through {@link pickRepoSource} for its engine consumer when db is
+   * absent). Two consumers share this ONE instance: the personal-subscription service (mint) and
+   * the engine core (clear on run completion), so the override is threaded into both.
+   */
+  subscriptionActivationRepository?: SubscriptionActivationRepository
   /**
    * Started pg-boss instance for durable execution. When present the container wires
    * a {@link PgBossWorkRunner}; otherwise runs fall back to the engine's NoopWorkRunner
@@ -1063,13 +1092,18 @@ function buildNodeSubscriptionService(
   workspaceRepository: CoreDependencies['workspaceRepository'],
   idGenerator: CoreDependencies['idGenerator'],
   clock: Clock,
+  // Mothership mode injects the local `node:sqlite` credential store here, so the pooled
+  // subscription tokens stay on the laptop (the LOCAL container executor leases + decrypts
+  // them). Else the Drizzle repo over `db`, and the service turns off without either.
+  repositoryOverride?: ProviderSubscriptionTokenRepository,
 ): ProviderSubscriptionService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  // No Postgres (mothership mode): the pooled subscription-token store is not yet a
-  // local-sqlite bucket (PR 3), so the service is off — capability resolution treats it absent.
-  if (!masterKeyBase64 || !db) return undefined
+  if (!masterKeyBase64) return undefined
+  const providerSubscriptionTokenRepository =
+    repositoryOverride ?? (db ? new DrizzleProviderSubscriptionTokenRepository(db) : undefined)
+  if (!providerSubscriptionTokenRepository) return undefined
   return new ProviderSubscriptionService({
-    providerSubscriptionTokenRepository: new DrizzleProviderSubscriptionTokenRepository(db),
+    providerSubscriptionTokenRepository,
     workspaceRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
@@ -1217,14 +1251,23 @@ function buildNodePersonalSubscriptionService(
   db: DrizzleDb | undefined,
   idGenerator: CoreDependencies['idGenerator'],
   clock: Clock,
+  // Mothership mode injects the local `node:sqlite` credential store for BOTH repos (they stay on
+  // the laptop — the double-encrypted personal credential + its per-run activation are leased +
+  // decrypted by the LOCAL container executor). Both must come from the same store, so both are
+  // overridden together; else the Drizzle repos over `db`, and the service is off without either.
+  personalOverride?: PersonalSubscriptionRepository,
+  activationOverride?: SubscriptionActivationRepository,
 ): PersonalSubscriptionService | undefined {
   const masterKeyBase64 = env.ENCRYPTION_KEY?.trim()
-  // No Postgres (mothership mode): the personal-subscription + activation stores are not yet
-  // local-sqlite buckets (PR 3), so the service is off.
-  if (!masterKeyBase64 || !db) return undefined
+  if (!masterKeyBase64) return undefined
+  const personalSubscriptionRepository =
+    personalOverride ?? (db ? new DrizzlePersonalSubscriptionRepository(db) : undefined)
+  const subscriptionActivationRepository =
+    activationOverride ?? (db ? new DrizzleSubscriptionActivationRepository(db) : undefined)
+  if (!personalSubscriptionRepository || !subscriptionActivationRepository) return undefined
   return new PersonalSubscriptionService({
-    personalSubscriptionRepository: new DrizzlePersonalSubscriptionRepository(db),
-    subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
+    personalSubscriptionRepository,
+    subscriptionActivationRepository,
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64,
       info: 'cat-factory:personal-subscriptions',
@@ -1645,10 +1688,18 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     repos.workspaceRepository,
     idGenerator,
     clock,
+    options.providerSubscriptionTokenRepository,
   )
   // The per-user individual-usage subscription store (Claude), shared by the
   // container executor's personal lease and the personal-subscription controller.
-  const personalSubscriptions = buildNodePersonalSubscriptionService(env, db, idGenerator, clock)
+  const personalSubscriptions = buildNodePersonalSubscriptionService(
+    env,
+    db,
+    idGenerator,
+    clock,
+    options.personalSubscriptionRepository,
+    options.subscriptionActivationRepository,
+  )
   // Agent-context observability sink: records the complete, redacted context provided
   // to each container agent (composed prompts + folded-in fragments + injected files).
   // Gated by the deployment prompt-recording switch + the workspace storeAgentContext
@@ -2208,14 +2259,27 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     pipelineRepository: repos.pipelineRepository,
     executionRepository: repos.executionRepository,
     // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    // Its eventual mothership-mode home is the local-sqlite credential bucket (the activation
-    // re-seals the token for the run); until that lands it routes to the remote registry like the
-    // other org stores, so a no-db build doesn't `TypeError` — `deleteByExecution` is not yet
-    // allow-listed, so it returns a clean `unknown_method` there (see the per-repo checklist).
-    subscriptionActivationRepository: sourced(
-      'subscriptionActivationRepository',
-      (d) => new DrizzleSubscriptionActivationRepository(d),
-    ),
+    // In mothership mode its home is the LOCAL `node:sqlite` credential bucket (the activation
+    // re-seals the token for the run, and the LOCAL container executor decrypts it), injected via
+    // `options.subscriptionActivationRepository` — the SAME instance the personal-subscription
+    // service above mints into, so mint + clear agree. Absent (plain Node / siloed-Postgres local)
+    // → the Drizzle repo over `db`.
+    //
+    // DEAD CODE (TODO: investigate dropping): the `sourced(...)` REMOTE-ROUTING branch for this
+    // repo is now unreachable in practice. It was the mothership-mode stopgap (route activation to
+    // the mothership, where its methods aren't allow-listed, so `deleteByExecution` returned a
+    // clean `unknown_method`) before the local-sqlite bucket — its intended home — existed. Now the
+    // local facade ALWAYS injects `options.subscriptionActivationRepository` in mothership mode, so
+    // `sourced` only ever runs its `build()` leg (Drizzle over a present `db`); its `remote[name]`
+    // leg for this repo can no longer be hit. Kept as a defensive fallback for a hypothetical direct
+    // `buildNodeContainer({ db: undefined })` with no override; drop `sourced` here (inline the
+    // Drizzle build) once we're sure no such caller exists.
+    subscriptionActivationRepository:
+      options.subscriptionActivationRepository ??
+      sourced(
+        'subscriptionActivationRepository',
+        (d) => new DrizzleSubscriptionActivationRepository(d),
+      ),
     // In-org shared services. When a realtime hub is wired (start()), the engine's
     // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
     // so a shared service's live events reach every board that mounts it — parity with
