@@ -105,7 +105,11 @@ const decisionItems = computed(() =>
       variant="ghost"
       size="sm"
       data-testid="board-zoom-out"
-      @click="zoomOut()"
+      @click="
+        () => {
+          zoomOut()
+        }
+      "
     />
     <!-- The zoom %/LOD readout is the first thing to drop on narrow viewports. -->
     <div class="hidden w-20 text-center text-xs tabular-nums text-slate-300 sm:block">
@@ -118,7 +122,11 @@ const decisionItems = computed(() =>
       variant="ghost"
       size="sm"
       data-testid="board-zoom-in"
-      @click="zoomIn()"
+      @click="
+        () => {
+          zoomIn()
+        }
+      "
     />
     <UButton
       icon="i-lucide-maximize"
@@ -126,7 +134,11 @@ const decisionItems = computed(() =>
       variant="ghost"
       size="sm"
       data-testid="board-fit-view"
-      @click="fitView({ padding: 0.2 })"
+      @click="
+        () => {
+          fitView({ padding: 0.2 })
+        }
+      "
     />
 
     <USeparator orientation="vertical" class="mx-1 h-6" />

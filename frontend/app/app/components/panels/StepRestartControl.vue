@@ -64,7 +64,11 @@ async function restart() {
       variant="ghost"
       size="sm"
       :title="t('panels.stepRestart.restartFromStep')"
-      @click="armed = true"
+      @click="
+        () => {
+          armed = true
+        }
+      "
     />
     <template v-else>
       <UButton
@@ -82,7 +86,11 @@ async function restart() {
         variant="ghost"
         size="sm"
         :disabled="restarting"
-        @click="armed = false"
+        @click="
+          () => {
+            armed = false
+          }
+        "
       >
         {{ t('common.cancel') }}
       </UButton>

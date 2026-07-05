@@ -34,7 +34,11 @@ const show = computed(() => !!setupUrl.value && !dismissed.value)
                 size="xs"
                 icon="i-lucide-x"
                 :aria-label="t('common.close')"
-                @click="dismissed = true"
+                @click="
+                  () => {
+                    dismissed = true
+                  }
+                "
               />
             </div>
             <p class="mt-1 text-sm text-amber-200/90">

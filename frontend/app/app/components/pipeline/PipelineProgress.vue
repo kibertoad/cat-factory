@@ -324,7 +324,11 @@ const ITEM_ICON: Record<string, string> = {
                 size="xs"
                 class="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                 :title="t('pipeline.progress.restartTooltip')"
-                @click.stop="restartArmed = i"
+                @click.stop="
+                  () => {
+                    restartArmed = i
+                  }
+                "
               />
               <template v-else>
                 <UButton
@@ -344,7 +348,11 @@ const ITEM_ICON: Record<string, string> = {
                   size="xs"
                   class="shrink-0"
                   :disabled="restarting === i"
-                  @click.stop="restartArmed = null"
+                  @click.stop="
+                    () => {
+                      restartArmed = null
+                    }
+                  "
                 >
                   {{ t('common.cancel') }}
                 </UButton>

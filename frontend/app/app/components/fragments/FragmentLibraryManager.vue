@@ -344,7 +344,11 @@ async function unlinkSource(id: string) {
           :color="tab === t ? 'primary' : 'neutral'"
           :variant="tab === t ? 'solid' : 'ghost'"
           size="sm"
-          @click="tab = t"
+          @click="
+            () => {
+              tab = t
+            }
+          "
         >
           {{ tabLabel(t) }}
         </UButton>
@@ -516,7 +520,11 @@ async function unlinkSource(id: string) {
                 size="xs"
                 :color="docDraft.source === s.source ? 'primary' : 'neutral'"
                 :variant="docDraft.source === s.source ? 'solid' : 'outline'"
-                @click="docDraft.source = s.source"
+                @click="
+                  () => {
+                    docDraft.source = s.source
+                  }
+                "
               >
                 {{ s.label }}
               </UButton>

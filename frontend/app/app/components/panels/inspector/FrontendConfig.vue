@@ -279,7 +279,16 @@ onUnmounted(() => preview.stopPolling(props.block.id))
           >
             {{ t('inspector.frontendConfig.detect.apply') }}
           </UButton>
-          <UButton size="xs" variant="ghost" color="neutral" @click="detectResult = null">
+          <UButton
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            @click="
+              () => {
+                detectResult = null
+              }
+            "
+          >
             {{ t('inspector.frontendConfig.detect.dismiss') }}
           </UButton>
         </div>

@@ -43,12 +43,12 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@clack/prompts": "^1.6.0"
+    "@clack/prompts": "^1.7.0"
   },
   "devDependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "typescript": "7.0.1-rc",
     "valibot": "^1.4.2",
     "vitest": "^4.1.9"

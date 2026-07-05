@@ -364,7 +364,11 @@ function fieldHelp(key: string): string | undefined {
         variant="ghost"
         size="xs"
         class="shrink-0"
-        @click="showLogs = !showLogs"
+        @click="
+          () => {
+            showLogs = !showLogs
+          }
+        "
       >
         {{
           showLogs

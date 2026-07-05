@@ -444,7 +444,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                     size="xs"
                     class="mt-1.5"
                     data-testid="tester-infra-setup-logs-toggle"
-                    @click="showInfraSetupLogs = !showInfraSetupLogs"
+                    @click="
+                      () => {
+                        showInfraSetupLogs = !showInfraSetupLogs
+                      }
+                    "
                   >
                     {{
                       showInfraSetupLogs
@@ -480,7 +484,11 @@ const GROUP_STATUS_META: Record<ScenarioGroup['status'], { icon: string; text: s
                   variant="ghost"
                   size="xs"
                   data-testid="tester-infra-attempts-toggle"
-                  @click="showProvisioning = !showProvisioning"
+                  @click="
+                    () => {
+                      showProvisioning = !showProvisioning
+                    }
+                  "
                 >
                   {{
                     showProvisioning

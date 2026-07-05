@@ -284,7 +284,11 @@ async function add() {
               :color="trackerKind === 'github' ? 'primary' : 'neutral'"
               :variant="trackerKind === 'github' ? 'solid' : 'subtle'"
               icon="i-lucide-github"
-              @click="trackerKind = 'github'"
+              @click="
+                () => {
+                  trackerKind = 'github'
+                }
+              "
             >
               {{ t('board.recurring.githubIssues') }}
             </UButton>
@@ -293,7 +297,11 @@ async function add() {
               :color="trackerKind === 'jira' ? 'primary' : 'neutral'"
               :variant="trackerKind === 'jira' ? 'solid' : 'subtle'"
               icon="i-lucide-square-check"
-              @click="trackerKind = 'jira'"
+              @click="
+                () => {
+                  trackerKind = 'jira'
+                }
+              "
             >
               {{ t('board.recurring.jira') }}
             </UButton>
@@ -302,7 +310,11 @@ async function add() {
               :color="trackerKind === 'linear' ? 'primary' : 'neutral'"
               :variant="trackerKind === 'linear' ? 'solid' : 'subtle'"
               icon="i-lucide-square-kanban"
-              @click="trackerKind = 'linear'"
+              @click="
+                () => {
+                  trackerKind = 'linear'
+                }
+              "
             >
               {{ t('board.recurring.linear') }}
             </UButton>
@@ -337,7 +349,11 @@ async function add() {
               :color="intakeSource === s.source ? 'primary' : 'neutral'"
               :variant="intakeSource === s.source ? 'solid' : 'subtle'"
               :icon="s.icon"
-              @click="intakeSource = s.source"
+              @click="
+                () => {
+                  intakeSource = s.source
+                }
+              "
             >
               {{ s.label }}
             </UButton>

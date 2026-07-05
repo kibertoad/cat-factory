@@ -43,13 +43,13 @@
     "@cat-factory/node-server": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
     "@cat-factory/server": "workspace:*",
-    "@hono/node-server": "^2.0.6",
+    "@hono/node-server": "^2.0.8",
     "drizzle-orm": "1.0.0-rc.4"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/gates": "workspace:*",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }

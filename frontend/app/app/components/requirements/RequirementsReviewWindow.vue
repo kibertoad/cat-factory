@@ -979,7 +979,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                   size="sm"
                   block
                   icon="i-lucide-pencil"
-                  @click="showRedo = !showRedo"
+                  @click="
+                    () => {
+                      showRedo = !showRedo
+                    }
+                  "
                 >
                   {{ t('requirements.actions.redoIncorporation') }}
                 </UButton>
