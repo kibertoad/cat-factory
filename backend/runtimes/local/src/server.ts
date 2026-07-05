@@ -11,6 +11,7 @@ import {
 } from '@cat-factory/node-server'
 import { logger } from '@cat-factory/server'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
+import type { BackendRegistries } from '@cat-factory/integrations'
 import { applyLocalDefaults } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl } from './github.js'
@@ -34,11 +35,13 @@ const execFileAsync = promisify(execFile)
 // repo-operating agent jobs (without it the board still serves and only container
 // kinds fail, loudly).
 //
-// A native ephemeral-environment backend (e.g. the built-in `kubernetes` one, or a
-// third-party adapter) is selected per-workspace from the env-backend registry by the
-// stored connection `kind` — registered as an import side effect, no facade seam needed.
-// `buildContainer` is intentionally NOT exposed: overriding it would discard local mode's
-// differentiators (local container transport, PAT-backed GitHub client).
+// A native ephemeral-environment backend can be selected per-workspace from the env-backend
+// registry by the stored connection `kind`. A built-in kind (e.g. `kubernetes`) is registered
+// as an import side effect; a deployment's OWN backend is registered by reference into the
+// `backendRegistries` seam below (no import side effect to rely on). `buildContainer` itself is
+// intentionally NOT exposed: overriding it would discard local mode's differentiators (local
+// container transport, PAT-backed GitHub client) — `backendRegistries` is the narrow seam that
+// injects a custom backend without giving that up.
 export async function startLocal(
   options: {
     env?: NodeJS.ProcessEnv
@@ -50,6 +53,20 @@ export async function startLocal(
      * Absent → the built-in-only default.
      */
     agentKindRegistry?: AgentKindRegistry
+    /**
+     * App-owned backend registries (environment + runner kind → provider), registered BY
+     * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
+     * A deployment builds `createBackendRegistries()`, registers its custom backend(s) onto it
+     * (e.g. a Kargo ephemeral-environment provider), and passes it here; it is threaded into
+     * `buildLocalContainer` on both the Postgres and mothership paths. Absent → the built-in-only
+     * default (`manifest` + `kubernetes`).
+     *
+     * This lets a custom-backend deployment call `startLocal()` — and inherit its boot preflights
+     * (harness-image refresh, container-runtime probe, PAT/auth warnings) — instead of
+     * re-implementing the boot path (`start()` + `buildLocalContainer` by hand) just to inject a
+     * registry, which silently forgoes those preflights.
+     */
+    backendRegistries?: BackendRegistries
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
@@ -104,7 +121,12 @@ export async function startLocal(
   // state lives on the mothership and runs are driven by the in-process work runner. Take the
   // dedicated boot path instead of the Node facade's `start()` (which requires Postgres).
   if (isMothershipMode(localized)) {
-    return startLocalMothership(localized, options.host, options.agentKindRegistry)
+    return startLocalMothership(
+      localized,
+      options.host,
+      options.agentKindRegistry,
+      options.backendRegistries,
+    )
   }
 
   return start({
@@ -116,7 +138,12 @@ export async function startLocal(
     env: localized,
     host: options.host,
     agentKindRegistry: options.agentKindRegistry,
-    buildContainer: (o) => buildLocalContainer(o),
+    // Inject the deployment's backend registries (if any) by reference — `start()` never puts a
+    // `backendRegistries` on `o`, so this can't clobber one, and when absent `buildLocalContainer`
+    // falls back to `createBackendRegistries()` (the built-in-only default). Unchanged from the
+    // prior `buildLocalContainer(o)` when no registry is passed.
+    buildContainer: (o) =>
+      buildLocalContainer({ ...o, backendRegistries: options.backendRegistries }),
     // Pass the repo projection through live: local mode seeds `github_repos` via the
     // out-of-process `link-repo` CLI and runs single-node with no invalidation bus, so an
     // in-memory TTL'd entry would keep serving a pre-link (or pre-monorepo-flag) projection
@@ -147,6 +174,7 @@ async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host?: string,
   agentKindRegistry?: AgentKindRegistry,
+  backendRegistries?: BackendRegistries,
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   logger.info(
     { mothership: env.LOCAL_MOTHERSHIP_URL },
@@ -157,7 +185,12 @@ async function startLocalMothership(
   // mode is always single-node, so the bare hub IS the real-time sink — no cross-node
   // propagator (Redis) is wired here.
   const realtimeHub = new NodeRealtimeHub()
-  const container = buildLocalContainer({ env, realtimeSink: realtimeHub, agentKindRegistry })
+  const container = buildLocalContainer({
+    env,
+    realtimeSink: realtimeHub,
+    agentKindRegistry,
+    backendRegistries,
+  })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).
   validateRegistrationsOnce({
