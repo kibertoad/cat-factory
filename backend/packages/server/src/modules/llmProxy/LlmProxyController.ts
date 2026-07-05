@@ -1,4 +1,3 @@
-import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { cachedTokensFromUsage, promptCacheParams } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
@@ -6,6 +5,7 @@ import { fetchLocalRunner } from '@cat-factory/integrations'
 import { type ApiKeyProvider, contextWindowFor } from '@cat-factory/kernel'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
+import { makeWaitUntil } from '../../http/waitUntil.js'
 import { logger } from '../../observability/logger.js'
 import type { LlmTokenUsage, ProxyCallObservation } from '../../runtime/gateways.js'
 
@@ -80,21 +80,6 @@ function bearer(header: string | undefined): string | null {
   if (!header) return null
   const match = /^Bearer\s+(.+)$/i.exec(header.trim())
   return match ? match[1]!.trim() : null
-}
-
-/**
- * Schedule post-response work. On the Worker the runtime exposes `executionCtx.waitUntil`
- * (keeps the isolate alive past the response); on Node there is no such context, so we
- * fall back to fire-and-forget (the process is long-lived).
- */
-function makeWaitUntil(c: Context<AppEnv>): (p: Promise<unknown>) => void {
-  return (p) => {
-    try {
-      c.executionCtx.waitUntil(p)
-    } catch {
-      void p.catch(() => {})
-    }
-  }
 }
 
 export function llmProxyController(): Hono<AppEnv> {

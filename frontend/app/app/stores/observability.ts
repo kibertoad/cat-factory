@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { AgentContextSnapshot, LlmCallActivity, LlmCallMetric } from '~/types/execution'
+import type {
+  AgentContextSnapshot,
+  AgentSearchQuery,
+  LlmCallActivity,
+  LlmCallMetric,
+} from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -23,6 +28,10 @@ export const useObservabilityStore = defineStore('observability', () => {
   const contextByExecution = ref<Record<string, AgentContextSnapshot[]>>({})
   /** Execution ids whose context is currently loading. */
   const contextLoading = ref<Set<string>>(new Set())
+  /** Per-execution-id performed-search-query list (newest first). */
+  const searchQueriesByExecution = ref<Record<string, AgentSearchQuery[]>>({})
+  /** Execution ids whose search queries are currently loading. */
+  const searchQueriesLoading = ref<Set<string>>(new Set())
   /** Execution ids currently loading. */
   const loading = ref<Set<string>>(new Set())
   /** Execution ids currently exporting. */
@@ -134,6 +143,30 @@ export const useObservabilityStore = defineStore('observability', () => {
     }
   }
 
+  function searchQueriesFor(executionId: string): AgentSearchQuery[] {
+    return searchQueriesByExecution.value[executionId] ?? []
+  }
+  function isSearchQueriesLoading(executionId: string): boolean {
+    return searchQueriesLoading.value.has(executionId)
+  }
+
+  /** Load (or refresh) the performed web-search queries for a run. */
+  async function loadSearchQueries(executionId: string) {
+    if (!workspace.workspaceId) return
+    withFlag(searchQueriesLoading, executionId, true)
+    try {
+      const { searchQueries } = await api.getSearchQueries(workspace.requireId(), executionId)
+      searchQueriesByExecution.value = {
+        ...searchQueriesByExecution.value,
+        [executionId]: searchQueries,
+      }
+    } catch {
+      // Best-effort: the panel shows an empty state; nothing is persisted client-side.
+    } finally {
+      withFlag(searchQueriesLoading, executionId, false)
+    }
+  }
+
   /**
    * Fetch the LLM-friendly export bundle and trigger a client-side download. The
    * events socket auths via a Bearer header (a plain `<a download>` can't), so we
@@ -169,5 +202,9 @@ export const useObservabilityStore = defineStore('observability', () => {
     contextFor,
     isContextLoading,
     loadContext,
+    searchQueriesByExecution,
+    searchQueriesFor,
+    isSearchQueriesLoading,
+    loadSearchQueries,
   }
 })

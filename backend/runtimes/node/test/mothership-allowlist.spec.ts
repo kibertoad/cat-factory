@@ -156,6 +156,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     listByExecution: 'pending',
     deleteOlderThan: 'sweeper',
   },
+  agentSearchQueryRepository: {
+    record: 'telemetry',
+    listByExecution: 'pending',
+    deleteOlderThan: 'sweeper',
+  },
   // The visual-confirmation gate's artifact METADATA surface is now allow-listed (insert/get/
   // listByExecution/countByExecution/listByBlock/delete — the controllers + gate reads/writes);
   // only the retention sweep stays mothership-internal (the mothership owns durable-state

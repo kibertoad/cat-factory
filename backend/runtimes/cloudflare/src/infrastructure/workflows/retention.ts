@@ -1,5 +1,6 @@
 import type {
   AgentContextSnapshotRepository,
+  AgentSearchQueryRepository,
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
@@ -42,6 +43,8 @@ export interface RetentionDeps {
   llmCallMetricRepository: LlmCallMetricRepository
   /** Agent-context snapshots; pruned on the same window as the LLM call telemetry. */
   agentContextSnapshotRepository: AgentContextSnapshotRepository
+  /** Agent-search queries; pruned on the same window as the LLM call telemetry. */
+  agentSearchQueryRepository: AgentSearchQueryRepository
   /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
   pipelineScheduleRepository?: PipelineScheduleRepository
   /** Optional: the provisioning event log (only when the PROVISIONING_DB binding is present). */
@@ -59,6 +62,7 @@ export interface RetentionResult {
   commits: number
   llmCallMetrics: number
   agentContextSnapshots: number
+  agentSearchQueries: number
   scheduleRuns: number
   provisioningLog: number
   passwordResetTokens: number
@@ -85,6 +89,7 @@ export async function sweepRetention({
   commitRepository,
   llmCallMetricRepository,
   agentContextSnapshotRepository,
+  agentSearchQueryRepository,
   pipelineScheduleRepository,
   provisioningLogRepository,
   passwordResetTokenRepository,
@@ -104,6 +109,10 @@ export async function sweepRetention({
     // Same window as the LLM call telemetry (heavy prompt + injected-file bodies).
     agentContextSnapshots: await prune(policy.llmCallMetricsMs, now, (c) =>
       agentContextSnapshotRepository.deleteOlderThan(c),
+    ),
+    // Same window as the LLM call telemetry (performed web-search queries).
+    agentSearchQueries: await prune(policy.llmCallMetricsMs, now, (c) =>
+      agentSearchQueryRepository.deleteOlderThan(c),
     ),
     scheduleRuns: pipelineScheduleRepository
       ? await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>

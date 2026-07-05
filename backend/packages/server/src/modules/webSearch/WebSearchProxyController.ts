@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
+import { makeWaitUntil } from '../../http/waitUntil.js'
 import { logger } from '../../observability/logger.js'
 import { createWebSearchUpstream } from './upstreams.js'
 
@@ -28,7 +29,13 @@ export function webSearchProxyController(): Hono<AppEnv> {
   // SearXNG's search endpoint shape: `/search?q=...&format=json`. We always answer
   // JSON regardless of the `format` param (the container only ever asks for json).
   app.get('/v1/web-search/search', async (c) => {
-    const { config, spendService, accountSettings, defaultWebSearchUpstream } = c.get('container')
+    const {
+      config,
+      spendService,
+      accountSettings,
+      defaultWebSearchUpstream,
+      searchQueryObservability,
+    } = c.get('container')
 
     const secret = config.auth.sessionSecret
     if (!secret) {
@@ -84,15 +91,41 @@ export function webSearchProxyController(): Hono<AppEnv> {
       agentKind: session.agentKind,
     })
 
+    // Record the performed query for observability (best-effort, gated inside the recorder
+    // on LLM_RECORD_PROMPTS + the workspace `storeAgentContext` setting). Attributed to the
+    // run + agent kind carried on the session token, tagged with the provider that served it.
+    // Scheduled through `waitUntil` so the write survives past the response on the Worker (a
+    // bare fire-and-forget is dropped when the isolate is frozen); a no-op passthrough on Node.
+    const waitUntil = makeWaitUntil(c)
+    const recordSearch = (resultCount: number): void => {
+      if (!searchQueryObservability) return
+      waitUntil(
+        searchQueryObservability
+          .record({
+            workspaceId: session.workspaceId,
+            executionId: session.executionId,
+            agentKind: session.agentKind,
+            provider: upstream.provider,
+            query,
+            resultCount,
+          })
+          .catch(() => {
+            // Swallowed: observability never breaks a search.
+          }),
+      )
+    }
+
     try {
       const { results } = await upstream.search(query)
       log.info({ resultCount: results.length }, 'web-search proxy: served search')
+      recordSearch(results.length)
       // Shape the response as SearXNG's `format=json` payload so the extension reads
       // `results[].{url,title,content}` unchanged.
       return c.json({ query, number_of_results: results.length, results })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       log.error({ err: message }, 'web-search proxy: upstream search failed')
+      recordSearch(0)
       // SearXNG-shaped empty result on failure so the agent degrades gracefully
       // (no results) instead of the tool hard-erroring mid-run.
       return c.json({ query, number_of_results: 0, results: [] }, 502)

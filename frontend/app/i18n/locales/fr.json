@@ -1098,6 +1098,16 @@
       "systemPrompt": "Prompt système",
       "userPrompt": "Prompt utilisateur",
       "details": "Détails"
+    },
+    "webSearch": "Recherche web",
+    "loadingSearch": "Chargement des recherches web…",
+    "noSearch": "Aucune recherche web enregistrée pour cette exécution. Les requêtes sont capturées lorsque la recherche web s'exécute et que l'espace de travail a activé « Stocker le contexte complet de l'agent ».",
+    "search": {
+      "available": "Disponible",
+      "unavailable": "Indisponible",
+      "provider": "Fournisseur",
+      "resultsCount": "{count} résultat | {count} résultats",
+      "queriesTitle": "Recherches effectuées"
     }
   },
   "auth": {

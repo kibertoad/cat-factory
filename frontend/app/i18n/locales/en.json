@@ -1141,6 +1141,16 @@
       "systemPrompt": "System prompt",
       "userPrompt": "User prompt",
       "details": "Details"
+    },
+    "webSearch": "Web search",
+    "loadingSearch": "Loading web searches…",
+    "noSearch": "No web searches recorded for this run. Queries are captured when web search runs and the workspace has 'Store full agent context' enabled.",
+    "search": {
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "provider": "Provider",
+      "resultsCount": "{count} result | {count} results",
+      "queriesTitle": "Performed searches"
     }
   },
   "auth": {

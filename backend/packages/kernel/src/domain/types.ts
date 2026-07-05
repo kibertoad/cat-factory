@@ -33,6 +33,8 @@ export type {
   StepApproval,
   StepReviewComment,
   StepSubtasks,
+  WebSearchAvailability,
+  WebSearchProvider,
   Workspace,
   WorkspaceSnapshot,
   // Prompt-fragment library shapes (ADR 0006).

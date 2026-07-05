@@ -19,6 +19,7 @@ import {
   type RunnerTransport,
   type TaskSourceProvider,
   type VcsIdentityRegistry,
+  type WebSearchAvailability,
   type WorkRunner,
 } from '@cat-factory/kernel'
 import {
@@ -80,6 +81,7 @@ import {
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import {
   AgentContextObservabilityService,
+  SearchQueryObservabilityService,
   type CoreDependencies,
   createCore,
   PACKAGE_REGISTRY_CIPHER_INFO,
@@ -110,6 +112,7 @@ import {
   logger,
   buildInfrastructureCapabilities,
   createDefaultWebSearchUpstream,
+  createWebSearchUpstream,
   createScopedModelProviderResolver,
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
@@ -167,6 +170,7 @@ import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepos
 import { D1TokenUsageRepository } from './repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
 import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextSnapshotRepository'
+import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1WorkspaceRepository } from './repositories/D1WorkspaceRepository'
 import {
@@ -1433,15 +1437,25 @@ function buildContainerExecutor(
   const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
   const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
   const webSearchSettings = buildAccountSettings(env, db, clock)
-  const resolveWebSearchEnabled =
+  const resolveWebSearchAvailability =
     defaultWebSearchUpstream || webSearchSettings
-      ? async (workspaceId: string): Promise<boolean> => {
-          // A deployment default serves every account, so the tool is on regardless.
-          if (defaultWebSearchUpstream) return true
-          if (!webSearchSettings) return false
-          const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
-          if (!accountId) return false
-          return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
+      ? async (workspaceId: string): Promise<WebSearchAvailability> => {
+          // Mirror the proxy's own resolution (`accountUpstream ?? defaultWebSearchUpstream`):
+          // the run's account keys WIN and the deployment default is only the fallback, so the
+          // surfaced provider matches the one that will actually serve the run's searches. Build
+          // the account upstream the SAME way the proxy does before falling back to the default.
+          if (webSearchSettings) {
+            const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+            if (accountId) {
+              const accountUpstream = createWebSearchUpstream(
+                (await webSearchSettings.resolve(accountId)).webSearch ?? {},
+              )
+              if (accountUpstream) return { available: true, provider: accountUpstream.provider }
+            }
+          }
+          if (defaultWebSearchUpstream)
+            return { available: true, provider: defaultWebSearchUpstream.provider }
+          return { available: false, provider: null }
         }
       : undefined
 
@@ -1503,7 +1517,7 @@ function buildContainerExecutor(
     proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (see resolver above).
-    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    ...(resolveWebSearchAvailability ? { resolveWebSearchAvailability } : {}),
     // Decrypt the workspace's private-registry entries onto the job body (rendered by
     // the harness into ~/.npmrc), so private dependencies resolve on install.
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
@@ -2263,6 +2277,18 @@ export function buildContainer(
     recordPrompts: config.observability.recordPrompts,
   })
 
+  // Agent-search-query observability sink: records each web search a container agent
+  // performed through the search proxy. Same double gate + retention window as the
+  // agent-context sink. Wired into the search proxy (write, via the container) AND
+  // createCore (read). Telemetry rows live in the dedicated TELEMETRY_DB database.
+  const searchQueryObservability = new SearchQueryObservabilityService({
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
+
   // Per-account deployment settings (Slack OAuth + web-search keys + content-storage). Built
   // once so the service's short-TTL cache is shared across requests; the Slack OAuth +
   // content-storage resolvers are derived from it in the domain composition root.
@@ -2322,6 +2348,9 @@ export function buildContainer(
     // Re-exposed on the core for the agent-context read endpoint; the same instance is
     // injected into the container executor below for the write path.
     agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)

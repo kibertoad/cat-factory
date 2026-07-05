@@ -4,6 +4,7 @@ import { blockSchema, executionInstanceSchema, spendStatusSchema } from '../enti
 import { resolveIterationCapSchema } from '../iteration-cap.js'
 import {
   agentContextSnapshotSchema,
+  agentSearchQuerySchema,
   llmMetricsExportSchema,
   llmMetricsResponseSchema,
 } from '../observability.js'
@@ -35,6 +36,14 @@ const approvalParams = withObjectKeys(v.object({ executionId: v.string(), approv
 const agentContextResponseSchema = v.object({
   executionId: v.string(),
   snapshots: v.array(agentContextSnapshotSchema),
+})
+
+// The agent-search-query observability response — `{ executionId, searchQueries }`.
+// The query schema (`agentSearchQuerySchema`) is the shared source of truth the kernel
+// `AgentSearchQuery` port also derives from.
+const searchQueriesResponseSchema = v.object({
+  executionId: v.string(),
+  searchQueries: v.array(agentSearchQuerySchema),
 })
 
 // ---- run lifecycle --------------------------------------------------------
@@ -91,6 +100,13 @@ export const getExecutionAgentContextContract = defineApiContract({
   requestPathParamsSchema: executionIdParams,
   pathResolver: ({ executionId }) => `/executions/${executionId}/agent-context`,
   responsesByStatusCode: { 200: agentContextResponseSchema, ...errorResponses },
+})
+
+export const getExecutionSearchQueriesContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: executionIdParams,
+  pathResolver: ({ executionId }) => `/executions/${executionId}/search-queries`,
+  responsesByStatusCode: { 200: searchQueriesResponseSchema, ...errorResponses },
 })
 
 export const exportExecutionLlmMetricsContract = defineApiContract({

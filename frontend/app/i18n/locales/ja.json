@@ -1098,6 +1098,16 @@
       "systemPrompt": "システムプロンプト",
       "userPrompt": "ユーザープロンプト",
       "details": "詳細"
+    },
+    "webSearch": "ウェブ検索",
+    "loadingSearch": "ウェブ検索を読み込み中…",
+    "noSearch": "この実行のウェブ検索は記録されていません。クエリはウェブ検索の実行時、かつワークスペースで「エージェントコンテキスト全体を保存」が有効な場合に記録されます。",
+    "search": {
+      "available": "利用可能",
+      "unavailable": "利用不可",
+      "provider": "プロバイダー",
+      "resultsCount": "{count} 件の結果 | {count} 件の結果",
+      "queriesTitle": "実行した検索"
     }
   },
   "auth": {
