@@ -23,6 +23,7 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     outputs:
@@ -178,6 +179,7 @@ jobs:
     # job's skip below.
     if: github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -199,9 +201,18 @@ jobs:
       - name: Monorepo lint (sherif)
         run: pnpm lint:monorepo
 
+  # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
+  # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
+  # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`
+  # (core), `publish-integrity`, and `frontend-check` — each of which needs the built `dist/`
+  # so each does its own Turbo-cached `pnpm build` (the builds can't be shared within a run:
+  # every lane starts at once). The `build-gate` job below aggregates them into a single
+  # required status, mirroring the `Test` gate, so branch protection requires one "Build"
+  # check regardless of how the lanes are later re-sliced.
   build-typecheck:
     name: Build & typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -246,6 +257,45 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # The internal harnesses (executor-harness, benchmark-harness) are NOT in the
+      # `backend/tsconfig.build.json` project-reference graph, so `pnpm build` above
+      # never typechecks them — a type error in the harness `src` used to surface only
+      # in the much later "Container acceptance (Docker)" job (its `tsc` is the first
+      # to compile the harness). Typecheck them here so that class of error fails in
+      # this fast lane instead.
+      - name: Typecheck internal harnesses
+        run: |
+          pnpm --filter @cat-factory/executor-harness run typecheck
+          pnpm --filter @cat-factory/benchmark-harness run typecheck
+
+      # Verify the Node facade's Drizzle migration lineage stays consistent with
+      # `schema.ts`: no forked/non-commutative history and no un-generated drift
+      # (an edited schema without its `pnpm db:generate` migration). Offline — a
+      # pure snapshot diff, no database needed.
+      - name: Check Drizzle migrations
+        run: pnpm --filter @cat-factory/node-server run db:check
+
+  # Publish-integrity lane (split out of build-typecheck so its intrinsic ~1min doesn't sit on
+  # the serial critical path). Needs the built dist/ (publint packs each package's output).
+  publish-integrity:
+    name: Publish integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      - name: Build libraries
+        run: pnpm build
+
       # Publish-integrity backstop: publint + attw over every publishable package's packed
       # output, so an empty-shell publish (dist/ missing — the @cat-factory/gitlab /
       # provider-s3 incident; prepublishOnly is the other guard) or a broken exports map
@@ -260,16 +310,29 @@ jobs:
       - name: Knip (unused code & deps)
         run: pnpm lint:knip
 
-      # The internal harnesses (executor-harness, benchmark-harness) are NOT in the
-      # `backend/tsconfig.build.json` project-reference graph, so `pnpm build` above
-      # never typechecks them — a type error in the harness `src` used to surface only
-      # in the much later "Container acceptance (Docker)" job (its `tsc` is the first
-      # to compile the harness). Typecheck them here so that class of error fails in
-      # this fast lane instead.
-      - name: Typecheck internal harnesses
-        run: |
-          pnpm --filter @cat-factory/executor-harness run typecheck
-          pnpm --filter @cat-factory/benchmark-harness run typecheck
+  # Frontend lane (typecheck + i18n guards + the real SPA compile), split out of
+  # build-typecheck. Needs fetch-depth 0 for the i18n locale-parity base diff, and the built
+  # dist/ (the frontend layer imports the built libraries).
+  frontend-check:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history so the i18n locale-parity guard can diff against the PR base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      - name: Build libraries
+        run: pnpm build
 
       # Typecheck the frontend layer's shippable code (the deploy apps have no
       # source of their own, and the libraries are typechecked by the build above).
@@ -299,6 +362,8 @@ jobs:
       # inline handler) used to slip through every check — nothing in CI built the
       # frontend. We run `nuxt generate` (not `nuxt build`) so this mirrors the EXACT
       # command the Pages deployment ships with, catching `generate`-only failures too.
+      # This is NOT redundant with the typecheck above: `nuxt generate` runs no type-checking
+      # (no `typeCheck: true` in nuxt.config) and the two catch disjoint error classes.
       # NUXT_PUBLIC_API_BASE is baked in at build time; a placeholder is fine for a pure
       # compile check.
       - name: Build frontend SPA
@@ -306,19 +371,41 @@ jobs:
         env:
           NUXT_PUBLIC_API_BASE: http://localhost:8787
 
-      # Verify the Node facade's Drizzle migration lineage stays consistent with
-      # `schema.ts`: no forked/non-commutative history and no un-generated drift
-      # (an edited schema without its `pnpm db:generate` migration). Offline — a
-      # pure snapshot diff, no database needed.
-      - name: Check Drizzle migrations
-        run: pnpm --filter @cat-factory/node-server run db:check
+  # Single aggregated status named "Build" so branch protection can require one check
+  # regardless of how the build/typecheck lanes above are sliced. Mirrors the `Test` gate:
+  # fails unless every build lane passed (none are change-gated, so they never legitimately
+  # skip — a skip here means something went wrong, so only `success` is accepted).
+  build-gate:
+    name: Build
+    needs: [build-typecheck, publish-integrity, frontend-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Verify all build lanes passed
+        env:
+          CORE: ${{ needs.build-typecheck.result }}
+          PUBLISH: ${{ needs.publish-integrity.result }}
+          FRONTEND: ${{ needs.frontend-check.result }}
+        run: |
+          echo "build-typecheck: $CORE | publish-integrity: $PUBLISH | frontend-check: $FRONTEND"
+          for lane in "$CORE" "$PUBLISH" "$FRONTEND"; do
+            if [ "$lane" != 'success' ]; then
+              echo "::error::a required build lane reported '$lane'"
+              exit 1
+            fi
+          done
+          echo "All build lanes passed."
 
   # The Cloudflare worker suite (58 files) is the dominant test cost, and its
   # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly
-  # parallel across jobs but not within one. Split it into 2 shards via vitest
+  # parallel across jobs but not within one. Split it into 3 shards via vitest
   # --shard (deterministic file partition); each shard runs in its own miniflare
   # local D1, so there is no cross-shard contention. No Postgres here — the
-  # worker uses a local D1 inside the Workers pool.
+  # worker uses a local D1 inside the Workers pool. (3 shards, matching test-e2e:
+  # each shard's ~90s run at /2 dropped this lane onto the blocking critical path,
+  # so a third shard keeps the per-shard wall-clock bounded.)
   test-worker:
     name: Test worker (shard ${{ matrix.shard }})
     needs: changes
@@ -327,12 +414,13 @@ jobs:
     # treats that skip as a pass).
     if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -348,7 +436,7 @@ jobs:
         run: pnpm build
 
       - name: Run worker shard
-        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/2
+        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/3
 
   # Every non-worker package that needs NO database: the pure-unit suites
   # (orchestration, integrations, server, agents, gates, …) plus the frontend layer.
@@ -362,6 +450,7 @@ jobs:
     # changed, and skips only on a docs-/prose-only PR (nothing to test).
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -398,6 +487,7 @@ jobs:
     # docs-only PR, exactly like `test-worker`.
     if: ${{ needs.changes.outputs.backendCode == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     # SHARDED across 2 jobs via vitest's --shard (deterministic file partition), mirroring the
@@ -476,6 +566,7 @@ jobs:
     # Skip only on a docs-only diff; any frontend or backend source change runs it.
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     strategy:
@@ -558,6 +649,7 @@ jobs:
     # e2e was skipped wholesale (a docs-only PR) — there'd be no blob reports to merge.
     if: ${{ !cancelled() && needs.test-e2e.result != 'skipped' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -600,6 +692,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.kubernetes == 'true' || needs.changes.outputs.deployHarness == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -737,6 +830,7 @@ jobs:
     needs: [changes, test-worker, test-units, test-db, test-k8s]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: {}
     steps:
       - name: Verify all test jobs passed (or were correctly skipped)
@@ -775,6 +869,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -833,6 +928,7 @@ jobs:
     # fail by construction.
     if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -856,6 +952,7 @@ jobs:
   zizmor:
     name: Zizmor (workflow security)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
