@@ -21,6 +21,8 @@
     "retry": "Retry",
     "copy": "Copy",
     "copied": "Copied to clipboard",
+    "reveal": "Reveal",
+    "hide": "Hide",
     "delete": "Delete",
     "remove": "Remove",
     "confirm": {

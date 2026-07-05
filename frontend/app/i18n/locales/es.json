@@ -40,6 +40,8 @@
       "reconfigureHint": "Puedes volver a configurarlo más tarde."
     },
     "copied": "Copiado al portapapeles",
+    "reveal": "Mostrar",
+    "hide": "Ocultar",
     "disconnect": "Desconectar",
     "copyFailed": "No se pudo copiar al portapapeles",
     "revoke": "Revocar",

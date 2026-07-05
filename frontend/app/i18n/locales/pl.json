@@ -40,6 +40,8 @@
       "reconfigureHint": "Możesz skonfigurować to ponownie później."
     },
     "copied": "Skopiowano do schowka",
+    "reveal": "Pokaż",
+    "hide": "Ukryj",
     "disconnect": "Rozłącz",
     "copyFailed": "Nie udało się skopiować do schowka",
     "revoke": "Unieważnij",

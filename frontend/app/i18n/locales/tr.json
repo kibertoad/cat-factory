@@ -40,6 +40,8 @@
       "reconfigureHint": "Bunu daha sonra yeniden yapılandırabilirsiniz."
     },
     "copied": "Panoya kopyalandı",
+    "reveal": "Göster",
+    "hide": "Gizle",
     "disconnect": "Bağlantıyı kes",
     "copyFailed": "Panoya kopyalanamadı",
     "revoke": "İptal et",

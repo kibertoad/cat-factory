@@ -40,6 +40,8 @@
       "reconfigureHint": "Vous pourrez le reconfigurer plus tard."
     },
     "copied": "Copié dans le presse-papiers",
+    "reveal": "Afficher",
+    "hide": "Masquer",
     "disconnect": "Déconnecter",
     "copyFailed": "Échec de la copie dans le presse-papiers",
     "revoke": "Révoquer",

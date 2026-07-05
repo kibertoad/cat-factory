@@ -40,6 +40,8 @@
       "reconfigureHint": "אפשר להגדיר זאת שוב מאוחר יותר."
     },
     "copied": "הועתק ללוח",
+    "reveal": "הצג",
+    "hide": "הסתר",
     "disconnect": "נתק",
     "copyFailed": "לא ניתן להעתיק ללוח",
     "revoke": "לבטל",

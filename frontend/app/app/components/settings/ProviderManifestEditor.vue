@@ -18,6 +18,7 @@ import { computed, ref, watch } from 'vue'
 import * as v from 'valibot'
 import { environmentManifestSchema, runnerPoolManifestSchema } from '@cat-factory/contracts'
 import type { ProviderConnectionKind } from '~/types/providerConnections'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const props = defineProps<{
   kind: ProviderConnectionKind
@@ -255,9 +256,8 @@ function onSave() {
         </p>
       </template>
       <UFormField v-for="key in secretKeys" :key="key" :label="key">
-        <UInput
+        <SecretInput
           v-model="secrets[key]"
-          type="password"
           class="w-full font-mono"
           autocomplete="off"
           :data-testid="`manifest-editor-secret-${key}`"

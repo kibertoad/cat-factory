@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 // Standalone full-screen reset form reached from the emailed link
 // (`/reset-password?token=…`). It is a public route (see AuthGate), so a recipient who
@@ -76,18 +77,16 @@ function goToLogin() {
       </template>
 
       <form v-else class="space-y-3" @submit.prevent="submit">
-        <UInput
+        <SecretInput
           v-model="password"
-          type="password"
           required
           :placeholder="t('auth.resetPassword.newPasswordPlaceholder')"
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
         />
-        <UInput
+        <SecretInput
           v-model="confirm"
-          type="password"
           required
           :placeholder="t('auth.resetPassword.confirmPasswordPlaceholder')"
           icon="i-lucide-lock"

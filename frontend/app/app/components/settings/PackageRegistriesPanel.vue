@@ -7,6 +7,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import type { PackageRegistryVendor } from '~/types/packageRegistries'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
+import SecretInput from '~/components/common/SecretInput.vue'
 
 const { t } = useI18n()
 const ui = useUiStore()
@@ -199,12 +200,7 @@ async function removeEntry(entryId: string) {
           </UFormField>
 
           <UFormField :label="t('settings.packageRegistries.add.token')">
-            <UInput
-              v-model="form.token"
-              type="password"
-              class="w-full"
-              data-testid="package-registry-token"
-            />
+            <SecretInput v-model="form.token" class="w-full" data-testid="package-registry-token" />
           </UFormField>
 
           <UButton
