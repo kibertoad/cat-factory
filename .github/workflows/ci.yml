@@ -56,6 +56,14 @@ jobs:
       #                 forced true — see `scope`.)
       backendCode: ${{ steps.scope.outputs.backendCode }}
       code: ${{ steps.scope.outputs.code }}
+      # Shard shape for the sharded test lanes (test-worker / test-db / test-e2e), chosen by
+      # event. A push to `main` is post-merge and un-hurried, so it collapses each lane to a
+      # SINGLE shard (fewer runner-minutes, higher wall-clock — the intended trade). Every
+      # other event (a PR, or a manual workflow_dispatch used to measure sharded timing) keeps
+      # the full 3-way split. `shardMatrix` feeds the job `matrix.shard`; `shardTotal` is the
+      # `--shard=<i>/<N>` denominator (vitest/playwright accept the degenerate `1/1`).
+      shardMatrix: ${{ steps.shards.outputs.matrix }}
+      shardTotal: ${{ steps.shards.outputs.total }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -197,6 +205,28 @@ jobs:
           echo "backendCode=$backend | code=$code" \
             "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
             "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
+
+      # Pick the shard shape for the sharded test lanes. Gate on `push` specifically (not
+      # "not a PR") so a manual workflow_dispatch — the way CI timing is measured before a
+      # change lands — still exercises the real 3-way split; only an actual push to `main`
+      # runs everything in one shard. `matrix` is a JSON array the jobs `fromJSON` into their
+      # `matrix.shard`; `total` is the `--shard` denominator (`1/1` is the valid "run all" case).
+      - id: shards
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = 'push' ]; then
+            matrix='[1]'
+            total=1
+          else
+            matrix='[1, 2, 3]'
+            total=3
+          fi
+          {
+            echo "matrix=$matrix"
+            echo "total=$total"
+          } >> "$GITHUB_OUTPUT"
+          echo "shardMatrix=$matrix | shardTotal=$total (event=$EVENT_NAME)"
 
   lint:
     name: Lint & format
@@ -520,7 +550,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -535,8 +566,13 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # Pass the shard index + denominator via env (not inline `${{ }}` in the script body),
+      # so there's no template-injection surface — matching the `scope`/`shards` steps.
       - name: Run worker shard
-        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/worker exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Every non-worker package that needs NO database: the pure-unit suites
   # (orchestration, integrations, server, agents, gates, …) plus the frontend layer.
@@ -601,7 +637,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
@@ -651,10 +688,15 @@ jobs:
       # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
       # two facades, the mothership-mode config, and their parallel workers never collide. Each
       # package's spec files are partitioned across the shards by vitest's --shard.
-      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/3)
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
+      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
         run: |
-          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/3
-          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/3
+          pnpm --filter @cat-factory/node-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
+          pnpm --filter @cat-factory/local-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
@@ -691,7 +733,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
@@ -744,8 +787,13 @@ jobs:
           echo "::error::Postgres did not become ready"
           exit 1
 
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
       - name: Run e2e shard
-        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard="$SHARD/$SHARD_TOTAL"
 
       # A red shard fails loudly on its own (the step above exits non-zero, incl. on a flaky
       # retry via `failOnFlakyTests`), so there is no combined-report merge job — the diagnosis
