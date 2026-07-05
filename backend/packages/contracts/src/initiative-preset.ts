@@ -54,8 +54,12 @@ export type InitiativePresetFieldType = v.InferOutput<typeof initiativePresetFie
 export const initiativePresetShowWhenSchema = v.object({
   /** The `key` of the field whose value gates this one's visibility. */
   key: v.pipe(v.string(), v.minLength(1)),
-  /** Show when the referenced scalar value equals this. */
-  equals: v.optional(v.string()),
+  /**
+   * Show when the referenced scalar value equals this. A union so `equals` can gate a
+   * `checkbox` (boolean) or `number` field, not only a `select`/`text` string — the
+   * comparison is strict, so the type must match the referenced field's value.
+   */
+  equals: v.optional(v.union([v.string(), v.boolean(), v.number()])),
   /** Show when the referenced `checkbox-group` value includes this. */
   includes: v.optional(v.string()),
 })
@@ -191,9 +195,10 @@ function valueMatchesFieldType(
  * Validate a filled preset form against its descriptor, returning a list of human-readable
  * problems (EMPTY ⇒ valid). Pure + total (never throws), so the create controller can map a
  * non-empty result to a single ValidationError. Enforces: no unknown keys, correct value type
- * per field, required VISIBLE fields present, `select`/`checkbox-group` values drawn from the
- * declared options, and `path` values that stay inside the repo ({@link isSafeRepoDirPath}).
- * Hidden fields (failing `showWhen`) are not required and their stale values are ignored.
+ * per field, required VISIBLE fields present (a required `checkbox` must be CHECKED — an
+ * unchecked `false` counts as unset), `select`/`checkbox-group` values drawn from the declared
+ * options, and `path` values that stay inside the repo ({@link isSafeRepoDirPath}). Hidden
+ * fields (failing `showWhen`) are not required and their stale values are ignored.
  */
 export function validateInitiativePresetInputs(
   descriptor: InitiativePresetDescriptor,
@@ -209,10 +214,13 @@ export function validateInitiativePresetInputs(
   for (const field of descriptor.fields) {
     const visible = isPresetFieldVisible(field, inputs)
     const value = inputs[field.key]
+    // A checkbox is "present" only when checked: a required checkbox means "must be checked",
+    // so an unchecked (`false`) box counts as unset and fails the required check below.
     const present =
       value !== undefined &&
       !(typeof value === 'string' && value.trim() === '') &&
-      !(Array.isArray(value) && value.length === 0)
+      !(Array.isArray(value) && value.length === 0) &&
+      value !== false
 
     if (!visible) continue
     if (!present) {

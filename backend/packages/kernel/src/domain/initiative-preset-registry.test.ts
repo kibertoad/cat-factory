@@ -121,6 +121,12 @@ describe('isPresetFieldVisible', () => {
     expect(isPresetFieldVisible(eqField, { placementMode: 'root' })).toBe(true)
     expect(isPresetFieldVisible(eqField, { placementMode: 'per-service' })).toBe(false)
   })
+  it('honours an `equals` condition against a checkbox (boolean) value', () => {
+    const boolField = field({ key: 'advancedDir', showWhen: { key: 'advanced', equals: true } })
+    expect(isPresetFieldVisible(boolField, { advanced: true })).toBe(true)
+    expect(isPresetFieldVisible(boolField, { advanced: false })).toBe(false)
+    expect(isPresetFieldVisible(boolField, {})).toBe(false)
+  })
 })
 
 describe('validateInitiativePresetInputs', () => {
@@ -186,5 +192,16 @@ describe('validateInitiativePresetInputs', () => {
     expect(
       validateInitiativePresetInputs(desc, { docsRoot: 'docs', docTypes: 'not-an-array' }),
     ).toContainEqual(expect.stringContaining('wrong type'))
+  })
+
+  it('treats an unchecked required checkbox as unset', () => {
+    const withConsent = descriptor({
+      fields: [field({ key: 'consent', type: 'checkbox', required: true })],
+    })
+    // Unchecked (`false`) fails the required check; checked (`true`) passes.
+    expect(validateInitiativePresetInputs(withConsent, { consent: false })).toContainEqual(
+      expect.stringContaining('Field "consent" is required'),
+    )
+    expect(validateInitiativePresetInputs(withConsent, { consent: true })).toEqual([])
   })
 })
