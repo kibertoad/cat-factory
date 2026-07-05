@@ -576,6 +576,16 @@ export function seedPipelines(): Pipeline[] {
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
+    // An analyst-only pipeline: the opt-in `environment-analyst` clones a service's repo
+    // read-only and drafts a declarative Docker Compose stack recipe (setup steps,
+    // prerequisites, health gate) as a NON-BINDING recommendation. The setup wizard runs it
+    // against a service frame and merges the draft over the deterministic detection; nothing is
+    // applied until the human confirms. See docs/initiatives/stack-recipes-and-shared-stacks.md.
+    {
+      id: 'pl_environment_analysis',
+      name: 'Analyze environment',
+      agentKinds: ['environment-analyst'],
+    },
     // The first PUBLIC-API pipeline: a single inline `initiative-breakdown` step that
     // decomposes an initiative brief into a structured plan. `public: true` exposes it to
     // external callers via `POST /api/v1/initiatives`; being inline (no container / no repo)
@@ -662,6 +672,9 @@ export function seedPipelines(): Pipeline[] {
 
 /** Pipeline id of the blueprint-only run kicked off after a successful bootstrap. */
 export const BLUEPRINT_PIPELINE_ID = 'pl_blueprint'
+
+/** Pipeline id of the environment-analyst-only run the setup wizard uses to draft a stack recipe. */
+export const ENVIRONMENT_ANALYSIS_PIPELINE_ID = 'pl_environment_analysis'
 
 /** Pipeline id of the built-in public "break down an initiative" pipeline (public API). */
 export const INITIATIVE_BREAKDOWN_PIPELINE_ID = 'pl_initiative_breakdown'

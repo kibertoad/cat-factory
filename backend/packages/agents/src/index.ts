@@ -194,6 +194,13 @@ export {
   registerBugInvestigatorAgent,
 } from './agents/kinds/bug-investigator.js'
 export {
+  ENVIRONMENT_ANALYST_KIND,
+  ENVIRONMENT_ANALYST_AGENT_KINDS,
+  environmentRecipeDraft,
+  type EnvironmentRecipeDraft,
+  registerEnvironmentAnalystAgent,
+} from './agents/kinds/environment-analyst.js'
+export {
   REPRO_TEST_KIND,
   REPRO_TEST_AGENT_KINDS,
   reproTestOutcome,
