@@ -68,12 +68,13 @@ lower to `{ kind: 'eks' }` rather than `{ kind: 'kubernetes' }`). That needs a d
 
 ### Running the integration suite against floci
 
-[floci](https://floci.io) is a local AWS emulator that stands up a **real k3s cluster per EKS
-cluster** and fronts it with the aws-iam-authenticator webhook, so a minted IAM token actually
-authenticates. Boot floci, create a cluster with the AWS CLI, then export the connection:
+[floci](https://floci.io) is a local, LocalStack-compatible AWS emulator whose EKS "real mode"
+stands up a **real k3s container per EKS cluster** and exposes its Kubernetes API server on a host
+port. Boot floci (pinned to the version this suite is validated against), create a cluster with the
+AWS CLI, then export the connection:
 
 ```sh
-docker run -d --name floci -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/floci-io/floci:latest
+docker run -d --name floci -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock -u root floci/floci:1.5.30
 export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1
 aws --endpoint-url=http://localhost:4566 eks create-cluster --name cat-factory-it \
   --role-arn arn:aws:iam::000000000000:role/eks --resources-vpc-config '{}'
@@ -86,10 +87,6 @@ export EKS_IT_RUNNER_IMAGE=cat-factory-mock-harness:it   # runner suite only
 pnpm --filter @cat-factory/eks run test:integration
 ```
 
-The `stsHost` override (`EKS_IT_STS_HOST` → the config's `stsHost`) points the presigned token
-at floci's STS instead of real AWS. See `src/test-support/eks-cluster.ts` for the full env list.
-
-> **Floci maturity caveat.** Whether floci's emulated k3s accepts a real IAM/SigV4 token at the
-> apiserver (i.e. wires aws-iam-authenticator) governs whether the integration suite exercises
-> the token seam end-to-end. If it doesn't, the minter's correctness is still fully covered by
-> the golden-vector unit test; adjust the CI job's floci bootstrap as its tooling stabilises.
+The `stsHost` override (`EKS_IT_STS_HOST` → the config's `stsHost`) points the presigned STS
+`GetCallerIdentity` URL at floci instead of real AWS. See `src/test-support/eks-cluster.ts` for the
+full env list and for exactly what floci does — and does not — cover at the auth layer.

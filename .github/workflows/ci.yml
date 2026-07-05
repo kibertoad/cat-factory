@@ -742,11 +742,15 @@ jobs:
   # EKS integration suite. NON-BLOCKING (intentionally NOT in the aggregated `Test` gate's
   # `needs`, like `test-e2e`) while floci support settles — the EKS unit tests (the SigV4/STS
   # golden vector + the contract round-trip) already run in the required `test` lane. This job
-  # boots floci (a local AWS emulator that stands up a REAL k3s cluster per EKS cluster and
-  # fronts it with the aws-iam-authenticator webhook), creates a cluster via the AWS CLI, exports
-  # its endpoint/CA + test credentials as `EKS_IT_*`, and runs the suite. The floci bootstrap is
-  # best-effort (`continue-on-error`): if it can't stand a cluster up, the suite self-skips on the
-  # missing `EKS_IT_*` env rather than failing.
+  # boots floci (a local, LocalStack-compatible AWS emulator whose EKS "real mode" stands up a
+  # REAL k3s container per cluster and exposes its Kubernetes API server on a host port), creates
+  # a cluster via the AWS CLI, exports its endpoint/CA + test credentials as `EKS_IT_*`, and runs
+  # the suite. NOTE (verified against floci 1.5.30): floci wires k3s to its own token webhook that
+  # maps any `aws eks get-token` bearer token to cluster-admin — it is NOT aws-iam-authenticator
+  # and does NOT verify the SigV4 signature, so this suite exercises the token TRANSPORT while the
+  # SigV4 SIGNING correctness is covered by the golden-vector unit test in the required lane. The
+  # floci bootstrap is best-effort (`continue-on-error`): if it can't stand a cluster up, the suite
+  # self-skips on the missing `EKS_IT_*` env rather than failing.
   test-eks:
     name: Test EKS (floci)
     needs: changes
@@ -784,15 +788,18 @@ jobs:
           set -x
           CLUSTER=cat-factory-it
           REGION=us-east-1
-          # floci exposes the AWS API on :4566 (LocalStack-compatible endpoint).
-          docker run -d --name floci -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock ghcr.io/floci-io/floci:latest || exit 0
-          for i in $(seq 1 30); do curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1 && break; sleep 2; done
+          # floci exposes the AWS API on :4566 (LocalStack-compatible endpoint). Published on
+          # Docker Hub as floci/floci; pinned to a known-good version rather than :latest so the
+          # emulated EKS behaviour matches what this suite is validated against. `-u root` is
+          # floci's documented invocation (it needs the mounted docker socket).
+          docker run -d --name floci -p 4566:4566 -v /var/run/docker.sock:/var/run/docker.sock -u root floci/floci:1.5.30 || exit 0
+          for _ in $(seq 1 30); do curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1 && break; sleep 2; done
           export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=$REGION
           AWS="aws --endpoint-url=http://localhost:4566 --region $REGION"
           $AWS eks create-cluster --name "$CLUSTER" \
             --role-arn arn:aws:iam::000000000000:role/eks-service-role \
             --resources-vpc-config '{}' || exit 0
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             STATUS="$($AWS eks describe-cluster --name "$CLUSTER" --query 'cluster.status' --output text 2>/dev/null || echo PENDING)"
             [ "$STATUS" = "ACTIVE" ] && break
             sleep 3

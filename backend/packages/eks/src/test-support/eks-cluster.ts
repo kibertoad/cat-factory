@@ -14,6 +14,16 @@ import type { SecretResolver } from '@cat-factory/kernel'
 // infra. This mirrors the Kubernetes suite's `test-support/cluster.ts` exactly, differing only
 // in that the secret bundle holds AWS credentials (used to mint the IAM apiserver token) rather
 // than a static ServiceAccount token, and the apiserver is reached the same way afterwards.
+//
+// What floci actually covers at the auth layer (verified against floci 1.5.30, the version the
+// CI job pins). floci's EKS real mode wires k3s to a floci-specific token webhook
+// (`POST /_floci/eks/token-webhook`, added in floci PR #1167) that maps ANY `aws eks get-token`
+// bearer token to `system:masters`/`cluster-admin`. It is deliberately NOT aws-iam-authenticator
+// and it does NOT verify the SigV4 signature or call STS. So this suite exercises the token
+// TRANSPORT end-to-end (mint a `k8s-aws-v1.`-prefixed token → the apiserver accepts it → real
+// Kubernetes API calls succeed), but the SigV4/STS SIGNING correctness is asserted separately by
+// the `eks-auth.logic` golden-vector unit test, which floci cannot validate. `EKS_IT_STS_HOST`
+// only changes the host the presigned URL points at; floci's webhook ignores its contents.
 
 export interface EksClusterEnv {
   /** The EKS cluster apiserver endpoint (from `aws eks describe-cluster`). */
