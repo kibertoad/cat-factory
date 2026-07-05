@@ -176,6 +176,21 @@ export interface AgentRunContext {
      * absent when no per-type fields were collected.
      */
     taskTypeFields?: TaskTypeFields
+    /**
+     * The raw Markdown of the workspace's linked TEMPLATE document for this task's `docKind`
+     * (WS1 item 3), resolved by the engine when a `role: 'template'` document is linked for the
+     * kind. The doc-authoring prompts parse it into the kind's effective template (its sections
+     * override the built-in skeleton), and the `doc-quality` gate checks against the same
+     * sections — one source of truth. Absent ⇒ the built-in `docTemplateFor(kind)` skeleton.
+     */
+    docTemplateBody?: string
+    /**
+     * The workspace's linked EXEMPLAR documents for this task's `docKind` (WS1 item 4) — "good
+     * examples to emulate" the author agents are pointed at, alongside the built-in curated
+     * exemplars. Each carries a short excerpt (not the full body) so the reference stays cheap.
+     * Absent ⇒ only the built-in exemplars (if any) are surfaced.
+     */
+    docExemplars?: { title: string; url: string; excerpt: string }[]
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]

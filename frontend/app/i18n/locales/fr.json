@@ -1584,6 +1584,9 @@
         "localRunners": {
           "label": "Mes exécuteurs locaux",
           "description": "Vos exécuteurs de modèles sur votre propre machine (Ollama, LM Studio, vLLM…)."
+        },
+        "documentTemplates": {
+          "label": "Modèles et exemples"
         }
       }
     },
@@ -2702,6 +2705,26 @@
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
       "attached": "Document joint",
       "attachFailed": "Impossible de joindre"
+    },
+    "templates": {
+      "title": "Modèles et exemples de documents",
+      "intro": "Associez à un type de document votre propre modèle et des documents d'exemple. Ils doivent d'abord être importés via l'intégration Documents. Les sections d'un modèle remplacent le squelette intégré de ce type ; les exemples guident les agents rédacteurs.",
+      "kindLabel": "Type de document",
+      "importFirst": "Importez d'abord un document : un modèle ou un exemple est l'un de vos documents importés.",
+      "importButton": "Importer un document",
+      "templateHeading": "Modèle",
+      "templateHint": "Remplace le squelette intégré de {kind}. Un modèle par type.",
+      "templateEmpty": "Utilisation du modèle intégré.",
+      "exemplarsHeading": "Exemples à suivre",
+      "exemplarsHint": "De bons exemples que les agents rédacteurs étudient, ajoutés à l'ensemble intégré.",
+      "exemplarsEmpty": "Aucun exemple lié.",
+      "pickLabel": "Document importé",
+      "pickPlaceholder": "Choisissez un document importé…",
+      "setTemplate": "Définir comme modèle",
+      "addExemplar": "Ajouter un exemple",
+      "remove": "Retirer",
+      "linkFailed": "Impossible de mettre à jour le lien du document",
+      "loadFailed": "Impossible de charger les modèles de documents"
     }
   },
   "tasks": {

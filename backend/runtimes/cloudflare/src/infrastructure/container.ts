@@ -723,7 +723,14 @@ function selectMergeLifecycleDeps(
       new GitHubPullRequestReviewProvider({ githubClient, resolveRepoTarget, blockRepository }),
     )
     wireDocQualityProvider(
-      new GitHubDocQualityProvider({ githubClient, resolveRepoTarget, blockRepository }),
+      new GitHubDocQualityProvider({
+        githubClient,
+        resolveRepoTarget,
+        blockRepository,
+        // The gate resolves a workspace-linked template (WS1) for the block's kind, so it checks
+        // against the SAME sections the doc-writer followed. Cheap query wrapper over the same D1.
+        documentRepository: new D1DocumentRepository({ db }),
+      }),
     )
     deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,

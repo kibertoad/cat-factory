@@ -37,8 +37,11 @@ jobs:
       #                 docs-only PR leaves it false so those lanes skip.
       #   code        — ANY real source changed (backend, frontend, a `deploy/*` example, or
       #                 a root build input), i.e. NOT a docs-/prose-only diff. Gates the
-      #                 cross-stack lanes (`test-units`, `test-e2e`); a docs-only PR runs no
-      #                 tests at all. (On non-PR events both flags are forced true — see `scope`.)
+      #                 cross-stack lanes (`test-units`, `test-e2e`) AND the build lanes
+      #                 (`build-typecheck`, `publish-integrity`, `frontend-check`), so a
+      #                 docs-only PR runs no tests and no builds — only lint, the repo
+      #                 guards, changeset, and zizmor. (On non-PR events both flags are
+      #                 forced true — see `scope`.)
       backendCode: ${{ steps.scope.outputs.backendCode }}
       code: ${{ steps.scope.outputs.code }}
     steps:
@@ -213,34 +216,32 @@ jobs:
       - name: Monorepo lint (sherif)
         run: pnpm lint:monorepo
 
-  # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
-  # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
-  # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`
-  # (core), `publish-integrity`, and `frontend-check` — each of which needs the built `dist/`
-  # so each does its own Turbo-cached `pnpm build` (the builds can't be shared within a run:
-  # every lane starts at once). The `build-gate` job below aggregates them into a single
-  # required status, mirroring the `Test` gate, so branch protection requires one "Build"
-  # check regardless of how the lanes are later re-sliced.
-  build-typecheck:
-    name: Build & typecheck
+  # The two pure-node repo guards (no install needed) used to open the `build-typecheck`
+  # job. They live in their OWN always-on job so that change-gating the build lanes on
+  # `code` (below) cannot take them along: both are exactly the checks a docs-/markdown-only
+  # PR is most likely to trip — the package catalog IS README.md content, and the image-tag
+  # consistency check reads the pinned tag files — so they must run on every PR regardless
+  # of scope, and the `Build` gate accepts nothing but `success` from this job.
+  repo-guards:
+    name: Repo guards
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          # Full history so the runner-image-tag guard below can diff against the PR base
+          # Full history so the runner-image-tag guard can diff against the PR base
           # (origin/${{ github.base_ref }}) and read the base's wrangler.toml.
           fetch-depth: 0
           persist-credentials: false
 
-      # Guard the executor-harness runner image tag BEFORE the expensive build: the harness
-      # version and the cat-factory-executor:<tag> pins in deploy/backend/{package.json,
-      # wrangler.toml} must stay in lockstep, and an image-source change must bump the tag.
-      # deploy.yml runs the same check post-merge on main; this catches the mistake on the PR
-      # instead of turning main red. BASE_REF is empty off PRs (push/dispatch) → the script
-      # runs the consistency check only. Pure node + git; no install needed.
+      # Guard the executor-harness runner image tag: the harness version and the
+      # cat-factory-executor:<tag> pins in deploy/backend/{package.json, wrangler.toml} must
+      # stay in lockstep, and an image-source change must bump the tag. deploy.yml runs the
+      # same check post-merge on main; this catches the mistake on the PR instead of turning
+      # main red. BASE_REF is empty off PRs (push/dispatch) → the script runs the
+      # consistency check only. Pure node + git; no install needed.
       - name: Guard runner image tag
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -256,6 +257,31 @@ jobs:
       # package can't become invisible to the docs an LLM reads first. Pure node; no install.
       - name: Guard package catalog
         run: node scripts/check-package-catalog.mjs
+
+  # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
+  # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
+  # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`
+  # (core), `publish-integrity`, and `frontend-check` — each of which needs the built `dist/`
+  # so each does its own Turbo-cached `pnpm build` (the builds can't be shared within a run:
+  # every lane starts at once). All three lanes are change-gated on the coarse `code` flag:
+  # nothing in them reads prose, so a docs-only PR skips them (the pure-node guards that DO
+  # read markdown live in the always-on `repo-guards` job above). The `build-gate` job below
+  # aggregates them into a single required status, mirroring the `Test` gate, so branch
+  # protection requires one "Build" check regardless of how the lanes are later re-sliced.
+  build-typecheck:
+    name: Build & typecheck
+    needs: changes
+    # Build/typecheck outcomes can only change when real source (or a root build input)
+    # changed — a docs-only PR skips the lane and the `Build` gate treats the skip as a pass.
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -291,6 +317,10 @@ jobs:
   # the serial critical path). Needs the built dist/ (publint packs each package's output).
   publish-integrity:
     name: Publish integrity
+    needs: changes
+    # publint/attw/knip all analyse built output and source imports — meaningless on a
+    # docs-only diff, so this lane change-gates exactly like build-typecheck.
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -327,6 +357,11 @@ jobs:
   # dist/ (the frontend layer imports the built libraries).
   frontend-check:
     name: Frontend checks
+    needs: changes
+    # The i18n catalogs are .json (never matched by the docs filter) and everything else
+    # here compiles source, so a docs-only diff cannot affect this lane; change-gates like
+    # the other build lanes.
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -385,30 +420,48 @@ jobs:
 
   # Single aggregated status named "Build" so branch protection can require one check
   # regardless of how the build/typecheck lanes above are sliced. Mirrors the `Test` gate:
-  # fails unless every build lane passed (none are change-gated, so they never legitimately
-  # skip — a skip here means something went wrong, so only `success` is accepted).
+  # the three build lanes are change-gated on `code`, so `skipped` is a legitimate result on
+  # a docs-only PR — but only when the `changes` job itself succeeded (a failed detection
+  # job would skip every lane on empty outputs and pass this gate with nothing built — the
+  # same fail-open hole `test-gate` closes). The always-on `repo-guards` job is never
+  # change-gated, so from it only `success` is accepted: a skip there means something went
+  # wrong.
   build-gate:
     name: Build
-    needs: [build-typecheck, publish-integrity, frontend-check]
+    needs: [changes, repo-guards, build-typecheck, publish-integrity, frontend-check]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Verify all build lanes passed
+      - name: Verify all build lanes passed (or were correctly skipped)
         env:
+          CHANGES: ${{ needs.changes.result }}
+          GUARDS: ${{ needs.repo-guards.result }}
           CORE: ${{ needs.build-typecheck.result }}
           PUBLISH: ${{ needs.publish-integrity.result }}
           FRONTEND: ${{ needs.frontend-check.result }}
         run: |
-          echo "build-typecheck: $CORE | publish-integrity: $PUBLISH | frontend-check: $FRONTEND"
+          echo "changes: $CHANGES | repo-guards: $GUARDS | build-typecheck: $CORE" \
+            "| publish-integrity: $PUBLISH | frontend-check: $FRONTEND"
+          if [ "$CHANGES" != 'success' ]; then
+            echo "::error::change detection did not succeed; refusing to pass the build gate"
+            exit 1
+          fi
+          if [ "$GUARDS" != 'success' ]; then
+            echo "::error::the always-on repo-guards job reported '$GUARDS'"
+            exit 1
+          fi
           for lane in "$CORE" "$PUBLISH" "$FRONTEND"; do
-            if [ "$lane" != 'success' ]; then
-              echo "::error::a required build lane reported '$lane'"
-              exit 1
-            fi
+            case "$lane" in
+              success | skipped) ;;
+              *)
+                echo "::error::a required build lane reported '$lane'"
+                exit 1
+                ;;
+            esac
           done
-          echo "All build lanes passed."
+          echo "All build lanes passed or were skipped with no relevant changes."
 
   # The Cloudflare worker suite (58 files) is the dominant test cost, and its
   # per-file overhead is intrinsic pool-workers isolate setup — embarrassingly

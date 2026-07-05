@@ -1,13 +1,15 @@
 import type {
+  DocKind,
   DocumentConnectionRecord,
   DocumentConnectionRepository,
+  DocumentLinkRole,
   DocumentRecord,
   DocumentRepository,
   DocumentSourceKind,
   SecretCipher,
 } from '@cat-factory/kernel'
 import { urlMatchCandidates } from '@cat-factory/kernel'
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { documentConnections, documents } from '../db/schema.js'
 
@@ -147,6 +149,8 @@ function rowToDocument(row: DocumentRow): DocumentRecord {
     body: row.body,
     contentHash: row.content_hash,
     linkedBlockId: row.linked_block_id,
+    role: (row.role as DocumentLinkRole | null) ?? null,
+    docKind: (row.doc_kind as DocKind | null) ?? null,
     syncedAt: row.synced_at,
     deletedAt: row.deleted_at,
   }
@@ -262,6 +266,115 @@ export class DrizzleDocumentRepository implements DocumentRepository {
           eq(documents.workspace_id, workspaceId),
           eq(documents.source, source),
           eq(documents.external_id, externalId),
+        ),
+      )
+  }
+
+  async getRoleLink(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<DocumentRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          eq(documents.role, role),
+          eq(documents.doc_kind, docKind),
+          isNull(documents.deleted_at),
+        ),
+      )
+      .orderBy(desc(documents.synced_at))
+      .limit(1)
+    return rows[0] ? rowToDocument(rows[0]) : null
+  }
+
+  async listRoleLinks(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<DocumentRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          eq(documents.role, role),
+          eq(documents.doc_kind, docKind),
+          isNull(documents.deleted_at),
+        ),
+      )
+      .orderBy(desc(documents.synced_at))
+    return rows.map(rowToDocument)
+  }
+
+  async listRoleLinksByWorkspace(workspaceId: string): Promise<DocumentRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          isNotNull(documents.role),
+          isNull(documents.deleted_at),
+        ),
+      )
+      .orderBy(desc(documents.synced_at))
+    return rows.map(rowToDocument)
+  }
+
+  async setRole(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<void> {
+    await this.db
+      .update(documents)
+      .set({ role, doc_kind: docKind })
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          eq(documents.source, source),
+          eq(documents.external_id, externalId),
+        ),
+      )
+  }
+
+  async clearRole(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<void> {
+    await this.db
+      .update(documents)
+      .set({ role: null, doc_kind: null })
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          eq(documents.source, source),
+          eq(documents.external_id, externalId),
+        ),
+      )
+  }
+
+  async clearRoleForKind(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<void> {
+    await this.db
+      .update(documents)
+      .set({ role: null, doc_kind: null })
+      .where(
+        and(
+          eq(documents.workspace_id, workspaceId),
+          eq(documents.role, role),
+          eq(documents.doc_kind, docKind),
         ),
       )
   }

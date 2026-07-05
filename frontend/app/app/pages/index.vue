@@ -47,6 +47,9 @@ const DocumentSourceConnectModal = defineAsyncComponent(
 const DocumentImportModal = defineAsyncComponent(
   () => import('~/components/documents/DocumentImportModal.vue'),
 )
+const DocumentTemplatesModal = defineAsyncComponent(
+  () => import('~/components/documents/DocumentTemplatesModal.vue'),
+)
 const SpawnPreviewModal = defineAsyncComponent(
   () => import('~/components/documents/SpawnPreviewModal.vue'),
 )
@@ -347,6 +350,7 @@ watch(
       <KaizenPanel v-if="ui.kaizenScreenOpen" />
       <DocumentSourceConnectModal v-if="ui.documentConnect" />
       <DocumentImportModal v-if="ui.documentImport" />
+      <DocumentTemplatesModal v-if="ui.documentTemplates" />
       <SpawnPreviewModal v-if="ui.spawnPreview" />
       <BootstrapModal v-if="ui.bootstrapOpen" />
       <AddServiceFromRepoModal v-if="ui.addServiceOpen" />

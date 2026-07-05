@@ -273,7 +273,18 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // `secretsCipher` blob (sealed/decrypted in the service under the LOCAL key), so no plaintext
   // crosses the machine API — the same precedent as the observability / environment connections.
   runnerPoolConnectionRepository: {},
-  documentRepository: { upsert: 'pending', listByWorkspace: 'pending', linkBlock: 'pending' },
+  documentRepository: {
+    upsert: 'pending',
+    listByWorkspace: 'pending',
+    linkBlock: 'pending',
+    // WS1 role-link management surface (controller-driven, not the agent run path — the run-path
+    // reads `getRoleLink`/`listRoleLinks` ARE allow-listed). Mothership-internal until a slice
+    // proxies the documents management surface.
+    listRoleLinksByWorkspace: 'pending',
+    setRole: 'pending',
+    clearRole: 'pending',
+    clearRoleForKind: 'pending',
+  },
   documentConnectionRepository: {
     decodeCredentials: 'helper',
     rowToRecord: 'helper',

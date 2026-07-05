@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
+  DocKind,
   DocumentBoardPlan,
   DocumentConnection,
+  DocumentLinkRole,
   DocumentSearchResult,
   DocumentSourceDescriptor,
   DocumentSourceKind,
@@ -49,6 +51,10 @@ export const useDocumentsStore = defineStore('documents', () => {
     prepend: true,
   })
   const loading = ref(false)
+
+  // Workspace+DocKind template / exemplar role links (WS1). Loaded lazily when the management
+  // panel opens; the full list of role-tagged documents across kinds.
+  const roleLinks = ref<SourceDocument[]>([])
 
   /** Imported documents currently attached to a given block. */
   function docsForBlock(blockId: string): SourceDocument[] {
@@ -116,6 +122,58 @@ export const useDocumentsStore = defineStore('documents', () => {
     return doc
   }
 
+  // ---- workspace+DocKind template / exemplar links (WS1) ------------------
+
+  /** Load every role-tagged (template/exemplar) document for the workspace. */
+  async function loadRoleLinks() {
+    roleLinks.value = await api.listDocumentRoleLinks(workspace.requireId())
+  }
+
+  /** The current template link for a kind (singular), if any. */
+  function templateFor(docKind: DocKind): SourceDocument | undefined {
+    return roleLinks.value.find((d) => d.role === 'template' && d.docKind === docKind)
+  }
+
+  /** The exemplar links for a kind (multi-valued). */
+  function exemplarsFor(docKind: DocKind): SourceDocument[] {
+    return roleLinks.value.filter((d) => d.role === 'exemplar' && d.docKind === docKind)
+  }
+
+  /**
+   * Tag an imported document as the workspace's template (singular per kind) or exemplar for a
+   * kind, then reconcile the local list (a template replaces the prior one for its kind).
+   */
+  async function linkForKind(
+    source: DocumentSourceKind,
+    externalId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ) {
+    const doc = await api.linkDocumentForKind(workspace.requireId(), {
+      source,
+      externalId,
+      role,
+      docKind,
+    })
+    const key = (d: SourceDocument) => `${d.source}:${d.externalId}`
+    // Drop any row for this doc, plus the prior template for this kind (singular replace).
+    roleLinks.value = roleLinks.value.filter(
+      (d) =>
+        key(d) !== key(doc) &&
+        !(role === 'template' && d.role === 'template' && d.docKind === docKind),
+    )
+    roleLinks.value.push(doc)
+    return doc
+  }
+
+  /** Clear a document's role tag (built-in template resumes for the kind / exemplar drops). */
+  async function unlinkForKind(source: DocumentSourceKind, externalId: string) {
+    await api.unlinkDocumentForKind(workspace.requireId(), { source, externalId })
+    roleLinks.value = roleLinks.value.filter(
+      (d) => !(d.source === source && d.externalId === externalId),
+    )
+  }
+
   return {
     available,
     sources,
@@ -137,5 +195,11 @@ export const useDocumentsStore = defineStore('documents', () => {
     plan,
     spawn,
     linkToBlock,
+    roleLinks,
+    loadRoleLinks,
+    templateFor,
+    exemplarsFor,
+    linkForKind,
+    unlinkForKind,
   }
 })
