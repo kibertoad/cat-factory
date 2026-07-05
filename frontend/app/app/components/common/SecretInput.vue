@@ -10,6 +10,8 @@
 // fields whose secrecy is data-dependent (`field.secret ? … : …`) can bind it directly.
 // All other UInput props/listeners (icon, size, placeholder, disabled, autofocus, class, …)
 // pass straight through via `$attrs`; `secret` is a declared prop so it strips off first.
+// `$attrs` is bound BEFORE `type` so the mask/reveal control stays authoritative — a caller
+// that (out of old habit) also passes `type="password"` can't clobber the toggle.
 // Mirrors the shape of `common/CopyButton.vue` / `common/IconButton.vue`.
 const props = withDefaults(
   defineProps<{
@@ -29,8 +31,8 @@ defineOptions({ inheritAttrs: false })
 </script>
 
 <template>
-  <UInput v-if="!props.secret" v-model="model" type="text" v-bind="$attrs" />
-  <UInput v-else v-model="model" :type="revealed ? 'text' : 'password'" v-bind="$attrs">
+  <UInput v-if="!props.secret" v-model="model" v-bind="$attrs" type="text" />
+  <UInput v-else v-model="model" v-bind="$attrs" :type="revealed ? 'text' : 'password'">
     <template #trailing>
       <UButton
         color="neutral"
