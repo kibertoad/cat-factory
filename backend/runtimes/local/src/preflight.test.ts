@@ -37,6 +37,45 @@ describe('createDockerPreflightProbes', () => {
     }
   })
 
+  it('registryAuth: an auths/credHelpers entry passes, a global credsStore alone does NOT false-pass', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'preflight-'))
+    try {
+      // A stock Docker Desktop config: a global credsStore but no login for our registry. This must
+      // NOT pass — the whole point is to catch a missing / expired registry login.
+      const cfgOnlyStore = join(dir, 'only-store.json')
+      await writeFile(cfgOnlyStore, JSON.stringify({ credsStore: 'desktop' }), 'utf8')
+      const noLogin = createDockerPreflightProbes({ dockerConfigPath: cfgOnlyStore })
+      expect((await noLogin.registryAuth('reg.example.com')).status).toBe('fail')
+
+      // After `docker login`, docker writes a per-registry `auths` entry (empty secret when a
+      // credsStore holds it) — that is the reliable signal, even alongside a credsStore.
+      const cfgLoggedIn = join(dir, 'logged-in.json')
+      await writeFile(
+        cfgLoggedIn,
+        JSON.stringify({ credsStore: 'desktop', auths: { 'reg.example.com': {} } }),
+        'utf8',
+      )
+      const loggedIn = createDockerPreflightProbes({ dockerConfigPath: cfgLoggedIn })
+      expect((await loggedIn.registryAuth('https://reg.example.com/v2/')).status).toBe('pass')
+
+      // A per-registry credential helper also counts as logged in.
+      const cfgHelper = join(dir, 'helper.json')
+      await writeFile(
+        cfgHelper,
+        JSON.stringify({ credHelpers: { 'reg.example.com': 'ecr-login' } }),
+        'utf8',
+      )
+      const viaHelper = createDockerPreflightProbes({ dockerConfigPath: cfgHelper })
+      expect((await viaHelper.registryAuth('reg.example.com')).status).toBe('pass')
+
+      // A missing config file ⇒ never logged in anywhere.
+      const missing = createDockerPreflightProbes({ dockerConfigPath: join(dir, 'nope.json') })
+      expect((await missing.registryAuth('reg.example.com')).status).toBe('fail')
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('httpReachable: 2xx passes, non-2xx fails, network error fails', async () => {
     const probes = createDockerPreflightProbes()
     vi.stubGlobal(

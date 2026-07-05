@@ -20,8 +20,14 @@ const GIB = 1024 ** 3
 export interface DockerPreflightProbesOptions {
   /** The docker-family CLI binary (default `docker`; honours `LOCAL_DOCKER_BINARY`). */
   binary?: string
-  /** Volume whose free space `disk-space` measures (default the OS temp dir — where compose scratch lives). */
+  /**
+   * Fallback volume whose free space `disk-space` measures when Docker's own data root isn't
+   * host-readable (Docker Desktop keeps it inside a VM). Default the OS temp dir — the host scratch
+   * where the checkout + env files are written.
+   */
   diskPath?: string
+  /** Path to docker's `config.json` (default `~/.docker/config.json`); injectable for tests. */
+  dockerConfigPath?: string
 }
 
 const pass = (detail?: string): PreflightProbeOutcome => ({
@@ -51,6 +57,7 @@ export function createDockerPreflightProbes(
 ): PreflightHostProbes {
   const binary = opts.binary?.trim() || 'docker'
   const diskPath = opts.diskPath || tmpdir()
+  const dockerConfigPath = opts.dockerConfigPath || join(homedir(), '.docker', 'config.json')
 
   return {
     async dockerDaemon() {
@@ -66,39 +73,57 @@ export function createDockerPreflightProbes(
     },
 
     async diskSpace(minBytes) {
-      try {
-        const { bavail, bsize } = await statfs(diskPath)
-        const free = bavail * bsize
-        return free >= minBytes
-          ? pass(`${gib(free)} free`)
-          : fail(`${gib(free)} free (< ${gib(minBytes)} required)`)
-      } catch (err) {
-        return fail(`could not read free disk on ${diskPath}: ${errMessage(err)}`)
+      // Prefer Docker's data root (where images/volumes actually land) when it's host-readable — on
+      // native Linux that's the real constraint. On Docker Desktop the root lives inside a VM and
+      // isn't host-visible, so we fall back to the configured scratch path (the host working dir
+      // where the checkout + env files are written).
+      const dataRoot = await dockerInfoField(binary, '{{.DockerRootDir}}')
+      const candidates = [dataRoot, diskPath].filter((p): p is string => !!p)
+      for (const target of candidates) {
+        try {
+          const { bavail, bsize } = await statfs(target)
+          const free = bavail * bsize
+          return free >= minBytes
+            ? pass(`${gib(free)} free on ${target}`)
+            : fail(`${gib(free)} free on ${target} (< ${gib(minBytes)} required)`)
+        } catch {
+          // Not host-readable (a Docker Desktop VM path) — try the next candidate.
+        }
       }
+      return fail(`could not read free disk (checked ${candidates.join(', ')})`)
     },
 
     async memory(minBytes) {
-      const total = totalmem()
+      // Prefer the Docker engine's view of total memory — on Docker Desktop (macOS/Windows)
+      // containers are bounded by the VM's allocation, NOT the host's physical RAM, so
+      // `os.totalmem()` would false-pass a machine with plenty of host RAM but a small Docker
+      // allocation. Fall back to the host total when the daemon isn't reachable.
+      const daemonMem = await dockerInfoNumber(binary, '{{.MemTotal}}')
+      const total = daemonMem ?? totalmem()
+      const source = daemonMem !== null ? 'Docker' : 'host'
       return total >= minBytes
-        ? pass(`${gib(total)} total`)
-        : fail(`${gib(total)} total (< ${gib(minBytes)} required)`)
+        ? pass(`${gib(total)} ${source} total`)
+        : fail(`${gib(total)} ${source} total (< ${gib(minBytes)} required)`)
     },
 
     async registryAuth(registry) {
       const wanted = normalizeRegistry(registry)
       try {
-        const raw = await readFile(join(homedir(), '.docker', 'config.json'), 'utf8')
+        const raw = await readFile(dockerConfigPath, 'utf8')
         const config = JSON.parse(raw) as {
           auths?: Record<string, unknown>
           credHelpers?: Record<string, unknown>
-          credsStore?: unknown
         }
-        // A stored auth entry, a per-registry credential helper, or a global credential store all
-        // mean docker can present credentials for this registry — we CHECK for one, never read it.
+        // `docker login <registry>` writes a per-registry `auths` entry even when a credential
+        // STORE/HELPER keeps the secret out of the file (the entry's `auth` is then empty), so a
+        // per-registry `auths` or `credHelpers` key is the reliable signal — we CHECK for it, never
+        // read the secret. We deliberately do NOT treat a global `credsStore` as proof: it only
+        // means docker CAN present creds for SOME registry, not that THIS one is logged in, and
+        // would false-pass every check on a stock Docker Desktop (which sets `credsStore: "desktop"`),
+        // defeating the whole "detect an expired ECR login before a 40-image pull" point.
         const authed =
           Object.keys(config.auths ?? {}).some((k) => normalizeRegistry(k) === wanted) ||
-          Object.keys(config.credHelpers ?? {}).some((k) => normalizeRegistry(k) === wanted) ||
-          typeof config.credsStore === 'string'
+          Object.keys(config.credHelpers ?? {}).some((k) => normalizeRegistry(k) === wanted)
         return authed
           ? pass(`credential present for ${wanted}`)
           : fail(`no docker login for ${wanted}`)
@@ -183,6 +208,26 @@ export function createDockerPreflightProbes(
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+/** Run `docker info --format <fmt>` and return the trimmed value, or null on any error / empty. */
+async function dockerInfoField(binary: string, format: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(binary, ['info', '--format', format], {
+      timeout: PROBE_TIMEOUT_MS,
+    })
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
+/** As {@link dockerInfoField}, coerced to a positive finite number (else null). */
+async function dockerInfoNumber(binary: string, format: string): Promise<number | null> {
+  const raw = await dockerInfoField(binary, format)
+  if (raw === null) return null
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 function escapeRegExp(value: string): string {
