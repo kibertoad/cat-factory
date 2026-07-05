@@ -1,5 +1,13 @@
 # @cat-factory/spend
 
+## 0.10.107
+
+### Patch Changes
+
+- Updated dependencies [bf31df7]
+  - @cat-factory/contracts@0.107.0
+  - @cat-factory/kernel@0.98.0
+
 ## 0.10.106
 
 ### Patch Changes
