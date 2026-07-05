@@ -422,6 +422,7 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
       extra?: Record<string, unknown>
       recordStep?: ProvisionEnvironmentRequest['recordStep']
       ensureSharedStacks?: ProvisionEnvironmentRequest['ensureSharedStacks']
+      runPreflights?: ProvisionEnvironmentRequest['runPreflights']
     } = {
       files: {},
     },
@@ -433,6 +434,7 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
         Promise.resolve({ cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 't' }),
       ...(opts.recordStep ? { recordStep: opts.recordStep } : {}),
       ...(opts.ensureSharedStacks ? { ensureSharedStacks: opts.ensureSharedStacks } : {}),
+      ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
     })
 
   // A script that greenlights a whole recipe bring-up (up/exec/host green, ps healthy, port bound).
@@ -728,5 +730,118 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
     expect(env.status).toBe('failed')
     expect(env.error).toContain('shared-stack orchestration is not available')
     expect(calls).toHaveLength(0)
+  })
+
+  it('runs preflight prerequisites and provisions when they all pass', async () => {
+    const preflightCalls: unknown[][] = []
+    const recipe: StackRecipe = {
+      prerequisites: [
+        { check: 'docker-daemon' },
+        { check: 'registry-auth', params: { registry: 'reg.example.com' } },
+      ],
+    }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        runPreflights: async (refs) => {
+          preflightCalls.push(refs)
+          return refs.map((r) => ({
+            check: r.check,
+            title: r.check,
+            status: 'pass',
+            required: true,
+          }))
+        },
+      }),
+    )
+    expect(env.status).toBe('ready')
+    // Preflights were run with the declared refs, before any daemon work.
+    expect(preflightCalls).toEqual([recipe.prerequisites])
+    expect(calls.some((a) => a.includes('up'))).toBe(true)
+  })
+
+  it('fails fast (no daemon work) when a required preflight check fails, surfacing remediation', async () => {
+    const recipe: StackRecipe = { prerequisites: [{ check: 'registry-auth' }] }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        runPreflights: async () => [
+          {
+            check: 'registry-auth',
+            title: 'Container registry login',
+            status: 'fail',
+            required: true,
+            detail: 'no docker login for reg',
+            remediation: 'Run `docker login reg` and re-run.',
+          },
+        ],
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('Preflight check(s) failed')
+    expect(env.error).toContain('no docker login for reg')
+    expect(env.error).toContain('docker login')
+    // The daemon was never touched — the check failed before clone/up.
+    expect(calls).toHaveLength(0)
+  })
+
+  it('proceeds when only a non-required preflight check warns', async () => {
+    const recipe: StackRecipe = {
+      prerequisites: [{ check: 'disk-space', params: { minGib: 16 }, required: false }],
+    }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        runPreflights: async () => [
+          { check: 'disk-space', title: 'Free disk space', status: 'warn', required: false },
+        ],
+      }),
+    )
+    expect(env.status).toBe('ready')
+    expect(calls.some((a) => a.includes('up'))).toBe(true)
+  })
+
+  it('fails loudly when a recipe declares prerequisites but the preflight seam is not wired', async () => {
+    const recipe: StackRecipe = { prerequisites: [{ check: 'docker-daemon' }] }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    // No `runPreflights` in the request → the deployment has no host-probe runtime.
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('preflight checks are not available')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('streams a preflight provisioning-log entry per check', async () => {
+    const steps: RecipeStepLog[] = []
+    const recipe: StackRecipe = { prerequisites: [{ check: 'docker-daemon' }] }
+    const { runtime } = fakeRuntime(greenScript, { withCheckout: true })
+    await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        recordStep: async (log) => {
+          steps.push(log)
+        },
+        runPreflights: async () => [
+          {
+            check: 'docker-daemon',
+            title: 'Docker daemon reachable',
+            status: 'pass',
+            required: true,
+            detail: 'Docker 27.0',
+          },
+        ],
+      }),
+    )
+    expect(steps[0]).toMatchObject({
+      name: 'preflight: Docker daemon reachable',
+      outcome: 'success',
+    })
   })
 })

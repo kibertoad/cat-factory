@@ -49,7 +49,12 @@ import type {
   TaskRepository,
   TaskSourceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { EnvironmentProvider, RunnerPoolProvider, UrlSafetyPolicy } from '@cat-factory/kernel'
+import type {
+  EnvironmentProvider,
+  PreflightHostProbes,
+  RunnerPoolProvider,
+  UrlSafetyPolicy,
+} from '@cat-factory/kernel'
 import type {
   CustomManifestTypeRepository,
   EnvironmentConnectionRepository,
@@ -154,6 +159,7 @@ import {
   EnvironmentTeardownService,
   EnvironmentUserHandlerService,
   RunnerPoolConnectionService,
+  PreflightService,
   ProvisioningLogRecorder,
   ProvisioningLogService,
   SharedStackService,
@@ -783,6 +789,13 @@ export interface CoreDependencies {
    * unauthenticated clone (public repos only).
    */
   sharedStackCloneToken?: string
+  /**
+   * The host-bound PREFLIGHT probes (docker daemon / disk / RAM / registry login / reachability /
+   * mkcert / hosts / secrets marker). Wired ONLY on the local facade (a host daemon); present ⇒ the
+   * preflight module + API are built and a stack recipe's `prerequisites` are enforced at provision
+   * start. Absent ⇒ the preflight API 503s and a recipe that declares prerequisites fails loudly.
+   */
+  preflightHostProbes?: PreflightHostProbes
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
   // Flat repository fields like every other feature; both runtime facades contribute
   // them by spreading one sandbox-owned `Partial<CoreDependencies>` mixin (the
@@ -1012,6 +1025,11 @@ export interface SharedStacksModule {
   service: SharedStackService
 }
 
+/** The preflight feature's service, present only when the host-probe seam is wired (local facade). */
+export interface PreflightsModule {
+  service: PreflightService
+}
+
 /** The Sandbox feature's services, present only when its repositories are wired. */
 export interface SandboxModule {
   /** Management CRUD (prompt versions, fixtures, experiments). */
@@ -1141,6 +1159,8 @@ export interface Core {
   mergePresets?: MergePresetsModule
   /** Present only when the shared-stack repository is wired (see CoreDependencies). */
   sharedStacks?: SharedStacksModule
+  /** Present only when the host-probe seam is wired (local facade — see CoreDependencies). */
+  preflight?: PreflightsModule
   /** Present only when the Sandbox repositories are wired (see CoreDependencies). */
   sandbox?: SandboxModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
@@ -1406,6 +1426,7 @@ function createEnvironmentsModule(
   provisioningLog: ProvisioningLogRecorder | undefined,
   eventPublisher: ExecutionEventPublisher | undefined,
   sharedStackService: SharedStackService | undefined,
+  preflightService: PreflightService | undefined,
 ): EnvironmentsModule | undefined {
   const { environmentConnectionRepository, environmentRegistryRepository, secretCipher } = deps
   if (!environmentConnectionRepository || !environmentRegistryRepository || !secretCipher) {
@@ -1523,6 +1544,10 @@ function createEnvironmentsModule(
     ...(sharedStackService
       ? { ensureSharedStacks: (ws, refs) => sharedStackService.ensureRefsUp(ws, refs) }
       : {}),
+    // A compose stack recipe's `prerequisites` are re-run at provision start through the preflight
+    // service, whose host probes exist only on the local facade; absent ⇒ a recipe that declares
+    // them fails loudly instead of silently skipping a machine-prerequisite gate.
+    ...(preflightService ? { runPreflights: (_ws, refs) => preflightService.run(refs) } : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
   const teardownService = new EnvironmentTeardownService({
@@ -2066,6 +2091,17 @@ function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | 
 }
 
 /**
+ * Assemble the preflight module when the host-probe seam is present — wired ONLY on the local
+ * facade (a host Docker daemon), the documented compose runtime-binding exception. Absent elsewhere
+ * ⇒ the preflight API 503s and a stack recipe that declares `prerequisites` fails loudly at
+ * provision (rather than silently skipping a declared machine-prerequisite gate).
+ */
+function createPreflightModule(deps: CoreDependencies): PreflightsModule | undefined {
+  if (!deps.preflightHostProbes) return undefined
+  return { service: new PreflightService({ hostProbes: deps.preflightHostProbes }) }
+}
+
+/**
  * Assemble the Sandbox module when its five repositories are present (both runtime
  * facades wire them together). Reuses the requirements reviewer's inline model config —
  * the per-scope provider resolver, the routing default ref, and the block-model resolver
@@ -2382,11 +2418,16 @@ export function createCore(dependencies: CoreDependencies): Core {
   // runtime-symmetric (present on every facade); the lifecycle only runs where a host daemon is
   // wired (`composeRuntime` — the local facade), else `ensureRefsUp` returns a clean error.
   const sharedStacks = createSharedStacksModule(dependencies)
+  // Built before the environments module so a compose stack recipe's `prerequisites` are re-run at
+  // provision start through this service. The host probes exist only on the local facade; absent ⇒
+  // a recipe that declares prerequisites fails loudly (the preflight API 503s too).
+  const preflight = createPreflightModule(dependencies)
   const environments = createEnvironmentsModule(
     dependencies,
     provisioningLogRecorder,
     executionEventPublisher,
     sharedStacks?.service,
+    preflight?.service,
   )
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
@@ -2625,6 +2666,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(slack ? { slack } : {}),
     ...(mergePresets ? { mergePresets } : {}),
     ...(sharedStacks ? { sharedStacks } : {}),
+    ...(preflight ? { preflight } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),

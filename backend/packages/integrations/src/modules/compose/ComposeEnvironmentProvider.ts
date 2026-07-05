@@ -10,7 +10,8 @@ import type {
   ProvisionedEnvironment,
   RunRepoContext,
 } from '@cat-factory/kernel'
-import type { RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import type { PreflightRef, RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
+import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import {
   type ComposeEnvironmentConfig,
   type ComposeRuntime,
@@ -483,6 +484,12 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     const hostCmdIssue = this.checkHostCommandsAllowed(recipe, config)
     if (hostCmdIssue) return this.failed(project, hostCmdIssue)
 
+    // Re-run the machine PREREQUISITE checks (VPN / registry login / daemon / disk / mkcert / hosts /
+    // secrets) FIRST — before the daemon / clone / shared-stack work — so a failed required check
+    // fails fast with its remediation instead of a mystery deep inside a 40-image pull.
+    const preflightIssue = await this.runPreflights(req, recipe, record)
+    if (preflightIssue) return this.failed(project, preflightIssue)
+
     const image = config.imageTemplate ? renderTemplate(config.imageTemplate, inputs) : undefined
     const vars = templateVars(inputs, project, image)
     // The compose invocation env: the templated `envTemplate` plus `COMPOSE_PROFILES`.
@@ -698,6 +705,39 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     return result.ok
       ? { networks: result.networks }
       : { error: `Shared stacks could not be brought up: ${result.error}` }
+  }
+
+  /**
+   * Re-run the recipe's machine PREREQUISITE checks (`recipe.prerequisites`) at provision start,
+   * streaming one provisioning-log step per check, and return a blocking message when any REQUIRED
+   * check fails (with its detail + remediation) — else null. A recipe with no prerequisites is a
+   * no-op. A recipe that DECLARES prerequisites on a deployment where the host-probe runtime isn't
+   * wired (`req.runPreflights` absent — no host daemon) fails loudly rather than silently skipping a
+   * declared safety gate, mirroring `ensureSharedStacks`.
+   */
+  private async runPreflights(
+    req: ProvisionEnvironmentRequest,
+    recipe: StackRecipe,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    const refs = recipe.prerequisites ?? []
+    if (refs.length === 0) return null
+    if (!req.runPreflights) {
+      return `This stack recipe declares preflight prerequisite check(s), but preflight checks are not available on this deployment (they need a host Docker daemon).`
+    }
+    const started = Date.now()
+    const results = await req.runPreflights(refs as PreflightRef[])
+    // Stream each check as its own provisioning-log entry so the "View logs" drawer shows which
+    // prerequisite is red (a `warn` is advisory — logged as a success with a note, not a failure).
+    for (const r of results) {
+      await this.logStep(record, `preflight: ${r.title}`, started, {
+        ok: r.status !== 'fail',
+        ...(r.detail ? { detail: r.status === 'warn' ? `warn: ${r.detail}` : r.detail } : {}),
+        ...(r.status === 'fail' ? { error: r.detail ?? 'failed' } : {}),
+      })
+    }
+    const blocking = preflightBlockingFailures(results)
+    return blocking.length > 0 ? formatPreflightFailure(blocking) : null
   }
 
   /**
