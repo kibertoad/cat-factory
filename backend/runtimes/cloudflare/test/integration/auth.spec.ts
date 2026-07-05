@@ -42,6 +42,8 @@ const INFRASTRUCTURE = {
   },
   // The Worker serves only the self-contained UI-test container, so a browsable preview is off.
   frontendPreview: { supported: false },
+  // The hosted Worker facade governs the account-wide model-family policy.
+  modelPolicy: { supported: true },
 }
 
 function fetchWith(

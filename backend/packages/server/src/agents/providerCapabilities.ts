@@ -113,14 +113,21 @@ export async function resolveWorkspaceCapabilities(
   let modelPolicy: ModelFamilyPolicy | undefined
   const accountSettings = services.accountSettings
   if (services.modelPolicySupported && accountSettings && services.workspaceAccountOf) {
-    const accountId = await services.workspaceAccountOf(workspaceId)
-    if (accountId) {
-      const load = async () => ({
-        policy: (await accountSettings.read(accountId)).config.modelPolicy ?? null,
-      })
-      const cached = services.caches?.accountModelPolicy
-      const { policy } = cached ? await cached.get(accountId, accountId, load) : await load()
-      if (policy && policy.mode !== 'off') modelPolicy = policy
+    try {
+      const accountId = await services.workspaceAccountOf(workspaceId)
+      if (accountId) {
+        const load = async () => ({
+          policy: (await accountSettings.read(accountId)).config.modelPolicy ?? null,
+        })
+        const cached = services.caches?.accountModelPolicy
+        const { policy } = cached ? await cached.get(accountId, accountId, load) : await load()
+        if (policy && policy.mode !== 'off') modelPolicy = policy
+      }
+    } catch {
+      // Account settings aren't always readable — mothership mode delegates org state over an
+      // RPC whose allow-list doesn't yet include the account-settings read (the same limitation
+      // the binary-storage infra probe degrades on). Treat an unreadable policy as "no
+      // restriction" rather than failing run start / the model catalog.
     }
   }
   return {
