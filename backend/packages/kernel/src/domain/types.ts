@@ -25,6 +25,7 @@ export type {
   PipelineAvailability,
   PipelineStep,
   Position,
+  PriorStepOutput,
   PromptFragment,
   PullRequestRef,
   PeerPullRequest,

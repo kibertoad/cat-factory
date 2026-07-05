@@ -1,5 +1,7 @@
 # cat-factory
 
+Website: [www.catfactory.ai](http://www.catfactory.ai)
+
 **A self-hosted platform for designing software on a visual board and having LLM
 agents build it — turning architecture blocks into real, reviewed pull
 requests, with the whole pipeline observable in real time.**

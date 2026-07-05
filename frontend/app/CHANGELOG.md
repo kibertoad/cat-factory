@@ -1,5 +1,28 @@
 # @cat-factory/app
 
+## 0.100.0
+
+### Minor Changes
+
+- f596090: Record successful step outputs in the step-detail "execution history", not just failures.
+
+  A restart-from-step resets the chosen step and every later one, dropping their `output`;
+  previously that successful work was lost and the per-step history could only ever show
+  errors. The run now keeps an `outputHistory` — the positive complement of `failureHistory`
+  — capturing the successful outputs a restart superseded (attributed by step index, bounded
+  in count + per-entry size, riding the run's `detail` JSON with no schema migration). The
+  step-detail overlay renders a merged, newest-first timeline of these superseded outputs and
+  the failed attempts. A plain retry (which re-runs only unfinished steps) records nothing.
+
+### Patch Changes
+
+- 5834659: Explain the "Environment integration is not configured" case in service auto-detect instead of showing the raw backend line.
+
+  When auto-detecting a service's test-environment config, the backend returns a 503 `unavailable` if the ephemeral-environment integration is off for the deployment. The inspector used to surface the terse server message ("Environment integration is not configured"), which read like a failure of the (working) GitHub connection. It now shows a dedicated panel that says exactly what is off, that it is separate from GitHub, how it gets enabled (`ENVIRONMENTS_ENABLED` + an encryption key on the server), and links the environments-integration docs. Copy added to all locales.
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+
 ## 0.99.0
 
 ### Minor Changes

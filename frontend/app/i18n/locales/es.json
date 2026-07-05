@@ -690,7 +690,12 @@
         "urlSource": "Fuente de URL del entorno sugerida: {source}. El gestor del espacio de trabajo la controla; configúrala allí.",
         "namespace": "Los manifiestos fijan el espacio de nombres \"{namespace}\"; se recomienda respetarlo en el gestor del espacio de trabajo.",
         "confidenceHigh": "Detectado",
-        "confidenceLow": "Sugerencia"
+        "confidenceLow": "Sugerencia",
+        "unavailable": {
+          "title": "Los entornos efímeros no están habilitados",
+          "body": "La detección automática lee este repositorio para sugerir una configuración de entorno de prueba (Kubernetes o Docker Compose), pero la integración de entornos efímeros está desactivada en este despliegue. Esto es independiente de tu conexión con GitHub. Quien administre el servidor debe habilitarla (definir ENVIRONMENTS_ENABLED y una clave de cifrado); después, la detección automática y el aprovisionamiento estarán disponibles.",
+          "docs": "Cómo habilitar los entornos efímeros"
+        }
       },
       "customManifestPathHint": "Se rellena con el valor predeterminado del tipo al seleccionarlo. Usa Detectar para localizar un manifiesto existente en el repositorio.",
       "generateManifest": {
@@ -986,6 +991,8 @@
       "hideInfraAttempts": "Ocultar intentos de infraestructura",
       "executionHistory": "Historial de ejecución",
       "hideExecutionHistory": "Ocultar historial de ejecución",
+      "attemptSucceeded": "Correcto",
+      "outputTruncated": "Salida recortada para mantener compacto el historial de ejecución.",
       "editingConclusions": "Editando las conclusiones",
       "editConclusionsPlaceholder": "Edita las conclusiones del agente; tus cambios se guardan cuando apruebas…",
       "noProseOutput": "Este agente no produjo salida en prosa.",
