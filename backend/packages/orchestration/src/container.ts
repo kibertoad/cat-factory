@@ -2144,6 +2144,7 @@ function createTrackerModule(deps: CoreDependencies): TrackerModule | undefined 
 function createRecurringModule(
   deps: CoreDependencies,
   executionService: ExecutionService,
+  executionEventPublisher: ExecutionEventPublisher,
   taskConnectionService?: TaskConnectionService,
 ): RecurringModule | undefined {
   const { pipelineScheduleRepository } = deps
@@ -2162,6 +2163,8 @@ function createRecurringModule(
     // Validates a `bug-intake` pipeline's schedule carries an `issueIntake` config whose source
     // is a connected task source. Absent (no task sources wired) → the presence check still runs.
     taskConnectionService,
+    // Pushes a `block-added` board event when the reused block is created, so it appears live.
+    executionEventPublisher,
   })
   return { service }
 }
@@ -2440,7 +2443,12 @@ export function createCore(dependencies: CoreDependencies): Core {
     executionService.start(ws, blockId, BLUEPRINT_PIPELINE_ID).then(() => undefined),
   )
   const tracker = createTrackerModule(dependencies)
-  const recurring = createRecurringModule(dependencies, executionService, tasks?.connectionService)
+  const recurring = createRecurringModule(
+    dependencies,
+    executionService,
+    executionEventPublisher,
+    tasks?.connectionService,
+  )
   // The initiative EXECUTION LOOP (slice 3): built after the engine (it drives
   // `executionService.start` to spawn tasks), then late-bound into the terminal poke above so a
   // settling child run advances its owning initiative immediately. Present only when initiatives
