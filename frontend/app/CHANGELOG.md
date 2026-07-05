@@ -1,5 +1,41 @@
 # @cat-factory/app
 
+## 0.96.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+- e5b9462: Fix a retried run leaving its stale "Run failed" banner up (and its carried-forward failure history hidden). After a retry replaces a block's failed run with a fresh run under a new id, the execution store's snapshot reconcile was preserving the now-deleted predecessor, which then shadowed the running run in the by-block projection. Drop a cached-only run whose block the incoming snapshot already covers so the banner clears on restart and the "previous errors" history surfaces on the task inspector.
+- d17a2fc: UX papercuts — the requirements & clarity review windows (UX-32/33/34)
+
+  - **UX-32 (P1): the review gate is no longer unadvanceable below `lg`.** The action rail
+    (Proceed / Incorporate / Re-review / Redo / resolve-exceeded) used to live in an
+    `aside` that was `hidden` below the `lg` breakpoint, so on a laptop split-screen or
+    tablet the human could answer findings but had no visible way to advance the gate. The
+    rail is now a right-hand column on wide screens and a bottom action bar below `lg`
+    (never hidden); the purely-informational stats collapse away below `lg` to keep the bar
+    compact.
+  - **UX-33 (P1): typed answers are no longer lost on close.** Closing a review window (X,
+    backdrop, or Escape) now flushes any typed-but-unblurred answer before the view tears
+    down. `useResultView` grew an `onClose` hook so all three close paths flush through one
+    seam; the flush snapshots the review up front so it survives the reactive state going
+    null on close.
+  - **UX-34 (P2): the two review windows now share one save model.** The clarity window
+    auto-saves answers on blur (seeding each textarea from the recorded reply), matching the
+    requirements window, instead of requiring an explicit "Save answer" click — so muscle
+    memory from one no longer silently drops data in the other.
+
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+  - @cat-factory/contracts@0.105.0
+
 ## 0.95.1
 
 ### Patch Changes
