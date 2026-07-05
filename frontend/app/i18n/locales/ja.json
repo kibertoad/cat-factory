@@ -963,6 +963,8 @@
       "companionCapDetail": "自動の再作業をもう1回実行するか、現在の出力を受け入れて次のステップに進むか、タスクを停止してリセットし、入力を編集して再送信してください。",
       "infraAttempts": "インフラの試行",
       "hideInfraAttempts": "インフラの試行を非表示",
+      "executionHistory": "実行履歴",
+      "hideExecutionHistory": "実行履歴を非表示",
       "editingConclusions": "結論を編集中",
       "editConclusionsPlaceholder": "エージェントの結論を編集してください。編集内容は承認時に保存されます…",
       "noProseOutput": "このエージェントは文章出力を生成しませんでした。",

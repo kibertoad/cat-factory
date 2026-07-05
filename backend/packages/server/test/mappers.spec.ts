@@ -376,6 +376,8 @@ describe('rowToExecution', () => {
       hint: null,
       occurredAt: 1,
       lastSubtasks: null,
+      // The step the attempt failed at rides through unchanged (attributes the trail per step).
+      stepIndex: 2,
     }
     const detail = JSON.stringify({
       pipelineId: 'pl_1',

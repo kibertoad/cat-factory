@@ -4520,6 +4520,9 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(exec.failure?.detail).toContain('ECONNREFUSED')
         const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
         expect(deployStep.state).not.toBe('done')
+        // The failure is attributed to the in-flight step (the deployer), so the step-detail
+        // overlay can filter its per-step execution history — and it round-trips through the facade.
+        expect(exec.failure?.stepIndex).toBe(exec.steps.indexOf(deployStep))
         // The failed EnvironmentRecord round-tripped through the facade's registry repo and
         // projects onto the step — the cross-runtime persistence + column-mapping assertion.
         expect(deployStep.environment?.status).toBe('failed')

@@ -963,6 +963,8 @@
       "companionCapDetail": "Wykonaj jeszcze jedną automatyczną rundę przeróbki, przejdź do następnego kroku akceptując bieżący wynik, albo zatrzymaj i zresetuj zadanie, aby edytować dane wejściowe i przesłać ponownie.",
       "infraAttempts": "Próby infrastrukturalne",
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
+      "executionHistory": "Historia wykonania",
+      "hideExecutionHistory": "Ukryj historię wykonania",
       "editingConclusions": "Edytowanie wniosków",
       "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
       "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",

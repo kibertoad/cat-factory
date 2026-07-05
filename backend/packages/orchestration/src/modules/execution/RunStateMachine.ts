@@ -512,6 +512,9 @@ export class RunStateMachine {
       hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
       occurredAt: this.clock.now(),
       lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,
+      // Attribute the failure to the in-flight step so the step-detail overlay can filter its
+      // "execution history" to this step's prior attempts (carried forward on retry unchanged).
+      stepIndex: instance.currentStep,
     }
     await this.executionRepository.markFailed(workspaceId, executionId, failure)
     // Progress reflects how far the pipeline got before failing.

@@ -963,6 +963,8 @@
       "companionCapDetail": "בצע סבב עיבוד אוטומטי נוסף, המשך לשלב הבא תוך קבלת הפלט הנוכחי, או עצור ואפס את המשימה כדי לערוך את הקלטים ולשלוח מחדש.",
       "infraAttempts": "ניסיונות תשתית",
       "hideInfraAttempts": "הסתר ניסיונות תשתית",
+      "executionHistory": "היסטוריית הרצה",
+      "hideExecutionHistory": "הסתר היסטוריית הרצה",
       "editingConclusions": "עריכת המסקנות",
       "editConclusionsPlaceholder": "ערוך את מסקנות הסוכן; העריכות שלך נשמרות כשתאשר…",
       "noProseOutput": "סוכן זה לא הפיק פלט טקסטואלי.",

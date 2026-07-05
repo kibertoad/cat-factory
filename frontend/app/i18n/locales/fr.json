@@ -963,6 +963,8 @@
       "companionCapDetail": "Effectuer un tour de retravail automatique supplémentaire, passer à l'étape suivante en acceptant la sortie actuelle, ou arrêter et réinitialiser la tâche pour modifier les entrées et la resoumettre.",
       "infraAttempts": "Tentatives d'infrastructure",
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
+      "executionHistory": "Historique d'exécution",
+      "hideExecutionHistory": "Masquer l'historique d'exécution",
       "editingConclusions": "Modification des conclusions",
       "editConclusionsPlaceholder": "Modifiez les conclusions de l'agent ; vos modifications sont enregistrées lorsque vous approuvez…",
       "noProseOutput": "Cet agent n'a produit aucune sortie en texte libre.",
