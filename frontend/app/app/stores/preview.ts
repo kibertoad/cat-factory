@@ -57,13 +57,16 @@ export const usePreviewStore = defineStore('preview', () => {
     try {
       const state = await api.getPreview(ws.requireId(), frameId)
       pollErrors.delete(frameId)
+      // Clear any stale error from an earlier failed request/poll so a now-successful fetch
+      // doesn't render a working preview under a leftover error banner.
+      requestError.value[frameId] = undefined
       apply(frameId, state)
     } catch (err) {
       // If we were polling a `starting` preview, a transient error must NOT silently wedge the
       // amber "Starting…" forever with no recovery: keep polling (it self-heals when the runtime
-      // recovers) up to POLL_MAX_ERRORS, then surface the error and stop so the user isn't left
-      // staring at a permanent spinner.
-      if (byFrame.value[frameId]?.status === 'starting') {
+      // recovers) up to POLL_MAX_ERRORS, then give up.
+      const prev = byFrame.value[frameId]
+      if (prev?.status === 'starting') {
         const n = (pollErrors.get(frameId) ?? 0) + 1
         if (n <= POLL_MAX_ERRORS) {
           pollErrors.set(frameId, n)
@@ -73,7 +76,14 @@ export const usePreviewStore = defineStore('preview', () => {
           )
           return
         }
-        requestError.value[frameId] = err instanceof Error ? err.message : String(err)
+        // Gave up: the preview never became reachable through the blips. Flip it out of the amber
+        // "Starting…" into a `failed` state carrying the error (with a Start to retry), rather than
+        // leaving the status claiming "Starting…" while polling has silently stopped.
+        byFrame.value[frameId] = {
+          ...prev,
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
       stopPolling(frameId)
     }

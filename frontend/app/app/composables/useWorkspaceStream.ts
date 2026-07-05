@@ -31,8 +31,10 @@ export function useWorkspaceStream() {
   const apiBase = useRuntimeConfig().public.apiBase
 
   const connected = ref(false)
-  // Have we EVER established a live socket for the current workspace? Drives the
-  // "reconnecting" vs "never connected" distinction in the banner.
+  // Have we EVER been fully live (connected AND reconciled) for the current workspace? Drives the
+  // "reconnecting" vs "never connected" distinction in the banner. Set together with `connected`
+  // AFTER the on-open resync settles — NOT at `onopen` — so the initial resync window (socket open
+  // but not yet announced) can't be mistaken for a re-connection and flash the amber banner.
   const everConnected = ref(false)
   // The very first handshake keeps failing (proxy/firewall blocks WS while REST works, or the
   // ticket mint throws) — the board loaded over REST but will never go live. Flagged after a
@@ -172,7 +174,6 @@ export function useWorkspaceStream() {
 
     socket.onopen = () => {
       attempt = 0
-      everConnected.value = true
       connectionFailed.value = false
       // Resync on (re)connect BEFORE announcing `connected`: any event missed while
       // disconnected is reconciled first. The snapshot carries `bootstrapJobs` +
@@ -196,6 +197,9 @@ export function useWorkspaceStream() {
         // A workspace switch (or stop()) may have happened while the refresh was in
         // flight — don't announce a connection for a socket we've since abandoned.
         if (!stopped && socket && workspace.workspaceId === workspaceId) {
+          // Flip `everConnected` here (not at onopen): only now are we "fully live", so a later
+          // drop reads as a real re-connection while this initial resync window does not.
+          everConnected.value = true
           connected.value = true
         }
       })
