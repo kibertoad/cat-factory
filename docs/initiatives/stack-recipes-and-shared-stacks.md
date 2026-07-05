@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-main pilot)
 
-**Status:** in progress (slices 1–6 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–6 + 8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -403,6 +403,41 @@ only thing that runs without opt-in. This is how `bin/dev-console app setup`'s o
 (composer → seed → migrate → index → health) becomes a recipe without cat-factory hardcoding
 acme knowledge.
 
+> **Landed (slice 8)** — the analyst agent kind end to end. Contract
+> (`contracts/src/environment-analyst.ts`): `AnalystRecipeDraft` (a proposed
+> {@link stackRecipeSchema} + per-field `AnalystRecipeNote` provenance [rationale + `AnalystCitation`
+> > source citations] + a `summary`), a deliberately LENIENT LLM-output shape (`v.fallback`) that
+> degrades field-by-field — a malformed `recipe` drops to `undefined` while the `summary`/`notes`
+> survive — rather than discarding the whole draft (the `bugInvestigation`/`securityAssessment`
+> shape). Agents (`agents/kinds/environment-analyst.ts`): the `environment-analyst` kind, a
+> read-only `container-explore` structured agent (`clone: { branch: 'base' }`, no post-op — its
+> whole product is the JSON on `result.custom`, rendered by `generic-structured`), registered
+> through the public `AgentKindRegistry` seam and pre-loaded by `defaultAgentKindRegistry()`
+> alongside `bug-investigator`/`repro-test`. Its `defineStructuredOutput` derives `agent.output`
+> from the shared contract schema with a hand-written `shapeHint` (the recipe's discriminated-union
+> steps walk poorly) and `failOnUnusableFinal: true` (an empty reasoning-model reply fails the run
+> loudly instead of yielding an empty draft); the read-only guardrail + final-answer-in-reply
+> directives are auto-appended for the container-explore surface. Kernel (`domain/seed.ts`): a
+> seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`,
+> `name: 'Analyze environment'`), mirroring `pl_blueprint` — a single container-explore agent run
+> against a service frame. **Gotchas for slice 7:** (1) the analyst is surfaced to the frontend
+> automatically via the workspace snapshot's `customAgentKinds` (it carries `presentation` with
+> `resultView: 'generic-structured'`), exactly like `repro-test` — NO frontend catalog change, and
+> `isKnownAgentKind` sees it once the snapshot registers custom kinds, so the seeded pipeline isn't
+> flagged. `category: 'design'` puts it in the palette's "Design & research" group. (2) The
+> DRAFT-MERGE (deterministic-detector-wins + provenance) + the "run deep analysis" trigger were
+> DEFERRED to slice 7 (the wizard), where the merge shape is naturally coupled to how the wizard
+> presents it — slice 8 is only the producer. The pure merge logic belongs beside
+> `provision-detect.logic.ts`, keyed on `AnalystRecipeDraft` + `ProvisioningRecommendation`.
+> (3) No persistence change — the draft rides `result.custom` / the execution engine and the recipe
+> rides the existing `provisioning` blob, so no migration and no D1⇄Drizzle work; validation is a
+> unit test in `@cat-factory/agents` (registration, derived output spec, surface directives, schema
+> leniency), not conformance. (4) The wizard runs `pl_environment_analysis` against the picked frame
+> like bootstrap runs `pl_blueprint`; the frame must have a linked repo (execution resolves it via
+> `resolveRepoTarget`). Analyzing an arbitrary user-chosen ref (detection takes `gitRef`) is NOT
+> supported by a frame-scoped pipeline run — if the wizard needs it, an ad-hoc `agent_runs` run
+> (the `env-config-repair` shape) is the alternative, at the cost of a new port triple.
+
 ### 7. Wizard UX (detect → review → preflight → trial → save)
 
 A guided flow in the SPA — new `EnvironmentSetupWizard.vue` family reusing the
@@ -471,22 +506,22 @@ configuration (see validation plan).
 Each slice = one PR; persistence slices land both runtimes + conformance in the same PR;
 changesets per touched package; contracts changes flagged as breaking-is-fine (pre-1.0).
 
-| #   | Slice                                                                                                                                                     | Status | PR     |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
-| 0   | Tracker doc                                                                                                                                               | done   | (this) |
-| 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                  | done   | (this) |
-| 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | done   | (this) |
-| 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | done   | (this) |
-| 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | done   | (this) |
-| 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | done   | (this) |
-| 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | done   | (this) |
-| 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s                              | todo   |        |
-| 8   | **Environment analyst**: agent kind (structured draft recipe) + wizard draft-merge with provenance                                                        | todo   |        |
-| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                            | todo   |        |
-| 10  | **Validation harness**: golden-run script + shared-services public-subset smoke (compose up + consumer attach + health + teardown-keeps-stack)            | todo   |        |
-| S1  | _Stretch_: recipe execution on self-hosted runner pools (heavy stacks for hosted deployments)                                                             | todo   |        |
-| S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                            | todo   |        |
-| S3  | _Stretch_: Windows-host bridge for `host-command` steps (WSL invocation shim)                                                                             | todo   |        |
+| #   | Slice                                                                                                                                                                                                                                                  | Status | PR     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------ |
+| 0   | Tracker doc                                                                                                                                                                                                                                            | done   | (this) |
+| 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                                                                                                               | done   | (this) |
+| 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests                                                                                                       | done   | (this) |
+| 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot)                                                                                              | done   | (this) |
+| 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                                                                                                                           | done   | (this) |
+| 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                                                                                                                    | done   | (this) |
+| 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                                                                                                             | done   | (this) |
+| 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s — **incl. the analyst draft-merge (deterministic-wins + provenance) + "run deep analysis" trigger deferred from slice 8** | todo   |        |
+| 8   | **Environment analyst**: agent kind (structured draft recipe on `result.custom`) + `AnalystRecipeDraft` contract + seeded `pl_environment_analysis` pipeline (draft-merge moved to slice 7)                                                            | done   | (this) |
+| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                                                                                                                         | todo   |        |
+| 10  | **Validation harness**: golden-run script + shared-services public-subset smoke (compose up + consumer attach + health + teardown-keeps-stack)                                                                                                         | todo   |        |
+| S1  | _Stretch_: recipe execution on self-hosted runner pools (heavy stacks for hosted deployments)                                                                                                                                                          | todo   |        |
+| S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                                                                                                                         | todo   |        |
+| S3  | _Stretch_: Windows-host bridge for `host-command` steps (WSL invocation shim)                                                                                                                                                                          | todo   |        |
 
 ## Validation plan (no human testing)
 
