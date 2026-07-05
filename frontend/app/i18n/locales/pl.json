@@ -2277,7 +2277,7 @@
         "remote-kubernetes": "Zdalny Kubernetes"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą, wygeneruj jego token poleceniem `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) i wklej go poniżej. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
+        "localK3sHint": "Wstępnie wypełnione dla lokalnego klastra k3s/k3d/kind na tym komputerze. Powiąż ServiceAccount z rolą i wklej poniżej token o długim czasie ważności. Pamiętaj, że zwykły token z `kubectl create token NAME -n NAMESPACE` wygasa po 1 godzinie: dodaj `--duration=720h`, aby wydłużyć jego ważność, albo utwórz niewygasający Secret kubernetes.io/service-account-token i odczytaj go. Następnie wybierz sposób ustalania adresu URL środowiska i zmień URL serwera API, jeśli Twój klaster nasłuchuje na innym porcie.",
         "autoSetup": {
           "title": "Automatyczna konfiguracja przez CLI",
           "description": "Uruchom to w terminalu, aby wykryć lub udostępnić lokalny klaster, wygenerować token ServiceAccount i otworzyć ten formularz wstępnie wypełniony. Wklej wyświetlony token, a następnie kliknij Przetestuj i Zapisz."

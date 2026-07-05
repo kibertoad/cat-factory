@@ -2277,7 +2277,7 @@
         "remote-kubernetes": "Kubernetes remoto"
       },
       "kubernetesEngine": {
-        "localK3sHint": "Precargado para un clúster local k3s/k3d/kind en esta máquina. Vincula una ServiceAccount a un rol, genera su token con `kubectl create token NAME -n NAMESPACE` (Kubernetes 1.24+) y pégalo abajo. Luego elige cómo se deriva la URL del entorno y edita la URL del API server si tu clúster escucha en otro puerto.",
+        "localK3sHint": "Precargado para un clúster local k3s/k3d/kind en esta máquina. Vincula una ServiceAccount a un rol y pega abajo un token de larga duración. Ten en cuenta que un token de `kubectl create token NAME -n NAMESPACE` simple caduca en 1 hora: añade `--duration=720h` para que dure más, o crea un Secret kubernetes.io/service-account-token que no caduca y léelo. Luego elige cómo se deriva la URL del entorno y edita la URL del API server si tu clúster escucha en otro puerto.",
         "autoSetup": {
           "title": "Configuración automática con la CLI",
           "description": "Ejecútalo en tu terminal para detectar o aprovisionar un clúster local, generar un token de ServiceAccount y abrir este formulario ya rellenado. Pega el token que muestra y luego pulsa Probar y Guardar."
