@@ -531,8 +531,13 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # Pass the shard index + denominator via env (not inline `${{ }}` in the script body),
+      # so there's no template-injection surface — matching the `scope`/`shards` steps.
       - name: Run worker shard
-        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/worker exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Every non-worker package that needs NO database: the pure-unit suites
   # (orchestration, integrations, server, agents, gates, …) plus the frontend layer.
@@ -648,10 +653,15 @@ jobs:
       # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
       # two facades, the mothership-mode config, and their parallel workers never collide. Each
       # package's spec files are partitioned across the shards by vitest's --shard.
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
       - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
         run: |
-          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }}
-          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }}
+          pnpm --filter @cat-factory/node-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
+          pnpm --filter @cat-factory/local-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
@@ -742,8 +752,13 @@ jobs:
           echo "::error::Postgres did not become ready"
           exit 1
 
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
       - name: Run e2e shard
-        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard="$SHARD/$SHARD_TOTAL"
 
       # A red shard fails loudly on its own (the step above exits non-zero, incl. on a flaky
       # retry via `failOnFlakyTests`), so there is no combined-report merge job — the diagnosis
