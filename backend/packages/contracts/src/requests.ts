@@ -4,7 +4,7 @@ import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { testerQualityConfigSchema, writebackOverrideSchema } from './entities.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
-import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,

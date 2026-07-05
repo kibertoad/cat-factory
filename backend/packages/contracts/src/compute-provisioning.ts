@@ -1,7 +1,10 @@
 import * as v from 'valibot'
 
 // ---------------------------------------------------------------------------
-// Container provisioning vocabulary.
+// Container COMPUTE vocabulary — where a service's container jobs run and at what
+// size. Distinct from ENVIRONMENT provisioning (the ephemeral-env provider config in
+// `environments.ts` / the event log in `provisioning-logs.ts`): this file is purely
+// the compute-target + sizing vocabulary a dispatch resolves against.
 //
 // We do NOT provision compute on AWS/GCP/Azure ourselves — an org's self-hosted
 // runner pool does that. What we own is a small, cloud-neutral vocabulary:

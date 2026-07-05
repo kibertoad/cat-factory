@@ -154,8 +154,9 @@ Persisted on the service frame like today; resolved up the frame chain
 contracts. Autodetection and the analyst only _recommend_ these fields; the provider keys purely
 on persisted config (the build-flag rule).
 
-> **Landed (slice 1)** in `backend/packages/contracts/src/environments.ts`: `stackRecipeSchema`
-> (`StackRecipe`) on `serviceProvisioning.recipe`, composed of `recipeStepSchema` (`RecipeStep`,
+> **Landed (slice 1)** in `backend/packages/contracts/src/stack-recipes.ts` (wired onto
+> `serviceProvisioning.recipe` in `environments.ts`): `stackRecipeSchema`
+> (`StackRecipe`), composed of `recipeStepSchema` (`RecipeStep`,
 > kinds `compose-exec` / `copy-file` / `wait-http` / `wait-file` / `host-command`, each with a
 > per-step `timeoutMs`; `compose-exec` seed import pipes a dump via `stdinFile`),
 > `recipeHealthGateSchema` (`RecipeHealthGate` — `compose-healthy` default / `http` /
