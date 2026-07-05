@@ -594,23 +594,33 @@ export function seedPipelines(): Pipeline[] {
       // produces a NEW document (PRD / RFC / design / ADR / technical reference / runbook /
       // research report — driven by the task's `docKind`).
       //
-      //   doc-researcher → investigate the topic, prior art and linked context (inline)
-      //   doc-outliner   → propose a kind-appropriate outline (inline) — HUMAN GATE: the
-      //                    cheapest, highest-leverage checkpoint is on the structure
-      //   doc-writer     → write the document as Markdown and open a PR (container-coding)
-      //   doc-reviewer   → the writer's companion: rate the draft and loop it back for rework
-      //                    below threshold (AI-to-AI convergence) — HUMAN GATE on the converged
-      //                    draft, whose feedback the finalizer folds in via the revision context
-      //   doc-finalizer  → final editorial pass on the PR branch (container-coding, no new PR)
-      //   doc-quality    → deterministic structural gate (required sections / placeholders /
-      //                    links / heading hierarchy); loops the `doc-fixer` on a red verdict
+      //   doc-researcher  → investigate the topic, prior art and linked context (inline)
+      //   doc-outliner    → propose a kind-appropriate outline (inline)
+      //   doc-interviewer → converse with the human to refine scope/audience/structure — an
+      //                     inline LLM that PARKS the run on a decision-wait while they answer
+      //                     through the interview window, then synthesizes a refined authoring
+      //                     brief the writer starts from (WS5). Replaces the old binary outline
+      //                     human gate with an iterative Q&A; parks via its OWN controller (not a
+      //                     `gates[]` human gate — hence `false` at its index, like the
+      //                     initiative interviewer)
+      //   doc-writer      → write the document as Markdown and open a PR (container-coding)
+      //   doc-reviewer    → the writer's companion: rate the draft and loop it back for rework
+      //                     below threshold (AI-to-AI convergence) — HUMAN GATE on the converged
+      //                     draft, whose feedback the finalizer folds in via the revision context
+      //   doc-finalizer   → final editorial pass on the PR branch (container-coding, no new PR)
+      //   doc-quality     → deterministic structural gate (required sections / placeholders /
+      //                     links / heading hierarchy); loops the `doc-fixer` on a red verdict
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as a code pipeline
       id: 'pl_document',
       name: 'Author a document',
-      version: 2,
+      // Slice WS5 inserted the interactive `doc-interviewer` after the outliner and replaced
+      // the outline's binary human gate with its iterative loop; bump the catalog version so
+      // workspaces on the v2 shape get the reseed offer.
+      version: 3,
       agentKinds: [
         'doc-researcher',
         'doc-outliner',
+        'doc-interviewer',
         'doc-writer',
         'doc-reviewer',
         'doc-finalizer',
@@ -619,10 +629,11 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Human gates on the outline (index 1) and on the converged review (`doc-reviewer`,
-      // index 3, after its rework loop clears the bar). `doc-quality` is a POLLING gate (auto,
-      // not a human checkpoint), so its flag is false like ci/conflicts. Everything else self-drives.
-      gates: [false, true, false, true, false, false, false, false, false],
+      // The interactive `doc-interviewer` (index 2) parks via its own controller, NOT a `gates[]`
+      // human gate (hence `false`), so the only remaining `gates[]` human checkpoint is on the
+      // converged review (`doc-reviewer`, index 4, after its rework loop clears the bar).
+      // `doc-quality` is a POLLING gate (auto), so its flag is false like ci/conflicts.
+      gates: [false, false, false, false, true, false, false, false, false, false],
     },
     {
       // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, the

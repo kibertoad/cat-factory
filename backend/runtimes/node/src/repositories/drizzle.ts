@@ -65,6 +65,9 @@ import type {
   RequirementReviewItem,
   RequirementRecommendation,
   RequirementReviewRepository,
+  DocInterviewSession,
+  DocInterviewQa,
+  DocInterviewRepository,
   KaizenGrading,
   KaizenGradingStatus,
   KaizenGradingRepository,
@@ -180,6 +183,7 @@ import {
   pipelineSchedules,
   pipelines,
   requirementReviews,
+  docInterviewSessions,
   kaizenGradings,
   kaizenVerifiedCombos,
   clarityReviews,
@@ -2531,6 +2535,103 @@ export class DrizzleRequirementReviewRepository implements RequirementReviewRepo
   }
 }
 
+type DocInterviewRow = typeof docInterviewSessions.$inferSelect
+
+function rowToDocInterviewSession(row: DocInterviewRow): DocInterviewSession {
+  return {
+    id: row.id,
+    blockId: row.block_id,
+    status: row.status as DocInterviewSession['status'],
+    round: row.round,
+    maxRounds: row.max_rounds,
+    qa: parseJsonArray<DocInterviewQa>(row.qa),
+    brief: row.brief,
+    model: row.model,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+/**
+ * Interactive document-interview sessions over Postgres (the Drizzle mirror of the Worker's
+ * `D1DocInterviewRepository`, migration 0040). The Q&A live as a JSON array in `qa`; the service
+ * keeps at most one live session per block, so `getByBlock` returns the latest. Behaviourally
+ * identical to the D1 repo so the cross-runtime conformance suite asserts the same interview
+ * brief substitution against both stores.
+ */
+export class DrizzleDocInterviewRepository implements DocInterviewRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async getByBlock(workspaceId: string, blockId: string): Promise<DocInterviewSession | null> {
+    const rows = await this.db
+      .select()
+      .from(docInterviewSessions)
+      .where(
+        and(
+          eq(docInterviewSessions.workspace_id, workspaceId),
+          eq(docInterviewSessions.block_id, blockId),
+        ),
+      )
+      .orderBy(desc(docInterviewSessions.created_at))
+      .limit(1)
+    return rows[0] ? rowToDocInterviewSession(rows[0]) : null
+  }
+
+  async get(workspaceId: string, id: string): Promise<DocInterviewSession | null> {
+    const rows = await this.db
+      .select()
+      .from(docInterviewSessions)
+      .where(
+        and(eq(docInterviewSessions.workspace_id, workspaceId), eq(docInterviewSessions.id, id)),
+      )
+      .limit(1)
+    return rows[0] ? rowToDocInterviewSession(rows[0]) : null
+  }
+
+  async upsert(workspaceId: string, session: DocInterviewSession): Promise<void> {
+    const values = {
+      workspace_id: workspaceId,
+      id: session.id,
+      block_id: session.blockId,
+      status: session.status,
+      round: session.round,
+      max_rounds: session.maxRounds,
+      qa: JSON.stringify(session.qa ?? []),
+      brief: session.brief,
+      model: session.model,
+      created_at: session.createdAt,
+      updated_at: session.updatedAt,
+    }
+    await this.db
+      .insert(docInterviewSessions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [docInterviewSessions.workspace_id, docInterviewSessions.id],
+        set: {
+          block_id: values.block_id,
+          status: values.status,
+          round: values.round,
+          max_rounds: values.max_rounds,
+          qa: values.qa,
+          brief: values.brief,
+          model: values.model,
+          updated_at: values.updated_at,
+        },
+      })
+  }
+
+  async deleteByBlock(workspaceId: string, blockId: string): Promise<void> {
+    await this.db
+      .delete(docInterviewSessions)
+      .where(
+        and(
+          eq(docInterviewSessions.workspace_id, workspaceId),
+          eq(docInterviewSessions.block_id, blockId),
+        ),
+      )
+  }
+}
+
 type KaizenGradingRow = typeof kaizenGradings.$inferSelect
 
 function rowToKaizenGrading(row: KaizenGradingRow): KaizenGrading {
@@ -4236,6 +4337,7 @@ export interface CoreRepositories {
   serviceRepository: ServiceRepository
   workspaceMountRepository: WorkspaceMountRepository
   requirementReviewRepository: RequirementReviewRepository
+  docInterviewRepository: DocInterviewRepository
   kaizenGradingRepository: KaizenGradingRepository
   kaizenVerifiedComboRepository: KaizenVerifiedComboRepository
   consensusSessionRepository: ConsensusSessionRepository
@@ -4277,6 +4379,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     serviceRepository: new DrizzleServiceRepository(db),
     workspaceMountRepository: new DrizzleWorkspaceMountRepository(db),
     requirementReviewRepository: new DrizzleRequirementReviewRepository(db),
+    docInterviewRepository: new DrizzleDocInterviewRepository(db),
     kaizenGradingRepository: new DrizzleKaizenGradingRepository(db),
     kaizenVerifiedComboRepository: new DrizzleKaizenVerifiedComboRepository(db),
     consensusSessionRepository: new DrizzleConsensusSessionRepository(db),

@@ -26,6 +26,7 @@ export function useWorkspaceStream() {
   const brainstorm = useBrainstormStore()
   const kaizen = useKaizenStore()
   const initiatives = useInitiativesStore()
+  const docInterview = useDocInterviewStore()
   const api = useApi()
   const apiBase = useRuntimeConfig().public.apiBase
 
@@ -108,6 +109,10 @@ export function useWorkspaceStream() {
       // An initiative changed (created, plan ingested, an item settled) — patch the cache
       // so an open tracker window / the board card reflects the transition live.
       initiatives.upsert(event.initiative)
+    } else if (event.type === 'docInterview') {
+      // The interactive document interview advanced (a fresh batch of questions, an answer, or
+      // convergence) — patch the cache so an open interview window reflects it live.
+      docInterview.upsert(event.session)
     }
   }
 

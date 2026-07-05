@@ -548,6 +548,16 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // (`RequirementReviewService.review`). Workspace-scoped on arg0 — completes the repo.
     deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Interactive document-interview sessions (WS5). The doc-authoring RUN PATH reads the
+  // converged brief (`getByBlock`, via the agent-context builder on every doc-writer dispatch),
+  // and the interview window reads/persists as the gate iterates. All workspace-scoped on arg0,
+  // mirroring the requirement-review surface.
+  docInterviewRepository: {
+    getByBlock: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    deleteByBlock: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // The merge lifecycle's kaizen step reads any prior verified model/prompt combo
   // (`getByKey(workspaceId, comboKey)`) to skip re-grading. Workspace-scoped on arg0. The Kaizen
   // screen also lists the whole verified-combo library (`listByWorkspace`, part of the same

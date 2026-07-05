@@ -199,6 +199,7 @@ import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMe
 import { R2BinaryBlobBackend } from './storage/R2BinaryBlobBackend'
 import type { ContentStorageCapability } from '@cat-factory/contracts'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
+import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
@@ -1736,6 +1737,7 @@ function selectRequirementsDeps(
 ): Partial<CoreDependencies> {
   return {
     requirementReviewRepository: new D1RequirementReviewRepository({ db }),
+    docInterviewRepository: new D1DocInterviewRepository({ db }),
     kaizenGradingRepository: new D1KaizenGradingRepository({ db }),
     kaizenVerifiedComboRepository: new D1KaizenVerifiedComboRepository({ db }),
     clarityReviewRepository: new D1ClarityReviewRepository({ db }),

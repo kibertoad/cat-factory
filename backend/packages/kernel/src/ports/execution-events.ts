@@ -4,6 +4,7 @@ import type {
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
+  DocInterviewSession,
   EnvConfigRepairJob,
   ExecutionInstance,
   Initiative,
@@ -119,6 +120,15 @@ export interface ExecutionEventPublisher {
    * leaves it a no-op.
    */
   initiativeChanged?(workspaceId: string, initiative: Initiative): Promise<void>
+  /**
+   * A block's interactive document-interview session changed (the interviewer asked a fresh
+   * batch, an answer landed, or it converged) — the mirror of {@link requirementReviewChanged}
+   * for the doc-interview loop (WS5): push the updated session so an open interview window /
+   * inspector reflects the transition live. This is live state, not a summons — the user is
+   * called back via a `notificationChanged` event when input is needed. Optional; a runtime
+   * with no real-time transport wired leaves it a no-op.
+   */
+  docInterviewChanged?(workspaceId: string, session: DocInterviewSession): Promise<void>
 }
 
 /**
@@ -139,4 +149,5 @@ export class NoopEventPublisher implements ExecutionEventPublisher {
   async brainstormSessionChanged(): Promise<void> {}
   async kaizenGradingChanged(): Promise<void> {}
   async initiativeChanged(): Promise<void> {}
+  async docInterviewChanged(): Promise<void> {}
 }

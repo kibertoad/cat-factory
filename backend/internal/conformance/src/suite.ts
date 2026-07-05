@@ -4166,6 +4166,61 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         await repo.clearRole(ws, 'github', 'docs/templates/rfc-b.md')
         expect(await repo.getRoleLink(ws, 'template', 'rfc')).toBeNull()
       })
+
+      it('persists an interactive document-interview session identically (WS5)', async () => {
+        // The interactive-interview session (WS5) is written by the interviewer LLM (off in
+        // conformance), so — like the role-link probe above — exercise the persistence through
+        // the repository directly. Asserting upsert / getByBlock-newest-wins / get / deleteByBlock
+        // here means a facade that maps a column differently (D1 vs Drizzle) fails a shared test.
+        const app = harness.makeApp()
+        const { workspace } = await app.createWorkspace()
+        const ws = workspace.id
+        const repo = app.docInterviewRepository()
+
+        // A fresh block has no session.
+        expect(await repo.getByBlock(ws, 'task_doc')).toBeNull()
+
+        // Round-trip an `awaiting` session with a pending question.
+        await repo.upsert(ws, {
+          id: 'dis-1',
+          blockId: 'task_doc',
+          status: 'awaiting',
+          round: 1,
+          maxRounds: 4,
+          qa: [{ id: 'diq-1', question: 'Who is the audience?', answer: '' }],
+          brief: null,
+          model: 'openai:gpt',
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        })
+        const loaded = await repo.getByBlock(ws, 'task_doc')
+        expect(loaded?.status).toBe('awaiting')
+        expect(loaded?.round).toBe(1)
+        expect(loaded?.qa).toEqual([{ id: 'diq-1', question: 'Who is the audience?', answer: '' }])
+        expect(await repo.get(ws, 'dis-1')).not.toBeNull()
+
+        // An upsert on the same id converges it (answered digest + synthesized brief).
+        await repo.upsert(ws, {
+          id: 'dis-1',
+          blockId: 'task_doc',
+          status: 'done',
+          round: 2,
+          maxRounds: 4,
+          qa: [{ id: 'diq-1', question: 'Who is the audience?', answer: 'Platform engineers' }],
+          brief: '# Authoring brief\n\nWrite for platform engineers.',
+          model: 'openai:gpt',
+          createdAt: 1_000,
+          updatedAt: 2_000,
+        })
+        const done = await repo.getByBlock(ws, 'task_doc')
+        expect(done?.status).toBe('done')
+        expect(done?.brief).toContain('platform engineers')
+        expect(done?.qa[0]?.answer).toBe('Platform engineers')
+
+        // deleteByBlock clears the block's session(s).
+        await repo.deleteByBlock(ws, 'task_doc')
+        expect(await repo.getByBlock(ws, 'task_doc')).toBeNull()
+      })
     })
 
     describe('ephemeral environments', () => {

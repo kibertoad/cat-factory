@@ -191,6 +191,13 @@ export interface AgentRunContext {
      * Absent ⇒ only the built-in exemplars (if any) are surfaced.
      */
     docExemplars?: { title: string; url: string; excerpt: string }[]
+    /**
+     * The synthesized authoring brief from the interactive document-interview session (WS5),
+     * present when the `doc-interviewer` step ran and converged for this task. The doc-writer
+     * folds it into its prompt as the refined spec to write from (in place of the raw outline).
+     * Absent ⇒ no interview ran (or none converged); the writer uses the outline/description.
+     */
+    docInterviewBrief?: string
   }
   /** Outputs produced by earlier steps in the same run, in order. */
   priorOutputs: { agentKind: AgentKind; output: string }[]

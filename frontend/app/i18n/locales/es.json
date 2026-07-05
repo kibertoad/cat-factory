@@ -2645,6 +2645,22 @@
       "body": "Las notificaciones de Slack se detendrán hasta que vuelvas a conectar."
     }
   },
+  "docInterview": {
+    "title": "Refinar el documento",
+    "subtitle": "Responde a las preguntas del entrevistador para dar forma al documento",
+    "intro": "El entrevistador está refinando este documento antes de redactarlo. Responde a sus preguntas para definir el alcance, el público y la estructura, y luego continúa — o procede a redactar con lo que tiene.",
+    "empty": "No se encontró ninguna entrevista para este bloque.",
+    "brief": "Resumen de redacción",
+    "converged": "No hay preguntas pendientes. El entrevistador tiene lo que necesita y el documento se está redactando.",
+    "answerPlaceholder": "Tu respuesta",
+    "hint": "Continuar permite al entrevistador hacer preguntas de seguimiento; Proceder redacta con las respuestas actuales.",
+    "proceed": "Proceder a redactar",
+    "continue": "Continuar",
+    "status": {
+      "awaiting": "Esperando respuestas",
+      "done": "Hecho"
+    }
+  },
   "documents": {
     "picker": {
       "searchPlaceholder": "Busca páginas o pega una URL o ID…",

@@ -2645,6 +2645,22 @@
       "body": "Powiadomienia Slack zostaną wstrzymane do ponownego połączenia."
     }
   },
+  "docInterview": {
+    "title": "Dopracuj dokument",
+    "subtitle": "Odpowiedz na pytania ankietera, aby ukształtować dokument",
+    "intro": "Ankieter dopracowuje ten dokument przed jego napisaniem. Odpowiedz na jego pytania, aby określić zakres, odbiorców i strukturę, a następnie kontynuuj — lub przejdź do redagowania z tym, co ma.",
+    "empty": "Nie znaleziono wywiadu dla tego bloku.",
+    "brief": "Brief redakcyjny",
+    "converged": "Brak oczekujących pytań. Ankieter ma to, czego potrzebuje, a dokument jest redagowany.",
+    "answerPlaceholder": "Twoja odpowiedź",
+    "hint": "Kontynuuj pozwala ankieterowi zadać dodatkowe pytania; Przejdź dalej redaguje z dotychczasowymi odpowiedziami.",
+    "proceed": "Przejdź do redagowania",
+    "continue": "Kontynuuj",
+    "status": {
+      "awaiting": "Oczekiwanie na odpowiedzi",
+      "done": "Gotowe"
+    }
+  },
   "documents": {
     "picker": {
       "searchPlaceholder": "Wyszukaj strony lub wklej adres URL albo identyfikator…",

@@ -84,6 +84,7 @@ export const useWorkspaceStore = defineStore(
         useConsensusStore().reset()
         useGitHubStore().reset()
         useInitiativesStore().reset()
+        useDocInterviewStore().reset()
         // The fragment picker catalog is per-board (the merged tenant catalog), so drop
         // it too — the next inspector open re-fetches it for the switched-to board rather
         // than showing the previous board's (or a raw-id placeholder for) fragments.

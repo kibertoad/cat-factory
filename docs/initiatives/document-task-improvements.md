@@ -1,6 +1,6 @@
 # Initiative: documentation-type task improvements
 
-**Status:** in progress (WS1 + WS2 + WS3 + WS4 landed; only WS5 remains) · **Owner:** core · **Started:** 2026-07-04
+**Status:** complete (WS1–WS5 landed) · **Owner:** core · **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -187,8 +187,8 @@ two: backend loop, then UI).
 | 9   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                                                                                                                                   | WS3        | done   | (this PR) |
 | 10  | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                                                                                                                                         | WS4        | done   | #798      |
 | 11  | Insert gate into `pl_document`/`pl_document_quick` + catalog version bump + conformance assertion                                                                                                                                         | WS4        | done   | #798      |
-| 12  | Interactive session backend: parked decision-wait loop + iteration cap + persistence (D1 ⇄ Drizzle) + conformance                                                                                                                         | WS5        | todo   |           |
-| 13  | Interactive session UI window via the result-view seam + i18n                                                                                                                                                                             | WS5        | todo   |           |
+| 12  | Interactive session backend: parked decision-wait loop + iteration cap + persistence (D1 ⇄ Drizzle) + conformance                                                                                                                         | WS5        | done   | (this PR) |
+| 13  | Interactive session UI window via the result-view seam + i18n                                                                                                                                                                             | WS5        | done   | (this PR) |
 
 ## Conventions & gotchas carried between iterations
 
@@ -278,6 +278,30 @@ placeholder}` in all 8 locales), guarded by exhaustive `Record<DocKindFieldKey, 
   the Integrations hub (`DocumentTemplatesModal.vue`, `documents.templates.*` i18n in all 8 locales);
   no prompt-version bump (the inline `DOC_*_SYSTEM_PROMPT` text is unchanged, and they aren't in
   `PROMPT_VERSIONS`).
+- **WS5 landed as a dedicated `doc-interviewer` step mirroring the initiative interviewer (not
+  conversational gates):** the design decision at slice start was to ADD a dedicated inline gate
+  step (after `doc-outliner`, replacing the outline's binary human gate — `pl_document` v3, step
+  indices shift) rather than overload the existing approve/revise gates, because the
+  `initiative-interviewer` (agent asks questions → human answers → iterate → proceed) is the far
+  closer reference than the requirements-review findings model. It reuses that spine exactly
+  (`RunStateMachine.parkStepOnDecision` / `WorkRunner.signalDecision`, the `step.pendingInterview`
+  re-entry flag, the slow LLM running in the durable driver on resume — NOT the HTTP request), via
+  a new `DocInterviewController` (`modules/execution/`). Unlike the entity-native initiative
+  interview, a document task has no owning row, so the transcript lives in its OWN
+  `doc_interview_sessions` table (D1 `0040` ⇄ Drizzle, conformance repo-round-trip probe
+  `docInterviewRepository()`), and the service (`DocInterviewService`, `modules/docInterview/`) is
+  SELF-CONTAINED (owns the repo + the inline LLM + record methods), mirroring
+  `RequirementReviewService`'s self-containment with the interview Q&A shape. The round cap is a
+  CONSTANT (`DOC_INTERVIEW_MAX_ROUNDS = 4`, mirroring `INITIATIVE_MAX_INTERVIEW_ROUNDS`), not a
+  merge-preset knob — the closest reference uses a constant and it avoids touching the preset
+  schema across both stores. The converged **authoring brief** feeds `doc-writer`/`doc-finalizer`
+  via `AgentContextBuilder.resolveDocAuthoringContext` → `context.block.docInterviewBrief` (guarded
+  by `docInterviews?.getByBlock`, run-path read allow-listed in the mothership RPC). Added
+  `DOC_INTERVIEWER_AGENT_KIND` to `assertNotIterativeGate` so a stray generic approve can't
+  short-circuit the loop. UI is `DocInterviewWindow.vue` via the `doc-interview` result-view id +
+  a `docInterview` workspace event; the kind is registered through `registerAgentKind` like the
+  other doc kinds (its registered system/user prompt is vestigial — the controller builds the real
+  interviewer prompt). `pl_document_quick` is left gate-free (no interviewer).
 - **Editing a versioned prompt means bumping its number** (`agents/kinds/versions.ts` rule);
   any prompt-visible change to the `doc-*` kinds in WS1/WS2 bumps accordingly.
 - **Pipeline catalog edits need a `version` bump** on the touched pipeline (the reseed-offer

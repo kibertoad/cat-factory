@@ -18,6 +18,7 @@ import {
 } from '@cat-factory/conformance'
 import {
   type DrizzleDb,
+  DrizzleDocInterviewRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
   createApp,
@@ -372,6 +373,7 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, SEED_CLOCK).blockRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
+    docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

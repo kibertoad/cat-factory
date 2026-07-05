@@ -5,6 +5,7 @@ import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
   BlockRepository,
+  DocInterviewRepository,
   DocumentRepository,
   DeployCloneTarget,
   EnvironmentProvider,
@@ -179,6 +180,14 @@ export interface ConformanceApp {
    * source); like the other probes, the persistence is exercised through the repository directly.
    */
   documentRepository(): DocumentRepository
+  /**
+   * The facade's interactive document-interview session repository over its real store, so the
+   * suite can assert the WS5 session persistence (upsert / getByBlock-newest-wins / get /
+   * deleteByBlock) identically on D1 and Postgres. A session is created by the interviewer LLM
+   * (off in conformance), so — like the document role-link probe — the persistence is exercised
+   * through the repository directly rather than an HTTP flow.
+   */
+  docInterviewRepository(): DocInterviewRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

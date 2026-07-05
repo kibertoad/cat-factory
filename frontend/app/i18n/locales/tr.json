@@ -2657,6 +2657,22 @@
       "body": "Yeniden bağlanana kadar Slack bildirimleri duracak."
     }
   },
+  "docInterview": {
+    "title": "Belgeyi iyileştir",
+    "subtitle": "Belgeyi şekillendirebilmesi için görüşmecinin sorularını yanıtlayın",
+    "intro": "Görüşmeci, yazılmadan önce bu belgeyi iyileştiriyor. Kapsamı, hedef kitleyi ve yapıyı belirlemek için sorularını yanıtlayın, ardından devam edin — veya mevcut yanıtlarla taslağa geçin.",
+    "empty": "Bu blok için görüşme bulunamadı.",
+    "brief": "Yazım özeti",
+    "converged": "Bekleyen soru yok. Görüşmecinin ihtiyacı olan bilgi var ve belge taslağı hazırlanıyor.",
+    "answerPlaceholder": "Yanıtınız",
+    "hint": "Devam et, görüşmecinin ek sorular sormasını sağlar; İlerle, mevcut yanıtlarla taslak oluşturur.",
+    "proceed": "Taslağa geç",
+    "continue": "Devam et",
+    "status": {
+      "awaiting": "Yanıt bekleniyor",
+      "done": "Tamamlandı"
+    }
+  },
   "documents": {
     "picker": {
       "searchPlaceholder": "Sayfalarda ara veya bir URL/ID yapıştır…",
