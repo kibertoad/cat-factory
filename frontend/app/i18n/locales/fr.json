@@ -277,6 +277,7 @@
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
       "environmentSetup": "Configurer les environnements",
+      "environmentLocalHint": "Les environnements éphémères locaux nécessitent un runtime de déploiement pour exécuter kubectl/kustomize/helm. Définissez {runtime} dans votre .env : le mode natif exécute ces outils sur votre hôte ({native}), le mode conteneur les exécute dans l'image de déploiement ({container}).",
       "showDetail": "Afficher le détail",
       "retrying": "Nouvelle tentative…",
       "history": {

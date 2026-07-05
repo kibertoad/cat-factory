@@ -277,6 +277,7 @@
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
       "environmentSetup": "Ortamları yapılandır",
+      "environmentLocalHint": "Yerel geçici ortamlar, kubectl/kustomize/helm çalıştırmak için bir dağıtım çalışma zamanı gerektirir. .env dosyanızda {runtime} değerini ayarlayın: yerel mod bu araçları ana makinenizde çalıştırır ({native}), konteyner modu bunları dağıtım imajında çalıştırır ({container}).",
       "showDetail": "Ayrıntıyı göster",
       "retrying": "Yeniden deneniyor…",
       "history": {

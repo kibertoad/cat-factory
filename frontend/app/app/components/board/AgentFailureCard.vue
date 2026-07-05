@@ -15,6 +15,7 @@ const props = withDefaults(
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
+const auth = useAuthStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
@@ -25,6 +26,13 @@ const isEnvironmentFailure = computed(() => failure.value?.kind === 'environment
 function openEnvironmentConfig() {
   ui.openProviderConnection('environment')
 }
+// In local mode the deploy runtime is an env-var (not a UI connection), so the Infrastructure
+// tab can't fix a "no deploy runner wired" failure — surface the concrete `.env` fix inline
+// instead of only linking to a tab that won't help. The env-var names are literal examples, so
+// they're passed as interpolation params (kept out of the catalog, per the i18n rules).
+const showEnvironmentLocalHint = computed(
+  () => isEnvironmentFailure.value && auth.localMode?.enabled === true,
+)
 const title = computed(() => {
   // A `dispatch` failure means the container/runner never accepted the job — say so
   // explicitly rather than the generic "Run failed", and show the verbatim provider
@@ -89,6 +97,22 @@ async function retry() {
       :class="compact ? 'text-[10px]' : 'text-[11px]'"
     >
       {{ failure.hint }}
+    </p>
+
+    <!-- Local mode only: the deploy runtime is configured via env vars, not a UI connection, so
+         name the concrete .env fix rather than only pointing at the (unhelpful-here) tab. -->
+    <p
+      v-if="showEnvironmentLocalHint && !compact"
+      class="mt-1 text-[11px] leading-snug text-rose-400/70"
+      data-testid="agent-failure-environment-local-hint"
+    >
+      {{
+        t('board.failure.environmentLocalHint', {
+          runtime: 'LOCAL_DEPLOY_RUNTIME',
+          native: 'LOCAL_DEPLOY_HARNESS_ENTRY',
+          container: 'LOCAL_DEPLOY_IMAGE',
+        })
+      }}
     </p>
 
     <FailureDetail

@@ -298,6 +298,10 @@
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
       "environmentSetup": "Set up environments",
+      "environmentLocalHint": "Local ephemeral environments need a deploy runtime to run kubectl/kustomize/helm. Set {runtime} in your .env: native mode runs those tools on your host ({native}), container mode runs them in the deploy image ({container}).",
+      "@environmentLocalHint": {
+        "description": "Shown only in local mode. The {runtime}/{native}/{container} placeholders are injected literal environment-variable names (LOCAL_DEPLOY_RUNTIME etc.) — keep them as placeholders, do not translate. '.env' is a filename, keep it verbatim."
+      },
       "showDetail": "Show detail",
       "retrying": "Retrying…",
       "history": {
