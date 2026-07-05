@@ -108,7 +108,11 @@
       "spendTitle": "Bu ayki token harcaması",
       "spendLimitReached": "Harcama limitine ulaşıldı, çalıştırmalar duraklatıldı",
       "serviceAdded": "{title} eklendi",
-      "serviceAddFailed": "Servis eklenemedi"
+      "serviceAddFailed": "Servis eklenemedi",
+      "zoomOut": "Uzaklaştır",
+      "zoomIn": "Yakınlaştır",
+      "fitView": "İçeriğe sığdır",
+      "resetZoom": "Yakınlaştırmayı %100'e sıfırla"
     },
     "canvas": {
       "emptyTitle": "Panonuz boş",

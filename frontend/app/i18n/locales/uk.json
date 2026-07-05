@@ -108,7 +108,11 @@
       "spendTitle": "Витрати на токени цього місяця",
       "spendLimitReached": "Досягнуто ліміт витрат: запуски призупинено",
       "serviceAdded": "Додано {title}",
-      "serviceAddFailed": "Не вдалося додати сервіс"
+      "serviceAddFailed": "Не вдалося додати сервіс",
+      "zoomOut": "Зменшити",
+      "zoomIn": "Збільшити",
+      "fitView": "Вписати в область",
+      "resetZoom": "Скинути масштаб до 100%"
     },
     "canvas": {
       "emptyTitle": "Ваша дошка порожня",

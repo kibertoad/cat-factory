@@ -126,7 +126,11 @@
       "spendTitle": "Token spend this month",
       "spendLimitReached": "Spend limit reached — runs paused",
       "serviceAdded": "Added {title}",
-      "serviceAddFailed": "Could not add service"
+      "serviceAddFailed": "Could not add service",
+      "zoomOut": "Zoom out",
+      "zoomIn": "Zoom in",
+      "fitView": "Fit board to content",
+      "resetZoom": "Reset zoom to 100%"
     },
     "canvas": {
       "emptyTitle": "Your board is empty",

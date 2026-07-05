@@ -1,5 +1,19 @@
 # @cat-factory/server
 
+## 0.90.1
+
+### Patch Changes
+
+- Updated dependencies [eef8612]
+- Updated dependencies [bf31df7]
+  - @cat-factory/integrations@0.72.1
+  - @cat-factory/contracts@0.107.0
+  - @cat-factory/agents@0.40.0
+  - @cat-factory/kernel@0.98.0
+  - @cat-factory/orchestration@0.79.1
+  - @cat-factory/prompt-fragments@0.10.13
+  - @cat-factory/spend@0.10.107
+
 ## 0.90.0
 
 ### Minor Changes
