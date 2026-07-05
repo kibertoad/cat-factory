@@ -23,14 +23,14 @@ export default defineConfig({
   // and hiding the failure. We want the opposite: a flaky shard must report RED so the
   // flake is visible. This does NOT block merging — `test-e2e` is deliberately kept out of
   // the aggregated `Test` gate's `needs` (see ci.yml), so a red shard is a signal to
-  // investigate, not a merge stop. Retries stay on so the merged report still records what
-  // eventually passed (the trace/video for diagnosis). Locally `retries: 0` means nothing
-  // is ever flaky, so this has no effect there.
+  // investigate, not a merge stop. Retries stay on so the trace/video for diagnosis is still
+  // captured. Locally `retries: 0` means nothing is ever flaky, so this has no effect there.
   failOnFlakyTests: true,
-  // In CI the suite is sharded across jobs (playwright test --shard=i/N), so each shard
-  // emits a `blob` report; a follow-on `test-e2e-report` job merges them into one HTML
-  // report (`playwright merge-reports`). Locally we just want the live `list` output.
-  reporter: process.env.CI ? [['blob'], ['list']] : 'list',
+  // `list` gives live console output in every environment. In CI the suite is sharded across
+  // jobs (playwright test --shard=i/N) and each shard fails loudly on its own via the step's
+  // exit code; there is no combined-report merge job, so the diagnosis material is the shard
+  // console output plus the per-shard `test-results/` trace + video uploaded as an artifact.
+  reporter: 'list',
   // A live run advances through several durable pg-boss steps; give web-first assertions
   // headroom over the default 5s without resorting to fixed sleeps.
   expect: { timeout: 15_000 },
