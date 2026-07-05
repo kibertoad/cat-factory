@@ -445,15 +445,6 @@ export interface ExecutionServiceDependencies {
    */
   llmObservability?: LlmObservabilityService
   /**
-   * Optional: whether the runtime can run a `docker-compose` service's infra in-container
-   * via Docker-in-Docker. Defaults to `true` (Cloudflare, Node, tests). The local facade
-   * sets it `false` for runtimes without nesting (Apple `container`), which makes
-   * {@link ExecutionService.assertTesterInfraConfigured} refuse a `docker-compose` Tester
-   * run ("limited mode" — steer to an `infraless` service or a runtime that nests
-   * containers) instead of dispatching a job that can't stand its dependencies up.
-   */
-  localTestInfraSupported?: boolean
-  /**
    * Optional: resolve a block's run repo (installation + repo + default branch) bound to
    * a checkout-free {@link RepoFiles} so a registered custom kind's pre/post-op hooks
    * read/commit a targeted subset of the repo WITHOUT a checkout. A facade composes it
@@ -568,8 +559,6 @@ export class ExecutionService {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
-  /** Whether the runtime can run the Tester's local DinD infra (false = limited mode). */
-  private readonly localTestInfraSupported: boolean
   /** Start-time assertion that a container-agent backend is configured (local-mode pool). */
   private readonly assertAgentBackendConfigured?: (workspaceId: string) => Promise<void>
   /**
@@ -635,7 +624,6 @@ export class ExecutionService {
     resolveWorkspaceModelDefault,
     resolveProviderCapabilities,
     inlineHarnessRef,
-    localTestInfraSupported,
     resolveRunRepoContext,
     assertAgentBackendConfigured,
     runInitiatorScope,
@@ -900,7 +888,6 @@ export class ExecutionService {
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.resolveProviderCapabilities = resolveProviderCapabilities
     this.inlineHarnessRef = inlineHarnessRef
-    this.localTestInfraSupported = localTestInfraSupported ?? true
     this.assertAgentBackendConfigured = assertAgentBackendConfigured
     this.resolveBinaryArtifactStore = resolveBinaryArtifactStore
   }
@@ -1031,18 +1018,6 @@ export class ExecutionService {
   }
 
   /**
-   * Guard a Tester pipeline's start on the service frame's declared provisioning being
-   * runnable. The Tester needs SOME way to stand its system up: `infraless` (or no
-   * provisioning declared) runs with no infra; a `docker-compose` service stands its stack
-   * up in-container (so a runtime without Docker-in-Docker is refused — "limited mode"); a
-   * `kubernetes`/`custom` service is provisioned by a workspace handler, so one must resolve
-   * for its type. Throws a {@link ConflictError} (`tester_infra_unsupported` when the local
-   * docker-compose infra can't run — no DinD or no compose path declared,
-   * `provision_type_unhandled` for a missing handler) — surfaced as an actionable message —
-   * otherwise. Passes through when the provisioning seam is unwired (tests / no environment
-   * integration), like the other optional start guards.
-   */
-  /**
    * Guard a run start when the pipeline carries a VISUAL step (`tester-ui` /
    * `visual-confirmation`): such a step exercises a rendered UI, so it only makes sense where
    * there is a UI to drive — a `type: 'frontend'` frame (it owns the app under test) or a frame
@@ -1075,6 +1050,16 @@ export class ExecutionService {
     )
   }
 
+  /**
+   * Guard a Tester pipeline's start on the service frame's declared provisioning being runnable.
+   * The Tester needs SOME way to stand its system up: `infraless` (or none declared) runs with no
+   * infra; `docker-compose`/`kubernetes`/`custom` are all provisioned by the single Deployer step
+   * through a workspace handler, so one must resolve for the service's type. A `frontend` frame is
+   * gated instead on having a live service under test. Throws an actionable {@link ConflictError}
+   * (`tester_infra_unsupported` for the frontend case, `provision_type_unhandled` for a missing
+   * handler); passes through when the provisioning seam is unwired (tests / no environment
+   * integration), like the other optional start guards.
+   */
   private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
     // A `frontend` frame (the self-contained UI-test flow) is gated on having a live service
     // under test, NOT on a provision type — resolved first and short-circuiting the backend
@@ -1089,8 +1074,6 @@ export class ExecutionService {
           hasLiveService: hasLiveServiceBinding(frontend.bindings),
         },
         provisionType: undefined,
-        localTestInfraSupported: this.localTestInfraSupported,
-        hasComposePath: false,
         handlerResolves: true,
       })
       if (decision.ok) return
@@ -1100,41 +1083,34 @@ export class ExecutionService {
     }
     const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
     const provisioning = service?.provisioning
-    // Only `kubernetes`/`custom` need a workspace handler resolved; resolve it lazily and
-    // only when the provisioning seam is wired (else pass through, treating it as resolvable).
-    const needsHandler = provisioning?.type === 'kubernetes' || provisioning?.type === 'custom'
+    // `docker-compose`/`kubernetes`/`custom` are all provisioned by the Deployer via a workspace
+    // handler, so resolve it lazily — and only when the provisioning seam is wired (else pass
+    // through, treating it as resolvable). `infraless`/none needs no handler.
+    const needsHandler =
+      provisioning?.type === 'docker-compose' ||
+      provisioning?.type === 'kubernetes' ||
+      provisioning?.type === 'custom'
     const handlerResolves =
       needsHandler && this.environmentProvisioning
         ? (await this.environmentProvisioning.canProvision(workspaceId, provisioning)).ok
         : true
-    const decision = decideTesterInfra({
-      provisionType: provisioning?.type,
-      localTestInfraSupported: this.localTestInfraSupported,
-      hasComposePath: !!provisioning?.composePath,
-      handlerResolves,
-    })
+    const decision = decideTesterInfra({ provisionType: provisioning?.type, handlerResolves })
     if (decision.ok) return
-    // A docker-compose service that can't stand its infra up (no DinD, or no compose path)
-    // surfaces as the "test infra not configured" conflict; a missing handler is distinct.
-    if (decision.reason === 'limited-local' || decision.reason === 'compose-unconfigured') {
-      throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'tester_infra_unsupported', {
-        infraReason: decision.reason,
-      })
-    }
+    // The only backend-branch refusal is a provision type with no resolvable handler.
     throw new ConflictError(TESTER_INFRA_MESSAGES[decision.reason], 'provision_type_unhandled', {
       provisionType: provisioning!.type,
     })
   }
 
   /**
-   * Fail fast when a `kubernetes`/`custom` service's chain would dead-end at an env-consumer
-   * (tester / human-test / playwright) because no enabled `deployer` provisions the environment
-   * before it — the exact silent dead-end this initiative fixes (the tester picks ephemeral mode
-   * from the provision type but finds no coordinates). The pure ordering check lives in
-   * {@link needsDeployerBeforeConsumer}; here we resolve the service's provision type (only when a
+   * Fail fast when a `docker-compose`/`kubernetes`/`custom` service's chain would dead-end at an
+   * env-consumer (tester / human-test / playwright) because no enabled `deployer` provisions the
+   * environment before it — the exact silent dead-end this initiative fixes (the tester picks
+   * ephemeral mode from the provision type but finds no coordinates). The pure ordering check lives
+   * in {@link needsDeployerBeforeConsumer}; here we resolve the service's provision type (only when a
    * consumer is present, so consumer-less chains skip the read) and translate a positive verdict
-   * into an actionable {@link ConflictError}. Pass-through for compose/infraless/frontend services
-   * and for chains with a deployer before the first consumer.
+   * into an actionable {@link ConflictError}. Pass-through for infraless/frontend services and for
+   * chains with a deployer before the first consumer.
    */
   private async assertDeployerBeforeConsumer(
     workspaceId: string,
@@ -1358,14 +1334,14 @@ export class ExecutionService {
     await this.assertPipelineFrameTypeAllowed(workspaceId, block, shape.agentKinds)
 
     // A chain with a Tester needs the service's declared provisioning to be runnable
-    // (`infraless`/none = no infra, `docker-compose` = DinD, `kubernetes`/`custom` = a handler).
+    // (`infraless`/none = no infra; `docker-compose`/`kubernetes`/`custom` = a workspace handler).
     if (shape.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
 
-    // A `kubernetes`/`custom` service whose enabled chain reaches an env-consumer (tester /
-    // human-test / playwright) with NO enabled `deployer` before it would dead-end inside the
-    // consumer — nothing provisions the environment it reads. Fail fast with an actionable error.
+    // A `docker-compose`/`kubernetes`/`custom` service whose enabled chain reaches an env-consumer
+    // (tester / human-test / playwright) with NO enabled `deployer` before it would dead-end inside
+    // the consumer — nothing provisions the environment it reads. Fail fast with an actionable error.
     await this.assertDeployerBeforeConsumer(workspaceId, block, shape.agentKinds, shape.enabled)
 
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads

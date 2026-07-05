@@ -54,7 +54,10 @@
       "cleared": "{name} effacé",
       "destroyed": "{name} détruit"
     },
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "back": "Retour",
+    "next": "Suivant",
+    "done": "Terminé"
   },
   "nav": {
     "menu": "Menu de navigation",
@@ -75,7 +78,8 @@
     "workspaceSettings": "Paramètres de l’espace de travail",
     "modelConfiguration": "Configuration du modèle",
     "accountSettings": "Paramètres du compte",
-    "infrastructure": "Infrastructure"
+    "infrastructure": "Infrastructure",
+    "environmentSetup": "Configuration d'environnement"
   },
   "board": {
     "toast": {
@@ -698,6 +702,11 @@
           "succeeded": "Manifeste généré et poussé.",
           "failed": "La génération du manifeste a échoué. Réessayez depuis la fenêtre Infrastructure."
         }
+      },
+      "envWizard": {
+        "title": "Configuration d'environnement Compose",
+        "hint": "Configurez la recette, les vérifications préalables et le gestionnaire pour que le Deployer provisionne cette stack.",
+        "open": "Ouvrir l'assistant"
       }
     },
     "agentConfig": {
@@ -4243,6 +4252,80 @@
       "maxConcurrentField": "Taches simultanees maximales",
       "defaultPipelineField": "Pipeline par defaut",
       "failed": "Impossible de mettre a jour l'initiative"
+    }
+  },
+  "environmentWizard": {
+    "title": "Configurer un environnement de test",
+    "subtitle": "Détectez, vérifiez et enregistrez une recette Docker Compose pour que le Deployer la provisionne.",
+    "recommended": "recommandé",
+    "steps": {
+      "pick": "Choisir le service",
+      "review": "Vérifier la recette",
+      "preflight": "Vérifications",
+      "save": "Enregistrer"
+    },
+    "pick": {
+      "intro": "Choisissez le service pour lequel configurer un environnement Docker Compose.",
+      "empty": "Aucun service pour l'instant. Ajoutez-en un d'abord."
+    },
+    "review": {
+      "detectHint": "Détecté depuis le dépôt. Rien n'est appliqué avant l'enregistrement.",
+      "detect": "Redétecter",
+      "noRepo": "Ce service n'a pas de dépôt lié, la détection est impossible.",
+      "detectError": "La détection a échoué. Vérifiez la connexion au dépôt et réessayez.",
+      "provenanceTitle": "D'où vient chaque champ",
+      "service": "Service Compose exposé",
+      "servicePlaceholder": "p. ex. app",
+      "port": "Port exposé",
+      "composeFiles": "Fichiers Compose",
+      "profiles": "Profils",
+      "seedDumps": "Jeux de données",
+      "seedAdd": "Ajouter une étape d'amorçage",
+      "seedAdded": "Ajouté",
+      "rawEditor": "Modifier la recette brute",
+      "rawApply": "Appliquer"
+    },
+    "analysis": {
+      "title": "Analyse approfondie",
+      "hint": "Lancez l'analyste d'environnement pour ébaucher les étapes de configuration et les contrôles de santé depuis le dépôt.",
+      "run": "Lancer l'analyse",
+      "unavailable": "L'analyse approfondie nécessite un dépôt lié et le pipeline d'analyse.",
+      "failed": "L'exécution de l'analyse a échoué.",
+      "apply": "Appliquer l'ébauche de l'analyste"
+    },
+    "field": {
+      "composeFiles": "Fichiers Compose",
+      "composeProfiles": "Profils",
+      "envFiles": "Fichiers d'environnement",
+      "externalNetworks": "Réseaux externes",
+      "sharedStackRefs": "Stacks partagées",
+      "prerequisites": "Vérifications préalables",
+      "setupSteps": "Étapes de configuration",
+      "healthGate": "Contrôle de santé",
+      "teardownSteps": "Étapes de démontage"
+    },
+    "origin": {
+      "detector": "détecté",
+      "analyst": "analyste",
+      "both": "détecté + analyste"
+    },
+    "preflight": {
+      "intro": "Vérifiez les prérequis de la machine avant le provisionnement.",
+      "run": "Lancer les vérifications",
+      "none": "Cette recette ne déclare aucune vérification préalable.",
+      "unavailable": "Les vérifications préalables s'exécutent sur la machine locale et ne sont pas disponibles sur ce déploiement.",
+      "optional": "facultatif"
+    },
+    "save": {
+      "handlerLabel": "Libellé du gestionnaire",
+      "handlerHint": "Le gestionnaire Docker Compose de l'espace de travail que le Deployer utilise pour provisionner cette stack.",
+      "summary": "Enregistre une recette Docker Compose sur « {frame} » (exposant le service « {service} ») et enregistre le gestionnaire de l'espace de travail.",
+      "saved": "Enregistré. Le Deployer provisionnera cette stack lors de l'exécution d'un pipeline.",
+      "save": "Enregistrer la configuration"
+    },
+    "trial": {
+      "hint": "Provisionnez éventuellement cet environnement maintenant pour tester la recette.",
+      "run": "Provisionnement d'essai"
     }
   }
 }

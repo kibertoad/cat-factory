@@ -95,6 +95,9 @@ const PackageRegistriesPanel = defineAsyncComponent(
 const InfrastructureWindow = defineAsyncComponent(
   () => import('~/components/settings/InfrastructureWindow.vue'),
 )
+const EnvironmentSetupWizard = defineAsyncComponent(
+  () => import('~/components/environments/EnvironmentSetupWizard.vue'),
+)
 const ModelConfigurationPanel = defineAsyncComponent(
   () => import('~/components/settings/ModelConfigurationPanel.vue'),
 )
@@ -373,6 +376,7 @@ watch(
       <ObservabilityConnectionPanel v-if="ui.observabilityConnectionOpen" />
       <PackageRegistriesPanel v-if="ui.packageRegistriesOpen" />
       <InfrastructureWindow v-if="ui.infrastructureOpen" />
+      <EnvironmentSetupWizard v-if="ui.environmentWizardOpen" />
       <ModelConfigurationPanel v-if="ui.modelConfigOpen" />
       <LocalModelEndpointsPanel v-if="ui.localModelsOpen" />
       <SandboxPanel v-if="ui.sandboxOpen" />

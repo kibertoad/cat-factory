@@ -282,6 +282,20 @@ watch(
             >
               {{ t('nav.infrastructure') }}
             </UButton>
+            <!-- Guided detect → review → preflight → save flow for a service frame's
+                 docker-compose provisioning (so the single Deployer stands its env up). -->
+            <UButton
+              block
+              color="primary"
+              variant="soft"
+              size="sm"
+              icon="i-lucide-flask-conical"
+              class="justify-start"
+              data-testid="nav-environment-setup"
+              @click="ui.openEnvironmentSetup()"
+            >
+              {{ t('nav.environmentSetup') }}
+            </UButton>
           </div>
         </section>
       </template>

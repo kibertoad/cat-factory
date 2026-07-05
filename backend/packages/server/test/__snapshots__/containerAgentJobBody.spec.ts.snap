@@ -535,9 +535,7 @@ exports[`ContainerAgentExecutor.buildJobBody (per-kind body shapes) > tester (do
     "githubApiBase": "https://api.github.com",
     "harness": "pi",
     "infra": {
-      "composePath": "docker-compose.yml",
-      "environment": "local",
-      "noInfraDependencies": false,
+      "environment": "ephemeral",
     },
     "jobId": "ex_1-tester-api",
     "mode": "explore",

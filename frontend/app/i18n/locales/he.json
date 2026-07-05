@@ -54,7 +54,10 @@
       "cleared": "{name} נוקה",
       "destroyed": "{name} הושמד"
     },
-    "undo": "בטל"
+    "undo": "בטל",
+    "back": "חזרה",
+    "next": "הבא",
+    "done": "סיום"
   },
   "nav": {
     "menu": "תפריט ניווט",
@@ -75,7 +78,8 @@
     "configuration": "תצורה",
     "workspaceSettings": "הגדרות סביבת עבודה",
     "modelConfiguration": "תצורת מודל",
-    "accountSettings": "הגדרות חשבון"
+    "accountSettings": "הגדרות חשבון",
+    "environmentSetup": "הגדרת סביבה"
   },
   "board": {
     "toast": {
@@ -698,6 +702,11 @@
           "succeeded": "המניפסט נוצר ונדחף.",
           "failed": "הפקת המניפסט נכשלה. נסה שוב מחלון התשתית."
         }
+      },
+      "envWizard": {
+        "title": "הגדרת סביבת Compose",
+        "hint": "הגדירו את המתכון, בדיקות המוכנות והמטפל כדי שה-Deployer יקצה את הסטאק הזה.",
+        "open": "פתיחת אשף"
       }
     },
     "agentConfig": {
@@ -4254,6 +4263,80 @@
       "maxConcurrentField": "מקסימום משימות במקביל",
       "defaultPipelineField": "צינור ברירת מחדל",
       "failed": "לא ניתן לעדכן את היוזמה"
+    }
+  },
+  "environmentWizard": {
+    "title": "הגדרת סביבת בדיקות",
+    "subtitle": "זהו, סקרו ושמרו מתכון Docker Compose כדי שה-Deployer יקצה אותו.",
+    "recommended": "מומלץ",
+    "steps": {
+      "pick": "בחירת שירות",
+      "review": "סקירת מתכון",
+      "preflight": "בדיקות מוכנות",
+      "save": "שמירה"
+    },
+    "pick": {
+      "intro": "בחרו את השירות שעבורו להגדיר סביבת Docker Compose.",
+      "empty": "אין שירותים עדיין. הוסיפו שירות תחילה."
+    },
+    "review": {
+      "detectHint": "זוהה מהמאגר. שום דבר לא מוחל עד שתשמרו.",
+      "detect": "זיהוי מחדש",
+      "noRepo": "לשירות זה אין מאגר מקושר, ולכן הזיהוי אינו יכול לרוץ.",
+      "detectError": "הזיהוי נכשל. בדקו את חיבור המאגר ונסו שוב.",
+      "provenanceTitle": "מהיכן הגיע כל שדה",
+      "service": "שירות Compose חשוף",
+      "servicePlaceholder": "למשל app",
+      "port": "פורט חשוף",
+      "composeFiles": "קובצי Compose",
+      "profiles": "פרופילים",
+      "seedDumps": "קובצי זריעה",
+      "seedAdd": "הוספת שלב זריעה",
+      "seedAdded": "נוסף",
+      "rawEditor": "עריכת מתכון גולמי",
+      "rawApply": "החלה"
+    },
+    "analysis": {
+      "title": "ניתוח מעמיק",
+      "hint": "הריצו את מנתח הסביבה כדי לנסח שלבי הגדרה ובדיקות תקינות מהמאגר.",
+      "run": "הרצת ניתוח",
+      "unavailable": "ניתוח מעמיק דורש מאגר מקושר ואת צינור הניתוח.",
+      "failed": "הרצת הניתוח נכשלה.",
+      "apply": "החלת טיוטת המנתח"
+    },
+    "field": {
+      "composeFiles": "קובצי Compose",
+      "composeProfiles": "פרופילים",
+      "envFiles": "קובצי סביבה",
+      "externalNetworks": "רשתות חיצוניות",
+      "sharedStackRefs": "סטאקים משותפים",
+      "prerequisites": "בדיקות מוכנות",
+      "setupSteps": "שלבי הגדרה",
+      "healthGate": "בדיקת תקינות",
+      "teardownSteps": "שלבי פירוק"
+    },
+    "origin": {
+      "detector": "זוהה",
+      "analyst": "מנתח",
+      "both": "זוהה + מנתח"
+    },
+    "preflight": {
+      "intro": "בדקו את דרישות המכונה לפני ההקצאה.",
+      "run": "הרצת בדיקות",
+      "none": "מתכון זה אינו מצהיר על בדיקות מוכנות.",
+      "unavailable": "בדיקות המוכנות רצות על המכונה המקומית ואינן זמינות בפריסה זו.",
+      "optional": "רשות"
+    },
+    "save": {
+      "handlerLabel": "תווית המטפל",
+      "handlerHint": "מטפל ה-Docker Compose של סביבת העבודה שה-Deployer משתמש בו כדי להקצות את הסטאק הזה.",
+      "summary": "שומר מתכון Docker Compose על \"{frame}\" (חושף את השירות \"{service}\") ורושם את המטפל של סביבת העבודה.",
+      "saved": "נשמר. ה-Deployer יקצה את הסטאק הזה כאשר צינור יריץ אותו.",
+      "save": "שמירת תצורה"
+    },
+    "trial": {
+      "hint": "אפשר להקצות סביבה זו כעת כדי לבדוק את המתכון.",
+      "run": "הקצאת ניסיון"
     }
   }
 }

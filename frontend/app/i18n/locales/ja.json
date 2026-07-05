@@ -54,7 +54,10 @@
       "cleared": "{name} をクリアしました",
       "destroyed": "{name} を破棄しました"
     },
-    "undo": "元に戻す"
+    "undo": "元に戻す",
+    "back": "戻る",
+    "next": "次へ",
+    "done": "完了"
   },
   "nav": {
     "menu": "ナビゲーションメニュー",
@@ -75,7 +78,8 @@
     "configuration": "設定",
     "workspaceSettings": "ワークスペース設定",
     "modelConfiguration": "モデル設定",
-    "accountSettings": "アカウント設定"
+    "accountSettings": "アカウント設定",
+    "environmentSetup": "環境セットアップ"
   },
   "board": {
     "toast": {
@@ -698,6 +702,11 @@
           "succeeded": "マニフェストを生成してプッシュしました。",
           "failed": "マニフェスト生成の実行に失敗しました。インフラウィンドウから再試行してください。"
         }
+      },
+      "envWizard": {
+        "title": "Compose 環境のセットアップ",
+        "hint": "レシピ・プリフライト・ハンドラーを設定して、Deployer がこのスタックをプロビジョニングできるようにします。",
+        "open": "ウィザードを開く"
       }
     },
     "agentConfig": {
@@ -4255,6 +4264,80 @@
       "maxConcurrentField": "最大同時実行タスク数",
       "defaultPipelineField": "既定のパイプライン",
       "failed": "イニシアチブを更新できませんでした"
+    }
+  },
+  "environmentWizard": {
+    "title": "テスト環境をセットアップ",
+    "subtitle": "Docker Compose レシピを検出・確認・保存して、Deployer がプロビジョニングできるようにします。",
+    "recommended": "推奨",
+    "steps": {
+      "pick": "サービス選択",
+      "review": "レシピ確認",
+      "preflight": "プリフライト",
+      "save": "保存"
+    },
+    "pick": {
+      "intro": "Docker Compose 環境をセットアップするサービスを選択します。",
+      "empty": "サービスがまだありません。まずサービスを追加してください。"
+    },
+    "review": {
+      "detectHint": "リポジトリから検出しました。保存するまで何も適用されません。",
+      "detect": "再検出",
+      "noRepo": "このサービスにはリンクされたリポジトリがないため、検出できません。",
+      "detectError": "検出に失敗しました。リポジトリ接続を確認して再試行してください。",
+      "provenanceTitle": "各フィールドの出所",
+      "service": "公開する Compose サービス",
+      "servicePlaceholder": "例: app",
+      "port": "公開ポート",
+      "composeFiles": "Compose ファイル",
+      "profiles": "プロファイル",
+      "seedDumps": "シードダンプ",
+      "seedAdd": "シードステップを追加",
+      "seedAdded": "追加済み",
+      "rawEditor": "生のレシピを編集",
+      "rawApply": "適用"
+    },
+    "analysis": {
+      "title": "詳細分析",
+      "hint": "環境アナリストを実行して、リポジトリからセットアップ手順とヘルスゲートを下書きします。",
+      "run": "分析を実行",
+      "unavailable": "詳細分析にはリンクされたリポジトリと分析パイプラインが必要です。",
+      "failed": "分析の実行に失敗しました。",
+      "apply": "アナリストの下書きを適用"
+    },
+    "field": {
+      "composeFiles": "Compose ファイル",
+      "composeProfiles": "プロファイル",
+      "envFiles": "環境ファイル",
+      "externalNetworks": "外部ネットワーク",
+      "sharedStackRefs": "共有スタック",
+      "prerequisites": "プリフライト",
+      "setupSteps": "セットアップ手順",
+      "healthGate": "ヘルスゲート",
+      "teardownSteps": "ティアダウン手順"
+    },
+    "origin": {
+      "detector": "検出",
+      "analyst": "アナリスト",
+      "both": "検出 + アナリスト"
+    },
+    "preflight": {
+      "intro": "プロビジョニング前にマシンの前提条件を確認します。",
+      "run": "チェックを実行",
+      "none": "このレシピにはプリフライトチェックが宣言されていません。",
+      "unavailable": "プリフライトチェックはローカルマシンで実行され、このデプロイでは利用できません。",
+      "optional": "任意"
+    },
+    "save": {
+      "handlerLabel": "ハンドラーのラベル",
+      "handlerHint": "Deployer がこのスタックのプロビジョニングに使う、ワークスペースの Docker Compose ハンドラー。",
+      "summary": "「{frame}」に Docker Compose レシピを保存し（サービス「{service}」を公開）、ワークスペースハンドラーを登録します。",
+      "saved": "保存しました。パイプラインが実行されると Deployer がこのスタックをプロビジョニングします。",
+      "save": "設定を保存"
+    },
+    "trial": {
+      "hint": "レシピをテストするため、この環境を今すぐプロビジョニングすることもできます。",
+      "run": "お試しプロビジョニング"
     }
   }
 }

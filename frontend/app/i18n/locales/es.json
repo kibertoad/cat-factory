@@ -54,7 +54,10 @@
       "cleared": "{name} borrado",
       "destroyed": "{name} destruido"
     },
-    "undo": "Deshacer"
+    "undo": "Deshacer",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "done": "Listo"
   },
   "nav": {
     "menu": "Menú de navegación",
@@ -75,7 +78,8 @@
     "workspaceSettings": "Ajustes del espacio de trabajo",
     "modelConfiguration": "Configuración del modelo",
     "accountSettings": "Ajustes de la cuenta",
-    "infrastructure": "Infraestructura"
+    "infrastructure": "Infraestructura",
+    "environmentSetup": "Configuración de entorno"
   },
   "board": {
     "toast": {
@@ -698,6 +702,11 @@
           "succeeded": "Manifiesto generado y subido.",
           "failed": "La generación del manifiesto falló. Vuelve a intentarlo desde la ventana de Infraestructura."
         }
+      },
+      "envWizard": {
+        "title": "Configuración de entorno Compose",
+        "hint": "Configura la receta, las comprobaciones previas y el gestor para que el Deployer aprovisione este stack.",
+        "open": "Abrir asistente"
       }
     },
     "agentConfig": {
@@ -4243,6 +4252,80 @@
       "maxConcurrentField": "Tareas concurrentes maximas",
       "defaultPipelineField": "Pipeline por defecto",
       "failed": "No se pudo actualizar la iniciativa"
+    }
+  },
+  "environmentWizard": {
+    "title": "Configurar un entorno de pruebas",
+    "subtitle": "Detecta, revisa y guarda una receta de Docker Compose para que el Deployer la aprovisione.",
+    "recommended": "recomendado",
+    "steps": {
+      "pick": "Elegir servicio",
+      "review": "Revisar receta",
+      "preflight": "Comprobaciones",
+      "save": "Guardar"
+    },
+    "pick": {
+      "intro": "Elige el servicio para el que configurar un entorno de Docker Compose.",
+      "empty": "Aún no hay servicios. Añade uno primero."
+    },
+    "review": {
+      "detectHint": "Detectado del repositorio. No se aplica nada hasta que guardes.",
+      "detect": "Volver a detectar",
+      "noRepo": "Este servicio no tiene repositorio vinculado, así que no puede detectarse.",
+      "detectError": "La detección falló. Revisa la conexión del repositorio e inténtalo de nuevo.",
+      "provenanceTitle": "De dónde viene cada campo",
+      "service": "Servicio Compose expuesto",
+      "servicePlaceholder": "p. ej. app",
+      "port": "Puerto expuesto",
+      "composeFiles": "Archivos Compose",
+      "profiles": "Perfiles",
+      "seedDumps": "Volcados de datos",
+      "seedAdd": "Añadir paso de carga",
+      "seedAdded": "Añadido",
+      "rawEditor": "Editar receta en bruto",
+      "rawApply": "Aplicar"
+    },
+    "analysis": {
+      "title": "Análisis profundo",
+      "hint": "Ejecuta el analista de entorno para redactar pasos de configuración y comprobaciones de salud desde el repositorio.",
+      "run": "Ejecutar análisis",
+      "unavailable": "El análisis profundo necesita un repositorio vinculado y la canalización de análisis.",
+      "failed": "La ejecución del análisis falló.",
+      "apply": "Aplicar borrador del analista"
+    },
+    "field": {
+      "composeFiles": "Archivos Compose",
+      "composeProfiles": "Perfiles",
+      "envFiles": "Archivos de entorno",
+      "externalNetworks": "Redes externas",
+      "sharedStackRefs": "Stacks compartidos",
+      "prerequisites": "Comprobaciones previas",
+      "setupSteps": "Pasos de configuración",
+      "healthGate": "Comprobación de salud",
+      "teardownSteps": "Pasos de desmontaje"
+    },
+    "origin": {
+      "detector": "detectado",
+      "analyst": "analista",
+      "both": "detectado + analista"
+    },
+    "preflight": {
+      "intro": "Comprueba los requisitos de la máquina antes de aprovisionar.",
+      "run": "Ejecutar comprobaciones",
+      "none": "Esta receta no declara comprobaciones previas.",
+      "unavailable": "Las comprobaciones previas se ejecutan en la máquina local y no están disponibles en este despliegue.",
+      "optional": "opcional"
+    },
+    "save": {
+      "handlerLabel": "Etiqueta del gestor",
+      "handlerHint": "El gestor de Docker Compose del espacio de trabajo que el Deployer usa para aprovisionar este stack.",
+      "summary": "Guarda una receta de Docker Compose en \"{frame}\" (exponiendo el servicio \"{service}\") y registra el gestor del espacio de trabajo.",
+      "saved": "Guardado. El Deployer aprovisionará este stack cuando una canalización lo ejecute.",
+      "save": "Guardar configuración"
+    },
+    "trial": {
+      "hint": "Opcionalmente, aprovisiona este entorno ahora para probar la receta.",
+      "run": "Aprovisionamiento de prueba"
     }
   }
 }

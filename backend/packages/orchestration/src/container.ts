@@ -870,15 +870,6 @@ export interface CoreDependencies {
 
   // ---- Local-runtime capability (optional; set by the local facade) ---------
   /**
-   * Whether the deployment's container runtime can run the Tester's LOCAL
-   * docker-compose infra via Docker-in-Docker. Defaults to `true` (Cloudflare, Node,
-   * tests). The local facade sets it from the selected runtime — `false` for Apple
-   * `container` (one VM per container, no nesting) — so the engine refuses a
-   * local-infra Tester run there ("limited mode") instead of dispatching a job that
-   * can't stand its dependencies up.
-   */
-  localTestInfraSupported?: boolean
-  /**
    * Optional: assert the workspace has a usable container-agent backend before a run
    * starts (local mode delegating agents to an unregistered runner pool throws here).
    * Absent → no start-time check (Cloudflare/Node have a fixed backend).

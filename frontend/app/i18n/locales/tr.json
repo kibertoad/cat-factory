@@ -54,7 +54,10 @@
       "cleared": "{name} temizlendi",
       "destroyed": "{name} yok edildi"
     },
-    "undo": "Geri al"
+    "undo": "Geri al",
+    "back": "Geri",
+    "next": "İleri",
+    "done": "Bitti"
   },
   "nav": {
     "menu": "Gezinme menüsü",
@@ -75,7 +78,8 @@
     "configuration": "Yapılandırma",
     "workspaceSettings": "Çalışma alanı ayarları",
     "modelConfiguration": "Model yapılandırması",
-    "accountSettings": "Hesap ayarları"
+    "accountSettings": "Hesap ayarları",
+    "environmentSetup": "Ortam kurulumu"
   },
   "board": {
     "toast": {
@@ -698,6 +702,11 @@
           "succeeded": "Manifest oluşturuldu ve gönderildi.",
           "failed": "Manifest oluşturma çalışması başarısız oldu. Altyapı penceresinden yeniden deneyin."
         }
+      },
+      "envWizard": {
+        "title": "Compose ortam kurulumu",
+        "hint": "Tarifi, ön kontrolleri ve işleyiciyi yapılandırın; böylece Deployer bu yığını sağlar.",
+        "open": "Sihirbazı aç"
       }
     },
     "agentConfig": {
@@ -4255,6 +4264,80 @@
       "maxConcurrentField": "Maks. es zamanli gorev",
       "defaultPipelineField": "Varsayilan pipeline",
       "failed": "Girisim guncellenemedi"
+    }
+  },
+  "environmentWizard": {
+    "title": "Bir test ortamı kur",
+    "subtitle": "Deployer sağlasın diye bir Docker Compose tarifini algıla, gözden geçir ve kaydet.",
+    "recommended": "önerilen",
+    "steps": {
+      "pick": "Servis seç",
+      "review": "Tarifi gözden geçir",
+      "preflight": "Ön kontrol",
+      "save": "Kaydet"
+    },
+    "pick": {
+      "intro": "Docker Compose ortamı kuracağın servisi seç.",
+      "empty": "Henüz servis yok. Önce bir servis ekle."
+    },
+    "review": {
+      "detectHint": "Depodan algılandı. Kaydedene kadar hiçbir şey uygulanmaz.",
+      "detect": "Yeniden algıla",
+      "noRepo": "Bu servisin bağlı bir deposu yok, bu yüzden algılama çalışamaz.",
+      "detectError": "Algılama başarısız oldu. Depo bağlantısını kontrol edip tekrar deneyin.",
+      "provenanceTitle": "Her alanın kaynağı",
+      "service": "Açığa çıkarılan Compose servisi",
+      "servicePlaceholder": "örn. app",
+      "port": "Açığa çıkarılan port",
+      "composeFiles": "Compose dosyaları",
+      "profiles": "Profiller",
+      "seedDumps": "Tohum dökümleri",
+      "seedAdd": "Tohum adımı ekle",
+      "seedAdded": "Eklendi",
+      "rawEditor": "Ham tarifi düzenle",
+      "rawApply": "Uygula"
+    },
+    "analysis": {
+      "title": "Derin analiz",
+      "hint": "Depodan kurulum adımlarını ve sağlık kapılarını taslak olarak çıkarmak için ortam analistini çalıştır.",
+      "run": "Analizi çalıştır",
+      "unavailable": "Derin analiz için bağlı bir depo ve analiz hattı gerekir.",
+      "failed": "Analiz çalışması başarısız oldu.",
+      "apply": "Analist taslağını uygula"
+    },
+    "field": {
+      "composeFiles": "Compose dosyaları",
+      "composeProfiles": "Profiller",
+      "envFiles": "Ortam dosyaları",
+      "externalNetworks": "Dış ağlar",
+      "sharedStackRefs": "Paylaşılan yığınlar",
+      "prerequisites": "Ön kontroller",
+      "setupSteps": "Kurulum adımları",
+      "healthGate": "Sağlık kapısı",
+      "teardownSteps": "Sökme adımları"
+    },
+    "origin": {
+      "detector": "algılandı",
+      "analyst": "analist",
+      "both": "algılandı + analist"
+    },
+    "preflight": {
+      "intro": "Sağlamadan önce makine ön koşullarını kontrol et.",
+      "run": "Kontrolleri çalıştır",
+      "none": "Bu tarif hiçbir ön kontrol tanımlamıyor.",
+      "unavailable": "Ön kontroller yerel makinede çalışır ve bu dağıtımda kullanılamaz.",
+      "optional": "isteğe bağlı"
+    },
+    "save": {
+      "handlerLabel": "İşleyici etiketi",
+      "handlerHint": "Deployer'ın bu yığını sağlamak için kullandığı çalışma alanının Docker Compose işleyicisi.",
+      "summary": "\"{frame}\" üzerine bir Docker Compose tarifi kaydeder (\"{service}\" servisini açığa çıkararak) ve çalışma alanı işleyicisini kaydeder.",
+      "saved": "Kaydedildi. Bir hat çalıştırdığında Deployer bu yığını sağlayacak.",
+      "save": "Yapılandırmayı kaydet"
+    },
+    "trial": {
+      "hint": "Tarifi test etmek için bu ortamı isteğe bağlı olarak şimdi sağlayabilirsin.",
+      "run": "Deneme sağlaması"
     }
   }
 }
