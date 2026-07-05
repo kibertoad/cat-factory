@@ -1,5 +1,48 @@
 # @cat-factory/gates
 
+## 0.3.0
+
+### Minor Changes
+
+- 49b498a: Service connections Phase 4 (= bug-triage Phase C) — multi-PR gates + merge-all. The `ci`,
+  `conflicts` and `merger` tail now operate across ALL of a multi-repo task's pull requests
+  (own-service + peer-service repos from Phase 3), not just the own PR — no runner-image change
+  (the ci-fixer reuses the existing sibling-checkout harness path via a widened `peerRepos` job
+  body).
+
+  - **CI gate** aggregates check runs across every PR: a red check in ANY repo fails the gate,
+    the failing repo(s) are named, and `step.gate.headShas` tracks each PR head. The `ci-fixer`
+    helper now fans out across the sibling checkouts (the `coder`-only multi-repo dispatch is
+    widened to `ci-fixer`) so one fixer round covers every failing repo. `CiStatusReport` becomes
+    per-PR (`repos: RepoCiStatus[]`).
+  - **Conflicts gate** probes mergeability per PR (`MergeabilityReport.repos`); any PR still
+    computing keeps polling, the first conflicted repo is recorded on `step.gate.conflictTarget`.
+    The conflict-resolver stays single-repo.
+  - **Merger** merges every PR in provider-before-consumer order (`orderPrsForMerge`), stopping at
+    the first failure. The task is `done` only when ALL PRs merged; a mid-sequence failure
+    (cross-repo merges are non-atomic) leaves the block `blocked` and raises an enumerated
+    `merge_review` notification (`payload.mergedRepos` / `unmergedRepos`, decision reason
+    `merge_partial`). `PullRequestMerger.mergeForBlock` becomes `mergePullRequests(prs)` returning
+    a `MergeAllOutcome`.
+  - Cross-runtime conformance asserts multi-repo CI aggregation + escalation on both runtimes;
+    the merge-all ordering + provider fan-out are unit-tested.
+  - A partially-merged multi-repo task (block left `blocked`) is now replay-idempotent: a
+    durable-driver retry no longer re-merges the already-merged PRs (which threw and downgraded
+    the block to `pr_ready` + raised a duplicate card).
+  - A conflict on a PEER repo no longer burns the conflict-resolver attempt budget on the
+    own-repo resolver (which can't reach it): the gate declines escalation (`GateProbe.escalatable`)
+    and goes straight to the manual-resolution give-up. Own-repo conflicts are unchanged.
+
+### Patch Changes
+
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+  - @cat-factory/kernel@0.86.0
+
 ## 0.2.88
 
 ### Patch Changes

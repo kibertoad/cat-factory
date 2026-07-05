@@ -1,5 +1,119 @@
 # @cat-factory/app
 
+## 0.88.0
+
+### Minor Changes
+
+- 49b498a: Bug-triage pipeline, Phase E — the `bug-intake` engine step (engine + SPA).
+
+  The recurring bug-triage pipeline's inbound entry point: each scheduled fire pulls ONE matching
+  open issue from the schedule's configured tracker board, claims it, and seeds the reused block
+  from it so every downstream step works that bug. Consumes the Phase D foundations
+  (`searchIssues`, `issueIntake`, `onIssuePickedUp`, `replaceForBlock`); no harness change, no
+  image bump.
+
+  - **`bug-intake` engine step** — a non-LLM one-shot step (the inbound dual of `tracker`),
+    registered as a `StepHandler` in the engine so it never reaches a container. It resolves the
+    schedule's `issueIntake` config by block, searches the source (predicates pushed into the
+    vendor query), dedupes against every already-worked issue in ONE batched projection read,
+    picks the oldest match, imports + **replace-links** it onto the block, rewrites the block's
+    title/description from it, and posts the best-effort "taken by cat-factory" pickup writeback.
+    The read-and-claim logic lives in a new provider-neutral `BugIntakeService`
+    (`@cat-factory/integrations`), wired into the engine only when task sources are configured.
+  - **No-match no-op** — when nothing qualifies (or no task source is wired), the run completes
+    SUCCESSFULLY with every remaining step marked `skipped` (there is nothing to fix) and no
+    notification — the outcome is visible in the schedule's run history. A scoped early-complete
+    that reuses the existing skip/finalize machinery, not a new gate archetype.
+  - **Schedule validation** — `RecurringPipelineService.create`/`update` now require an
+    `issueIntake` config, pointed at a connected task source, whenever the pipeline carries an
+    enabled `bug-intake` step (validated at both boundaries, including clearing the config on an
+    existing bug-intake schedule) — otherwise every fire would silently no-op.
+  - **SPA** — `RecurringPipelineModal.vue` gains an issue-intake section (source picker from the
+    connected task sources, per-vendor board field, and the title/labels/issue-type predicates)
+    shown when the picked pipeline has a `bug-intake` step, with i18n across all locales.
+  - **Conformance** — intake pickup (a matching issue is imported, linked and seeds the block),
+    the no-match no-op (the run completes with the remaining steps skipped), and the
+    missing-config rejection are asserted on every runtime against a fake task source.
+
+  Review fixes folded in:
+
+  - The no-match no-op now finalizes the reused block `done` DIRECTLY instead of via
+    `finalizeBlock`, which for a mergerless bug-triage pipeline would have flipped the block
+    `pr_ready` and raised a spurious `pipeline_complete` "confirm + merge the PR" notification for a
+    PR that does not exist. The conformance no-match test now asserts the `done` status and that no
+    notification is raised.
+  - Schedule intake validation now checks `TaskConnectionService.isOffered` (available AND enabled)
+    rather than `isEnabled`, which defaults ON for a never-connected source and so would have waved
+    through intake from a source with no connection to search.
+  - `PipelineService.update` now rejects enabling a `bug-intake` step on a pipeline whose attached
+    schedules carry no `issueIntake` config (the pipeline-edit dual of the schedule-attach guard).
+  - Reseeding the reused block on pickup also clears the previous fire's `peerPullRequests` so a new
+    bug doesn't inherit a prior bug's connected-repo PRs.
+  - `RecurringPipelineModal.vue`'s bug-intake detection now respects the per-step `enabled` mask,
+    mirroring the backend, and the literal `owner/name` / `bug` / `in-progress` placeholder examples
+    are inlined in the component rather than living (and being mistranslated) in the message catalog.
+
+- c20a69a: feat(initiatives): slice 4 — follow-ups & polish
+
+  Complete the Initiatives feature: a settling spawned-task run's forward-looking
+  follow-ups (and, on failure, its real cause) are harvested onto the initiative
+  tracker at the terminal emit; a human promotes an open follow-up into a new
+  `pending` tracker item or dismisses it, retries/skips/re-scopes items, and retunes
+  the execution policy — all over the existing rev-CAS single-writer path. No new
+  persistence or facade wiring: the curation state rides the initiative `doc` blob
+  (D1 ⇄ Drizzle parity unchanged), and the harvest reuses the in-hand run instance
+  so it costs no extra read.
+
+### Patch Changes
+
+- 49b498a: Bug-triage pipeline, Phase F — structured, multi-repo investigation + clarification.
+
+  The `bug-investigator` is upgraded from a thin prose role into a STRUCTURED, read-only,
+  multi-repo `container-explore` kind whose triage drives the downstream `clarity-review` gate,
+  and the gate learns to seed itself from that triage instead of running its own first LLM pass.
+  Same kind id, so the existing `pl_bugfix` preset inherits the upgrade.
+
+  - **Structured `bug-investigator`** (`@cat-factory/agents`): registered via the public
+    `registerAgentKind` seam (the `security-auditor` shape) with a lenient valibot
+    `bugInvestigation` schema — `clarity` (`clear` | `needs_clarification`), `summary`, ranked
+    `rootCauseHypotheses`, `affectedRepos`, `suggestedReproductions`, and `questions`
+    (non-empty only when clarification is needed). Its structured object lands on `step.custom`
+    (rendered by the stock `generic-structured` view); a built-in post-completion resolver renders
+    a prose digest onto `step.output` so downstream steps read the investigation via `priorOutputs`.
+    The old prose ROLE entry is removed.
+  - **Read-only multi-repo checkouts** (`@cat-factory/server` + `@cat-factory/executor-harness`,
+    image bump): the multi-repo fan-out gate now also fires for `bug-investigator`, and the
+    container-explore job body threads `peerRepos` + the multi-repo prompt section. The harness
+    gains a read-only `runMultiRepoExplore` path — it clones the primary repo PLUS every connected
+    involved-service repo as SIBLING checkouts, runs the agent once at the workspace root, and
+    makes NO edits / commits / PR (a read-only peer carries no `newBranch`/`pr`) — so a
+    cross-service bug is traced across every repo it touches. `PeerRepoSpec.newBranch` is now
+    optional (present for the coding fan-out, absent for the read-only one).
+  - **Clarity gate seeding + auto-pass** (`@cat-factory/orchestration`): when a structured
+    investigator ran upstream, the `clarity-review` gate seeds DETERMINISTICALLY from its triage —
+    no reviewer LLM — auto-passing on `clarity === 'clear'` (advance, no human park, no
+    notification) and seeding one blocking finding per `question` on `needs_clarification` (park
+    for a human, exactly as an LLM reviewer pass would). Because the seed needs no model, the gate
+    now activates whenever the clarity store is wired, and the review/incorporate/re-review LLM
+    paths degrade gracefully when unwired. Mirrors the requirements-review auto-pass pattern.
+  - **Tracker echo on park** (`@cat-factory/kernel` port + `@cat-factory/integrations`): a new
+    best-effort `IssueWritebackProvider.postQuestions` echoes the open questions as a comment on
+    the block's linked tracker issue when the gate parks — answers still arrive in-app (the tracker
+    comment is an echo, not a channel). Not gated on the workspace writeback settings, and a
+    tracker outage never fails the run.
+  - **Conformance**: a two-facade suite drives the investigator → clarity gate flow — `clear`
+    auto-passes straight through to the next step with the digest recorded, and
+    `needs_clarification` parks one finding per question then resumes on dismiss-all + proceed.
+
+  The runner image is bumped for the read-only multi-repo explore path; the three hand-maintained
+  image-tag pins are synced.
+
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+
 ## 0.87.5
 
 ### Patch Changes

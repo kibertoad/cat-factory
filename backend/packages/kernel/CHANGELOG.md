@@ -1,5 +1,155 @@
 # @cat-factory/kernel
 
+## 0.86.0
+
+### Minor Changes
+
+- 49b498a: Bug-triage pipeline, Phase D — issue-intake foundations (ports + persistence).
+
+  The plumbing the upcoming `bug-intake` step (Phase E) drives: a predicate search across the
+  three task-source vendors, the per-schedule intake configuration, the "taken by cat-factory"
+  pickup writeback, and the replace-link that keeps a recurring block's issue context from
+  accumulating across fires. No engine step yet — this phase is ports, vendor implementations,
+  and persistence only.
+
+  - **`TaskSourceProvider.searchIssues` + `IssueIntakeQuery`** (kernel port): open issues on one
+    vendor board matching every predicate (title fragment / labels / issue type), oldest-first,
+    deduped against the already-worked exclusion list. Predicates are pushed into the vendor
+    query wherever expressible — Jira compiles ONE JQL (`statusCategory != Done`, `issuetype`,
+    `labels`, `summary ~`, `issuekey NOT IN`, `ORDER BY created ASC`; excluded ids validated
+    against the key shape so a malformed id can't inject), GitHub compiles search qualifiers
+    (`repo:` `is:open` `type:` `label:` `in:title`, the title fragment quoted as a literal phrase
+    so it can't inject a qualifier) with the API's `created-asc` sort (a new `order` param on
+    `GitHubClient.searchIssues`, honoured by the GitLab-backed client too) and filters the
+    exclusion list case-insensitively from a bounded, paged overscan, Linear compiles a GraphQL
+    `IssueFilter` (team, state type not completed/canceled, per-label `labels.some`,
+    `title.containsIgnoreCase`) asked for oldest-created-first, also paged so a run of
+    already-worked issues at the front can't starve the pickup.
+  - **`PipelineSchedule.issueIntake`** (contracts + both runtimes, kept symmetric): the
+    schedule-scoped intake config (`source`, per-vendor `board` scope, `predicates`, the GitHub
+    `inProgressLabel`) as a new `pipeline_schedules.issue_intake` JSON column — D1 migration
+    `0038_schedule_issue_intake.sql` ⇄ Drizzle schema + generated migration — parsed/serialized
+    by shared `@cat-factory/server` mapper helpers so the column can't drift, accepted on
+    schedule create/update (PATCH is tri-state: omitted = unchanged, null = clear), and pinned
+    by a cross-runtime conformance round-trip. Requiring it when the pipeline carries a
+    `bug-intake` step is Phase E's schedule validation.
+  - **`IssueWritebackProvider.onIssuePickedUp`**: comments "Taken by cat-factory" (+ run link)
+    on the block's linked issue(s) and marks them in-progress — Jira transitions into the
+    `indeterminate` status category (`pickDoneTransition` generalized into
+    `pickTransitionByCategory`), Linear transitions to the team's `started` state (the Linear
+    state pickers generalized into `pickStateIdByType`), GitHub applies the schedule's
+    `inProgressLabel` (default `in-progress`) via a new `GitHubClient.applyIssueLabel` that
+    creates the label — with the required colour — when absent.
+    Best-effort per issue like the existing hooks, and deliberately NOT gated on the workspace
+    writeback settings — claiming the issue is intake semantics. Wired in both facades.
+  - **`TaskLinkService.replaceForBlock`** + `TaskRepository.unlinkAllFromBlock`: detach every
+    issue linked to the reused block in ONE batched write (D1 ⇄ Drizzle), then link the newly
+    picked issue — so linked context never accumulates across recurring fires.
+
+- 49b498a: Bug-triage pipeline, Phase F — structured, multi-repo investigation + clarification.
+
+  The `bug-investigator` is upgraded from a thin prose role into a STRUCTURED, read-only,
+  multi-repo `container-explore` kind whose triage drives the downstream `clarity-review` gate,
+  and the gate learns to seed itself from that triage instead of running its own first LLM pass.
+  Same kind id, so the existing `pl_bugfix` preset inherits the upgrade.
+
+  - **Structured `bug-investigator`** (`@cat-factory/agents`): registered via the public
+    `registerAgentKind` seam (the `security-auditor` shape) with a lenient valibot
+    `bugInvestigation` schema — `clarity` (`clear` | `needs_clarification`), `summary`, ranked
+    `rootCauseHypotheses`, `affectedRepos`, `suggestedReproductions`, and `questions`
+    (non-empty only when clarification is needed). Its structured object lands on `step.custom`
+    (rendered by the stock `generic-structured` view); a built-in post-completion resolver renders
+    a prose digest onto `step.output` so downstream steps read the investigation via `priorOutputs`.
+    The old prose ROLE entry is removed.
+  - **Read-only multi-repo checkouts** (`@cat-factory/server` + `@cat-factory/executor-harness`,
+    image bump): the multi-repo fan-out gate now also fires for `bug-investigator`, and the
+    container-explore job body threads `peerRepos` + the multi-repo prompt section. The harness
+    gains a read-only `runMultiRepoExplore` path — it clones the primary repo PLUS every connected
+    involved-service repo as SIBLING checkouts, runs the agent once at the workspace root, and
+    makes NO edits / commits / PR (a read-only peer carries no `newBranch`/`pr`) — so a
+    cross-service bug is traced across every repo it touches. `PeerRepoSpec.newBranch` is now
+    optional (present for the coding fan-out, absent for the read-only one).
+  - **Clarity gate seeding + auto-pass** (`@cat-factory/orchestration`): when a structured
+    investigator ran upstream, the `clarity-review` gate seeds DETERMINISTICALLY from its triage —
+    no reviewer LLM — auto-passing on `clarity === 'clear'` (advance, no human park, no
+    notification) and seeding one blocking finding per `question` on `needs_clarification` (park
+    for a human, exactly as an LLM reviewer pass would). Because the seed needs no model, the gate
+    now activates whenever the clarity store is wired, and the review/incorporate/re-review LLM
+    paths degrade gracefully when unwired. Mirrors the requirements-review auto-pass pattern.
+  - **Tracker echo on park** (`@cat-factory/kernel` port + `@cat-factory/integrations`): a new
+    best-effort `IssueWritebackProvider.postQuestions` echoes the open questions as a comment on
+    the block's linked tracker issue when the gate parks — answers still arrive in-app (the tracker
+    comment is an echo, not a channel). Not gated on the workspace writeback settings, and a
+    tracker outage never fails the run.
+  - **Conformance**: a two-facade suite drives the investigator → clarity gate flow — `clear`
+    auto-passes straight through to the next step with the digest recorded, and
+    `needs_clarification` parks one finding per question then resumes on dismiss-all + proceed.
+
+  The runner image is bumped for the read-only multi-repo explore path; the three hand-maintained
+  image-tag pins are synced.
+
+- c20a69a: feat(initiatives): slice 4 — follow-ups & polish
+
+  Complete the Initiatives feature: a settling spawned-task run's forward-looking
+  follow-ups (and, on failure, its real cause) are harvested onto the initiative
+  tracker at the terminal emit; a human promotes an open follow-up into a new
+  `pending` tracker item or dismisses it, retries/skips/re-scopes items, and retunes
+  the execution policy — all over the existing rev-CAS single-writer path. No new
+  persistence or facade wiring: the curation state rides the initiative `doc` blob
+  (D1 ⇄ Drizzle parity unchanged), and the harvest reuses the in-hand run instance
+  so it costs no extra read.
+
+- 49b498a: Service connections Phase 3 — multi-repo coding. The implementer now fans a cross-service
+  change out across every connected involved-service repo, not just the task's own. A new
+  `resolveRepoTargets` resolves the task's own repo PLUS each involved service's repo, deduped
+  by repo (two services in one monorepo collapse into a single checkout with both
+  subdirectories noted; a service co-located in the primary's own repo rides the own-service
+  PR). `ContainerAgentExecutor` builds a `peerRepos` job body + a "Multi-repo workspace" prompt
+  section for the `coder` kind and works at the repo root so it can reach every involved
+  subtree. The executor-harness clones each peer repo as a SIBLING checkout under one workspace
+  root, runs the agent once across all of them, and opens one PR per repo it actually changed.
+  The own-service PR stays on `block.pullRequest`; the peer PRs are recorded on the new
+  `block.peerPullRequests` (`AgentRunResult.peerPullRequests` → engine → JSON column, mirrored
+  on D1 + Drizzle), with an `allPullRequests(block)` helper for the multi-repo-aware readers.
+  Peer clone URLs are host-allowlisted exactly like the primary. Bumps the runner image
+  (`peerRepos` job field + sibling-checkout flow).
+- 49b498a: Service connections Phase 4 (= bug-triage Phase C) — multi-PR gates + merge-all. The `ci`,
+  `conflicts` and `merger` tail now operate across ALL of a multi-repo task's pull requests
+  (own-service + peer-service repos from Phase 3), not just the own PR — no runner-image change
+  (the ci-fixer reuses the existing sibling-checkout harness path via a widened `peerRepos` job
+  body).
+
+  - **CI gate** aggregates check runs across every PR: a red check in ANY repo fails the gate,
+    the failing repo(s) are named, and `step.gate.headShas` tracks each PR head. The `ci-fixer`
+    helper now fans out across the sibling checkouts (the `coder`-only multi-repo dispatch is
+    widened to `ci-fixer`) so one fixer round covers every failing repo. `CiStatusReport` becomes
+    per-PR (`repos: RepoCiStatus[]`).
+  - **Conflicts gate** probes mergeability per PR (`MergeabilityReport.repos`); any PR still
+    computing keeps polling, the first conflicted repo is recorded on `step.gate.conflictTarget`.
+    The conflict-resolver stays single-repo.
+  - **Merger** merges every PR in provider-before-consumer order (`orderPrsForMerge`), stopping at
+    the first failure. The task is `done` only when ALL PRs merged; a mid-sequence failure
+    (cross-repo merges are non-atomic) leaves the block `blocked` and raises an enumerated
+    `merge_review` notification (`payload.mergedRepos` / `unmergedRepos`, decision reason
+    `merge_partial`). `PullRequestMerger.mergeForBlock` becomes `mergePullRequests(prs)` returning
+    a `MergeAllOutcome`.
+  - Cross-runtime conformance asserts multi-repo CI aggregation + escalation on both runtimes;
+    the merge-all ordering + provider fan-out are unit-tested.
+  - A partially-merged multi-repo task (block left `blocked`) is now replay-idempotent: a
+    durable-driver retry no longer re-merges the already-merged PRs (which threw and downgraded
+    the block to `pr_ready` + raised a duplicate card).
+  - A conflict on a PEER repo no longer burns the conflict-resolver attempt budget on the
+    own-repo resolver (which can't reach it): the gate declines escalation (`GateProbe.escalatable`)
+    and goes straight to the manual-resolution give-up. Own-repo conflicts are unchanged.
+
+### Patch Changes
+
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+
 ## 0.85.0
 
 ### Minor Changes

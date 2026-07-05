@@ -1,5 +1,118 @@
 # @cat-factory/local-server
 
+## 0.45.0
+
+### Minor Changes
+
+- 49b498a: Registry DI migration — the agent-kind registry becomes app-owned (no module global).
+
+  Continues the [registry-DI initiative](docs/initiatives/registry-di-migration.md): the
+  plugin-style agent-kind registry (`registerAgentKind` into a module-level `Map`) is replaced by
+  an app-owned **`AgentKindRegistry`** instance the composition root news once
+  (`defaultAgentKindRegistry()`, pre-loaded with the built-in `bug-investigator` / document /
+  initiative kinds), threads through the single `CoreDependencies` object, and re-exposes on the
+  `Core` + `ServerContainer` for the HTTP snapshot projection. Module identity stops mattering, the
+  external-adapter "phantom Map" gotcha is gone, and tests get a fresh instance instead of
+  `clearRegisteredAgentKinds()`. This also fixes the phase-F worker-shard conformance flake at its
+  root: the shared suite's `clearRegisteredAgentKinds()` used to wipe the built-in kinds for the
+  rest of a single-module run.
+
+  **BREAKING** — the free module-global seams are removed from `@cat-factory/agents` (and the
+  facade re-exports): `registerAgentKind`/`registerAgentKinds`, `registered*` (`registeredAgentKind`,
+  `registeredAgentStep`, `registeredKindRequiresContainer`, `registeredSystemPrompt`,
+  `registeredUserPrompt`, `registeredConfigContributions`, `registeredPreOps`, `registeredPostOps`,
+  `registeredAgentPresentation`, `registeredStructuredOutput`, `registeredWebResearchHint`,
+  `registeredAgentTuning`, `registeredAgentKinds`), and `clearRegisteredAgentKinds`. Instead export
+  the `AgentKindRegistry` class + `defaultAgentKindRegistry()` factory; the pure prompt/catalog fns
+  (`systemPromptFor`/`userPromptFor`/`traitsFor`/`hasTrait`/`agentTuningFor`/`configContributionsFor`/
+  `configContributionCatalog`/`webResearchGuidanceFor`/`isInlineModelStep`) now take a `registry`
+  argument, and a deployment registers custom kinds **by reference** on the instance it injects into
+  `buildContainer` / `start()` / `startLocal()` (the `agentKindRegistry` seam), exactly like the
+  backend-registries pilot. The runtimes stay symmetric and the cross-runtime conformance suite
+  injects a pre-loaded registry to assert a custom kind resolves identically on every facade.
+
+  Also fixes a warm-pool bug in the executor-harness: the read-only multi-repo explore fan-out
+  (`runExploreMode`) was gated on `!job.persistentCheckout`, so a `bug-investigator` dispatched to a
+  warm local pool (which injects `persistentCheckout: true` on every job) silently dropped its peer
+  repos and only saw the primary. The guard is dropped — `runMultiRepoExplore` uses its own
+  ephemeral workspace, so the flag is harmlessly ignored.
+
+- 49b498a: Service connections Phase 3 — multi-repo coding. The implementer now fans a cross-service
+  change out across every connected involved-service repo, not just the task's own. A new
+  `resolveRepoTargets` resolves the task's own repo PLUS each involved service's repo, deduped
+  by repo (two services in one monorepo collapse into a single checkout with both
+  subdirectories noted; a service co-located in the primary's own repo rides the own-service
+  PR). `ContainerAgentExecutor` builds a `peerRepos` job body + a "Multi-repo workspace" prompt
+  section for the `coder` kind and works at the repo root so it can reach every involved
+  subtree. The executor-harness clones each peer repo as a SIBLING checkout under one workspace
+  root, runs the agent once across all of them, and opens one PR per repo it actually changed.
+  The own-service PR stays on `block.pullRequest`; the peer PRs are recorded on the new
+  `block.peerPullRequests` (`AgentRunResult.peerPullRequests` → engine → JSON column, mirrored
+  on D1 + Drizzle), with an `allPullRequests(block)` helper for the multi-repo-aware readers.
+  Peer clone URLs are host-allowlisted exactly like the primary. Bumps the runner image
+  (`peerRepos` job field + sibling-checkout flow).
+
+### Patch Changes
+
+- 49b498a: Bug-triage pipeline, Phase F — structured, multi-repo investigation + clarification.
+
+  The `bug-investigator` is upgraded from a thin prose role into a STRUCTURED, read-only,
+  multi-repo `container-explore` kind whose triage drives the downstream `clarity-review` gate,
+  and the gate learns to seed itself from that triage instead of running its own first LLM pass.
+  Same kind id, so the existing `pl_bugfix` preset inherits the upgrade.
+
+  - **Structured `bug-investigator`** (`@cat-factory/agents`): registered via the public
+    `registerAgentKind` seam (the `security-auditor` shape) with a lenient valibot
+    `bugInvestigation` schema — `clarity` (`clear` | `needs_clarification`), `summary`, ranked
+    `rootCauseHypotheses`, `affectedRepos`, `suggestedReproductions`, and `questions`
+    (non-empty only when clarification is needed). Its structured object lands on `step.custom`
+    (rendered by the stock `generic-structured` view); a built-in post-completion resolver renders
+    a prose digest onto `step.output` so downstream steps read the investigation via `priorOutputs`.
+    The old prose ROLE entry is removed.
+  - **Read-only multi-repo checkouts** (`@cat-factory/server` + `@cat-factory/executor-harness`,
+    image bump): the multi-repo fan-out gate now also fires for `bug-investigator`, and the
+    container-explore job body threads `peerRepos` + the multi-repo prompt section. The harness
+    gains a read-only `runMultiRepoExplore` path — it clones the primary repo PLUS every connected
+    involved-service repo as SIBLING checkouts, runs the agent once at the workspace root, and
+    makes NO edits / commits / PR (a read-only peer carries no `newBranch`/`pr`) — so a
+    cross-service bug is traced across every repo it touches. `PeerRepoSpec.newBranch` is now
+    optional (present for the coding fan-out, absent for the read-only one).
+  - **Clarity gate seeding + auto-pass** (`@cat-factory/orchestration`): when a structured
+    investigator ran upstream, the `clarity-review` gate seeds DETERMINISTICALLY from its triage —
+    no reviewer LLM — auto-passing on `clarity === 'clear'` (advance, no human park, no
+    notification) and seeding one blocking finding per `question` on `needs_clarification` (park
+    for a human, exactly as an LLM reviewer pass would). Because the seed needs no model, the gate
+    now activates whenever the clarity store is wired, and the review/incorporate/re-review LLM
+    paths degrade gracefully when unwired. Mirrors the requirements-review auto-pass pattern.
+  - **Tracker echo on park** (`@cat-factory/kernel` port + `@cat-factory/integrations`): a new
+    best-effort `IssueWritebackProvider.postQuestions` echoes the open questions as a comment on
+    the block's linked tracker issue when the gate parks — answers still arrive in-app (the tracker
+    comment is an echo, not a channel). Not gated on the workspace writeback settings, and a
+    tracker outage never fails the run.
+  - **Conformance**: a two-facade suite drives the investigator → clarity gate flow — `clear`
+    auto-passes straight through to the next step with the digest recorded, and
+    `needs_clarification` parks one finding per question then resumes on dismiss-all + proceed.
+
+  The runner image is bumped for the read-only multi-repo explore path; the three hand-maintained
+  image-tag pins are synced.
+
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+  - @cat-factory/kernel@0.86.0
+  - @cat-factory/integrations@0.65.0
+  - @cat-factory/orchestration@0.71.0
+  - @cat-factory/server@0.81.0
+  - @cat-factory/gitlab@0.7.0
+  - @cat-factory/node-server@0.72.0
+  - @cat-factory/agents@0.34.0
+  - @cat-factory/executor-harness@1.34.8
+
 ## 0.44.4
 
 ### Patch Changes
