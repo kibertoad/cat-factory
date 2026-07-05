@@ -1,4 +1,10 @@
-import type { EnvironmentManifest, EnvironmentStatus } from '@cat-factory/kernel'
+import type {
+  EnvironmentManifest,
+  EnvironmentStatus,
+  RecipeHealthGate,
+  RecipeStep,
+  StackRecipe,
+} from '@cat-factory/kernel'
 import { parse, stringify } from 'yaml'
 
 // Pure helpers for the Docker Compose ENVIRONMENT backend: read the flat per-workspace
@@ -35,7 +41,17 @@ export interface ComposeRuntime {
    */
   compose(
     args: string[],
-    opts?: { env?: Record<string, string>; timeoutMs?: number },
+    opts?: {
+      env?: Record<string, string>
+      timeoutMs?: number
+      /**
+       * STACK-RECIPE `compose-exec` step only: stream a repo-relative file from the project's
+       * checkout into the command's stdin (a `.sql` seed dump piped to a db client). The runtime
+       * resolves `checkoutFile` under the project's checkout dir and pipes it as stdin. Requires a
+       * checkout (build/recipe mode); ignored by a runtime that can't clone.
+       */
+      stdin?: { project: string; checkoutFile: string }
+    },
   ): Promise<ComposeExecResult>
   /** Write a per-project scratch file; returns its absolute host path. */
   writeProjectFile(project: string, fileName: string, content: string): Promise<string>
@@ -57,6 +73,31 @@ export interface ComposeRuntime {
    * returns its absolute host path. Optional, paired with {@link checkout}.
    */
   writeCheckoutFile?(project: string, relPath: string, content: string): Promise<string>
+  /**
+   * STACK-RECIPE mode only: copy a committed template to its gitignored target INSIDE the checkout
+   * (env-file materialization + `copy-file` steps — `.env.dev.local-dist` → `.env.dev.local`). Both
+   * paths are repo-relative and have already passed the checkout-escape guard. Optional, paired
+   * with {@link checkout}.
+   */
+  copyCheckoutFile?(project: string, from: string, to: string): Promise<void>
+  /**
+   * STACK-RECIPE `wait-file` step only (checkout target): whether a repo-relative path exists in
+   * the checkout (the frontend build's `manifest.json` gate, when it lands in the working tree
+   * rather than a container). A `wait-file` targeting a running container polls via
+   * `docker compose exec … test -f` instead. Optional, paired with {@link checkout}.
+   */
+  checkoutFileExists?(project: string, relPath: string): Promise<boolean>
+  /**
+   * STACK-RECIPE `host-command` step only: run an arbitrary argv on the ORCHESTRATOR HOST (not in
+   * a container) with `cwd` at the checkout (+ optional `workdir` under it). The single trust-
+   * boundary-widening step kind — gated behind the recipe's own opt-in and refused unless the
+   * runtime supports it (local facade only). Optional; absent ⇒ `host-command` steps are refused.
+   */
+  hostCommand?(
+    project: string,
+    argv: string[],
+    opts?: { workdir?: string; env?: Record<string, string>; timeoutMs?: number },
+  ): Promise<ComposeExecResult>
 }
 
 /** The flat per-workspace config, read off `manifest.providerConfig`. */
@@ -91,6 +132,22 @@ export interface ComposeEnvironmentConfig {
   build?: boolean
   /** Build-mode only: bound (ms) for `docker compose build`, separate from the `up --wait` bound. */
   buildTimeoutMs?: number
+  /**
+   * The declarative STACK RECIPE for a complex multi-step bring-up — multi-`-f` layering,
+   * `COMPOSE_PROFILES`, env-file materialization, ordered setup/teardown steps + a terminal health
+   * gate. Merged from the SERVICE's provisioning into `providerConfig.recipe` at resolve time
+   * (`handlerConfigToBackendConfig`); absent ⇒ the simple single-file `composePath` + `up --wait`
+   * path. When present, `recipe.composeFiles` supersedes `composePath`, and a recipe always
+   * materializes a checkout (its steps + env files operate on the working tree).
+   */
+  recipe?: StackRecipe
+  /**
+   * Opt-in to a recipe's `host-command` steps — the ONE trust-boundary-widening step kind (it
+   * runs an arbitrary argv on the orchestrator host, not in a container). Off by default; a recipe
+   * `host-command` step is refused unless the WORKSPACE handler sets this (the operator owns the
+   * host, so the opt-in is theirs, like the `build` flag) AND the runtime supports host commands.
+   */
+  allowHostCommands?: boolean
 }
 
 const DEFAULT_COMPOSE_PATH = 'docker-compose.yml'
@@ -151,7 +208,19 @@ export function parseComposeEnvConfig(manifest: EnvironmentManifest): ComposeEnv
     defaultTtlMs: resolveTtlMs(raw.ttlMinutes, manifest.defaultTtlMs),
     build: optionalBoolean(raw.build),
     buildTimeoutMs: resolveBuildTimeoutMs(raw.buildTimeoutMinutes),
+    allowHostCommands: optionalBoolean(raw.allowHostCommands),
+    ...(isStackRecipe(raw.recipe) ? { recipe: raw.recipe } : {}),
   }
+}
+
+/**
+ * A structural guard for the persisted `providerConfig.recipe`. The recipe was validated by
+ * `serviceProvisioningSchema` when the service block's provisioning was saved and merged in verbatim
+ * (`handlerConfigToBackendConfig`), so this is a defensive shape check — a plain object — not a
+ * re-validation; a non-object (a stale/hand-edited config) is treated as "no recipe".
+ */
+function isStackRecipe(value: unknown): value is StackRecipe {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 /**
@@ -341,7 +410,7 @@ export function hasBuildDirective(service: unknown): boolean {
  * flagged `external: true` (or `external: { name }`). Returns each network's RESOLVED name (the
  * explicit `name:` on the network def, else the `name:` inside an `external` object, else the map
  * key), deduped in declaration order. These are created + owned OUTSIDE the per-PR project (by a
- * SharedStack or the engine — the lokalise `lokalise-net` shape): detection recommends them onto
+ * SharedStack or the engine — the acme `acme-net` shape): detection recommends them onto
  * `recipe.externalNetworks`, and the compose provider (slice 5) attaches the per-PR project to them
  * as `external: true`. Pure — no I/O.
  */
@@ -750,4 +819,252 @@ export function tailOutput(output: string, lines = 12): string {
     .filter(Boolean)
     .slice(-lines)
     .join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// STACK RECIPES — multi-`-f` layering, profiles, env-file materialization, ordered setup
+// steps + a terminal health gate. All pure (no I/O): the provider drives the daemon / host
+// through the injected `ComposeRuntime` and streams per-step verdicts to `recordStep`. The
+// recipe runs local-facade-only (needs a host daemon), so it always materializes a checkout —
+// its steps + env files operate on the working tree, and the compose files are read from it.
+// ---------------------------------------------------------------------------
+
+/** Default per-step budget (ms) for a `compose-exec`/`copy-file`/`host-command` step. */
+export const DEFAULT_RECIPE_STEP_TIMEOUT_MS = 300_000
+/** Default budget (ms) for a `wait-*` step / a non-`compose-healthy` health gate. */
+export const DEFAULT_RECIPE_WAIT_TIMEOUT_MS = 300_000
+/** Default re-probe interval (ms) for a `wait-*` step / health gate. */
+export const DEFAULT_RECIPE_POLL_INTERVAL_MS = 2_000
+/** The rewritten-compose filename prefix, written beside each original inside the checkout. */
+const RECIPE_REWRITE_PREFIX = 'cat-factory.'
+
+/** The ordered `-f` compose files a recipe layers: `recipe.composeFiles` when set, else `[composePath]`. */
+export function resolveRecipeComposeFiles(recipe: StackRecipe, composePath: string): string[] {
+  return recipe.composeFiles && recipe.composeFiles.length > 0 ? recipe.composeFiles : [composePath]
+}
+
+/** The filename portion of a repo-relative path (`docker/dev.yml` → `dev.yml`). */
+function composeFileBase(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '')
+  const idx = normalized.lastIndexOf('/')
+  return idx < 0 ? normalized : normalized.slice(idx + 1)
+}
+
+/**
+ * Where a rewritten recipe compose file is written inside the checkout: beside its original
+ * (so relative build contexts / binds / env_files still resolve), prefixed so it never clobbers
+ * the committed file. `docker/dev.yml` → `docker/cat-factory.dev.yml`.
+ */
+export function rewrittenRecipeComposePath(originalPath: string): string {
+  const dir = composeFileDir(originalPath)
+  const base = `${RECIPE_REWRITE_PREFIX}${composeFileBase(originalPath)}`
+  return dir ? `${dir}/${base}` : base
+}
+
+/** One recipe compose file read from the checkout, before rewriting. */
+export interface RecipeComposeInput {
+  /** Repo-relative path of the original committed file (the rewrite lands beside it). */
+  path: string
+  /** The (already `{{var}}`-rendered) file text. */
+  text: string
+}
+
+/** One rewritten, isolation-safe recipe compose file to write into the checkout + pass as `-f`. */
+export interface PreparedRecipeComposeFile {
+  /** Repo-relative destination for the rewritten file (see {@link rewrittenRecipeComposePath}). */
+  path: string
+  content: string
+}
+
+/** The outcome of preparing a recipe's layered compose files into isolation-safe project files. */
+export interface PreparedRecipeCompose {
+  files: PreparedRecipeComposeFile[]
+  issues: string[]
+}
+
+/**
+ * Rewrite a recipe's LAYERED compose files (base + overrides) into isolation-safe project files,
+ * one per input, preserving `-f` order. Each file is parsed, host-escape-checked (build-mode rules:
+ * only refs that ESCAPE the checkout are refused — a recipe always has a working tree), and has its
+ * published host ports forced ephemeral (so concurrent per-PR stacks never collide). The probed
+ * `service`'s port publish is guaranteed on whichever file DEFINES that service; if no file defines
+ * it, that is a blocking issue. Compose merges the `-f` layers itself at `up`, so we rewrite each
+ * layer independently rather than trying to reproduce compose's merge semantics.
+ */
+export function prepareRecipeComposeFiles(
+  inputs: RecipeComposeInput[],
+  service: string,
+  port: number,
+  opts: { baseDepth: number },
+): PreparedRecipeCompose {
+  const files: PreparedRecipeComposeFile[] = []
+  const issues: string[] = []
+  let serviceDefined = false
+  for (const input of inputs) {
+    let parsed: unknown
+    try {
+      parsed = parse(input.text)
+    } catch (err) {
+      issues.push(
+        `compose file '${input.path}' is not valid YAML: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+      files.push({ path: rewrittenRecipeComposePath(input.path), content: input.text })
+      continue
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      issues.push(`compose file '${input.path}' is empty or not a mapping`)
+      files.push({ path: rewrittenRecipeComposePath(input.path), content: input.text })
+      continue
+    }
+    const doc = parsed as ComposeDoc
+    // Recipe files always have a checkout, so use the build-mode guard (escape-only), scoped to the
+    // first compose file's dir (the resolved `--project-directory` all layers share).
+    for (const issue of collectUnsupportedComposeRefs(doc, {
+      build: true,
+      baseDepth: opts.baseDepth,
+    })) {
+      issues.push(`${input.path}: ${issue}`)
+    }
+    neutralizeHostPorts(doc)
+    if (servicesOf(doc)[service]) {
+      serviceDefined = true
+      ensureServicePublishes(doc, service, port)
+    }
+    files.push({ path: rewrittenRecipeComposePath(input.path), content: stringify(doc) })
+  }
+  if (!serviceDefined) {
+    issues.push(`no service named '${service}' is defined across the recipe's compose files`)
+  }
+  return { files, issues }
+}
+
+/**
+ * Blocking host-escape issues for a recipe's checkout-relative paths, collected up front so a bad
+ * recipe fails BEFORE the daemon is touched (the `prepareComposeProject` posture). Every path that
+ * the engine reads/writes/execs INSIDE the checkout — the `composeFiles` layers (written back beside
+ * their originals + feeding `--project-directory`), env-file template+target pairs, `copy-file`
+ * from/to, a `compose-exec`/health `stdinFile`, a `host-command` `workdir`, and a checkout-target
+ * `wait-file` — is run through {@link escapesCheckout} (repo-root-relative, depth 0). A container-
+ * target `wait-file` path (its step names a `service`) is legitimately container-absolute and is
+ * NOT checked here. Only `setupSteps` are inspected — `teardownSteps` execution is deferred, so
+ * they can't touch the host yet; fold them in here when it lands.
+ */
+export function recipeCheckoutPathIssues(recipe: StackRecipe): string[] {
+  const issues: string[] = []
+  const check = (path: string, label: string) => {
+    if (escapesCheckout(path, 0)) {
+      issues.push(
+        `recipe ${label} ('${path}') escapes the checkout — refused (host-filesystem escape)`,
+      )
+    }
+  }
+  // The compose-file layers are written back into the checkout + one feeds `--project-directory`, so
+  // an escaping path is a host-filesystem write escape — guarded like every other recipe path.
+  for (const composeFile of recipe.composeFiles ?? []) {
+    check(composeFile, 'compose file')
+  }
+  for (const env of recipe.envFiles ?? []) {
+    check(env.template, 'env-file template')
+    check(env.target, 'env-file target')
+  }
+  for (const step of recipe.setupSteps ?? []) {
+    if (step.kind === 'copy-file') {
+      check(step.from, `step '${step.name}' from`)
+      check(step.to, `step '${step.name}' to`)
+    } else if (step.kind === 'compose-exec') {
+      if (step.stdinFile) check(step.stdinFile, `step '${step.name}' stdinFile`)
+    } else if (step.kind === 'host-command') {
+      if (step.workdir) check(step.workdir, `step '${step.name}' workdir`)
+    } else if (step.kind === 'wait-file' && !step.service) {
+      check(step.path, `step '${step.name}' path`)
+    }
+  }
+  return issues
+}
+
+/** The `COMPOSE_PROFILES` env for a recipe (comma-joined), or `{}` when it enables none. */
+export function recipeProfilesEnv(recipe: StackRecipe): Record<string, string> {
+  const profiles = recipe.composeProfiles ?? []
+  return profiles.length > 0 ? { COMPOSE_PROFILES: profiles.join(',') } : {}
+}
+
+/** The per-step timeout budget (ms): the step's own `timeoutMs`, else the per-kind default. */
+export function recipeStepTimeoutMs(step: RecipeStep): number {
+  const perKindDefault =
+    step.kind === 'wait-http' || step.kind === 'wait-file'
+      ? DEFAULT_RECIPE_WAIT_TIMEOUT_MS
+      : DEFAULT_RECIPE_STEP_TIMEOUT_MS
+  return step.timeoutMs ?? perKindDefault
+}
+
+/** The re-probe interval (ms) of a `wait-*` step: its own `intervalMs`, else the default. */
+export function recipeStepIntervalMs(
+  step: Extract<RecipeStep, { kind: 'wait-http' | 'wait-file' }>,
+): number {
+  return step.intervalMs ?? DEFAULT_RECIPE_POLL_INTERVAL_MS
+}
+
+/**
+ * The `docker compose exec` argv for a `compose-exec` step (or a `compose-exec` health gate),
+ * appended to the project `scope`. Always `-T` (no TTY — the engine runs non-interactively); the
+ * optional `--user` / `--workdir` precede the service + command argv.
+ */
+export function composeExecArgs(
+  scope: string[],
+  step: {
+    service: string
+    command: string[]
+    user?: string
+    workdir?: string
+  },
+): string[] {
+  return [
+    ...scope,
+    'exec',
+    '-T',
+    ...(step.user ? ['--user', step.user] : []),
+    ...(step.workdir ? ['--workdir', step.workdir] : []),
+    step.service,
+    ...step.command,
+  ]
+}
+
+/** The `docker compose exec … test -f <path>` argv for a container-target `wait-file` step. */
+export function waitFileExecArgs(scope: string[], service: string, path: string): string[] {
+  return [...scope, 'exec', '-T', service, 'test', '-f', path]
+}
+
+/**
+ * Whether an HTTP probe response satisfies a `wait-http` step / `http` health gate: the status
+ * matches `expectStatus` when set (else any 2xx), AND the body contains `expectBodyContains` when
+ * set. Pure — the provider does the actual `fetch`.
+ */
+export function matchesHttpExpectation(
+  status: number,
+  body: string,
+  opts: { expectStatus?: number; expectBodyContains?: string },
+): boolean {
+  const statusOk =
+    opts.expectStatus !== undefined ? status === opts.expectStatus : status >= 200 && status < 300
+  if (!statusOk) return false
+  return opts.expectBodyContains ? body.includes(opts.expectBodyContains) : true
+}
+
+/** The terminal readiness gate a recipe resolves to when it declares none (today's `up --wait`). */
+export const DEFAULT_RECIPE_HEALTH_GATE: RecipeHealthGate = { kind: 'compose-healthy' }
+
+/** The budget (ms) for a health gate: its own `timeoutMs` (http/compose-exec), else the wait default. */
+export function healthGateTimeoutMs(gate: RecipeHealthGate): number {
+  return gate.kind === 'compose-healthy'
+    ? DEFAULT_RECIPE_WAIT_TIMEOUT_MS
+    : (gate.timeoutMs ?? DEFAULT_RECIPE_WAIT_TIMEOUT_MS)
+}
+
+/** The re-probe interval (ms) for a health gate: its own `intervalMs` (http/compose-exec), else the default. */
+export function healthGateIntervalMs(gate: RecipeHealthGate): number {
+  return gate.kind === 'compose-healthy'
+    ? DEFAULT_RECIPE_POLL_INTERVAL_MS
+    : (gate.intervalMs ?? DEFAULT_RECIPE_POLL_INTERVAL_MS)
 }

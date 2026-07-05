@@ -1,9 +1,10 @@
-import { execFile } from 'node:child_process'
-import { chmod, mkdir, rm, writeFile } from 'node:fs/promises'
+import { execFile, spawn } from 'node:child_process'
+import { chmod, copyFile, mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { promisify } from 'node:util'
-import type { ComposeRuntime } from '@cat-factory/integrations'
+import type { ComposeExecResult, ComposeRuntime } from '@cat-factory/integrations'
 
 const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 16 * 1024 * 1024
@@ -29,13 +30,23 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
   const binary = opts.binary?.trim() || 'docker'
   const scratchRoot = opts.scratchRoot || join(tmpdir(), 'cat-factory-compose')
   const projectDir = (project: string) => join(scratchRoot, project)
+  const checkoutDir = (project: string) => join(projectDir(project), 'checkout')
   return {
     async compose(args, options) {
+      const timeout = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+      const env = options?.env ? { ...process.env, ...options.env } : process.env
+      // A `compose-exec` recipe step may stream a repo-relative checkout file into the command's
+      // stdin (a `.sql` seed dump piped to a db client). `execFile` can't feed a stream to stdin, so
+      // spawn + pipe the file for that case; everything else stays on the simpler execFile path.
+      if (options?.stdin) {
+        const filePath = join(checkoutDir(options.stdin.project), options.stdin.checkoutFile)
+        return runComposeWithStdin(binary, args, filePath, { env, timeoutMs: timeout })
+      }
       try {
         const { stdout, stderr } = await execFileAsync(binary, ['compose', ...args], {
           maxBuffer: MAX_BUFFER,
-          timeout: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-          env: options?.env ? { ...process.env, ...options.env } : process.env,
+          timeout,
+          env,
         })
         return { code: 0, stdout, stderr }
       } catch (err) {
@@ -105,13 +116,114 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
       return { dir }
     },
     async writeCheckoutFile(project, relPath, content) {
-      const path = join(projectDir(project), 'checkout', relPath)
+      const path = join(checkoutDir(project), relPath)
       await mkdir(dirname(path), { recursive: true })
       await writeFile(path, content, 'utf8')
       return path
+    },
+    async copyCheckoutFile(project, from, to) {
+      // Recipe env-file materialization / `copy-file` steps: copy a committed template to its
+      // gitignored target INSIDE the checkout. Both paths are repo-relative and were host-escape
+      // guarded by the provider before we get here.
+      const dst = join(checkoutDir(project), to)
+      await mkdir(dirname(dst), { recursive: true })
+      await copyFile(join(checkoutDir(project), from), dst)
+    },
+    async checkoutFileExists(project, relPath) {
+      try {
+        await stat(join(checkoutDir(project), relPath))
+        return true
+      } catch {
+        return false
+      }
+    },
+    async hostCommand(project, argv, options) {
+      // A recipe `host-command` step: run an arbitrary argv on the HOST (opt-in, provider-gated),
+      // cwd at the checkout (+ optional in-checkout `workdir`). Normalize failures/timeouts into a
+      // non-throwing result exactly like `compose`, so the provider surfaces the step's own error.
+      const cwd = options?.workdir
+        ? join(checkoutDir(project), options.workdir)
+        : checkoutDir(project)
+      const [command, ...rest] = argv
+      try {
+        const { stdout, stderr } = await execFileAsync(command!, rest, {
+          cwd,
+          maxBuffer: MAX_BUFFER,
+          timeout: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+          env: options?.env ? { ...process.env, ...options.env } : process.env,
+        })
+        return { code: 0, stdout, stderr }
+      } catch (err) {
+        const e = err as {
+          code?: number | string
+          killed?: boolean
+          stdout?: string
+          stderr?: string
+          message?: string
+        }
+        const code = typeof e.code === 'number' ? e.code : 1
+        const timedOut = e.killed
+          ? `host command timed out after ${options?.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`
+          : undefined
+        return { code, stdout: e.stdout ?? '', stderr: e.stderr || timedOut || e.message || '' }
+      }
     },
     async cleanupProject(project) {
       await rm(projectDir(project), { recursive: true, force: true }).catch(() => {})
     },
   }
+}
+
+/**
+ * Run `docker compose <args>` streaming a host file into the command's stdin (a recipe
+ * `compose-exec` seed import). `execFile` has no stdin-stream option, so spawn the child, pipe the
+ * file, bound the output buffers + a kill timeout, and normalize the outcome into a non-throwing
+ * {@link ComposeExecResult} — matching the `compose` error posture. A missing/unreadable stdin file
+ * fails the step with a clear message rather than silently feeding an empty stream to the command.
+ */
+function runComposeWithStdin(
+  binary: string,
+  args: string[],
+  filePath: string,
+  opts: { env: NodeJS.ProcessEnv; timeoutMs: number },
+): Promise<ComposeExecResult> {
+  return new Promise((resolve) => {
+    const child = spawn(binary, ['compose', ...args], { env: opts.env })
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+    const finish = (result: ComposeExecResult) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(result)
+    }
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM')
+      finish({
+        code: 1,
+        stdout,
+        stderr: stderr || `docker compose timed out after ${opts.timeoutMs}ms`,
+      })
+    }, opts.timeoutMs)
+    child.stdout.on('data', (d: Buffer) => {
+      if (stdout.length < MAX_BUFFER) stdout += d.toString()
+    })
+    child.stderr.on('data', (d: Buffer) => {
+      if (stderr.length < MAX_BUFFER) stderr += d.toString()
+    })
+    child.on('error', (err) => finish({ code: 1, stdout, stderr: stderr || String(err) }))
+    child.on('close', (code) => finish({ code: code ?? 1, stdout, stderr }))
+    const rs = createReadStream(filePath)
+    rs.on('error', (err) => {
+      child.kill('SIGTERM')
+      finish({ code: 1, stdout, stderr: `could not read stdin file '${filePath}': ${String(err)}` })
+    })
+    // The child can exit before stdin is fully written (an early auth/syntax failure, or the
+    // SIGTERM on timeout); the still-writing pipe then emits EPIPE on `child.stdin`. Without a
+    // handler that is an unhandled 'error' that crashes the whole process, so swallow it and stop
+    // the source — the child's own exit code + stderr (via 'close'/'error') is the real outcome.
+    child.stdin.on('error', () => rs.destroy())
+    rs.pipe(child.stdin)
+  })
 }

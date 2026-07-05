@@ -7,7 +7,7 @@
 - f6399cf: feat(environments): stack-recipe detection (shared-stacks initiative, slice 2)
 
   Extend the deterministic, checkout-free provisioning detector (`provision-detect.logic.ts`) to
-  recognize the STACK RECIPE a complex `docker-compose` repo implies (the lokalise-main pilot),
+  recognize the STACK RECIPE a complex `docker-compose` repo implies (the acme-main pilot),
   populating the recommendation shape slice 1 added. Still non-binding — nothing is applied beyond
   the pre-selected base layers; the wizard (slice 7) confirms.
 
@@ -32,7 +32,7 @@
   The compose-doc semantics (`extractExternalNetworks`, `extractComposeProfiles`) live in
   `compose-environment.logic.ts` so the compose provider (slice 5) reuses the same predicates. When a
   repo is not recipe-shaped, the recommendation is byte-for-byte the simple single-file output as
-  before. Fixture-driven unit tests cover each extension plus a combined lokalise-main-shaped repo.
+  before. Fixture-driven unit tests cover each extension plus a combined acme-main-shaped repo.
 
 ## 0.67.1
 

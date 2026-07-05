@@ -250,6 +250,8 @@ export type {
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
   ProvisionedEnvironment,
+  RecipeStepLog,
+  RecipeStepRecorder,
   ProvisionFields,
   SecretResolver,
   RepoFileReader,

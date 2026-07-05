@@ -138,6 +138,12 @@ export type {
   InfraEngine,
   ManifestId,
   ServiceProvisioning,
+  // Docker Compose stack recipes (the complex-monolith bring-up expressed as data).
+  StackRecipe,
+  RecipeStep,
+  RecipeStepKind,
+  RecipeHealthGate,
+  RecipeEnvFile,
   // Frontend-frame config (build/serve/mock knobs + backend bindings that double as links).
   FrontendConfig,
   FrontendBackendBinding,

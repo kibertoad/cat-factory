@@ -120,6 +120,13 @@ export interface ProvisionEnvironmentRequest {
    * provision then fails deterministically. Absent ⇒ the caller doesn't offer a clone at all.
    */
   clone?: () => Promise<DeployCloneTarget | undefined>
+  /**
+   * Best-effort per-step provisioning-log sink for a multi-step STACK RECIPE (the Docker Compose
+   * complex-monolith bring-up). The compose provider calls it once per recipe step (and per engine
+   * phase) with the step name + verdict + duration; absent ⇒ steps aren't individually logged (the
+   * simple single-file compose path, or a facade with no provisioning log wired). Never throws.
+   */
+  recordStep?: RecipeStepRecorder
 }
 
 export interface EnvironmentStatusRequest {
@@ -136,6 +143,33 @@ export interface EnvironmentTeardownRequest {
   provisionFields: ProvisionFields
   resolveSecret: SecretResolver
 }
+
+/**
+ * One STACK-RECIPE step's outcome, streamed to the provisioning log as it completes (a
+ * multi-step compose bring-up — env-file materialization, `up`, `composer install`, seed
+ * import, migrations, index builds, the health gate). Each entry is best-effort: a log-write
+ * failure never breaks the provision (the recorder swallows it), and a step that succeeds or
+ * fails writes exactly one entry, so the "View logs" drawer shows which step is running / died.
+ */
+export interface RecipeStepLog {
+  /** The step's human label (the recipe step `name`, or a synthetic label for an engine phase). */
+  name: string
+  outcome: 'success' | 'failure'
+  /** Wall-clock duration of the step (ms). */
+  durationMs: number
+  /** A short output tail / structured note for the log, when useful. */
+  detail?: string
+  /** The failure message when `outcome === 'failure'`. */
+  error?: string
+}
+
+/**
+ * Best-effort sink a provider calls once per recipe step, so a long multi-step bring-up streams
+ * per-step entries into the provisioning log instead of a single opaque provision result. The
+ * provisioning service builds the closure (it owns the workspace/block/run/provider ids); the
+ * provider only names the step + its verdict. Absent ⇒ steps aren't individually logged.
+ */
+export type RecipeStepRecorder = (log: RecipeStepLog) => Promise<void>
 
 /** The provider's view of a provisioned environment (mapped from its response). */
 export interface ProvisionedEnvironment {
