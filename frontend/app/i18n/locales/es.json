@@ -1984,6 +1984,52 @@
         "removeFailed": "No se pudo eliminar la entrada del registro"
       }
     },
+    "sharedStacks": {
+      "tab": "Stacks compartidos",
+      "intro": "Infraestructura de Compose de larga duración (bases de datos, brokers, búsqueda, correo) que se levanta una vez por espacio de trabajo y se reutiliza en todas las ejecuciones y pull requests. Un entorno de pruebas se conecta a la red gestionada de un stack. Levantar un stack requiere un despliegue local de Docker; en otros backends puedes gestionar igualmente la definición.",
+      "stackNoun": "stack compartido",
+      "status": {
+        "stopped": "Detenido",
+        "starting": "Iniciando",
+        "running": "En ejecución",
+        "failed": "Con errores"
+      },
+      "list": {
+        "heading": "Stacks configurados",
+        "start": "Iniciar",
+        "stop": "Detener",
+        "edit": "Editar",
+        "remove": "Eliminar stack"
+      },
+      "add": {
+        "heading": "Añadir un stack compartido",
+        "name": "Nombre",
+        "cloneUrl": "URL de clonación del repositorio",
+        "cloneUrlHelp": "El repositorio git donde viven los archivos de Compose del stack.",
+        "gitRef": "Rama o etiqueta (opcional)",
+        "composeFiles": "Archivos de Compose",
+        "composeFilesHelp": "Separados por comas, relativos al repositorio, en orden de anulación.",
+        "composeProfiles": "Perfiles de Compose (opcional)",
+        "managedNetworks": "Redes gestionadas (opcional)",
+        "managedNetworksHelp": "Redes que este stack crea y posee para que los consumidores se conecten.",
+        "allowHostCommands": "Permitir pasos de configuración con comandos del host",
+        "save": "Añadir stack"
+      },
+      "edit": {
+        "heading": "Editar stack compartido",
+        "save": "Guardar cambios",
+        "cancel": "Cancelar"
+      },
+      "toast": {
+        "created": "Stack compartido añadido",
+        "createFailed": "No se pudo añadir el stack compartido",
+        "updated": "Stack compartido actualizado",
+        "updateFailed": "No se pudo actualizar el stack compartido",
+        "startFailed": "No se pudo iniciar el stack compartido",
+        "stopFailed": "No se pudo detener el stack compartido",
+        "removeFailed": "No se pudo eliminar el stack compartido"
+      }
+    },
     "localMode": {
       "title": "Modo local",
       "intro": "Ajustes del ejecutor de contenedores local, almacenados en el despliegue de esta máquina (reemplazó las variables de entorno {poolVars} / {harnessVars}). Guardar redimensiona el grupo en caliente en vivo, sin necesidad de reiniciar; las ejecuciones en curso conservan el contenedor que ya tienen.",

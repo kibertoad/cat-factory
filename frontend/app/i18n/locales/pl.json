@@ -1984,6 +1984,52 @@
         "removeFailed": "Nie udało się usunąć wpisu rejestru"
       }
     },
+    "sharedStacks": {
+      "tab": "Współdzielone stosy",
+      "intro": "Długo działająca infrastruktura Compose (bazy danych, brokery, wyszukiwanie, poczta) uruchamiana raz na przestrzeń roboczą i wykorzystywana ponownie we wszystkich uruchomieniach i pull requestach. Środowisko testowe łączy się z zarządzaną siecią stosu. Uruchomienie stosu wymaga lokalnego wdrożenia Dockera; w innych backendach nadal możesz zarządzać definicją.",
+      "stackNoun": "współdzielony stos",
+      "status": {
+        "stopped": "Zatrzymany",
+        "starting": "Uruchamianie",
+        "running": "Działa",
+        "failed": "Niepowodzenie"
+      },
+      "list": {
+        "heading": "Skonfigurowane stosy",
+        "start": "Uruchom",
+        "stop": "Zatrzymaj",
+        "edit": "Edytuj",
+        "remove": "Usuń stos"
+      },
+      "add": {
+        "heading": "Dodaj współdzielony stos",
+        "name": "Nazwa",
+        "cloneUrl": "URL klonowania repozytorium",
+        "cloneUrlHelp": "Repozytorium git, w którym znajdują się pliki Compose stosu.",
+        "gitRef": "Gałąź lub tag (opcjonalnie)",
+        "composeFiles": "Pliki Compose",
+        "composeFilesHelp": "Rozdzielone przecinkami, względem repozytorium, w kolejności nadpisywania.",
+        "composeProfiles": "Profile Compose (opcjonalnie)",
+        "managedNetworks": "Zarządzane sieci (opcjonalnie)",
+        "managedNetworksHelp": "Sieci, które ten stos tworzy i posiada, aby konsumenci mogli się z nimi łączyć.",
+        "allowHostCommands": "Zezwól na kroki konfiguracji z poleceniami hosta",
+        "save": "Dodaj stos"
+      },
+      "edit": {
+        "heading": "Edytuj współdzielony stos",
+        "save": "Zapisz zmiany",
+        "cancel": "Anuluj"
+      },
+      "toast": {
+        "created": "Dodano współdzielony stos",
+        "createFailed": "Nie udało się dodać współdzielonego stosu",
+        "updated": "Zaktualizowano współdzielony stos",
+        "updateFailed": "Nie udało się zaktualizować współdzielonego stosu",
+        "startFailed": "Nie udało się uruchomić współdzielonego stosu",
+        "stopFailed": "Nie udało się zatrzymać współdzielonego stosu",
+        "removeFailed": "Nie udało się usunąć współdzielonego stosu"
+      }
+    },
     "localMode": {
       "title": "Tryb lokalny",
       "intro": "Strojenie lokalnego uruchamiacza kontenerów, przechowywane we wdrożeniu tej maszyny (zastąpiło zmienne środowiskowe {poolVars} / {harnessVars}). Zapisanie zmienia rozmiar ciepłej puli na żywo, bez potrzeby restartu; trwające uruchomienia zachowują kontener, który już mają.",

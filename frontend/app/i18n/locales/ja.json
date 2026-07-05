@@ -2106,6 +2106,52 @@
         "removeFailed": "レジストリエントリを削除できませんでした"
       }
     },
+    "sharedStacks": {
+      "tab": "共有スタック",
+      "intro": "ワークスペースごとに一度だけ起動され、すべての実行とプルリクエストで再利用される長期稼働の Compose インフラ（データベース、ブローカー、検索、メール）です。テスト環境はスタックのマネージドネットワークに接続します。スタックの起動にはローカルの Docker デプロイが必要です。他のバックエンドでも定義の管理は可能です。",
+      "stackNoun": "共有スタック",
+      "status": {
+        "stopped": "停止",
+        "starting": "起動中",
+        "running": "実行中",
+        "failed": "失敗"
+      },
+      "list": {
+        "heading": "構成済みのスタック",
+        "start": "開始",
+        "stop": "停止",
+        "edit": "編集",
+        "remove": "スタックを削除"
+      },
+      "add": {
+        "heading": "共有スタックを追加",
+        "name": "名前",
+        "cloneUrl": "リポジトリのクローン URL",
+        "cloneUrlHelp": "スタックの Compose ファイルが置かれている git リポジトリ。",
+        "gitRef": "ブランチまたはタグ（任意）",
+        "composeFiles": "Compose ファイル",
+        "composeFilesHelp": "カンマ区切り、リポジトリ相対、オーバーライド順。",
+        "composeProfiles": "Compose プロファイル（任意）",
+        "managedNetworks": "マネージドネットワーク（任意）",
+        "managedNetworksHelp": "コンシューマーが接続するために、このスタックが作成・所有するネットワーク。",
+        "allowHostCommands": "ホストコマンドのセットアップ手順を許可する",
+        "save": "スタックを追加"
+      },
+      "edit": {
+        "heading": "共有スタックを編集",
+        "save": "変更を保存",
+        "cancel": "キャンセル"
+      },
+      "toast": {
+        "created": "共有スタックを追加しました",
+        "createFailed": "共有スタックを追加できませんでした",
+        "updated": "共有スタックを更新しました",
+        "updateFailed": "共有スタックを更新できませんでした",
+        "startFailed": "共有スタックを開始できませんでした",
+        "stopFailed": "共有スタックを停止できませんでした",
+        "removeFailed": "共有スタックを削除できませんでした"
+      }
+    },
     "localMode": {
       "title": "ローカルモード",
       "intro": "ローカルコンテナランナーの調整設定で、このマシンのデプロイに保存されます ({poolVars} / {harnessVars} 環境変数を置き換えました)。保存するとウォームプールがライブでサイズ変更され、再起動は不要です。実行中のランは、すでに保持しているコンテナをそのまま使います。",

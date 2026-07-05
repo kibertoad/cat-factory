@@ -259,6 +259,7 @@ export {
   type IncidentEnrichmentModule,
   type SlackModule,
   type MergePresetsModule,
+  type SharedStacksModule,
   type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,

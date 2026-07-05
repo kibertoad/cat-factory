@@ -2106,6 +2106,52 @@
         "removeFailed": "Kayıt defteri girdisi kaldırılamadı"
       }
     },
+    "sharedStacks": {
+      "tab": "Paylaşılan yığınlar",
+      "intro": "Çalışma alanı başına bir kez başlatılan ve tüm çalıştırmalar ile pull request'lerde yeniden kullanılan uzun ömürlü Compose altyapısı (veritabanları, aracılar, arama, posta). Bir test ortamı, yığının yönetilen ağına bağlanır. Bir yığını başlatmak yerel bir Docker dağıtımı gerektirir; diğer arka uçlarda tanımı yine de yönetebilirsiniz.",
+      "stackNoun": "paylaşılan yığın",
+      "status": {
+        "stopped": "Durduruldu",
+        "starting": "Başlatılıyor",
+        "running": "Çalışıyor",
+        "failed": "Başarısız"
+      },
+      "list": {
+        "heading": "Yapılandırılmış yığınlar",
+        "start": "Başlat",
+        "stop": "Durdur",
+        "edit": "Düzenle",
+        "remove": "Yığını sil"
+      },
+      "add": {
+        "heading": "Paylaşılan yığın ekle",
+        "name": "Ad",
+        "cloneUrl": "Depo klonlama URL'si",
+        "cloneUrlHelp": "Yığının Compose dosyalarının bulunduğu git deposu.",
+        "gitRef": "Dal veya etiket (isteğe bağlı)",
+        "composeFiles": "Compose dosyaları",
+        "composeFilesHelp": "Virgülle ayrılmış, depoya göreli, geçersiz kılma sırasında.",
+        "composeProfiles": "Compose profilleri (isteğe bağlı)",
+        "managedNetworks": "Yönetilen ağlar (isteğe bağlı)",
+        "managedNetworksHelp": "Tüketicilerin bağlanması için bu yığının oluşturup sahip olduğu ağlar.",
+        "allowHostCommands": "Ana makine komutu kurulum adımlarına izin ver",
+        "save": "Yığın ekle"
+      },
+      "edit": {
+        "heading": "Paylaşılan yığını düzenle",
+        "save": "Değişiklikleri kaydet",
+        "cancel": "İptal"
+      },
+      "toast": {
+        "created": "Paylaşılan yığın eklendi",
+        "createFailed": "Paylaşılan yığın eklenemedi",
+        "updated": "Paylaşılan yığın güncellendi",
+        "updateFailed": "Paylaşılan yığın güncellenemedi",
+        "startFailed": "Paylaşılan yığın başlatılamadı",
+        "stopFailed": "Paylaşılan yığın durdurulamadı",
+        "removeFailed": "Paylaşılan yığın silinemedi"
+      }
+    },
     "localMode": {
       "title": "Yerel mod",
       "intro": "Yerel konteyner çalıştırıcısı için ayarlar, bu makinenin dağıtımında saklanır ({poolVars} / {harnessVars} ortam değişkenlerinin yerini aldı). Kaydetmek sıcak havuzu anında yeniden boyutlandırır, yeniden başlatma gerekmez; devam eden çalıştırmalar zaten tuttukları konteyneri korur.",

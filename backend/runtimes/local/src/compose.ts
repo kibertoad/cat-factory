@@ -168,6 +168,36 @@ export function createDockerComposeRuntime(opts: DockerComposeRuntimeOptions = {
         return { code, stdout: e.stdout ?? '', stderr: e.stderr || timedOut || e.message || '' }
       }
     },
+    async ensureNetwork(name) {
+      // Shared-stack bring-up: idempotently ensure a managed Docker network exists so consumers can
+      // attach to it as `external: true`. `network inspect` succeeds when present (a no-op create);
+      // otherwise `network create`. Normalize failures into a non-throwing result like `compose`.
+      try {
+        await execFileAsync(binary, ['network', 'inspect', name], {
+          maxBuffer: MAX_BUFFER,
+          timeout: DEFAULT_TIMEOUT_MS,
+        })
+        return { code: 0, stdout: '', stderr: '' }
+      } catch {
+        // Not present (or unreachable) — try to create it.
+      }
+      try {
+        const { stdout, stderr } = await execFileAsync(binary, ['network', 'create', name], {
+          maxBuffer: MAX_BUFFER,
+          timeout: DEFAULT_TIMEOUT_MS,
+        })
+        return { code: 0, stdout, stderr }
+      } catch (err) {
+        const e = err as {
+          code?: number | string
+          stdout?: string
+          stderr?: string
+          message?: string
+        }
+        const code = typeof e.code === 'number' ? e.code : 1
+        return { code, stdout: e.stdout ?? '', stderr: e.stderr || e.message || '' }
+      }
+    },
     async cleanupProject(project) {
       await rm(projectDir(project), { recursive: true, force: true }).catch(() => {})
     },

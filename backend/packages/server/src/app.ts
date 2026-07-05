@@ -18,6 +18,7 @@ import { githubWebhookController } from './modules/github/GitHubWebhookControlle
 import { vcsWebhookController } from './modules/vcs/VcsWebhookController.js'
 import { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 import { mergePresetController } from './modules/merge/MergePresetController.js'
+import { sharedStackController } from './modules/sharedStack/SharedStackController.js'
 import { sandboxController } from './modules/sandbox/SandboxController.js'
 import { workspaceSettingsController } from './modules/settings/WorkspaceSettingsController.js'
 import { localSettingsController } from './modules/localSettings/LocalSettingsController.js'
@@ -152,6 +153,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/workspaces/:workspaceId', initiativeController())
   app.route('/workspaces/:workspaceId', notificationController())
   app.route('/workspaces/:workspaceId', mergePresetController())
+  app.route('/workspaces/:workspaceId', sharedStackController())
   app.route('/workspaces/:workspaceId', sandboxController())
   app.route('/workspaces/:workspaceId', workspaceSettingsController())
   app.route('/workspaces/:workspaceId', releaseHealthController())
