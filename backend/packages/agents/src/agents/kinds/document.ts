@@ -1,5 +1,7 @@
 import type { AgentRunContext, DocKind } from '@cat-factory/kernel'
 import { CONTEXT_BUDGET, estimateTokens } from '@cat-factory/kernel'
+import type { DocKindFieldKey } from '@cat-factory/contracts'
+import { DOC_KIND_FIELDS } from '@cat-factory/contracts'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { DOC_AWARE_TRAIT } from './traits.js'
 import { linkedContextSection } from '../prompts/standard.js'
@@ -63,6 +65,47 @@ const DOC_KIND_DIR: Record<DocKind, string> = {
   other: 'docs',
 }
 
+/**
+ * Human-readable labels for the per-kind specific fields, woven into the author agents' brief.
+ * These are the prompt-facing labels (English prose); the create-task form has its own i18n
+ * catalog keyed by the same {@link DocKindFieldKey}. Exhaustive so a new field is a compile error.
+ */
+const DOC_KIND_FIELD_LABELS: Record<DocKindFieldKey, string> = {
+  targetUsers: 'Target users',
+  successMetrics: 'Success metrics',
+  alternativesConsidered: 'Alternatives considered',
+  rolloutConcerns: 'Rollout / migration concerns',
+  decisionDrivers: 'Decision drivers',
+  consideredOptions: 'Considered options',
+  whenToUse: 'When to use / trigger',
+  escalationPath: 'Escalation path',
+  researchQuestion: 'Research question',
+  optionsToCompare: 'Options to compare',
+  apiSurface: 'API surface / endpoints in scope',
+}
+
+/**
+ * Fold the task's filled kind-specific fields (see `DOC_KIND_FIELDS`) into the brief as
+ * author-provided required content for the matching template sections. Empty when the kind has
+ * no extra fields or none are filled, so a bare document task's brief is unchanged.
+ */
+function docKindFieldsSection(context: AgentRunContext, docKind: DocKind): string {
+  const specs = DOC_KIND_FIELDS[docKind]
+  const fields = context.block.taskTypeFields
+  if (!specs || !fields) return ''
+  const filled = specs
+    .map((spec) => {
+      const value = fields[spec.key]?.trim()
+      return value ? `- ${DOC_KIND_FIELD_LABELS[spec.key]}: ${value}` : null
+    })
+    .filter((line): line is string => line !== null)
+  if (!filled.length) return ''
+  return [
+    `Author-provided ${docKind} specifics (treat as required content for the matching sections):`,
+    ...filled,
+  ].join('\n')
+}
+
 /** The document fields on the task, defaulting `docKind` to `other` when unset. */
 function docFields(context: AgentRunContext): {
   docKind: DocKind
@@ -109,6 +152,8 @@ function docBriefSection(
     `Brief / requirements: ${context.block.description?.trim() || '(none provided — infer from the title and any linked context)'}`,
   )
   if (outlineHints) lines.push(`Author-provided outline hints: ${outlineHints}`)
+  const kindFields = docKindFieldsSection(context, docKind)
+  if (kindFields) lines.push(kindFields)
   const linked = linkedContextSection(context, opts)
   if (linked) lines.push(linked)
   return lines.join('\n')

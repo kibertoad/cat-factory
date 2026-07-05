@@ -151,6 +151,46 @@
       "targetPathPlaceholder": "למשל docs/rfcs/0001-foo.md",
       "outlineHints": "רמזים למתווה",
       "outlineHintsPlaceholder": "סעיפים או נקודות שהמסמך צריך לכסות",
+      "docFields": {
+        "targetUsers": {
+          "label": "משתמשי היעד",
+          "placeholder": "למי מיועד המסמך ואילו משימות הם מבצעים"
+        },
+        "successMetrics": { "label": "מדדי הצלחה", "placeholder": "תוצאות מדידות שמראות שזה עובד" },
+        "alternativesConsidered": {
+          "label": "חלופות שנשקלו",
+          "placeholder": "גישות אחרות שנשקלו ומדוע נפסלו"
+        },
+        "rolloutConcerns": {
+          "label": "שיקולי הטמעה",
+          "placeholder": "סיכוני מיגרציה והשקה שיש לטפל בהם"
+        },
+        "decisionDrivers": {
+          "label": "גורמי ההחלטה",
+          "placeholder": "הכוחות והאילוצים שמניעים את ההחלטה"
+        },
+        "consideredOptions": {
+          "label": "אפשרויות שנשקלו",
+          "placeholder": "האפשרויות שהוערכו, כל אחת עם היתרונות והחסרונות שלה"
+        },
+        "whenToUse": {
+          "label": "מתי להשתמש",
+          "placeholder": "הטריגר או המצב שאליו חל ה-runbook הזה"
+        },
+        "escalationPath": {
+          "label": "נתיב הסלמה",
+          "placeholder": "למי לפנות וכיצד להסלים במקרה של כשל"
+        },
+        "researchQuestion": {
+          "label": "שאלת המחקר",
+          "placeholder": "השאלה או ההשערה שיש לענות עליה"
+        },
+        "optionsToCompare": {
+          "label": "אפשרויות להשוואה",
+          "placeholder": "האפשרויות שיש לשקול זו מול זו"
+        },
+        "apiSurface": { "label": "משטח ה-API", "placeholder": "נקודות הקצה או המשטח שבתחום" }
+      },
       "optional": "אופציונלי",
       "pipeline": "צינור",
       "chooseAtRunTime": "בחר בזמן הריצה",

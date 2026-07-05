@@ -151,6 +151,52 @@
       "targetPathPlaceholder": "ex. docs/rfcs/0001-foo.md",
       "outlineHints": "Indications de plan",
       "outlineHintsPlaceholder": "Sections ou points que le document devrait couvrir",
+      "docFields": {
+        "targetUsers": {
+          "label": "Utilisateurs cibles",
+          "placeholder": "À qui s'adresse le document et les tâches qu'ils accomplissent"
+        },
+        "successMetrics": {
+          "label": "Indicateurs de réussite",
+          "placeholder": "Résultats mesurables qui montrent que ça fonctionne"
+        },
+        "alternativesConsidered": {
+          "label": "Alternatives envisagées",
+          "placeholder": "Les autres approches évaluées et pourquoi elles ont été écartées"
+        },
+        "rolloutConcerns": {
+          "label": "Points de déploiement",
+          "placeholder": "Risques de migration et de déploiement à traiter"
+        },
+        "decisionDrivers": {
+          "label": "Facteurs de décision",
+          "placeholder": "Les forces et contraintes qui motivent la décision"
+        },
+        "consideredOptions": {
+          "label": "Options envisagées",
+          "placeholder": "Les options évaluées, chacune avec ses compromis"
+        },
+        "whenToUse": {
+          "label": "Quand l'utiliser",
+          "placeholder": "Le déclencheur ou la situation à laquelle ce runbook s'applique"
+        },
+        "escalationPath": {
+          "label": "Chemin d'escalade",
+          "placeholder": "Qui contacter et comment escalader en cas d'échec"
+        },
+        "researchQuestion": {
+          "label": "Question de recherche",
+          "placeholder": "La question ou l'hypothèse à laquelle répondre"
+        },
+        "optionsToCompare": {
+          "label": "Options à comparer",
+          "placeholder": "Les options à mettre en balance"
+        },
+        "apiSurface": {
+          "label": "Surface d'API",
+          "placeholder": "Les endpoints ou la surface concernés"
+        }
+      },
       "optional": "optionnel",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choisir au lancement",

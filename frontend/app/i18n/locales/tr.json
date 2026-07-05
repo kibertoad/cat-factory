@@ -151,6 +151,49 @@
       "targetPathPlaceholder": "ör. docs/rfcs/0001-foo.md",
       "outlineHints": "Ana hat ipuçları",
       "outlineHintsPlaceholder": "Belgenin kapsaması gereken bölümler veya noktalar",
+      "docFields": {
+        "targetUsers": {
+          "label": "Hedef kullanıcılar",
+          "placeholder": "Belgenin kime yönelik olduğu ve yaptıkları işler"
+        },
+        "successMetrics": {
+          "label": "Başarı ölçütleri",
+          "placeholder": "İşe yaradığını gösteren ölçülebilir sonuçlar"
+        },
+        "alternativesConsidered": {
+          "label": "Değerlendirilen alternatifler",
+          "placeholder": "Tartılan diğer yaklaşımlar ve neden elendikleri"
+        },
+        "rolloutConcerns": {
+          "label": "Dağıtım kaygıları",
+          "placeholder": "Ele alınacak geçiş ve dağıtım riskleri"
+        },
+        "decisionDrivers": {
+          "label": "Karar etkenleri",
+          "placeholder": "Kararı yönlendiren güçler ve kısıtlar"
+        },
+        "consideredOptions": {
+          "label": "Değerlendirilen seçenekler",
+          "placeholder": "Değerlendirilen seçenekler ve ödünleşimleri"
+        },
+        "whenToUse": {
+          "label": "Ne zaman kullanılır",
+          "placeholder": "Bu runbook'un geçerli olduğu tetikleyici veya durum"
+        },
+        "escalationPath": {
+          "label": "Yükseltme yolu",
+          "placeholder": "Kiminle iletişime geçileceği ve arıza durumunda nasıl yükseltileceği"
+        },
+        "researchQuestion": {
+          "label": "Araştırma sorusu",
+          "placeholder": "Yanıtlanacak soru veya hipotez"
+        },
+        "optionsToCompare": {
+          "label": "Karşılaştırılacak seçenekler",
+          "placeholder": "Birbirine karşı tartılacak seçenekler"
+        },
+        "apiSurface": { "label": "API yüzeyi", "placeholder": "Kapsamdaki uç noktalar veya yüzey" }
+      },
       "optional": "isteğe bağlı",
       "pipeline": "İşlem hattı",
       "chooseAtRunTime": "Çalıştırma sırasında seç",

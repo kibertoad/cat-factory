@@ -169,6 +169,49 @@
       "targetPathPlaceholder": "e.g. docs/rfcs/0001-foo.md",
       "outlineHints": "Outline hints",
       "outlineHintsPlaceholder": "Sections or points the document should cover",
+      "docFields": {
+        "targetUsers": {
+          "label": "Target users",
+          "placeholder": "Who the document is for and the jobs they're doing"
+        },
+        "successMetrics": {
+          "label": "Success metrics",
+          "placeholder": "Measurable outcomes that show it's working"
+        },
+        "alternativesConsidered": {
+          "label": "Alternatives considered",
+          "placeholder": "Other approaches weighed and why they were ruled out"
+        },
+        "rolloutConcerns": {
+          "label": "Rollout concerns",
+          "placeholder": "Migration and rollout risks to address"
+        },
+        "decisionDrivers": {
+          "label": "Decision drivers",
+          "placeholder": "The forces and constraints driving the decision"
+        },
+        "consideredOptions": {
+          "label": "Considered options",
+          "placeholder": "The options evaluated, each with its trade-offs"
+        },
+        "whenToUse": {
+          "label": "When to use",
+          "placeholder": "The trigger or situation this runbook applies to"
+        },
+        "escalationPath": {
+          "label": "Escalation path",
+          "placeholder": "Who to contact and how to escalate on failure"
+        },
+        "researchQuestion": {
+          "label": "Research question",
+          "placeholder": "The question or hypothesis to answer"
+        },
+        "optionsToCompare": {
+          "label": "Options to compare",
+          "placeholder": "The options to weigh against each other"
+        },
+        "apiSurface": { "label": "API surface", "placeholder": "The endpoints or surface in scope" }
+      },
       "optional": "optional",
       "pipeline": "Pipeline",
       "chooseAtRunTime": "Choose at run time",

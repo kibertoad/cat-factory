@@ -1,6 +1,6 @@
 # Initiative: documentation-type task improvements
 
-**Status:** in progress (WS1 item 1 + WS2 landed) · **Owner:** core · **Started:** 2026-07-04
+**Status:** in progress (WS1 item 1 + WS2 + WS3 landed) · **Owner:** core · **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -183,8 +183,8 @@ two: backend loop, then UI).
 | 5   | `style.anti-llmisms` + `style.concise-actionable` fragments (new `collections/style.ts`)                                                                                                                                                  | WS2        | done   | #787      |
 | 6   | `doc-aware` trait + engine fragment folding for doc kinds; default-on selection for document tasks                                                                                                                                        | WS2        | done   | #787      |
 | 7   | Style fragments as review criteria for `doc-reviewer`                                                                                                                                                                                     | WS2        | done   | #787      |
-| 8   | Kind-specific `taskTypeFields` (contracts) + `docBriefSection` folding                                                                                                                                                                    | WS3        | todo   |           |
-| 9   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                                                                                                                                   | WS3        | todo   |           |
+| 8   | Kind-specific `taskTypeFields` (contracts) + `docBriefSection` folding                                                                                                                                                                    | WS3        | done   | (this PR) |
+| 9   | `AddTaskModal.vue` / inspector per-kind conditional inputs (+ i18n keys in all locales)                                                                                                                                                   | WS3        | done   | (this PR) |
 | 10  | `doc-quality` gate in `@cat-factory/gates` (deterministic probe over `RepoFiles`) + helper wiring                                                                                                                                         | WS4        | todo   |           |
 | 11  | Insert gate into `pl_document`/`pl_document_quick` + catalog version bump + conformance assertion                                                                                                                                         | WS4        | todo   |           |
 | 12  | Interactive session backend: parked decision-wait loop + iteration cap + persistence (D1 ⇄ Drizzle) + conformance                                                                                                                         | WS5        | todo   |           |
@@ -240,6 +240,21 @@ two: backend loop, then UI).
   `companion.ts` telling it to treat those standards as the criteria. No doc prompt-version bump
   was needed: the inline `DOC_*_SYSTEM_PROMPT` text is unchanged (they aren't in `PROMPT_VERSIONS`
   anyway); the new fragments carry their own semver `version`.
+- **WS3 landed via one shared `DOC_KIND_FIELDS` descriptor (not per-kind branches):** the
+  kind-specific fields are flat optional strings on `taskTypeFieldsSchema` (no migration — the
+  sparse bag's whole point), and `DOC_KIND_FIELDS` (`contracts/src/primitives.ts`,
+  `Partial<Record<DocKind, DocKindFieldSpec[]>>`) is the SINGLE SOURCE OF TRUTH the form and the
+  prompt both iterate: `AddTaskModal.vue` renders `v-for="spec in docKindFields"` (only the
+  selected kind's fields; a value for another kind is never submitted), and `document.ts`'s
+  `docKindFieldsSection` folds the filled ones into the brief as required content for the matching
+  template sections. The form labels/placeholders are i18n (`board.addTask.docFields.<key>.{label,
+placeholder}` in all 8 locales), guarded by exhaustive `Record<DocKindFieldKey, string>` catalog
+  maps (`DOC_FIELD_LABEL_KEYS`/`DOC_FIELD_PLACEHOLDER_KEYS`) per the dynamic-enum-key rule; the
+  prompt labels are a separate exhaustive `DOC_KIND_FIELD_LABELS` in `document.ts`. Adding a field
+  = a new schema entry + a `DOC_KIND_FIELDS` descriptor + the two i18n keys in every locale + the
+  prompt label; the exhaustive Records make a forgotten one a compile error. No prompt-version bump
+  was needed (the inline `DOC_*_SYSTEM_PROMPT` text is unchanged; the fold only adds user-prompt
+  content, and these prompts aren't in `PROMPT_VERSIONS`).
 - **Editing a versioned prompt means bumping its number** (`agents/kinds/versions.ts` rule);
   any prompt-visible change to the `doc-*` kinds in WS1/WS2 bumps accordingly.
 - **Pipeline catalog edits need a `version` bump** on the touched pipeline (the reseed-offer
