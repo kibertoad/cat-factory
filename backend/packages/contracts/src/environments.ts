@@ -1,5 +1,10 @@
 import * as v from 'valibot'
-import { customBackendKindSchema, nonEmpty, urlString } from './primitives.js'
+import {
+  customBackendKindSchema,
+  eksClusterFieldsSchema,
+  nonEmpty,
+  urlString,
+} from './primitives.js'
 import { stackRecipeSchema } from './stack-recipes.js'
 
 // ---------------------------------------------------------------------------
@@ -512,8 +517,20 @@ export const kubernetesProvisionConfigSchema = v.object({
 })
 export type KubernetesProvisionConfig = v.InferOutput<typeof kubernetesProvisionConfigSchema>
 
+/**
+ * The AWS EKS provision config: the full Kubernetes provision config (an EKS apiserver is a
+ * standard apiserver, so per-PR namespaces + manifest apply are identical) PLUS the AWS
+ * `region` + `clusterName` needed to mint the IAM apiserver token. The AWS credentials ride
+ * the secret bundle; the SigV4/STS minting lives in `@cat-factory/eks`.
+ */
+export const eksProvisionConfigSchema = v.object({
+  ...kubernetesProvisionConfigSchema.entries,
+  ...eksClusterFieldsSchema.entries,
+})
+export type EksProvisionConfig = v.InferOutput<typeof eksProvisionConfigSchema>
+
 /** Built-in environment backend kinds the contract knows by name. */
-export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+export const RESERVED_ENVIRONMENT_BACKEND_KINDS = ['manifest', 'kubernetes', 'eks'] as const
 
 /**
  * The `kind` slug of a CUSTOM (third-party, programmatically-registered) environment
@@ -540,6 +557,7 @@ export const customEnvironmentBackendKindSchema = customBackendKindSchema(
 export const environmentBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: environmentManifestSchema }),
   v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesProvisionConfigSchema }),
+  v.object({ kind: v.literal('eks'), eks: eksProvisionConfigSchema }),
   v.object({ kind: customEnvironmentBackendKindSchema, manifest: environmentManifestSchema }),
 ])
 export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendConfigSchema>

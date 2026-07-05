@@ -118,6 +118,58 @@ export async function startRun(
   )
 }
 
+/** A recurring schedule as the controller returns it (only the fields the specs read). */
+export interface Schedule {
+  id: string
+  /** The reused on-board task block the schedule runs against (the board node to assert on). */
+  blockId: string
+}
+
+/**
+ * Create a recurring-pipeline schedule over REST (the endpoint the recurring modal posts to),
+ * attached to the service frame `frameId`. Returns the schedule whose `blockId` is the reused
+ * on-board task the backend now pushes live onto the board (`block-added`). A nominal daily
+ * cadence is stored, but the spec fires it deterministically via {@link runScheduleNow} rather
+ * than waiting on the sweeper.
+ */
+export async function createSchedule(
+  request: APIRequestContext,
+  workspaceId: string,
+  frameId: string,
+  pipelineId: string,
+  name = 'E2E recurring',
+): Promise<Schedule> {
+  return json<Schedule>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/recurring-pipelines`, {
+      data: {
+        frameId,
+        pipelineId,
+        name,
+        recurrence: {
+          intervalHours: 24,
+          weekdays: [],
+          windowStartHour: null,
+          windowEndHour: null,
+          timezone: 'UTC',
+        },
+      },
+    }),
+  )
+}
+
+/** Fire a schedule immediately (run-now), starting a run against its reused block. */
+export async function runScheduleNow(
+  request: APIRequestContext,
+  workspaceId: string,
+  scheduleId: string,
+): Promise<void> {
+  await json(
+    await request.post(
+      `${BACKEND_URL}/workspaces/${workspaceId}/recurring-pipelines/${scheduleId}/run-now`,
+    ),
+  )
+}
+
 /** One bootstrap job as the controller returns it (only the fields the specs read). */
 export interface BootstrapJob {
   id: string

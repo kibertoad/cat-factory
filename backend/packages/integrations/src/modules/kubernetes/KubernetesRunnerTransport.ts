@@ -8,12 +8,17 @@ import type {
   RunnerTransport,
   SecretResolver,
 } from '@cat-factory/kernel'
-import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
+import {
+  KubernetesApiClient,
+  type KubernetesTokenProvider,
+  safeText,
+} from './KubernetesApiClient.js'
 import {
   analyzePodStatus,
   apiBase,
   buildPodManifest,
   classifyPodReadiness,
+  KUBERNETES_TOKEN_KEY,
   podName,
   podUrl,
   podsUrl,
@@ -56,8 +61,19 @@ export class KubernetesRunnerTransport implements RunnerTransport {
   constructor(
     private readonly config: KubernetesRunnerConfig,
     resolveSecret: SecretResolver,
+    /**
+     * Optional async token source forwarded to the apiserver client. Omitted for the native
+     * Kubernetes backend (static ServiceAccount token); supplied by the EKS backend so the
+     * SAME transport drives an EKS apiserver behind a minted, short-lived IAM token.
+     */
+    tokenProvider?: KubernetesTokenProvider,
   ) {
-    this.client = new KubernetesApiClient(config, resolveSecret)
+    this.client = new KubernetesApiClient(
+      config,
+      resolveSecret,
+      KUBERNETES_TOKEN_KEY,
+      tokenProvider,
+    )
   }
 
   async dispatch(

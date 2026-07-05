@@ -3,9 +3,11 @@
 // environment tab's backend-type selector (the other being the BYO HTTP manifest editor).
 // It builds the discriminated `{ kind: 'kubernetes', kubernetes }` config plus the
 // `apiToken` secret bundle and emits test/save to the parent tab (which calls the shared
-// provider-connections store). The K8s env config differs from the runner K8s config
-// (manifest source + URL derivation vs an executor image + namespace), so it has its own
-// form rather than reusing KubernetesRunnerForm.
+// provider-connections store). The K8s env config has manifest-source + URL-derivation
+// (discriminated-union) fields a flat descriptor form can't yet express, so — unlike the
+// runner backends, which now self-describe via `configTemplate` and render through the
+// generic form — the environment axis keeps this bespoke form until it, too, is descriptor-
+// driven (see docs/initiatives/descriptor-driven-infra-forms.md).
 import { computed, reactive, ref, watch } from 'vue'
 import { KUBERNETES_ENV_TOKEN_SECRET_KEY } from '@cat-factory/contracts'
 import type { ProviderConnection } from '~/types/providerConnections'

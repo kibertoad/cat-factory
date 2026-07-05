@@ -251,8 +251,12 @@ export { KubernetesRunnerTransport } from './modules/kubernetes/KubernetesRunner
 export {
   KubernetesApiClient,
   type KubernetesClientConfig,
+  type KubernetesTokenProvider,
 } from './modules/kubernetes/KubernetesApiClient.js'
-export { KubernetesEnvironmentProvider } from './modules/kubernetes/KubernetesEnvironmentProvider.js'
+export {
+  KubernetesEnvironmentProvider,
+  type KubernetesEnvironmentProviderOptions,
+} from './modules/kubernetes/KubernetesEnvironmentProvider.js'
 export * as kubernetesLogic from './modules/kubernetes/kubernetes.logic.js'
 export * as kubernetesEnvironmentLogic from './modules/kubernetes/kubernetes-environment.logic.js'
 // The Docker Compose environment backend: a host-daemon `EnvironmentProvider` (the Checkbox

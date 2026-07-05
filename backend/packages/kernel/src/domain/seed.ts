@@ -506,6 +506,46 @@ export function seedPipelines(): Pipeline[] {
         'merger',
       ],
     },
+    {
+      // The recurring bug-triage pipeline: each scheduled fire pulls ONE matching issue
+      // from the workspace's configured tracker board (`bug-intake`, an engine step that
+      // rewrites the reused recurring block from the picked issue), investigates the bug
+      // across every involved service's repo (`bug-investigator`, a structured multi-repo
+      // read-only explore), asks a human for clarification when the report is unclear
+      // (`clarity-review` — auto-passes when the investigation is `clear`, parks otherwise),
+      // estimates the work once the problem is understood (`task-estimator`, so the estimate
+      // is available to gate the expensive downstream steps), writes a failing reproduction
+      // test that may concede without failing the run (`repro-test`, which SEEDS the shared
+      // work branch), fixes the reported bug (`coder`, which resumes that branch and opens the
+      // PR), reviews it (`reviewer` companion), verifies it in an ephemeral env (`tester-api`),
+      // and drives the fix through the standard mergeability / CI / merge tail. On merge the
+      // existing tracker writeback closes the issue.
+      //
+      // `availability: 'recurring'` (design §2): a `bug-intake` step pulls its work from a
+      // schedule's tracker board, so this pipeline is meaningless as a one-off — the launch
+      // gate (`assertPipelineLaunchable`) refuses a manual start and the SPA hides it from the
+      // one-off picker while surfacing it in the recurring modal. The closest reference preset
+      // is `pl_bugfix` (the investigate → clarity head) extended with the intake front + the
+      // repro/estimate/test/gates tail. Only `clarity-review` is a human gate; the read-only
+      // investigator auto-advances and the conflicts/ci/merger tail self-drives.
+      id: 'pl_bug_triage',
+      name: 'Bug triage (recurring)',
+      availability: 'recurring',
+      agentKinds: [
+        'bug-intake',
+        'bug-investigator',
+        'clarity-review',
+        'task-estimator',
+        'repro-test',
+        'coder',
+        'reviewer',
+        'tester-api',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
+      gates: [false, false, true, false, false, false, false, false, false, false, false],
+    },
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
@@ -621,3 +661,5 @@ export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'
 export const TECH_DEBT_PIPELINE_ID = 'pl_tech_debt'
+/** Pipeline id of the recurring bug-triage pipeline (backlog worker; see backend/docs/bug-triage-pipeline.md). */
+export const BUG_TRIAGE_PIPELINE_ID = 'pl_bug_triage'
