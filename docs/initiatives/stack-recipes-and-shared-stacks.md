@@ -318,28 +318,28 @@ Classification: **A** = fully automatable (unattended once configured) · **C** 
 with credentials/one-time login provided · **M** = inherently manual, guided by a preflight
 with remediation instructions.
 
-| Bring-up element                                                        | Covered by                                                        | Class |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------- | ----- |
-| Tailscale VPN enrollment/connection                                     | Preflight: reachability probe of VPN-only hosts + instructions    | M     |
-| AWS SSO + ECR login (both registries)                                   | Preflight: registry auth state + login instructions               | M     |
-| Vault OIDC (Google SSO) secrets → `.env.dev.local`, `docker/.env.*`     | Preflight: secrets-marker check + instructions (run repo's step)  | M     |
-| mkcert install + CA trust                                               | Preflight: CA-in-truststore check + instructions                  | M     |
-| `/etc/hosts` entries, sysctl tweaks (sudo)                              | Preflight: hosts-entries check + instructions                     | M     |
-| Private clone of both repos                                             | Existing PAT-backed clone seam (`resolveDeployCloneTarget`)       | C     |
-| ECR image pulls (after login)                                           | Compose pull inside provision                                     | C     |
+| Bring-up element                                                    | Covered by                                                        | Class |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------- | ----- |
+| Tailscale VPN enrollment/connection                                 | Preflight: reachability probe of VPN-only hosts + instructions    | M     |
+| AWS SSO + ECR login (both registries)                               | Preflight: registry auth state + login instructions               | M     |
+| Vault OIDC (Google SSO) secrets → `.env.dev.local`, `docker/.env.*` | Preflight: secrets-marker check + instructions (run repo's step)  | M     |
+| mkcert install + CA trust                                           | Preflight: CA-in-truststore check + instructions                  | M     |
+| `/etc/hosts` entries, sysctl tweaks (sudo)                          | Preflight: hosts-entries check + instructions                     | M     |
+| Private clone of both repos                                         | Existing PAT-backed clone seam (`resolveDeployCloneTarget`)       | C     |
+| ECR image pulls (after login)                                       | Compose pull inside provision                                     | C     |
 | `docker network create acme-net`                                    | SharedStack `managedNetworks`                                     | A     |
-| shared-services compose up + wait-healthy (public + ECR images)         | SharedStack `ensureUp` + healthGate                               | A/C   |
-| shared-services `users sync` (mysql/proxysql/postgres/cockroach)        | SharedStack `setupSteps` (`compose-exec`)                         | A     |
-| Debezium connector registration                                         | SharedStack `setupSteps` (`wait-http` + `compose-exec`/HTTP step) | A     |
-| `.split.yaml.dist` → `.split.yaml`, `.env.dev.local-dist` → target      | Recipe `envFiles` materialization                                 | A     |
+| shared-services compose up + wait-healthy (public + ECR images)     | SharedStack `ensureUp` + healthGate                               | A/C   |
+| shared-services `users sync` (mysql/proxysql/postgres/cockroach)    | SharedStack `setupSteps` (`compose-exec`)                         | A     |
+| Debezium connector registration                                     | SharedStack `setupSteps` (`wait-http` + `compose-exec`/HTTP step) | A     |
+| `.split.yaml.dist` → `.split.yaml`, `.env.dev.local-dist` → target  | Recipe `envFiles` materialization                                 | A     |
 | `docker/dev.yml` + OS override layering, external `acme-net` attach | Recipe `composeFiles` + `externalNetworks` + `sharedStackRefs`    | A     |
-| `composer install`, cache warmup                                        | Recipe `setupSteps` (`compose-exec`, own timeout)                 | A     |
+| `composer install`, cache warmup                                    | Recipe `setupSteps` (`compose-exec`, own timeout)                 | A     |
 | MySQL seed import (`deployment/acme-db-dummy/*.sql`)                | Recipe `setupSteps` (seed via `compose-exec` mysql client)        | A     |
-| Doctrine migrations (main + services_db)                                | Recipe `setupSteps` (`compose-exec`)                              | A     |
-| ES index create + reindex, expert-search reindex                        | Recipe `setupSteps` (`wait-http` + `compose-exec`)                | A     |
-| Frontend build gate (`public/js/compiled/ui/manifest.json`)             | Recipe `setupSteps` (`wait-file`)                                 | A     |
-| `bin/console monitor:health` readiness loop                             | Recipe `healthGate` (`compose-exec`)                              | A     |
-| Test login users (register + Mailpit confirm)                           | `tester-environment-access.md` Slice B credential pools (seeded)  | A     |
+| Doctrine migrations (main + services_db)                            | Recipe `setupSteps` (`compose-exec`)                              | A     |
+| ES index create + reindex, expert-search reindex                    | Recipe `setupSteps` (`wait-http` + `compose-exec`)                | A     |
+| Frontend build gate (`public/js/compiled/ui/manifest.json`)         | Recipe `setupSteps` (`wait-file`)                                 | A     |
+| `bin/console monitor:health` readiness loop                         | Recipe `healthGate` (`compose-exec`)                              | A     |
+| Test login users (register + Mailpit confirm)                       | `tester-environment-access.md` Slice B credential pools (seeded)  | A     |
 
 **Honesty note:** a full acme-monolith environment requires the five **M** rows done once per
 machine (and the ECR login refreshed ~8-hourly — the preflight makes the stale-token case a
@@ -363,7 +363,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | todo   |        |
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s                              | todo   |        |
 | 8   | **Environment analyst**: agent kind (structured draft recipe) + wizard draft-merge with provenance                                                        | todo   |        |
-| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                        | todo   |        |
+| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                            | todo   |        |
 | 10  | **Validation harness**: golden-run script + shared-services public-subset smoke (compose up + consumer attach + health + teardown-keeps-stack)            | todo   |        |
 | S1  | _Stretch_: recipe execution on self-hosted runner pools (heavy stacks for hosted deployments)                                                             | todo   |        |
 | S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                            | todo   |        |

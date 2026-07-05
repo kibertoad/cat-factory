@@ -16,7 +16,7 @@ import {
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
-import { catFactoryObservability } from '@cat-factory/agents'
+import { catFactoryObservability, FINAL_ANSWER_IN_REPLY } from '@cat-factory/agents'
 import {
   answeredDigest,
   applyDocInterviewAnswer,
@@ -60,7 +60,8 @@ export const DOC_INTERVIEW_SYSTEM_PROMPT =
   'section must cover, and anything explicitly out of scope. Respond with ONLY a JSON object of ' +
   'shape {"done": boolean, "questions": string[], "brief": string}. When done is false, ' +
   '`questions` is non-empty; when done is true, `questions` is empty and you MUST fill `brief`. ' +
-  'No prose, no code fences.'
+  'No prose, no code fences. ' +
+  FINAL_ANSWER_IN_REPLY
 
 /** What the interviewer needs to resolve its inline model, reach the provider, and persist. */
 export interface DocInterviewDeps {
@@ -106,6 +107,15 @@ export class DocInterviewService {
   }
 
   /**
+   * Drop the block's session(s) so the next run starts a clean interview. Called by the gate on a
+   * fresh run (mirrors `IterativeReviewService.review` clearing the block before iteration 1) — a
+   * re-run must not reuse the prior run's converged / at-cap session and its stale answers.
+   */
+  clearForBlock(workspaceId: string, blockId: string): Promise<void> {
+    return this.deps.docInterviewRepository.deleteByBlock(workspaceId, blockId)
+  }
+
+  /**
    * Run one interviewer pass over the document. `finalize` forces convergence (the human
    * proceeded, or the round cap was hit) so the model is asked only to synthesize the brief.
    */
@@ -138,10 +148,17 @@ export class DocInterviewService {
         }`,
       )
     }
-    return {
-      output: coerceDocInterviewOutput(extractJson(text), { finalize: opts.finalize }),
-      model: `${ref.provider}:${ref.model}`,
+    const output = coerceDocInterviewOutput(extractJson(text), { finalize: opts.finalize })
+    // A non-final pass that yields neither questions nor a brief means the model returned
+    // empty / unparseable output (e.g. a reasoning model that emitted only into its private
+    // thinking channel, or prose with no JSON). Fail loudly instead of silently converging with an
+    // empty brief and skipping the whole interview — the run surfaces the failure and can retry.
+    if (!opts.finalize && output.kind === 'done' && !output.brief.trim()) {
+      throw new ValidationError(
+        `The document interviewer (${ref.provider}:${ref.model}) returned no questions and no brief`,
+      )
     }
+    return { output, model: `${ref.provider}:${ref.model}` }
   }
 
   /**

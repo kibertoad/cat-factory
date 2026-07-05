@@ -21,7 +21,13 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
-import { CODE_AWARE_TRAIT, DOC_AWARE_TRAIT, hasTrait } from '@cat-factory/agents'
+import {
+  CODE_AWARE_TRAIT,
+  DOC_AWARE_TRAIT,
+  DOC_FINALIZER_KIND,
+  DOC_WRITER_KIND,
+  hasTrait,
+} from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import {
   boundServiceFrameIds,
@@ -635,8 +641,13 @@ export class AgentContextBuilder {
     if (!hasTrait(agentKind, DOC_AWARE_TRAIT, this.deps.agentKindRegistry)) return {}
     // The converged interactive-interview brief (WS5) — folded into the writer's context so the
     // draft starts from the refined spec, not the raw outline. Read independently of the
-    // template/exemplar links (they need the documents integration; the interview does not).
-    const interviewBrief = await this.resolveDocInterviewBrief(workspaceId, block)
+    // template/exemplar links (they need the documents integration; the interview does not), and
+    // ONLY for the two kinds that render it (doc-writer / doc-finalizer) — the researcher /
+    // outliner / interviewer / reviewer never consume it, so we skip the session read for them.
+    const interviewBrief =
+      agentKind === DOC_WRITER_KIND || agentKind === DOC_FINALIZER_KIND
+        ? await this.resolveDocInterviewBrief(workspaceId, block)
+        : undefined
     const documents = this.deps.documents
     if (!documents) return interviewBrief ? { docInterviewBrief: interviewBrief } : {}
     const docKind = (block.taskTypeFields?.docKind ?? 'other') as DocKind

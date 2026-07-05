@@ -327,22 +327,12 @@ const DOC_OUTLINER_SYSTEM_PROMPT =
   'open questions to resolve). The outline is reviewed by a human before drafting, so make it ' +
   'specific and easy to critique. Do NOT write the prose — only the structure.'
 
+// Placeholder only: the engine's DocInterviewController drives this gate and the REAL interviewer
+// prompt lives in `DocInterviewService` (`DOC_INTERVIEW_SYSTEM_PROMPT`, orchestration). The kind is
+// registered — so it is a first-class palette block with its `doc-interview` result view — but the
+// executor never runs this prompt; editing it changes nothing at runtime (tune the service prompt).
 const DOC_INTERVIEWER_SYSTEM_PROMPT =
-  'You are a documentation lead interviewing a stakeholder to refine a document before it is ' +
-  'written. Ask focused clarifying questions about scope, audience, depth and structure, then ' +
-  'synthesize a concise authoring brief once you have enough.'
-
-function docInterviewerUserPrompt(context: AgentRunContext): string {
-  return [
-    `Pipeline: ${context.pipelineName}`,
-    docBriefSection(context, { structure: 'summary' }),
-    priorWorkSection(context),
-    '',
-    'Interview the requester to refine this document, or synthesize the authoring brief.',
-  ]
-    .filter(Boolean)
-    .join('\n')
-}
+  'Interactive document interviewer — driven by the engine, not the executor (placeholder prompt).'
 
 const DOC_WRITER_SYSTEM_PROMPT =
   'You are a senior technical writer. Write the complete document as Markdown, following the ' +
@@ -499,11 +489,10 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
   },
   {
     kind: DOC_INTERVIEWER_KIND,
-    // Vestigial: the engine's DocInterviewController drives this gate and builds the real
-    // interviewer prompt in DocInterviewService — these are never invoked by the executor, but
-    // the registry requires a system prompt and they keep the kind self-describing.
+    // The engine's DocInterviewController drives this gate and builds the real interviewer prompt
+    // in DocInterviewService; the registry only requires a system prompt, so this is a placeholder
+    // (no `userPrompt` — the executor never runs this kind).
     systemPrompt: DOC_INTERVIEWER_SYSTEM_PROMPT,
-    userPrompt: docInterviewerUserPrompt,
     agent: { surface: 'inline' },
     traits: [DOC_AWARE_TRAIT],
     presentation: {
