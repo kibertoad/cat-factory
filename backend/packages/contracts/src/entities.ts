@@ -1248,6 +1248,15 @@ export const webSearchProviderSchema = v.picklist(['brave', 'searxng'])
 export type WebSearchProvider = v.InferOutput<typeof webSearchProviderSchema>
 
 /**
+ * Narrow a free-text stored value (a telemetry `provider` column, which is plain TEXT) back
+ * to the {@link WebSearchProvider} union, or null when it isn't one. The single source of
+ * truth both telemetry stores use to map their rows, so the union is defined once.
+ */
+export function isWebSearchProvider(value: unknown): value is WebSearchProvider {
+  return value === 'brave' || value === 'searxng'
+}
+
+/**
  * Whether a container agent had web search available for its run, and — when it did —
  * which upstream backend served it (resolved backend-side at dispatch from the run's
  * account keys, else the deployment default). Surfaced on a container step so the run

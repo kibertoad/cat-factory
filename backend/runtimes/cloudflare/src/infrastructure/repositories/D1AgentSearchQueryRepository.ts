@@ -1,8 +1,5 @@
-import type {
-  AgentSearchQuery,
-  AgentSearchQueryRepository,
-  WebSearchProvider,
-} from '@cat-factory/kernel'
+import type { AgentSearchQuery, AgentSearchQueryRepository } from '@cat-factory/kernel'
+import { isWebSearchProvider } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 
 interface SearchQueryRow {
@@ -16,18 +13,14 @@ interface SearchQueryRow {
   created_at: number
 }
 
-/** The stored provider column is a free-text TEXT; narrow it back to the wire union. */
-function parseProvider(value: string | null): WebSearchProvider | null {
-  return value === 'brave' || value === 'searxng' ? value : null
-}
-
 function rowToQuery(row: SearchQueryRow): AgentSearchQuery {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
     executionId: row.execution_id,
     agentKind: row.agent_kind,
-    provider: parseProvider(row.provider),
+    // The stored provider column is free-text TEXT; narrow it back to the wire union.
+    provider: isWebSearchProvider(row.provider) ? row.provider : null,
     query: row.query,
     resultCount: row.result_count,
     createdAt: row.created_at,

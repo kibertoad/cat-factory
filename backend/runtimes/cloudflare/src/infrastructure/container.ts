@@ -1440,21 +1440,22 @@ function buildContainerExecutor(
   const resolveWebSearchAvailability =
     defaultWebSearchUpstream || webSearchSettings
       ? async (workspaceId: string): Promise<WebSearchAvailability> => {
-          // A deployment default serves every account, so the tool is on regardless — and
-          // it wins over the account path in the proxy, so its provider is the one that runs.
+          // Mirror the proxy's own resolution (`accountUpstream ?? defaultWebSearchUpstream`):
+          // the run's account keys WIN and the deployment default is only the fallback, so the
+          // surfaced provider matches the one that will actually serve the run's searches. Build
+          // the account upstream the SAME way the proxy does before falling back to the default.
+          if (webSearchSettings) {
+            const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+            if (accountId) {
+              const accountUpstream = createWebSearchUpstream(
+                (await webSearchSettings.resolve(accountId)).webSearch ?? {},
+              )
+              if (accountUpstream) return { available: true, provider: accountUpstream.provider }
+            }
+          }
           if (defaultWebSearchUpstream)
             return { available: true, provider: defaultWebSearchUpstream.provider }
-          if (!webSearchSettings) return { available: false, provider: null }
-          const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
-          if (!accountId) return { available: false, provider: null }
-          // Build the account upstream the SAME way the proxy resolves it, so the surfaced
-          // provider matches the one that will actually serve the run's searches.
-          const upstream = createWebSearchUpstream(
-            (await webSearchSettings.resolve(accountId)).webSearch ?? {},
-          )
-          return upstream
-            ? { available: true, provider: upstream.provider }
-            : { available: false, provider: null }
+          return { available: false, provider: null }
         }
       : undefined
 

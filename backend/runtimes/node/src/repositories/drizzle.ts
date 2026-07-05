@@ -123,7 +123,11 @@ import type {
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS } from '@cat-factory/kernel'
-import { agentRunKindSchema, decodeInitiativeRow } from '@cat-factory/contracts'
+import {
+  agentRunKindSchema,
+  decodeInitiativeRow,
+  isWebSearchProvider,
+} from '@cat-factory/contracts'
 import {
   decodeEnum,
   tryDecodeRows,
@@ -1582,18 +1586,14 @@ class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepos
 
 type AgentSearchQueryRow = typeof agentSearchQueries.$inferSelect
 
-/** The stored provider column is free-text; narrow it back to the wire union. */
-function parseSearchProvider(value: string | null): AgentSearchQuery['provider'] {
-  return value === 'brave' || value === 'searxng' ? value : null
-}
-
 function rowToAgentSearchQuery(row: AgentSearchQueryRow): AgentSearchQuery {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
     executionId: row.execution_id,
     agentKind: row.agent_kind,
-    provider: parseSearchProvider(row.provider),
+    // The stored provider column is free-text; narrow it back to the wire union.
+    provider: isWebSearchProvider(row.provider) ? row.provider : null,
     query: row.query,
     resultCount: row.result_count,
     createdAt: row.created_at,

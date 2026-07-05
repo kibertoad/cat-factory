@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { ContainerSessionService } from '../../containers/ContainerSessionService.js'
 import type { AppEnv } from '../../http/env.js'
+import { makeWaitUntil } from '../../http/waitUntil.js'
 import { logger } from '../../observability/logger.js'
 import { createWebSearchUpstream } from './upstreams.js'
 
@@ -93,20 +94,25 @@ export function webSearchProxyController(): Hono<AppEnv> {
     // Record the performed query for observability (best-effort, gated inside the recorder
     // on LLM_RECORD_PROMPTS + the workspace `storeAgentContext` setting). Attributed to the
     // run + agent kind carried on the session token, tagged with the provider that served it.
+    // Scheduled through `waitUntil` so the write survives past the response on the Worker (a
+    // bare fire-and-forget is dropped when the isolate is frozen); a no-op passthrough on Node.
+    const waitUntil = makeWaitUntil(c)
     const recordSearch = (resultCount: number): void => {
       if (!searchQueryObservability) return
-      void searchQueryObservability
-        .record({
-          workspaceId: session.workspaceId,
-          executionId: session.executionId,
-          agentKind: session.agentKind,
-          provider: upstream.provider,
-          query,
-          resultCount,
-        })
-        .catch(() => {
-          // Swallowed: observability never breaks a search.
-        })
+      waitUntil(
+        searchQueryObservability
+          .record({
+            workspaceId: session.workspaceId,
+            executionId: session.executionId,
+            agentKind: session.agentKind,
+            provider: upstream.provider,
+            query,
+            resultCount,
+          })
+          .catch(() => {
+            // Swallowed: observability never breaks a search.
+          }),
+      )
     }
 
     try {
