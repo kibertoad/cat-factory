@@ -1,5 +1,10 @@
 import type { AgentRunContext, Block, DocKind } from '@cat-factory/kernel'
-import { CONTEXT_BUDGET, DOC_FIXER_AGENT_KIND, estimateTokens } from '@cat-factory/kernel'
+import {
+  CONTEXT_BUDGET,
+  DOC_FIXER_AGENT_KIND,
+  DOC_QUALITY_AGENT_KIND,
+  estimateTokens,
+} from '@cat-factory/kernel'
 import type { DocKindFieldKey } from '@cat-factory/contracts'
 import { DOC_KIND_FIELDS } from '@cat-factory/contracts'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
@@ -245,8 +250,8 @@ const DOC_FINALIZER_SYSTEM_PROMPT =
 
 const DOC_FIXER_SYSTEM_PROMPT =
   'You are a documentation fixer. A deterministic document-quality gate flagged specific ' +
-  'structural problems with a drafted document — listed under the "doc-quality" step below. ' +
-  'Fix EVERY flagged issue on the existing document file: add any missing required section ' +
+  'structural problems with a drafted document — listed under "Document-quality gate findings" ' +
+  'below. Fix EVERY flagged issue on the existing document file: add any missing required section ' +
   '(write real, substantive content for it — not a placeholder heading), remove leftover ' +
   'template/placeholder markers, repair broken in-repo links, and correct the heading ' +
   'hierarchy. Leave everything the gate did not flag untouched, and edit only that one document ' +
@@ -303,15 +308,32 @@ function docFinalizerUserPrompt(context: AgentRunContext): string {
 
 function docFixerUserPrompt(context: AgentRunContext): string {
   const { targetPath } = docFields(context)
+  // The gate's findings ARE the fixer's whole brief, so render them directly (and first) rather
+  // than leaving them to the budgeted `priorWorkSection`: the gate appends them as the LAST
+  // prior output, where a long research brief / outline ahead of them can exhaust the inline
+  // budget and truncate the findings away entirely — the fixer would then have nothing to fix.
+  const findings = context.priorOutputs
+    .find((p) => p.agentKind === DOC_QUALITY_AGENT_KIND)
+    ?.output?.trim()
+  const findingsSection = findings
+    ? ['', 'Document-quality gate findings (fix every one of these):', findings].join('\n')
+    : ''
+  // Keep the rest of the pipeline's work as budgeted context, minus the findings we render in
+  // full above so they aren't duplicated (and don't compete for the prior-work budget).
+  const priorContext: AgentRunContext = {
+    ...context,
+    priorOutputs: context.priorOutputs.filter((p) => p.agentKind !== DOC_QUALITY_AGENT_KIND),
+  }
   return [
     `Pipeline: ${context.pipelineName}`,
     docBriefSection(context, { materialized: true }),
-    priorWorkSection(context),
+    findingsSection,
+    priorWorkSection(priorContext),
     '',
-    `The document-quality gate flagged the issues listed above under "doc-quality". Fix every ` +
-      `one on \`${targetPath}\`: add the substance for any missing required section, remove ` +
-      `leftover placeholders, repair broken in-repo links, and correct the heading hierarchy. ` +
-      `Edit it in place; leave anything not flagged untouched.`,
+    `Fix every document-quality gate finding listed above on \`${targetPath}\`: add the ` +
+      `substance for any missing required section, remove leftover placeholders, repair broken ` +
+      `in-repo links, and correct the heading hierarchy. Edit it in place; leave anything not ` +
+      `flagged untouched.`,
   ].join('\n')
 }
 

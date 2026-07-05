@@ -57,6 +57,72 @@ describe('analyzeDocStructure', () => {
     expect(analysis.missingSections).toEqual([])
   })
 
+  it('does not flag inline-code examples or attributed HTML tags as placeholders', () => {
+    const content = [
+      '# API Reference',
+      '',
+      '## Examples',
+      'Render a link with `<a href="/docs">Docs</a>` in the template.',
+      'Inline generic `<T, U>` and a self-closing `<br />` are fine.',
+      'Raw HTML in prose: <img src="diagram.png" alt="flow"> and <br />.',
+      'A commented note: <!-- TODO: revisit later -->',
+    ].join('\n')
+    const analysis = analyzeDocStructure({ content, requiredSections: ['Examples'] })
+    // No leftover-skeleton markers: the angle brackets are real HTML / inline code, and the
+    // only TODO lives inside an HTML comment (stripped before the scan).
+    expect(analysis.placeholders).toEqual([])
+    expect(analysis.missingSections).toEqual([])
+  })
+
+  it('still flags a genuine prose angle-bracket placeholder', () => {
+    const analysis = analyzeDocStructure({
+      content: '# Doc\n\n## Overview\nReplace <your service name> before shipping.',
+      requiredSections: ['Overview'],
+    })
+    expect(analysis.placeholders).toContain('<…> placeholder')
+  })
+
+  it('ignores a markdown link written as an inline-code example', () => {
+    const content = [
+      '# Doc',
+      '',
+      'A real link [guide](./guide.md), but `[not a link](./nope.md)` is just an example.',
+    ].join('\n')
+    const analysis = analyzeDocStructure({ content, requiredSections: [] })
+    expect(analysis.relativeLinks).toEqual(['./guide.md'])
+  })
+
+  it('recognizes setext headings (=== / ---) for the H1 and section checks', () => {
+    const content = ['Login PRD', '=========', '', 'Overview', '--------', 'What we build.'].join(
+      '\n',
+    )
+    const analysis = analyzeDocStructure({ content, requiredSections: ['Overview'] })
+    // The setext H1 satisfies the top-level-title rule; the setext H2 matches the section.
+    expect(analysis.headingIssues).toEqual([])
+    expect(analysis.missingSections).toEqual([])
+  })
+
+  it('does not treat a thematic break or YAML front matter as a setext heading', () => {
+    const content = [
+      '---',
+      'title: Login PRD',
+      '---',
+      '# Login PRD',
+      '',
+      'Some prose.',
+      '',
+      '---',
+      '',
+      '## Overview',
+      'text',
+    ].join('\n')
+    const analysis = analyzeDocStructure({ content, requiredSections: ['Overview'] })
+    // Front matter is stripped (so `title: Login PRD` is not a setext H2), and the `---` after
+    // a blank line is a thematic break, not a heading — so exactly one H1 remains.
+    expect(analysis.headingIssues).toEqual([])
+    expect(analysis.missingSections).toEqual([])
+  })
+
   it('flags a missing top-level title, duplicate H1, and a skipped heading level', () => {
     const noH1 = analyzeDocStructure({ content: '## Overview\ntext', requiredSections: [] })
     expect(noH1.headingIssues.some((i) => i.includes('no top-level'))).toBe(true)

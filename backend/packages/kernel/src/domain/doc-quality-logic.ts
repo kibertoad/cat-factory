@@ -40,6 +40,12 @@ interface Heading {
   text: string
 }
 
+/** Strip a leading YAML front-matter block (`--- … ---`) — it is config, not document prose. */
+function stripFrontMatter(content: string): string {
+  const m = content.match(/^﻿?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/)
+  return m ? content.slice(m[0].length) : content
+}
+
 /** Strip fenced code blocks (``` / ~~~) so their contents aren't parsed as headings/placeholders. */
 function stripFencedCode(content: string): string {
   const lines = content.split(/\r?\n/)
@@ -61,12 +67,51 @@ function stripFencedCode(content: string): string {
   return out.join('\n')
 }
 
-/** The ATX headings (`#`..`######`) in document order, from code-stripped content. */
+/**
+ * Blank out inline code spans (`` `<a href>` ``) and HTML comments so the placeholder + link
+ * scans don't treat a code EXAMPLE as an unfilled skeleton or a broken link. Fenced blocks are
+ * already gone by the time this runs; this covers the inline forms that survive them. Headings
+ * are extracted from the pre-strip body, so a heading naming inline code is unaffected.
+ */
+function stripInlineCodeAndComments(content: string): string {
+  return content
+    .replace(/<!--[\s\S]*?-->/g, ' ') // HTML comments (may span lines)
+    .replace(/(`+)[^`\n]*?\1/g, ' ') // inline code spans (matched backtick runs, single line)
+}
+
+/** ATX (`#`) heading, or its `#{1,6}` capture length; null for a non-heading line. */
+function atxLevel(line: string): number | null {
+  const m = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/)
+  return m ? m[1]!.length : null
+}
+
+/** A setext underline (`===` ⇒ H1, `---` ⇒ H2) as a bare rule line, else null. */
+function setextUnderline(line: string): string | null {
+  const m = line.match(/^ {0,3}(=+|-+)[ \t]*$/)
+  return m ? m[1]! : null
+}
+
+/** The ATX **and** setext headings in document order, from code-stripped content. */
 function extractHeadings(content: string): Heading[] {
   const headings: Heading[] = []
-  for (const line of content.split(/\r?\n/)) {
+  const lines = content.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
     const m = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/)
-    if (m) headings.push({ level: m[1]!.length, text: m[2]!.trim() })
+    if (m) {
+      headings.push({ level: m[1]!.length, text: m[2]!.trim() })
+      continue
+    }
+    // Setext: a non-blank paragraph line underlined by `===` (H1) or `---` (H2). Guard the
+    // usual confusions — a blank line before the rule makes it a thematic break, not a
+    // heading, and an ATX / underline line above is never a setext title.
+    const underline = setextUnderline(line)
+    if (underline && i > 0) {
+      const prev = lines[i - 1]!
+      if (prev.trim() && atxLevel(prev) === null && setextUnderline(prev) === null) {
+        headings.push({ level: underline[0] === '=' ? 1 : 2, text: prev.trim() })
+      }
+    }
   }
   return headings
 }
@@ -90,8 +135,11 @@ const PLACEHOLDER_PATTERNS: { pattern: RegExp; label: string }[] = [
   { pattern: /lorem ipsum/i, label: 'Lorem ipsum' },
   // An angle-bracket placeholder containing a space (`<Document title>`, `<your value>`) —
   // a real HTML tag / generic type argument almost never contains an inner space, so this
-  // targets skeleton placeholders without flagging legitimate `<div>` / `<T>` in prose.
-  { pattern: /<[A-Za-z][^<>\n]*\s[^<>\n]*>/, label: '<…> placeholder' },
+  // targets skeleton placeholders without flagging legitimate `<div>` / `<T>` in prose. The
+  // inner class also forbids `= " ' /`, so a real attributed / self-closing HTML tag
+  // (`<a href="x">`, `<img src="y">`, `<br />`) is NOT a placeholder — only prose-shaped
+  // angle text is (inline-code examples are already stripped before this scan runs).
+  { pattern: /<[A-Za-z][^<>\n="'/]*\s[^<>\n="'/]*>/, label: '<…> placeholder' },
 ]
 
 /** Extract the repo-relative link/image targets (external URLs, anchors, mailto excluded). */
@@ -118,7 +166,11 @@ function extractRelativeLinks(content: string): string[] {
  * {@link DocStructureAnalysis.relativeLinks}) to a `fail` verdict.
  */
 export function analyzeDocStructure(input: DocStructureInput): DocStructureAnalysis {
-  const body = stripFencedCode(input.content)
+  const body = stripFencedCode(stripFrontMatter(input.content))
+  // Placeholder + link scans additionally ignore inline code / HTML comments, so a code
+  // EXAMPLE (`` `<a href>` ``, `` `[x](./y.md)` ``, `// TODO`) can't be mistaken for a
+  // leftover skeleton or a broken link. Headings still come from `body` (pre-inline-strip).
+  const scanBody = stripInlineCodeAndComments(body)
   const headings = extractHeadings(body)
   const headingWordSets = headings.map((h) => new Set(significantWords(h.text)))
 
@@ -130,7 +182,7 @@ export function analyzeDocStructure(input: DocStructureInput): DocStructureAnaly
 
   const placeholders: string[] = []
   for (const { pattern, label } of PLACEHOLDER_PATTERNS) {
-    if (pattern.test(body)) placeholders.push(label)
+    if (pattern.test(scanBody)) placeholders.push(label)
   }
 
   const headingIssues: string[] = []
@@ -155,7 +207,7 @@ export function analyzeDocStructure(input: DocStructureInput): DocStructureAnaly
     missingSections,
     placeholders,
     headingIssues,
-    relativeLinks: extractRelativeLinks(body),
+    relativeLinks: extractRelativeLinks(scanBody),
   }
 }
 

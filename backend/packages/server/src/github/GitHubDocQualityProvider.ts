@@ -80,17 +80,20 @@ export class GitHubDocQualityProvider implements DocQualityProvider {
       ...analysis.headingIssues,
     ]
 
-    // Verify each in-repo relative link resolves to a real file at the PR head. Distinct files
-    // with no batch API, so the reads run concurrently — not a repository point-read loop.
+    // Verify each in-repo relative link resolves to a real file OR directory at the PR head.
+    // Distinct paths with no batch API, so the reads run concurrently — not a repository
+    // point-read loop. A directory target (`[examples](./examples/)`) has no file bytes, so
+    // fall back to a directory listing before calling it broken.
     const broken = (
       await Promise.all(
         analysis.relativeLinks.map(async (link) => {
           const resolved = resolveDocLinkPath(targetPath, link)
           if (resolved === null) return null
-          const linked = await repo.getFile(resolved, headSha)
-          return linked
+          if (await repo.getFile(resolved, headSha)) return null
+          const entries = await repo.listDirectory(resolved, headSha)
+          return entries.length > 0
             ? null
-            : `In-repo link "${link}" does not resolve (no file at \`${resolved}\`).`
+            : `In-repo link "${link}" does not resolve (no file or directory at \`${resolved}\`).`
         }),
       )
     ).filter((f): f is string => f !== null)
