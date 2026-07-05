@@ -505,7 +505,7 @@ describe('extractComposeProfiles', () => {
 describe('attachExternalNetworks', () => {
   it('declares each network external + joins every service, keeping default connectivity', () => {
     const doc = parse('services:\n  web:\n    image: nginx\n  worker:\n    image: worker\n')
-    attachExternalNetworks(doc, ['acme-net'])
+    expect(attachExternalNetworks([doc], ['acme-net'])).toEqual([])
     expect(doc.networks).toEqual({ 'acme-net': { external: true } })
     // A service on no explicit network was on `default`; keep it and add the external one.
     expect(doc.services.web.networks).toEqual(['default', 'acme-net'])
@@ -514,7 +514,7 @@ describe('attachExternalNetworks', () => {
 
   it('unions into an array networks value without adding default (respects explicit scoping)', () => {
     const doc = parse('services:\n  web:\n    image: nginx\n    networks: [frontend]\n')
-    attachExternalNetworks(doc, ['acme-net'])
+    attachExternalNetworks([doc], ['acme-net'])
     expect(doc.services.web.networks).toEqual(['frontend', 'acme-net'])
   })
 
@@ -522,7 +522,7 @@ describe('attachExternalNetworks', () => {
     const doc = parse(
       'services:\n  web:\n    image: nginx\n    networks:\n      frontend:\n        aliases: [w]\n',
     )
-    attachExternalNetworks(doc, ['acme-net'])
+    attachExternalNetworks([doc], ['acme-net'])
     expect(doc.services.web.networks).toEqual({ frontend: { aliases: ['w'] }, 'acme-net': null })
   })
 
@@ -531,7 +531,7 @@ describe('attachExternalNetworks', () => {
       'services:\n  web:\n    image: nginx\n    networks: [shared]\n' +
         'networks:\n  shared:\n    external: true\n    name: acme-net\n',
     )
-    attachExternalNetworks(doc, ['acme-net'])
+    attachExternalNetworks([doc], ['acme-net'])
     // acme-net already resolves via the `shared` alias → untouched, no default re-added.
     expect(doc.services.web.networks).toEqual(['shared'])
     expect(doc.networks).toEqual({ shared: { external: true, name: 'acme-net' } })
@@ -539,7 +539,7 @@ describe('attachExternalNetworks', () => {
 
   it('does not attach to a service pinned to network_mode (compose forbids combining them)', () => {
     const doc = parse('services:\n  web:\n    image: nginx\n    network_mode: host\n')
-    attachExternalNetworks(doc, ['acme-net'])
+    attachExternalNetworks([doc], ['acme-net'])
     expect(doc.services.web.networks).toBeUndefined()
     expect(doc.services.web.network_mode).toBe('host')
     // Still declared top-level for any other service to reference.
@@ -548,9 +548,48 @@ describe('attachExternalNetworks', () => {
 
   it('is a no-op for an empty network list', () => {
     const doc = parse('services:\n  web:\n    image: nginx\n')
-    attachExternalNetworks(doc, [])
+    attachExternalNetworks([doc], [])
     expect(doc.networks).toBeUndefined()
     expect(doc.services.web.networks).toBeUndefined()
+  })
+
+  it('decides across MERGED layers: no default re-add, and skips a cross-layer network_mode', () => {
+    // `web` is scoped off `default` in the base and only env-tweaked in the override; `gw` is pinned
+    // to network_mode in the base and only env-tweaked in the override. A per-layer rewrite would
+    // re-add `default` to the override's `web` and add `networks` to the override's `gw` (which then
+    // merges into a forbidden network_mode + networks). The merged-stack pass avoids both.
+    const base = parse(
+      'services:\n  web:\n    image: nginx\n    networks: [frontend]\n' +
+        '  gw:\n    image: gw\n    network_mode: host\n',
+    )
+    const override = parse(
+      'services:\n  web:\n    environment:\n      - A=b\n  gw:\n    environment:\n      - C=d\n',
+    )
+    expect(attachExternalNetworks([base, override], ['acme-net'])).toEqual([])
+    // web: unioned beside its base scoping, NO default; the override layer is left alone.
+    expect(base.services.web.networks).toEqual(['frontend', 'acme-net'])
+    expect(override.services.web.networks).toBeUndefined()
+    // gw: network_mode in the base ⇒ never joins networks in any layer.
+    expect(base.services.gw.networks).toBeUndefined()
+    expect(base.services.gw.network_mode).toBe('host')
+    expect(override.services.gw.networks).toBeUndefined()
+    // Declared once, on the base layer.
+    expect(base.networks).toEqual({ 'acme-net': { external: true } })
+    expect(override.networks).toBeUndefined()
+  })
+
+  it('returns a blocking issue for a project-owned network of the same name (never clobbers it)', () => {
+    const doc = parse(
+      'services:\n  web:\n    image: nginx\n    networks: [acme-net]\n' +
+        'networks:\n  acme-net:\n    driver: bridge\n',
+    )
+    const issues = attachExternalNetworks([doc], ['acme-net'])
+    expect(issues).toHaveLength(1)
+    expect(issues[0]).toContain('acme-net')
+    expect(issues[0]).toContain('project-owned')
+    // The author's project-owned definition is left intact — NOT overwritten with { external: true }.
+    expect(doc.networks).toEqual({ 'acme-net': { driver: 'bridge' } })
+    expect(doc.services.web.networks).toEqual(['acme-net'])
   })
 })
 
@@ -699,6 +738,83 @@ describe('prepareRecipeComposeFiles', () => {
     // The override service was NOT given a networks key (no default re-added, no re-declaration).
     expect(override.services.web.networks).toBeUndefined()
     expect(override.networks).toBeUndefined()
+  })
+
+  it('attaches a NEW network across layers without re-adding default to a scoped service', () => {
+    // acme-net is NOT declared external anywhere (a shared-stack managed net), so it IS attached. The
+    // base scopes `web` off `default`; the override only tweaks env. The attach must land beside the
+    // base's scoping and leave the override alone, so the merged `web` never rejoins `default`.
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text: 'services:\n  web:\n    image: nginx\n    networks: [frontend]\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  web:\n    environment:\n      - FOO=bar\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues).toEqual([])
+    const base = parse(prepared.files[0]!.content)
+    const override = parse(prepared.files[1]!.content)
+    expect(base.services.web.networks).toEqual(['frontend', 'acme-net'])
+    expect(override.services.web.networks).toBeUndefined()
+    expect(base.networks).toEqual({ 'acme-net': { external: true } })
+  })
+
+  it('does not combine network_mode + networks when they are split across layers', () => {
+    // `gw` is pinned to network_mode in the base and only env-tweaked in the override. Attaching a new
+    // network per-layer would add `networks` to the override's `gw`, merging into a config compose
+    // rejects (network_mode + networks). The merged-stack decision skips `gw` in every layer.
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text:
+            'services:\n  web:\n    image: nginx\n' +
+            '  gw:\n    image: gw\n    network_mode: host\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  gw:\n    environment:\n      - X=1\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues).toEqual([])
+    const base = parse(prepared.files[0]!.content)
+    const override = parse(prepared.files[1]!.content)
+    expect(base.services.gw.network_mode).toBe('host')
+    expect(base.services.gw.networks).toBeUndefined()
+    expect(override.services.gw.networks).toBeUndefined()
+    // The probed service still attaches normally.
+    expect(base.services.web.networks).toEqual(['default', 'acme-net'])
+  })
+
+  it('fails with a blocking issue when an attach network collides with a project-owned one', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker-compose.yml',
+          text:
+            'services:\n  web:\n    image: nginx\n    networks: [acme-net]\n' +
+            'networks:\n  acme-net:\n    driver: bridge\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 0, attachNetworks: ['acme-net'] },
+    )
+    expect(prepared.issues.some((i) => i.includes('acme-net') && i.includes('project-owned'))).toBe(
+      true,
+    )
   })
 })
 

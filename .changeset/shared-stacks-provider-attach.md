@@ -21,7 +21,12 @@ acme `acme-net` shape). This is the provider-integration slice of the stack-reci
   project to `externalNetworks ∪ managedNetworks` via a new pure `attachExternalNetworks` folded
   into `prepareRecipeComposeFiles`: each network not already declared external across the merged
   `-f` layers is declared top-level `{ external: true }` and joined by every service (preserving
-  the implicit `default` connectivity; skipping a `network_mode`-pinned service).
+  the implicit `default` connectivity; skipping a `network_mode`-pinned service). The attach
+  reasons about the MERGED stack (all `-f` layers together), not each layer in isolation, so it
+  never re-adds `default` to a service the base intentionally scoped, never lands `networks` on a
+  service whose `network_mode` sits in another layer (which compose rejects at `up`), and refuses —
+  rather than silently overwrites — a requested network whose name collides with a project-owned
+  network in the recipe.
 - Execution stays local-facade-bound (the documented compose runtime-binding exception); the recipe
   rides the existing persisted `provisioning` blob, so there is no migration. A recipe that
   references shared stacks on a deployment without the lifecycle wired fails loudly.

@@ -423,75 +423,175 @@ export function hasBuildDirective(service: unknown): boolean {
  * as `external: true`. Pure — no I/O.
  */
 export function extractExternalNetworks(doc: ComposeDoc): string[] {
-  const networks = doc.networks
-  if (!networks || typeof networks !== 'object') return []
   const names: string[] = []
   const seen = new Set<string>()
-  for (const [key, def] of Object.entries(networks as Record<string, unknown>)) {
-    if (!def || typeof def !== 'object') continue
-    const d = def as Record<string, unknown>
-    const external = d.external
-    // `external: true` OR `external: { name }` marks the network as pre-existing; `external: false`
-    // (or absent) is a project-owned network we don't touch. An array (or other non-plain-object)
-    // value is malformed and does NOT mark the network external.
-    const externalObject =
-      external !== null && typeof external === 'object' && !Array.isArray(external)
-        ? (external as Record<string, unknown>)
-        : undefined
-    if (external !== true && !externalObject) continue
-    const externalName = externalObject ? optionalString(externalObject.name) : undefined
-    const resolved = optionalString(d.name) ?? externalName ?? key
-    if (!seen.has(resolved)) {
-      seen.add(resolved)
-      names.push(resolved)
-    }
+  for (const net of topLevelNetworks(doc)) {
+    if (!net.external || seen.has(net.resolvedName)) continue
+    seen.add(net.resolvedName)
+    names.push(net.resolvedName)
   }
   return names
 }
 
-/**
- * Attach a compose doc to a set of EXTERNAL Docker networks it does not already declare — a per-PR
- * consumer joining the long-lived networks a SharedStack owns (the acme `acme-net` shape, slice 5).
- * For each requested network NOT already declared external in the doc (by resolved name, via
- * {@link extractExternalNetworks}), declare it top-level as `{ external: true }` (so compose
- * attaches to the REAL pre-existing network instead of creating a project-scoped `<project>_<name>`)
- * and add it to every service's `networks`. A service on NO explicit network is implicitly on
- * `default`, so it is given `['default', <networks…>]` — keeping its default connectivity rather
- * than silently dropping it. A service pinned to `network_mode` is skipped (compose forbids
- * combining `network_mode` with `networks`). Networks the doc ALREADY declares external (possibly
- * under an alias key) are left untouched — the author already wired them. Mutates + returns the
- * doc. Pure — no I/O. The caller pre-filters `networks` against the MERGED external set across all
- * `-f` layers, so this per-doc skip is belt-and-suspenders for a standalone call.
- */
-export function attachExternalNetworks(doc: ComposeDoc, networks: string[]): ComposeDoc {
-  if (networks.length === 0) return doc
-  const already = new Set(extractExternalNetworks(doc))
-  const toAttach = networks.filter((n) => !already.has(n))
-  if (toAttach.length === 0) return doc
-  const topLevel =
-    doc.networks && typeof doc.networks === 'object' && !Array.isArray(doc.networks)
-      ? (doc.networks as Record<string, unknown>)
-      : {}
-  for (const name of toAttach) topLevel[name] = { external: true }
-  doc.networks = topLevel
-  for (const service of Object.values(servicesOf(doc))) {
-    if (!service || typeof service !== 'object') continue
-    attachServiceNetworks(service, toAttach)
-  }
-  return doc
+/** One top-level `networks:` entry, with its RESOLVED Docker name and whether it is external. */
+interface TopLevelNetwork {
+  key: string
+  resolvedName: string
+  external: boolean
 }
 
 /**
- * Add `networks` to one service, preserving its existing connectivity: a service with no `networks`
- * key was on the implicit `default`, so keep it (`['default', …]`); an array unions in the new
- * names; a long-form map adds them as keys (default settings). A service pinned to `network_mode`
- * can't also join networks (compose rejects the combination), so it is left untouched.
+ * Parse a compose doc's top-level `networks:` map into {@link TopLevelNetwork} entries. A network is
+ * external when flagged `external: true` or `external: { name }` (it must ALREADY exist); anything
+ * else — a driver/labels def, a bare `netname:` (null/scalar def), `external: false` — is
+ * project-owned (compose creates it). The RESOLVED name is the explicit `name:`, else an
+ * `external.name`, else the map key. A malformed `networks:` (array / scalar) yields no entries.
+ * Pure — no I/O.
  */
-function attachServiceNetworks(service: ComposeService, networks: string[]): void {
-  if (service.network_mode !== undefined) return
+function topLevelNetworks(doc: ComposeDoc): TopLevelNetwork[] {
+  const networks = doc.networks
+  if (!networks || typeof networks !== 'object' || Array.isArray(networks)) return []
+  const out: TopLevelNetwork[] = []
+  for (const [key, def] of Object.entries(networks as Record<string, unknown>)) {
+    if (!def || typeof def !== 'object') {
+      // A bare `netname:` (null/scalar def) is a project-owned network with default settings.
+      out.push({ key, resolvedName: key, external: false })
+      continue
+    }
+    const d = def as Record<string, unknown>
+    const external = d.external
+    // An array (or other non-plain-object) `external` value is malformed and does NOT mark it external.
+    const externalObject =
+      external !== null && typeof external === 'object' && !Array.isArray(external)
+        ? (external as Record<string, unknown>)
+        : undefined
+    const externalName = externalObject ? optionalString(externalObject.name) : undefined
+    out.push({
+      key,
+      resolvedName: optionalString(d.name) ?? externalName ?? key,
+      external: external === true || externalObject !== undefined,
+    })
+  }
+  return out
+}
+
+/**
+ * Attach a recipe's LAYERED compose docs (the `-f` layers, which compose merges at `up`) to a set of
+ * EXTERNAL Docker networks a SharedStack owns (the acme `acme-net` shape, slice 5). For each requested
+ * network not already declared external across the merged layers, declare it top-level `{ external:
+ * true }` (on the base layer — compose merges top-level `networks:` maps across files) so compose
+ * attaches to the REAL pre-existing network instead of a project-scoped `<project>_<name>`, and join
+ * it from every service not pinned to `network_mode`.
+ *
+ * Every decision is made against the MERGED stack, never a single layer in isolation, because compose
+ * unions the layers — a naive per-layer rewrite fights that merge:
+ * - a service is attached in EXACTLY ONE layer, so `default` is added at most once and ONLY when no
+ *   layer declares an explicit `networks` for it (an override that omits `networks` INHERITS the base's
+ *   scoping — it is not "on default", so re-adding `default` would silently reconnect a service the
+ *   base deliberately isolated);
+ * - a service pinned to `network_mode` in ANY layer is skipped (compose rejects `network_mode` +
+ *   `networks`, even when the two sit in different layers);
+ * - a requested name colliding with a PROJECT-OWNED top-level network in any layer is returned as a
+ *   blocking issue rather than silently overwriting the author's private network with `{ external: true }`.
+ *
+ * Mutates the docs; returns any blocking issues (empty on success). Pure — no I/O.
+ */
+export function attachExternalNetworks(docs: ComposeDoc[], networks: string[]): string[] {
+  if (networks.length === 0 || docs.length === 0) return []
+  const tops = docs.flatMap(topLevelNetworks)
+  const externalNames = new Set(tops.filter((t) => t.external).map((t) => t.resolvedName))
+  const requested = networks.filter((name) => !externalNames.has(name))
+  if (requested.length === 0) return []
+
+  // A requested network that collides with a project-owned network of the same resolved name is
+  // ambiguous — converting it to external would cross-wire the per-PR services onto the shared segment
+  // (and drop the author's driver/labels). Fail loud, like every other recipe issue.
+  const projectOwned = new Set(tops.filter((t) => !t.external).map((t) => t.resolvedName))
+  const collisions = requested.filter((name) => projectOwned.has(name))
+  if (collisions.length > 0) {
+    return collisions.map(
+      (name) =>
+        `network '${name}' is declared project-owned in the recipe's compose but is also a shared-stack/external network the recipe attaches — rename one so the per-PR project isn't silently cross-wired onto the shared network.`,
+    )
+  }
+
+  for (const [name, plan] of planServiceAttach(docs)) {
+    if (plan.hasNetworkMode) continue
+    const service = servicesOf(docs[plan.targetLayer]!)[name]
+    if (!service || typeof service !== 'object') continue
+    attachServiceNetworks(service, requested, plan.hasExplicitNetworks)
+  }
+
+  // Declare the external networks once, top-level, on the base layer (compose merges the layers'
+  // top-level `networks:` maps, so a single declaration covers the whole merged config).
+  const base = docs[0]!
+  const baseTop =
+    base.networks && typeof base.networks === 'object' && !Array.isArray(base.networks)
+      ? (base.networks as Record<string, unknown>)
+      : {}
+  for (const name of requested) baseTop[name] = { external: true }
+  base.networks = baseTop
+  return []
+}
+
+/** Where + how one service should join the external networks, decided across all `-f` layers. */
+interface ServiceAttachPlan {
+  /**
+   * The layer to write the attachment into: the last layer that declares an explicit `networks` for
+   * the service (so the new names land beside the author's existing ones), else the first layer that
+   * defines it (the implicit-`default` case).
+   */
+  targetLayer: number
+  hasNetworkMode: boolean
+  hasExplicitNetworks: boolean
+}
+
+/**
+ * Plan each service's external-network attachment against the MERGED stack: its first-defining layer,
+ * whether ANY layer pins `network_mode`, and whether ANY layer declares an explicit `networks` (and,
+ * if so, the last such layer — the write target that keeps the union beside the author's scoping).
+ */
+function planServiceAttach(docs: ComposeDoc[]): Map<string, ServiceAttachPlan> {
+  const firstLayer = new Map<string, number>()
+  const lastExplicitLayer = new Map<string, number>()
+  const networkMode = new Set<string>()
+  docs.forEach((doc, layer) => {
+    for (const [name, service] of Object.entries(servicesOf(doc))) {
+      if (!service || typeof service !== 'object') continue
+      if (!firstLayer.has(name)) firstLayer.set(name, layer)
+      if (service.network_mode !== undefined) networkMode.add(name)
+      if (service.networks !== undefined && service.networks !== null) {
+        lastExplicitLayer.set(name, layer)
+      }
+    }
+  })
+  const plans = new Map<string, ServiceAttachPlan>()
+  for (const [name, first] of firstLayer) {
+    const explicit = lastExplicitLayer.get(name)
+    plans.set(name, {
+      targetLayer: explicit ?? first,
+      hasNetworkMode: networkMode.has(name),
+      hasExplicitNetworks: explicit !== undefined,
+    })
+  }
+  return plans
+}
+
+/**
+ * Add `networks` to one service, preserving its existing connectivity. A service with no `networks`
+ * key gets `['default', …]` ONLY when no layer scopes it explicitly (`hasExplicitNetworks` false) —
+ * otherwise the explicit scoping lives in another layer and re-adding `default` would clobber it (via
+ * compose's cross-`-f` union), so only the new names are added. An array unions in the new names; a
+ * long-form map adds them as keys (default settings). The caller skips `network_mode`-pinned services.
+ */
+function attachServiceNetworks(
+  service: ComposeService,
+  networks: string[],
+  hasExplicitNetworks: boolean,
+): void {
   const existing = service.networks
   if (existing === undefined || existing === null) {
-    service.networks = ['default', ...networks]
+    service.networks = hasExplicitNetworks ? [...networks] : ['default', ...networks]
     return
   }
   if (Array.isArray(existing)) {
@@ -990,19 +1090,14 @@ export function prepareRecipeComposeFiles(
   opts: { baseDepth: number; attachNetworks?: string[] },
 ): PreparedRecipeCompose {
   const parsedLayers = inputs.map((input) => ({ input, ...parseRecipeComposeDoc(input) }))
-  // The external networks ANY layer already declares — computed across the merged stack so an
-  // override layer never re-injects a network the base already wired (see the doc comment).
-  const alreadyExternal = new Set(
-    parsedLayers.flatMap(({ doc }) => (doc ? extractExternalNetworks(doc) : [])),
-  )
-  const toAttach = (opts.attachNetworks ?? []).filter((name) => !alreadyExternal.has(name))
-  const files: PreparedRecipeComposeFile[] = []
   const issues: string[] = []
   let serviceDefined = false
+  // Per-layer validation + isolation rewrites (host-escape refs, host-port neutralize, port publish).
+  // The external-network attach is DEFERRED until after this loop so it reasons about the MERGED stack
+  // (all layers) rather than each layer in isolation — see {@link attachExternalNetworks}.
   for (const { input, doc, issue } of parsedLayers) {
     if (issue || !doc) {
       issues.push(issue ?? `compose file '${input.path}' is empty or not a mapping`)
-      files.push({ path: rewrittenRecipeComposePath(input.path), content: input.text })
       continue
     }
     // Recipe files always have a checkout, so use the build-mode guard (escape-only), scoped to the
@@ -1018,12 +1113,18 @@ export function prepareRecipeComposeFiles(
       serviceDefined = true
       ensureServicePublishes(doc, service, port)
     }
-    if (toAttach.length > 0) attachExternalNetworks(doc, toAttach)
-    files.push({ path: rewrittenRecipeComposePath(input.path), content: stringify(doc) })
   }
   if (!serviceDefined) {
     issues.push(`no service named '${service}' is defined across the recipe's compose files`)
   }
+  // Attach the shared-stack + declared external networks across the merged, normalized layers,
+  // surfacing a project-owned name collision as a blocking issue.
+  const validDocs = parsedLayers.flatMap(({ doc }) => (doc ? [doc] : []))
+  issues.push(...attachExternalNetworks(validDocs, opts.attachNetworks ?? []))
+  const files: PreparedRecipeComposeFile[] = parsedLayers.map(({ input, doc }) => ({
+    path: rewrittenRecipeComposePath(input.path),
+    content: doc ? stringify(doc) : input.text,
+  }))
   return { files, issues }
 }
 
