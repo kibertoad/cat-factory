@@ -1,0 +1,249 @@
+import * as v from 'valibot'
+import {
+  initiativeExecutionPolicySchema,
+  initiativePresetInputsSchema,
+  type InitiativePresetInputs,
+  type InitiativePresetInputValue,
+} from './initiative.js'
+
+// ---------------------------------------------------------------------------
+// Initiative-preset wire contracts.
+//
+// An initiative PRESET is more than a pipeline: it bundles (a) its own FORM the user
+// fills at create time — rendered generically by the SPA from this backend-supplied
+// descriptor, zero frontend changes per preset — (b) a planning-pipeline binding
+// (skip the interviewer when the form IS the interview), (c) execution-policy /
+// fragment / human-review defaults, and (d) code hooks (a repo-detection prefill
+// probe, a plan post-processor) that live on the KERNEL registration, not here (this
+// file is the serialisable, SPA-facing subset). See
+// `docs/initiatives/initiative-presets-and-docs-refresh.md` and the kernel
+// `initiative-preset-registry.ts`.
+//
+// The field descriptor extends the `ProviderConfigField` family with the two shapes a
+// preset form needs that a flat provider form did not: `checkbox-group` (a multi-select
+// whose value is `string[]`) and `path` (a repo-relative directory), plus single-condition
+// `showWhen` visibility (a per-doc-type subfolder shown only when that type is checked).
+// Descriptor labels are backend-supplied English (the `describeConfig` convention); only
+// the surrounding chrome is i18n.
+// ---------------------------------------------------------------------------
+
+/**
+ * How a preset field is rendered/collected. The first six mirror {@link ProviderConfigField}'s
+ * types exactly; `checkbox-group` (a multi-select, value `string[]`) and `path` (a repo-relative
+ * directory, {@link isSafeRepoDirPath}-validated) are the two additions the preset form needs.
+ */
+export const initiativePresetFieldTypeSchema = v.picklist([
+  'text',
+  'password',
+  'select',
+  'number',
+  'checkbox',
+  'textarea',
+  'checkbox-group',
+  'path',
+])
+export type InitiativePresetFieldType = v.InferOutput<typeof initiativePresetFieldTypeSchema>
+
+/**
+ * Single-condition visibility for a field: it renders only when the referenced field's value
+ * matches. `equals` compares a scalar value; `includes` tests membership in a `checkbox-group`
+ * value (the per-doc-type subfolder case — "show `diagramsDir` only when `docTypes` includes
+ * `diagrams`"). Deliberately ONE condition — resist growing this into a recursive schema
+ * renderer (that is the descriptor-forms initiative's separate line item).
+ */
+export const initiativePresetShowWhenSchema = v.object({
+  /** The `key` of the field whose value gates this one's visibility. */
+  key: v.pipe(v.string(), v.minLength(1)),
+  /** Show when the referenced scalar value equals this. */
+  equals: v.optional(v.string()),
+  /** Show when the referenced `checkbox-group` value includes this. */
+  includes: v.optional(v.string()),
+})
+export type InitiativePresetShowWhen = v.InferOutput<typeof initiativePresetShowWhenSchema>
+
+/** One value a preset needs, rendered as a single form field. */
+export const initiativePresetFieldSchema = v.object({
+  /** Stable key the value is stored/sent under (e.g. `docTypes`, `docsRoot`). */
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
+  /** Human label for the form field (backend-supplied English). */
+  label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  /** Optional helper text shown under the field. */
+  help: v.optional(v.string()),
+  /** Optional input placeholder. */
+  placeholder: v.optional(v.string()),
+  /** Whether the value is required (absent ⇒ optional). A hidden (`showWhen`) field is never required. */
+  required: v.optional(v.boolean()),
+  /** Field type; absent is treated as `text`. */
+  type: v.optional(initiativePresetFieldTypeSchema),
+  /** Choices for a `select` / `checkbox-group` field. */
+  options: v.optional(v.array(v.object({ value: v.string(), label: v.string() }))),
+  /** The scalar default (`text`/`select`/`path`/`number`/`checkbox`); the form falls back to it when blank. */
+  default: v.optional(v.string()),
+  /** The multi-select default for a `checkbox-group` field. */
+  defaultValues: v.optional(v.array(v.string())),
+  /** Single-condition visibility; absent ⇒ always shown. */
+  showWhen: v.optional(initiativePresetShowWhenSchema),
+})
+export type InitiativePresetField = v.InferOutput<typeof initiativePresetFieldSchema>
+
+/** Display metadata for a preset in the create-initiative picker. */
+export const initiativePresetPresentationSchema = v.object({
+  /** Human label, e.g. `Documentation refresh`. */
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
+  /** Icon id (e.g. an `i-lucide-*` name). */
+  icon: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  /** Accent colour (CSS hex/keyword). */
+  color: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
+  /** One-line description shown in the picker. */
+  description: v.pipe(v.string(), v.maxLength(500)),
+})
+export type InitiativePresetPresentation = v.InferOutput<typeof initiativePresetPresentationSchema>
+
+/**
+ * The serialisable, SPA-facing description of a preset: everything the create-initiative
+ * modal needs to render the picker + form and start planning, attached to the workspace
+ * snapshot (the `customAgentKinds` precedent). The code hooks (`detect`/`seedPlan`/
+ * `promptAdditions`) live on the kernel registration, NOT here.
+ */
+export const initiativePresetDescriptorSchema = v.object({
+  /** Stable preset id (e.g. `preset_generic`, `preset_docs_refresh`). */
+  id: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
+  presentation: initiativePresetPresentationSchema,
+  /** The form fields the user fills at create time (empty for the generic preset). */
+  fields: v.array(initiativePresetFieldSchema),
+  /** The planning pipeline the SPA starts (e.g. `pl_initiative`, `pl_initiative_docs`). */
+  planningPipelineId: v.pipe(v.string(), v.minLength(1)),
+  /** `full` runs the interviewer; `skip` treats the form AS the interview (seeded qa). */
+  interview: v.picklist(['full', 'skip']),
+  /** Default for the human-review opt-in (mapped to the gate-override seam at start). */
+  humanReviewDefault: v.boolean(),
+  /** Best-practice prompt fragments applied by default (configurable via a form field). */
+  defaultFragmentIds: v.optional(v.array(v.string()), []),
+  /** Partial execution-policy overrides folded in at plan ingest. */
+  policyDefaults: v.optional(v.partial(initiativeExecutionPolicySchema)),
+  /**
+   * Whether this preset supports a repo-detection PREFILL probe (a `detect` hook is wired on
+   * the registration). Computed server-side when the snapshot is built (the `supportsTest`
+   * convention) so the SPA knows to call `POST …/initiative-presets/:id/probe`. Never blocks
+   * create — an unwired probe / GitHub simply falls back to the descriptor defaults.
+   */
+  probe: v.optional(v.boolean()),
+})
+export type InitiativePresetDescriptor = v.InferOutput<typeof initiativePresetDescriptorSchema>
+
+/** Strictly parse a preset descriptor. Throws on shape violations. */
+export function parseInitiativePresetDescriptor(value: unknown): InitiativePresetDescriptor {
+  return v.parse(initiativePresetDescriptorSchema, value)
+}
+
+// ---------------------------------------------------------------------------
+// Path safety + input validation (pure — shared by the create-flow validation).
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether `path` is a SAFE repo-relative DIRECTORY (the `path`-field analogue of
+ * {@link isSafeDocPath}, minus the `.md` requirement). A preset `path` value is used verbatim
+ * as an in-repo placement dir the writers commit under, so it must not escape the repo: no `..`
+ * traversal, no absolute path (`/…` or a Windows drive), no backslash / NUL. An empty string is
+ * NOT a valid path (callers treat "unset" separately). A trailing slash is tolerated.
+ */
+export function isSafeRepoDirPath(path: string): boolean {
+  const p = path.trim()
+  if (!p || p.length > 300) return false
+  if (p.startsWith('/') || /^[a-zA-Z]:/.test(p)) return false
+  if (p.includes('\\') || p.includes('\0')) return false
+  return !p.split('/').some((segment) => segment === '..')
+}
+
+/** Whether a field is visible given the current input values (its `showWhen` condition). */
+export function isPresetFieldVisible(
+  field: InitiativePresetField,
+  inputs: InitiativePresetInputs,
+): boolean {
+  const cond = field.showWhen
+  if (!cond) return true
+  const value = inputs[cond.key]
+  if (cond.equals !== undefined) return value === cond.equals
+  if (cond.includes !== undefined) return Array.isArray(value) && value.includes(cond.includes)
+  // A `showWhen` with neither predicate is a malformed condition — treat as always visible.
+  return true
+}
+
+/** Whether a filled value matches the field's declared type (structural, pre-semantic check). */
+function valueMatchesFieldType(
+  field: InitiativePresetField,
+  value: InitiativePresetInputValue,
+): boolean {
+  switch (field.type) {
+    case 'checkbox-group':
+      return Array.isArray(value)
+    case 'checkbox':
+      return typeof value === 'boolean'
+    case 'number':
+      return typeof value === 'number'
+    default:
+      // text / password / select / textarea / path (and the untyped default) are strings.
+      return typeof value === 'string'
+  }
+}
+
+/**
+ * Validate a filled preset form against its descriptor, returning a list of human-readable
+ * problems (EMPTY ⇒ valid). Pure + total (never throws), so the create controller can map a
+ * non-empty result to a single ValidationError. Enforces: no unknown keys, correct value type
+ * per field, required VISIBLE fields present, `select`/`checkbox-group` values drawn from the
+ * declared options, and `path` values that stay inside the repo ({@link isSafeRepoDirPath}).
+ * Hidden fields (failing `showWhen`) are not required and their stale values are ignored.
+ */
+export function validateInitiativePresetInputs(
+  descriptor: InitiativePresetDescriptor,
+  inputs: InitiativePresetInputs,
+): string[] {
+  const problems: string[] = []
+  const byKey = new Map(descriptor.fields.map((f) => [f.key, f]))
+
+  for (const key of Object.keys(inputs)) {
+    if (!byKey.has(key)) problems.push(`Unknown field "${key}".`)
+  }
+
+  for (const field of descriptor.fields) {
+    const visible = isPresetFieldVisible(field, inputs)
+    const value = inputs[field.key]
+    const present =
+      value !== undefined &&
+      !(typeof value === 'string' && value.trim() === '') &&
+      !(Array.isArray(value) && value.length === 0)
+
+    if (!visible) continue
+    if (!present) {
+      if (field.required) problems.push(`Field "${field.key}" is required.`)
+      continue
+    }
+    if (!valueMatchesFieldType(field, value)) {
+      problems.push(`Field "${field.key}" has the wrong type for a ${field.type ?? 'text'} field.`)
+      continue
+    }
+    const optionValues = new Set((field.options ?? []).map((o) => o.value))
+    if (field.type === 'select' && optionValues.size > 0 && !optionValues.has(value as string)) {
+      problems.push(`Field "${field.key}" has a value outside its options.`)
+    }
+    if (field.type === 'checkbox-group' && optionValues.size > 0) {
+      for (const entry of value as string[]) {
+        if (!optionValues.has(entry))
+          problems.push(`Field "${field.key}" has an option "${entry}" outside its choices.`)
+      }
+    }
+    if (field.type === 'path' && !isSafeRepoDirPath(value as string)) {
+      problems.push(
+        `Field "${field.key}" must be a relative path inside the repo (no "..", absolute, or backslash segments).`,
+      )
+    }
+  }
+
+  return problems
+}
+
+/** Strictly parse a bounded preset-inputs record. Throws on shape violations. */
+export function parseInitiativePresetInputs(value: unknown): InitiativePresetInputs {
+  return v.parse(initiativePresetInputsSchema, value)
+}
