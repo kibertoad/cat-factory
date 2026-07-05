@@ -21,6 +21,7 @@ export {
   BraveWebSearchUpstream,
   SearxngWebSearchUpstream,
   createWebSearchUpstream,
+  createDefaultWebSearchUpstream,
   DEFAULT_WEB_SEARCH_COUNT,
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
