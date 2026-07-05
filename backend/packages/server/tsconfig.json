@@ -5,9 +5,17 @@
     // Runtime-neutral but Web-standard: it runs on both workerd and Node, so it
     // relies on the Web Platform globals (Response, Request, crypto, fetch,
     // atob/btoa, TextEncoder, console) rather than any Cloudflare or Node types.
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // No ambient `@types` in `src`: keep the surface Web-standard so a Node-only import
+    // (`node:fs`, `process`, disk `Buffer`, …) fails to typecheck and can't break on
+    // workerd. The ONE Node built-in relied upon — `AsyncLocalStorage` (supported on both
+    // Node and the Workers runtime under `nodejs_compat`) — is typed by the local ambient
+    // shim `src/node-async-hooks.d.ts`. The test project (`tsconfig.test.json`) opts into
+    // `@types/node` for the node-using tests (undici mocks / `Buffer`).
+    "types": []
   },
-  // Typecheck config: covers tests too. `rootDir` lives in tsconfig.build.json so
-  // the emitted build stays src-only while typecheck spans src + test.
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  // `src` only (the ambient shim under `src/` is matched by the glob). `rootDir` lives in
+  // tsconfig.build.json so the emitted build stays src-only; the tests are typechecked by
+  // tsconfig.test.json (which adds `@types/node`).
+  "include": ["src/**/*.ts"]
 }

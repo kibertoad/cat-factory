@@ -86,6 +86,7 @@ import { coerceTaskEstimate, summarizeEstimate } from '../estimation/estimate.lo
 import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { deployEvictionEpoch, deployJobId, orderProvisionTargets } from './deployer.logic.js'
 import { renderInvestigationDigest } from './bugInvestigation.logic.js'
+import { renderReproDigest } from './reproTest.logic.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import {
   ANALYSIS_AGENT_KIND,
@@ -97,6 +98,7 @@ import {
   HUMAN_TEST_AGENT_KIND,
   isTesterKind,
   MERGER_AGENT_KIND,
+  REPRO_TEST_AGENT_KIND,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
   SPEC_WRITER_AGENT_KIND,
@@ -2823,6 +2825,22 @@ export class RunDispatcher {
         applies: (result) => result.custom !== undefined,
         resolve: async ({ result }) => {
           const digest = renderInvestigationDigest(result.custom)
+          if (digest) return { output: digest }
+        },
+      },
+      // A `repro-test` step returns its STRUCTURED outcome as `result.custom` (kept on
+      // `step.custom` for the generic-structured view). Render a short prose digest into
+      // `step.output` at the post-completion slot so the coder reads the reproduction result
+      // (reproduced / conceded + why) via `priorOutputs` (which carries only `step.output`).
+      // Conceding never fails the run — the container tolerates a no-op (`noChangesTolerated`),
+      // so this only reshapes the output. An unparseable result leaves the raw reply on
+      // `step.output`.
+      {
+        kind: REPRO_TEST_AGENT_KIND,
+        phase: 'post-completion',
+        applies: (result) => result.custom !== undefined,
+        resolve: async ({ result }) => {
+          const digest = renderReproDigest(result.custom)
           if (digest) return { output: digest }
         },
       },

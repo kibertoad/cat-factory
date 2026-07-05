@@ -10,6 +10,7 @@ import type { AgentTrait } from './traits.js'
 import type { AgentTuning } from './tuning.js'
 import type { StructuredOutput } from './structured-output.js'
 import { registerBugInvestigatorAgent } from './bug-investigator.js'
+import { registerReproTestAgent } from './repro-test.js'
 import { registerDocumentAgents } from './document.js'
 import { registerInitiativeAgents } from './initiative.js'
 
@@ -144,8 +145,8 @@ function withDerivedOutput(definition: AgentKindDefinition): AgentKindDefinition
  * every prompt build / routing decision reads it from there — so there is no module-global
  * `Map`, no `clear*()` test cruft, and no external-adapter module-identity gotcha: a
  * deployment registers extra kinds by reference (`registry.register(def)`) on the instance the
- * facade injects. The built-in kinds (`bug-investigator` / the document + initiative kinds) are
- * pre-loaded by the factory, not by an import side effect.
+ * facade injects. The built-in kinds (`bug-investigator` / `repro-test` / the document +
+ * initiative kinds) are pre-loaded by the factory, not by an import side effect.
  */
 export class AgentKindRegistry {
   private readonly registry = new Map<string, AgentKindDefinition>()
@@ -260,6 +261,7 @@ export class AgentKindRegistry {
 export function defaultAgentKindRegistry(): AgentKindRegistry {
   const registry = new AgentKindRegistry()
   registerBugInvestigatorAgent(registry)
+  registerReproTestAgent(registry)
   registerDocumentAgents(registry)
   registerInitiativeAgents(registry)
   return registry

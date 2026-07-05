@@ -219,6 +219,47 @@ async function tearDownInfra(dir: string, infra: ServiceInfraSpec): Promise<void
   }
 }
 
+/**
+ * Parse an agent's final reply into the structured JSON `custom`, shared by the explore and
+ * coding structured-output paths. With repair enabled (default) a malformed reply gets ONE
+ * structured repair call before giving up; with `output.repair === false` it parses directly.
+ * Returns the parsed value (or null when unusable) plus the repair diagnostics. Never throws —
+ * a parse failure is a null value, and each caller decides whether that is fatal (explore: yes;
+ * coding: no, the pushed commits are the deliverable).
+ */
+async function resolveReplyCustom(
+  job: AgentJob,
+  summary: string,
+  signal: AbortSignal | undefined,
+): Promise<{ value: unknown; diagnostics?: StructuredOutputDiagnostics }> {
+  if (job.output?.repair === false) {
+    try {
+      return { value: extractJsonObject(summary) }
+    } catch {
+      return { value: null }
+    }
+  }
+  const resolved = await resolveStructuredOutput(
+    {
+      label: 'agent',
+      shapeHint: job.output?.shapeHint ?? 'Expected a single JSON object.',
+      parse: (text) => extractJsonObject(text),
+    },
+    summary,
+    {
+      harness: job.harness,
+      subscriptionToken: job.subscriptionToken,
+      subscriptionBaseUrl: job.subscriptionBaseUrl,
+      proxyBaseUrl: job.proxyBaseUrl,
+      sessionToken: job.sessionToken,
+      model: job.model,
+      jobId: job.jobId,
+      signal,
+    },
+  )
+  return { value: resolved.value, diagnostics: resolved.diagnostics }
+}
+
 /** Extract the first JSON object from an agent's final message (tolerating fences/prose). */
 function extractJsonObject(text: string): unknown {
   const trimmed = text.trim()
@@ -551,40 +592,12 @@ async function finalizeExploreResult(
     }
   }
 
-  // Structured: parse the agent's JSON. With repair enabled (default) a malformed
-  // reply gets ONE structured repair call before giving up; with `repair:false` we
-  // parse directly (no repair channel). The backend coerces/validates + renders from
-  // the returned object in a post-op.
-  let custom: unknown = null
-  let diagnostics: StructuredOutputDiagnostics | undefined
-  if (job.output.repair === false) {
-    try {
-      custom = extractJsonObject(summary)
-    } catch {
-      custom = null
-    }
-  } else {
-    const resolved = await resolveStructuredOutput(
-      {
-        label: 'agent',
-        shapeHint: job.output.shapeHint ?? 'Expected a single JSON object.',
-        parse: (text) => extractJsonObject(text),
-      },
-      summary,
-      {
-        harness: job.harness,
-        subscriptionToken: job.subscriptionToken,
-        subscriptionBaseUrl: job.subscriptionBaseUrl,
-        proxyBaseUrl: job.proxyBaseUrl,
-        sessionToken: job.sessionToken,
-        model: job.model,
-        jobId: job.jobId,
-        signal,
-      },
-    )
-    custom = resolved.value
-    diagnostics = resolved.diagnostics
-  }
+  // Structured: parse the agent's JSON via the shared resolver. With repair enabled (default)
+  // a malformed reply gets ONE structured repair call before giving up; with `repair:false` it
+  // parses directly (no repair channel). The backend coerces/validates + renders from the
+  // returned object in a post-op. Unlike the coding path, an unparseable explore reply IS a
+  // failure — the report/JSON is the whole deliverable.
+  const { value: custom, diagnostics } = await resolveReplyCustom(job, summary, signal)
   if (custom === undefined || custom === null) {
     return {
       summary,
@@ -709,15 +722,18 @@ async function runMultiRepoExplore(job: AgentJob, opts: RunOptions): Promise<Age
 }
 
 /**
- * Edit-and-push coding: clone `branch` (or resume `newBranch`), run the agent, commit +
- * push to `pushBranch`, and open `pr` when one is set and the run produced changes. A
- * no-op is a failure for the implementer (`noChangesIsError` default) and a non-fatal
- * no-op for the in-place fixers.
+ * Edit-and-push coding, dispatching on job DATA: repo-bootstrap (force-push a fresh history to a
+ * separate target repo), conflict-resolution (merge the base in, resolve, push back), multi-repo
+ * fan-out (sibling checkouts + one PR per changed repo), else the ordinary single-repo flow.
+ * After the flow, a STRUCTURED coding kind (e.g. `repro-test`, whose deliverable is BOTH a pushed
+ * commit AND a JSON outcome) parses its final reply into `custom` — best-effort, so an unparseable
+ * outcome degrades to no `custom` (the backend resolver then defaults) rather than failing the
+ * run, whose real deliverable is the pushed commits.
  */
 async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   // Repo bootstrap is a coding run that force-pushes a fresh history to a SEPARATE target
   // repo (clone + adapt a reference, or scaffold from scratch). Keyed off job DATA
-  // (`bootstrap`), not the agent kind.
+  // (`bootstrap`), not the agent kind. Bootstrap/conflict never carry a structured `output`.
   if (job.bootstrap) return runBootstrap(job, opts)
   // Conflict resolution is a coding run with a different pre/post around the agent:
   // clone full, merge the base in to surface the conflicts, then complete the merge
@@ -727,8 +743,28 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
   // sibling, run the agent once across all of them, and open one PR per changed repo. Keyed
   // off job DATA (`peerRepos`), not the agent kind — the implementer sets it when the task
   // has involved services in distinct repos.
-  if (job.peerRepos?.length) return runMultiRepoCoding(job, opts)
+  const result = job.peerRepos?.length
+    ? await runMultiRepoCoding(job, opts)
+    : await runSingleRepoCoding(job, opts)
 
+  // Structured coding kind (repro-test): fold the final reply's JSON onto `custom` so the
+  // backend post-completion resolver records the outcome. Skipped on a failed run (its `error`
+  // is the signal) and when there is no reply to parse. Best-effort: a null parse leaves
+  // `custom` unset (the run still succeeds on its commits).
+  if (job.output?.kind === 'structured' && !result.error && result.summary) {
+    const { value } = await resolveReplyCustom(job, result.summary, opts.signal)
+    if (value !== null && value !== undefined) result.custom = value
+  }
+  return result
+}
+
+/**
+ * The ordinary single-repo coding flow: clone `branch` (or resume `newBranch`), run the agent,
+ * commit + push to `pushBranch`, and open `pr` when one is set and the run produced changes. A
+ * no-op is a failure for the implementer (`noChangesIsError` default) and a non-fatal no-op for
+ * the in-place fixers (and for a seed-only kind like `repro-test`).
+ */
+async function runSingleRepoCoding(job: AgentJob, opts: RunOptions): Promise<AgentResult> {
   const pushBranch = job.pushBranch ?? job.newBranch ?? job.branch
   const { summary, stats, stderrTail, pushed, usage, callMetrics } = await runCodingAgent(
     {

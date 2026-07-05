@@ -297,16 +297,52 @@ Notes for Phase G/H (which build on this):
 
 ### Phase G — `repro-test` agent (design §7–8)
 
-Same caveat as Phase F: `repro-test` is a `container-coding` kind that will want the
-same sibling-checkout treatment as `coder` when a bug spans multiple services, so it
-also needs adding to the (currently `coder`-only) multi-repo fan-out gate from Phase B.
+Implemented on branch `claude/bug-triage-phase-g-repro-test`. **Harness change + image bump**
+(`1.34.8` → `1.34.9`): a `container-coding` kind whose deliverable is BOTH a pushed commit AND a
+structured JSON outcome is a new harness capability (coding mode never parsed structured output —
+only explore mode did), so like Phase F this phase is NOT harness-free. Pins synced via
+`pnpm sync:image-tags`. Also fans out multi-repo via the registry flag (`fanOutMultiRepo: true`),
+so no edit to the executor's built-in fan-out allow-list was needed.
 
 | Item                                                                                       | Status |
 | ------------------------------------------------------------------------------------------ | ------ |
-| `repro-test` registered kind (`container-coding`, work branch) + structured outcome schema | todo   |
-| Concede resolver: `not_reproducible` recorded, run advances (never fails)                  | todo   |
-| `BUG_FIX_GUIDANCE` coder prompt fragment (applied when a prior `repro-test` output exists) | todo   |
-| Conformance: reproduced and conceded paths both reach the coder on both runtimes           | todo   |
+| `repro-test` registered kind (`container-coding`, work branch) + structured outcome schema | done   |
+| Concede resolver: `not_reproducible` recorded, run advances (never fails)                  | done   |
+| `BUG_FIX_GUIDANCE` coder prompt fragment (applied when a prior `repro-test` output exists) | done   |
+| Conformance: reproduced and conceded paths both reach the coder on both runtimes           | done   |
+
+Notes for Phase H (which seeds `pl_bug_triage` using this kind):
+
+- **`repro-test` does NOT open the PR** — it SEEDS the shared work branch (`cat-factory/<blockId>`)
+  by committing the failing test(s) and pushing, then the `coder` RESUMES that branch, adds the fix
+  and opens the ONE PR (containing both). Expressed declaratively on the kind's `AgentStepSpec`:
+  two new `container-coding`-only fields, `opensPr: false` (seed only — a later step opens the PR)
+  and `noChangesTolerated: true` (a concede commits nothing, which must not fail the run). The
+  default coder/ci-fixer behaviour is unchanged (`opensPr` defaults true for a work-branch coder;
+  an in-place PR-branch fixer never opens a PR either way).
+- **Structured output on the coding surface (harness):** `runCodingMode` now parses the agent's
+  final reply into `custom` when `output.kind === 'structured'`, BEST-EFFORT — the run's real
+  deliverable is its pushed commits, so an unparseable outcome degrades to no `custom` (the engine
+  resolver then leaves the raw reply) rather than failing the run. Only an infra/eviction failure
+  fails a `repro-test` step, like any container kind. `resolveReplyCustom` is shared with the
+  explore path (which still treats an unparseable reply as a hard failure — the report IS the whole
+  deliverable there).
+- **The concede resolver is a BUILT-IN post-completion resolver** in
+  `RunDispatcher.buildStepResolverRegistry` (`renderReproDigest`), mirroring the `bug-investigator`
+  digest resolver — it folds `{ outcome, testPaths, notes }` into a prose `step.output` so the coder
+  reads the reproduction result via `priorOutputs` (which carries only `step.output`), keeping the
+  structured object on `step.custom` for the `generic-structured` view.
+- **`BUG_FIX_GUIDANCE`** is folded into the CODER's system prompt (in the server's job-body builder,
+  exactly like `FOLLOW_UP_GUIDANCE`) via the pure `bugFixGuidanceFor(context)` helper — gated on the
+  build-phase coder specifically AND a prior `repro-test` output existing, so it is a no-op for every
+  other kind / run.
+- **Runtime-neutral `@types/node` gap fixed along the way:** `@cat-factory/server` uses
+  `AsyncLocalStorage` (`node:async_hooks`) in `src` — safe on both runtimes under `nodejs_compat`
+  — but declared no `@types/node`, so it couldn't typecheck in a strict pnpm layout. Rather than
+  pull the whole Node type surface into the runtime-neutral package (which would let `node:fs` /
+  `process` typecheck in `src` and break on workerd), `src` now runs with `"types": []` + a minimal
+  ambient shim (`src/node-async-hooks.d.ts`) typing only `AsyncLocalStorage`, and the node-using
+  TESTS get `@types/node` via a separate `tsconfig.test.json`.
 
 ### Phase H — the pipeline itself + end-to-end (design §1, §6, §9–10)
 
@@ -332,9 +368,11 @@ also needs adding to the (currently `coder`-only) multi-repo fan-out gate from P
 - **No N+1**: the intake dedupe against the `tasks` projection is one batched read;
   predicates are pushed into the vendor query (JQL / search qualifiers / GraphQL filter),
   never fetch-all-then-filter.
-- **Harness changes live in Phase B only** (sibling checkouts): bump
-  `@cat-factory/executor-harness` + the three pinned image tags per the CLAUDE.md rules.
-  Every other phase is backend TypeScript + registered kinds — zero harness edits.
+- **Most phases are harness-free** (backend TypeScript + registered kinds), but a genuinely new
+  container CAPABILITY needs a harness change + image bump per the CLAUDE.md rules (bump
+  `@cat-factory/executor-harness` + `pnpm sync:image-tags`): Phase B (sibling checkouts), Phase F
+  (read-only multi-repo explore), and Phase G (structured output on the coding surface). Phases
+  C/D/E were harness-free.
 - **A parked clarification intentionally blocks subsequent fires** (the recurring
   no-overlap rule): one bug in flight per schedule. Don't "fix" this.
 - **Writeback is best-effort everywhere** — a tracker outage must never fail a run.
@@ -344,13 +382,13 @@ also needs adding to the (currently `coder`-only) multi-repo fan-out gate from P
   the same PR (the locale-parity CI gate).
 - Two branches adding Drizzle migrations merge into "Non-commutative migrations": re-root
   with `node scripts/rebase-migration-snapshot.mjs <later-folder>` (see CLAUDE.md).
-- **The multi-repo fan-out gate (`MULTI_REPO_FANOUT_KINDS` in `ContainerAgentExecutor`) now
-  covers `coder`, `ci-fixer` AND `bug-investigator`** (Phase F widened it). Phase G's
-  `repro-test` (a `container-coding` kind) must be added too when a bug spans repos. Note the
-  investigator is READ-ONLY: Phase F also had to teach the HARNESS to clone peers in explore
-  mode (`runMultiRepoExplore`) — the coding fan-out (`runMultiRepoCoding`) opens PRs and was
-  the only multi-repo path before. `repro-test` rides the EXISTING coding path (it commits),
-  so it needs no new harness path — just the gate entry.
+- **The multi-repo fan-out gate** — the executor keeps a small allow-list of PRE-REGISTRY
+  built-ins (`coder`, `ci-fixer`), but a REGISTERED kind opts in via `fanOutMultiRepo: true` on
+  its definition (the `bug-investigator` in Phase F, and now `repro-test` in Phase G), so neither
+  needed an allow-list edit. `repro-test` rides the EXISTING coding fan-out (`runMultiRepoCoding`)
+  since it commits — no new harness path like Phase F's read-only `runMultiRepoExplore`. What Phase
+  G DID add to the harness is structured-output parsing on the coding path (see the Phase G notes)
+  — the coding fan-out gained the same `custom` parse as the single-repo coder.
 - **The harness's multi-repo paths are deliberately simpler than the single-repo ones**: the
   coding fan-out (`runMultiRepoCoding`, per PR #752) has no mid-run checkpoints / warm pool /
   follow-up streaming, and the read-only explore fan-out (`runMultiRepoExplore`, Phase F) just

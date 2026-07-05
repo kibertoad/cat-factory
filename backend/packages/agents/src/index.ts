@@ -186,6 +186,15 @@ export {
   type BugInvestigation,
   registerBugInvestigatorAgent,
 } from './agents/kinds/bug-investigator.js'
+export {
+  REPRO_TEST_KIND,
+  REPRO_TEST_AGENT_KINDS,
+  reproTestOutcome,
+  type ReproTestOutcome,
+  registerReproTestAgent,
+  BUG_FIX_GUIDANCE,
+  bugFixGuidanceFor,
+} from './agents/kinds/repro-test.js'
 export { MOCK_AGENT_KIND, isMockKind, mockSystemPrompt } from './agents/prompts/mock.js'
 export {
   type BusinessLogicAgentKind,

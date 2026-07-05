@@ -8015,6 +8015,71 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
       })
     })
 
+    // The `repro-test` is a structured `container-coding` kind (phase G): it writes a failing
+    // reproduction test (or concedes `not_reproducible`) and returns a `{ outcome, testPaths,
+    // notes }` assessment. A concede NEVER fails the run — a post-completion resolver folds the
+    // outcome into `step.output` and the run advances to the coder either way. These assert both
+    // the reproduced and the conceded path reach the coder identically on every runtime.
+    describe('bug-triage reproduction (phase G)', () => {
+      const runRepro = async (
+        outcome: 'reproduced' | 'not_reproducible',
+        customResult: Record<string, unknown>,
+      ): Promise<ExecutionInstance> => {
+        const app = harness.makeApp({ customResult })
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: `Reproduce & fix (${outcome})`,
+          agentKinds: ['repro-test', 'coder'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        return (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+      }
+
+      it('records a reproduced outcome, then advances to the coder', async () => {
+        const exec = await runRepro('reproduced', {
+          outcome: 'reproduced',
+          testPaths: ['test/submit.test.ts'],
+          notes: 'Fails for the reported reason (unhandled rejection).',
+        })
+        expect(exec.status).toBe('done')
+
+        const repro = exec.steps.find((s) => s.agentKind === 'repro-test')!
+        expect(repro.state).toBe('done')
+        // The structured outcome is kept on `step.custom` for the generic-structured view.
+        expect((repro.custom as { outcome?: string } | undefined)?.outcome).toBe('reproduced')
+        // The post-completion resolver rendered a prose digest onto `step.output`.
+        expect(repro.output).toContain('Reproduction test')
+        expect(repro.output).toContain('Reproduced')
+        expect(repro.output).toContain('`test/submit.test.ts`')
+
+        // The coder ran after the reproduction step — a repro-test never blocks the run.
+        expect(exec.steps.find((s) => s.agentKind === 'coder')?.state).toBe('done')
+      })
+
+      it('concedes not_reproducible without failing the run, still reaching the coder', async () => {
+        const exec = await runRepro('not_reproducible', {
+          outcome: 'not_reproducible',
+          testPaths: [],
+          notes: 'Needs production data to trigger; could not reproduce locally.',
+        })
+        // Conceding is a SUCCESSFUL run (only infra/eviction fails a repro-test).
+        expect(exec.status).toBe('done')
+
+        const repro = exec.steps.find((s) => s.agentKind === 'repro-test')!
+        expect(repro.state).toBe('done')
+        expect((repro.custom as { outcome?: string } | undefined)?.outcome).toBe('not_reproducible')
+        expect(repro.output).toContain('Not reproducible')
+        expect(repro.output).toContain('Needs production data')
+
+        // The coder still runs — a conceded reproduction does not stop the pipeline.
+        expect(exec.steps.find((s) => s.agentKind === 'coder')?.state).toBe('done')
+      })
+    })
+
     // Slack is an extra notification transport; both facades wire the same module +
     // channel. These assert the per-workspace routing and the per-account member map
     // persist + read back identically on each store (the persistence-parity concern).

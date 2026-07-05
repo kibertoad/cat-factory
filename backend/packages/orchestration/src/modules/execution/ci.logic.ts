@@ -51,6 +51,16 @@ export {
 export const BUG_INVESTIGATOR_AGENT_KIND = 'bug-investigator'
 
 /**
+ * The agent kind of the `repro-test` container agent (bug-triage phase G). A structured
+ * `container-coding` kind: it writes failing reproduction test(s) for the reported bug, commits
+ * them onto the shared run branch (seeding it for the coder, which opens the PR), and returns a
+ * `{ outcome, testPaths, notes }` assessment. Conceding (`not_reproducible`) never fails the run
+ * — a post-completion resolver folds the outcome into `step.output` so the coder reads it via
+ * `priorOutputs`. Registered in `@cat-factory/agents`; this is the engine-side id alias.
+ */
+export const REPRO_TEST_AGENT_KIND = 'repro-test'
+
+/**
  * The agent kind of the container agent that writes the service's unified, in-repo
  * specification (`spec.json`). It runs BEFORE the coder and aggregates the collected
  * requirements of every task under the service frame — including their acceptance
