@@ -716,8 +716,8 @@ export type RecipeHealthGate = v.InferOutput<typeof recipeHealthGateSchema>
  * recipe only — autodetection / the analyst merely recommend it.
  */
 export const stackRecipeSchema = v.object({
-  /** Ordered `-f` compose files (base + overrides). Supersedes `composePath` when present. */
-  composeFiles: v.optional(v.array(recipePathString)),
+  /** Ordered `-f` compose files (base + overrides). Supersedes `composePath` when present (⇒ non-empty). */
+  composeFiles: v.optional(v.pipe(v.array(recipePathString), v.minLength(1))),
   /** `COMPOSE_PROFILES` to enable for the project. */
   composeProfiles: v.optional(v.array(recipeName)),
   /** Committed templates materialized into their gitignored targets before `up`. */
