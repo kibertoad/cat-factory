@@ -58,3 +58,32 @@ describe('[local] applyLocalDefaults secrets', () => {
     )
   })
 })
+
+describe('[local] applyLocalDefaults web search', () => {
+  it('defaults WEB_SEARCH_SEARXNG_URL to the local SearXNG on by default', () => {
+    const env = applyLocalDefaults({ ...SECRETS })
+    expect(env.WEB_SEARCH_SEARXNG_URL).toBe('http://localhost:8080')
+  })
+
+  it('honours an explicit WEB_SEARCH_SEARXNG_URL (idempotent — explicit wins)', () => {
+    const env = applyLocalDefaults({ ...SECRETS, WEB_SEARCH_SEARXNG_URL: 'http://searxng:9000' })
+    expect(env.WEB_SEARCH_SEARXNG_URL).toBe('http://searxng:9000')
+  })
+
+  it('omits the default when LOCAL_WEB_SEARCH is an off-value', () => {
+    for (const off of ['off', 'false', '0', 'no', 'none', 'disabled']) {
+      const env = applyLocalDefaults({ ...SECRETS, LOCAL_WEB_SEARCH: off })
+      expect(env.WEB_SEARCH_SEARXNG_URL).toBeUndefined()
+    }
+  })
+
+  it('still passes an explicit URL through even when the default is disabled', () => {
+    // Disabling only skips the DEFAULT; an operator who set the URL explicitly keeps it.
+    const env = applyLocalDefaults({
+      ...SECRETS,
+      LOCAL_WEB_SEARCH: 'off',
+      WEB_SEARCH_SEARXNG_URL: 'http://searxng:9000',
+    })
+    expect(env.WEB_SEARCH_SEARXNG_URL).toBe('http://searxng:9000')
+  })
+})

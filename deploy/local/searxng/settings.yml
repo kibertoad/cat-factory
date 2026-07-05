@@ -1,0 +1,17 @@
+# Local-mode SearXNG config (bind-mounted at /etc/searxng). Minimal overrides on top of the
+# image defaults, just enough for the backend web-search proxy to query it:
+#   - search.formats includes `json` (the official image ships HTML-only; the proxy asks for
+#     format=json), and
+#   - server.limiter is off (the backend queries programmatically; the bot limiter would 429 it).
+# The secret_key is a throwaway local-dev value — change it for any non-local exposure.
+use_default_settings: true
+
+server:
+  secret_key: 'local-dev-searxng-secret-change-me'
+  limiter: false
+  bind_address: '0.0.0.0'
+
+search:
+  formats:
+    - html
+    - json
