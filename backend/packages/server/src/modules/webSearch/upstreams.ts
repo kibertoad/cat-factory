@@ -100,9 +100,12 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
     // `trusted` marks a DEPLOYMENT-configured URL (the operator's own SearXNG, e.g. local
     // mode's `http://localhost:8080`) rather than an account-supplied one. The SSRF host
     // guard exists because ACCOUNT URLs are untrusted; a trusted URL may point at a loopback/
-    // LAN host, so the host check is skipped for it. Everything else `safeFetch` gives us —
-    // manual redirect following, cross-origin credential/body stripping, the response byte
-    // cap — still applies. Untrusted (default) instances keep the full guard.
+    // LAN host, so the host check is skipped for the configured origin only (its own base URL
+    // and same-origin redirects). A CROSS-origin redirect is STILL guarded (see `search`), so a
+    // trusted-but-compromised upstream can't pivot to an internal/metadata host — and everything
+    // else `safeFetch` gives us (manual redirect following, cross-origin credential/body
+    // stripping, the response byte cap) still applies. Untrusted (default) instances keep the
+    // full guard on every hop.
     private readonly trusted = false,
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
@@ -115,11 +118,20 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
     const url = new URL(`${this.base}/search`)
     url.searchParams.set('q', query)
     url.searchParams.set('format', 'json')
-    // Re-validate the (account-configured) host on every redirect hop so a permitted
-    // base can't 302 the request — with the optional bearer attached — to an internal
-    // or metadata host. A trusted deployment upstream skips only this host check (see the
-    // `trusted` ctor arg); the rest of `safeFetch`'s protections still apply.
-    const assertSafe = this.trusted ? () => {} : assertSafeWebSearchUrl
+    // Re-validate the host on every redirect hop so a permitted base can't 302 the request —
+    // with the optional bearer attached — to an internal or metadata host. A trusted deployment
+    // upstream trusts ONLY its own configured origin (which may be a loopback/LAN host — see the
+    // `trusted` ctor arg): the initial request and any SAME-origin redirect are allowed, but a
+    // CROSS-origin redirect is still SSRF-guarded, so a trusted-but-compromised SearXNG can't
+    // bounce the request to `169.254.169.254` or another internal host. `safeFetch` runs
+    // `assertSafe` on every hop.
+    const trustedOrigin = this.trusted ? new URL(this.base).origin : undefined
+    const assertSafe =
+      trustedOrigin === undefined
+        ? assertSafeWebSearchUrl
+        : (u: string) => {
+            if (new URL(u).origin !== trustedOrigin) assertSafeWebSearchUrl(u)
+          }
     const res = await safeFetch(
       url.toString(),
       {

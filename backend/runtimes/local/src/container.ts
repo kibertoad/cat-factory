@@ -40,6 +40,7 @@ import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
 import { makeInlineHarnessPredicate, wrapResolverWithInlineHarness } from './harnessInline.js'
 import { buildLocalDeployTransport } from './NativeCliDeployTransport.js'
 import { applyLocalDefaults } from './config.js'
+import { OFF_VALUES } from './envFlags.js'
 import {
   buildVcsIdentityRegistry,
   createLocalGitHubClient,
@@ -649,8 +650,6 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   }
 }
 
-/** Values that explicitly DISABLE native mode (so `LOCAL_NATIVE_AGENTS=false` means off). */
-const NATIVE_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
 /** Affirmative values that enable BOTH native harnesses without naming one. */
 const NATIVE_ALL_VALUES = new Set(['true', '1', 'on', 'yes', 'all', 'both'])
 /** What an affirmative-with-no-harness value enables. */
@@ -672,7 +671,7 @@ export function parseNativeHarnesses(
   onWarn?: (message: string) => void,
 ): HarnessKind[] {
   const trimmed = raw?.trim().toLowerCase()
-  if (!trimmed || NATIVE_OFF_VALUES.has(trimmed)) return []
+  if (!trimmed || OFF_VALUES.has(trimmed)) return []
   const out = new Set<HarnessKind>()
   let affirmative = false
   const unrecognized: string[] = []

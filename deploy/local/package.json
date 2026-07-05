@@ -10,8 +10,8 @@
     "dev": "node --watch --env-file-if-exists=.env src/main.ts",
     "prestart": "pnpm --filter @cat-factory/local-server run build",
     "start": "node --env-file-if-exists=.env src/main.ts",
-    "up": "docker compose up -d",
-    "down": "docker compose down",
+    "up": "docker compose --profile web-search up -d",
+    "down": "docker compose --profile web-search down",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "typecheck": "tsc -p tsconfig.json --noEmit"

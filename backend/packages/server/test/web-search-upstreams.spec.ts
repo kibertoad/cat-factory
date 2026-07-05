@@ -137,6 +137,21 @@ describe('SearxngWebSearchUpstream', () => {
     // It got PAST the host guard: the failure is a connection error, not the SSRF rejection.
     expect((err as Error).message).not.toMatch(/public host/)
   })
+
+  it('trusted still SSRF-guards a CROSS-origin redirect to an internal host', async () => {
+    // `trusted` trusts only the configured origin — it must NOT disable per-hop redirect
+    // revalidation, or a trusted-but-compromised SearXNG could 302 the request (bearer stripped,
+    // but the fetch still happens) to `169.254.169.254`. A public trusted base that redirects to
+    // a metadata host is rejected at the redirect hop, exactly as the untrusted path would be.
+    const PUBLIC_SEARX = 'https://searx.public.example'
+    agent
+      .get(PUBLIC_SEARX)
+      .intercept({ path: (p) => p.startsWith('/search'), method: 'GET' })
+      .reply(302, '', { headers: { location: 'http://169.254.169.254/latest/meta-data/' } })
+    await expect(
+      new SearxngWebSearchUpstream(PUBLIC_SEARX, undefined, true).search('q'),
+    ).rejects.toThrow(/public host/)
+  })
 })
 
 describe('createWebSearchUpstream', () => {

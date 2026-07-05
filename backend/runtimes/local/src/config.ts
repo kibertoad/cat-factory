@@ -1,6 +1,7 @@
 import { loadNodeConfig } from '@cat-factory/node-server'
 import type { AppConfig } from '@cat-factory/server'
 import { base64urlToBytes } from '@cat-factory/server'
+import { isOffValue } from './envFlags.js'
 import { resolveHostAlias } from './runtimes/index.js'
 
 // Local mode defaults the auth gate OPEN and can be exposed on a LAN, so a weak
@@ -31,10 +32,6 @@ const DEFAULT_PORT = '8787'
 // upstream from `WEB_SEARCH_SEARXNG_URL`, so a loopback URL is permitted (it bypasses the
 // account-URL SSRF guard). See `createDefaultWebSearchUpstream` in @cat-factory/server.
 const DEFAULT_LOCAL_SEARXNG_URL = 'http://localhost:8080'
-
-// `LOCAL_WEB_SEARCH` off-values disable the on-by-default self-hosted web search (mirrors the
-// off-value convention used for the harness-image refresh).
-const WEB_SEARCH_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
 
 /**
  * Resolve a mandatory local-mode secret from env, throwing a clear, actionable error when it
@@ -101,9 +98,7 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   // facade builds no upstream → the tool isn't advertised and the proxy degrades to empty). Per
   // this loader's "explicit env always wins" contract, an operator-set WEB_SEARCH_SEARXNG_URL is
   // preserved regardless (via `...env`).
-  const webSearchDisabled = WEB_SEARCH_OFF_VALUES.has(
-    (env.LOCAL_WEB_SEARCH ?? '').trim().toLowerCase(),
-  )
+  const webSearchDisabled = isOffValue(env.LOCAL_WEB_SEARCH)
   return {
     ...env,
     ...(webSearchDisabled

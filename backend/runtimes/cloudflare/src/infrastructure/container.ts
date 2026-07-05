@@ -109,6 +109,7 @@ import {
   WebCryptoPersonalSecretCipher,
   logger,
   buildInfrastructureCapabilities,
+  createDefaultWebSearchUpstream,
   createScopedModelProviderResolver,
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
@@ -117,6 +118,7 @@ import {
   type MintInstallationToken,
   type PersistenceRegistry,
   type ServerContainer,
+  type WebSearchUpstream,
 } from '@cat-factory/server'
 import { type AppConfig, loadConfig } from './config'
 import { loadLangfuseConfig } from './config/langfuse'
@@ -1358,6 +1360,19 @@ function buildOpenRouterCatalogService(
   })
 }
 
+// The deployment-wide trusted web-search upstream for CONTAINER agents, built from this
+// facade's own `WEB_SEARCH_*` env — the fallback the search proxy uses when a run's account
+// configured none of its own (see `createDefaultWebSearchUpstream` in @cat-factory/server).
+// Public endpoints only on workerd (no loopback-SearXNG story); kept symmetric with the Node
+// facade so a stock Cloudflare deployment can also set a deployment-wide default.
+function buildDefaultWebSearchUpstream(env: Env): WebSearchUpstream | undefined {
+  return createDefaultWebSearchUpstream({
+    braveApiKey: env.WEB_SEARCH_BRAVE_API_KEY,
+    searxngUrl: env.WEB_SEARCH_SEARXNG_URL,
+    searxngApiKey: env.WEB_SEARCH_SEARXNG_API_KEY,
+  })
+}
+
 function buildContainerExecutor(
   env: Env,
   config: AppConfig,
@@ -1406,18 +1421,24 @@ function buildContainerExecutor(
     return registry.installationToken(installationId)
   }
 
-  // Web-search keys live per-account; advertise Pi's `web_search` tool to a run only when
-  // its account actually has a usable upstream (else the tool would just fail/return
-  // nothing). Resolved per run off the account-settings store (its own short-TTL cache).
+  // Advertise Pi's `web_search` tool to a run only when a usable upstream exists — either the
+  // deployment-wide default below (⇒ always on) or the run's account has its own keys (else the
+  // tool would just fail/return nothing). The per-account check runs off the account-settings
+  // store (its own short-TTL cache).
   const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
+  const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
   const webSearchSettings = buildAccountSettings(env, db, clock)
-  const resolveWebSearchEnabled = webSearchSettings
-    ? async (workspaceId: string): Promise<boolean> => {
-        const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
-        if (!accountId) return false
-        return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
-      }
-    : undefined
+  const resolveWebSearchEnabled =
+    defaultWebSearchUpstream || webSearchSettings
+      ? async (workspaceId: string): Promise<boolean> => {
+          // A deployment default serves every account, so the tool is on regardless.
+          if (defaultWebSearchUpstream) return true
+          if (!webSearchSettings) return false
+          const accountId = await new D1WorkspaceRepository({ db }).accountOf(workspaceId)
+          if (!accountId) return false
+          return Boolean((await webSearchSettings.resolve(accountId)).webSearch)
+        }
+      : undefined
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -2242,6 +2263,11 @@ export function buildContainer(
   // content-storage resolvers are derived from it in the domain composition root.
   const accountSettings = buildAccountSettings(env, db, clock, contentStorageCapability)
 
+  // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
+  // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+  // Kept symmetric with the Node facade; absent unless the operator sets a `WEB_SEARCH_*` var.
+  const defaultWebSearchUpstream = buildDefaultWebSearchUpstream(env)
+
   // Resolve the binary-artifact store for a workspace's account from its content-storage
   // settings (the blob backend is per-account; the metadata is the shared D1 store). Without
   // `accountSettings` (no encryption key) every workspace falls back to the runtime default
@@ -2350,6 +2376,7 @@ export function buildContainer(
     ...selectIncidentEnrichmentDeps(env, db),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
+    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectLangfuseSink(config),
