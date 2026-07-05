@@ -211,6 +211,18 @@ export interface Env {
   /** Cap on provider web searches per inline run (Anthropic `maxUses`; default 5). */
   INLINE_WEB_SEARCH_MAX_USES?: string
 
+  // ---- Container agent web search: deployment-wide default upstream (opt-in) ----
+  // Fallback web-search upstream for CONTAINER (Pi) agents whose account configured none of
+  // its own — the trusted counterpart to the per-account keys (see `createDefaultWebSearchUpstream`
+  // in @cat-factory/server). Public endpoints only here (no loopback-SearXNG story on workerd);
+  // when set, `web_search` is advertised to every run. Absent ⇒ account-keys-only, as before.
+  /** Brave Search key for the deployment-wide default upstream (preferred when set). */
+  WEB_SEARCH_BRAVE_API_KEY?: string
+  /** Self-hosted SearXNG base URL for the deployment-wide default upstream. */
+  WEB_SEARCH_SEARXNG_URL?: string
+  /** Optional bearer for the default SearXNG (only if it sits behind an auth proxy). */
+  WEB_SEARCH_SEARXNG_API_KEY?: string
+
   // ---- GitHub integration (see config.ts; opt-in) -------------------------
   /** GitHub App id (numeric). Presence enables the integration. */
   GITHUB_APP_ID?: string
