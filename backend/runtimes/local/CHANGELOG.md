@@ -1,5 +1,42 @@
 # @cat-factory/local-server
 
+## 0.53.0
+
+### Minor Changes
+
+- 9ea1e77: Tiered spend budgets (account / workspace / user) with operator hard caps.
+
+  Budgets are now tracked and enforced across three tiers: the existing per-workspace
+  monthly limit, a per-account limit, and a per-user limit. A run pauses when any applicable
+  tier is exhausted. All three tiers are configurable and visible in the Budget settings
+  screen.
+
+  Two new environment variables (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`,
+  `BUDGET_MAX_MONTHLY_PER_USER`), read by the Node and Cloudflare config loaders, set
+  operator hard ceilings on the account/user tiers; the UI cannot exceed a configured cap and
+  shows it on the budget screen. See `docs/environment-variables.md` and
+  `docs/initiatives/tiered-budgets.md`.
+
+  Breaking (pre-1.0, no data migration): the `token_usage` ledger gains nullable
+  `account_id`/`user_id` columns (existing rows are unattributed and excluded from the new
+  account/user rollups until re-metered); `TokenUsageRecord`, `RecordUsageInput`, and
+  `SpendPricing` gained fields; `SpendService.isOverBudget` now takes an optional tier scope.
+  A new `user_settings` table and `GET/PUT /user-settings` endpoint carry the user-tier
+  budget.
+
+### Patch Changes
+
+- Updated dependencies [9ea1e77]
+  - @cat-factory/contracts@0.109.0
+  - @cat-factory/kernel@0.100.0
+  - @cat-factory/orchestration@0.82.0
+  - @cat-factory/server@0.92.0
+  - @cat-factory/node-server@0.81.0
+  - @cat-factory/agents@0.40.3
+  - @cat-factory/gitlab@0.7.17
+  - @cat-factory/integrations@0.73.3
+  - @cat-factory/executor-harness@1.35.0
+
 ## 0.52.4
 
 ### Patch Changes
