@@ -252,6 +252,7 @@ export type {
   ProvisionedEnvironment,
   RecipeStepLog,
   RecipeStepRecorder,
+  SharedStackEnsureResult,
   ProvisionFields,
   SecretResolver,
   RepoFileReader,

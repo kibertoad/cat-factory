@@ -1395,6 +1395,7 @@ function createEnvironmentsModule(
   deps: CoreDependencies,
   provisioningLog: ProvisioningLogRecorder | undefined,
   eventPublisher: ExecutionEventPublisher | undefined,
+  sharedStackService: SharedStackService | undefined,
 ): EnvironmentsModule | undefined {
   const { environmentConnectionRepository, environmentRegistryRepository, secretCipher } = deps
   if (!environmentConnectionRepository || !environmentRegistryRepository || !secretCipher) {
@@ -1504,6 +1505,13 @@ function createEnvironmentsModule(
     ...(deps.deployJobClient ? { deployJobClient: deps.deployJobClient } : {}),
     ...(deps.resolveDeployCloneTarget
       ? { resolveDeployCloneTarget: deps.resolveDeployCloneTarget }
+      : {}),
+    // A compose stack recipe's `sharedStackRefs` are brought up (provider-before-consumer) through
+    // the shared-stack service, whose managed networks the compose provider attaches the per-PR
+    // project to. Wired only when the shared-stacks module exists (its repository is present on
+    // every facade); the lifecycle itself refuses without a host daemon.
+    ...(sharedStackService
+      ? { ensureSharedStacks: (ws, refs) => sharedStackService.ensureRefsUp(ws, refs) }
       : {}),
     ...(provisioningLog ? { provisioningLog } : {}),
   })
@@ -2359,10 +2367,16 @@ export function createCore(dependencies: CoreDependencies): Core {
         service: new ProvisioningLogService({ repository: dependencies.provisioningLogRepository }),
       }
     : undefined
+  // Built before the environments module so a compose stack recipe's `sharedStackRefs` can be
+  // brought up (provider-before-consumer) through this service during provisioning. Persistence is
+  // runtime-symmetric (present on every facade); the lifecycle only runs where a host daemon is
+  // wired (`composeRuntime` — the local facade), else `ensureRefsUp` returns a clean error.
+  const sharedStacks = createSharedStacksModule(dependencies)
   const environments = createEnvironmentsModule(
     dependencies,
     provisioningLogRecorder,
     executionEventPublisher,
+    sharedStacks?.service,
   )
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
@@ -2385,7 +2399,6 @@ export function createCore(dependencies: CoreDependencies): Core {
   const notifications = createNotificationsModule(dependencies)
   const slack = createSlackModule(dependencies)
   const mergePresets = createMergePresetsModule(dependencies)
-  const sharedStacks = createSharedStacksModule(dependencies)
   const sandbox = createSandboxModule(dependencies, agentKindRegistry)
   // Built before the execution engine so the per-service running-task limit can be
   // enforced at start() (and the escalation sweep can read the waiting threshold).

@@ -258,6 +258,56 @@ describe('SharedStackService', () => {
     expect(calls.some((c) => c.includes('down') && c.includes('-v'))).toBe(true)
   })
 
+  it('ensureRefsUp brings each stack up in order and returns the deduped managed networks', async () => {
+    const bootstrap = makeService(repo)
+    const a = await bootstrap.create(WS, { ...baseInput, name: 'a', managedNetworks: ['acme-net'] })
+    const b = await bootstrap.create(WS, {
+      ...baseInput,
+      name: 'b',
+      managedNetworks: ['acme-net', 'bus-net'], // acme-net repeats → deduped
+    })
+    const { runtime } = makeRuntime()
+    const svc = makeService(repo, runtime)
+    const result = await svc.ensureRefsUp(WS, [a.id, b.id])
+    expect(result).toEqual({ ok: true, networks: ['acme-net', 'bus-net'] })
+    // Both stacks are now running.
+    expect((await svc.get(WS, a.id)).status).toBe('running')
+    expect((await svc.get(WS, b.id)).status).toBe('running')
+  })
+
+  it('ensureRefsUp reports a blocking error for an unknown ref (never throws)', async () => {
+    const svc = makeService(repo, makeRuntime().runtime)
+    const result = await svc.ensureRefsUp(WS, ['ss_missing'])
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain('ss_missing')
+  })
+
+  it('ensureRefsUp surfaces a stack whose bring-up failed', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      setupSteps: [{ kind: 'compose-exec', name: 'seed', service: 'db', command: ['seed'] }],
+    })
+    const { runtime } = makeRuntime({
+      async compose(args) {
+        if (args.includes('exec')) return { code: 1, stdout: '', stderr: 'boom' }
+        return ok
+      },
+    })
+    const result = await makeService(repo, runtime).ensureRefsUp(WS, [created.id])
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain('is not running')
+      expect(result.error).toContain('seed')
+    }
+  })
+
+  it('ensureRefsUp reports an error (never throws) without a Docker runtime', async () => {
+    const created = await makeService(repo).create(WS, baseInput)
+    const result = await makeService(repo).ensureRefsUp(WS, [created.id]) // no runtime
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/local Docker runtime/)
+  })
+
   it('refuses to delete or reconfigure a running stack', async () => {
     const created = await makeService(repo).create(WS, baseInput)
     const { runtime } = makeRuntime()

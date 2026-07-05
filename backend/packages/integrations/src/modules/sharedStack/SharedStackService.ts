@@ -4,11 +4,18 @@ import type {
   IdGenerator,
   RecipeStepRecorder,
   SharedStack,
+  SharedStackEnsureResult,
   SharedStackRepository,
   UpdateSharedStackInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, requireWorkspace, ValidationError } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  requireWorkspace,
+  ValidationError,
+} from '@cat-factory/kernel'
 import {
   type ComposeRuntime,
   classifyComposePs,
@@ -175,6 +182,15 @@ export class SharedStackService {
   async ensureUp(workspaceId: string, id: string): Promise<SharedStack> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
     const stack = assertFound(await this.stacks.get(workspaceId, id), 'SharedStack', id)
+    return this.ensureStackUp(workspaceId, stack)
+  }
+
+  /**
+   * Bring an ALREADY-RESOLVED shared stack up (idempotent). Split out of {@link ensureUp} so a batch
+   * caller ({@link ensureRefsUp}) can drive several stacks after a SINGLE list read — no repository
+   * point-read per stack. Requires the host Docker runtime; coalesces concurrent callers per stack id.
+   */
+  private async ensureStackUp(workspaceId: string, stack: SharedStack): Promise<SharedStack> {
     if (!this.runtime) {
       throw new ValidationError(
         'Bringing a shared stack up requires the local Docker runtime (unavailable on this deployment).',
@@ -185,11 +201,61 @@ export class SharedStackService {
     // `running` while nothing is up, so trust-but-verify with a cheap `compose ps` before
     // short-circuiting; a stale `running` falls through and re-provisions instead of wedging.
     if (stack.status === 'running' && (await this.isStackLive(stack))) return stack
-    const existing = this.inflight.get(id)
+    const existing = this.inflight.get(stack.id)
     if (existing) return existing
-    const run = this.bringUp(workspaceId, stack).finally(() => this.inflight.delete(id))
-    this.inflight.set(id, run)
+    const run = this.bringUp(workspaceId, stack).finally(() => this.inflight.delete(stack.id))
+    this.inflight.set(stack.id, run)
     return run
+  }
+
+  /**
+   * Bring UP the shared stacks a consumer recipe references (`recipe.sharedStackRefs`) and return
+   * the deduped union of the managed Docker networks they own — the provider-before-consumer step
+   * the compose environment provider runs before standing a per-PR project up, so it can attach to
+   * those networks as `external: true`. The workspace's stacks are read ONCE (batched, then indexed
+   * by id — no point-read per ref) and each referenced stack is ensured idempotently (a healthy stack
+   * is a no-op) IN ORDER, since a later stack may depend on an earlier one's network. Returns a
+   * blocking `error` — never throws — when a ref names no stack in the workspace, the runtime can't
+   * bring one up (no host daemon), or a bring-up fails, so the provider surfaces a deterministic
+   * provision failure with the real cause. This is the
+   * {@link ProvisionEnvironmentRequest.ensureSharedStacks} seam's implementation.
+   */
+  async ensureRefsUp(workspaceId: string, refs: string[]): Promise<SharedStackEnsureResult> {
+    await requireWorkspace(this.workspaceRepository, workspaceId)
+    // Batch-load the workspace's stacks once and index by id, so the ordered bring-up below does
+    // host-daemon work only — never a repository round-trip per ref (no N+1).
+    const byId = new Map((await this.stacks.list(workspaceId)).map((stack) => [stack.id, stack]))
+    const networks: string[] = []
+    const seen = new Set<string>()
+    for (const ref of refs) {
+      const found = byId.get(ref)
+      if (!found) return { ok: false, error: `shared stack '${ref}': not found in this workspace` }
+      let stack: SharedStack
+      try {
+        stack = await this.ensureStackUp(workspaceId, found)
+      } catch (err) {
+        // A runtime that can't bring stacks up (no daemon) or an unexpected bring-up throw becomes a
+        // clear blocking reason for the provision.
+        return { ok: false, error: `shared stack '${ref}': ${getErrorMessage(err)}` }
+      }
+      if (stack.status !== 'running') {
+        // `ensureUp` persists (and returns) a `failed` stack rather than throwing; surface its
+        // lastError so the consumer's provisioning log shows why the shared infra didn't come up.
+        return {
+          ok: false,
+          error: `shared stack '${stack.name}' is not running: ${
+            stack.lastError ?? 'bring-up did not complete'
+          }`,
+        }
+      }
+      for (const network of stack.managedNetworks) {
+        if (!seen.has(network)) {
+          seen.add(network)
+          networks.push(network)
+        }
+      }
+    }
+    return { ok: true, networks }
   }
 
   /** Tear a shared stack down (`down -v`). A deliberate action; the stack row is preserved. */
