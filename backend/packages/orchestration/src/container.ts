@@ -769,6 +769,12 @@ export interface CoreDependencies {
    * refuse (the documented compose runtime-binding exception).
    */
   composeRuntime?: ComposeRuntime
+  /**
+   * The VCS token a shared stack's bring-up clones its repo with (for a private `cloneUrl`). Wired
+   * on the local facade from the same source-control PAT the agent containers push with; absent ⇒
+   * unauthenticated clone (public repos only).
+   */
+  sharedStackCloneToken?: string
   // ---- Sandbox (parallel prompt/model testing surface; opt-in) --------------
   // Flat repository fields like every other feature; both runtime facades contribute
   // them by spreading one sandbox-owned `Partial<CoreDependencies>` mixin (the
@@ -2036,6 +2042,7 @@ function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | 
     idGenerator: deps.idGenerator,
     clock: deps.clock,
     ...(deps.composeRuntime ? { composeRuntime: deps.composeRuntime } : {}),
+    ...(deps.sharedStackCloneToken ? { cloneToken: deps.sharedStackCloneToken } : {}),
   })
   return { service }
 }

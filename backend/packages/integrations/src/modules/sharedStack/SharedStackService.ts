@@ -11,10 +11,9 @@ import type {
 import { assertFound, ConflictError, requireWorkspace, ValidationError } from '@cat-factory/kernel'
 import {
   type ComposeRuntime,
+  classifyComposePs,
   composeFileDir,
   DEFAULT_RECIPE_HEALTH_GATE,
-  healthGateIntervalMs,
-  healthGateTimeoutMs,
   tailOutput,
 } from '../compose/compose-environment.logic.js'
 import { runHealthGate, runRecipeStep } from '../compose/recipe-runner.js'
@@ -31,6 +30,13 @@ export interface SharedStackServiceDependencies {
    * documented compose runtime-binding exception — persistence stays symmetric, execution does not).
    */
   composeRuntime?: ComposeRuntime
+  /**
+   * Optional VCS token used to CLONE a stack's repo during bring-up (threaded to the runtime's
+   * `checkout` as `token`). Wired on the local facade from the same source-control PAT the agent
+   * containers push with, so a shared stack whose `cloneUrl` is a PRIVATE repo can be brought up.
+   * Absent ⇒ the clone runs unauthenticated (public repos only), exactly as before.
+   */
+  cloneToken?: string
   /**
    * Optional per-step provisioning-log recorder factory: given a stack, returns a recorder the
    * bring-up streams per-step verdicts through (clone, network, env-file, up, each setup step,
@@ -64,6 +70,7 @@ export class SharedStackService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly runtime: ComposeRuntime | undefined
+  private readonly cloneToken: string | undefined
   private readonly provisioningLog: ((stack: SharedStack) => RecipeStepRecorder) | undefined
   // Coalesce concurrent `ensureUp` for the same stack onto one in-flight bring-up (a second caller
   // must not start a duplicate `up` / re-run non-idempotent setup steps).
@@ -75,6 +82,7 @@ export class SharedStackService {
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
     this.runtime = deps.composeRuntime
+    this.cloneToken = deps.cloneToken
     this.provisioningLog = deps.provisioningLog
   }
 
@@ -172,7 +180,11 @@ export class SharedStackService {
         'Bringing a shared stack up requires the local Docker runtime (unavailable on this deployment).',
       )
     }
-    if (stack.status === 'running') return stack
+    // Idempotent no-op ONLY when the daemon actually still has the stack up. The stored `running`
+    // is intent, not liveness — after a host reboot / `docker system prune` the row still says
+    // `running` while nothing is up, so trust-but-verify with a cheap `compose ps` before
+    // short-circuiting; a stale `running` falls through and re-provisions instead of wedging.
+    if (stack.status === 'running' && (await this.isStackLive(stack))) return stack
     const existing = this.inflight.get(id)
     if (existing) return existing
     const run = this.bringUp(workspaceId, stack).finally(() => this.inflight.delete(id))
@@ -207,6 +219,24 @@ export class SharedStackService {
       .slice(0, 63)
   }
 
+  /**
+   * Is the stack's compose project ACTUALLY up on the daemon right now? A project-name-scoped
+   * `compose ps` (no checkout / `-f` needed) classified as `ready`. Used to reconcile a stored
+   * `running` against reality before `ensureUp` short-circuits — a failed probe (daemon gone,
+   * containers pruned) reads as not-live so the caller re-provisions. Never throws.
+   */
+  private async isStackLive(stack: SharedStack): Promise<boolean> {
+    const runtime = this.runtime
+    if (!runtime) return false
+    const ps = await runtime
+      .compose(['-p', this.projectName(stack), 'ps', '-a', '--format', 'json'], {
+        timeoutMs: SHORT_TIMEOUT_MS,
+      })
+      .catch(() => null)
+    if (!ps || ps.code !== 0) return false
+    return classifyComposePs(ps.stdout) === 'ready'
+  }
+
   /** Drive the full bring-up, persisting the terminal `running`/`failed` verdict. */
   private async bringUp(workspaceId: string, stack: SharedStack): Promise<SharedStack> {
     const runtime = this.runtime!
@@ -235,6 +265,7 @@ export class SharedStackService {
       ;({ dir: checkoutDir } = await runtime.checkout(project, {
         cloneUrl: stack.cloneUrl,
         ref: stack.gitRef ?? 'HEAD',
+        ...(this.cloneToken ? { token: this.cloneToken } : {}),
       }))
       await this.logStep(record, 'clone repo', cloneStarted, { ok: true })
     } catch (err) {
@@ -321,15 +352,7 @@ export class SharedStackService {
     // Terminal health gate.
     const gate = stack.healthGate ?? DEFAULT_RECIPE_HEALTH_GATE
     const gateStarted = this.clock.now()
-    const gateResult = await runHealthGate(
-      gate,
-      { runtime, scope, env },
-      {
-        timeoutMs: healthGateTimeoutMs(gate),
-        intervalMs: healthGateIntervalMs(gate),
-        shortTimeoutMs: SHORT_TIMEOUT_MS,
-      },
-    )
+    const gateResult = await runHealthGate(gate, { runtime, scope, env }, SHORT_TIMEOUT_MS)
     await this.logStep(record, `health gate (${gate.kind})`, gateStarted, gateResult)
     if (!gateResult.ok) {
       return this.persist(workspaceId, stack, {

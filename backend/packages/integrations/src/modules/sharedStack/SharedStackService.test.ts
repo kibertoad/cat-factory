@@ -44,10 +44,11 @@ const workspaceRepository = {
 
 const ok: ComposeExecResult = { code: 0, stdout: '', stderr: '' }
 
-/** A fake ComposeRuntime that records compose argv and returns scripted results. */
+/** A fake ComposeRuntime that records compose argv + checkout targets and returns scripted results. */
 function makeRuntime(overrides: Partial<ComposeRuntime> = {}) {
   const calls: string[][] = []
   const networks: string[] = []
+  const checkouts: { cloneUrl: string; ref: string; token?: string }[] = []
   const runtime: ComposeRuntime = {
     async compose(args) {
       calls.push(args)
@@ -58,7 +59,8 @@ function makeRuntime(overrides: Partial<ComposeRuntime> = {}) {
     async writeProjectFile() {
       return '/scratch/file'
     },
-    async checkout() {
+    async checkout(_project, target) {
+      checkouts.push(target)
       return { dir: '/scratch/checkout' }
     },
     async copyCheckoutFile() {},
@@ -68,10 +70,14 @@ function makeRuntime(overrides: Partial<ComposeRuntime> = {}) {
     },
     ...overrides,
   }
-  return { runtime, calls, networks }
+  return { runtime, calls, networks, checkouts }
 }
 
-function makeService(repo: SharedStackRepository, runtime?: ComposeRuntime): SharedStackService {
+function makeService(
+  repo: SharedStackRepository,
+  runtime?: ComposeRuntime,
+  opts: { cloneToken?: string } = {},
+): SharedStackService {
   let n = 0
   return new SharedStackService({
     sharedStackRepository: repo,
@@ -79,6 +85,7 @@ function makeService(repo: SharedStackRepository, runtime?: ComposeRuntime): Sha
     idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
     clock: { now: () => 1_700_000_000_000 },
     ...(runtime ? { composeRuntime: runtime } : {}),
+    ...(opts.cloneToken ? { cloneToken: opts.cloneToken } : {}),
   })
 }
 
@@ -129,7 +136,7 @@ describe('SharedStackService', () => {
     expect(calls.filter((c) => c.includes('exec')).length).toBeGreaterThanOrEqual(2)
   })
 
-  it('ensureUp is idempotent — a running stack is a no-op (no second up)', async () => {
+  it('ensureUp is idempotent — a live running stack is a no-op (liveness probe only, no second up)', async () => {
     const created = await makeService(repo).create(WS, baseInput)
     const { runtime, calls } = makeRuntime()
     const svc = makeService(repo, runtime)
@@ -137,7 +144,49 @@ describe('SharedStackService', () => {
     calls.length = 0
     const again = await svc.ensureUp(WS, created.id)
     expect(again.status).toBe('running')
-    expect(calls).toEqual([])
+    // The only compose call on the idempotent path is the `ps` liveness probe — never a second `up`.
+    expect(calls.some((c) => c.includes('ps'))).toBe(true)
+    expect(calls.every((c) => !c.includes('up'))).toBe(true)
+  })
+
+  it('re-provisions a stored-running stack whose containers are gone (stale running, not a no-op)', async () => {
+    // A `compose-exec` gate so a re-provision converges fast (no `ps` health poll to wait on).
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      healthGate: { kind: 'compose-exec', service: 'app', command: ['health'] },
+    })
+    // First bring-up succeeds → status running.
+    await makeService(repo, makeRuntime().runtime).ensureUp(WS, created.id)
+    // Now the daemon reports the project as absent (host reboot / prune): the `ps` liveness probe
+    // yields no rows, so the stored `running` must NOT be trusted as a no-op.
+    let upArgs: string[] | null = null
+    const { runtime } = makeRuntime({
+      async compose(args) {
+        if (args.includes('up')) upArgs = args
+        if (args.includes('ps')) return { code: 0, stdout: '[]', stderr: '' }
+        return ok
+      },
+    })
+    const again = await makeService(repo, runtime).ensureUp(WS, created.id)
+    // The stale `running` was reconciled away — the stack was cloned + re-`up -d`ed to running.
+    expect(upArgs).not.toBeNull()
+    expect(upArgs!).toContain('-d')
+    expect(again.status).toBe('running')
+  })
+
+  it('threads the clone token into checkout when configured (private stack repo)', async () => {
+    const created = await makeService(repo).create(WS, baseInput)
+    const { runtime, checkouts } = makeRuntime()
+    await makeService(repo, runtime, { cloneToken: 'ghp_secret' }).ensureUp(WS, created.id)
+    expect(checkouts).toHaveLength(1)
+    expect(checkouts[0]?.token).toBe('ghp_secret')
+  })
+
+  it('omits the token when none is configured (public clone, unauthenticated)', async () => {
+    const created = await makeService(repo).create(WS, baseInput)
+    const { runtime, checkouts } = makeRuntime()
+    await makeService(repo, runtime).ensureUp(WS, created.id)
+    expect(checkouts[0]?.token).toBeUndefined()
   })
 
   it('coalesces concurrent ensureUp onto one bring-up', async () => {

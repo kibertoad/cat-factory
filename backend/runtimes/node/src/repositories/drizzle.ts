@@ -3445,12 +3445,28 @@ export class DrizzleMergePresetRepository implements MergePresetRepository {
   }
 }
 
-function parseSharedStackJson<T>(json: string, fallback: T): T {
+// Shape-guarded parsers matching the D1 mirror (`D1SharedStackRepository`) EXACTLY, so a
+// malformed/hand-edited JSON column coerces identically on both stores (a non-array ⇒ `[]`, a
+// non-object health gate ⇒ `null`) rather than the Node facade handing the domain a raw value the
+// Worker would have dropped — the "keep the runtimes symmetric" guarantee holds for bad data too.
+function parseSharedStackArray<T>(json: string): T[] {
   try {
     const parsed = JSON.parse(json)
-    return parsed as T
+    return Array.isArray(parsed) ? (parsed as T[]) : []
   } catch {
-    return fallback
+    return []
+  }
+}
+
+function parseSharedStackHealthGate(json: string | null): SharedStack['healthGate'] {
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json)
+    return parsed && typeof parsed === 'object'
+      ? (parsed as NonNullable<SharedStack['healthGate']>)
+      : null
+  } catch {
+    return null
   }
 }
 
@@ -3461,14 +3477,16 @@ function rowToSharedStack(row: typeof sharedStacks.$inferSelect): SharedStack {
     name: row.name,
     cloneUrl: row.clone_url,
     gitRef: row.git_ref,
-    composeFiles: parseSharedStackJson<SharedStack['composeFiles']>(row.compose_files, []),
-    composeProfiles: parseSharedStackJson<SharedStack['composeProfiles']>(row.compose_profiles, []),
-    envFiles: parseSharedStackJson<SharedStack['envFiles']>(row.env_files, []),
-    managedNetworks: parseSharedStackJson<SharedStack['managedNetworks']>(row.managed_networks, []),
-    setupSteps: parseSharedStackJson<SharedStack['setupSteps']>(row.setup_steps, []),
-    healthGate: row.health_gate
-      ? parseSharedStackJson<SharedStack['healthGate']>(row.health_gate, null)
-      : null,
+    composeFiles: parseSharedStackArray<SharedStack['composeFiles'][number]>(row.compose_files),
+    composeProfiles: parseSharedStackArray<SharedStack['composeProfiles'][number]>(
+      row.compose_profiles,
+    ),
+    envFiles: parseSharedStackArray<SharedStack['envFiles'][number]>(row.env_files),
+    managedNetworks: parseSharedStackArray<SharedStack['managedNetworks'][number]>(
+      row.managed_networks,
+    ),
+    setupSteps: parseSharedStackArray<SharedStack['setupSteps'][number]>(row.setup_steps),
+    healthGate: parseSharedStackHealthGate(row.health_gate),
     allowHostCommands: row.allow_host_commands === 1,
     status: row.status as SharedStack['status'],
     lastError: row.last_error,

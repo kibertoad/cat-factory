@@ -3,6 +3,8 @@ import {
   type ComposeRuntime,
   classifyComposePs,
   composeExecArgs,
+  healthGateIntervalMs,
+  healthGateTimeoutMs,
   matchesHttpExpectation,
   recipeStepIntervalMs,
   recipeStepTimeoutMs,
@@ -92,14 +94,20 @@ export async function runRecipeStep(step: RecipeStep, ctx: RecipeRunContext): Pr
   }
 }
 
-/** Run the terminal health gate until it passes or its budget elapses (never throws). */
+/**
+ * Run the terminal health gate until it passes or its budget elapses (never throws). The gate's own
+ * timeout/interval are derived from `gate` here (via {@link healthGateTimeoutMs}/{@link
+ * healthGateIntervalMs}), so callers pass only `shortTimeoutMs` — the bound for the individual
+ * compose/HTTP probe calls the gate makes — rather than re-deriving the budget at every call site.
+ */
 export async function runHealthGate(
   gate: RecipeHealthGate,
   ctx: { runtime: ComposeRuntime; scope: string[]; env: Record<string, string> },
-  budget: { timeoutMs: number; intervalMs: number; shortTimeoutMs: number },
+  shortTimeoutMs: number,
 ): Promise<StepResult> {
   const { runtime, scope, env } = ctx
-  const { timeoutMs, intervalMs, shortTimeoutMs } = budget
+  const timeoutMs = healthGateTimeoutMs(gate)
+  const intervalMs = healthGateIntervalMs(gate)
   if (gate.kind === 'http') {
     return pollUntil(timeoutMs, intervalMs, () => probeHttp(gate.url, gate, shortTimeoutMs))
   }

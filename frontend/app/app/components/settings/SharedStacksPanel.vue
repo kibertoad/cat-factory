@@ -15,7 +15,9 @@ const { confirmAction, toastDone } = useConfirmAction()
 
 const stacks = computed(() => store.stacks)
 const busyId = ref<string | null>(null)
-const creating = ref(false)
+const saving = ref(false)
+// null ⇒ the form is in "add" mode; a stack id ⇒ editing that stack's definition in place.
+const editingId = ref<string | null>(null)
 
 const form = reactive({
   name: '',
@@ -35,8 +37,22 @@ const STATUS_COLOR: Record<SharedStackStatus, 'neutral' | 'warning' | 'success' 
   failed: 'error',
 }
 
+// Status → catalog key as an EXHAUSTIVE Record over the enum (not a runtime-assembled key), so a
+// new SharedStackStatus fails the typecheck on this map instead of leaking a raw key into the badge.
+const STATUS_LABEL_KEYS: Record<SharedStackStatus, string> = {
+  stopped: 'settings.sharedStacks.status.stopped',
+  starting: 'settings.sharedStacks.status.starting',
+  running: 'settings.sharedStacks.status.running',
+  failed: 'settings.sharedStacks.status.failed',
+}
+
 function statusLabel(status: SharedStackStatus): string {
-  return t(`settings.sharedStacks.status.${status}`)
+  return t(STATUS_LABEL_KEYS[status])
+}
+
+/** A running/starting stack cannot be reconfigured (the backend refuses) — edit is stopped/failed only. */
+function canEdit(stack: SharedStack): boolean {
+  return stack.status !== 'running' && stack.status !== 'starting'
 }
 
 /** Split a comma/whitespace-separated field into trimmed non-empty tokens. */
@@ -47,9 +63,32 @@ function tokens(value: string): string[] {
     .filter(Boolean)
 }
 
-const canCreate = computed(
+const canSave = computed(
   () => form.name.trim() && form.cloneUrl.trim() && tokens(form.composeFiles).length > 0,
 )
+
+function resetForm() {
+  editingId.value = null
+  form.name = ''
+  form.cloneUrl = ''
+  form.gitRef = ''
+  form.composeFiles = ''
+  form.composeProfiles = ''
+  form.managedNetworks = ''
+  form.allowHostCommands = false
+}
+
+/** Load a stack's definition into the form for in-place editing. */
+function startEdit(stack: SharedStack) {
+  editingId.value = stack.id
+  form.name = stack.name
+  form.cloneUrl = stack.cloneUrl
+  form.gitRef = stack.gitRef ?? ''
+  form.composeFiles = stack.composeFiles.join(', ')
+  form.composeProfiles = stack.composeProfiles.join(', ')
+  form.managedNetworks = stack.managedNetworks.join(', ')
+  form.allowHostCommands = stack.allowHostCommands
+}
 
 function notifyError(title: string, e: unknown) {
   toast.add({
@@ -60,41 +99,56 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-async function createStack() {
-  creating.value = true
+/** Create a new stack, or save edits to the one being edited (same form, mode toggled by `editingId`). */
+async function saveStack() {
+  saving.value = true
+  const editing = editingId.value
+  const payload = {
+    name: form.name.trim(),
+    cloneUrl: form.cloneUrl.trim(),
+    ...(form.gitRef.trim() ? { gitRef: form.gitRef.trim() } : {}),
+    composeFiles: tokens(form.composeFiles),
+    composeProfiles: tokens(form.composeProfiles),
+    managedNetworks: tokens(form.managedNetworks),
+    allowHostCommands: form.allowHostCommands,
+  }
   try {
-    await store.create({
-      name: form.name.trim(),
-      cloneUrl: form.cloneUrl.trim(),
-      ...(form.gitRef.trim() ? { gitRef: form.gitRef.trim() } : {}),
-      composeFiles: tokens(form.composeFiles),
-      composeProfiles: tokens(form.composeProfiles),
-      managedNetworks: tokens(form.managedNetworks),
-      allowHostCommands: form.allowHostCommands,
-    })
-    form.name = ''
-    form.cloneUrl = ''
-    form.gitRef = ''
-    form.composeFiles = ''
-    form.composeProfiles = ''
-    form.managedNetworks = ''
-    form.allowHostCommands = false
+    if (editing) {
+      await store.update(editing, { ...payload, gitRef: form.gitRef.trim() || null })
+    } else {
+      await store.create(payload)
+    }
+    resetForm()
     toast.add({
-      title: t('settings.sharedStacks.toast.created'),
+      title: t(
+        editing ? 'settings.sharedStacks.toast.updated' : 'settings.sharedStacks.toast.created',
+      ),
       icon: 'i-lucide-check',
       color: 'success',
     })
   } catch (e) {
-    notifyError(t('settings.sharedStacks.toast.createFailed'), e)
+    notifyError(
+      t(
+        editing
+          ? 'settings.sharedStacks.toast.updateFailed'
+          : 'settings.sharedStacks.toast.createFailed',
+      ),
+      e,
+    )
   } finally {
-    creating.value = false
+    saving.value = false
   }
 }
 
 async function start(stack: SharedStack) {
   busyId.value = stack.id
   try {
-    await store.ensureUp(stack.id)
+    // ensureUp resolves 200 even on a FAILED bring-up (the record carries status/lastError), so
+    // surface that as an error toast too — not only a thrown transport/unavailable error.
+    const updated = await store.ensureUp(stack.id)
+    if (updated.status === 'failed') {
+      notifyError(t('settings.sharedStacks.toast.startFailed'), updated.lastError ?? '')
+    }
   } catch (e) {
     notifyError(t('settings.sharedStacks.toast.startFailed'), e)
   } finally {
@@ -186,6 +240,16 @@ async function remove(stack: SharedStack) {
               {{ t('settings.sharedStacks.list.stop') }}
             </UButton>
             <UButton
+              v-if="canEdit(stack)"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-pencil"
+              size="sm"
+              :data-testid="`shared-stack-edit-${stack.id}`"
+              :aria-label="t('settings.sharedStacks.list.edit')"
+              @click="startEdit(stack)"
+            />
+            <UButton
               color="error"
               variant="ghost"
               icon="i-lucide-trash-2"
@@ -201,8 +265,15 @@ async function remove(stack: SharedStack) {
       </div>
     </section>
 
-    <section class="space-y-3 rounded-lg border border-slate-700 p-3">
-      <h3 class="text-sm font-semibold">{{ t('settings.sharedStacks.add.heading') }}</h3>
+    <section
+      class="space-y-3 rounded-lg border border-slate-700 p-3"
+      data-testid="shared-stack-form"
+    >
+      <h3 class="text-sm font-semibold">
+        {{
+          t(editingId ? 'settings.sharedStacks.edit.heading' : 'settings.sharedStacks.add.heading')
+        }}
+      </h3>
 
       <UFormField :label="t('settings.sharedStacks.add.name')">
         <UInput v-model="form.name" class="w-full" data-testid="shared-stack-name" />
@@ -268,14 +339,25 @@ async function remove(stack: SharedStack) {
         data-testid="shared-stack-allow-host-commands"
       />
 
-      <UButton
-        :loading="creating"
-        :disabled="!canCreate"
-        data-testid="shared-stack-save"
-        @click="createStack"
-      >
-        {{ t('settings.sharedStacks.add.save') }}
-      </UButton>
+      <div class="flex items-center gap-2">
+        <UButton
+          :loading="saving"
+          :disabled="!canSave"
+          data-testid="shared-stack-save"
+          @click="saveStack"
+        >
+          {{ t(editingId ? 'settings.sharedStacks.edit.save' : 'settings.sharedStacks.add.save') }}
+        </UButton>
+        <UButton
+          v-if="editingId"
+          color="neutral"
+          variant="ghost"
+          data-testid="shared-stack-cancel-edit"
+          @click="resetForm"
+        >
+          {{ t('settings.sharedStacks.edit.cancel') }}
+        </UButton>
+      </div>
     </section>
   </div>
 </template>

@@ -1985,41 +1985,49 @@
       }
     },
     "sharedStacks": {
-      "tab": "Shared stacks",
-      "intro": "Long-lived compose infrastructure (databases, brokers, search, mail) brought up once per workspace and reused across runs and pull requests. A test environment attaches to a stack's managed network. Bringing a stack up runs on a local Docker deployment; on other backends you can still manage the definition.",
-      "stackNoun": "shared stack",
+      "tab": "Спільні стеки",
+      "intro": "Довготривала інфраструктура Compose (бази даних, брокери, пошук, пошта), яку запускають один раз на робочий простір і повторно використовують у всіх запусках та pull request'ах. Тестове середовище під'єднується до керованої мережі стека. Запуск стека потребує локального розгортання Docker; на інших бекендах ви все одно можете керувати визначенням.",
+      "stackNoun": "спільний стек",
       "status": {
-        "stopped": "Stopped",
-        "starting": "Starting",
-        "running": "Running",
-        "failed": "Failed"
+        "stopped": "Зупинено",
+        "starting": "Запуск",
+        "running": "Працює",
+        "failed": "Помилка"
       },
       "list": {
-        "heading": "Configured stacks",
-        "start": "Start",
-        "stop": "Stop",
-        "remove": "Delete stack"
+        "heading": "Налаштовані стеки",
+        "start": "Запустити",
+        "stop": "Зупинити",
+        "edit": "Редагувати",
+        "remove": "Видалити стек"
       },
       "add": {
-        "heading": "Add a shared stack",
-        "name": "Name",
-        "cloneUrl": "Repository clone URL",
-        "cloneUrlHelp": "The git repository the stack's compose files live in.",
-        "gitRef": "Branch or tag (optional)",
-        "composeFiles": "Compose files",
-        "composeFilesHelp": "Comma-separated, repo-relative, in override order.",
-        "composeProfiles": "Compose profiles (optional)",
-        "managedNetworks": "Managed networks (optional)",
-        "managedNetworksHelp": "Networks this stack creates and owns for consumers to attach to.",
-        "allowHostCommands": "Allow host-command setup steps",
-        "save": "Add stack"
+        "heading": "Додати спільний стек",
+        "name": "Назва",
+        "cloneUrl": "URL клонування репозиторію",
+        "cloneUrlHelp": "Git-репозиторій, у якому містяться файли Compose стека.",
+        "gitRef": "Гілка або тег (необов'язково)",
+        "composeFiles": "Файли Compose",
+        "composeFilesHelp": "Через кому, відносно репозиторію, у порядку перевизначення.",
+        "composeProfiles": "Профілі Compose (необов'язково)",
+        "managedNetworks": "Керовані мережі (необов'язково)",
+        "managedNetworksHelp": "Мережі, які цей стек створює й якими володіє, щоб споживачі під'єднувалися до них.",
+        "allowHostCommands": "Дозволити кроки налаштування з командами хоста",
+        "save": "Додати стек"
+      },
+      "edit": {
+        "heading": "Редагувати спільний стек",
+        "save": "Зберегти зміни",
+        "cancel": "Скасувати"
       },
       "toast": {
-        "created": "Shared stack added",
-        "createFailed": "Could not add the shared stack",
-        "startFailed": "Could not start the shared stack",
-        "stopFailed": "Could not stop the shared stack",
-        "removeFailed": "Could not delete the shared stack"
+        "created": "Спільний стек додано",
+        "createFailed": "Не вдалося додати спільний стек",
+        "updated": "Спільний стек оновлено",
+        "updateFailed": "Не вдалося оновити спільний стек",
+        "startFailed": "Не вдалося запустити спільний стек",
+        "stopFailed": "Не вдалося зупинити спільний стек",
+        "removeFailed": "Не вдалося видалити спільний стек"
       }
     },
     "localMode": {

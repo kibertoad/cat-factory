@@ -2107,41 +2107,49 @@
       }
     },
     "sharedStacks": {
-      "tab": "Shared stacks",
-      "intro": "Long-lived compose infrastructure (databases, brokers, search, mail) brought up once per workspace and reused across runs and pull requests. A test environment attaches to a stack's managed network. Bringing a stack up runs on a local Docker deployment; on other backends you can still manage the definition.",
-      "stackNoun": "shared stack",
+      "tab": "Paylaşılan yığınlar",
+      "intro": "Çalışma alanı başına bir kez başlatılan ve tüm çalıştırmalar ile pull request'lerde yeniden kullanılan uzun ömürlü Compose altyapısı (veritabanları, aracılar, arama, posta). Bir test ortamı, yığının yönetilen ağına bağlanır. Bir yığını başlatmak yerel bir Docker dağıtımı gerektirir; diğer arka uçlarda tanımı yine de yönetebilirsiniz.",
+      "stackNoun": "paylaşılan yığın",
       "status": {
-        "stopped": "Stopped",
-        "starting": "Starting",
-        "running": "Running",
-        "failed": "Failed"
+        "stopped": "Durduruldu",
+        "starting": "Başlatılıyor",
+        "running": "Çalışıyor",
+        "failed": "Başarısız"
       },
       "list": {
-        "heading": "Configured stacks",
-        "start": "Start",
-        "stop": "Stop",
-        "remove": "Delete stack"
+        "heading": "Yapılandırılmış yığınlar",
+        "start": "Başlat",
+        "stop": "Durdur",
+        "edit": "Düzenle",
+        "remove": "Yığını sil"
       },
       "add": {
-        "heading": "Add a shared stack",
-        "name": "Name",
-        "cloneUrl": "Repository clone URL",
-        "cloneUrlHelp": "The git repository the stack's compose files live in.",
-        "gitRef": "Branch or tag (optional)",
-        "composeFiles": "Compose files",
-        "composeFilesHelp": "Comma-separated, repo-relative, in override order.",
-        "composeProfiles": "Compose profiles (optional)",
-        "managedNetworks": "Managed networks (optional)",
-        "managedNetworksHelp": "Networks this stack creates and owns for consumers to attach to.",
-        "allowHostCommands": "Allow host-command setup steps",
-        "save": "Add stack"
+        "heading": "Paylaşılan yığın ekle",
+        "name": "Ad",
+        "cloneUrl": "Depo klonlama URL'si",
+        "cloneUrlHelp": "Yığının Compose dosyalarının bulunduğu git deposu.",
+        "gitRef": "Dal veya etiket (isteğe bağlı)",
+        "composeFiles": "Compose dosyaları",
+        "composeFilesHelp": "Virgülle ayrılmış, depoya göreli, geçersiz kılma sırasında.",
+        "composeProfiles": "Compose profilleri (isteğe bağlı)",
+        "managedNetworks": "Yönetilen ağlar (isteğe bağlı)",
+        "managedNetworksHelp": "Tüketicilerin bağlanması için bu yığının oluşturup sahip olduğu ağlar.",
+        "allowHostCommands": "Ana makine komutu kurulum adımlarına izin ver",
+        "save": "Yığın ekle"
+      },
+      "edit": {
+        "heading": "Paylaşılan yığını düzenle",
+        "save": "Değişiklikleri kaydet",
+        "cancel": "İptal"
       },
       "toast": {
-        "created": "Shared stack added",
-        "createFailed": "Could not add the shared stack",
-        "startFailed": "Could not start the shared stack",
-        "stopFailed": "Could not stop the shared stack",
-        "removeFailed": "Could not delete the shared stack"
+        "created": "Paylaşılan yığın eklendi",
+        "createFailed": "Paylaşılan yığın eklenemedi",
+        "updated": "Paylaşılan yığın güncellendi",
+        "updateFailed": "Paylaşılan yığın güncellenemedi",
+        "startFailed": "Paylaşılan yığın başlatılamadı",
+        "stopFailed": "Paylaşılan yığın durdurulamadı",
+        "removeFailed": "Paylaşılan yığın silinemedi"
       }
     },
     "localMode": {

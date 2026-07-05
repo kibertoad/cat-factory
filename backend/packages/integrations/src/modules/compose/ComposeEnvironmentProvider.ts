@@ -18,8 +18,6 @@ import {
   checkoutDepthFor,
   classifyComposePs,
   composeFileDir,
-  healthGateIntervalMs,
-  healthGateTimeoutMs,
   parseComposeEnvConfig,
   parseHostPort,
   prepareComposeProject,
@@ -620,11 +618,7 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     const gateResult = await runHealthGate(
       gate,
       { runtime: this.runtime, scope, env },
-      {
-        timeoutMs: healthGateTimeoutMs(gate),
-        intervalMs: healthGateIntervalMs(gate),
-        shortTimeoutMs: SHORT_TIMEOUT_MS,
-      },
+      SHORT_TIMEOUT_MS,
     )
     await this.logStep(record, `health gate (${gate.kind})`, gateStarted, gateResult)
     if (!gateResult.ok) {

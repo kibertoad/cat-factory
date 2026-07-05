@@ -2169,6 +2169,7 @@
         "heading": "Configured stacks",
         "start": "Start",
         "stop": "Stop",
+        "edit": "Edit",
         "remove": "Delete stack"
       },
       "add": {
@@ -2185,9 +2186,16 @@
         "allowHostCommands": "Allow host-command setup steps",
         "save": "Add stack"
       },
+      "edit": {
+        "heading": "Edit shared stack",
+        "save": "Save changes",
+        "cancel": "Cancel"
+      },
       "toast": {
         "created": "Shared stack added",
         "createFailed": "Could not add the shared stack",
+        "updated": "Shared stack updated",
+        "updateFailed": "Could not update the shared stack",
         "startFailed": "Could not start the shared stack",
         "stopFailed": "Could not stop the shared stack",
         "removeFailed": "Could not delete the shared stack"

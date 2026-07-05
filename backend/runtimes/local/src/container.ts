@@ -584,6 +584,9 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // same runtime the compose env backend uses. Only on a Docker-family runtime; absent ⇒ the
       // lifecycle endpoints refuse (Apple `container` can't nest, like `localDind`).
       ...(localComposeRuntime ? { composeRuntime: localComposeRuntime } : {}),
+      // Clone a shared stack's repo with the same source-control PAT the agent containers push
+      // with, so a stack whose `cloneUrl` is a PRIVATE repo can be brought up (else public-only).
+      ...(gitToken ? { sharedStackCloneToken: gitToken } : {}),
       ...options.overrides,
       // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
       // explicit test override still wins; in mothership boot there is no `boss`, so this is the
