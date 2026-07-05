@@ -461,6 +461,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "El repositorio de este bloque no está entre los repositorios de GitHub conectados, por lo que no se puede leer. Conecta o sincroniza GitHub para él y vuelve a intentarlo.",
     "container": {
       "title": "Contenido",
       "hint": "Los módulos y tareas dentro de este bloque. Haz clic en una entrada para seleccionarla en el tablero.",

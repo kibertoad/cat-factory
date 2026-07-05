@@ -12,6 +12,7 @@ import type {
 } from '~/types/domain'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
+import { apiErrorEnvelope } from '~/composables/api/errors'
 
 // Frontend-frame (`type: 'frontend'`) configuration: how to build, serve, and mock this
 // frontend for a self-contained UI test (+ an optional browsable preview on local/node),
@@ -119,7 +120,9 @@ const showPreview = ref(false)
 // frame links to its repo the same way a service does (`github_repos.block_id`).
 const repoLink = computed(() => github.repoForBlock(props.block.id))
 const detecting = ref(false)
-const detectError = ref(false)
+// The detect failure message to show, or null when there's no error. Holds the SERVER's real
+// message (the backend raises an actionable one for an unreadable repo) instead of a fixed line.
+const detectError = ref<string | null>(null)
 const detectResult = ref<FrontendConfigRecommendation | null>(null)
 
 // A detection result is scoped to the inspected block — clear it (and any error) when the
@@ -128,18 +131,20 @@ watch(
   () => props.block.id,
   () => {
     detectResult.value = null
-    detectError.value = false
+    detectError.value = null
   },
 )
 
 async function detectFromRepo() {
   const repo = repoLink.value
   if (!repo) {
-    detectError.value = true
+    // The frame points at a repo that isn't in the connected-repo projection, so we can't resolve
+    // its owner/name to ask the backend. A "sync/connect GitHub" problem, not a read failure.
+    detectError.value = t('inspector.detectRepoUnresolved')
     return
   }
   detecting.value = true
-  detectError.value = false
+  detectError.value = null
   detectResult.value = null
   try {
     const result = await infra.detectFrontendConfig({
@@ -151,8 +156,13 @@ async function detectFromRepo() {
     // When nothing was detected the "none" hint tells the user to set the frontend directory —
     // that field lives in the (collapsed) Build group, so open it so the advice is actionable.
     if (!result.detected) showBuild.value = true
-  } catch {
-    detectError.value = true
+  } catch (e) {
+    // Surface the server's real message (an actionable "couldn't read the repo — check App access"
+    // for a read fault), falling back to the generic line only when none is available.
+    detectError.value =
+      apiErrorEnvelope(e)?.message ??
+      (e instanceof Error ? e.message : null) ??
+      t('inspector.frontendConfig.detect.error')
   } finally {
     detecting.value = false
   }
@@ -243,7 +253,7 @@ onUnmounted(() => preview.stopPolling(props.block.id))
       </p>
 
       <p v-if="detectError" class="text-[11px] text-rose-300/80">
-        {{ t('inspector.frontendConfig.detect.error') }}
+        {{ detectError }}
       </p>
 
       <template v-if="detectResult && !detecting">

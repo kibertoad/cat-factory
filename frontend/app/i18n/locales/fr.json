@@ -461,6 +461,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "Le dépôt de ce bloc ne figure pas parmi les dépôts GitHub connectés et ne peut donc pas être lu. Connectez ou synchronisez GitHub pour ce dépôt, puis réessayez.",
     "container": {
       "title": "Contenu",
       "hint": "Les modules et les tâches contenus dans ce bloc. Cliquez sur une entrée pour la sélectionner sur le tableau.",

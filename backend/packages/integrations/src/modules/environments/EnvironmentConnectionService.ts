@@ -41,6 +41,7 @@ import type {
 } from '@cat-factory/contracts'
 import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
+import { RepoReadError } from './repo-read-error.js'
 import type {
   EnvironmentBackendProvider,
   EnvironmentBackendRegistry,
@@ -700,19 +701,49 @@ export class EnvironmentConnectionService {
       const type = (await this.listCustomTypes(workspaceId)).find(
         (t) => t.manifestId === input.manifestId,
       )
-      return detectCustomManifest(bound.repo, {
+      return this.mapRepoReadError(input, () =>
+        detectCustomManifest(bound.repo, {
+          gitRef: input.gitRef ?? bound.baseBranch,
+          ...(input.directory ? { directory: input.directory } : {}),
+          manifestId: input.manifestId,
+          ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
+          ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
+        }),
+      )
+    }
+    return this.mapRepoReadError(input, () =>
+      detectKubernetesProvisioning(bound.repo, {
         gitRef: input.gitRef ?? bound.baseBranch,
         ...(input.directory ? { directory: input.directory } : {}),
-        manifestId: input.manifestId,
-        ...(type?.defaultManifestPath ? { defaultPath: type.defaultManifestPath } : {}),
-        ...(input.currentManifestPath ? { currentPath: input.currentManifestPath } : {}),
-      })
+        ...(input.prefer ? { prefer: input.prefer } : {}),
+      }),
+    )
+  }
+
+  /**
+   * Run an auto-detect scan and translate a {@link RepoReadError} — a genuine "couldn't read the
+   * repo" fault the checkout-free reader threw — into an actionable {@link ValidationError} the
+   * SPA surfaces verbatim. Without this the fault would either be masked as a misleading "nothing
+   * detected" or escape as an opaque 500 ("Internal server error"), which is exactly the vague,
+   * unhelpful outcome this replaces. A clean miss (nothing found, no fault) returns normally.
+   */
+  private async mapRepoReadError<T>(
+    input: { owner: string; repo: string; directory?: string; gitRef?: string },
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run()
+    } catch (err) {
+      if (!(err instanceof RepoReadError)) throw err
+      const where = input.directory ? ` (directory "${input.directory}")` : ''
+      const at = input.gitRef ? ` at "${input.gitRef}"` : ''
+      throw new ValidationError(
+        `Could not read ${input.owner}/${input.repo}${where}${at} to auto-detect. ` +
+          `Confirm the GitHub App still has "Contents: read" access to this repository (re-check the ` +
+          `installation's repository access, and the branch exists) and that you are not rate-limited, ` +
+          `then retry. Underlying error: ${err.reason}`,
+      )
     }
-    return detectKubernetesProvisioning(bound.repo, {
-      gitRef: input.gitRef ?? bound.baseBranch,
-      ...(input.directory ? { directory: input.directory } : {}),
-      ...(input.prefer ? { prefer: input.prefer } : {}),
-    })
   }
 
   /**
@@ -742,10 +773,12 @@ export class EnvironmentConnectionService {
         ],
       }
     }
-    return detectFrontendConfig(bound.repo, {
-      gitRef: input.gitRef ?? bound.baseBranch,
-      ...(input.directory ? { directory: input.directory } : {}),
-    })
+    return this.mapRepoReadError(input, () =>
+      detectFrontendConfig(bound.repo, {
+        gitRef: input.gitRef ?? bound.baseBranch,
+        ...(input.directory ? { directory: input.directory } : {}),
+      }),
+    )
   }
 
   /**
