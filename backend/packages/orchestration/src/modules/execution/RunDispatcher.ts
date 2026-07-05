@@ -1437,11 +1437,11 @@ export class RunDispatcher {
     // there is genuinely one to stand up, so every downstream consumer (tester / human-test /
     // playwright) can depend on a pre-provisioned env rather than standing infra up itself:
     //  - a DECLARED `kubernetes`/`custom` type (resolved through its per-type handler), OR
-    //  - a DECLARED `docker-compose` type on a workspace with a compose handler configured — the
-    //    per-PR compose stack is provisioned HERE (attaching shared stacks / running preflights),
-    //    and the tester then targets that provisioned env (see `testerInfraSpec`). With NO compose
-    //    handler yet configured it stays a no-op and the tester falls back to its in-container
-    //    compose bring-up (removable once the compose-connection setup flow lands), OR
+    //  - a DECLARED `docker-compose` type on a workspace with a compose handler configured (the
+    //    setup wizard saves one) — the per-PR compose stack is provisioned HERE (attaching shared
+    //    stacks / running preflights), and the tester then targets that provisioned env (see
+    //    `testerInfraSpec`). A compose chain that reaches a tester with no resolvable handler is now
+    //    refused at run start (`assertTesterInfraConfigured`), so this stays the sole compose path, OR
     //  - an UNDECLARED frame on a workspace with a legacy single-connection registered (the compat
     //    bridge — preserved so existing single-connection deployments keep provisioning).
     // Every other frame stands nothing up HERE — `infraless`/none, an undeclared frame with NO

@@ -29,6 +29,11 @@ export interface FakeProfile {
   bootstrapProgress?: { completed: number; inProgress: number; total: number }[]
   /** When set, the bootstrap run reports FAILED on poll (the failure-banner + retry path). */
   bootstrapFailWith?: string
+  /**
+   * The `result.custom` a STRUCTURED agent kind returns (e.g. the `environment-analyst` draft the
+   * setup wizard reads back off the step). Absent ⇒ the fake's default `{ ok: true }`.
+   */
+  customResult?: unknown
 }
 
 // Structural types derived from the conformance fakes, so this test-only package needs no
@@ -57,6 +62,9 @@ function profileToOptions(profile: FakeProfile | undefined): FakeOptions {
       ? { dispatchThrowKinds: profile.dispatchThrowKinds as FakeOptions['dispatchThrowKinds'] }
       : {}),
     ...(profile.asyncPolls !== undefined ? { asyncPolls: profile.asyncPolls } : {}),
+    ...(profile.customResult !== undefined
+      ? { customResult: profile.customResult as FakeOptions['customResult'] }
+      : {}),
   }
 }
 

@@ -21,6 +21,7 @@ import { localSettingsApi } from './api/localSettings'
 import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
+import { preflightsApi } from './api/preflights'
 import { presetsApi } from './api/presets'
 import { sharedStacksApi } from './api/sharedStacks'
 import { providerConnectionsApi } from './api/providerConnections'
@@ -113,6 +114,7 @@ export function useApi() {
     ...specApi(ctx),
     ...notificationsApi(ctx),
     ...presetsApi(ctx),
+    ...preflightsApi(ctx),
     ...sharedStacksApi(ctx),
     ...providerConnectionsApi(ctx),
     ...infraHandlersApi(ctx),

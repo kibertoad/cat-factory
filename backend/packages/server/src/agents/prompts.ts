@@ -483,10 +483,11 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
     peerEnvironments[key] = involved.envUrl
   }
   const peers = Object.keys(peerEnvironments).length ? { peerEnvironments } : {}
-  // Prefer a provisioned environment whenever one exists: a `kubernetes`/`custom` service is
-  // provisioned by a workspace handler, and a `deployer` step can provision an env for any
-  // service. Either way the Tester targets that URL rather than standing nothing up locally.
-  if (type === 'kubernetes' || type === 'custom' || envUrl) {
+  // Prefer a provisioned environment whenever one exists. `docker-compose`/`kubernetes`/`custom`
+  // are all stood up by the single `deployer` step (compose now goes through a workspace handler +
+  // the recipe/shared-stack provider, exactly like the others), so the Tester targets that URL
+  // rather than standing anything up itself. `infraless`/undeclared falls through to no-infra.
+  if (type === 'docker-compose' || type === 'kubernetes' || type === 'custom' || envUrl) {
     return {
       environment: 'ephemeral',
       ...(envUrl ? { environmentUrl: envUrl } : {}),
@@ -495,10 +496,7 @@ export function testerInfraSpec(context: AgentRunContext): Record<string, unknow
   }
   return {
     environment: 'local',
-    noInfraDependencies: type !== 'docker-compose',
-    ...(type === 'docker-compose' && provisioning?.composePath
-      ? { composePath: provisioning.composePath }
-      : {}),
+    noInfraDependencies: true,
     ...peers,
   }
 }

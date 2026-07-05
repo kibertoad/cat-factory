@@ -4,21 +4,20 @@ import { HUMAN_TEST_AGENT_KIND, TESTER_KINDS } from './ci.logic.js'
 import { ACCEPTANCE_AGENT_KINDS } from '@cat-factory/agents'
 
 // Pure decision for the Tester's start-time infra gate — no IO, no ports. Given the
-// service's declared provision type, the runtime's Docker-in-Docker capability, and
-// whether a workspace handler resolves for the type, decide whether a Tester pipeline
-// may start. ExecutionService resolves the inputs (the service frame's `provisioning`,
-// the handler resolution) and translates the verdict into an actionable ConflictError;
-// keeping the branching here makes the whole matrix trivially testable.
+// service's declared provision type and whether a workspace handler resolves for the type,
+// decide whether a Tester pipeline may start. ExecutionService resolves the inputs (the
+// service frame's `provisioning`, the handler resolution) and translates the verdict into an
+// actionable ConflictError; keeping the branching here makes the whole matrix trivially testable.
 //
 // The collapse (per-service provision types): there is no longer a per-task/per-service
 // `local` vs `ephemeral` toggle. A service declares a provision TYPE and the workspace
 // owns HOW each type is handled; the Tester just needs SOME way to stand its system up:
 //   - `infraless` (or no provisioning declared) → run with no infra.
-//   - `docker-compose` → the harness stands the compose stack up IN-CONTAINER (DinD), so
-//     a runtime that can't nest containers (Apple `container`) refuses up front, and the
-//     service must declare a compose path (else there's nothing to stand up).
-//   - `kubernetes` / `custom` → the env is provisioned by a workspace handler, so one must
-//     resolve for the service's type (else there's nothing to test against).
+//   - `docker-compose` / `kubernetes` / `custom` → the env is provisioned by the single
+//     Deployer step through a workspace handler, so one must resolve for the service's type
+//     (else there's nothing to test against). Docker-compose used to be a special in-container
+//     (DinD) case; since the shared-stacks wizard configures a `docker-compose` handler and the
+//     Deployer became the sole compose provisioner, it is handler-based like the others.
 
 export interface TesterInfraInput {
   /**
@@ -34,30 +33,18 @@ export interface TesterInfraInput {
   frontend?: { hasServiceBindings: boolean; hasLiveService: boolean }
   /** The service frame's declared provision type, or undefined when none is set. */
   provisionType: ProvisionType | undefined
-  /** Whether the runtime can run an in-container docker-compose stack via Docker-in-Docker. */
-  localTestInfraSupported: boolean
   /**
-   * Whether the `docker-compose` service declares a compose path. Consulted ONLY for
-   * `docker-compose` — the harness stands nothing up without one, so a `docker-compose`
-   * service with no path can't run a meaningful Tester. Ignored for the other types.
-   */
-  hasComposePath: boolean
-  /**
-   * Whether a workspace handler resolves for the service's declared type. Consulted ONLY
-   * for `kubernetes`/`custom` (a `docker-compose` stack runs in-container with no handler,
-   * `infraless`/none stands nothing up). Pass `true` when the resolution seam is unwired
-   * (tests / no environment integration) so the gate passes through.
+   * Whether a workspace handler resolves for the service's declared type. Consulted for
+   * `docker-compose`/`kubernetes`/`custom` (all Deployer-provisioned; `infraless`/none stands
+   * nothing up). Pass `true` when the resolution seam is unwired (tests / no environment
+   * integration) so the gate passes through.
    */
   handlerResolves: boolean
 }
 
 export type TesterInfraDecision =
   | { ok: true }
-  // A `docker-compose` service on a runtime that can't nest containers (no DinD).
-  | { ok: false; reason: 'limited-local' }
-  // A `docker-compose` service that declares no compose path (nothing to stand up).
-  | { ok: false; reason: 'compose-unconfigured' }
-  // A `kubernetes`/`custom` service with no workspace handler that resolves for its type.
+  // A `docker-compose`/`kubernetes`/`custom` service with no workspace handler that resolves for its type.
   | { ok: false; reason: 'provision-type-unhandled' }
   // A `frontend` frame with no bound service that has a live ephemeral env (no service under test).
   | { ok: false; reason: 'frontend-no-live-service' }
@@ -67,8 +54,8 @@ export type TesterInfraDecision =
  * flow) is decided FIRST: it passes unless it declares live-backend `service` bindings with
  * none actually live (nothing to exercise as the service under test); a mock-only / no-binding
  * frontend passes. Otherwise the backend service branch: `infraless`/none always passes (the
- * Tester stands nothing up); `docker-compose` passes only on a DinD-capable runtime AND when a
- * compose path is declared; `kubernetes`/`custom` passes only when a workspace handler resolves.
+ * Tester stands nothing up); `docker-compose`/`kubernetes`/`custom` pass only when a workspace
+ * handler resolves (all provisioned by the single Deployer step).
  */
 export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision {
   if (input.frontend) {
@@ -79,11 +66,7 @@ export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision 
   }
   const type = input.provisionType
   if (!type || type === 'infraless') return { ok: true }
-  if (type === 'docker-compose') {
-    if (!input.localTestInfraSupported) return { ok: false, reason: 'limited-local' }
-    return input.hasComposePath ? { ok: true } : { ok: false, reason: 'compose-unconfigured' }
-  }
-  // `kubernetes` | `custom` — provisioned externally by a workspace handler.
+  // `docker-compose` | `kubernetes` | `custom` — provisioned by the Deployer via a workspace handler.
   return input.handlerResolves ? { ok: true } : { ok: false, reason: 'provision-type-unhandled' }
 }
 
@@ -100,20 +83,26 @@ export const ENV_CONSUMER_KINDS: readonly string[] = [
 ]
 
 /**
- * For a `kubernetes`/`custom` service: whether the ENABLED chain reaches an env-consuming step
- * (tester / playwright / human-test) with NO enabled `deployer` before it — i.e. nothing would
- * provision the environment the consumer needs, so the run would dead-end inside the consumer. The
- * pure half of the run-start guard: `ExecutionService` resolves the service's provision type and
- * translates a `true` verdict into an actionable launch error. Returns false for every other
- * provision type (a `docker-compose` tester stands its stack up in-container; `infraless`/none/a
- * frontend frame need no deployer) and whenever a deployer precedes the first consumer.
+ * For a Deployer-provisioned service (`docker-compose`/`kubernetes`/`custom`): whether the ENABLED
+ * chain reaches an env-consuming step (tester / playwright / human-test) with NO enabled `deployer`
+ * before it — i.e. nothing would provision the environment the consumer needs, so the run would
+ * dead-end inside the consumer. The pure half of the run-start guard: `ExecutionService` resolves the
+ * service's provision type and translates a `true` verdict into an actionable launch error. Returns
+ * false for `infraless`/none/a frontend frame (nothing to provision) and whenever a deployer precedes
+ * the first consumer.
  */
 export function needsDeployerBeforeConsumer(
   agentKinds: readonly string[],
   enabled: readonly boolean[] | undefined,
   provisionType: ProvisionType | undefined,
 ): boolean {
-  if (provisionType !== 'kubernetes' && provisionType !== 'custom') return false
+  if (
+    provisionType !== 'docker-compose' &&
+    provisionType !== 'kubernetes' &&
+    provisionType !== 'custom'
+  ) {
+    return false
+  }
   let deployerSeen = false
   for (let i = 0; i < agentKinds.length; i++) {
     if (enabled?.[i] === false) continue

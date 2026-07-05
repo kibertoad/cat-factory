@@ -176,6 +176,12 @@ export const useUiStore = defineStore('ui', () => {
   // `local-k3s` connection from it; the ServiceAccount token is deliberately NOT in the link (a
   // secret in a URL leaks into history/logs), so the user still pastes it before Test → Save.
   const k3sSetupPrefill = ref<K3sSetupPrefill | null>(null)
+  // Environment setup wizard (shared-stacks slice 7): the guided detect → review → preflight →
+  // trial → save flow for a service frame's `docker-compose` provisioning. `environmentWizardOpen`
+  // is the modal flag; `environmentWizardFrameId` preselects the service frame the flow targets
+  // (set when launched from a frame's inspector nudge; null ⇒ the wizard's pick step chooses one).
+  const environmentWizardOpen = ref(false)
+  const environmentWizardFrameId = ref<string | null>(null)
   const modelConfigOpen = ref(false)
   // LLM-vendor subscription credentials (the token pool powering the Claude Code
   // / Codex harnesses). `vendorCredentialsTab` lets a caller deep-link to one tab —
@@ -644,6 +650,17 @@ export const useUiStore = defineStore('ui', () => {
     const qs = params.toString()
     history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
   }
+  // Launch the environment setup wizard, optionally preselecting the service frame it targets
+  // (the inspector nudge passes the frame; the navbar entry opens it with the pick step active).
+  function openEnvironmentSetup(frameId: string | null = null) {
+    resetHubReturn()
+    environmentWizardFrameId.value = frameId
+    environmentWizardOpen.value = true
+  }
+  function closeEnvironmentSetup() {
+    environmentWizardOpen.value = false
+    environmentWizardFrameId.value = null
+  }
   function openModelConfig() {
     modelConfigOpen.value = true
   }
@@ -932,6 +949,10 @@ export const useUiStore = defineStore('ui', () => {
     closeProviderConnection,
     k3sSetupPrefill,
     consumeK3sSetupDeepLink,
+    environmentWizardOpen,
+    environmentWizardFrameId,
+    openEnvironmentSetup,
+    closeEnvironmentSetup,
     openModelConfig,
     closeModelConfig,
     openVendorCredentials,
