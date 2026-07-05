@@ -1,5 +1,68 @@
 # @cat-factory/node-server
 
+## 0.76.0
+
+### Minor Changes
+
+- 076d02f: feat(documents): interactive document-review sessions (doc-task WS5)
+
+  Between the outline and the draft, a document-authoring run now converses with the requester
+  instead of a single binary approve/revise gate. A new inline `doc-interviewer` step (inserted
+  after `doc-outliner` in `pl_document`, replacing the outline's human gate) asks a small batch of
+  clarifying questions about scope, audience and structure, parks the run on the standard durable
+  decision-wait while the human answers through a dedicated window, and iterates (up to a round
+  cap) until it synthesizes a refined **authoring brief** the `doc-writer`/`doc-finalizer` start
+  from (folded into their context via the agent-context builder).
+
+  The park/answer/resume/advance spine is now a shared `InterviewGateController<TEntity>`
+  parameterized by an `InterviewGateKind` strategy; both the document interviewer and the
+  interactive-planning (initiative) interviewer ride it, so the two gates can't drift. A document
+  task has no owning entity row, so its transcript is persisted in its own `doc_interview_sessions`
+  table — mirrored across D1 ⇄ Drizzle with a cross-runtime conformance assertion. The interview
+  window is wired through the universal result-view seam (`doc-interview`) and updates live over a
+  new `docInterview` workspace event. Pass-through when no interviewer model is wired, so document
+  pipelines run unchanged.
+
+  Hardening: a re-run of a document task now clears the block's prior session before interviewing
+  (so it starts clean instead of reusing a stale, already-converged one), the converged brief is
+  folded only into the two kinds that consume it (`doc-writer`/`doc-finalizer`), and a non-final
+  interviewer pass that returns neither questions nor a brief fails the run loudly instead of
+  silently skipping the interview with an empty brief.
+
+  Breaking: `pl_document` bumps to version 3 (the reseed offer), and its step indices shift (the
+  interviewer is inserted at index 2), so in-flight runs on the old shape should be restarted.
+
+### Patch Changes
+
+- 77bc73c: Update dependencies to the latest versions within the supply-chain release-age
+  window. The Vercel AI SDK family stays within the `ai@6` / `@ai-sdk/*` majors
+  that `workers-ai-provider@^3` peers require (`ai@6.0.219`,
+  `@ai-sdk/anthropic@3.0.92`, `@ai-sdk/openai@3.0.80`,
+  `@ai-sdk/openai-compatible@2.0.56`, `@ai-sdk/provider@3.0.13`,
+  `@ai-sdk/amazon-bedrock@4.0.128`). Other bumps include `@hono/node-server`,
+  `pg-boss`, `undici`, `markdown-it`, `@aws-sdk/client-s3`, `@clack/prompts`,
+  `@types/node`, and eligible transitive dependencies. `@cloudflare/workers-types`
+  is held at `4.x` because `wrangler@4` peers on `^4`.
+- Updated dependencies [77bc73c]
+- Updated dependencies [076d02f]
+  - @cat-factory/agents@0.39.0
+  - @cat-factory/caching@0.4.10
+  - @cat-factory/consensus@0.9.9
+  - @cat-factory/eks@0.1.6
+  - @cat-factory/integrations@0.69.1
+  - @cat-factory/kernel@0.93.0
+  - @cat-factory/observability-langfuse@0.7.141
+  - @cat-factory/orchestration@0.75.0
+  - @cat-factory/provider-bedrock@0.7.149
+  - @cat-factory/provider-cloudflare@0.7.150
+  - @cat-factory/provider-s3@0.2.91
+  - @cat-factory/server@0.85.0
+  - @cat-factory/contracts@0.102.0
+  - @cat-factory/gates@0.4.6
+  - @cat-factory/gitlab@0.7.9
+  - @cat-factory/spend@0.10.102
+  - @cat-factory/prompt-fragments@0.10.8
+
 ## 0.75.3
 
 ### Patch Changes
