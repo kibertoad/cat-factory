@@ -587,6 +587,69 @@ describe('EnvironmentConnectionService — validateRepo', () => {
   })
 })
 
+describe('EnvironmentConnectionService — detect read faults', () => {
+  // A RepoFiles whose reads all THROW (a non-404 from the real client: auth/permission/rate-limit).
+  const throwingRepo = (): RepoFiles =>
+    ({
+      async getFile() {
+        throw new Error('GitHub GET /repos/o/r/contents/ → 403: forbidden')
+      },
+      async listDirectory() {
+        throw new Error('GitHub GET /repos/o/r/contents/ → 403: forbidden')
+      },
+    }) as unknown as RepoFiles
+
+  function detectService() {
+    return new EnvironmentConnectionService({
+      environmentConnectionRepository: fakeConnections(),
+      workspaceRepository: fakeWorkspaces,
+      secretCipher: fakeCipher,
+      clock,
+      environmentBackendRegistry: registry,
+      resolveRepoFilesForWorkspace: async () => repoCtx(throwingRepo()),
+    })
+  }
+
+  it('maps an unreadable repo to an actionable validation error (service provisioning)', async () => {
+    const service = detectService()
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r' }),
+    ).rejects.toMatchObject({ code: 'validation' })
+    // A GitHub-pinned input gets the GitHub-specific "Contents: read" guidance.
+    await expect(
+      service.detectServiceProvisioning('ws1', {
+        owner: 'o',
+        repo: 'r',
+        directory: 'services/api',
+        provider: 'github',
+      }),
+    ).rejects.toThrow(/Contents: read/)
+  })
+
+  it('tailors the read-fault guidance to the pinned VCS provider (never hardcodes GitHub)', async () => {
+    const service = detectService()
+    // GitLab-pinned ⇒ GitLab-specific guidance, NOT a "GitHub App"/"Contents: read" instruction
+    // the user has no equivalent for.
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r', provider: 'gitlab' }),
+    ).rejects.toThrow(/read_repository/)
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r', provider: 'gitlab' }),
+    ).rejects.not.toThrow(/GitHub App/)
+    // No provider pinned (⇒ the workspace's connected provider) stays neutral — no GitHub-only term.
+    await expect(
+      service.detectServiceProvisioning('ws1', { owner: 'o', repo: 'r' }),
+    ).rejects.not.toThrow(/GitHub App|Contents: read/)
+  })
+
+  it('maps an unreadable repo to an actionable validation error (frontend config)', async () => {
+    const service = detectService()
+    await expect(
+      service.detectFrontendConfig('ws1', { owner: 'o', repo: 'r' }),
+    ).rejects.toMatchObject({ code: 'validation' })
+  })
+})
+
 describe('EnvironmentConnectionService — bootstrapRepo', () => {
   const VALID = 'name: x\njobs: [a]\n'
 
