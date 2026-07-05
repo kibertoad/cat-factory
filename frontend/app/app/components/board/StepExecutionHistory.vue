@@ -12,17 +12,31 @@ const props = defineProps<{ failures: AgentFailure[]; outputs: PriorStepOutput[]
 const { t, d } = useI18n()
 
 type Entry =
-  | { kind: 'failure'; occurredAt: number; failure: AgentFailure }
-  | { kind: 'success'; occurredAt: number; output: PriorStepOutput }
+  | { kind: 'failure'; key: string; occurredAt: number; failure: AgentFailure }
+  | { kind: 'success'; key: string; occurredAt: number; output: PriorStepOutput }
 
 // Merge both trails and show newest first — the most recent attempt is the most relevant.
+// Each entry's `key` is its position within its OWN trail (both are append-only, so that
+// position is a stable identity), not the volatile merged-sort index — and it stays unique
+// even when several entries share a timestamp (a restart can discard many steps with the same
+// clock-fallback `occurredAt`).
 const entries = computed<Entry[]>(() =>
   [
     ...props.failures.map(
-      (failure): Entry => ({ kind: 'failure', occurredAt: failure.occurredAt, failure }),
+      (failure, i): Entry => ({
+        kind: 'failure',
+        key: `failure-${i}`,
+        occurredAt: failure.occurredAt,
+        failure,
+      }),
     ),
     ...props.outputs.map(
-      (output): Entry => ({ kind: 'success', occurredAt: output.occurredAt, output }),
+      (output, i): Entry => ({
+        kind: 'success',
+        key: `success-${i}`,
+        occurredAt: output.occurredAt,
+        output,
+      }),
     ),
   ].sort((a, b) => b.occurredAt - a.occurredAt),
 )
@@ -31,8 +45,8 @@ const entries = computed<Entry[]>(() =>
 <template>
   <ol class="space-y-2">
     <li
-      v-for="(entry, i) in entries"
-      :key="`${entry.kind}-${entry.occurredAt}-${i}`"
+      v-for="entry in entries"
+      :key="entry.key"
       class="rounded-md border px-2.5 py-2"
       :class="
         entry.kind === 'success'
@@ -40,7 +54,7 @@ const entries = computed<Entry[]>(() =>
           : 'border-slate-800/80 bg-slate-950/50'
       "
       :data-testid="
-        entry.kind === 'success' ? 'agent-output-history-entry' : 'agent-failure-history-entry'
+        entry.kind === 'success' ? 'step-history-success-entry' : 'step-history-failure-entry'
       "
     >
       <!-- a superseded SUCCESSFUL attempt: its output, collapsible + copyable -->
