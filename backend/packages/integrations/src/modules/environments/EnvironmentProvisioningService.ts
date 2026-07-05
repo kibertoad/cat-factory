@@ -460,6 +460,37 @@ export class EnvironmentProvisioningService {
                 )) ?? undefined)
               : undefined))())
       : undefined
+    // Best-effort per-step provisioning-log sink for a multi-step STACK RECIPE. Bound to the
+    // block/run/provider identity here (the provider only names the step + its verdict), so a
+    // long compose bring-up streams a per-step entry into the same env log the provision outcome
+    // lands in — filterable by run in the "View logs" drawer. Wired only when the log is; the
+    // recorder itself never throws.
+    const recordStep = this.deps.provisioningLog
+      ? async (log: {
+          name: string
+          outcome: 'success' | 'failure'
+          durationMs: number
+          detail?: string
+          error?: string
+        }): Promise<void> => {
+          await this.deps.provisioningLog!.record({
+            workspaceId,
+            subsystem: 'environment',
+            operation: 'provision',
+            targetId: null,
+            providerId: manifest.providerId,
+            blockId: args.blockId ?? null,
+            executionId: args.executionId ?? null,
+            outcome: log.outcome,
+            error: log.error ?? null,
+            detail: JSON.stringify({
+              step: log.name,
+              durationMs: log.durationMs,
+              ...(log.detail ? { note: log.detail } : {}),
+            }),
+          })
+        }
+      : undefined
     return {
       manifest,
       inputs,
@@ -467,6 +498,7 @@ export class EnvironmentProvisioningService {
       resolveSecret,
       ...(runRepo ? { runRepo } : {}),
       ...(clone ? { clone } : {}),
+      ...(recordStep ? { recordStep } : {}),
       ...(this.deps.resolveRepoFilesForWorkspace
         ? {
             resolveRepoFiles: (coords) =>

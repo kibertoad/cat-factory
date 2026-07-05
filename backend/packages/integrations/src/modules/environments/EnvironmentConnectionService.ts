@@ -54,7 +54,7 @@ import {
   handlerConfigToBackendConfig,
   overlaySecrets,
   resolveHandlerBackend,
-  type ServiceKubeInputs,
+  type ServiceProvisioningInputs,
   toManifestId,
 } from './infra-handler-build.js'
 import { missingRequiredConfigKeys, stringifyProviderConfig } from './environments.logic.js'
@@ -386,6 +386,7 @@ export class EnvironmentConnectionService {
       ...(service.images ? { images: service.images } : {}),
       ...(service.helmReleases ? { helmReleases: service.helmReleases } : {}),
       ...(service.secretInjections ? { secretInjections: service.secretInjections } : {}),
+      ...(service.recipe ? { recipe: service.recipe } : {}),
     })
     return {
       provider,
@@ -1307,7 +1308,7 @@ export class EnvironmentConnectionService {
    */
   private buildFromRecord(
     record: EnvironmentConnectionRecord,
-    service?: ServiceKubeInputs,
+    service?: ServiceProvisioningInputs,
   ): {
     backend: EnvironmentBackendProvider
     provider: EnvironmentProvider

@@ -1,22 +1,36 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
-import type { ProvisionEnvironmentRequest, RunRepoContext } from '@cat-factory/kernel'
+import type {
+  ProvisionEnvironmentRequest,
+  RecipeStepLog,
+  RunRepoContext,
+  StackRecipe,
+} from '@cat-factory/kernel'
 import { ComposeEnvironmentProvider } from './ComposeEnvironmentProvider.js'
 import type { ComposeExecResult, ComposeRuntime } from './compose-environment.logic.js'
 
 type Script = (args: string[]) => ComposeExecResult
 
-function fakeRuntime(script: Script, opts: { withCheckout?: boolean } = {}) {
+function fakeRuntime(
+  script: Script,
+  opts: { withCheckout?: boolean; existingFiles?: Set<string> } = {},
+) {
   const calls: string[][] = []
+  const composeEnvs: (Record<string, string> | undefined)[] = []
+  const stdins: { checkoutFile: string }[] = []
   const written: { project: string; fileName: string; content: string }[] = []
   const checkouts: {
     project: string
     target: { cloneUrl: string; ref: string; token?: string }
   }[] = []
   const checkoutFiles: { project: string; relPath: string; content: string }[] = []
+  const copies: { from: string; to: string }[] = []
+  const hostCommands: { argv: string[]; workdir?: string }[] = []
   const runtime: ComposeRuntime = {
-    async compose(args) {
+    async compose(args, options) {
       calls.push(args)
+      composeEnvs.push(options?.env)
+      if (options?.stdin) stdins.push({ checkoutFile: options.stdin.checkoutFile })
       return script(args)
     },
     async writeProjectFile(project, fileName, content) {
@@ -33,10 +47,30 @@ function fakeRuntime(script: Script, opts: { withCheckout?: boolean } = {}) {
             checkoutFiles.push({ project, relPath, content })
             return `/tmp/${project}/checkout/${relPath}`
           },
+          async copyCheckoutFile(_project, from, to) {
+            copies.push({ from, to })
+          },
+          async checkoutFileExists(_project, relPath) {
+            return opts.existingFiles?.has(relPath) ?? false
+          },
+          async hostCommand(_project, argv, o) {
+            hostCommands.push({ argv, ...(o?.workdir ? { workdir: o.workdir } : {}) })
+            return { code: 0, stdout: '', stderr: '' }
+          },
         }
       : {}),
   }
-  return { runtime, calls, written, checkouts, checkoutFiles }
+  return {
+    runtime,
+    calls,
+    composeEnvs,
+    stdins,
+    written,
+    checkouts,
+    checkoutFiles,
+    copies,
+    hostCommands,
+  }
 }
 
 function fakeRunRepo(files: Record<string, string>): RunRepoContext {
@@ -368,5 +402,252 @@ describe('ComposeEnvironmentProvider', () => {
     })
     expect(bad.ok).toBe(false)
     expect(bad.message).toContain('daemon')
+  })
+})
+
+describe('ComposeEnvironmentProvider — stack recipes', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const recipeManifest = (recipe: StackRecipe, extra: Record<string, unknown> = {}) => ({
+    ...manifest,
+    providerConfig: { service: 'web', port: '8080', ...extra, recipe },
+  })
+
+  // A recipe always needs a checkout runtime + a clone target; both the compose files it layers
+  // must exist in the run repo.
+  const recipeReq = (
+    recipe: StackRecipe,
+    opts: {
+      files: Record<string, string>
+      extra?: Record<string, unknown>
+      recordStep?: ProvisionEnvironmentRequest['recordStep']
+    } = {
+      files: {},
+    },
+  ): ProvisionEnvironmentRequest =>
+    baseReq({
+      manifest: recipeManifest(recipe, opts.extra),
+      runRepo: fakeRunRepo(opts.files),
+      clone: () =>
+        Promise.resolve({ cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 't' }),
+      ...(opts.recordStep ? { recordStep: opts.recordStep } : {}),
+    })
+
+  // A script that greenlights a whole recipe bring-up (up/exec/host green, ps healthy, port bound).
+  const greenScript: Script = (args) => {
+    if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:49200', stderr: '' }
+    if (args.includes('ps')) return { code: 0, stdout: '[{"State":"running"}]', stderr: '' }
+    return { code: 0, stdout: '', stderr: '' }
+  }
+
+  it('layers -f files, enables profiles, materializes env files, runs steps, then resolves the URL', async () => {
+    const recipe: StackRecipe = {
+      composeFiles: ['docker/dev.yml', 'docker/dev.override.yml'],
+      composeProfiles: ['backends'],
+      envFiles: [{ template: '.env.dev.local-dist', target: '.env.dev.local' }],
+      setupSteps: [
+        {
+          kind: 'compose-exec',
+          name: 'composer install',
+          service: 'web',
+          command: ['composer', 'install'],
+        },
+        {
+          kind: 'compose-exec',
+          name: 'migrate',
+          service: 'web',
+          command: ['bin/console', 'migrate'],
+        },
+      ],
+      // healthGate omitted ⇒ compose-healthy (poll `ps`).
+    }
+    const { runtime, calls, composeEnvs, copies } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: {
+          'docker/dev.yml':
+            'services:\n  web:\n    image: nginx\n    ports:\n      - "8080:8080"\n',
+          'docker/dev.override.yml': 'services:\n  web:\n    environment:\n      - FOO=bar\n',
+        },
+      }),
+    )
+    expect(env.status).toBe('ready')
+    expect(env.url).toBe('http://localhost:49200')
+    // `up -d` layered both rewritten files and did NOT `--wait` (readiness is the recipe gate).
+    const up = calls.find((a) => a.includes('up'))!
+    expect(up.filter((a) => a === '-f')).toHaveLength(2)
+    expect(up).not.toContain('--wait')
+    // Every compose call carried COMPOSE_PROFILES.
+    const upEnv = composeEnvs[calls.indexOf(up)]
+    expect(upEnv?.COMPOSE_PROFILES).toBe('backends')
+    // The env-file template was materialized into its target inside the checkout.
+    expect(copies).toEqual([{ from: '.env.dev.local-dist', to: '.env.dev.local' }])
+    // Both setup steps ran (composer install + migrate) as non-interactive execs.
+    const execs = calls.filter((a) => a.includes('exec'))
+    expect(execs.some((a) => a.includes('composer'))).toBe(true)
+    expect(execs.some((a) => a.includes('migrate'))).toBe(true)
+  })
+
+  it('streams a per-step provisioning-log entry (env file, up, each step, health gate)', async () => {
+    const steps: RecipeStepLog[] = []
+    const recipe: StackRecipe = {
+      envFiles: [{ template: '.env.dist', target: '.env' }],
+      setupSteps: [
+        { kind: 'compose-exec', name: 'seed', service: 'db', command: ['sh', '-c', 'seed'] },
+      ],
+    }
+    const { runtime } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        recordStep: async (log) => {
+          steps.push(log)
+        },
+      }),
+    )
+    expect(env.status).toBe('ready')
+    expect(steps.map((s) => s.name)).toEqual([
+      'env-file: .env',
+      'compose up',
+      'seed',
+      'health gate (compose-healthy)',
+    ])
+    expect(steps.every((s) => s.outcome === 'success')).toBe(true)
+  })
+
+  it('pipes a seed dump into a compose-exec step via stdin', async () => {
+    const recipe: StackRecipe = {
+      setupSteps: [
+        {
+          kind: 'compose-exec',
+          name: 'seed import',
+          service: 'db',
+          command: ['mysql'],
+          stdinFile: 'deployment/dummy.sql',
+        },
+      ],
+    }
+    const { runtime, stdins } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(env.status).toBe('ready')
+    expect(stdins).toEqual([{ checkoutFile: 'deployment/dummy.sql' }])
+  })
+
+  it('passes an HTTP health gate by polling the URL', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('healthy', { status: 200 })),
+    )
+    const recipe: StackRecipe = {
+      healthGate: {
+        kind: 'http',
+        url: 'http://localhost:8080/health',
+        expectBodyContains: 'healthy',
+      },
+    }
+    const { runtime } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(env.status).toBe('ready')
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/health', expect.anything())
+  })
+
+  it('tears down and surfaces the failing step when a setup step fails', async () => {
+    const steps: RecipeStepLog[] = []
+    const recipe: StackRecipe = {
+      setupSteps: [
+        {
+          kind: 'compose-exec',
+          name: 'migrate',
+          service: 'web',
+          command: ['bin/console', 'migrate'],
+        },
+      ],
+    }
+    const { runtime, calls } = fakeRuntime(
+      (args) => {
+        if (args.includes('exec'))
+          return { code: 1, stdout: '', stderr: 'migration failed: syntax error' }
+        if (args.includes('port')) return { code: 0, stdout: '0.0.0.0:1', stderr: '' }
+        return { code: 0, stdout: '', stderr: '' }
+      },
+      { withCheckout: true },
+    )
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        recordStep: async (log) => {
+          steps.push(log)
+        },
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain("Recipe step 'migrate' failed")
+    expect(env.error).toContain('migration failed')
+    // The half-up stack was torn down for a clean retry, and the step logged a failure.
+    expect(calls.some((a) => a.includes('down'))).toBe(true)
+    expect(steps.find((s) => s.name === 'migrate')?.outcome).toBe('failure')
+  })
+
+  it('runs a host-command step only when the workspace opted in', async () => {
+    const recipe: StackRecipe = {
+      setupSteps: [{ kind: 'host-command', name: 'host prep', command: ['echo', 'hi'] }],
+    }
+    // Not opted in → refused before the daemon is touched.
+    const denied = fakeRuntime(greenScript, { withCheckout: true })
+    const off = await new ComposeEnvironmentProvider(denied.runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(off.status).toBe('failed')
+    expect(off.error).toContain('host-command')
+    expect(denied.calls).toHaveLength(0)
+
+    // Opted in → the host command runs and the stack comes up.
+    const allowed = fakeRuntime(greenScript, { withCheckout: true })
+    const on = await new ComposeEnvironmentProvider(allowed.runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        extra: { allowHostCommands: 'true' },
+      }),
+    )
+    expect(on.status).toBe('ready')
+    expect(allowed.hostCommands).toEqual([{ argv: ['echo', 'hi'] }])
+  })
+
+  it('fails clearly when the runtime cannot materialize a checkout', async () => {
+    const recipe: StackRecipe = { setupSteps: [] }
+    const { runtime, calls } = fakeRuntime(greenScript) // no withCheckout
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('Docker-capable runtime')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('refuses a checkout-escaping recipe path before touching the daemon', async () => {
+    const recipe: StackRecipe = {
+      envFiles: [{ template: '/etc/passwd', target: '.env' }],
+    }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('escapes the checkout')
+    expect(calls).toHaveLength(0)
   })
 })

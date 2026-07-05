@@ -19,7 +19,20 @@ import {
   resolveProjectName,
   sanitizeProjectName,
   toEphemeralPortEntry,
+  // stack-recipe helpers
+  composeExecArgs,
+  matchesHttpExpectation,
+  prepareRecipeComposeFiles,
+  recipeCheckoutPathIssues,
+  recipeProfilesEnv,
+  recipeStepTimeoutMs,
+  resolveRecipeComposeFiles,
+  rewrittenRecipeComposePath,
+  waitFileExecArgs,
+  DEFAULT_RECIPE_STEP_TIMEOUT_MS,
+  DEFAULT_RECIPE_WAIT_TIMEOUT_MS,
 } from './compose-environment.logic.js'
+import type { StackRecipe } from '@cat-factory/kernel'
 
 const manifestWith = (providerConfig: Record<string, unknown>) => ({
   providerId: 'compose',
@@ -485,5 +498,224 @@ describe('extractComposeProfiles', () => {
         '  solo:\n    profiles: extra\n', // single string, not a list
     )
     expect(extractComposeProfiles(doc)).toEqual(['backends', 'extra', 'full', 'peer'])
+  })
+})
+
+describe('parseComposeEnvConfig — recipe', () => {
+  it('reads a persisted recipe off providerConfig (structural, not re-validated)', () => {
+    const recipe = { composeFiles: ['docker/dev.yml'], composeProfiles: ['backends'] }
+    const config = parseComposeEnvConfig(manifestWith({ service: 'web', port: '8080', recipe }))
+    expect(config.recipe).toEqual(recipe)
+  })
+  it('treats a non-object recipe as absent', () => {
+    const config = parseComposeEnvConfig(
+      manifestWith({ service: 'web', port: '8080', recipe: 'nope' }),
+    )
+    expect(config.recipe).toBeUndefined()
+  })
+  it('reads the host-command opt-in from its string form', () => {
+    expect(
+      parseComposeEnvConfig(
+        manifestWith({ service: 'web', port: '8080', allowHostCommands: 'true' }),
+      ).allowHostCommands,
+    ).toBe(true)
+    expect(
+      parseComposeEnvConfig(manifestWith({ service: 'web', port: '8080' })).allowHostCommands,
+    ).toBe(false)
+  })
+})
+
+describe('resolveRecipeComposeFiles', () => {
+  it('uses recipe.composeFiles in order when present, else falls back to composePath', () => {
+    expect(
+      resolveRecipeComposeFiles(
+        { composeFiles: ['docker/dev.yml', 'docker/dev.wsl.override.yml'] },
+        'x.yml',
+      ),
+    ).toEqual(['docker/dev.yml', 'docker/dev.wsl.override.yml'])
+    expect(resolveRecipeComposeFiles({}, 'docker-compose.yml')).toEqual(['docker-compose.yml'])
+    expect(resolveRecipeComposeFiles({ composeFiles: [] }, 'docker-compose.yml')).toEqual([
+      'docker-compose.yml',
+    ])
+  })
+})
+
+describe('rewrittenRecipeComposePath', () => {
+  it('prefixes the basename in the file’s own dir so it never clobbers the original', () => {
+    expect(rewrittenRecipeComposePath('docker/dev.yml')).toBe('docker/cat-factory.dev.yml')
+    expect(rewrittenRecipeComposePath('docker/dev.wsl.override.yml')).toBe(
+      'docker/cat-factory.dev.wsl.override.yml',
+    )
+    expect(rewrittenRecipeComposePath('docker-compose.yml')).toBe('cat-factory.docker-compose.yml')
+  })
+})
+
+describe('prepareRecipeComposeFiles', () => {
+  it('neutralizes host ports across layers + guarantees the probed service publishes', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text: 'services:\n  web:\n    image: nginx\n    ports:\n      - "8080:8080"\n  db:\n    image: postgres\n    ports:\n      - "5432:5432"\n',
+        },
+        {
+          path: 'docker/dev.override.yml',
+          text: 'services:\n  web:\n    environment:\n      - FOO=bar\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1 },
+    )
+    expect(prepared.issues).toEqual([])
+    expect(prepared.files.map((f) => f.path)).toEqual([
+      'docker/cat-factory.dev.yml',
+      'docker/cat-factory.dev.override.yml',
+    ])
+    const base = parse(prepared.files[0]!.content)
+    // Host ports stripped to ephemeral on every service; the probed service still publishes 8080.
+    expect(base.services.web.ports).toEqual(['8080'])
+    expect(base.services.db.ports).toEqual(['5432'])
+  })
+
+  it('flags a stack where no layer defines the probed service', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [{ path: 'docker-compose.yml', text: 'services:\n  api:\n    image: nginx\n' }],
+      'web',
+      8080,
+      { baseDepth: 0 },
+    )
+    expect(prepared.issues.some((i) => i.includes("no service named 'web'"))).toBe(true)
+  })
+
+  it('refuses a checkout-escaping bind mount (host-filesystem escape), prefixed by file', () => {
+    const prepared = prepareRecipeComposeFiles(
+      [
+        {
+          path: 'docker/dev.yml',
+          text: 'services:\n  web:\n    image: nginx\n    volumes:\n      - ../../etc:/host\n',
+        },
+      ],
+      'web',
+      8080,
+      { baseDepth: 1 },
+    )
+    expect(
+      prepared.issues.some((i) => i.startsWith('docker/dev.yml:') && i.includes('escape')),
+    ).toBe(true)
+  })
+})
+
+describe('recipeCheckoutPathIssues', () => {
+  it('flags every checkout-escaping recipe path but allows in-checkout relatives', () => {
+    const recipe: StackRecipe = {
+      envFiles: [
+        { template: '.env.dev.local-dist', target: '.env.dev.local' }, // ok
+        { template: '/etc/passwd', target: '.env' }, // escape (absolute)
+      ],
+      setupSteps: [
+        { kind: 'copy-file', name: 'ok copy', from: 'a/.split.dist', to: 'a/.split.yaml' },
+        {
+          kind: 'compose-exec',
+          name: 'seed',
+          service: 'db',
+          command: ['sh'],
+          stdinFile: '../../secret.sql',
+        },
+        { kind: 'host-command', name: 'host', command: ['echo'], workdir: 'sub' },
+        { kind: 'wait-file', name: 'wait ct', path: '/app/manifest.json', service: 'web' }, // container-absolute: skipped
+      ],
+    }
+    const issues = recipeCheckoutPathIssues(recipe)
+    expect(issues.some((i) => i.includes('/etc/passwd'))).toBe(true)
+    expect(issues.some((i) => i.includes('secret.sql'))).toBe(true)
+    // The in-checkout relatives + the container-target wait-file raise nothing.
+    expect(issues.some((i) => i.includes('.env.dev.local-dist'))).toBe(false)
+    expect(issues.some((i) => i.includes('manifest.json'))).toBe(false)
+  })
+})
+
+describe('recipeProfilesEnv', () => {
+  it('comma-joins profiles into COMPOSE_PROFILES, or {} when none', () => {
+    expect(recipeProfilesEnv({ composeProfiles: ['backends', 'peer'] })).toEqual({
+      COMPOSE_PROFILES: 'backends,peer',
+    })
+    expect(recipeProfilesEnv({})).toEqual({})
+  })
+})
+
+describe('recipeStepTimeoutMs', () => {
+  it('prefers the step’s own timeout, else a per-kind default', () => {
+    expect(
+      recipeStepTimeoutMs({
+        kind: 'compose-exec',
+        name: 's',
+        service: 'a',
+        command: ['x'],
+        timeoutMs: 1000,
+      }),
+    ).toBe(1000)
+    expect(
+      recipeStepTimeoutMs({ kind: 'compose-exec', name: 's', service: 'a', command: ['x'] }),
+    ).toBe(DEFAULT_RECIPE_STEP_TIMEOUT_MS)
+    expect(recipeStepTimeoutMs({ kind: 'wait-http', name: 'w', url: 'http://x' })).toBe(
+      DEFAULT_RECIPE_WAIT_TIMEOUT_MS,
+    )
+  })
+})
+
+describe('composeExecArgs / waitFileExecArgs', () => {
+  it('builds a non-interactive exec with optional user + workdir', () => {
+    expect(
+      composeExecArgs(['-p', 'proj'], {
+        service: 'app',
+        command: ['bin/console', 'migrate'],
+        user: 'www',
+        workdir: '/app',
+      }),
+    ).toEqual([
+      '-p',
+      'proj',
+      'exec',
+      '-T',
+      '--user',
+      'www',
+      '--workdir',
+      '/app',
+      'app',
+      'bin/console',
+      'migrate',
+    ])
+    expect(composeExecArgs(['-p', 'proj'], { service: 'app', command: ['ls'] })).toEqual([
+      '-p',
+      'proj',
+      'exec',
+      '-T',
+      'app',
+      'ls',
+    ])
+  })
+  it('builds a `test -f` probe for a container wait-file', () => {
+    expect(waitFileExecArgs(['-p', 'proj'], 'ui', '/app/manifest.json')).toEqual([
+      '-p',
+      'proj',
+      'exec',
+      '-T',
+      'ui',
+      'test',
+      '-f',
+      '/app/manifest.json',
+    ])
+  })
+})
+
+describe('matchesHttpExpectation', () => {
+  it('accepts any 2xx by default, an exact expected status, and a required body substring', () => {
+    expect(matchesHttpExpectation(200, '', {})).toBe(true)
+    expect(matchesHttpExpectation(500, '', {})).toBe(false)
+    expect(matchesHttpExpectation(204, '', { expectStatus: 204 })).toBe(true)
+    expect(matchesHttpExpectation(200, '', { expectStatus: 204 })).toBe(false)
+    expect(matchesHttpExpectation(200, 'all good', { expectBodyContains: 'good' })).toBe(true)
+    expect(matchesHttpExpectation(200, 'nope', { expectBodyContains: 'good' })).toBe(false)
   })
 })

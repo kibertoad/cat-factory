@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (lokalise-main pilot)
 
-**Status:** in progress (slices 1–2 landed = contracts + detection) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–3 landed = contracts + detection + recipe execution) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -229,6 +229,33 @@ agent) can show exactly which step died. All build-mode safety lines stay (host-
 uniformity on every path-bearing reference; `include:`/cross-file `extends` refused —
 multi-`-f` layering is the sanctioned alternative; `privileged` refused).
 
+> **Landed (slice 3)** — the recipe now reaches the provider: `resolveProviderForType`
+> (`EnvironmentConnectionService`) + `handlerConfigToBackendConfig`'s `local-docker` branch fold
+> the SERVICE's `recipe` into the compose handler's `providerConfig.recipe` (the compose analogue
+> of merging a kube `manifestSource`; `ServiceKubeInputs` → `ServiceProvisioningInputs`), so the
+> provider keys purely on the persisted, merged config. `ComposeEnvironmentProvider.provisionRecipe`
+> drives the bring-up: it always materializes a checkout (its steps + env files operate on the
+> working tree), reads + `{{var}}`-renders each `composeFiles` layer, rewrites them isolation-safe
+> per layer (`prepareRecipeComposeFiles` — host-escape-checked with the build-mode guard + host
+> ports neutralized + the probed service's publish guaranteed on whichever layer defines it), writes
+> them beside their originals + passes ordered `-f`s, materializes `envFiles`, `up -d` under
+> `COMPOSE_PROFILES` (**no `--wait`** — these stacks rarely declare healthchecks, so readiness is
+> the recipe's own gate), runs `setupSteps` (`compose-exec` [seed import pipes a `.sql` via the new
+> > `compose` stdin seam], `copy-file`, `wait-http`, `wait-file` [container `test -f` or checkout],
+> `host-command` [opt-in via the handler's `allowHostCommands` + the runtime's `hostCommand` seam]),
+> then polls the `healthGate` (`compose-healthy`/`http`/`compose-exec`). Per-step verdicts stream
+> through the new kernel `ProvisionEnvironmentRequest.recordStep` seam (bound in
+> `EnvironmentProvisioningService.buildProvisionRequest` to a `subsystem:'environment'` provisioning
+> log entry) — env file, `up`, each step, health gate — so the "View logs" drawer shows which step
+> ran/died; a failing step tears the half-up stack down and surfaces its own error as `lastError`.
+> New pure helpers + the `ComposeRuntime` recipe seams (`compose` stdin, `copyCheckoutFile`,
+> `checkoutFileExists`, `hostCommand`) live in `compose-environment.logic.ts` / `runtimes/local`.
+> **Gotchas for later slices:** recipe execution is local-facade-bound (no D1⇄Drizzle work — the
+> recipe rides the existing `provisioning` blob, so persistence parity is inherent), so its
+> validation is unit tests with a fake `ComposeRuntime`, not conformance. `teardownSteps` execution
+> is deferred (`down -v` is the teardown for now). `externalNetworks`/`sharedStackRefs` are parsed
+> but NOT yet attached — that is slice 5.
+
 ### 5. Detection extensions (`provision-detect.logic.ts` — deterministic, checkout-free)
 
 Keep the non-binding `ProvisioningRecommendation` + per-field confidence shape. Add:
@@ -357,7 +384,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 0   | Tracker doc                                                                                                                                               | done   | (this) |
 | 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                  | done   | (this) |
 | 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | done   | (this) |
-| 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | todo   |        |
+| 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | done   | (this) |
 | 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | todo   |        |
 | 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | todo   |        |
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | todo   |        |

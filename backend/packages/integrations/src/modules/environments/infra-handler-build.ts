@@ -61,16 +61,20 @@ export function toManifestId(providerId: string): string {
 }
 
 /**
- * The service-owned kube provisioning inputs ("what + where" + render inputs) merged into the
- * workspace engine config at provision time: the manifest source plus the container-deploy
- * render fields (image overrides, per-environment helm releases, secret injections).
+ * The service-owned provisioning inputs ("what + where" + render inputs) merged into the
+ * workspace engine/handler config at provision time. For a KUBE engine: the manifest source plus
+ * the container-deploy render fields (image overrides, per-environment helm releases, secret
+ * injections). For the `local-docker` (compose) engine: the declarative STACK RECIPE — the
+ * service owns the recipe (multi-`-f` layering, profiles, env-file materialization, setup steps,
+ * health gate), the workspace handler owns only the daemon connection, so the recipe is folded
+ * into the compose `providerConfig` here (the compose analogue of merging `manifestSource`).
  */
-export type ServiceKubeInputs = Pick<
+export type ServiceProvisioningInputs = Pick<
   ServiceProvisioning,
-  'manifestSource' | 'images' | 'helmReleases' | 'secretInjections'
+  'manifestSource' | 'images' | 'helmReleases' | 'secretInjections' | 'recipe'
 >
 
-type KubeHelmRelease = NonNullable<ServiceKubeInputs['helmReleases']>[number]
+type KubeHelmRelease = NonNullable<ServiceProvisioningInputs['helmReleases']>[number]
 
 /**
  * Merge the workspace engine's (cluster-shared) helm releases with the service's
@@ -102,10 +106,25 @@ function mergeHelmReleases(
 export function handlerConfigToBackendConfig(
   config: InfraHandlerConfig,
   backendKind: string,
-  service?: ServiceKubeInputs,
+  service?: ServiceProvisioningInputs,
 ): EnvironmentBackendConfig {
   switch (config.engine) {
-    case 'local-docker':
+    case 'local-docker': {
+      // The workspace `local-docker` handler owns the daemon connection; the SERVICE owns the
+      // declarative stack recipe (the "what/where"). Fold the service's recipe into the compose
+      // `providerConfig` at resolve time — the compose analogue of merging a kube `manifestSource`
+      // — so the provider keys purely on the persisted, merged config. Absent ⇒ the simple
+      // single-file `composePath` path (the recipe is optional, so an undeclared service is
+      // byte-for-byte unchanged).
+      if (!service?.recipe) {
+        return { kind: backendKind, manifest: config.manifest } as EnvironmentBackendConfig
+      }
+      const providerConfig = { ...(config.manifest.providerConfig ?? {}), recipe: service.recipe }
+      return {
+        kind: backendKind,
+        manifest: { ...config.manifest, providerConfig },
+      } as EnvironmentBackendConfig
+    }
     case 'remote-custom':
       return { kind: backendKind, manifest: config.manifest } as EnvironmentBackendConfig
     case 'local-k3s':
