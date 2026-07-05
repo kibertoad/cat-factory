@@ -499,6 +499,13 @@ function next() {
           >
             {{ t('environmentWizard.preflight.unavailable') }}
           </p>
+          <p
+            v-if="store.preflightError"
+            class="text-[12px] text-rose-300/80"
+            data-testid="env-setup-preflight-error"
+          >
+            {{ store.preflightError }}
+          </p>
 
           <ul
             v-if="store.preflightResults?.length"

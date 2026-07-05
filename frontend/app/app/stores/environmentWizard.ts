@@ -94,6 +94,9 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   // ---- Preflight ----------------------------------------------------------
   const preflightRunning = ref(false)
   const preflightResults = ref<PreflightResult[] | null>(null)
+  // A real (non-503) preflight failure, surfaced so a genuine error isn't indistinguishable from
+  // "nothing happened" (a 503 latches `preflights.available` to the degraded note instead).
+  const preflightError = ref<string | null>(null)
 
   // ---- Save (handler + frame recipe) --------------------------------------
   const handlerLabel = ref('Docker Compose')
@@ -142,7 +145,16 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     const matching = execution.instances.filter(
       (i) => i.blockId === id && i.pipelineId === ANALYSIS_PIPELINE_ID,
     )
-    return matching.at(-1)
+    if (matching.length <= 1) return matching[0]
+    // A frame transiently holds several analyst runs (a retry's now-dead terminal predecessor
+    // re-listed by a stale reconnect snapshot alongside the live/succeeded successor), and
+    // `instances` has no reliable order, so a bare `.at(-1)` can return the dead run. Prefer a live
+    // run, then the newest succeeded one, before falling back to the last (so a sole failed run
+    // still surfaces as failed). Mirrors `execution.getByBlock`'s live-run preference.
+    const live = matching.find((i) => i.status !== 'done' && i.status !== 'failed')
+    if (live) return live
+    const succeeded = matching.filter((i) => i.status === 'done')
+    return succeeded.at(-1) ?? matching.at(-1)
   })
 
   /** The parsed analyst draft off the completed analyst step's `result.custom`, when ready. */
@@ -173,10 +185,13 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   )
 
   // ---- Actions ------------------------------------------------------------
-  /** Reset the flow for a (possibly preselected) frame. */
-  function open(preselectFrameId: string | null) {
-    frameId.value = preselectFrameId
-    step.value = preselectFrameId ? 'review' : 'pick'
+  /**
+   * Clear all per-frame flow state (detection, working recipe, preflight, save, trial). Shared by
+   * `open` and `selectFrame` so re-targeting the wizard at a different frame can't leave a prior
+   * frame's `saved`/`composeService`/`exposedPort`/results behind (which would make an unsaved
+   * frame render the green "saved" confirmation + offer a trial provision).
+   */
+  function resetFlowState() {
     detecting.value = false
     detectError.value = false
     recommendation.value = null
@@ -186,6 +201,7 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     composeService.value = ''
     preflightRunning.value = false
     preflightResults.value = null
+    preflightError.value = null
     handlerLabel.value = 'Docker Compose'
     exposedPort.value = 80
     saving.value = false
@@ -194,13 +210,19 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     trialing.value = false
     trialError.value = null
     trialStarted.value = false
+  }
+
+  /** Reset the flow for a (possibly preselected) frame. */
+  function open(preselectFrameId: string | null) {
+    frameId.value = preselectFrameId
+    step.value = preselectFrameId ? 'review' : 'pick'
+    resetFlowState()
     if (preselectFrameId) void detect()
   }
 
   function selectFrame(id: string) {
     frameId.value = id
-    recommendation.value = null
-    recipe.value = {}
+    resetFlowState()
     step.value = 'review'
     void detect()
   }
@@ -318,8 +340,14 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   /** Run the working recipe's declared preflight checks (host-bound; degrades on a non-local facade). */
   async function runPreflight() {
     preflightRunning.value = true
+    preflightError.value = null
     try {
       preflightResults.value = await preflights.run(recipe.value.prerequisites ?? [])
+    } catch (err) {
+      // A 503 is handled inside `preflights.run` (degraded note); anything else is a real failure
+      // that must be shown rather than swallowed into an unhandled rejection.
+      preflightError.value =
+        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
     } finally {
       preflightRunning.value = false
     }
@@ -335,6 +363,13 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     const service = composeService.value.trim()
     if (!id || !service) {
       saveError.value = 'A frame and an exposed compose service are required.'
+      return
+    }
+    // `exposedPort` is a `v-model.number` field, which yields '' (not a number) when cleared. Guard
+    // here so an empty/out-of-range port can't reach the handler manifest.
+    const port = Number(exposedPort.value)
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      saveError.value = 'Enter a valid exposed port (1-65535).'
       return
     }
     saving.value = true
@@ -356,7 +391,7 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
             response: {},
             providerConfig: {
               service,
-              port: exposedPort.value,
+              port,
               ...(build ? { build: true } : {}),
               ...(allowHostCommands ? { allowHostCommands: true } : {}),
             },
@@ -417,6 +452,7 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     composeService,
     preflightRunning,
     preflightResults,
+    preflightError,
     handlerLabel,
     exposedPort,
     saving,

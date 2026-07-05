@@ -409,12 +409,12 @@ export function onCallUserPrompt(
 /**
  * The tester's infra stand-up spec for the generic agent job, derived from the service's
  * declared provision type AND whether the run actually provisioned an environment: a
- * `kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a `deployer`
- * step) — runs against that ephemeral environment (`environment:'ephemeral'` + the URL); a
- * `docker-compose` service stands its compose stack up in-container (`environment:'local'` +
- * the compose path); an `infraless` service (or none declared) stands nothing up (`local` +
- * `noInfraDependencies`). The harness `infra` wire shape is unchanged — only its source moved
- * from the old `tester.environment` config to the service's `provisioning` + the run env.
+ * `docker-compose`/`kubernetes`/`custom` service — or ANY run that provisioned an env URL (e.g. a
+ * `deployer` step) — runs against that ephemeral environment (`environment:'ephemeral'` + the URL
+ * when present), since all three are stood up by the single Deployer step; an `infraless` service
+ * (or none declared) stands nothing up (`local` + `noInfraDependencies`). The harness `infra` wire
+ * shape is unchanged — only its source moved from the old `tester.environment` config to the
+ * service's `provisioning` + the run env.
  */
 
 /**

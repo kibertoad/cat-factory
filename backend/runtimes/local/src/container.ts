@@ -609,10 +609,6 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       ...(gitToken
         ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>)
         : {}),
-      // Gate the Tester's local-infra mode on the runtime's Docker-in-Docker support
-      // (local-authoritative — after the overrides so a deployment can't accidentally
-      // claim DinD support the runtime doesn't have).
-      localTestInfraSupported,
       // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
       // wires the repository, so the per-user override service + controller assemble here
       // (and stay 503 / inert on the Worker + Node facades). A developer can point a
