@@ -433,11 +433,11 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 | ID    | Sev | Status | Finding                                                                                  |
 | ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
-| UX-62 | P1  | done   | Icon-only close/action buttons with no accessible name (widespread)                      |
-| UX-63 | P2  | done   | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
-| UX-64 | P2  | done   | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
-| UX-65 | P2  | done   | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
-| UX-66 | P2  | done   | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
+| UX-62 | P1  | done (#841) | Icon-only close/action buttons with no accessible name (widespread)                      |
+| UX-63 | P2  | done (#841) | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
+| UX-64 | P2  | done (#841) | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
+| UX-65 | P2  | done (#841) | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
+| UX-66 | P2  | done (#841) | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
 | UX-67 | P2  | todo   | No light mode / system color-scheme support; palette hardcoded                           |
 | UX-68 | P3  | todo   | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
 | UX-69 | P3  | todo   | Board nodes not in the tab order — no keyboard path to a specific card                   |
