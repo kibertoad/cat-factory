@@ -33,7 +33,6 @@ export function buildMothershipEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.Pr
     ENCRYPTION_KEY,
     AUTH_SESSION_SECRET: SESSION_SECRET,
     AUTH_PASSWORD_ENABLED: 'true',
-    ENVIRONMENTS_ENABLED: 'true',
     PROMPT_LIBRARY_ENABLED: 'true',
     DOCUMENT_SOURCES: 'confluence,notion,github,figma,zeplin,linear',
     ...overrides,

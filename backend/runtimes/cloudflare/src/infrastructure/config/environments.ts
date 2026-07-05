@@ -5,11 +5,12 @@ import { csv } from './utils'
 export type { EnvironmentsConfig }
 
 export function loadEnvironmentsConfig(env: Env): EnvironmentsConfig {
-  // Opt-in via the enable flag; credentials are sealed with the shared ENCRYPTION_KEY
-  // (under an environments-scoped HKDF info).
+  // The module assembles whenever the shared ENCRYPTION_KEY is set (credentials are
+  // sealed with it, under an environments-scoped HKDF info); there is no separate
+  // enable flag. The key is already mandatory service-wide (documents/tasks fail config
+  // load without it), so on any real deployment the integration is simply always on.
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   return {
-    enabled: env.ENVIRONMENTS_ENABLED === 'true' && !!encryptionKey,
     encryptionKey,
     // Trusted-adapter escape hatch: permit an in-house env platform on an internal/VPN
     // host (otherwise the strict public-https guard rejects it).

@@ -1634,7 +1634,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
             : {},
         )
       : undefined)
-  const deployDeps: Partial<CoreDependencies> = config.environments.enabled
+  const deployDeps: Partial<CoreDependencies> = config.environments.encryptionKey
     ? {
         ...(deployJobClient ? { deployJobClient } : {}),
         ...(resolveDeployCloneTarget ? { resolveDeployCloneTarget } : {}),
@@ -2767,10 +2767,10 @@ function selectNodeDocumentsDeps(
  * from the env-backend registry by the stored `kind` (built-in `manifest`/`kubernetes`, or a
  * deployment's programmatically-registered custom kind), so nothing is injected here.
  * Per-tenant management-API secrets are encrypted at rest with the shared ENCRYPTION_KEY.
- * Disabled → `{}` and the module stays off.
+ * No key configured → `{}` and the module stays off (there is no separate enable flag).
  */
 function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<CoreDependencies> {
-  if (!config.environments.enabled || !config.environments.encryptionKey) return {}
+  if (!config.environments.encryptionKey) return {}
   // The provider is resolved per-workspace from the env-backend registry by the stored
   // `kind`. Node honors custom-CA / insecure-skip TLS (undici), so a Kubernetes env config
   // with a CA is allowed (environmentCustomTlsSupported defaults to supported).

@@ -58,9 +58,8 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // with the Worker test env); the conformance Slack CRUD asserts persistence parity,
   // and the channel bails (best-effort) when a workspace has no Slack connection.
   SLACK_ENABLED: 'true',
-  // Opt into the ephemeral-environment integration so its module wires up (parity with
-  // the Worker test env); the conformance env CRUD asserts persistence parity.
-  ENVIRONMENTS_ENABLED: 'true',
+  // The ephemeral-environment integration wires from ENCRYPTION_KEY (no flag), parity with
+  // the Worker test env; the conformance env CRUD asserts persistence parity.
   // Opt into the prompt-fragment library (ADR 0006) so its module wires up; the
   // conformance library CRUD asserts persistence parity across stores.
   PROMPT_LIBRARY_ENABLED: 'true',

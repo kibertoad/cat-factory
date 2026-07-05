@@ -130,16 +130,15 @@ UI (Workspace settings -> Budget) and defaults to about 100 EUR/month.
 
 ## Integrations & observability
 
-| Variable                                                               | Modes       | Default                | Description                                             |
-| ---------------------------------------------------------------------- | ----------- | ---------------------- | ------------------------------------------------------- |
-| `SLACK_ENABLED`                                                        | CF, Node    | `false`                | Enable the Slack notification channel.                  |
-| `OBSERVABILITY_ENABLED`                                                | CF, Node    | `false`                | Enable the post-release-health observability providers. |
-| `CONSENSUS_ENABLED`                                                    | Node        | `false`                | Enable the consensus-orchestration mechanism.           |
-| `ENVIRONMENTS_ENABLED`                                                 | CF, Node    | `false` (Local `true`) | Enable ephemeral environments.                          |
-| `ENVIRONMENTS_ALLOW_HTTP_URLS` / `ENVIRONMENTS_ALLOW_URL_HOSTS`        | Node, Local | off                    | Relax environment URL restrictions (local defaults on). |
-| `RUNNERS_ENABLED`                                                      | CF, Node    | `false`                | Enable self-hosted runner pools.                        |
-| `LANGFUSE_*`                                                           | CF, Node    | none                   | Langfuse trace sink credentials.                        |
-| `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` | Node        | none                   | System email sender.                                    |
+| Variable                                                               | Modes       | Default | Description                                             |
+| ---------------------------------------------------------------------- | ----------- | ------- | ------------------------------------------------------- |
+| `SLACK_ENABLED`                                                        | CF, Node    | `false` | Enable the Slack notification channel.                  |
+| `OBSERVABILITY_ENABLED`                                                | CF, Node    | `false` | Enable the post-release-health observability providers. |
+| `CONSENSUS_ENABLED`                                                    | Node        | `false` | Enable the consensus-orchestration mechanism.           |
+| `ENVIRONMENTS_ALLOW_HTTP_URLS` / `ENVIRONMENTS_ALLOW_URL_HOSTS`        | Node, Local | off     | Relax environment URL restrictions (local defaults on). |
+| `RUNNERS_ENABLED`                                                      | CF, Node    | `false` | Enable self-hosted runner pools.                        |
+| `LANGFUSE_*`                                                           | CF, Node    | none    | Langfuse trace sink credentials.                        |
+| `EMAIL_SYSTEM_PROVIDER` / `EMAIL_SYSTEM_FROM` / `EMAIL_SYSTEM_API_KEY` | Node        | none    | System email sender.                                    |
 
 ## Local mode
 

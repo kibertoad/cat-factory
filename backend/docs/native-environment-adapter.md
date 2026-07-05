@@ -222,9 +222,10 @@ cross-runtime parity.
 
 ### The connection is required — and that is intended
 
-The environments module assembles only when **`ENVIRONMENTS_ENABLED=true`**,
-**`ENCRYPTION_KEY`** is set, **and a connection is registered** for the workspace. This is
-not a quirk to design around: the connection is the per-workspace anchor that
+The environments module assembles when **`ENCRYPTION_KEY`** is set (it is always set —
+the always-on document/task sources require it), and a workspace provisions only once **a
+connection is registered** for it. This is not a quirk to design around: the connection is
+the per-workspace anchor that
 
 - holds the **sealed token** (resolved at call time via `resolveSecret` using the manifest
   `auth` scheme), and

@@ -1815,18 +1815,20 @@ function selectSandboxDeps(sandboxDb: D1Database | undefined): Partial<CoreDepen
 }
 
 /**
- * Build the ephemeral environment integration's concrete ports when opted in.
- * Requires the encryption key (the config gate already enforces this), so the
- * generic HTTP provider, the D1 repositories and the Web Crypto cipher are wired
- * together. Returns `{}` when disabled, so `createCore` leaves the `environments`
- * module unassembled and the deterministic deployer / env discovery stay off.
+ * Build the ephemeral environment integration's concrete ports. It assembles
+ * whenever the encryption key is set (the shared master key that seals per-tenant
+ * credentials), so the generic HTTP provider, the D1 repositories and the Web Crypto
+ * cipher are wired together. Returns `{}` only when no key is configured, so
+ * `createCore` leaves the `environments` module unassembled. There is no separate
+ * enable flag: whether a workspace provisions anything is decided by its registered
+ * connection + whether its pipeline runs a `deployer`/`tester` step.
  */
 function selectEnvironmentsDeps(
   env: Env,
   config: AppConfig,
   db: D1Database,
 ): Partial<CoreDependencies> {
-  if (!config.environments.enabled) return {}
+  if (!config.environments.encryptionKey) return {}
   // The provider is resolved per-workspace from the env-backend registry by the stored
   // `kind` (`manifest` | `kubernetes` | a third-party kind imported for side effect); a
   // workspace picks its backend at connect time. The Worker can't honor a custom CA /
@@ -1840,7 +1842,7 @@ function selectEnvironmentsDeps(
     // `custom` provision-type catalog) is a workspace feature on every facade.
     customManifestTypeRepository: new D1CustomManifestTypeRepository({ db }),
     secretCipher: new WebCryptoSecretCipher({
-      masterKeyBase64: config.environments.encryptionKey!,
+      masterKeyBase64: config.environments.encryptionKey,
     }),
     environmentCustomTlsSupported: false,
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
@@ -1867,7 +1869,7 @@ function selectDeployDeps(
   clock: Clock,
 ): Partial<CoreDependencies> {
   if (
-    !config.environments.enabled ||
+    !config.environments.encryptionKey ||
     !env.DEPLOY_CONTAINER ||
     !config.github.enabled ||
     !env.GITHUB_APP_PRIVATE_KEY

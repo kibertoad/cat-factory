@@ -381,20 +381,16 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
     // ENCRYPTION_KEY backs credential encryption at rest).
     documents: loadDocumentsConfig(env),
     tasks: loadTasksConfig(env),
-    // Ephemeral-environment provider integration: opt-in (a tenant rolls its own
-    // environment-management API), gated on ENVIRONMENTS_ENABLED + the shared
-    // ENCRYPTION_KEY (credentials are encrypted at rest), mirroring the Worker.
-    environments:
-      env.ENVIRONMENTS_ENABLED === 'true' && env.ENCRYPTION_KEY?.trim()
-        ? {
-            enabled: true,
-            encryptionKey: env.ENCRYPTION_KEY.trim(),
-            // Trusted-adapter escape hatch: permit an in-house env platform on an
-            // internal/VPN host (otherwise the strict public-https guard rejects it).
-            allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
-            allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
-          }
-        : { enabled: false },
+    // Ephemeral-environment provider integration (a tenant rolls its own
+    // environment-management API): assembles from the shared ENCRYPTION_KEY that seals
+    // per-tenant credentials at rest, with no separate enable flag, mirroring the Worker.
+    environments: {
+      encryptionKey: env.ENCRYPTION_KEY?.trim(),
+      // Trusted-adapter escape hatch: permit an in-house env platform on an
+      // internal/VPN host (otherwise the strict public-https guard rejects it).
+      allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
+      allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
+    },
     runners: runnersEncryptionKey
       ? {
           enabled: true,

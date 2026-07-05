@@ -381,13 +381,10 @@ export interface Env {
    */
   DOCUMENT_PLANNER?: string
 
-  // ---- Ephemeral environment integration (see config.ts; opt-in) ----------
-  /**
-   * Enables the environment provider integration ('true'). Per-workspace provider
-   * manifests and their (encrypted) secret bundles live in D1, not here. Secrets are
-   * sealed with the shared `ENCRYPTION_KEY`.
-   */
-  ENVIRONMENTS_ENABLED?: string
+  // ---- Ephemeral environment integration (see config.ts) ------------------
+  // The integration assembles from the shared `ENCRYPTION_KEY` (which seals the
+  // per-workspace manifests/secret bundles in D1); there is no enable flag. Only the
+  // URL-guard escape hatches below are read from env.
   /**
    * Comma-separated hostnames exempt from the strict public-https URL guard, for a
    * TRUSTED in-house adapter pointing at an internal env platform (a private/VPN host).

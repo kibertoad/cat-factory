@@ -17,8 +17,8 @@ describe('shared ENCRYPTION_KEY', () => {
     const container = buildContainer(env, agent())
     expect(container.documents).toBeDefined()
     expect(container.tasks).toBeDefined()
-    // Environments is opt-in via ENVIRONMENTS_ENABLED (set in the bindings); the shared
-    // key satisfies its credential-cipher requirement.
+    // Environments assembles from the same shared key (no enable flag) — the key satisfies
+    // its credential-cipher requirement, so it's on wherever documents/tasks are.
     expect(container.environments).toBeDefined()
   })
 

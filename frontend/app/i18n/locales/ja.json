@@ -688,12 +688,7 @@
         "urlSource": "推奨される環境 URL ソース: {source}。これはワークスペースのハンドラーが管理します。そちらで設定してください。",
         "namespace": "マニフェストは名前空間「{namespace}」を固定しています。ワークスペースのハンドラーでそれを尊重することを推奨します。",
         "confidenceHigh": "検出",
-        "confidenceLow": "提案",
-        "unavailable": {
-          "title": "エフェメラル環境が有効になっていません",
-          "body": "自動検出はこのリポジトリを読み取ってテスト環境（Kubernetes または Docker Compose）の設定を提案しますが、このデプロイではエフェメラル環境統合が無効になっています。これは GitHub 接続とは別のものです。サーバーを運用している担当者が有効化（ENVIRONMENTS_ENABLED と暗号化キーを設定）すると、自動検出とプロビジョニングが利用できるようになります。",
-          "docs": "エフェメラル環境を有効にする方法"
-        }
+        "confidenceLow": "提案"
       },
       "customManifestPathHint": "タイプを選択すると既定値が自動入力されます。リポジトリ内の既存のマニフェストを探すには「検出」を使用してください。",
       "generateManifest": {
