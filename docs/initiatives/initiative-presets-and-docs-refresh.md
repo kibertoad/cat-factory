@@ -221,7 +221,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | #   | Slice                                                                                                                                                                                                                                                    | Scope  | Status  | PR     |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------ |
 | 0   | This tracker                                                                                                                                                                                                                                             | —      | ✅ done | (this) |
-| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ⬜ todo |        |
+| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ✅ done | #812   |
 | 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ⬜ todo |        |
 | 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ⬜ todo |        |
 | 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ⬜ todo |        |
@@ -254,6 +254,21 @@ Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
   `preset_generic` is the strangler wrapper, not a behaviour change.
 - **Changesets per touched package** (contracts, kernel, orchestration, agents, server, app,
   facades), and any new package rows in README tables per the repo checklist.
+- **[S1] The preset-inputs schemas live in `contracts/src/initiative.ts`, NOT
+  `initiative-preset.ts`** — the entity (`presetInputs`, item `spawn`) references them, and
+  `initiative-preset.ts` imports `initiativeExecutionPolicySchema` back FROM `initiative.ts`, so
+  putting inputs in the preset file would be a runtime valibot import cycle. `initiative-preset.ts`
+  imports the inputs shape from `initiative.js`; there is no reverse import.
+- **[S1] The descriptor's `probe` flag is DERIVED, not author-supplied.** Registrations carry the
+  `detect` code hook; `initiativePresetDescriptors()` (kernel) sets `probe: !!detect` when it
+  serialises for the snapshot (the `supportsTest` convention). Slice 3's snapshot attach should
+  call `initiativePresetDescriptors()`, not read `descriptor.probe` from the registration.
+- **[S1] `preset_generic` is a built-in default the registry always resolves** (even after
+  `clearRegisteredInitiativePresets`), prepended by `allInitiativePresets()` unless a registration
+  overrides its id. `getInitiativePreset('preset_generic')` never returns undefined.
+- **[S1] Create-flow input validation is `validateInitiativePresetInputs(descriptor, inputs)`**
+  (contracts, pure, returns `string[]` — empty ⇒ valid). Slice 3 maps a non-empty result to one
+  `ValidationError`; it already enforces unknown-key/type/options/required-visible/path-safety.
 
 ## Out of scope
 

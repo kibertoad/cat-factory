@@ -100,6 +100,21 @@ export {
   clearRegisteredPipelines,
 } from './domain/pipeline-registry.js'
 
+// Installation-level extension point for initiative PRESETS (mirrors the pipeline / gate
+// registry seams): a preset bundles a create-time form descriptor + planning-pipeline binding
+// + defaults + code hooks (repo-detection prefill, plan post-processor, prompt steering). The
+// built-in `preset_generic` is the strangler default. See `domain/initiative-preset-registry.ts`.
+export {
+  type InitiativePresetRegistration,
+  GENERIC_INITIATIVE_PRESET_ID,
+  registerInitiativePreset,
+  registerInitiativePresets,
+  getInitiativePreset,
+  allInitiativePresets,
+  initiativePresetDescriptors,
+  clearRegisteredInitiativePresets,
+} from './domain/initiative-preset-registry.js'
+
 // Installation-level extension point for custom polling gates + step-completion
 // resolvers (mirrors the agent-kind / pipeline registry seams): a deployment registers
 // its own gate / resolver at startup and the ExecutionService merges them with the

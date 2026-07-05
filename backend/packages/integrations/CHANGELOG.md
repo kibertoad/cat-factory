@@ -1,5 +1,81 @@
 # @cat-factory/integrations
 
+## 0.68.0
+
+### Minor Changes
+
+- f6399cf: feat(environments): stack-recipe detection (shared-stacks initiative, slice 2)
+
+  Extend the deterministic, checkout-free provisioning detector (`provision-detect.logic.ts`) to
+  recognize the STACK RECIPE a complex `docker-compose` repo implies (the lokalise-main pilot),
+  populating the recommendation shape slice 1 added. Still non-binding — nothing is applied beyond
+  the pre-selected base layers; the wizard (slice 7) confirms.
+
+  - **Compose-file layering** — a bare `dev.yml` base is now recognized, and a base file's
+    `<stem>.override.ya?ml` auto-merge sibling is layered into `recipe.composeFiles` while
+    OS-specific overrides (`dev.wsl.override.yml`, `dev.mac.override.yml`) are surfaced as opt-in
+    `composeFileCandidates` annotated with `os` (never auto-layered).
+  - **External networks** — a top-level `networks:` entry flagged `external: true`
+    (or `external: { name }`) → `recipe.externalNetworks` + a nudge to bind it to a shared stack
+    (no `sharedStackRefs` fabricated — stacks arrive in slice 4).
+  - **Env-file materialization** — committed `*-dist` / `*.example` / `*.dist` config templates
+    beside the compose file / in the service's config dirs → `recipe.envFiles` template→target pairs
+    (`.env.dev.local-dist` → `.env.dev.local`, `.split.yaml.dist` → `.split.yaml`); non-config
+    templates like `README.dist` are ignored.
+  - **Profiles** — the union of services' `profiles:` labels → default-off `profileCandidates`
+    (opt-in groups; never written into `recipe.composeProfiles`).
+  - **Seed dumps** — `*.sql` under seed-ish dirs (`deployment/`, `seed/`, …, one level deep) →
+    low-confidence `seedDumpCandidates`, fullest-dump pre-selected, wizard-confirmed into a seed step.
+  - **Repo-CLI hint** — a `bin/*console*` CLI / `Makefile` / `justfile` / `Taskfile` → the report-only
+    `repoCliHint` (the nudge toward the slice-8 environment analyst). Detection never parses shell.
+
+  The compose-doc semantics (`extractExternalNetworks`, `extractComposeProfiles`) live in
+  `compose-environment.logic.ts` so the compose provider (slice 5) reuses the same predicates. When a
+  repo is not recipe-shaped, the recommendation is byte-for-byte the simple single-file output as
+  before. Fixture-driven unit tests cover each extension plus a combined lokalise-main-shaped repo.
+
+## 0.67.1
+
+### Patch Changes
+
+- Updated dependencies [2e4d883]
+  - @cat-factory/contracts@0.101.0
+  - @cat-factory/kernel@0.91.0
+
+## 0.67.0
+
+### Minor Changes
+
+- 773695b: feat(documents): workspace-linked template + exemplar documents per DocKind (doc-task WS1 items 2–4)
+
+  A workspace can now point a document kind at its OWN template and example documents, reusing
+  the existing documents integration end-to-end (no new fetch machinery). A single `role`
+  (`template` | `exemplar`) + `docKind` tag on the projected `documents` row — sitting alongside
+  the block-scoped `linkedBlockId` anchor — models both:
+
+  - **Template** (singular per kind): its parsed section headings REPLACE the built-in skeleton
+    for that kind. Resolved through one shared seam (`resolveDocTemplate`) that BOTH the
+    doc-authoring prompts (via the engine-resolved `block.docTemplateBody`) and the `doc-quality`
+    gate provider go through, so the writer and the gate never check against different sections.
+  - **Exemplars** (multi-valued per kind): "good examples to emulate" surfaced to the author
+    agents alongside a new set of built-in curated exemplars.
+
+  The `documents` table gains nullable `role`/`doc_kind` columns (D1 migration ⇄ Drizzle schema +
+  generated migration), with new `DocumentRepository` role methods mirrored across both stores and
+  asserted by the cross-runtime conformance suite. The Node facade's Drizzle migration is the
+  merge node that collapses the two pre-existing divergent snapshot leaves. New workspace-scoped
+  routes (`GET`/`POST /document-role-links`, `POST /document-role-links/remove`) back a
+  per-DocKind template/exemplar management panel in the Integrations hub (i18n in all 8 locales).
+
+  Breaking (pre-1.0, acceptable): the `documents` projection wire shape gains `role`/`docKind`
+  fields; stale rows simply carry nulls.
+
+### Patch Changes
+
+- Updated dependencies [773695b]
+  - @cat-factory/contracts@0.100.0
+  - @cat-factory/kernel@0.90.0
+
 ## 0.66.1
 
 ### Patch Changes

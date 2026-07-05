@@ -337,6 +337,59 @@ export function hasBuildDirective(service: unknown): boolean {
 }
 
 /**
+ * The external networks a compose doc expects to ALREADY exist — a top-level `networks:` entry
+ * flagged `external: true` (or `external: { name }`). Returns each network's RESOLVED name (the
+ * explicit `name:` on the network def, else the `name:` inside an `external` object, else the map
+ * key), deduped in declaration order. These are created + owned OUTSIDE the per-PR project (by a
+ * SharedStack or the engine — the lokalise `lokalise-net` shape): detection recommends them onto
+ * `recipe.externalNetworks`, and the compose provider (slice 5) attaches the per-PR project to them
+ * as `external: true`. Pure — no I/O.
+ */
+export function extractExternalNetworks(doc: ComposeDoc): string[] {
+  const networks = doc.networks
+  if (!networks || typeof networks !== 'object') return []
+  const names: string[] = []
+  const seen = new Set<string>()
+  for (const [key, def] of Object.entries(networks as Record<string, unknown>)) {
+    if (!def || typeof def !== 'object') continue
+    const d = def as Record<string, unknown>
+    const external = d.external
+    // `external: true` OR `external: { name }` marks the network as pre-existing; `external: false`
+    // (or absent) is a project-owned network we don't touch. An array (or other non-plain-object)
+    // value is malformed and does NOT mark the network external.
+    const externalObject =
+      external !== null && typeof external === 'object' && !Array.isArray(external)
+        ? (external as Record<string, unknown>)
+        : undefined
+    if (external !== true && !externalObject) continue
+    const externalName = externalObject ? optionalString(externalObject.name) : undefined
+    const resolved = optionalString(d.name) ?? externalName ?? key
+    if (!seen.has(resolved)) {
+      seen.add(resolved)
+      names.push(resolved)
+    }
+  }
+  return names
+}
+
+/**
+ * The union of every `profiles:` label declared across the doc's services, deduped + sorted.
+ * Compose profiles gate optional service groups (`COMPOSE_PROFILES`); detection surfaces them
+ * default-OFF as opt-in candidates rather than enabling them. Pure — no I/O.
+ */
+export function extractComposeProfiles(doc: ComposeDoc): string[] {
+  const labels = new Set<string>()
+  for (const service of Object.values(servicesOf(doc))) {
+    if (!service || typeof service !== 'object') continue
+    for (const raw of asArray((service as ComposeService).profiles)) {
+      const label = optionalString(raw)
+      if (label) labels.add(label)
+    }
+  }
+  return [...labels].sort()
+}
+
+/**
  * True when a host path (bind source / env_file / build context / secret-or-config `file:`) would
  * resolve OUTSIDE the cloned checkout — so it stays refused even in build mode (host-filesystem
  * escape); only in-checkout relatives (`./x`, `x`, `x/y`) are allowed. Refused:

@@ -1,4 +1,6 @@
 import * as v from 'valibot'
+import { taskTypeFieldsSchema } from './primitives.js'
+import { agentConfigValuesSchema } from './agent-config.js'
 
 // ---------------------------------------------------------------------------
 // Initiative wire contracts. An Initiative is the longer-running counterpart to
@@ -33,6 +35,39 @@ const idField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIAT
 const titleField = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_TITLE_MAX))
 const proseField = v.pipe(v.string(), v.maxLength(INITIATIVE_PROSE_MAX))
 const shortProseField = v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX))
+
+// ---------------------------------------------------------------------------
+// Initiative-preset inputs. A preset (see `initiative-preset.ts`) bundles a
+// backend-supplied FORM the user fills at create time; the filled values are this
+// bounded JSON record, persisted on the entity (`presetInputs`) and FROZEN after
+// create. Kept HERE (with the entity that persists them, next to the item `spawn`
+// bag) rather than in `initiative-preset.ts` so the entity can reference the shape
+// without a module cycle — the preset descriptor imports these back the other way.
+// ---------------------------------------------------------------------------
+
+/** Bound on a single string / string-array element value in {@link initiativePresetInputsSchema}. */
+export const INITIATIVE_PRESET_INPUT_MAX = 2000
+/** Bound on the number of elements in a `checkbox-group`/multi-value input. */
+export const INITIATIVE_PRESET_INPUT_ARRAY_MAX = 50
+
+/** One filled preset-form value: a scalar (`text`/`select`/`path`/…), a multi-select, a toggle, or a number. */
+export const initiativePresetInputValueSchema = v.union([
+  v.pipe(v.string(), v.maxLength(INITIATIVE_PRESET_INPUT_MAX)),
+  v.pipe(
+    v.array(v.pipe(v.string(), v.maxLength(INITIATIVE_PRESET_INPUT_MAX))),
+    v.maxLength(INITIATIVE_PRESET_INPUT_ARRAY_MAX),
+  ),
+  v.boolean(),
+  v.number(),
+])
+export type InitiativePresetInputValue = v.InferOutput<typeof initiativePresetInputValueSchema>
+
+/** The user's filled preset form — a bounded map from field `key` to its value. */
+export const initiativePresetInputsSchema = v.record(
+  v.pipe(v.string(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX)),
+  initiativePresetInputValueSchema,
+)
+export type InitiativePresetInputs = v.InferOutput<typeof initiativePresetInputsSchema>
 
 /** Lifecycle of a single tracker item (one unit of work → one spawned task). */
 export const initiativeItemStatusSchema = v.picklist([
@@ -122,6 +157,25 @@ export const initiativePhaseSchema = v.object({
 })
 export type InitiativePhase = v.InferOutput<typeof initiativePhaseSchema>
 
+/**
+ * Preset-authored decoration for a spawned task, folded onto the task block by the
+ * execution loop's `buildTaskBlock` (slice 5) so an item comes out as a first-class typed
+ * task rather than a bare description block. Every field is optional and additive:
+ *   - `taskTypeFields` — the per-type block fields (a doc task's `targetPath`/`docKind`, …).
+ *   - `fragmentIds`    — best-practice prompt fragments to stamp on the block.
+ *   - `agentConfig`    — per-agent-kind config values for the spawned pipeline.
+ *   - `gates`          — a per-run gate override (parallel to the pipeline's steps, one
+ *                        boolean each), threaded through the slice-2 gate-override seam.
+ * Emitted by the planner (via the draft item) and/or enforced by a preset's `seedPlan`.
+ */
+export const initiativeItemSpawnSchema = v.object({
+  taskTypeFields: v.optional(taskTypeFieldsSchema),
+  fragmentIds: v.optional(v.array(v.string())),
+  agentConfig: v.optional(agentConfigValuesSchema),
+  gates: v.optional(v.array(v.boolean())),
+})
+export type InitiativeItemSpawn = v.InferOutput<typeof initiativeItemSpawnSchema>
+
 /** One unit of work in the tracker — spawned just-in-time as a task block. */
 export const initiativeItemSchema = v.object({
   id: idField,
@@ -143,6 +197,8 @@ export const initiativeItemSchema = v.object({
   pr: v.optional(v.object({ url: v.string(), number: v.optional(v.number()) })),
   /** Loop/human annotation — e.g. the failure detail that blocked the item. */
   note: v.optional(shortProseField),
+  /** Preset-authored spawn decoration stamped onto the spawned task block (slice 5). */
+  spawn: v.optional(initiativeItemSpawnSchema),
 })
 export type InitiativeItem = v.InferOutput<typeof initiativeItemSchema>
 
@@ -223,6 +279,16 @@ export const initiativeSchema = v.object({
   /** Stable slug naming the in-repo tracker folder (`docs/initiatives/<slug>/`). */
   slug: idField,
   title: titleField,
+  /**
+   * The initiative-preset this initiative was created from (see `initiative-preset.ts`).
+   * Absent ⇒ a preset-less initiative created by an old client / the public API — its
+   * behaviour is byte-for-byte today's (the generic pipeline, human review on). The SPA
+   * picker seeds `preset_generic` for new initiatives, but a preset only ever ADDS context;
+   * nothing in the planning/loop path branches on its presence.
+   */
+  presetId: v.optional(idField),
+  /** The user's filled preset form, FROZEN at create (the `agentConfig` freeze precedent). */
+  presetInputs: v.optional(initiativePresetInputsSchema),
   /** The agreed goal statement (from planning). */
   goal: v.optional(proseField, ''),
   constraints: v.optional(v.array(shortProseField), []),
@@ -266,6 +332,8 @@ export const initiativeDraftItemSchema = v.object({
   dependsOn: v.optional(v.array(idField), []),
   estimate: v.optional(initiativeEstimateSchema),
   pipelineId: v.optional(idField),
+  /** Preset-authored spawn decoration (a `seedPlan` may enforce/override it at ingest). */
+  spawn: v.optional(initiativeItemSpawnSchema),
 })
 export type InitiativeDraftItem = v.InferOutput<typeof initiativeDraftItemSchema>
 
