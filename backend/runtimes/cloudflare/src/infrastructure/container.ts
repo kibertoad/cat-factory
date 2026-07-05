@@ -70,6 +70,14 @@ import {
   ACCOUNT_SETTINGS_CIPHER_INFO,
   createEmailSender,
 } from '@cat-factory/integrations'
+// Opt-in AWS EKS backends (runner + environment), registered by reference on BOTH facades so
+// the runtimes stay symmetric with the native `kubernetes` backend they extend (which likewise
+// rides both). They are pass-throughs until a workspace connects an `eks` backend, and carry NO
+// runtime AWS SDK dependency (the IAM token is minted with WebCrypto, which workerd supports).
+// A real EKS cluster's private-CA apiserver is only reachable from a runtime that can pin a
+// custom CA (Node/local) — exactly like a private-CA `kubernetes` connection — so on the Worker
+// the kind is offered but a connection to such a cluster fails TLS at run time, not silently.
+import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import {
   AgentContextObservabilityService,
   type CoreDependencies,
@@ -2093,6 +2101,12 @@ export function buildContainer(
   // `validateRegistrationsOnce`, and the ServerContainer's snapshot projection; the conformance
   // suite injects a pre-loaded one via `overrides`. Defaults to the built-ins-only registry.
   const agentKindRegistry = overrides.agentKindRegistry ?? defaultAgentKindRegistry()
+
+  // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
+  // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
+  // by `kind`), so a re-used injected registry (the conformance harness) is safe.
+  runnerBackendRegistry.register(eksRunnerBackend)
+  environmentBackendRegistry.register(eksEnvironmentBackend)
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can

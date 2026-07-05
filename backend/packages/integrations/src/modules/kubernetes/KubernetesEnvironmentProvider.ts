@@ -3,6 +3,7 @@ import type {
   ConnectionTestResult,
   DeployProvisionJob,
   EnvironmentConnectionTestRequest,
+  EnvironmentManifest,
   EnvironmentProvider,
   EnvironmentStatus,
   EnvironmentStatusRequest,
@@ -15,6 +16,7 @@ import type {
   RepoFiles,
   RunnerJobView,
   RunRepoContext,
+  SecretResolver,
 } from '@cat-factory/kernel'
 import { KubernetesApiClient, safeText } from './KubernetesApiClient.js'
 import { apiBase, classifyDeploymentReadiness } from './kubernetes.logic.js'
@@ -70,6 +72,27 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   constructor(private readonly options: KubernetesEnvironmentProviderOptions = {}) {}
 
   /**
+   * Parse the stored manifest's `providerConfig` into the concrete K8s config. Overridable so a
+   * subclass (the EKS provider) can parse its own superset config (K8s fields + AWS region /
+   * cluster) while every method below still consumes it through the shared K8s fields.
+   */
+  protected parseConfig(manifest: EnvironmentManifest): KubernetesProvisionConfig {
+    return parseKubernetesEnvConfig(manifest)
+  }
+
+  /**
+   * Build the apiserver client for a request. Overridable so a subclass can inject a different
+   * auth scheme (the EKS provider passes a SigV4/STS token minter) WITHOUT touching any of the
+   * provisioning/status/teardown logic, which stays auth-agnostic.
+   */
+  protected makeClient(
+    config: KubernetesEnvironmentConfig,
+    resolveSecret: SecretResolver,
+  ): KubernetesApiClient {
+    return new KubernetesApiClient(config, resolveSecret)
+  }
+
+  /**
    * Asynchronous, container-backed provisioning for configs the in-Worker REST path can't
    * render (`kustomize`, helm releases, structured image overrides, secret injections). The
    * provider builds the deploy job + maps its outcome; the engine dispatches/polls it.
@@ -80,8 +103,8 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   }
 
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
-    const config = parseKubernetesEnvConfig(req.manifest)
-    const client = new KubernetesApiClient(config, req.resolveSecret)
+    const config = this.parseConfig(req.manifest)
+    const client = this.makeClient(config, req.resolveSecret)
     const { namespace, vars } = this.provisionContext(config, req.inputs)
 
     await this.ensureNamespace(client, config, namespace)
@@ -116,7 +139,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   }
 
   async status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment> {
-    const config = parseKubernetesEnvConfig(req.manifest)
+    const config = this.parseConfig(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) {
       return {
@@ -128,7 +151,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
         fields: {},
       }
     }
-    const client = new KubernetesApiClient(config, req.resolveSecret)
+    const client = this.makeClient(config, req.resolveSecret)
     const status = await this.deploymentStatus(client, config, namespace)
     const url = await this.resolveLiveUrl(client, config, namespace, req.provisionFields)
     return {
@@ -142,10 +165,10 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }> {
-    const config = parseKubernetesEnvConfig(req.manifest)
+    const config = this.parseConfig(req.manifest)
     const namespace = req.provisionFields.namespace ?? req.externalId
     if (!namespace) return { status: 'torn_down' }
-    const client = new KubernetesApiClient(config, req.resolveSecret)
+    const client = this.makeClient(config, req.resolveSecret)
     const res = await client.fetch(
       'DELETE',
       namespaceUrl(config, namespace),
@@ -165,11 +188,11 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     if (!req.manifest) return { ok: false, message: 'Expected a Kubernetes environment manifest.' }
     let config: KubernetesEnvironmentConfig
     try {
-      config = parseKubernetesEnvConfig(req.manifest)
+      config = this.parseConfig(req.manifest)
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }
-    const client = new KubernetesApiClient(config, req.resolveSecret)
+    const client = this.makeClient(config, req.resolveSecret)
     try {
       const res = await client.fetch(
         'GET',
@@ -199,7 +222,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
    * Throws when rendering is required but the engine supplied no deploy inputs (a wiring bug).
    */
   private buildProvisionJob(req: ProvisionEnvironmentRequest): DeployProvisionJob | null {
-    const config: KubernetesProvisionConfig = parseKubernetesEnvConfig(req.manifest)
+    const config: KubernetesProvisionConfig = this.parseConfig(req.manifest)
     if (!needsContainerRender(config)) return null
     const deploy = req.deploy
     if (!deploy) {
@@ -230,7 +253,7 @@ export class KubernetesEnvironmentProvider implements EnvironmentProvider {
     view: RunnerJobView,
     req: ProvisionEnvironmentRequest,
   ): ProvisionedEnvironment {
-    const config = parseKubernetesEnvConfig(req.manifest)
+    const config = this.parseConfig(req.manifest)
     return mapDeployOutcome(view, this.provisionContext(config, req.inputs).vars)
   }
 

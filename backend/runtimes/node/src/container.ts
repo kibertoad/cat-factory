@@ -7,6 +7,12 @@ import {
   resolveAgentConfig,
   isProxyableProvider,
 } from '@cat-factory/agents'
+// Opt-in AWS EKS backends (runner + environment), registered by reference below (the Worker
+// facade registers the same pair, keeping the runtimes symmetric with the native `kubernetes`
+// backend these extend). They are pass-throughs until a workspace actually connects an `eks`
+// backend, and carry NO runtime AWS SDK dependency (the token is minted with WebCrypto), so this
+// adds no cost to a deployment that never uses EKS.
+import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import {
   ConfluenceProvider,
   FigmaProvider,
@@ -1356,6 +1362,16 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
   // are visible) else the built-ins-only default. The SAME instance flows to the executors,
   // createCore and the ServerContainer snapshot projection.
   const agentKindRegistry = options.agentKindRegistry ?? defaultAgentKindRegistry()
+
+  // Register the opt-in AWS EKS backends by reference (the default registries stay AWS-free).
+  // Reuses the native Kubernetes transport/provider behind a minted IAM apiserver token; a
+  // pass-through until a workspace connects an `eks` backend. Registered on BOTH facades (the
+  // Worker registers the same pair in its container build) so the runtimes stay symmetric with
+  // the native `kubernetes` backend these extend — a real EKS cluster's private-CA apiserver is
+  // only reachable from a runtime that can pin a custom CA (Node/local), the same constraint a
+  // private-CA `kubernetes` connection already carries.
+  runnerBackendRegistry.register(eksRunnerBackend)
+  environmentBackendRegistry.register(eksEnvironmentBackend)
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI (no env vars):

@@ -15,6 +15,7 @@
     { "path": "packages/consensus/tsconfig.build.json" },
     { "path": "packages/spend/tsconfig.build.json" },
     { "path": "packages/integrations/tsconfig.build.json" },
+    { "path": "packages/eks/tsconfig.build.json" },
     { "path": "packages/workspaces/tsconfig.build.json" },
     { "path": "packages/agents/tsconfig.build.json" },
     { "path": "packages/gates/tsconfig.build.json" },
