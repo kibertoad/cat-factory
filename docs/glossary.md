@@ -99,6 +99,25 @@ enum — the kinds are string constants across two homes:
   `@cat-factory/agents` under `src/agents/kinds/` + `src/agents/prompts/`.
 - **Custom/registered kinds** — added via `registerAgentKind` (`CLAUDE.md` → "Custom agents").
 
+### Bug-triage step vocabulary
+
+The recurring `pl_bug_triage` pipeline (`BUG_TRIAGE_PIPELINE_ID`, `kernel/src/domain/seed.ts`;
+full design in [`backend/docs/bug-triage-pipeline.md`](../backend/docs/bug-triage-pipeline.md))
+introduces three kinds whose names invite confusion:
+
+- **`bug-intake`** — a one-shot **non-LLM engine step** (like `tracker`), NOT an agent. It is the
+  **inbound dual of `tracker`**: `tracker` FILES a new ticket from an analysis; `bug-intake` PULLS
+  one matching open issue from the schedule's configured tracker board, marks it in-progress, and
+  reseeds the recurring block from it. Config lives on the **schedule** (`issueIntake`), not the
+  pipeline. No matching issue ⇒ the run completes successfully with the rest of the steps skipped.
+- **`bug-investigator`** — a **structured `container-explore`** registered kind (read-only,
+  multi-repo). Its `clarity`/`questions` drive the adjacent `clarity-review` gate; `clear`
+  auto-passes with no human park.
+- **`repro-test`** — a **structured `container-coding`** registered kind that writes a failing
+  reproduction test. Trap: it **SEEDS the shared work branch (`cat-factory/<blockId>`) but does
+  NOT open the PR** (`opensPr: false`); the following `coder` resumes that branch and opens the one
+  PR. A `not_reproducible` concession NEVER fails the run (`noChangesTolerated: true`).
+
 ### D1 ⇄ Drizzle migration parity
 
 Every persisted table has two schemas that must stay in step (`CLAUDE.md` → "Keep the runtimes

@@ -4,7 +4,7 @@ import {
   environmentRequestTemplateSchema,
   environmentSecretRefSchema,
 } from './environments.js'
-import { customBackendKindSchema } from './primitives.js'
+import { customBackendKindSchema, eksClusterFieldsSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Self-hosted runner-pool wire contracts ("bring your own infra").
@@ -208,8 +208,27 @@ export const runnerPoolManifestSchema = v.object({
 })
 export type RunnerPoolManifest = v.InferOutput<typeof runnerPoolManifestSchema>
 
+// ---------------------------------------------------------------------------
+// AWS EKS runner backend.
+//
+// An EKS cluster's apiserver IS a standard Kubernetes apiserver, so the EKS runner backend
+// reuses the ENTIRE native Kubernetes transport (per-run pods over the apiserver pod-proxy)
+// — the only difference is authentication. Instead of a static ServiceAccount bearer token,
+// EKS authenticates with a short-lived IAM token: a SigV4-presigned STS `GetCallerIdentity`
+// URL (the `k8s-aws-v1.` token, ~15 min TTL). So the config is the Kubernetes runner config
+// (apiserver endpoint, CA, namespace, image, sizing) PLUS the AWS `region` + `clusterName`;
+// the AWS credentials ride the secret bundle (`awsAccessKeyId` / `awsSecretAccessKey` /
+// optional `awsSessionToken`). The minting lives in `@cat-factory/eks`.
+// ---------------------------------------------------------------------------
+
+export const eksRunnerConfigSchema = v.object({
+  ...kubernetesRunnerConfigSchema.entries,
+  ...eksClusterFieldsSchema.entries,
+})
+export type EksRunnerConfig = v.InferOutput<typeof eksRunnerConfigSchema>
+
 /** Built-in runner backend kinds the contract knows by name. */
-export const RESERVED_RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes'] as const
+export const RESERVED_RUNNER_BACKEND_KINDS = ['manifest', 'kubernetes', 'eks'] as const
 
 /**
  * The `kind` slug of a CUSTOM (third-party, programmatically-registered) runner backend:
@@ -224,7 +243,8 @@ export const customRunnerBackendKindSchema = customBackendKindSchema(RESERVED_RU
 /**
  * An "agent runner backend" config, discriminated by `kind`. This is the universal
  * abstraction over WHERE repo-operating coding jobs run: the built-ins `manifest` (the BYO
- * HTTP scheduler pool) and `kubernetes` (native per-run pods), plus any CUSTOM kind a
+ * HTTP scheduler pool), `kubernetes` (native per-run pods) and `eks` (native per-run pods on
+ * AWS EKS — the Kubernetes transport behind a minted IAM token), plus any CUSTOM kind a
  * deployment registers by reference into the app-owned `RunnerBackendRegistry` (it rides the
  * generic manifest member — NO new variant needed). Mirrors `environmentBackendConfigSchema`;
  * the provider-registry seam keys on `kind`.
@@ -232,6 +252,7 @@ export const customRunnerBackendKindSchema = customBackendKindSchema(RESERVED_RU
 export const runnerBackendConfigSchema = v.variant('kind', [
   v.object({ kind: v.literal('manifest'), manifest: runnerPoolManifestSchema }),
   v.object({ kind: v.literal('kubernetes'), kubernetes: kubernetesRunnerConfigSchema }),
+  v.object({ kind: v.literal('eks'), eks: eksRunnerConfigSchema }),
   v.object({ kind: customRunnerBackendKindSchema, manifest: runnerPoolManifestSchema }),
 ])
 export type RunnerBackendConfig = v.InferOutput<typeof runnerBackendConfigSchema>

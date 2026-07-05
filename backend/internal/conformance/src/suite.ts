@@ -1,5 +1,6 @@
 import {
   type Block,
+  BUG_TRIAGE_PIPELINE_ID,
   type ExecutionInstance,
   type MergeThresholdPreset,
   type ModelPreset,
@@ -7936,6 +7937,97 @@ export function defineMiscConformance(harness: ConformanceHarness): void {
           { frameId: 'blk_auth', pipelineId: pipeline.body.id, name: 'Nightly', recurrence },
         )
         expect(created.status).toBe(422)
+      })
+
+      // Phase H — the whole built-in `pl_bug_triage` pipeline end to end on a schedule: a fire
+      // pulls one matching issue (bug-intake), investigates it (bug-investigator → clear ⇒ the
+      // clarity gate auto-passes with no park), estimates it (task-estimator), reproduces it
+      // (repro-test), fixes it (coder), reviews it (reviewer), tests it (tester-api, greenlights),
+      // and drives the conflicts/ci/merger tail to an auto-merge. This asserts the SEEDED
+      // definition (`availability: 'recurring'`, the exact step order) drives to completion
+      // identically on every runtime — not a hand-built pipeline. The investigator/repro results
+      // ride ONE lenient superset `customResult`: each structured kind reads only its own fields
+      // (both schemas strip the rest), so the single fake result satisfies both.
+      it('drives the built-in pl_bug_triage pipeline end to end: intake → investigate → repro → fix → merge', async () => {
+        const source = new FakeTaskSourceProvider('jira')
+        source.set('99', {
+          title: 'Checkout crashes on empty cart',
+          labels: ['bug'],
+          status: 'open',
+        })
+        const app = harness.makeApp(
+          {
+            confidence: 1,
+            // A superset of the bug-investigator triage (clear ⇒ auto-pass) and the repro-test
+            // outcome (reproduced) — each kind parses only its own fields.
+            customResult: {
+              clarity: 'clear',
+              summary: 'The checkout handler dereferences an empty cart.',
+              rootCauseHypotheses: ['Missing empty-cart guard in checkout()'],
+              affectedRepos: [],
+              suggestedReproductions: ['POST /checkout with an empty cart'],
+              questions: [],
+              outcome: 'reproduced',
+              testPaths: ['test/checkout.test.ts'],
+              notes: 'Fails for the reported reason (empty-cart dereference).',
+            },
+          },
+          { taskSourceProviders: [source] },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        await app.call('POST', `/workspaces/${wsId}/task-sources/jira/connect`, {
+          credentials: {
+            baseUrl: 'https://acme.atlassian.net',
+            accountEmail: 'd@a.io',
+            apiToken: 't',
+          },
+        })
+
+        // The pipeline is the SEEDED built-in (auto-seeded into every workspace), attached to a
+        // schedule with its issue-intake config — exactly how a real deployment runs it.
+        const created = await app.call<PipelineSchedule>(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines`,
+          {
+            frameId: 'blk_auth',
+            pipelineId: BUG_TRIAGE_PIPELINE_ID,
+            name: 'Nightly bug triage',
+            recurrence,
+            issueIntake: {
+              source: 'jira',
+              board: { jiraProjectKey: 'PROJ' },
+              predicates: { titleFragment: 'crash', labels: ['bug'] },
+            },
+          },
+        )
+        expect(created.status).toBe(201)
+        const blockId = created.body.blockId
+
+        const fired = await app.call(
+          'POST',
+          `/workspaces/${wsId}/recurring-pipelines/${created.body.id}/run-now`,
+        )
+        expect(fired.status).toBe(200)
+
+        const run = (await app.drive(wsId)).find((e) => e.blockId === blockId)
+        // The full pipeline reached an auto-merge (confidence 1) — `done`, every step finished.
+        expect(run?.status).toBe('done')
+        const step = (kind: string) => run?.steps.find((s) => s.agentKind === kind)
+        expect(step('bug-intake')?.output).toContain('99')
+        expect(step('bug-intake')?.skipped).toBeFalsy()
+        // Investigation was `clear`, so the clarity gate auto-passed (no park, run stayed running).
+        expect((step('bug-investigator')?.custom as { clarity?: string })?.clarity).toBe('clear')
+        expect(step('clarity-review')?.state).toBe('done')
+        // The reproduction reproduced and the coder fixed it — both ran, neither blocked the run.
+        expect((step('repro-test')?.custom as { outcome?: string })?.outcome).toBe('reproduced')
+        expect(step('coder')?.state).toBe('done')
+        expect(step('reviewer')?.state).toBe('done')
+        expect(step('merger')?.state).toBe('done')
+        // The reused block was reseeded from the picked issue and finalized `done`.
+        const block = await app.blockRepository().get(wsId, blockId)
+        expect(block?.status).toBe('done')
+        expect(block?.title).toContain('Checkout crashes on empty cart')
       })
 
       it('persists an on-demand schedule (no cadence) and fires it via run-now', async () => {

@@ -361,6 +361,31 @@ importers:
         specifier: 7.0.1-rc
         version: 7.0.1-rc
 
+  backend/packages/eks:
+    dependencies:
+      '@cat-factory/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@cat-factory/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+      '@cat-factory/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.1
+        version: 26.0.1
+      typescript:
+        specifier: 7.0.1-rc
+        version: 7.0.1-rc
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@7.0.1-rc)
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.0.1)(@vitest/coverage-v8@4.1.9)(happy-dom@20.10.6)(msw@2.14.6(@types/node@26.0.1)(typescript@7.0.1-rc))(vite@7.3.5(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.22.4)(yaml@2.9.0))
+
   backend/packages/gates:
     dependencies:
       '@cat-factory/contracts':
@@ -702,6 +727,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/eks':
+        specifier: workspace:*
+        version: link:../../packages/eks
       '@cat-factory/gates':
         specifier: workspace:*
         version: link:../../packages/gates
@@ -839,6 +867,9 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/eks':
+        specifier: workspace:*
+        version: link:../../packages/eks
       '@cat-factory/gates':
         specifier: workspace:*
         version: link:../../packages/gates

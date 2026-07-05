@@ -17,6 +17,34 @@ describe('validatePipelineShape', () => {
     }
   })
 
+  it('the seeded pl_bug_triage pipeline is recurring-only, well-shaped, and estimator-first', () => {
+    const bugTriage = seedPipelines().find((p) => p.id === 'pl_bug_triage')
+    expect(bugTriage, 'pl_bug_triage must be a built-in seed pipeline').toBeTruthy()
+    const kinds = bugTriage!.agentKinds
+    // Structurally valid (the reviewer companion sits adjacent to coder; no invalid gating).
+    expect(() =>
+      validatePipelineShape({
+        agentKinds: kinds,
+        enabled: bugTriage!.enabled,
+        gating: bugTriage!.gating,
+      }),
+    ).not.toThrow()
+    // Recurring-only: a bug-intake step forces `availability: 'recurring'`, so it fires from a
+    // schedule and refuses a one-off manual start.
+    expect(bugTriage!.availability).toBe('recurring')
+    expect(() =>
+      assertPipelineLaunchable(kinds, bugTriage!.availability, 'recurring'),
+    ).not.toThrow()
+    expect(() => assertPipelineLaunchable(kinds, bugTriage!.availability, 'manual')).toThrow()
+    // The task-estimator runs BEFORE any implementation spend (design §6): the estimate is
+    // available to gate the expensive downstream steps (repro-test / coder / reviewer / tester).
+    const estimatorIdx = kinds.indexOf('task-estimator')
+    expect(estimatorIdx).toBeGreaterThanOrEqual(0)
+    for (const spend of ['repro-test', 'coder', 'reviewer', 'tester-api']) {
+      expect(kinds.indexOf(spend)).toBeGreaterThan(estimatorIdx)
+    }
+  })
+
   it('requires a companion to run immediately after a producer it can review', () => {
     expect(() => assertValidCompanionPlacement(['reviewer'])).toThrow()
     // A disabled producer leaves its companion orphaned → rejected.
