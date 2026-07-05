@@ -54,7 +54,10 @@
       "cleared": "Wyczyszczono {name}",
       "destroyed": "Zniszczono {name}"
     },
-    "undo": "Cofnij"
+    "undo": "Cofnij",
+    "back": "Wstecz",
+    "next": "Dalej",
+    "done": "Gotowe"
   },
   "nav": {
     "menu": "Menu nawigacji",
@@ -75,7 +78,8 @@
     "workspaceSettings": "Ustawienia obszaru roboczego",
     "modelConfiguration": "Konfiguracja modelu",
     "accountSettings": "Ustawienia konta",
-    "infrastructure": "Infrastruktura"
+    "infrastructure": "Infrastruktura",
+    "environmentSetup": "Konfiguracja środowiska"
   },
   "board": {
     "toast": {
@@ -697,6 +701,11 @@
           "succeeded": "Manifest wygenerowany i wypchnięty.",
           "failed": "Generowanie manifestu nie powiodło się. Spróbuj ponownie w oknie Infrastruktura."
         }
+      },
+      "envWizard": {
+        "title": "Konfiguracja środowiska Compose",
+        "hint": "Skonfiguruj przepis, kontrole wstępne i handler, aby Deployer udostępnił ten stos.",
+        "open": "Otwórz kreatora"
       }
     },
     "agentConfig": {
@@ -4242,6 +4251,80 @@
       "maxConcurrentField": "Maks. rownoczesnych zadan",
       "defaultPipelineField": "Domyslny pipeline",
       "failed": "Nie udalo sie zaktualizowac inicjatywy"
+    }
+  },
+  "environmentWizard": {
+    "title": "Skonfiguruj środowisko testowe",
+    "subtitle": "Wykryj, przejrzyj i zapisz przepis Docker Compose, aby Deployer go udostępnił.",
+    "recommended": "zalecane",
+    "steps": {
+      "pick": "Wybierz usługę",
+      "review": "Przejrzyj przepis",
+      "preflight": "Kontrole wstępne",
+      "save": "Zapisz"
+    },
+    "pick": {
+      "intro": "Wybierz usługę, dla której skonfigurować środowisko Docker Compose.",
+      "empty": "Brak usług. Najpierw dodaj usługę."
+    },
+    "review": {
+      "detectHint": "Wykryto z repozytorium. Nic nie zostanie zastosowane, dopóki nie zapiszesz.",
+      "detect": "Wykryj ponownie",
+      "noRepo": "Ta usługa nie ma powiązanego repozytorium, więc wykrywanie nie może działać.",
+      "detectError": "Wykrywanie nie powiodło się. Sprawdź połączenie z repozytorium i spróbuj ponownie.",
+      "provenanceTitle": "Skąd pochodzi każde pole",
+      "service": "Udostępniona usługa Compose",
+      "servicePlaceholder": "np. app",
+      "port": "Udostępniony port",
+      "composeFiles": "Pliki Compose",
+      "profiles": "Profile",
+      "seedDumps": "Zrzuty danych",
+      "seedAdd": "Dodaj krok ładowania",
+      "seedAdded": "Dodano",
+      "rawEditor": "Edytuj surowy przepis",
+      "rawApply": "Zastosuj"
+    },
+    "analysis": {
+      "title": "Analiza pogłębiona",
+      "hint": "Uruchom analityka środowiska, aby na podstawie repozytorium naszkicować kroki konfiguracji i bramki kondycji.",
+      "run": "Uruchom analizę",
+      "unavailable": "Analiza pogłębiona wymaga powiązanego repozytorium i potoku analizy.",
+      "failed": "Uruchomienie analizy nie powiodło się.",
+      "apply": "Zastosuj szkic analityka"
+    },
+    "field": {
+      "composeFiles": "Pliki Compose",
+      "composeProfiles": "Profile",
+      "envFiles": "Pliki środowiska",
+      "externalNetworks": "Sieci zewnętrzne",
+      "sharedStackRefs": "Współdzielone stosy",
+      "prerequisites": "Kontrole wstępne",
+      "setupSteps": "Kroki konfiguracji",
+      "healthGate": "Bramka kondycji",
+      "teardownSteps": "Kroki demontażu"
+    },
+    "origin": {
+      "detector": "wykryto",
+      "analyst": "analityk",
+      "both": "wykryto + analityk"
+    },
+    "preflight": {
+      "intro": "Sprawdź wymagania maszyny przed udostępnieniem.",
+      "run": "Uruchom kontrole",
+      "none": "Ten przepis nie deklaruje kontroli wstępnych.",
+      "unavailable": "Kontrole wstępne działają na komputerze lokalnym i nie są dostępne w tym wdrożeniu.",
+      "optional": "opcjonalne"
+    },
+    "save": {
+      "handlerLabel": "Etykieta handlera",
+      "handlerHint": "Handler Docker Compose obszaru roboczego, którego Deployer używa do udostępnienia tego stosu.",
+      "summary": "Zapisuje przepis Docker Compose w „{frame}” (udostępniając usługę „{service}”) i rejestruje handler obszaru roboczego.",
+      "saved": "Zapisano. Deployer udostępni ten stos, gdy uruchomi go potok.",
+      "save": "Zapisz konfigurację"
+    },
+    "trial": {
+      "hint": "Opcjonalnie udostępnij to środowisko teraz, aby przetestować przepis.",
+      "run": "Udostępnienie próbne"
     }
   }
 }

@@ -42,6 +42,7 @@ const github = useGitHubStore()
 const services = useServicesStore()
 const infra = useInfraConfigStore()
 const agentRuns = useAgentRunsStore()
+const ui = useUiStore()
 const { t } = useI18n()
 
 // The custom-manifest-type catalog feeds the `custom` picker. Cheap + shared (coalesced).
@@ -429,6 +430,34 @@ function setSize(value: InstanceSize) {
       <p class="text-[11px] leading-snug text-slate-500">
         {{ t('inspector.testConfig.provisionTypeHint') }}
       </p>
+    </div>
+
+    <!-- Nudge into the guided environment setup wizard for a docker-compose service: the wizard
+         drives detect → review (recipe + analyst draft) → preflight → save so the single Deployer
+         provisions the compose stack, rather than editing the raw path inline. -->
+    <div
+      v-if="provisionType === 'docker-compose'"
+      class="flex items-center justify-between gap-2 rounded border border-primary-800/40 bg-primary-950/20 p-2"
+      data-testid="env-setup-nudge"
+    >
+      <div class="min-w-0">
+        <p class="text-[11px] font-medium text-primary-200/90">
+          {{ t('inspector.testConfig.envWizard.title') }}
+        </p>
+        <p class="text-[11px] leading-snug text-slate-500">
+          {{ t('inspector.testConfig.envWizard.hint') }}
+        </p>
+      </div>
+      <UButton
+        size="xs"
+        variant="soft"
+        color="primary"
+        icon="i-lucide-flask-conical"
+        data-testid="env-setup-nudge-open"
+        @click="ui.openEnvironmentSetup(props.block.id)"
+      >
+        {{ t('inspector.testConfig.envWizard.open') }}
+      </UButton>
     </div>
 
     <!-- Auto-detect a recommended provisioning config from the repo (slice 11). Non-binding:

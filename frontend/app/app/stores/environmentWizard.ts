@@ -133,13 +133,15 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
   const analysisPipeline = computed(() => pipelines.getPipeline(ANALYSIS_PIPELINE_ID))
   const canAnalyze = computed(() => hasRepo.value && analysisPipeline.value !== undefined)
 
-  /** The analyst run for this frame (newest matching instance), read live from the execution store. */
+  /** The analyst run for this frame (newest matching instance), read live from the execution store.
+   *  Filters the full instance list (not the collapsing `getByBlock`, which returns a single run per
+   *  block) so a concurrent non-analyst run on the frame can't mask the analyst pipeline's run. */
   const analystRun = computed(() => {
     const id = frameId.value
     if (!id) return undefined
-    const matching = execution
-      .getByBlock(id)
-      .filter((i) => i.pipelineId === ANALYSIS_PIPELINE_ID)
+    const matching = execution.instances.filter(
+      (i) => i.blockId === id && i.pipelineId === ANALYSIS_PIPELINE_ID,
+    )
     return matching.at(-1)
   })
 
@@ -148,7 +150,8 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
     const run = analystRun.value
     if (!run) return null
     const analystStep = run.steps.find((s) => s.agentKind === ANALYST_AGENT_KIND)
-    if (!analystStep || analystStep.state !== 'done' || analystStep.custom === undefined) return null
+    if (!analystStep || analystStep.state !== 'done' || analystStep.custom === undefined)
+      return null
     const parsed = v.safeParse(analystRecipeDraftSchema, analystStep.custom)
     return parsed.success ? parsed.output : null
   })
@@ -371,7 +374,8 @@ export const useEnvironmentWizardStore = defineStore('environmentWizard', () => 
       })
       saved.value = true
     } catch (err) {
-      saveError.value = apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
+      saveError.value =
+        apiErrorEnvelope(err)?.message ?? (err instanceof Error ? err.message : String(err))
     } finally {
       saving.value = false
     }

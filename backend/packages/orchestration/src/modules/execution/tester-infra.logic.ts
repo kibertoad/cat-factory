@@ -118,14 +118,6 @@ export const TESTER_INFRA_MESSAGES: Record<
   Exclude<TesterInfraDecision, { ok: true }>['reason'],
   string
 > = {
-  'limited-local':
-    "This deployment's container runtime can't run the Tester's local docker-compose infra " +
-    '(no Docker-in-Docker). Mark the service as `infraless`, or run it on a runtime that ' +
-    'supports nested containers, before starting.',
-  'compose-unconfigured':
-    'This service is `docker-compose` but declares no compose path, so the Tester has no ' +
-    'infra to stand up. Set the service’s docker-compose path, or mark it `infraless`, ' +
-    'before starting.',
   'provision-type-unhandled':
     "This workspace has no handler configured for the service's provision type, so the " +
     'Tester has no environment to run against. Configure an infrastructure handler for the ' +

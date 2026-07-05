@@ -63,7 +63,10 @@
     "@clear": {
       "description": "Verb meaning empty / reset a stored value (a config, a saved connection), NOT the adjective 'transparent / obvious'. Used as a destructive-action button label."
     },
-    "undo": "Undo"
+    "undo": "Undo",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done"
   },
   "nav": {
     "menu": "Navigation menu",
@@ -90,7 +93,8 @@
     "configuration": "Configuration",
     "workspaceSettings": "Workspace settings",
     "modelConfiguration": "Model configuration",
-    "accountSettings": "Account settings"
+    "accountSettings": "Account settings",
+    "environmentSetup": "Environment setup"
   },
   "board": {
     "toast": {
@@ -740,6 +744,11 @@
         "namespace": "Manifests pin namespace \"{namespace}\"; recommend honoring it on the workspace handler.",
         "confidenceHigh": "Detected",
         "confidenceLow": "Suggestion"
+      },
+      "envWizard": {
+        "title": "Compose environment setup",
+        "hint": "Configure the recipe, preflights, and handler so the Deployer provisions this stack.",
+        "open": "Open wizard"
       }
     },
     "agentConfig": {
@@ -4360,6 +4369,80 @@
       "maxConcurrentField": "Max concurrent tasks",
       "defaultPipelineField": "Default pipeline",
       "failed": "Could not update the initiative"
+    }
+  },
+  "environmentWizard": {
+    "title": "Set up a test environment",
+    "subtitle": "Detect, review, and save a Docker Compose recipe so the Deployer provisions it.",
+    "recommended": "recommended",
+    "steps": {
+      "pick": "Pick service",
+      "review": "Review recipe",
+      "preflight": "Preflight",
+      "save": "Save"
+    },
+    "pick": {
+      "intro": "Choose the service to set up a Docker Compose environment for.",
+      "empty": "No services yet. Add a service first."
+    },
+    "review": {
+      "detectHint": "Detected from the repository. Nothing is applied until you save.",
+      "detect": "Re-detect",
+      "noRepo": "This service has no linked repository, so detection can't run.",
+      "detectError": "Detection failed. Check the repository connection and try again.",
+      "provenanceTitle": "Where each field came from",
+      "service": "Exposed compose service",
+      "servicePlaceholder": "e.g. app",
+      "port": "Exposed port",
+      "composeFiles": "Compose files",
+      "profiles": "Profiles",
+      "seedDumps": "Seed dumps",
+      "seedAdd": "Add seed step",
+      "seedAdded": "Added",
+      "rawEditor": "Edit raw recipe",
+      "rawApply": "Apply"
+    },
+    "analysis": {
+      "title": "Deep analysis",
+      "hint": "Run the environment analyst to draft setup steps and health gates from the repo.",
+      "run": "Run analysis",
+      "unavailable": "Deep analysis needs a linked repository and the analysis pipeline.",
+      "failed": "The analysis run failed.",
+      "apply": "Apply analyst draft"
+    },
+    "field": {
+      "composeFiles": "Compose files",
+      "composeProfiles": "Profiles",
+      "envFiles": "Env files",
+      "externalNetworks": "External networks",
+      "sharedStackRefs": "Shared stacks",
+      "prerequisites": "Preflights",
+      "setupSteps": "Setup steps",
+      "healthGate": "Health gate",
+      "teardownSteps": "Teardown steps"
+    },
+    "origin": {
+      "detector": "detected",
+      "analyst": "analyst",
+      "both": "detected + analyst"
+    },
+    "preflight": {
+      "intro": "Check machine prerequisites before provisioning.",
+      "run": "Run checks",
+      "none": "This recipe declares no preflight checks.",
+      "unavailable": "Preflight checks run on the local machine and aren't available on this deployment.",
+      "optional": "optional"
+    },
+    "save": {
+      "handlerLabel": "Handler label",
+      "handlerHint": "The workspace's Docker Compose handler the Deployer uses to provision this stack.",
+      "summary": "Saves a Docker Compose recipe onto \"{frame}\" (exposing service \"{service}\") and registers the workspace handler.",
+      "saved": "Saved. The Deployer will provision this stack when a pipeline runs it.",
+      "save": "Save configuration"
+    },
+    "trial": {
+      "hint": "Optionally provision this environment now to test the recipe.",
+      "run": "Trial provision"
     }
   }
 }
