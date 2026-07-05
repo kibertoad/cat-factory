@@ -308,6 +308,17 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     get: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Shared stacks are a workspace-scoped, member-level config library (like merge presets): the
+  // Infrastructure panel lists/creates/edits/deletes them and the board-load snapshot reads them.
+  // All four repository methods take the workspaceId as arg0 — proxied to the mothership like the
+  // other workspace libraries. (The bring-up/teardown LIFECYCLE is a host-Docker service action,
+  // not a repository method, so it never crosses the machine API.)
+  sharedStackRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspace', arg: 0 } },
+    remove: { scope: { kind: 'workspace', arg: 0 } },
+  },
   modelPresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
     // The run-start model resolution (`resolvePresetModelForKind` → the personal-credential

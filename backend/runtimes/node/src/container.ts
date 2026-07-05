@@ -2264,6 +2264,11 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // unconditionally, exactly like the Worker's `selectMergeLifecycleDeps`, so the
     // preset CRUD API + the merger step's threshold resolution work identically.
     mergePresetRepository: repos.mergePresetRepository,
+    // Shared stacks (long-lived compose infra a consumer environment attaches to). Wired
+    // unconditionally like the merge presets so the CRUD API works identically on both
+    // runtimes; the bring-up (`ensureUp`) needs a host daemon, so plain Node has no
+    // `composeRuntime` — the local facade injects one via `overrides.composeRuntime`.
+    sharedStackRepository: repos.sharedStackRepository,
     // Sandbox (parallel prompt/model testing) — contributed as one sandbox-owned mixin,
     // symmetric with the Worker's `...selectSandboxDeps(db)`; the run-driver reuses the
     // reviewer model config below. The container body never enumerates the five repos.

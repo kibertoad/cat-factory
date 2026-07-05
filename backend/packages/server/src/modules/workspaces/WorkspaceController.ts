@@ -290,6 +290,10 @@ export function workspaceController(): Hono<AppEnv> {
       // per-block badges and the task preset picker on load.
       notifications,
       mergePresets,
+      // The workspace's shared stacks (long-lived compose infra a consumer environment
+      // attaches to), so the Infrastructure window renders the library + each stack's
+      // live status on load.
+      sharedStacks,
       // The workspace's model presets (the model→agent mapping library a task picks
       // from), so the board renders the Model Configuration settings + the per-task
       // preset picker on load. `list` seeds the built-in presets (Kimi K2.7 default +
@@ -324,6 +328,7 @@ export function workspaceController(): Hono<AppEnv> {
       container.envConfigRepair?.service.listJobs(workspaceId),
       container.notifications?.service.listOpen(workspaceId),
       container.mergePresets?.service.list(workspaceId),
+      container.sharedStacks?.service.list(workspaceId),
       container.modelPresets?.service.list(workspaceId),
       container.serviceFragmentDefaults?.service.get(workspaceId),
       container.recurring?.service.list(workspaceId),
@@ -376,6 +381,7 @@ export function workspaceController(): Hono<AppEnv> {
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
         ...(redacted.notifications ? { notifications: redacted.notifications } : {}),
         ...(mergePresets ? { mergePresets } : {}),
+        ...(sharedStacks ? { sharedStacks } : {}),
         ...(modelPresets ? { modelPresets } : {}),
         ...(serviceFragmentDefaults ? { serviceFragmentDefaults } : {}),
         ...(recurringPipelines ? { recurringPipelines } : {}),

@@ -380,13 +380,19 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // never registers it. A pre-registered `compose` kind (the conformance harness's fake-runtime
   // backend) wins — the guard keeps this real-daemon registration from clobbering it.
   const localRuntimeId = resolveRuntimeId(env)
+  // The host Docker seam is shared by the compose ENVIRONMENT backend (per-PR preview stacks) and
+  // the SHARED-STACK lifecycle (long-lived infra), so build it once on a Docker-family runtime and
+  // thread it into both — the backend registry here, and the core deps via `overrides.composeRuntime`
+  // below (so `SharedStackService.ensureUp`/`teardown` can drive the daemon).
+  let localComposeRuntime: ReturnType<typeof createDockerComposeRuntime> | undefined
   if (
     runtimeProfile(localRuntimeId).family === 'docker' &&
     !backendRegistries.environmentBackendRegistry.get('compose')
   ) {
     const composeBinary = env.LOCAL_DOCKER_BINARY?.trim() || runtimeProfile(localRuntimeId).binary
+    localComposeRuntime = createDockerComposeRuntime({ binary: composeBinary })
     backendRegistries.environmentBackendRegistry.register(
-      composeEnvironmentBackend(createDockerComposeRuntime({ binary: composeBinary })),
+      composeEnvironmentBackend(localComposeRuntime),
     )
   }
   const poolResolve = buildNodeResolveTransport(
@@ -574,6 +580,13 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       // that isn't registered. Listed BEFORE `...options.overrides` so a caller (the
       // cross-runtime conformance harness) can override it.
       assertAgentBackendConfigured,
+      // Shared-stack bring-up/teardown drives the host Docker daemon, so hand the core deps the
+      // same runtime the compose env backend uses. Only on a Docker-family runtime; absent ⇒ the
+      // lifecycle endpoints refuse (Apple `container` can't nest, like `localDind`).
+      ...(localComposeRuntime ? { composeRuntime: localComposeRuntime } : {}),
+      // Clone a shared stack's repo with the same source-control PAT the agent containers push
+      // with, so a stack whose `cloneUrl` is a PRIVATE repo can be brought up (else public-only).
+      ...(gitToken ? { sharedStackCloneToken: gitToken } : {}),
       ...options.overrides,
       // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
       // explicit test override still wins; in mothership boot there is no `boss`, so this is the

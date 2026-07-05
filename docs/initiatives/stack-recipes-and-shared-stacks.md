@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-main pilot)
 
-**Status:** in progress (slices 1–3 landed = contracts + detection + recipe execution) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–4 landed = contracts + detection + recipe execution + SharedStack) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -192,6 +192,32 @@ lastError, updatedAt }`. New table mirrored D1 ⇄ Drizzle + conformance round-t
 This is the compose analogue of the k8s helm `scope: 'shared'` singleton, and it directly
 models acme-shared-services (one stack per machine/workspace, consumers attach over
 `acme-net`).
+
+> **Landed (slice 4)** — the `SharedStack` entity + CRUD + lifecycle. Contract in
+> `contracts/src/shared-stacks.ts` (`SharedStack` reuses the recipe vocabulary — `composeFiles`
+> / `composeProfiles` / `envFiles` / `setupSteps` / `healthGate` — plus `managedNetworks` +
+> `allowHostCommands`), kernel `SharedStackRepository` port, and the `shared_stacks` table mirrored
+> **D1 (`0041_shared_stacks.sql`) ⇄ Drizzle** with a cross-runtime `defineSharedStackSuite`
+> round-trip (JSON columns + the `allow_host_commands` boolean). `SharedStackService`
+> (`integrations/src/modules/sharedStack/`) owns CRUD (runtime-neutral persistence, wired on ALL
+> facades) + the bring-up: `ensureUp` clones the stack repo, `ensureNetwork`s the managed networks
+> (a new `ComposeRuntime` seam), `up -d` under `COMPOSE_PROFILES`, materializes env files, runs the
+> setup steps + health gate (via the **extracted `recipe-runner.ts`** now shared with
+> `ComposeEnvironmentProvider`), and persists `running`/`failed` + `lastError`; it is idempotent
+> (already-`running` ⇒ no-op) and coalesces concurrent callers onto one in-flight bring-up.
+> `teardown` is `down -v` (explicit — never swept). Controller
+> `GET|POST|PATCH|DELETE /workspaces/:ws/shared-stacks` (+ `ensure-up`/`teardown`); the stack list
+> rides the workspace snapshot; SPA store + a "Shared stacks" panel in the Infrastructure window.
+> **Gotchas for slice 5:** (1) a shared stack runs its committed compose files AS AUTHORED — host
+> ports are KEPT and there is NO isolation rewrite / port-neutralize (it's trusted operator infra,
+> unlike a per-PR preview), so slice 5's consumer-attach must NOT reuse the per-PR
+> `prepareRecipeComposeFiles` path for the stack itself. (2) `ensureUp`/`teardown` need
+> `composeRuntime` — wired only on the local facade via `overrides.composeRuntime`; on Worker/Node
+> the endpoints refuse (persistence still symmetric). (3) `managedNetworks` are created but NOT torn
+> down by `down -v` (they outlive the project, by design — consumers may still be attached);
+> `sharedStackRefs` on a service recipe are still parsed-not-attached — that ensure-first ordering +
+> `external: true` rewrite on the CONSUMER project is exactly slice 5. (4) per-step provisioning-log
+> streaming is a wired-but-unused `SharedStackService.provisioningLog` seam (a clean follow-up).
 
 ### 3. Preflights (machine-prerequisite checks + guided remediation)
 
@@ -386,7 +412,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                  | done   | (this) |
 | 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | done   | (this) |
 | 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | done   | (this) |
-| 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | todo   |        |
+| 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | done   | (this) |
 | 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | todo   |        |
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | todo   |        |
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s                              | todo   |        |

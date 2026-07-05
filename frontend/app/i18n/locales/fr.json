@@ -1990,6 +1990,52 @@
         "removeFailed": "Impossible de supprimer l'entrée du registre"
       }
     },
+    "sharedStacks": {
+      "tab": "Stacks partagés",
+      "intro": "Infrastructure Compose de longue durée (bases de données, brokers, recherche, e-mail) démarrée une fois par espace de travail et réutilisée pour toutes les exécutions et pull requests. Un environnement de test se connecte au réseau géré d'un stack. Démarrer un stack nécessite un déploiement Docker local ; sur les autres backends, vous pouvez tout de même gérer la définition.",
+      "stackNoun": "stack partagé",
+      "status": {
+        "stopped": "Arrêté",
+        "starting": "Démarrage",
+        "running": "En cours d'exécution",
+        "failed": "Échec"
+      },
+      "list": {
+        "heading": "Stacks configurés",
+        "start": "Démarrer",
+        "stop": "Arrêter",
+        "edit": "Modifier",
+        "remove": "Supprimer le stack"
+      },
+      "add": {
+        "heading": "Ajouter un stack partagé",
+        "name": "Nom",
+        "cloneUrl": "URL de clonage du dépôt",
+        "cloneUrlHelp": "Le dépôt git où se trouvent les fichiers Compose du stack.",
+        "gitRef": "Branche ou tag (facultatif)",
+        "composeFiles": "Fichiers Compose",
+        "composeFilesHelp": "Séparés par des virgules, relatifs au dépôt, dans l'ordre de surcharge.",
+        "composeProfiles": "Profils Compose (facultatif)",
+        "managedNetworks": "Réseaux gérés (facultatif)",
+        "managedNetworksHelp": "Réseaux que ce stack crée et possède pour que les consommateurs s'y connectent.",
+        "allowHostCommands": "Autoriser les étapes de configuration par commande hôte",
+        "save": "Ajouter le stack"
+      },
+      "edit": {
+        "heading": "Modifier le stack partagé",
+        "save": "Enregistrer les modifications",
+        "cancel": "Annuler"
+      },
+      "toast": {
+        "created": "Stack partagé ajouté",
+        "createFailed": "Impossible d'ajouter le stack partagé",
+        "updated": "Stack partagé mis à jour",
+        "updateFailed": "Impossible de mettre à jour le stack partagé",
+        "startFailed": "Impossible de démarrer le stack partagé",
+        "stopFailed": "Impossible d'arrêter le stack partagé",
+        "removeFailed": "Impossible de supprimer le stack partagé"
+      }
+    },
     "localMode": {
       "title": "Mode local",
       "intro": "Réglage de l'exécuteur de conteneurs local, stocké sur le déploiement de cette machine (il a remplacé les variables d'environnement {poolVars} / {harnessVars}). L'enregistrement redimensionne le pool à chaud en direct, sans redémarrage nécessaire; les exécutions en cours conservent le conteneur qu'elles détiennent déjà.",
