@@ -1032,6 +1032,8 @@
       "hideInfraAttempts": "Hide infrastructure attempts",
       "executionHistory": "Execution history",
       "hideExecutionHistory": "Hide execution history",
+      "attemptSucceeded": "Succeeded",
+      "outputTruncated": "Output clipped to keep the run history compact.",
       "editingConclusions": "Editing the conclusions",
       "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
       "noProseOutput": "This agent produced no prose output.",

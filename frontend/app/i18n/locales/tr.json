@@ -989,6 +989,8 @@
       "hideInfraAttempts": "Altyapı denemelerini gizle",
       "executionHistory": "Yürütme geçmişi",
       "hideExecutionHistory": "Yürütme geçmişini gizle",
+      "attemptSucceeded": "Başarılı",
+      "outputTruncated": "Yürütme geçmişini derli toplu tutmak için çıktı kırpıldı.",
       "editingConclusions": "Sonuçlar düzenleniyor",
       "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
       "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",

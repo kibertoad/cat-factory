@@ -18,6 +18,7 @@ export type {
   AgentRunKind,
   AgentFailureKind,
   AgentFailure,
+  PriorStepOutput,
   StepApproval,
   StepMetrics,
   LlmCallMetric,

@@ -6,6 +6,7 @@ import type {
   IssueIntakeConfig,
   Pipeline,
   PipelineStep,
+  PriorStepOutput,
   ResolvedFrontendBinding,
   Workspace,
 } from '@cat-factory/contracts'
@@ -16,6 +17,7 @@ import {
   blockStatusSchema,
   executionStatusSchema,
   issueIntakeConfigSchema,
+  priorStepOutputSchema,
   resolvedFrontendBindingSchema,
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
@@ -670,6 +672,8 @@ interface ExecutionDetail {
   initiatedBy: string | null
   /** Failures from prior attempts, oldest→newest (see {@link ExecutionInstance.failureHistory}). */
   failureHistory?: AgentFailure[]
+  /** Successful outputs a restart discarded, oldest→newest (see {@link ExecutionInstance.outputHistory}). */
+  outputHistory?: PriorStepOutput[]
   /** Epoch-ms creation time stamped at run start; absent on legacy rows. */
   createdAt?: number
   /** Run-start non-fatal advisories (see {@link ExecutionInstance.notes}). */
@@ -739,6 +743,15 @@ function parseFailureHistory(list: unknown): AgentFailure[] {
 }
 
 /**
+ * The prior-attempts SUCCESSFUL-output trail packed into `detail`. Tolerant like
+ * {@link parseFailureHistory}: a non-array, or an entry that doesn't match the wire schema, is
+ * dropped rather than bricking the whole snapshot decode (the SPA re-validates the full snapshot).
+ */
+function parseOutputHistory(list: unknown): PriorStepOutput[] {
+  return Array.isArray(list) ? list.filter((o) => is(priorStepOutputSchema, o)) : []
+}
+
+/**
  * The run-start resolved frontend bindings packed into `detail`. Tolerant like the failure
  * parsers: a non-array, or an entry that doesn't match the wire schema, is dropped rather than
  * bricking the whole snapshot decode (the SPA re-validates the full snapshot).
@@ -793,6 +806,9 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     // The prior-attempts error trail rides in `detail` (survives every step upsert and needs
     // no dedicated column); a run that never failed-then-retried simply has none.
     failureHistory: parseFailureHistory(detail.failureHistory),
+    // The prior-attempts successful-output trail rides in `detail` too (same rationale); a run
+    // never restarted past a completed step simply has none.
+    outputHistory: parseOutputHistory(detail.outputHistory),
     // Run-start advisories ride in `detail` too (only present for a frontend UI-test run that
     // had something to flag); tolerate a non-array-of-strings by dropping it.
     ...(Array.isArray(detail.notes) && detail.notes.every((n) => typeof n === 'string')
@@ -827,6 +843,8 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Only persist a non-empty trail (JSON.stringify omits the undefined key), so runs that
     // never failed don't carry an empty array on every write.
     failureHistory: instance.failureHistory?.length ? instance.failureHistory : undefined,
+    // Likewise the successful-output trail: only present once a restart discarded a completed step.
+    outputHistory: instance.outputHistory?.length ? instance.outputHistory : undefined,
     ...(instance.createdAt != null ? { createdAt: instance.createdAt } : {}),
     // Likewise only persist run-start notes when there is something to flag.
     notes: instance.notes?.length ? instance.notes : undefined,

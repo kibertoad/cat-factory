@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // The newest-first list of failed-attempt entries (timestamp + message + hint + collapsible
-// detail), shared by the task-inspector's "previous errors" disclosure (AgentFailureHistory)
-// and the step-detail overlay's per-step "execution history". Presentational only — the caller
-// decides which trail to pass (the whole run's, or one step's) and how to reveal it.
+// detail) behind the task-inspector's "previous errors" disclosure (AgentFailureHistory).
+// Presentational only — the caller decides which trail to pass and how to reveal it. (The
+// step-detail overlay's per-step "execution history" uses StepExecutionHistory instead, which
+// merges these failures with the successful outputs a restart superseded.)
 import type { AgentFailure } from '~/types/domain'
 import FailureDetail from '~/components/board/FailureDetail.vue'
 

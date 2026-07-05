@@ -861,6 +861,26 @@ export const agentFailureSchema = v.object({
 export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
 
 /**
+ * A SUCCESSFUL step attempt whose output a restart later superseded — the positive
+ * complement of {@link agentFailureSchema}. When a run is restarted from a step, that
+ * step and every later one are reset and their `output` dropped; the ones that had
+ * already succeeded are recorded here so the step-detail overlay's "execution history"
+ * surfaces what a superseded attempt PRODUCED, not only the errors. Attributed to a
+ * `stepIndex` exactly like a failure, and rides in the run's `detail` JSON (no column).
+ */
+export const priorStepOutputSchema = v.object({
+  /** Index of the pipeline step that produced this output (see {@link agentFailureSchema} `stepIndex`). */
+  stepIndex: v.number(),
+  /** Epoch ms the superseded attempt finished (its `finishedAt`, else when it was recorded). */
+  occurredAt: v.number(),
+  /** The attempt's prose/JSON output, clipped to a stored-size bound when {@link truncated}. */
+  output: v.string(),
+  /** Whether {@link output} was clipped because the original exceeded the per-entry size bound. */
+  truncated: v.optional(v.boolean()),
+})
+export type PriorStepOutput = v.InferOutput<typeof priorStepOutputSchema>
+
+/**
  * State a polling **gate** step carries (today `ci` and `conflicts`). A gate is
  * special (like a `deployer` step): it is NOT itself an LLM/container agent. It
  * runs a programmatic precheck against a provider (CI check runs / PR mergeability)
@@ -1822,6 +1842,17 @@ export const executionInstanceSchema = v.object({
    * Absent/empty for a run that has never been failed-then-retried.
    */
   failureHistory: v.optional(v.array(agentFailureSchema)),
+  /**
+   * Successful outputs from the run's PRIOR attempts that a restart discarded, oldest→newest —
+   * the positive complement of {@link failureHistory}. A restart-from-step resets the chosen
+   * step and every later one, dropping their `output`; those that had already SUCCEEDED are
+   * recorded here (attributed by `stepIndex`) so the step-detail overlay's execution history
+   * surfaces the successful outputs a restart superseded, not only the errors. Bounded in count
+   * and per-entry size so the run's `detail` JSON doesn't bloat. Absent/empty for a run never
+   * restarted past a completed step (a plain retry re-runs only unfinished steps, so it records
+   * nothing).
+   */
+  outputHistory: v.optional(v.array(priorStepOutputSchema)),
   /**
    * Non-fatal advisories computed once at run start — today the frontend UI-test flow's
    * resolved-binding notes ({@link buildFrontendRunNotes}: duplicate env vars, or a partial-live

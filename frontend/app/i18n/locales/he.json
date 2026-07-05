@@ -989,6 +989,8 @@
       "hideInfraAttempts": "הסתר ניסיונות תשתית",
       "executionHistory": "היסטוריית הרצה",
       "hideExecutionHistory": "הסתר היסטוריית הרצה",
+      "attemptSucceeded": "הצליח",
+      "outputTruncated": "הפלט נקטע כדי לשמור על היסטוריית ההרצה קומפקטית.",
       "editingConclusions": "עריכת המסקנות",
       "editConclusionsPlaceholder": "ערוך את מסקנות הסוכן; העריכות שלך נשמרות כשתאשר…",
       "noProseOutput": "סוכן זה לא הפיק פלט טקסטואלי.",

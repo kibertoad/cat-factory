@@ -6560,6 +6560,8 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(firstRun.steps.map((s) => s.state)).toEqual(['done', 'done'])
         const originalSpec = firstRun.steps[0]!.output
         expect(originalSpec).toContain('[spec-writer]')
+        const originalCoder = firstRun.steps[1]!.output
+        expect(originalCoder).toBeTruthy()
 
         // Restart from the LAST step (coder). The earlier spec-writer is preserved
         // untouched; the coder is reset to re-run. A fresh run id is minted and the
@@ -6579,6 +6581,12 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         // Step 1 was reset (no stale output; re-running, not done).
         expect(restarted.body.steps[1]!.state).not.toBe('done')
         expect(restarted.body.steps[1]!.output).toBeFalsy()
+        // The restart DISCARDED the coder's completed output; rather than losing it, the run
+        // records it in an output history attributed to that step — so the step-detail
+        // execution history can surface superseded SUCCESSFUL outputs, not only failures.
+        expect(restarted.body.outputHistory).toEqual([
+          expect.objectContaining({ stepIndex: 1, output: originalCoder }),
+        ])
 
         const afterCoder = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(afterCoder.status).toBe('done')
@@ -6601,6 +6609,14 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         const afterHead = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(afterHead.status).toBe('done')
         expect(afterHead.steps[0]!.output).toContain(`[desc]${REWORKED}[/desc]`)
+        // The successful-output trail accumulates across restarts and round-trips through the
+        // facade's persistence (it rides the run's `detail` JSON like the failure trail): the
+        // first restart discarded the coder (step 1); the head restart then discarded the re-run
+        // spec-writer (step 0) + coder (step 1) — each attributed to the step that produced it.
+        expect(afterHead.outputHistory?.map((o) => o.stepIndex)).toEqual([1, 0, 1])
+        expect(
+          afterHead.outputHistory?.some((o) => o.stepIndex === 0 && o.output === originalSpec),
+        ).toBe(true)
 
         // An out-of-range step index is rejected (422) rather than stranding the run.
         const bad = await app.call(

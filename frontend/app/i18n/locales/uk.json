@@ -989,6 +989,8 @@
       "hideInfraAttempts": "Приховати спроби інфраструктури",
       "executionHistory": "Історія виконання",
       "hideExecutionHistory": "Приховати історію виконання",
+      "attemptSucceeded": "Успішно",
+      "outputTruncated": "Вивід обрізано, щоб історія виконання залишалася компактною.",
       "editingConclusions": "Редагування висновків",
       "editConclusionsPlaceholder": "Відредагуйте висновки агента; ваші зміни зберігаються після затвердження…",
       "noProseOutput": "Цей агент не створив текстового виводу.",

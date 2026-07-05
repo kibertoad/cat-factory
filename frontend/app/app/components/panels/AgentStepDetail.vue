@@ -11,7 +11,7 @@ import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBind
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
-import FailureHistoryList from '~/components/board/FailureHistoryList.vue'
+import StepExecutionHistory from '~/components/board/StepExecutionHistory.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
@@ -96,6 +96,16 @@ const stepFailures = computed(() => {
   if (instance.value?.failure) trail.push(instance.value.failure)
   return trail.filter((f) => f.stepIndex === idx)
 })
+// The positive complement of the failure trail: the SUCCESSFUL outputs a restart discarded
+// for THIS step (each carries the `stepIndex` that produced it), so the history surfaces what
+// superseded attempts produced — not only errors. Merged with `stepFailures` in the timeline.
+const stepOutputs = computed(() => {
+  const idx = ctx.value?.stepIndex
+  if (idx == null) return []
+  return (instance.value?.outputHistory ?? []).filter((o) => o.stepIndex === idx)
+})
+// Whether this step has ANY prior-attempt history (successful outputs and/or failures).
+const hasStepHistory = computed(() => stepFailures.value.length > 0 || stepOutputs.value.length > 0)
 const showHistory = ref(false)
 
 // A failed run is no longer executing: a step left mid-flight (state still
@@ -439,10 +449,10 @@ async function copyOutput() {
                 />
               </div>
 
-              <!-- this step's failure trail (the run-level history narrowed to this step),
-                   behind a toggle — mirrors the "previous errors" history on the task inspector
-                   but scoped to the step the user is looking at -->
-              <div v-if="stepFailures.length">
+              <!-- this step's execution history (the run-level trail narrowed to this step),
+                   behind a toggle — a merged timeline of the SUCCESSFUL outputs a restart
+                   superseded and the FAILED attempts, scoped to the step being looked at -->
+              <div v-if="hasStepHistory">
                 <UButton
                   :icon="showHistory ? 'i-lucide-chevron-up' : 'i-lucide-history'"
                   variant="ghost"
@@ -460,10 +470,11 @@ async function copyOutput() {
                       : t('panels.stepDetail.executionHistory')
                   }}
                 </UButton>
-                <FailureHistoryList
+                <StepExecutionHistory
                   v-if="showHistory"
                   class="mt-2"
                   :failures="stepFailures"
+                  :outputs="stepOutputs"
                   data-testid="step-execution-history"
                 />
               </div>
