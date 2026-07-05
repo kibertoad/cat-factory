@@ -72,7 +72,12 @@ export function webSearchProxyController(): Hono<AppEnv> {
 
     // Budget gate: a run that has exhausted its workspace's spend budget can't keep
     // spending on searches either (searches cost money on metered providers).
-    if (await spendService.isOverBudget(session.workspaceId)) {
+    if (
+      await spendService.isOverBudget(session.workspaceId, {
+        accountId: session.accountId,
+        userId: session.userId,
+      })
+    ) {
       logger.warn(
         { scope: 'webSearchProxy', workspaceId: session.workspaceId },
         'web-search proxy: spend budget exhausted — refusing search',

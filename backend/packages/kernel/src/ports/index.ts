@@ -441,6 +441,7 @@ export type {
 export type { MergePresetRepository } from './merge-preset-repositories.js'
 export type { SharedStackRepository } from './shared-stack-repositories.js'
 export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
+export type { UserSettingsRepository } from './user-settings-repositories.js'
 export type {
   SandboxPromptVersionRepository,
   SandboxFixtureRepository,

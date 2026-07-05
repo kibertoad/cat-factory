@@ -23,6 +23,15 @@ export type AccountRole = v.InferOutput<typeof accountRoleSchema>
 export const accountRolesSchema = v.pipe(v.array(accountRoleSchema), v.minLength(1))
 export type AccountRoles = v.InferOutput<typeof accountRolesSchema>
 
+/**
+ * A monthly spend budget limit in the base pricing currency. `0` is valid and
+ * means "no PAID spend" (same semantics as the per-workspace limit). Shared by the
+ * account and user budget tiers. An operator-configured env cap
+ * (`BUDGET_MAX_MONTHLY_PER_ACCOUNT` / `BUDGET_MAX_MONTHLY_PER_USER`) additionally
+ * ceilings whatever value the UI submits.
+ */
+export const monthlyBudgetLimitSchema = v.pipe(v.number(), v.minValue(0))
+
 /** An account as exposed to clients, annotated with the caller's role in it. */
 export const accountSchema = v.object({
   id: v.string(),
@@ -39,6 +48,13 @@ export const accountSchema = v.object({
    * (`cloudflare`).
    */
   defaultCloudProvider: v.optional(cloudProviderSchema),
+  /**
+   * The account-tier monthly spend budget (base pricing currency). Null ⇒ no
+   * account-level limit configured; the effective account budget then falls back to
+   * the operator env cap (`BUDGET_MAX_MONTHLY_PER_ACCOUNT`) if set, else unlimited.
+   * See the tiered-budgets initiative.
+   */
+  spendMonthlyLimit: v.optional(v.nullable(monthlyBudgetLimitSchema)),
 })
 export type Account = v.InferOutput<typeof accountSchema>
 
@@ -65,9 +81,11 @@ export const createAccountSchema = v.object({
 })
 export type CreateAccountInput = v.InferOutput<typeof createAccountSchema>
 
-/** Update an account's settings (today: its default cloud provider for new services). */
+/** Update an account's settings (default cloud provider + account-tier budget). */
 export const updateAccountSchema = v.object({
   defaultCloudProvider: v.optional(cloudProviderSchema),
+  /** Account-tier monthly budget; `null` clears the override, absent leaves it. */
+  spendMonthlyLimit: v.optional(v.nullable(monthlyBudgetLimitSchema)),
 })
 export type UpdateAccountInput = v.InferOutput<typeof updateAccountSchema>
 

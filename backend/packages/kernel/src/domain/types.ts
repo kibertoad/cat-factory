@@ -354,6 +354,9 @@ export type {
   UpdateWorkspaceSettingsInput,
   TaskLimitMode,
   TaskLimitPerType,
+  // Per-user settings (the user-tier spend budget).
+  UserSettings,
+  UpdateUserSettingsInput,
   // Slack integration shapes (Slack as an extra notification transport).
   SlackConnection,
   SlackRoute,

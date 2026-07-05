@@ -26,6 +26,35 @@ export interface SpendPricing {
   prices: Record<string, ModelPrice>
   /** Fallback price for any model without a specific or provider-level entry. */
   defaultPrice: ModelPrice
+  /**
+   * Operator hard ceiling on the ACCOUNT-tier monthly budget, from the deployment env
+   * var `BUDGET_MAX_MONTHLY_PER_ACCOUNT`. Undefined ⇒ no operator ceiling. When set it
+   * caps whatever value the UI submits AND acts as the effective account budget when no
+   * account limit is configured. See the tiered-budgets initiative.
+   */
+  accountMonthlyLimitCap?: number
+  /**
+   * Operator hard ceiling on the USER-tier monthly budget, from the deployment env var
+   * `BUDGET_MAX_MONTHLY_PER_USER`. Undefined ⇒ no operator ceiling. Same double duty as
+   * {@link accountMonthlyLimitCap}.
+   */
+  userMonthlyLimitCap?: number
+}
+
+/**
+ * The effective monthly limit for a budget tier: the smaller of the tier's configured
+ * limit and the operator env cap, treating an absent value as "no constraint". Returns
+ * `Infinity` when neither is set — the tier is inactive and never gates. `0` is a real
+ * limit ("no paid spend"), not "absent", so it is respected.
+ */
+export function effectiveTierLimit(
+  configured: number | null | undefined,
+  cap: number | null | undefined,
+): number {
+  const values: number[] = []
+  if (configured != null) values.push(configured)
+  if (cap != null) values.push(cap)
+  return values.length > 0 ? Math.min(...values) : Number.POSITIVE_INFINITY
 }
 
 /**
@@ -137,6 +166,7 @@ export function mergeSpendPricing(
 ): SpendPricing {
   if (!overrides) return base
   return {
+    ...base,
     currency: overrides.spendCurrency ?? base.currency,
     monthlyLimit: overrides.spendMonthlyLimit ?? base.monthlyLimit,
     prices: base.prices,
@@ -177,6 +207,26 @@ export function estimateCost(pricing: SpendPricing, ref: ModelRef, usage: AgentT
     (usage.inputTokens / 1_000_000) * price.inputPerMillion +
     (usage.outputTokens / 1_000_000) * price.outputPerMillion
   )
+}
+
+/**
+ * Build the env-driven operator budget-cap overlay for a {@link SpendPricing}. Each cap
+ * is applied only when it is a non-negative number; a missing/invalid value leaves that
+ * tier uncapped. Shared by the Node and Cloudflare config loaders so both runtimes read
+ * `BUDGET_MAX_MONTHLY_PER_ACCOUNT` / `BUDGET_MAX_MONTHLY_PER_USER` identically.
+ */
+export function budgetCapsOverlay(
+  accountCap: number | undefined,
+  userCap: number | undefined,
+): Partial<Pick<SpendPricing, 'accountMonthlyLimitCap' | 'userMonthlyLimitCap'>> {
+  const overlay: Partial<Pick<SpendPricing, 'accountMonthlyLimitCap' | 'userMonthlyLimitCap'>> = {}
+  if (accountCap != null && Number.isFinite(accountCap) && accountCap >= 0) {
+    overlay.accountMonthlyLimitCap = accountCap
+  }
+  if (userCap != null && Number.isFinite(userCap) && userCap >= 0) {
+    overlay.userMonthlyLimitCap = userCap
+  }
+  return overlay
 }
 
 /** Start of the calendar month containing `epochMs`, in UTC (epoch ms). */

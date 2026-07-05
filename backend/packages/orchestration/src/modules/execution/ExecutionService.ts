@@ -1251,7 +1251,8 @@ export class ExecutionService {
     agentKinds: readonly string[],
     initiatedBy: string | null | undefined,
   ): Promise<void> {
-    if (!(await this.spend.isOverBudget(workspaceId))) return
+    const accountId = await this.workspaceRepository.accountOf(workspaceId)
+    if (!(await this.spend.isOverBudget(workspaceId, { accountId, userId: initiatedBy }))) return
     if (!this.resolveProviderCapabilities) return
     const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
     const ids: (string | undefined)[] = []
@@ -1269,12 +1270,10 @@ export class ExecutionService {
       ids.push(undefined)
     }
     if (!ids.some((id) => this.modelIdIsMetered(id, caps))) return
-    const status = await this.spend.status(workspaceId)
     throw new ConflictError(
-      `This workspace has reached its spend budget (${status.costSpent.toFixed(2)}/` +
-        `${status.costLimit.toFixed(2)} ${status.currency}). New runs on metered models are ` +
-        'paused until the budget is raised (Workspace settings → Budget) or the billing period ' +
-        'resets. A task pinned to a local model or a connected subscription still runs.',
+      'This run has reached a spend budget (workspace, account, or user). New runs on metered ' +
+        'models are paused until the budget is raised or the billing period resets. A task pinned ' +
+        'to a local model or a connected subscription still runs.',
     )
   }
 
@@ -1753,7 +1752,13 @@ export class ExecutionService {
     // to the budget, so it must not be held hostage by a budget other (metered) models
     // exhausted. This is what lets a deliberately local-only / subscription-only workspace
     // keep running at a `0` budget (see the spend-budget docs).
-    if (await this.spend.isOverBudget(workspaceId)) {
+    const budgetAccountId = await this.workspaceRepository.accountOf(workspaceId)
+    if (
+      await this.spend.isOverBudget(workspaceId, {
+        accountId: budgetAccountId,
+        userId: instance.initiatedBy,
+      })
+    ) {
       if (!(await this.runDispatcher.currentStepIsNonMetered(workspaceId, instance, step))) {
         if (instance.status !== 'paused') {
           instance.status = 'paused'

@@ -86,6 +86,7 @@ import type {
 import type {
   MergePresetRepository,
   SharedStackRepository,
+  UserSettingsRepository,
   WorkspaceSettingsRepository,
   ModelPresetRepository,
   ServiceFragmentDefaultsRepository,
@@ -192,6 +193,7 @@ import { MergePresetService } from './modules/merge/MergePresetService.js'
 import { SandboxService } from './modules/sandbox/SandboxService.js'
 import { SandboxRunService } from './modules/sandbox/SandboxRunService.js'
 import { WorkspaceSettingsService } from './modules/settings/WorkspaceSettingsService.js'
+import { UserSettingsService } from './modules/settings/UserSettingsService.js'
 import { ReleaseHealthService } from './modules/releaseHealth/ReleaseHealthService.js'
 import { PackageRegistryService } from './modules/packageRegistries/PackageRegistryService.js'
 import { PreviewService, type BuildPreviewJob } from './modules/preview/PreviewService.js'
@@ -817,6 +819,11 @@ export interface CoreDependencies {
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
   /**
+   * Stores per-user settings (today: the user-tier spend budget). Wired by every
+   * persistence-backed facade; absent → the user budget tier is inert (tests/conformance).
+   */
+  userSettingsRepository?: UserSettingsRepository
+  /**
    * Stores a workspace's model presets (the named model→agent mappings a task picks
    * from; each is a base model applied to every agent kind plus per-kind overrides).
    * Optional and default-off: absent → the `modelPresets` module isn't assembled and
@@ -1034,6 +1041,11 @@ export interface WorkspaceSettingsModule {
   service: WorkspaceSettingsService
 }
 
+/** The per-user-settings feature's service, present only when its repository is wired. */
+export interface UserSettingsModule {
+  service: UserSettingsService
+}
+
 /** The model-preset feature's service, present only when its repository is wired. */
 export interface ModelPresetsModule {
   service: ModelPresetService
@@ -1156,6 +1168,8 @@ export interface Core {
   sandbox?: SandboxModule
   /** Present only when the workspace-settings repository is wired (see CoreDependencies). */
   settings?: WorkspaceSettingsModule
+  /** Present only when the per-user-settings repository is wired (see CoreDependencies). */
+  userSettings?: UserSettingsModule
   /** Present only when the model-preset repository is wired (see CoreDependencies). */
   modelPresets?: ModelPresetsModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
@@ -2328,12 +2342,19 @@ export function createCore(dependencies: CoreDependencies): Core {
     repoProjectionCache: caches.repoProjection,
   })
   const workspaceService = new WorkspaceService(dependencies)
+  // Late-bound so the account service can invalidate the spend service's cached
+  // account-budget limit on an account-budget edit (spendService is built below).
+  let spendServiceRef: SpendService | undefined
   const accountService = new AccountService({
     accountRepository: dependencies.accountRepository,
     membershipRepository: dependencies.membershipRepository,
     userRepository: dependencies.userRepository,
     idGenerator: dependencies.idGenerator,
     clock: dependencies.clock,
+    onAccountBudgetChanged: (accountId) => spendServiceRef?.invalidateAccountLimit(accountId),
+    // Reject an account budget above the operator cap on write (late-bound: spendService
+    // is built below, and the cap is a static deployment fact once it is).
+    resolveAccountBudgetCap: () => spendServiceRef?.budgetCaps().accountMonthlyLimitMax,
   })
   const userService = new UserService({
     userRepository: dependencies.userRepository,
@@ -2380,8 +2401,21 @@ export function createCore(dependencies: CoreDependencies): Core {
     clock: dependencies.clock,
     pricing: dependencies.spendPricing ?? DEFAULT_SPEND_PRICING,
     workspaceSettingsRepository: dependencies.workspaceSettingsRepository,
+    accountRepository: dependencies.accountRepository,
+    userSettingsRepository: dependencies.userSettingsRepository,
     dynamicPricesFor: dependencies.dynamicModelPricesFor,
   })
+  spendServiceRef = spendService
+  const userSettings: UserSettingsModule | undefined = dependencies.userSettingsRepository
+    ? {
+        service: new UserSettingsService({
+          userSettingsRepository: dependencies.userSettingsRepository,
+          onUserBudgetChanged: (userId) => spendService.invalidateUserLimit(userId),
+          // Reject a user budget above the operator cap on write.
+          resolveUserBudgetCap: () => spendService.budgetCaps().userMonthlyLimitMax,
+        }),
+      }
+    : undefined
   const llmObservability = dependencies.llmCallMetricRepository
     ? new LlmObservabilityService({
         llmCallMetricRepository: dependencies.llmCallMetricRepository,
@@ -2664,6 +2698,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     ...(preflight ? { preflight } : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(settings ? { settings } : {}),
+    ...(userSettings ? { userSettings } : {}),
     ...(releaseHealth ? { releaseHealth } : {}),
     ...(packageRegistries ? { packageRegistries } : {}),
     ...(preview ? { preview } : {}),

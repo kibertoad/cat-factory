@@ -224,6 +224,7 @@ import {
   D1SandboxGradeRepository,
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
+import { D1UserSettingsRepository } from './repositories/D1UserSettingsRepository'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
@@ -698,6 +699,7 @@ function selectMergeLifecycleDeps(
     // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".
     sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
+    userSettingsRepository: new D1UserSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
