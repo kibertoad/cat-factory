@@ -8,6 +8,7 @@ import type {
   DeployCloneTarget,
   DeployProvisionInputs,
   DeployProvisionJob,
+  EnvironmentFailureReason,
   EnvironmentManifest,
   EnvironmentProvider,
   InfraEngine,
@@ -323,15 +324,19 @@ export class EnvironmentProvisioningService {
       return { kind: 'completed', handle }
     }
     if (!this.deps.deployJobClient) {
+      // Provider-agnostic on purpose: ANY provider whose config needs a container-backed render
+      // (Kubernetes today; a future Nomad/custom provider tomorrow) reaches here, so the message
+      // names the runtime-neutral transport remedies, not one provider's CLIs. The SPA keys its
+      // runtime-/provider-specific hint off the `deploy_runner_unwired` reason instead.
       const message =
-        'This service provisions its environment with a container-based render ' +
-        '(real kubectl / kustomize / helm), but this deployment has no deploy runner wired to ' +
-        'run it. Configure a deploy backend for this deployment — a self-hosted runner pool ' +
-        '(Node), the LOCAL_DEPLOY_RUNTIME env (local mode), or the DeployContainer binding ' +
-        '(Cloudflare) — or switch this service to raw manifests, which provision with no ' +
-        'deploy container.'
+        "This service's environment provider needs a container-backed deploy to render and " +
+        'apply its manifests, but this deployment has no deploy runner wired to run it. ' +
+        'Configure a deploy backend for this deployment — a self-hosted runner pool (Node), the ' +
+        'LOCAL_DEPLOY_RUNTIME env (local mode), or the DeployContainer binding (Cloudflare) — or ' +
+        'use an environment config that provisions without a deploy container.'
       await this.captureProvisionFailure(args, resolved, message)
-      throw new ValidationError(message)
+      const reason: EnvironmentFailureReason = 'deploy_runner_unwired'
+      throw new ValidationError(message, { reason })
     }
     try {
       await this.deps.deployJobClient.dispatch(

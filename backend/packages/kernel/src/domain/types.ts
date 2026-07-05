@@ -138,6 +138,7 @@ export type {
   KubernetesProvisionConfig,
   // Per-service provision type + per-type infra handlers (the what/where ÷ how split).
   ProvisionType,
+  EnvironmentFailureReason,
   InfraEngine,
   ManifestId,
   ServiceProvisioning,

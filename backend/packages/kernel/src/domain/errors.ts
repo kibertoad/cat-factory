@@ -30,8 +30,13 @@ export class NotFoundError extends DomainError {
 
 /** Structurally valid but violates a domain rule (→ 422). */
 export class ValidationError extends DomainError {
-  constructor(message: string) {
-    super('validation', message)
+  constructor(
+    message: string,
+    /** Optional machine-readable context (e.g. a `reason` code) the engine or facade can react
+     *  to precisely — mirrors {@link DomainError.details}. */
+    details?: Record<string, unknown>,
+  ) {
+    super('validation', message, details)
   }
 }
 
@@ -97,4 +102,17 @@ export function assertFound<T>(value: T | null | undefined, entity: string, id: 
 /** Extract a human-readable message from an unknown thrown value. */
 export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Extract a {@link DomainError}'s machine-readable `reason` code (under `details.reason`) from an
+ * unknown thrown value, else undefined — the read-side dual of the `reason` a `ConflictError` /
+ * `ValidationError` carries, so an engine catch can propagate it (onto a run's `AgentFailure.reason`)
+ * without string-matching the message.
+ */
+export function getErrorReason(error: unknown): string | undefined {
+  if (error instanceof DomainError && typeof error.details?.reason === 'string') {
+    return error.details.reason
+  }
+  return undefined
 }

@@ -4,6 +4,7 @@
 // the unified retry through the agentRuns store, so every surface (board card,
 // inspector, task panel) gets identical behaviour from one place. Replaces the
 // three hand-rolled bootstrap banners that used to duplicate this logic.
+import type { EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import FailureDetail from '~/components/board/FailureDetail.vue'
 
@@ -16,6 +17,7 @@ const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
 const ui = useUiStore()
 const auth = useAuthStore()
+const board = useBoardStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
@@ -26,12 +28,26 @@ const isEnvironmentFailure = computed(() => failure.value?.kind === 'environment
 function openEnvironmentConfig() {
   ui.openProviderConnection('environment')
 }
-// In local mode the deploy runtime is an env-var (not a UI connection), so the Infrastructure
-// tab can't fix a "no deploy runner wired" failure — surface the concrete `.env` fix inline
-// instead of only linking to a tab that won't help. The env-var names are literal examples, so
-// they're passed as interpolation params (kept out of the catalog, per the i18n rules).
+
+// The provision type of the failed run's SERVICE frame (walk up to the frame, mirroring the
+// backend's `resolveServiceProvisioning`). Drives the K8s-specific gate below.
+const provisionType = computed(() => {
+  const block = board.getBlock(props.run.blockId)
+  return block ? board.serviceOf(block)?.provisioning?.type : undefined
+})
+
+// The env-var hint is Kubernetes+local specific, so gate it precisely rather than showing it for
+// every environment failure: only for the machine-readable `deploy_runner_unwired` cause (NOT a
+// helm/apply error or a transient blip), only in local mode (where the deploy runtime is an env
+// var, not a UI connection the tab could fix), and only for a `kubernetes` provision (so a future
+// Nomad/custom provider triggering the same cause never shows kubectl/kustomize/helm guidance).
+const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
 const showEnvironmentLocalHint = computed(
-  () => isEnvironmentFailure.value && auth.localMode?.enabled === true,
+  () =>
+    isEnvironmentFailure.value &&
+    auth.localMode?.enabled === true &&
+    failure.value?.reason === DEPLOY_RUNNER_UNWIRED &&
+    provisionType.value === 'kubernetes',
 )
 const title = computed(() => {
   // A `dispatch` failure means the container/runner never accepted the job — say so

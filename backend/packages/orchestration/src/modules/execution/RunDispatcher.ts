@@ -43,6 +43,7 @@ import {
   ConflictError,
   DEFAULT_MERGE_PRESET,
   getErrorMessage,
+  getErrorReason,
   DOC_INTERVIEWER_AGENT_KIND,
   getProvider,
   INITIATIVE_ANALYST_AGENT_KIND,
@@ -1495,6 +1496,9 @@ export class RunDispatcher {
         next,
         null,
         getErrorMessage(error),
+        // Propagate the provider's machine-readable cause (e.g. `deploy_runner_unwired`) so the
+        // SPA can render precise, runtime-specific guidance rather than string-matching the prose.
+        getErrorReason(error),
       )
     }
     if (dispatch.kind === 'completed') {
@@ -1670,11 +1674,13 @@ export class RunDispatcher {
     target: DeployTarget,
     url: string | null | undefined,
     error: string,
+    /** Machine-readable cause (e.g. `deploy_runner_unwired`) carried to the failure record. */
+    reason?: string,
   ): Promise<AdvanceResult> {
     const done = step.deployEnvs ?? {}
     step.deployEnvs = { ...done, [target.frameId]: { status: 'failed', url: url ?? null, error } }
     if (target.isPrimary) {
-      return this.failDeployerStep(workspaceId, instance, step, target.frameId, error)
+      return this.failDeployerStep(workspaceId, instance, step, target.frameId, error, reason)
     }
     // A PEER failure is non-terminal — persist it BEFORE moving to the next frame so a replay
     // doesn't re-attempt this failed peer (same rationale as the ready/infraless settle paths).
@@ -1977,6 +1983,9 @@ export class RunDispatcher {
     step: PipelineStep,
     frameId: string,
     message: string,
+    /** Machine-readable cause (e.g. `deploy_runner_unwired`) surfaced on the failure so the SPA
+     *  renders precise guidance without string-matching the prose. */
+    reason?: string,
   ): Promise<AdvanceResult> {
     // Project the FAILED frame's env (so its `lastError` renders in the Environment panel) — for a
     // single-frame deploy that is the own env; for a failed involved-service env it surfaces the
@@ -1989,6 +1998,7 @@ export class RunDispatcher {
       error: 'Environment provisioning failed.',
       failureKind: 'environment',
       detail: message,
+      ...(reason ? { reason } : {}),
     }
   }
 

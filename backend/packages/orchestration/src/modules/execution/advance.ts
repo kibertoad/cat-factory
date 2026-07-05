@@ -30,12 +30,19 @@ export type AdvanceResult =
    * unparseable companion verdict → `'companion_rejected'`, a Tester gate that
    * exhausted its fixer budget → `'agent'`) and may attach extended `detail` (e.g.
    * the companion's raw reply); the driver records those instead of the generic
-   * `'job_failed'` container-failure framing. Defaults: `failureKind` →
-   * `'job_failed'`, `detail` → none. Inline gates MUST NOT call `failRun`
-   * themselves — returning this is the single path so the driver can't double-write
-   * and clobber the rich record.
+   * `'job_failed'` container-failure framing. `reason` is an optional machine-readable
+   * cause code (e.g. an environment failure's `deploy_runner_unwired`) the SPA maps to
+   * precise guidance. Defaults: `failureKind` → `'job_failed'`, `detail`/`reason` → none.
+   * Inline gates MUST NOT call `failRun` themselves — returning this is the single path so
+   * the driver can't double-write and clobber the rich record.
    */
-  | { kind: 'job_failed'; error: string; failureKind?: AgentFailureKind; detail?: string }
+  | {
+      kind: 'job_failed'
+      error: string
+      failureKind?: AgentFailureKind
+      detail?: string
+      reason?: string
+    }
   /**
    * A polled async job's container was evicted/crashed and the single automatic
    * recovery (a fresh-container re-dispatch of the same step) has been spent, so the
