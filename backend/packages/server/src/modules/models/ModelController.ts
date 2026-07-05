@@ -35,7 +35,20 @@ export function modelController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const userId = c.get('user')?.id
-    const caps = await resolveWorkspaceCapabilities(container, workspaceId, userId)
+    // Spread the container (it structurally supplies apiKeys/subscriptions/localModels/…),
+    // then add the model-policy inputs: the account-settings SERVICE (the container exposes
+    // it as a `{ service }` module), the workspace→account resolver, and the deployment's
+    // support flag. The account read is cached via `container.caches.accountModelPolicy`.
+    const caps = await resolveWorkspaceCapabilities(
+      {
+        ...container,
+        accountSettings: container.accountSettings?.service,
+        workspaceAccountOf: (ws) => container.workspaceService.accountOf(ws),
+        modelPolicySupported: container.config.infrastructure?.modelPolicy?.supported ?? false,
+      },
+      workspaceId,
+      userId,
+    )
     // Surface the caller's own locally-run models (Ollama / LM Studio / …) alongside the
     // built-in catalog. They're scoped to the user (a runner lives on their machine).
     const local =

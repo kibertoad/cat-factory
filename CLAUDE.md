@@ -205,6 +205,50 @@ Copy the existing good citizens: `WorkspaceMountRepository.countByServiceIds`,
 `BoardService.removeBlock`'s batched `removeByServices` / `deleteMany`. If you find yourself
 writing `await this.someRepository.getX(item)` inside a loop, STOP and batch it.
 
+## Caching — go through the app cache seam, NEVER a homebrew Map
+
+**Do NOT hand-roll a caching layer.** A per-service `Map`/object with a manual TTL, a
+module-global memo, an ad-hoc `{ value, expiresAt }` store, or any bespoke in-memory cache is
+BANNED for slow-moving domain reads. They can't be invalidated across a horizontally-scaled
+Node deployment (a write on one replica leaves every peer serving stale data), they duplicate
+eviction/TTL logic per site, and they hide what is actually cached. The repo has ONE caching
+seam — use it. (The `AccountSettingsService` 30s `Map` is the legacy anti-pattern this rule
+exists to stop repeating; new work routes through the seam instead.)
+
+The seam is the kernel **`AppCaches`** port (`backend/packages/kernel/src/ports/caching.ts`),
+implemented by **`@cat-factory/caching`** (`createAppCaches`, built on `layered-loader`) and
+exposed on the container as `container.caches`. Each named slice is a `GroupCacheHandle<T>`
+with read-through `get(key, group, load)` + `invalidate` / `invalidateGroup` / `invalidateAll`.
+Full model: [`docs/initiatives/caching-layer.md`](./docs/initiatives/caching-layer.md).
+
+**To cache a new slow-moving read, add a slice — do not invent storage:**
+
+- **Register the slice** on the `AppCaches` interface (kernel) + one entry in `AppCachesProfile`
+  and both `DEFAULT_APP_CACHES_PROFILE` and `ISOLATE_SAFE_APP_CACHES_PROFILE`, and build it in
+  `createAppCaches` (`backend/packages/caching/src/appCaches.ts`). Copy the nearest good citizen
+  (`repoProjection` for a per-scope DB read; `fragmentDocumentBody` for a version-probed external
+  read). This lives in the shared caching package, so both facades pick it up by calling
+  `createAppCaches` — no per-facade cache code.
+- **Read through it** in the owning service: `caches.slice.get(key, group, () => this.load(...))`.
+  Group by the invalidation scope (workspace / account id) so one event can drop the whole group.
+- **Invalidate on EVERY write** that mutates the cached source, right after the write commits
+  (`invalidate(key, group)` for one entry, `invalidateGroup(group)` for a scope, `invalidateAll()`
+  as the coarse safe fallback). Invalidation — not the TTL — is the coherence story; the TTL is
+  only a freshness backstop. A cached read with no invalidation on its write path is a bug.
+- **Pass-through on the Worker for OUR OWN mutable state.** A Worker isolate has no cross-isolate
+  invalidation bus, so a TTL'd cache of mutable D1 state would serve stale data after another
+  isolate's write — set `enabled: false` in `ISOLATE_SAFE_APP_CACHES_PROFILE` for such a slice
+  (like `repoProjection` / `accountModelPolicy`). Only immutable or self-verifying (sha/version-
+  probed) entries may keep a real TTL on the Worker (like `fragmentDocumentBody`).
+- **Wrap a nullable value** (`{ value: T | null }`) so the common "absent" case caches as a value
+  rather than re-loading on every miss (layered-loader treats a bare `null` as unresolved).
+- **Multi-node invalidation is free** — the Node facade injects a Redis notification pair when
+  `REDIS_URL` is set, so `invalidate*` broadcasts to peers; with no bus (single replica / local /
+  tests) the loader is bare in-memory. The consuming service never sees any of this.
+
+Keep the runtimes symmetric (the slice + its invalidation land for both facades at once) and add
+a conformance assertion for any cached behaviour a facade could get wrong.
+
 ## Resolving conflicting Drizzle migrations (post-merge)
 
 The Node facade's Postgres migrations (`backend/runtimes/node/drizzle/`) use **drizzle-kit

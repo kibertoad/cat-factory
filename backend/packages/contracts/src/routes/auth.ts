@@ -135,6 +135,14 @@ export const infrastructureCapabilitiesSchema = v.object({
    * preview; a specific frontend still opts in per-frame via `previewEnabled`.
    */
   frontendPreview: v.object({ supported: v.boolean() }),
+  /**
+   * Whether this deployment supports the account-wide model-family allow/block policy.
+   * `true` on the Cloudflare / remote-Node facades and in mothership mode; `false` in
+   * plain local mode (a single-developer machine has no account admin to govern). The SPA
+   * hides the "Model access policy" admin section when `false`, and the server refuses to
+   * store a non-`off` policy there.
+   */
+  modelPolicy: v.optional(v.object({ supported: v.boolean() })),
 })
 export type InfrastructureCapabilities = v.InferOutput<typeof infrastructureCapabilitiesSchema>
 

@@ -33,6 +33,12 @@ export const CONFLICT_REASONS = [
   // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) was started on a frame
   // with no UI to exercise — neither a `frontend` frame nor a frame a frontend links to.
   'visual_pipeline_no_frontend',
+  // A pipeline uses a model whose FAMILY the account-wide model policy blocks (on the
+  // effective route) — the SPA steers the user to pick an allowed model / family.
+  'model_policy_blocked',
+  // An account-settings write tried to set a model-family policy on a deployment that does
+  // not support it (plain local mode) — the policy is a hosted/mothership-only control.
+  'model_policy_unsupported',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

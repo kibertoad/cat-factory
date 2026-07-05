@@ -435,6 +435,13 @@ export const modelOptionSchema = v.object({
    * or the opt-in Cloudflare lib enabled. The picker disables an unavailable model.
    */
   available: v.optional(v.boolean()),
+  /**
+   * Whether this model is UNAVAILABLE specifically because the account's model-family
+   * policy blocks it (its family is not permitted on the effective route), as distinct
+   * from being unconfigured. When true, `available` is also false, but the picker shows
+   * a "blocked by account policy" reason instead of the "add a key" hint.
+   */
+  policyBlocked: v.optional(v.boolean()),
   /** Short provider label for the active flavour, e.g. `Cloudflare`, `DashScope`. */
   providerLabel: v.string(),
   /** Effective provider id the agent runs with. */

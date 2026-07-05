@@ -66,6 +66,8 @@ export {
   INDIVIDUAL_VENDORS,
   individualVendorForModelId,
   personalCredentialVendorForModelId,
+  familyForModelId,
+  isAllowedByFamilyPolicy,
 } from './domain/models.js'
 export {
   seedBlocks,

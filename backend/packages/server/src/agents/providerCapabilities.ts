@@ -1,4 +1,5 @@
 import type {
+  AccountSettingsService,
   ApiKeyService,
   LocalModelEndpointService,
   OpenRouterCatalogService,
@@ -7,6 +8,8 @@ import type {
 } from '@cat-factory/integrations'
 import {
   ALL_SUBSCRIPTION_VENDORS,
+  type AppCaches,
+  type ModelFamilyPolicy,
   type ProviderCapabilities,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -34,6 +37,25 @@ export interface CapabilityServices {
   localModelEndpoints?: LocalModelEndpointService
   /** Per-workspace enabled OpenRouter models (the dynamic catalog subset). */
   openRouterCatalog?: OpenRouterCatalogService
+  /**
+   * The account-settings service, read to resolve the owning account's model-family policy.
+   * Wired only on facades that {@link modelPolicySupported support it}.
+   */
+  accountSettings?: AccountSettingsService
+  /** Resolve a workspace's owning account id (`undefined`/`null` ⇒ unscoped/legacy board). */
+  workspaceAccountOf?: (workspaceId: string) => Promise<string | null | undefined>
+  /**
+   * Whether this deployment enforces the account-wide model-family policy (Cloudflare /
+   * remote Node / mothership — never plain local mode). When false the policy is neither
+   * read nor applied here, mirroring the availability the SPA sees via `/auth/config`.
+   */
+  modelPolicySupported?: boolean
+  /**
+   * App caches — the account policy read goes through `caches.accountModelPolicy` (a
+   * slow-moving, admin-changed, per-account read on the `/models` + start-guard hot paths;
+   * invalidated by the account-settings write). Absent ⇒ the read runs live each time.
+   */
+  caches?: AppCaches
 }
 
 // Direct providers whose AI-SDK resolver works without an explicit base URL (the SDK
@@ -83,11 +105,30 @@ export async function resolveWorkspaceCapabilities(
       openRouterModels.add(m.id)
     }
   }
+  // The account-wide model-family policy, resolved from the workspace's owning account when
+  // the deployment supports it. A `null`/legacy account or an `off` policy ⇒ no restriction.
+  // Read-through the per-account cache (slow-moving, admin-changed) — the load reads only
+  // the non-secret config (`read`, no secret decryption) and wraps the result so the common
+  // "no policy" case caches as a value rather than a re-loaded null.
+  let modelPolicy: ModelFamilyPolicy | undefined
+  const accountSettings = services.accountSettings
+  if (services.modelPolicySupported && accountSettings && services.workspaceAccountOf) {
+    const accountId = await services.workspaceAccountOf(workspaceId)
+    if (accountId) {
+      const load = async () => ({
+        policy: (await accountSettings.read(accountId)).config.modelPolicy ?? null,
+      })
+      const cached = services.caches?.accountModelPolicy
+      const { policy } = cached ? await cached.get(accountId, accountId, load) : await load()
+      if (policy && policy.mode !== 'off') modelPolicy = policy
+    }
+  }
   return {
     directProviders,
     subscriptionVendors,
     cloudflareEnabled: services.cloudflareModelsEnabled ?? false,
     localModels,
     openRouterModels,
+    ...(modelPolicy ? { modelPolicy } : {}),
   }
 }
