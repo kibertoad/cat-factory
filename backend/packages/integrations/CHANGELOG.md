@@ -1,5 +1,36 @@
 # @cat-factory/integrations
 
+## 0.73.5
+
+### Patch Changes
+
+- 10787c4: Make the "environment provisioning failed" surface actionable when no deploy runner is wired.
+
+  - **Backend, provider-agnostic message:** the `EnvironmentProvisioningService` error for a
+    render-needing config with no `deployJobClient` no longer hardcodes Kubernetes tooling (it
+    reaches for any provider that needs a container-backed deploy). It names the runtime-neutral
+    transport remedies (a self-hosted runner pool, `LOCAL_DEPLOY_RUNTIME`, or the Cloudflare
+    `DeployContainer` binding) or using a config that provisions without a deploy container.
+  - **Structured failure reason:** `AgentFailure` gains an optional machine-readable `reason`
+    (JSON column — no migration), and this condition carries `deploy_runner_unwired`
+    (`EnvironmentFailureReason` in contracts) from the thrown `ValidationError` through the
+    deployer-step failure path onto the run's failure, so the SPA can act on the cause without
+    string-matching prose. Adds `getErrorReason` to the kernel error helpers.
+  - **Frontend, precisely-gated guidance:** the board's `AgentFailureCard` shows a "Configure…"
+    deep-link on `environment`-kind failures whose destination follows the cause: a
+    `deploy_runner_unwired` failure on a non-local deployment links to Infrastructure → **Agent
+    containers** (`runner-pool`) — where the deploy runner/pool is actually wired, so the button no
+    longer dead-ends on the Test-environments tab that can't fix it — while every other environment
+    failure keeps linking to Infrastructure → **Test environments** (`environment`). The
+    Kubernetes+local env-var hint (`LOCAL_DEPLOY_RUNTIME` + `LOCAL_DEPLOY_HARNESS_ENTRY` /
+    `LOCAL_DEPLOY_IMAGE`) is shown ONLY for the `deploy_runner_unwired` reason, in local mode, and
+    for a `kubernetes` provision — so a docker-compose / transient / future non-K8s failure never
+    shows inaccurate guidance.
+
+- Updated dependencies [10787c4]
+  - @cat-factory/contracts@0.110.1
+  - @cat-factory/kernel@0.101.1
+
 ## 0.73.4
 
 ### Patch Changes
