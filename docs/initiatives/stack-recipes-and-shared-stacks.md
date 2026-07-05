@@ -406,37 +406,38 @@ acme knowledge.
 > **Landed (slice 8)** — the analyst agent kind end to end. Contract
 > (`contracts/src/environment-analyst.ts`): `AnalystRecipeDraft` (a proposed
 > {@link stackRecipeSchema} + per-field `AnalystRecipeNote` provenance [rationale + `AnalystCitation`
+>
 > > source citations] + a `summary`), a deliberately LENIENT LLM-output shape (`v.fallback`) that
-> degrades field-by-field — a malformed `recipe` drops to `undefined` while the `summary`/`notes`
-> survive — rather than discarding the whole draft (the `bugInvestigation`/`securityAssessment`
-> shape). Agents (`agents/kinds/environment-analyst.ts`): the `environment-analyst` kind, a
-> read-only `container-explore` structured agent (`clone: { branch: 'base' }`, no post-op — its
-> whole product is the JSON on `result.custom`, rendered by `generic-structured`), registered
-> through the public `AgentKindRegistry` seam and pre-loaded by `defaultAgentKindRegistry()`
-> alongside `bug-investigator`/`repro-test`. Its `defineStructuredOutput` derives `agent.output`
-> from the shared contract schema with a hand-written `shapeHint` (the recipe's discriminated-union
-> steps walk poorly) and `failOnUnusableFinal: true` (an empty reasoning-model reply fails the run
-> loudly instead of yielding an empty draft); the read-only guardrail + final-answer-in-reply
-> directives are auto-appended for the container-explore surface. Kernel (`domain/seed.ts`): a
-> seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`,
-> `name: 'Analyze environment'`), mirroring `pl_blueprint` — a single container-explore agent run
-> against a service frame. **Gotchas for slice 7:** (1) the analyst is surfaced to the frontend
-> automatically via the workspace snapshot's `customAgentKinds` (it carries `presentation` with
-> `resultView: 'generic-structured'`), exactly like `repro-test` — NO frontend catalog change, and
-> `isKnownAgentKind` sees it once the snapshot registers custom kinds, so the seeded pipeline isn't
-> flagged. `category: 'design'` puts it in the palette's "Design & research" group. (2) The
-> DRAFT-MERGE (deterministic-detector-wins + provenance) + the "run deep analysis" trigger were
-> DEFERRED to slice 7 (the wizard), where the merge shape is naturally coupled to how the wizard
-> presents it — slice 8 is only the producer. The pure merge logic belongs beside
-> `provision-detect.logic.ts`, keyed on `AnalystRecipeDraft` + `ProvisioningRecommendation`.
-> (3) No persistence change — the draft rides `result.custom` / the execution engine and the recipe
-> rides the existing `provisioning` blob, so no migration and no D1⇄Drizzle work; validation is a
-> unit test in `@cat-factory/agents` (registration, derived output spec, surface directives, schema
-> leniency), not conformance. (4) The wizard runs `pl_environment_analysis` against the picked frame
-> like bootstrap runs `pl_blueprint`; the frame must have a linked repo (execution resolves it via
-> `resolveRepoTarget`). Analyzing an arbitrary user-chosen ref (detection takes `gitRef`) is NOT
-> supported by a frame-scoped pipeline run — if the wizard needs it, an ad-hoc `agent_runs` run
-> (the `env-config-repair` shape) is the alternative, at the cost of a new port triple.
+> > degrades field-by-field — a malformed `recipe` drops to `undefined` while the `summary`/`notes`
+> > survive — rather than discarding the whole draft (the `bugInvestigation`/`securityAssessment`
+> > shape). Agents (`agents/kinds/environment-analyst.ts`): the `environment-analyst` kind, a
+> > read-only `container-explore` structured agent (`clone: { branch: 'base' }`, no post-op — its
+> > whole product is the JSON on `result.custom`, rendered by `generic-structured`), registered
+> > through the public `AgentKindRegistry` seam and pre-loaded by `defaultAgentKindRegistry()`
+> > alongside `bug-investigator`/`repro-test`. Its `defineStructuredOutput` derives `agent.output`
+> > from the shared contract schema with a hand-written `shapeHint` (the recipe's discriminated-union
+> > steps walk poorly) and `failOnUnusableFinal: true` (an empty reasoning-model reply fails the run
+> > loudly instead of yielding an empty draft); the read-only guardrail + final-answer-in-reply
+> > directives are auto-appended for the container-explore surface. Kernel (`domain/seed.ts`): a
+> > seeded analyst-only pipeline `pl_environment_analysis` (`ENVIRONMENT_ANALYSIS_PIPELINE_ID`,
+> > `name: 'Analyze environment'`), mirroring `pl_blueprint` — a single container-explore agent run
+> > against a service frame. **Gotchas for slice 7:** (1) the analyst is surfaced to the frontend
+> > automatically via the workspace snapshot's `customAgentKinds` (it carries `presentation` with
+> > `resultView: 'generic-structured'`), exactly like `repro-test` — NO frontend catalog change, and
+> > `isKnownAgentKind` sees it once the snapshot registers custom kinds, so the seeded pipeline isn't
+> > flagged. `category: 'design'` puts it in the palette's "Design & research" group. (2) The
+> > DRAFT-MERGE (deterministic-detector-wins + provenance) + the "run deep analysis" trigger were
+> > DEFERRED to slice 7 (the wizard), where the merge shape is naturally coupled to how the wizard
+> > presents it — slice 8 is only the producer. The pure merge logic belongs beside
+> > `provision-detect.logic.ts`, keyed on `AnalystRecipeDraft` + `ProvisioningRecommendation`.
+> > (3) No persistence change — the draft rides `result.custom` / the execution engine and the recipe
+> > rides the existing `provisioning` blob, so no migration and no D1⇄Drizzle work; validation is a
+> > unit test in `@cat-factory/agents` (registration, derived output spec, surface directives, schema
+> > leniency), not conformance. (4) The wizard runs `pl_environment_analysis` against the picked frame
+> > like bootstrap runs `pl_blueprint`; the frame must have a linked repo (execution resolves it via
+> > `resolveRepoTarget`). Analyzing an arbitrary user-chosen ref (detection takes `gitRef`) is NOT
+> > supported by a frame-scoped pipeline run — if the wizard needs it, an ad-hoc `agent_runs` run
+> > (the `env-config-repair` shape) is the alternative, at the cost of a new port triple.
 
 ### 7. Wizard UX (detect → review → preflight → trial → save)
 

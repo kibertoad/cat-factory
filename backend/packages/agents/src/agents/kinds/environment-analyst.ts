@@ -97,13 +97,25 @@ const ENVIRONMENT_ANALYST_SYSTEM_PROMPT =
   'step that just shells out to it. For EVERY field and step you draft, add a `notes` entry with a ' +
   'short rationale and a `citations` list (file path + line range) grounding it in what you read. ' +
   'Only include a field when you have real evidence for it — an empty recipe with an honest summary ' +
-  'is better than a fabricated one. Return ONLY a JSON object of this exact shape:\n' +
+  'is better than a fabricated one. Return ONLY a JSON object of this exact shape (the recipe ' +
+  'fields below are illustrative — populate only the ones you have evidence for):\n' +
   '{\n' +
   '  "summary": "one paragraph on how this system is brought up",\n' +
-  '  "recipe": { "composeFiles": [], "composeProfiles": [], "envFiles": [], "externalNetworks": [], "prerequisites": [], "setupSteps": [], "healthGate": {} },\n' +
+  '  "recipe": {\n' +
+  '    "composeFiles": ["docker-compose.yml", "docker-compose.override.yml"],\n' +
+  '    "composeProfiles": ["dev"],\n' +
+  '    "envFiles": [{ "template": ".env.dist", "target": ".env" }],\n' +
+  '    "externalNetworks": ["shared-net"],\n' +
+  '    "prerequisites": [{ "check": "docker-daemon", "required": true }],\n' +
+  '    "setupSteps": [{ "kind": "compose-exec", "name": "install deps", "service": "app", "command": ["composer", "install"] }],\n' +
+  '    "healthGate": { "kind": "compose-healthy" }\n' +
+  '  },\n' +
   '  "notes": [{ "field": "setupSteps[0]", "rationale": "why", "citations": [{ "path": "bin/dev-console", "lines": "112-140" }] }]\n' +
   '}\n' +
-  'Omit any recipe field you found no evidence for (do not emit empty placeholders inside it).'
+  'OMIT any recipe field you found no evidence for entirely — never emit an empty array (`[]`) or ' +
+  'empty object (`{}`) as a placeholder, and never include a `healthGate` without a `kind`. A ' +
+  'single malformed field discards the WHOLE drafted recipe, so an omitted field is always safer ' +
+  'than a half-formed one.'
 
 export const ENVIRONMENT_ANALYST_AGENT_KINDS: AgentKindDefinition[] = [
   {
