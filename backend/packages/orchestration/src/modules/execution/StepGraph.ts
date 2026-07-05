@@ -73,6 +73,28 @@ export class StepGraph {
     // doesn't leave stale JSON for the `generic-structured` result view to render.
     step.custom = undefined
     step.rework = undefined
+    // Clear the live container handle + the deployer fan-out state, so a re-run of a `deployer`
+    // step re-provisions from scratch (a stale `deployEnvs` would otherwise let it skip straight to
+    // complete, and a stale `jobId`/`container` would re-attach to an evicted job). Mirrors what
+    // `retry.logic.resetStep` drops by omission; required by the human-test → deployer loop-back.
+    step.container = undefined
+    step.deployEnvs = undefined
+    step.deployFrameId = undefined
+    step.deployProvisioning = undefined
+    step.deployPrimaryFrameId = undefined
+  }
+
+  /**
+   * Loop the run back to `fromIndex` and re-run every step through `throughIndex` — each reset to a
+   * clean re-runnable state (clearing stale job handles + deployer fan-out state). Unlike
+   * {@link rerunProducerThrough} it attaches no `rework` feedback; it just re-arms the from-step and
+   * moves the cursor, and the caller re-drives. Used by the human-test gate to rebuild its
+   * environment by re-running the upstream `deployer` step.
+   */
+  rerunRange(instance: ExecutionInstance, fromIndex: number, throughIndex: number): void {
+    for (let i = fromIndex; i <= throughIndex; i++) this.resetStepForRerun(instance.steps[i]!)
+    this.startStep(instance.steps[fromIndex]!)
+    instance.currentStep = fromIndex
   }
 
   /**

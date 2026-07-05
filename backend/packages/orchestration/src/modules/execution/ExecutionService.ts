@@ -153,7 +153,12 @@ import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import { carryForwardFailures, planResumedSteps, planRestartFromStep } from './retry.logic.js'
-import { decideTesterInfra, TESTER_INFRA_MESSAGES } from './tester-infra.logic.js'
+import {
+  decideTesterInfra,
+  ENV_CONSUMER_KINDS,
+  needsDeployerBeforeConsumer,
+  TESTER_INFRA_MESSAGES,
+} from './tester-infra.logic.js'
 import { hasLiveServiceBinding, hasServiceBinding } from './frontend-infra.logic.js'
 
 export interface ExecutionServiceDependencies {
@@ -725,20 +730,16 @@ export class ExecutionService {
       agentExecutor,
       contextBuilder: this.contextBuilder,
       notificationService,
-      // Wrap the env services with the deployer's input/context derivation so the gate's
-      // provisioning matches a `deployer` step's. Left undefined when no provider is wired
-      // (the gate degrades to manual mode).
+      // The human-test gate READS the env the upstream `deployer` step provisioned (it no longer
+      // stands up its own) — resolved by the block's OWN service frame, exactly as the tester
+      // context resolves it, so the gate and the tester(s) share the one provisioned env. Left
+      // undefined when no provider is wired (the gate degrades to manual mode).
       ...(environmentProvisioning
         ? {
-            provisionEnvironment: (ws, block, executionId) =>
-              environmentProvisioning.provision({
-                workspaceId: ws,
-                blockId: block.id,
-                executionId,
-                inputs: this.runDispatcher.deployInputs(block),
-                context: this.runDispatcher.deployContext(block),
-              }),
-            refreshEnvironment: (ws, id) => environmentProvisioning.refreshStatus(ws, id),
+            readEnvironment: async (ws, block) => {
+              const frame = await this.contextBuilder.resolveServiceFrame(ws, block.id)
+              return environmentProvisioning.getHandleForBlock(ws, block.id, frame?.id)
+            },
           }
         : {}),
       ...(environmentTeardown
@@ -1108,6 +1109,38 @@ export class ExecutionService {
   }
 
   /**
+   * Fail fast when a `kubernetes`/`custom` service's chain would dead-end at an env-consumer
+   * (tester / human-test / playwright) because no enabled `deployer` provisions the environment
+   * before it — the exact silent dead-end this initiative fixes (the tester picks ephemeral mode
+   * from the provision type but finds no coordinates). The pure ordering check lives in
+   * {@link needsDeployerBeforeConsumer}; here we resolve the service's provision type (only when a
+   * consumer is present, so consumer-less chains skip the read) and translate a positive verdict
+   * into an actionable {@link ConflictError}. Pass-through for compose/infraless/frontend services
+   * and for chains with a deployer before the first consumer.
+   */
+  private async assertDeployerBeforeConsumer(
+    workspaceId: string,
+    block: Block,
+    agentKinds: readonly string[],
+    enabled: readonly boolean[] | undefined,
+  ): Promise<void> {
+    const hasConsumer = agentKinds.some(
+      (kind, i) => enabled?.[i] !== false && ENV_CONSUMER_KINDS.includes(kind),
+    )
+    if (!hasConsumer) return
+    const service = await this.contextBuilder.resolveServiceConfig(workspaceId, block)
+    if (!needsDeployerBeforeConsumer(agentKinds, enabled, service?.provisioning?.type)) return
+    throw new ConflictError(
+      `This service provisions a '${service!.provisioning!.type}' environment, but this pipeline ` +
+        'has no Deployer step before its first Tester / human-test step, so the environment would ' +
+        'never be stood up. Add a Deployer step before the Tester, or set the service to ' +
+        'docker-compose / infraless.',
+      'deployer_required_before_tester',
+      { provisionType: service!.provisioning!.type },
+    )
+  }
+
+  /**
    * Guard a pipeline's start when it carries an agent kind that RELIES on binary-artifact
    * storage (the {@link BINARY_STORAGE_TRAIT}, e.g. the UI Tester, which uploads its
    * screenshots there). Such a run would otherwise dispatch and then fail/degrade with no
@@ -1311,6 +1344,11 @@ export class ExecutionService {
     if (shape.agentKinds.some(isTesterKind)) {
       await this.assertTesterInfraConfigured(workspaceId, block)
     }
+
+    // A `kubernetes`/`custom` service whose enabled chain reaches an env-consumer (tester /
+    // human-test / playwright) with NO enabled `deployer` before it would dead-end inside the
+    // consumer — nothing provisions the environment it reads. Fail fast with an actionable error.
+    await this.assertDeployerBeforeConsumer(workspaceId, block, shape.agentKinds, shape.enabled)
 
     // A chain carrying an agent that relies on binary-artifact storage (the UI Tester uploads
     // screenshots) needs the account to have storage configured.

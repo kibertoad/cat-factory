@@ -383,7 +383,8 @@
         "bootstrap_not_retryable": "לא ניתן להריץ מחדש את האתחול",
         "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה",
         "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו",
-        "visual_pipeline_no_frontend": "אין frontend לבדיקה"
+        "visual_pipeline_no_frontend": "אין frontend לבדיקה",
+        "deployer_required_before_tester": "הוסף Deployer לפני ה-Tester"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
       "providersUnconfigured": {

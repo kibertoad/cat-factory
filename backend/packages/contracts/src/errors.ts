@@ -33,6 +33,10 @@ export const CONFLICT_REASONS = [
   // A pipeline with visual steps (`tester-ui` / `visual-confirmation`) was started on a frame
   // with no UI to exercise — neither a `frontend` frame nor a frame a frontend links to.
   'visual_pipeline_no_frontend',
+  // A `kubernetes`/`custom` service's pipeline reaches a Tester / human-test / playwright step
+  // with no enabled `deployer` before it, so nothing would provision the env it needs — the run
+  // would dead-end inside the consumer. The Deployer is the single environment provisioner.
+  'deployer_required_before_tester',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

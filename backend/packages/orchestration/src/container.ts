@@ -1481,12 +1481,23 @@ function createEnvironmentsModule(
         ...(deps.logger ? { logger: deps.logger } : {}),
       })
     : undefined
+  // Built BEFORE the provisioning service so it can be injected as `environmentTeardown` there:
+  // a deployer re-run that supersedes a prior env with a DIFFERENT provider identity tears the old
+  // infra down through this service (best-effort; the TTL reaper is the backstop).
+  const teardownService = new EnvironmentTeardownService({
+    connectionService,
+    environmentRegistryRepository,
+    secretCipher,
+    clock: deps.clock,
+    ...(provisioningLog ? { provisioningLog } : {}),
+  })
   const provisioningService = new EnvironmentProvisioningService({
     connectionService,
     environmentRegistryRepository,
     secretCipher,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    environmentTeardown: teardownService,
     ...(deps.environmentUrlSafetyPolicy ? { urlPolicy: deps.environmentUrlSafetyPolicy } : {}),
     ...(deps.resolveRunRepoContext ? { resolveRunRepoContext: deps.resolveRunRepoContext } : {}),
     ...(deps.resolveRepoFilesForCoords
@@ -1505,13 +1516,6 @@ function createEnvironmentsModule(
     ...(deps.resolveDeployCloneTarget
       ? { resolveDeployCloneTarget: deps.resolveDeployCloneTarget }
       : {}),
-    ...(provisioningLog ? { provisioningLog } : {}),
-  })
-  const teardownService = new EnvironmentTeardownService({
-    connectionService,
-    environmentRegistryRepository,
-    secretCipher,
-    clock: deps.clock,
     ...(provisioningLog ? { provisioningLog } : {}),
   })
   return {

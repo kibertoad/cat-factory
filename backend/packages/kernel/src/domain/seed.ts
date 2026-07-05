@@ -121,116 +121,88 @@ export function seedBlocks(): Block[] {
 }
 
 /**
+ * A pipeline step in the readable seed form. A bare kind string is an ENABLED step with no human
+ * gate; the object form NAMES the step's human `gate` (approval pause) and/or marks it opt-in
+ * (`enabled: false` — present in the preset but disabled by default). This replaces the fragile
+ * index-aligned `gates`/`enabled` boolean arrays: a gate is declared BY NAME on its own step, so
+ * inserting a step (e.g. a `deployer` before the tester) can never shift a positional flag onto the
+ * wrong step. `gate` is intentionally the extension seam — a custom gate can carry its own config
+ * here (see the ambient-augmentation note in docs/initiatives/deployer-single-provisioner.md).
+ */
+type SeedStep = string | { kind: string; gate?: boolean; enabled?: boolean }
+
+/**
+ * Lower a named-step pipeline spec into the wire {@link Pipeline} (index-aligned
+ * `agentKinds`/`gates`/`enabled`). `gates`/`enabled` are emitted ONLY when a step actually declares
+ * a human gate / is disabled by default, so a plain all-enabled, gate-less pipeline stays as bare
+ * `agentKinds` — its persisted shape is byte-identical to the hand-authored form.
+ */
+function definePipeline(spec: {
+  id: string
+  name: string
+  steps: readonly SeedStep[]
+  availability?: Pipeline['availability']
+  labels?: string[]
+  version?: number
+  public?: boolean
+}): Pipeline {
+  const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
+  const gates = norm.map((s) => s.gate === true)
+  const enabled = norm.map((s) => s.enabled !== false)
+  return {
+    id: spec.id,
+    name: spec.name,
+    agentKinds: norm.map((s) => s.kind),
+    ...(gates.some(Boolean) ? { gates } : {}),
+    ...(enabled.some((e) => !e) ? { enabled } : {}),
+    ...(spec.availability ? { availability: spec.availability } : {}),
+    ...(spec.labels ? { labels: spec.labels } : {}),
+    ...(spec.version !== undefined ? { version: spec.version } : {}),
+    ...(spec.public ? { public: spec.public } : {}),
+  } as Pipeline
+}
+
+/**
  * Reusable pipelines shown in the pipeline palette on first load: the built-in catalog
  * plus any pipelines a deployment registered via `registerPipeline` (e.g. a proprietary
  * org package), merged by id.
  */
 export function seedPipelines(): Pipeline[] {
   const builtins: Pipeline[] = [
-    {
+    // `requirements` runs first and reviews the collected requirements; the spec-writer then
+    // applies them as an increment onto the in-repo spec baseline, and only THEN does the architect
+    // design the solution against that written spec (the architect is spec-aware). The requirements
+    // review + the architecture pause for human approval (`gate: true`); the spec is NOT human-gated
+    // — its `spec-companion` rates it and loops the spec-writer back automatically. `blueprints`
+    // refreshes the service map from the new code; a `deployer` stands a kubernetes/custom env up
+    // for the tester (a no-op otherwise); `conflicts`/`ci`/`merger` gate + ship the PR. The two
+    // brainstorm dialogues are opt-in (`enabled: false`). Version bumped for the deployer reseed.
+    definePipeline({
       id: 'pl_full',
       name: 'Full build',
-      // `requirements` runs first and reviews the collected requirements; the
-      // spec-writer then applies them as an increment onto the in-repo spec baseline,
-      // and only THEN does the
-      // architect design the solution — against that written spec (the architect is
-      // spec-aware, so it reads `spec/` from its checkout). The requirements review and
-      // the architecture pause for human approval (their proposals are reviewed/edited
-      // before the next step); the spec is NOT human-gated — its `spec-companion`
-      // (Spec Reviewer) rates it and loops the spec-writer back automatically instead.
-      // `blueprints` runs right after implementation so the service map (and the board)
-      // is refreshed from the just-written code, on the same PR branch. `conflicts`
-      // then ensures the PR is mergeable with its base — looping a `conflict-resolver`
-      // agent to merge the base in and resolve any conflicts — `ci` gates the
-      // (now-final, up-to-date) PR branch on green CI — looping a `ci-fixer` agent on
-      // failure — and `merger` runs last: it scores the PR and either auto-merges
-      // (within the task's thresholds) or raises a review notification.
-      agentKinds: [
-        // Structured-dialogue option exploration BEFORE the requirements review (opt-in:
-        // disabled by default in `enabled` below). Turns a vague description into a crisp
-        // requirements direction the review then critiques.
-        'requirements-brainstorm',
-        'requirements-review',
-        // The spec-writer applies THIS task's clarified requirements as an increment
-        // onto the spec already committed at the branch's baseline (what's merged so
-        // far), writing the complete updated in-repo `spec/` document onto the work
-        // branch BEFORE the architect and coder run — so the spec (and its Gherkin
-        // acceptance scenarios) is the source of truth the architect designs against
-        // and the code is written to satisfy. An unmerged sibling task's work is never
-        // visible: the only inputs are this task's requirements and the baseline. It
-        // is NOT human-gated: the `spec-companion` (Spec Reviewer) below rates the
-        // spec and loops the spec-writer back for automatic rework below threshold.
+      version: 2,
+      steps: [
+        // Opt-in structured-dialogue option exploration before the requirements review.
+        { kind: 'requirements-brainstorm', gate: true, enabled: false },
+        { kind: 'requirements-review', gate: true },
         'spec-writer',
-        // `spec-companion` is the spec-writer's optional reviewer: it grades the
-        // spec (especially acceptance-scenario coverage), and below its threshold
-        // loops the spec-writer back with the feedback folded in — replacing the
-        // human review the spec used to require.
         'spec-companion',
-        // Structured-dialogue approach exploration BEFORE the architect (opt-in: disabled by
-        // default in `enabled` below). Starts from the refined requirements and finalizes an
-        // approach the architect designs against.
-        'architecture-brainstorm',
-        'architect',
+        // Opt-in structured-dialogue approach exploration before the architect.
+        { kind: 'architecture-brainstorm', gate: true, enabled: false },
+        { kind: 'architect', gate: true },
         'researcher',
         'coder',
-        // `reviewer` is the coder's companion: it rates the change IMMEDIATELY after
-        // implementation and loops the coder back for automatic rework when quality is
-        // below threshold (see companions) — so review + rework happen before the
-        // map/test tail runs, on already-reviewed code.
         'reviewer',
         'blueprints',
-        // `mocker` stands up the external-dependency mocks the tester needs to run
-        // the suite locally, so it always runs immediately before `tester`.
         'mocker',
+        'deployer',
         'tester-api',
         'conflicts',
         'ci',
         'merger',
       ],
-      // Human gates: the two opt-in brainstorm dialogues (indices 0 + 4), the context
-      // requirements review (index 1) and the architecture proposal (`architect`, index 5).
-      // The spec is NOT human-gated — its `spec-companion` (index 3) is the quality gate. The
-      // `mocker` / `tester` / `conflicts` / `ci` / `merger` tail gates/decides itself.
-      gates: [
-        true,
-        true,
-        false,
-        false,
-        true,
-        true,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-      ],
-      // The two brainstorm steps are opt-in: present in the preset but DISABLED by default
-      // (indices 0 = requirements-brainstorm, 4 = architecture-brainstorm), so they are
-      // skipped at run start unless a user toggles them on for the pipeline. Every other
-      // step is enabled.
-      enabled: [
-        false,
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-      ],
-    },
-    {
+    }),
+    definePipeline({
       // The most thorough preset: a complex, full-stack feature run that engages
       // every valuable agent so no angle is left uncovered. It extends "Full build"
       // with the up-front researcher, the acceptance-scenario author, the external-
@@ -260,22 +232,27 @@ export function seedPipelines(): Pipeline[] {
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as Full build
       id: 'pl_fullstack',
       name: 'Complex fullstack feature',
-      agentKinds: [
-        // Opt-in structured-dialogue option exploration (disabled by default in `enabled`).
-        'requirements-brainstorm',
-        'requirements-review',
+      // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Human gates: the
+      // two opt-in brainstorm dialogues, the requirements review, and — after its companion clears
+      // the quality bar — the architecture (on `architect-companion`). Version bumped for the reseed.
+      version: 2,
+      steps: [
+        // Opt-in structured-dialogue option exploration.
+        { kind: 'requirements-brainstorm', gate: true, enabled: false },
+        { kind: 'requirements-review', gate: true },
         'researcher',
         'spec-writer',
         'spec-companion',
-        // Opt-in structured-dialogue approach exploration (disabled by default in `enabled`).
-        'architecture-brainstorm',
+        // Opt-in structured-dialogue approach exploration.
+        { kind: 'architecture-brainstorm', gate: true, enabled: false },
         'architect',
-        'architect-companion',
+        { kind: 'architect-companion', gate: true },
         'mocker',
         'coder',
         'reviewer',
         'blueprints',
         'business-documenter',
+        'deployer',
         'tester-api',
         'playwright',
         'documenter',
@@ -283,74 +260,18 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      // Human gates: the two opt-in brainstorm dialogues (indices 0 + 5), the context
-      // requirements review (index 1) and — after its companion has cleared the quality bar —
-      // the architecture (on `architect-companion`, index 7). The spec is NOT human-gated: its
-      // `spec-companion` (index 4) rates it and loops the spec-writer back automatically. Every
-      // other step (including the self-gating conflicts / ci / merger tail and the auto-only
-      // `reviewer` companion) runs straight through.
-      gates: [
-        true,
-        true,
-        false,
-        false,
-        false,
-        true,
-        false,
-        true,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-      ],
-      // The two brainstorm steps are opt-in: present but DISABLED by default (indices 0 =
-      // requirements-brainstorm, 5 = architecture-brainstorm), skipped at run start unless a
-      // user toggles them on for the pipeline. Every other step is enabled.
-      enabled: [
-        false,
-        true,
-        true,
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-      ],
-    },
-    {
-      // A bug-fix preset, front-loaded with the investigate → triage pair:
-      //   bug-investigator → read the codebase from the raw report (read-only) and emit an
-      //                      enriched report + an optional, confidence-gated hypothesis
-      //   clarity-review   → triage that report for fixability (human gate; the iterative
-      //                      answer → incorporate → re-review loop), producing the clarified
-      //                      brief downstream agents consume
-      //   spec-writer      → fold the clarified brief into the in-repo spec
-      //   architect → coder → reviewer → the design/implement/review core
-      //   conflicts → ci → merger → the standard mergeability / CI / merge tail
-      // Only the clarity review is a human gate; the read-only investigator auto-advances.
+    }),
+    // A bug-fix preset, front-loaded with the investigate → triage pair: `bug-investigator` reads
+    // the codebase from the raw report (read-only) and emits an enriched report; `clarity-review`
+    // triages it for fixability (the ONLY human gate — the iterative answer → incorporate → re-review
+    // loop); `spec-writer` folds the clarified brief into the spec; architect → coder → reviewer is
+    // the core; conflicts → ci → merger is the standard tail.
+    definePipeline({
       id: 'pl_bugfix',
       name: 'Triage & fix bug',
-      agentKinds: [
+      steps: [
         'bug-investigator',
-        'clarity-review',
+        { kind: 'clarity-review', gate: true },
         'spec-writer',
         'architect',
         'coder',
@@ -359,12 +280,24 @@ export function seedPipelines(): Pipeline[] {
         'ci',
         'merger',
       ],
-      gates: [false, true, false, false, false, false, false, false, false],
-    },
+    }),
     {
       id: 'pl_quick',
       name: 'Quick implement',
-      agentKinds: ['coder', 'blueprints', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
+      // A `deployer` runs before the tester so a kubernetes/custom service gets its ephemeral env
+      // stood up (a no-op for docker-compose/infraless/frontend); bump the version for the reseed
+      // offer. Same pattern across every tester/human-test built-in below.
+      version: 2,
+      agentKinds: [
+        'coder',
+        'blueprints',
+        'mocker',
+        'deployer',
+        'tester-api',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
     },
     // The leanest end-to-end build: implement → review → test, then the standard
     // mergeability / CI / merge tail. The `coder` (Implementer) writes the change,
@@ -375,12 +308,23 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_simple',
       name: 'Simple',
-      agentKinds: ['coder', 'reviewer', 'mocker', 'tester-api', 'conflicts', 'ci', 'merger'],
+      version: 2,
+      agentKinds: [
+        'coder',
+        'reviewer',
+        'mocker',
+        'deployer',
+        'tester-api',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
     },
     {
       id: 'pl_integrate',
       name: 'Integrate & ship',
-      agentKinds: ['integrator', 'mocker', 'tester-api', 'documenter'],
+      version: 2,
+      agentKinds: ['integrator', 'mocker', 'deployer', 'tester-api', 'documenter'],
     },
     // A human-in-the-loop build: implement → review, then a `human-test` gate that spins up an
     // ephemeral environment and PARKS for a person to validate the change in a live URL before
@@ -391,7 +335,11 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_human_review',
       name: 'Build & human-test',
-      agentKinds: ['coder', 'reviewer', 'human-test', 'conflicts', 'ci', 'merger'],
+      // The `deployer` stands the ephemeral env up before the human-test gate reads it (the gate no
+      // longer provisions its own — the deployer is the single provisioner; the gate loops back here
+      // to rebuild on a fix/recreate).
+      version: 2,
+      agentKinds: ['coder', 'reviewer', 'deployer', 'human-test', 'conflicts', 'ci', 'merger'],
     },
     // A human-code-review build: the full implement → review → map → test tail, then a
     // `human-review` gate that watches the PR for a human reviewer on GitHub before `merger`
@@ -403,11 +351,13 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_pr_review',
       name: 'Build & PR review',
+      version: 2,
       agentKinds: [
         'coder',
         'reviewer',
         'blueprints',
         'mocker',
+        'deployer',
         'tester-api',
         'conflicts',
         'ci',
@@ -434,10 +384,12 @@ export function seedPipelines(): Pipeline[] {
       id: 'pl_visual',
       name: 'Build & visual confirmation',
       labels: ['experimental'],
+      version: 2,
       agentKinds: [
         'coder',
         'reviewer',
         'mocker',
+        'deployer',
         'tester-ui',
         'visual-confirmation',
         'conflicts',
@@ -469,7 +421,17 @@ export function seedPipelines(): Pipeline[] {
       id: 'pl_frontend',
       name: 'Frontend build & UI test',
       labels: ['experimental'],
-      agentKinds: ['coder', 'reviewer', 'mocker', 'tester-ui', 'conflicts', 'ci', 'merger'],
+      version: 2,
+      agentKinds: [
+        'coder',
+        'reviewer',
+        'mocker',
+        'deployer',
+        'tester-ui',
+        'conflicts',
+        'ci',
+        'merger',
+      ],
     },
     // Recurring-pipeline presets. "Dependency updates" is a plain implement →
     // review → merge run; "Tech debt" first runs a read-only `analysis` agent and
@@ -479,11 +441,13 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_dep_update',
       name: 'Dependency updates',
+      version: 2,
       agentKinds: [
         'coder',
         'reviewer',
         'blueprints',
         'mocker',
+        'deployer',
         'tester-api',
         'conflicts',
         'ci',
@@ -493,6 +457,7 @@ export function seedPipelines(): Pipeline[] {
     {
       id: 'pl_tech_debt',
       name: 'Tech debt',
+      version: 2,
       agentKinds: [
         'analysis',
         'tracker',
@@ -500,13 +465,14 @@ export function seedPipelines(): Pipeline[] {
         'reviewer',
         'blueprints',
         'mocker',
+        'deployer',
         'tester-api',
         'conflicts',
         'ci',
         'merger',
       ],
     },
-    {
+    definePipeline({
       // The recurring bug-triage pipeline: each scheduled fire pulls ONE matching issue
       // from the workspace's configured tracker board (`bug-intake`, an engine step that
       // rewrites the reused recurring block from the picked issue), investigates the bug
@@ -531,25 +497,28 @@ export function seedPipelines(): Pipeline[] {
       id: 'pl_bug_triage',
       name: 'Bug triage (recurring)',
       availability: 'recurring',
-      agentKinds: [
+      // A `deployer` runs before the tester (k8s/custom only; a no-op otherwise). Only
+      // `clarity-review` is a human gate; version bumped for the reseed offer.
+      version: 2,
+      steps: [
         'bug-intake',
         'bug-investigator',
-        'clarity-review',
+        { kind: 'clarity-review', gate: true },
         'task-estimator',
         'repro-test',
         'coder',
         'reviewer',
+        'deployer',
         'tester-api',
         'conflicts',
         'ci',
         'merger',
       ],
-      gates: [false, false, true, false, false, false, false, false, false, false, false],
-    },
+    }),
     // A blueprint-only pipeline, run after a bootstrap to create the initial
     // service map (and populate the board) from the freshly bootstrapped repo.
     { id: 'pl_blueprint', name: 'Map service', agentKinds: ['blueprints'] },
-    {
+    definePipeline({
       // The Initiative Planning pipeline — the ONLY pipeline runnable on an
       // `initiative`-level block (and initiative blocks accept no other; see the
       // engine's runnable guard). The INTERVIEWER interviews the human on goals /
@@ -562,17 +531,17 @@ export function seedPipelines(): Pipeline[] {
       // `docs/initiatives/<slug>/`) and arms the execution loop.
       id: 'pl_initiative',
       name: 'Plan initiative',
-      agentKinds: [
+      // Slice 2 added the interviewer + analyst in front of the planner; version bumped for the
+      // reseed offer. The interviewer parks via its own controller (not a `gate`); the only human
+      // gate is on the planner's output, before the committer persists it.
+      version: 2,
+      steps: [
         'initiative-interviewer',
         'initiative-analyst',
-        'initiative-planner',
+        { kind: 'initiative-planner', gate: true },
         'initiative-committer',
       ],
-      gates: [false, false, true, false],
-      // Slice 2 added the interviewer + analyst in front of the planner; bump the
-      // catalog version so workspaces on the v1 shape get the reseed offer.
-      version: 2,
-    },
+    }),
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
@@ -587,7 +556,7 @@ export function seedPipelines(): Pipeline[] {
       agentKinds: ['initiative-breakdown'],
       public: true,
     },
-    {
+    definePipeline({
       // FORWARD document authoring: turn a brief (+ linked PRDs/RFCs/issues) into a polished
       // in-repo Markdown document shipped as a PR. Unlike the reverse-documentation kinds
       // (documenter / business-documenter / blueprints) that describe existing code, this
@@ -613,28 +582,24 @@ export function seedPipelines(): Pipeline[] {
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as a code pipeline
       id: 'pl_document',
       name: 'Author a document',
-      // Slice WS5 inserted the interactive `doc-interviewer` after the outliner and replaced
-      // the outline's binary human gate with its iterative loop; bump the catalog version so
-      // workspaces on the v2 shape get the reseed offer.
+      // Slice WS5 inserted the interactive `doc-interviewer` after the outliner and replaced the
+      // outline's binary human gate with its iterative loop; version bumped for the reseed offer. The
+      // interviewer parks via its OWN controller (not a `gate`), `doc-quality` is a polling gate
+      // (auto), so the only human `gate` is the converged review (`doc-reviewer`, after its loop).
       version: 3,
-      agentKinds: [
+      steps: [
         'doc-researcher',
         'doc-outliner',
         'doc-interviewer',
         'doc-writer',
-        'doc-reviewer',
+        { kind: 'doc-reviewer', gate: true },
         'doc-finalizer',
         'doc-quality',
         'conflicts',
         'ci',
         'merger',
       ],
-      // The interactive `doc-interviewer` (index 2) parks via its own controller, NOT a `gates[]`
-      // human gate (hence `false`), so the only remaining `gates[]` human checkpoint is on the
-      // converged review (`doc-reviewer`, index 4, after its rework loop clears the bar).
-      // `doc-quality` is a POLLING gate (auto), so its flag is false like ci/conflicts.
-      gates: [false, false, false, false, true, false, false, false, false, false],
-    },
+    }),
     {
       // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, the
       // deterministic doc-quality gate, then the standard mergeability / CI / merge tail — so

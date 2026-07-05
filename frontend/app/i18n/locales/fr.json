@@ -383,7 +383,8 @@
         "bootstrap_not_retryable": "L’initialisation ne peut pas être relancée",
         "bootstrap_reference_missing": "L’architecture de référence a disparu",
         "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline",
-        "visual_pipeline_no_frontend": "Aucun frontend à tester"
+        "visual_pipeline_no_frontend": "Aucun frontend à tester",
+        "deployer_required_before_tester": "Ajoutez un Deployer avant le Testeur"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
       "providersUnconfigured": {

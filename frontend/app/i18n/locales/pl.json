@@ -383,7 +383,8 @@
         "bootstrap_not_retryable": "Inicjalizacji nie można ponowić",
         "bootstrap_reference_missing": "Architektura referencyjna zniknęła",
         "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku",
-        "visual_pipeline_no_frontend": "Brak frontendu do przetestowania"
+        "visual_pipeline_no_frontend": "Brak frontendu do przetestowania",
+        "deployer_required_before_tester": "Dodaj Deployer przed Testerem"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
       "providersUnconfigured": {

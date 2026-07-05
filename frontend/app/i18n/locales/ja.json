@@ -383,7 +383,8 @@
         "bootstrap_not_retryable": "ブートストラップは再試行できません",
         "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません",
         "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません",
-        "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません"
+        "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません",
+        "deployer_required_before_tester": "テスターの前にDeployerを追加してください"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
       "providersUnconfigured": {

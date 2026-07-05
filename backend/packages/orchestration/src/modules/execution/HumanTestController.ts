@@ -12,6 +12,7 @@ import type {
   WorkRunner,
 } from '@cat-factory/kernel'
 import { ConflictError, getErrorMessage, isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { isDeployStep } from '@cat-factory/integrations'
 import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
@@ -47,14 +48,14 @@ export interface HumanTestControllerDeps {
   agentExecutor: AgentExecutor
   contextBuilder: AgentContextBuilder
   notificationService?: NotificationService
-  /** Provision a fresh ephemeral env for the block (wraps the env provisioning service). */
-  provisionEnvironment?: (
-    workspaceId: string,
-    block: Block,
-    executionId: string,
-  ) => Promise<EnvironmentHandle>
-  /** Re-poll an env's status (wraps the env provisioning service). */
-  refreshEnvironment?: (workspaceId: string, environmentId: string) => Promise<EnvironmentHandle>
+  /**
+   * Read the environment the DEPLOYER provisioned for the block (wraps the env provisioning
+   * service's block lookup). The human-test gate NO LONGER provisions its own environment — the
+   * upstream `deployer` step is the single provisioner, and this reads its result. Absent (or a
+   * `null` result — an infraless service / a deployer-less chain) ⇒ the gate degrades to manual
+   * mode (test against the PR branch and confirm here).
+   */
+  readEnvironment?: (workspaceId: string, block: Block) => Promise<EnvironmentHandle | null>
   /** Tear an env down (wraps the env teardown service). Best-effort. */
   teardownEnvironment?: (workspaceId: string, environmentId: string) => Promise<void>
   /** Merge the repo default branch into the block's PR branch (server-side). */
@@ -72,16 +73,19 @@ export interface HumanTestControllerDeps {
 type HelperUpdate = { state: 'done' } | { state: 'failed' }
 
 /**
- * Drives the `human-test` gate: a non-LLM engine step where a HUMAN is the verdict. When the
- * step is reached it spins up an ephemeral environment and PARKS, surfacing the live URL; a
- * person validates the change and then drives one of a handful of actions — confirm (tear the
- * env down + advance), request a fix from findings (dispatch the Tester's `fixer`, rebuild the
- * env, re-park), pull main into the branch + redeploy (a clean merge rebuilds the env; a
- * conflict dispatches the `conflict-resolver`), recreate, or destroy the env. Modelled like the
- * iterative review gates: the slow/awaiting work runs in the durable driver (the human actions
- * just record intent + signal), so the HTTP request the user is no longer waiting on never
- * blocks. Extracted out of `ExecutionService`; the shared step-graph primitives stay on the
- * engine and are injected via {@link HumanTestControllerDeps}.
+ * Drives the `human-test` gate: a non-LLM engine step where a HUMAN is the verdict. When the step
+ * is reached it READS the environment the upstream `deployer` step provisioned (the deployer is the
+ * single provisioner — the gate never stands its own env up) and PARKS, surfacing the live URL; a
+ * person validates the change and then drives one of a handful of actions — confirm (tear the env
+ * down + advance), request a fix from findings (dispatch the Tester's `fixer`, then rebuild the env
+ * by re-running the deployer + re-park), pull main into the branch + redeploy (a clean merge loops
+ * back to the deployer; a conflict dispatches the `conflict-resolver` first), recreate (re-run the
+ * deployer), or destroy the env. Rebuilding always LOOPS BACK to the upstream deployer rather than
+ * provisioning here. Modelled like the iterative review gates: the slow/awaiting work runs in the
+ * durable driver (the human actions just record intent + signal), so the HTTP request the user is
+ * no longer waiting on never blocks. When no environment was provisioned (an infraless service, or
+ * a deployer-less chain) the gate degrades to manual mode. Extracted out of `ExecutionService`; the
+ * shared step-graph primitives stay on the engine and are injected via {@link HumanTestControllerDeps}.
  */
 export class HumanTestController {
   constructor(private readonly deps: HumanTestControllerDeps) {}
@@ -115,9 +119,11 @@ export class HumanTestController {
       return this.handleAction(workspaceId, instance, step, block, isFinalStep, action)
     }
     if (!ht) return this.begin(workspaceId, instance, step, block)
-    // Replay / re-entry with no pending action: re-derive from the phase.
+    // Replay / re-entry with no pending action: re-derive from the phase. `provisioning` here means
+    // the upstream deployer was (re-)run to (re)build the env and control has now returned to the
+    // gate — read the fresh env and park (a loop-back sets this phase; see loopBackToDeployer).
     if (ht.phase === 'provisioning') {
-      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+      return this.readEnvAndPark(workspaceId, instance, step, block)
     }
     // A helper (fixer / conflict-resolver) is in flight: the step is `working` with a live
     // job, NOT parked. Re-attach to its job instead of re-parking, so a re-drive through
@@ -127,82 +133,6 @@ export class HumanTestController {
       return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
     }
     return this.deps.stateMachine.parkStepOnDecision(workspaceId, instance, step, this.proposal(ht))
-  }
-
-  /**
-   * Re-poll the in-flight environment provisioning from the durable driver's `awaiting_gate`
-   * loop (delegated from `pollGate` when the current step is a human-test gate still
-   * provisioning). Ready → park for the human; still provisioning → keep polling; failed →
-   * degrade to manual mode and park so the human can recreate or test by hand.
-   */
-  async pollEnvironment(workspaceId: string, instance: ExecutionInstance): Promise<AdvanceResult> {
-    const step = instance.steps[instance.currentStep]
-    if (!step || step.agentKind !== HUMAN_TEST_AGENT_KIND || !step.humanTest) {
-      return { kind: 'continue' }
-    }
-    const ht = step.humanTest
-    if (ht.phase !== 'provisioning') return { kind: 'continue' }
-    const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return { kind: 'noop' }
-    if (!this.deps.refreshEnvironment || !ht.environment) {
-      return this.degrade(workspaceId, instance, step, block, 'Environment is no longer tracked.')
-    }
-    let handle: EnvironmentHandle
-    try {
-      handle = await this.deps.refreshEnvironment(workspaceId, ht.environment.id)
-    } catch (error) {
-      return this.degrade(
-        workspaceId,
-        instance,
-        step,
-        block,
-        `Could not read the environment status (${getErrorMessage(error)}).`,
-      )
-    }
-    ht.environment = this.toEnvView(handle)
-    if (handle.status === 'ready') {
-      return this.toAwaitingHuman(workspaceId, instance, step, block)
-    }
-    if (
-      handle.status === 'failed' ||
-      handle.status === 'expired' ||
-      handle.status === 'torn_down'
-    ) {
-      return this.degrade(
-        workspaceId,
-        instance,
-        step,
-        block,
-        'Environment provisioning failed; recreate it or test against the PR branch.',
-      )
-    }
-    await this.deps.stateMachine.persistInstance(workspaceId, instance)
-    await this.deps.stateMachine.emitInstance(workspaceId, instance)
-    return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
-  }
-
-  /**
-   * The provisioning poll budget was spent while still provisioning (delegated from
-   * `resolveGatePollExhaustion`). Don't fail the run — park in degraded mode so the human can
-   * wait, recreate, or test by hand. The env record keeps provisioning in the background.
-   */
-  async onProvisionTimeout(
-    workspaceId: string,
-    instance: ExecutionInstance,
-  ): Promise<AdvanceResult> {
-    const step = instance.steps[instance.currentStep]
-    if (!step || step.agentKind !== HUMAN_TEST_AGENT_KIND || !step.humanTest) {
-      return { kind: 'continue' }
-    }
-    const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return { kind: 'noop' }
-    return this.degrade(
-      workspaceId,
-      instance,
-      step,
-      block,
-      'Environment is taking longer than expected to provision; recreate it or test against the PR branch.',
-    )
   }
 
   /**
@@ -229,7 +159,7 @@ export class HumanTestController {
     await this.deps.stateMachine.stopRunContainer(workspaceId, instance)
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return { kind: 'noop' }
-    return this.recreateAndContinue(workspaceId, instance, step, block)
+    return this.loopBackToDeployer(workspaceId, instance, step, block)
   }
 
   // ---- human actions (called from ExecutionService, driven server-side) ----
@@ -264,17 +194,15 @@ export class HumanTestController {
    * involvement, since nothing about the run's position changes.
    */
   async destroyEnvironment(workspaceId: string, blockId: string): Promise<ExecutionInstance> {
-    // Destroy is allowed both while parked (awaiting_human) AND while an env is still
-    // provisioning — a human must be able to cancel a slow/stuck provision without waiting
-    // for the poll budget to exhaust.
+    // Destroy is allowed both while parked (awaiting_human) AND during a deployer-driven rebuild
+    // (the transient `provisioning` phase a loop-back sets) — a human must be able to drop the env
+    // at either point.
     const { instance, step } = this.requireParked(await this.findActive(workspaceId, blockId))
     const ht = step.humanTest!
     await this.teardownCurrent(workspaceId, ht)
     if (ht.phase === 'provisioning') {
-      // Cancelled mid-provision: drop the env so the driver's next `pollEnvironment` (which
-      // owns the phase transitions during provisioning) hits its `!ht.environment` guard and
-      // degrades to manual mode, parking the human. We don't flip the phase here ourselves —
-      // the durable poll loop is the single owner of that transition.
+      // Mid-rebuild (the upstream deployer is re-running): just forget the env locally — the
+      // re-entry (`readEnvAndPark`) reads the freshly-rebuilt one, or degrades if none stood up.
       ht.environment = null
     } else if (ht.environment) {
       ht.environment = { ...ht.environment, status: 'torn_down' }
@@ -286,7 +214,7 @@ export class HumanTestController {
 
   // ---- internals -----------------------------------------------------------
 
-  /** Fresh entry: stand up an environment (or degrade) and park for the human. */
+  /** Fresh entry: read the environment the deployer provisioned (or degrade) and park the human. */
   private async begin(
     workspaceId: string,
     instance: ExecutionInstance,
@@ -302,7 +230,24 @@ export class HumanTestController {
       rounds: [],
       ...(block.pullRequest?.branch ? { headSha: null } : {}),
     }
-    if (!this.deps.provisionEnvironment) {
+    return this.readEnvAndPark(workspaceId, instance, step, block)
+  }
+
+  /**
+   * Read the environment the upstream `deployer` step provisioned for this block and park the human
+   * on it. The deployer is the single provisioner and it runs BEFORE this gate, so a healthy env is
+   * already `ready` here; anything else — no provider wired, no env stood up (an infraless service /
+   * a deployer-less chain), or a not-ready/failed env — degrades to manual mode (test against the PR
+   * branch and confirm here) rather than the gate provisioning anything itself.
+   */
+  private async readEnvAndPark(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    block: Block,
+  ): Promise<AdvanceResult> {
+    const ht = step.humanTest!
+    if (!this.deps.readEnvironment) {
       return this.degrade(
         workspaceId,
         instance,
@@ -311,24 +256,32 @@ export class HumanTestController {
         'No ephemeral-environment provider is configured; test against the PR branch and confirm here.',
       )
     }
+    let handle: EnvironmentHandle | null
     try {
-      const handle = await this.deps.provisionEnvironment(workspaceId, block, instance.id)
-      step.humanTest.environment = this.toEnvView(handle)
-      if (handle.status === 'ready') {
-        return this.toAwaitingHuman(workspaceId, instance, step, block)
-      }
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
+      handle = await this.deps.readEnvironment(workspaceId, block)
     } catch (error) {
       return this.degrade(
         workspaceId,
         instance,
         step,
         block,
-        `Could not provision an environment (${getErrorMessage(error)}); test against the PR branch and confirm here.`,
+        `Could not read the environment (${getErrorMessage(error)}); test against the PR branch and confirm here.`,
       )
     }
+    ht.environment = handle ? this.toEnvView(handle) : null
+    if (handle?.status === 'ready') {
+      ht.degradedReason = null
+      return this.toAwaitingHuman(workspaceId, instance, step, block)
+    }
+    return this.degrade(
+      workspaceId,
+      instance,
+      step,
+      block,
+      handle
+        ? 'The environment is not ready yet; test against the PR branch and confirm here.'
+        : 'No ephemeral environment was provisioned for this service (add a Deployer step before this gate, or test against the PR branch and confirm here).',
+    )
   }
 
   /** Consume a human-requested action on re-entry. */
@@ -354,7 +307,7 @@ export class HumanTestController {
       case 'pull-main':
         return this.pullMainInDriver(workspaceId, instance, step, block)
       case 'recreate':
-        return this.recreateAndContinue(workspaceId, instance, step, block)
+        return this.loopBackToDeployer(workspaceId, instance, step, block)
     }
   }
 
@@ -379,7 +332,7 @@ export class HumanTestController {
       return this.dispatchHelper(workspaceId, instance, step, block, 'pull-main', '')
     }
     // merged / noop → rebuild the env against the updated branch.
-    return this.recreateAndContinue(workspaceId, instance, step, block)
+    return this.loopBackToDeployer(workspaceId, instance, step, block)
   }
 
   /**
@@ -461,49 +414,58 @@ export class HumanTestController {
     return { kind: 'awaiting_job', jobId: step.jobId, stepIndex: instance.currentStep }
   }
 
-  /** Tear down the current env (best-effort) and provision a fresh one, then re-park. */
-  private async recreateAndContinue(
+  /**
+   * Rebuild the environment by LOOPING BACK to the upstream `deployer` step (the single
+   * provisioner): reset every step from the deployer through this gate, re-arm the deployer, and
+   * re-drive. The deployer re-provisions against the (now-updated) branch, then control returns here
+   * and {@link readEnvAndPark} reads the fresh env (via the repurposed `provisioning` phase in
+   * {@link evaluate}). The fix-attempt budget + round history survive the reset (the cap lives on
+   * `attempts`). When no deployer precedes the gate (an infraless service / a deployer-less chain)
+   * there is nothing to rebuild through, so degrade to manual mode.
+   */
+  private async loopBackToDeployer(
     workspaceId: string,
     instance: ExecutionInstance,
     step: PipelineStep,
     block: Block,
   ): Promise<AdvanceResult> {
+    const humanTestIndex = instance.currentStep
+    const deployerIndex = this.nearestDeployerBefore(instance.steps, humanTestIndex)
     const ht = step.humanTest!
-    await this.teardownCurrent(workspaceId, ht)
-    // The old env is gone — drop it immediately so that if the re-provision below fails (or
-    // no provider is wired) the gate degrades to a clean manual mode instead of surfacing a
-    // stale "ready" env + live URL pointing at the just-destroyed environment. The success
-    // path overwrites this with the fresh handle.
-    ht.environment = null
-    if (!this.deps.provisionEnvironment) {
+    if (deployerIndex < 0) {
       return this.degrade(
         workspaceId,
         instance,
         step,
         block,
-        'No ephemeral-environment provider is configured; test against the PR branch and confirm here.',
+        'No Deployer step precedes this gate, so the environment cannot be rebuilt automatically; test against the PR branch and confirm here.',
       )
     }
-    try {
-      const handle = await this.deps.provisionEnvironment(workspaceId, block, instance.id)
-      ht.environment = this.toEnvView(handle)
-      ht.degradedReason = null
-      if (handle.status === 'ready') {
-        return this.toAwaitingHuman(workspaceId, instance, step, block)
-      }
-      ht.phase = 'provisioning'
-      await this.deps.stateMachine.persistInstance(workspaceId, instance)
-      await this.deps.stateMachine.emitInstance(workspaceId, instance)
-      return { kind: 'awaiting_gate', stepIndex: instance.currentStep }
-    } catch (error) {
-      return this.degrade(
-        workspaceId,
-        instance,
-        step,
-        block,
-        `Could not provision an environment (${getErrorMessage(error)}); test against the PR branch and confirm here.`,
-      )
+    // `resetStepForRerun` clears a step's transient fields but not `humanTest`, so re-seed it
+    // explicitly: preserve the fix-attempt budget + round history (the cap lives on `attempts`), and
+    // set `provisioning` so the re-entry (once the deployer settles) reads the freshly-rebuilt env.
+    const preserved: HumanTestStepState = {
+      phase: 'provisioning',
+      environment: null,
+      attempts: ht.attempts,
+      maxAttempts: ht.maxAttempts,
+      rounds: ht.rounds ?? [],
+      ...(ht.headSha !== undefined ? { headSha: ht.headSha } : {}),
     }
+    this.deps.stepGraph.rerunRange(instance, deployerIndex, humanTestIndex)
+    step.humanTest = preserved
+    if (instance.status === 'blocked') instance.status = 'running'
+    await this.deps.stateMachine.persistInstance(workspaceId, instance)
+    await this.deps.stateMachine.emitInstance(workspaceId, instance)
+    return { kind: 'continue' }
+  }
+
+  /** The index of the nearest `deployer` step before `index`, or -1 when none precedes it. */
+  private nearestDeployerBefore(steps: readonly PipelineStep[], index: number): number {
+    for (let i = index - 1; i >= 0; i--) {
+      if (isDeployStep(steps[i]!.agentKind)) return i
+    }
+    return -1
   }
 
   /** Park in degraded (manual) mode: no live env, but the human can still test + confirm. */

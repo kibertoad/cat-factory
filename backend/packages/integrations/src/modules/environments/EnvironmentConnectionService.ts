@@ -1071,6 +1071,49 @@ export class EnvironmentConnectionService {
     return { provider: this.deps.environmentProvider ?? provider, manifest }
   }
 
+  /**
+   * Resolve the live provider + manifest + secret resolver for an EXISTING environment record,
+   * keyed by the record's persisted provision type/engine — the per-type handler that stood it up,
+   * NOT the workspace-primary handler. So teardown / status of an env in a workspace with several
+   * per-type handlers goes through the SAME handler that provisioned it (the previous
+   * `resolveProvider` always used the primary, tearing an env down through the wrong provider).
+   * Falls back to the legacy single-connection resolution for a legacy row (null `provisionType`)
+   * or when no per-type handler matches (its handler was unregistered) — so those envs keep working
+   * and the fallback preserves the old behaviour.
+   */
+  async resolveProviderForRecord(record: {
+    workspaceId: string
+    provisionType: string | null
+    engine: string | null
+  }): Promise<{
+    provider: EnvironmentProvider
+    manifest: EnvironmentManifest
+    resolveSecret: SecretResolver
+  }> {
+    const { workspaceId } = record
+    if (record.provisionType) {
+      // One batched list + a pure filter (no N+1 point-read). `EnvironmentRecord` carries no
+      // manifestId, so a `custom` type pinned to a manifest id can't be disambiguated here — a
+      // single matching handler wins, else prefer the same engine, else fall through to legacy.
+      const handlers = await this.deps.environmentConnectionRepository.listByWorkspace(workspaceId)
+      const matches = handlers.filter((h) => h.provisionType === record.provisionType)
+      const handler =
+        matches.length === 1
+          ? matches[0]
+          : (matches.find((h) => h.engine === record.engine) ?? undefined)
+      if (handler) {
+        const { provider, manifest } = this.buildFromRecord(handler)
+        return {
+          provider: this.deps.environmentProvider ?? provider,
+          manifest,
+          resolveSecret: await this.buildResolveSecret(handler),
+        }
+      }
+    }
+    const { provider, manifest } = await this.resolveProvider(workspaceId)
+    return { provider, manifest, resolveSecret: await this.resolveSecrets(workspaceId) }
+  }
+
   /** Resolve a VCS-neutral bound RepoFiles for the workspace+coords, or null. */
   private async resolveRepo(
     workspaceId: string,
