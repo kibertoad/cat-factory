@@ -277,6 +277,7 @@
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
       "environmentSetup": "הגדרת סביבות",
+      "deployRunnerSetup": "הגדרת מאגר ראנרים",
       "environmentLocalHint": "סביבות זמניות מקומיות זקוקות לזמן ריצה לפריסה כדי להריץ את kubectl/kustomize/helm. הגדירו את {runtime} בקובץ ה-.env שלכם: מצב מקורי מריץ את הכלים האלה על המארח שלכם ({native}), מצב מכולה מריץ אותם בתוך תמונת הפריסה ({container}).",
       "showDetail": "הצג פרטים",
       "retrying": "מנסה שוב…",

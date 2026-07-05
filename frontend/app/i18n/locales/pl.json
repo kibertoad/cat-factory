@@ -277,6 +277,7 @@
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
       "environmentSetup": "Skonfiguruj środowiska",
+      "deployRunnerSetup": "Skonfiguruj pulę runnerów",
       "environmentLocalHint": "Lokalne środowiska tymczasowe wymagają środowiska uruchomieniowego wdrożenia do uruchomienia kubectl/kustomize/helm. Ustaw {runtime} w pliku .env: tryb natywny uruchamia te narzędzia na twoim hoście ({native}), tryb kontenerowy uruchamia je w obrazie wdrożeniowym ({container}).",
       "showDetail": "Pokaż szczegóły",
       "retrying": "Ponawianie…",

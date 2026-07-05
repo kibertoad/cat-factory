@@ -18,9 +18,13 @@ Make the "environment provisioning failed" surface actionable when no deploy run
   (`EnvironmentFailureReason` in contracts) from the thrown `ValidationError` through the
   deployer-step failure path onto the run's failure, so the SPA can act on the cause without
   string-matching prose. Adds `getErrorReason` to the kernel error helpers.
-- **Frontend, precisely-gated guidance:** the board's `AgentFailureCard` shows a "Set up
-  environments" deep-link to Infrastructure → Test environments on `environment`-kind failures.
-  The Kubernetes+local env-var hint (`LOCAL_DEPLOY_RUNTIME` + `LOCAL_DEPLOY_HARNESS_ENTRY` /
-  `LOCAL_DEPLOY_IMAGE`) is now shown ONLY for the `deploy_runner_unwired` reason, in local mode,
-  and for a `kubernetes` provision — so a docker-compose / transient / future non-K8s failure
-  never shows inaccurate guidance.
+- **Frontend, precisely-gated guidance:** the board's `AgentFailureCard` shows a "Configure…"
+  deep-link on `environment`-kind failures whose destination follows the cause: a
+  `deploy_runner_unwired` failure on a non-local deployment links to Infrastructure → **Agent
+  containers** (`runner-pool`) — where the deploy runner/pool is actually wired, so the button no
+  longer dead-ends on the Test-environments tab that can't fix it — while every other environment
+  failure keeps linking to Infrastructure → **Test environments** (`environment`). The
+  Kubernetes+local env-var hint (`LOCAL_DEPLOY_RUNTIME` + `LOCAL_DEPLOY_HARNESS_ENTRY` /
+  `LOCAL_DEPLOY_IMAGE`) is shown ONLY for the `deploy_runner_unwired` reason, in local mode, and
+  for a `kubernetes` provision — so a docker-compose / transient / future non-K8s failure never
+  shows inaccurate guidance.
