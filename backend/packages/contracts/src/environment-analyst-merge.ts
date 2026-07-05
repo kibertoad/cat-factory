@@ -126,6 +126,24 @@ function detectorNoteFor(
 }
 
 /**
+ * Deep-clone a JSON-shaped contract value (recipe fields + analyst notes are pure data — strings,
+ * numbers, arrays, plain objects, no Date/Map/class instances). Used so the merged view model
+ * shares NO mutable reference with the caller's recommendation/draft: the wizard edits the merged
+ * recipe/notes in place, and an in-place edit must never reach back and mutate the deterministic
+ * detector fact or the non-binding draft. (A `structuredClone` global isn't typed in this pure,
+ * browser-shared package's `ES2022` lib, so this stays dependency-free.)
+ */
+function cloneData<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => cloneData(item)) as T
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, nested] of Object.entries(value)) out[key] = cloneData(nested)
+    return out as T
+  }
+  return value
+}
+
+/**
  * The analyst note for a field: an exact `field` match wins over an indexed/path-suffixed one
  * (e.g. `setupSteps` is preferred over `setupSteps[0]` for the field-level chip).
  */
@@ -152,7 +170,10 @@ export function mergeAnalystRecipeDraft(
 ): MergedRecipeDraft {
   const detectorRecipe = recommendation.provisioning.recipe
   const analystRecipe = draft?.recipe
-  const analystNotes = draft?.notes ?? []
+  // Clone the analyst notes up front so the returned view model shares no mutable reference with
+  // the caller's `draft` — the wizard edits this recipe/notes in place, and an in-place edit must
+  // never reach back and mutate the deterministic detector fact or the non-binding draft.
+  const analystNotes: AnalystRecipeNote[] = draft?.notes ? cloneData(draft.notes) : []
 
   const recipe: StackRecipe = {}
   const fields: MergedRecipeField[] = []
@@ -165,7 +186,8 @@ export function mergeAnalystRecipeDraft(
 
     if (detectorHas) {
       // The detector read the compose truth — its fact wins even if the analyst also proposed one.
-      Object.assign(recipe, { [field]: detectorValue })
+      // Clone the value so an edit to the merged recipe can't mutate the source recommendation.
+      Object.assign(recipe, { [field]: cloneData(detectorValue) })
       const note = detectorNoteFor(recommendation.notes, field)
       fields.push({
         field,
@@ -174,7 +196,8 @@ export function mergeAnalystRecipeDraft(
       })
     } else if (analystHas) {
       // Analyst-only field (setup steps, health gate, prerequisites the detector can't see).
-      Object.assign(recipe, { [field]: analystValue })
+      // Clone the value so an edit to the merged recipe can't mutate the source draft.
+      Object.assign(recipe, { [field]: cloneData(analystValue) })
       const note = analystNoteFor(analystNotes, field)
       fields.push({
         field,
@@ -190,20 +213,21 @@ export function mergeAnalystRecipeDraft(
   }
 
   const summary = draft?.summary
+  // A blank summary (absent, empty, or whitespace-only — the lenient draft schema doesn't trim)
+  // is "no summary": it neither counts as analyst input nor rides along in the output, so the
+  // `summary` presence and `hasAnalystInput` signals can't disagree for the same draft.
+  const hasSummary = summary !== undefined && summary.trim() !== ''
   const analystContributedRecipe = MERGEABLE_RECIPE_FIELDS.some((field) =>
     isProduced(analystRecipe?.[field]),
   )
   const hasAnalystInput = Boolean(
-    draft &&
-    (analystContributedRecipe ||
-      analystNotes.length > 0 ||
-      (summary !== undefined && summary !== '')),
+    draft && (analystContributedRecipe || analystNotes.length > 0 || hasSummary),
   )
 
   return {
     recipe,
     fields,
-    ...(summary !== undefined ? { summary } : {}),
+    ...(hasSummary ? { summary } : {}),
     analystNotes,
     hasAnalystInput,
   }

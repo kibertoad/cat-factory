@@ -317,4 +317,104 @@ describe('mergeAnalystRecipeDraft', () => {
     expect(merged.analystNotes).toEqual([])
     expect(merged.summary).toBeUndefined()
   })
+
+  it('treats a blank summary (empty or whitespace-only) as no input and omits it from the output', () => {
+    const rec = recommendation({ composeFiles: ['dev.yml'] })
+
+    const empty = mergeAnalystRecipeDraft(rec, { summary: '', recipe: undefined, notes: undefined })
+    expect(empty.hasAnalystInput).toBe(false)
+    // The blank summary neither counts as input nor rides along ⇒ the two signals agree.
+    expect(empty.summary).toBeUndefined()
+    expect('summary' in empty).toBe(false)
+
+    const whitespace = mergeAnalystRecipeDraft(rec, {
+      summary: '   ',
+      recipe: undefined,
+      notes: undefined,
+    })
+    expect(whitespace.hasAnalystInput).toBe(false)
+    expect(whitespace.summary).toBeUndefined()
+  })
+
+  it('merges analyst teardownSteps last in field order, carrying its provenance note', () => {
+    const rec = recommendation({ composeFiles: ['dev.yml'] }, [
+      { field: 'composeFiles', confidence: 'high', message: 'base compose file' },
+    ])
+    const draft: AnalystRecipeDraft = {
+      recipe: {
+        teardownSteps: [
+          { kind: 'compose-exec', name: 'dump db', service: 'db', command: ['pg_dump', 'app'] },
+        ],
+      },
+      notes: [{ field: 'teardownSteps', rationale: 'snapshot the db before down -v' }],
+    }
+
+    const merged = mergeAnalystRecipeDraft(rec, draft)
+
+    expect(merged.recipe.teardownSteps).toEqual([
+      { kind: 'compose-exec', name: 'dump db', service: 'db', command: ['pg_dump', 'app'] },
+    ])
+    // teardownSteps is last in MERGEABLE_RECIPE_FIELDS, so it lands after the detector's composeFiles.
+    expect(merged.fields.map((f) => f.field)).toEqual(['composeFiles', 'teardownSteps'])
+    const teardown = merged.fields.find((f) => f.field === 'teardownSteps')!
+    expect(teardown.origin).toBe('analyst')
+    expect(teardown.analystRationale).toBe('snapshot the db before down -v')
+  })
+
+  it('maps a dot-path analyst note (`healthGate.url`) to the top-level healthGate field', () => {
+    const rec = recommendation(undefined)
+    const draft: AnalystRecipeDraft = {
+      recipe: { healthGate: { kind: 'http', url: 'http://localhost:8080/health' } },
+      notes: [
+        {
+          field: 'healthGate.url',
+          rationale: 'README documents the /health endpoint',
+          citations: [{ path: 'README.md', lines: '40' }],
+        },
+      ],
+    }
+
+    const merged = mergeAnalystRecipeDraft(rec, draft)
+
+    const gate = merged.fields.find((f) => f.field === 'healthGate')!
+    expect(gate.origin).toBe('analyst')
+    expect(gate.analystRationale).toBe('README documents the /health endpoint')
+    expect(gate.citations).toEqual([{ path: 'README.md', lines: '40' }])
+  })
+
+  it('returns a recipe + notes decoupled from the inputs (an edit to the merge cannot mutate them)', () => {
+    const rec = recommendation({ composeFiles: ['detected.yml'] }, [
+      { field: 'composeFiles', confidence: 'high', message: 'canonical compose file' },
+    ])
+    const draft: AnalystRecipeDraft = {
+      recipe: {
+        setupSteps: [
+          {
+            kind: 'compose-exec',
+            name: 'install',
+            service: 'app',
+            command: ['composer', 'install'],
+          },
+        ],
+      },
+      notes: [
+        {
+          field: 'setupSteps',
+          rationale: 'runs install',
+          citations: [{ path: 'Makefile', lines: '1' }],
+        },
+      ],
+    }
+
+    const merged = mergeAnalystRecipeDraft(rec, draft)
+
+    // Mutating the reviewable/editable view model must not reach back into the caller's inputs.
+    merged.recipe.composeFiles!.push('injected.yml') // detector-won field
+    merged.recipe.setupSteps!.push({ kind: 'copy-file', name: 'x', from: 'a', to: 'b' }) // analyst field
+    merged.analystNotes.splice(0, merged.analystNotes.length)
+
+    expect(rec.provisioning.recipe!.composeFiles).toEqual(['detected.yml'])
+    expect(draft.recipe!.setupSteps).toHaveLength(1)
+    expect(draft.notes).toHaveLength(1)
+  })
 })
