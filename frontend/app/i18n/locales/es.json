@@ -3230,8 +3230,6 @@
     "reReviewingStage": "Volviendo a revisar el informe de error actualizado… Puedes cerrar esto, te avisaremos solo si se necesita más información.",
     "answerLabel": "Respuesta",
     "answerPlaceholder": "Responde a este hallazgo…",
-    "refineAnswerPlaceholder": "Refina tu respuesta…",
-    "saveAnswer": "Guardar respuesta",
     "dismissIrrelevant": "Descartar por irrelevante",
     "reopen": "Reabrir",
     "docHeading": "Informe de error aclarado",

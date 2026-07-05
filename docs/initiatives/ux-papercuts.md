@@ -4,7 +4,8 @@ Status: **fixes in progress.** Slices landed: the undo & confirmation-blast-radi
 cluster (UX-01/02/03/13, [#737](https://github.com/kibertoad/cat-factory/pull/737)); the
 clipboard-feedback shared primitive (UX-38/39); friendly model/agent-kind labels in the
 review & consensus windows (UX-36/37); markdown prose + copy affordances in the result
-views (UX-43, UX-44 copy buttons). This
+views (UX-43, UX-44 copy buttons); the review-window gate-actions + draft-persistence
+cluster (UX-32/33/34). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -216,9 +217,9 @@ per-file patches:
 
 | ID    | Sev | Status  | Finding                                                                                                          |
 | ----- | --- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| UX-32 | P1  | todo    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
-| UX-33 | P1  | todo    | Typed review answers lost when window closes without blur/save                                                   |
-| UX-34 | P2  | todo    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
+| UX-32 | P1  | done    | Requirements/Clarity review actions completely hidden below `lg` — gate unadvanceable                            |
+| UX-33 | P1  | done    | Typed review answers lost when window closes without blur/save                                                   |
+| UX-34 | P2  | done    | Requirements auto-saves on blur; Clarity needs explicit "Save answer" — opposite models                          |
 | UX-35 | P2  | todo    | No elapsed time on running steps in PipelineProgress / TaskExecution                                             |
 | UX-36 | P2  | done    | Raw model id rendered verbatim in review windows                                                                 |
 | UX-37 | P2  | done    | Internal `agentKind` enum + raw model id leak in consensus window                                                |
@@ -230,22 +231,28 @@ per-file patches:
 | UX-43 | P3  | done    | Agent prose rendered as plain text in several result views                                                       |
 | UX-44 | P3  | partial | Structured JSON / consensus output lack copy buttons; no jump-to-latest in live stream; findings lack timestamps |
 
-- **UX-32 — Hidden gate actions.** `requirements/RequirementsReviewWindow.vue:794`
-  and `clarity/ClarityReviewWindow.vue:479`: the entire action rail (Proceed,
-  Incorporate, Re-review, Redo, …) lives in `<aside class="hidden w-72 … lg:flex">`.
-  Below `lg` (laptop split-screen, tablet) the user can answer findings but cannot
-  advance the review — a hard pipeline gate with no visible exit. Fix: move the
-  action block into the scrollable main column or a sticky footer. **Highest-priority
-  single fix in this doc.**
-- **UX-33 — Lost review drafts.** `RequirementsReviewWindow.vue:576` persists an
-  answer only on textarea `@blur`; `flushDrafts()` runs only before explicit
-  actions; `close()` (backdrop :414, X :442, Escape via `useResultView`) doesn't
-  flush. Clarity requires an explicit "Save answer" click
-  (`ClarityReviewWindow.vue:402-411`) with no flush at all. Fix: flush drafts in
-  the close path.
-- **UX-34 — Inconsistent save models.** Same visual language, opposite
-  interaction between the two review windows; muscle memory from one silently
-  drops data in the other. Standardize on auto-save-on-blur (+ close-flush).
+- **UX-32 — Hidden gate actions. DONE.** The action rail in both
+  `RequirementsReviewWindow.vue` and `ClarityReviewWindow.vue` was `<aside class="hidden
+w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could answer
+  findings but had no visible way to advance the gate. The `aside` is now a responsive
+  rail — a right-hand column on wide screens (`lg:w-72 lg:border-s`) and a full-width
+  bottom action bar below `lg` (`flex w-full border-t`, never hidden). The
+  purely-informational stats block is the only thing hidden below `lg`
+  (`hidden … lg:block`) so the mobile action bar stays compact; every action button shows
+  at all sizes. (The `exceeded` state's `IterationCapPrompt` was already in the main
+  column, so it was reachable — the fix is for the `ready`/`merged` actions +
+  request-recommendations.)
+- **UX-33 — Lost review drafts. DONE.** `useResultView` gained an `onClose` hook that
+  runs on EVERY close path (X, backdrop, Escape) before the view tears down; both review
+  windows pass `onClose: () => void flushDrafts()`. `flushDrafts` now snapshots the review
+  up front and threads it through `persistDraft`, so the persist completes even though the
+  reactive `review`/`blockId` go null the instant the view closes.
+- **UX-34 — Inconsistent save models. DONE.** The clarity window was converted to
+  auto-save-on-blur (the requirements pattern): a seeding `watch` pre-fills each textarea
+  from the recorded reply, `persistDraft` saves on `@blur` only when the trimmed draft
+  differs, and the explicit "Save answer" button (+ its `clarity.saveAnswer` /
+  `clarity.refineAnswerPlaceholder` i18n keys, removed from all 8 locales) is gone. Both
+  windows now behave identically.
 - **UX-35 — No elapsed clock.** `pipeline/PipelineProgress.vue` and
   `panels/inspector/TaskExecution.vue` show spinner/phase/subtasks but no duration;
   `composables/useStepTimer.ts` is wired only into the step-detail overlay. A step
@@ -532,9 +539,16 @@ per-file patches:
   plain-text `<pre>`/`<p whitespace-pre-wrap>`. It's the inline counterpart to the full
   segmented reader (`parseOutputOutline`) used by `AgentStepDetail`. Pair copy-able output
   (JSON, prose) with the shared `common/CopyButton.vue`.
-- When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding
-  or changing an `en.json` key requires the same change in every other locale in
-  the same PR.
+- **Flush unsaved draft input on the close path via `useResultView`'s `onClose` hook**
+  (not per-close-button handlers). A result-view window that holds editable draft state
+  (the review windows) passes `onClose: () => void flushDrafts()`; the composable fires it
+  on the X button, the backdrop click, AND the Escape key, so no close path can leak. The
+  flush MUST snapshot whatever it needs (the review, the block id) synchronously up front —
+  the reactive `blockId`/derived state go null the moment `closeResultView()` runs, so an
+  async persist that re-reads them mid-flight silently no-ops.
+- When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
+  changing, OR removing an `en.json` key requires the same change in every other locale in
+  the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).
 - Frontend fixes to `@cat-factory/app` need a changeset (patch), and any new
   interactive affordance covered by e2e wants a `data-testid`.
 - Line references are from the 2026-07-02 audit; re-verify anchors before editing.

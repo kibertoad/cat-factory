@@ -3337,8 +3337,6 @@
       "description": "Noun label heading the recorded reply to a finding (the answer that was given), not the verb."
     },
     "answerPlaceholder": "Answer this finding…",
-    "refineAnswerPlaceholder": "Refine your answer…",
-    "saveAnswer": "Save answer",
     "dismissIrrelevant": "Dismiss as irrelevant",
     "reopen": "Reopen",
     "docHeading": "Clarified bug report",
