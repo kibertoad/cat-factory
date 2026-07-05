@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (lokalise-main pilot)
 
-**Status:** planning (slice 0 = this tracker) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slice 1 = contracts landed) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -153,6 +153,20 @@ Persisted on the service frame like today; resolved up the frame chain
 (`AgentContextBuilder.resolveServiceFrame`). Valibot schemas beside the existing provisioning
 contracts. Autodetection and the analyst only _recommend_ these fields; the provider keys purely
 on persisted config (the build-flag rule).
+
+> **Landed (slice 1)** in `backend/packages/contracts/src/stack-recipes.ts` (wired onto
+> `serviceProvisioning.recipe` in `environments.ts`): `stackRecipeSchema`
+> (`StackRecipe`), composed of `recipeStepSchema` (`RecipeStep`,
+> kinds `compose-exec` / `copy-file` / `wait-http` / `wait-file` / `host-command`, each with a
+> per-step `timeoutMs`; `compose-exec` seed import pipes a dump via `stdinFile`),
+> `recipeHealthGateSchema` (`RecipeHealthGate` — `compose-healthy` default / `http` /
+> `compose-exec`), and `recipeEnvFileSchema` (`RecipeEnvFile`). All fields are optional (a plain
+> `composePath` config parses unchanged); `recipe.composeFiles` supersedes `composePath` when
+> present. The recommendation gained `composeFileCandidates` (OS overrides annotated via `os`),
+> `profileCandidates` (default-off), `seedDumpCandidates`, and the report-only `repoCliHint` —
+> detected recipe fields (external networks, env-file pairs, base compose files) go straight into
+> `recommendation.provisioning.recipe`. Persistence rides the existing `optJsonField('provisioning')`
+> blob, so **no migration** — the D1 ⇄ Drizzle parity work begins at the SharedStack table (slice 4).
 
 ### 2. `SharedStack` (new entity + lifecycle service)
 
@@ -323,7 +337,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | #   | Slice                                                                                                                                                     | Status | PR     |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
 | 0   | Tracker doc                                                                                                                                               | done   | (this) |
-| 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                  | todo   |        |
+| 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                  | done   | (this) |
 | 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | todo   |        |
 | 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | todo   |        |
 | 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | todo   |        |

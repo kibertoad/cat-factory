@@ -4,7 +4,7 @@ import { agentConfigValuesSchema } from './agent-config.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema, taskEstimateSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
-import { cloudProviderSchema, instanceSizeSchema } from './provisioning.js'
+import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
 import { releaseSignalSchema } from './release.js'
 import {
   environmentStatusSchema,

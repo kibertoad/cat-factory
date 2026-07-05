@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { cloudProviderSchema } from './provisioning.js'
+import { cloudProviderSchema } from './compute-provisioning.js'
 
 // ---------------------------------------------------------------------------
 // Account tenancy wire contracts. An account is the tenant that owns workspaces:

@@ -1,5 +1,11 @@
 import * as v from 'valibot'
-import { customBackendKindSchema, eksClusterFieldsSchema } from './primitives.js'
+import {
+  customBackendKindSchema,
+  eksClusterFieldsSchema,
+  nonEmpty,
+  urlString,
+} from './primitives.js'
+import { stackRecipeSchema } from './stack-recipes.js'
 
 // ---------------------------------------------------------------------------
 // Ephemeral environment provider wire contracts. Every organization rolls its
@@ -28,9 +34,6 @@ export const environmentSecretRefSchema = v.object({
   key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_.-]+$/), v.minLength(1), v.maxLength(64)),
 })
 export type EnvironmentSecretRef = v.InferOutput<typeof environmentSecretRefSchema>
-
-const nonEmpty = v.pipe(v.string(), v.minLength(1))
-const urlString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000))
 
 /**
  * How the worker authenticates to the org's *management* API (the one we call to
@@ -585,6 +588,14 @@ export const serviceProvisioningSchema = v.object({
    * contexts, in-checkout bind mounts, and relative `env_file`s resolve.
    */
   composeBuild: v.optional(v.boolean()),
+  /**
+   * `docker-compose`: the declarative STACK RECIPE for a complex multi-step bring-up —
+   * multi-`-f` layering, profiles, env-file materialization, external networks / shared-stack
+   * refs, ordered setup/teardown steps + a terminal health gate. Absent ⇒ the simple
+   * single-file `composePath` + `up --wait` path (when set, `recipe.composeFiles` supersedes
+   * `composePath`). See {@link stackRecipeSchema}.
+   */
+  recipe: v.optional(stackRecipeSchema),
   /** `custom`: the custom-manifest-type id this service produces (matched to a remote-custom handler). */
   manifestId: v.optional(manifestIdSchema),
   /** `custom`: optional path to the custom manifest within the repo. */
@@ -981,7 +992,13 @@ export type ProvisioningDetectionConfidence = v.InferOutput<
 
 /** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
 export const provisioningDetectionNoteSchema = v.object({
-  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`. */
+  /**
+   * Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` |
+   * `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` |
+   * `manifestRoot` | `composeService` | `composeBuild` | `composeFiles` | `composeProfiles` |
+   * `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` | `healthGate` |
+   * `seedDump` | `repoCli`.
+   */
   field: v.string(),
   confidence: provisioningDetectionConfidenceSchema,
   /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
@@ -1062,18 +1079,90 @@ export type ProvisioningManifestRootCandidate = v.InferOutput<
 >
 
 /**
+ * A candidate Docker Compose file for `-f` layering (slice 2 detection). The base file(s) are
+ * pre-selected into `provisioning.recipe.composeFiles`; OS-specific overrides
+ * (`dev.wsl.override.yml`, `dev.mac.override.yml`) are surfaced here — annotated with `os` and
+ * NOT auto-layered — so the wizard binds the one matching the operator's machine.
+ */
+export const provisioningComposeFileCandidateSchema = v.object({
+  /** Repo-relative compose file path (a value `recipe.composeFiles` would take). */
+  path: v.string(),
+  /** The file's base name (e.g. `dev.wsl.override.yml`). */
+  name: v.string(),
+  /** For an OS-specific override, which OS it targets; absent ⇒ OS-neutral (a base layer). */
+  os: v.optional(v.picklist(['wsl', 'mac', 'linux', 'windows'])),
+  /** True for a base layer pre-selected into `composeFiles`; an OS override is opt-in. */
+  recommended: v.boolean(),
+})
+export type ProvisioningComposeFileCandidate = v.InferOutput<
+  typeof provisioningComposeFileCandidateSchema
+>
+
+/**
+ * A `COMPOSE_PROFILES` label the compose files declare (slice 2 detection). Surfaced
+ * default-OFF — an optional service group the user opts into; `recommended` is set only for a
+ * profile the detector deems part of the base bring-up (rare — most profiles are optional).
+ */
+export const provisioningProfileCandidateSchema = v.object({
+  /** The `profiles:` label (e.g. `peer`, `backends`). */
+  profile: v.string(),
+  /** Whether to pre-enable it (default false — profiles are opt-in). */
+  recommended: v.boolean(),
+})
+export type ProvisioningProfileCandidate = v.InferOutput<typeof provisioningProfileCandidateSchema>
+
+/**
+ * A `.sql` dump found under a seed-ish directory (`deployment/`, `seed/`, `db/`,
+ * `docker-entrypoint-initdb.d/`) — a LOW-confidence candidate the wizard confirms, turning it
+ * into a `compose-exec` seed-import step (piping the dump via `stdinFile`). Never auto-applied.
+ */
+export const provisioningSeedDumpCandidateSchema = v.object({
+  /** Repo-relative path of the SQL dump. */
+  path: v.string(),
+  /** The dump file's base name. */
+  name: v.string(),
+  /** The heuristic top pick among several dumps. */
+  recommended: v.boolean(),
+})
+export type ProvisioningSeedDumpCandidate = v.InferOutput<
+  typeof provisioningSeedDumpCandidateSchema
+>
+
+/**
+ * A REPORT-ONLY hint that the repo carries its OWN imperative bring-up — a Makefile, a
+ * `bin/*console*` repo CLI, a justfile/Taskfile with setup-looking targets. Detection never
+ * parses shell; it only flags the file so the wizard can suggest running the environment
+ * ANALYST (slice 8) to translate that bring-up into recipe steps. Its presence sets the
+ * "consider deep analysis" nudge.
+ */
+export const provisioningRepoCliHintSchema = v.object({
+  /** Repo-relative path of the CLI / build file that triggered the hint. */
+  path: v.string(),
+  /** What kind of imperative entry point it is. */
+  kind: v.picklist(['makefile', 'repo-cli', 'justfile', 'taskfile']),
+})
+export type ProvisioningRepoCliHint = v.InferOutput<typeof provisioningRepoCliHintSchema>
+
+/**
  * A non-binding provisioning recommendation detected from a service's repo. `provisioning`
- * carries the service-owned config to prefill (the "what + where"); `urlSource`/`namespace`
- * are engine-level suggestions the workspace handler owns (the detector can READ them from
- * the manifests but they aren't stored on the service); the candidate arrays + `notes` drive
- * the confirm UI. `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
+ * carries the service-owned config to prefill (the "what + where", now including a
+ * `docker-compose` service's {@link stackRecipeSchema | recipe} — layered compose files,
+ * profiles, env-file pairs, external networks); `urlSource`/`namespace` are engine-level
+ * suggestions the workspace handler owns (the detector can READ them from the manifests but
+ * they aren't stored on the service); the candidate arrays + `notes` drive the confirm UI.
+ * `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
  *
  * The candidate arrays let the user CHOOSE instead of accepting a silent auto-pick:
  * `overlayCandidates` (which overlay within a kustomize root), `manifestRootCandidates` (which
- * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice), and
- * `composeServiceCandidates` (which compose service). Each note's `field` is one of
- * `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` |
- * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`.
+ * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice),
+ * `composeServiceCandidates` (which compose service), `composeFileCandidates` (which OS override
+ * to layer), `profileCandidates` (which optional profiles to enable), and `seedDumpCandidates`
+ * (which SQL dump to seed from). `repoCliHint` flags a repo with its own imperative bring-up
+ * (a nudge toward the analyst). Each note's `field` is one of `provisionType` | `renderer` |
+ * `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` |
+ * `serviceDir` | `manifestRoot` | `composeService` | `composeBuild` | `composeFiles` |
+ * `composeProfiles` | `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` |
+ * `healthGate` | `seedDump` | `repoCli`.
  */
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),
@@ -1091,6 +1180,14 @@ export const provisioningRecommendationSchema = v.object({
   serviceDirCandidates: v.optional(v.array(provisioningServiceDirCandidateSchema)),
   /** Candidate compose services to pick from when the compose file declares several (advisory). */
   composeServiceCandidates: v.optional(v.array(provisioningComposeServiceCandidateSchema)),
+  /** Candidate compose files for `-f` layering (base pre-selected; OS overrides opt-in). */
+  composeFileCandidates: v.optional(v.array(provisioningComposeFileCandidateSchema)),
+  /** `COMPOSE_PROFILES` labels the compose files declare (surfaced default-off). */
+  profileCandidates: v.optional(v.array(provisioningProfileCandidateSchema)),
+  /** Low-confidence SQL seed dumps to confirm as `compose-exec` seed steps. */
+  seedDumpCandidates: v.optional(v.array(provisioningSeedDumpCandidateSchema)),
+  /** Report-only: the repo has its own imperative bring-up ⇒ suggest the environment analyst. */
+  repoCliHint: v.optional(provisioningRepoCliHintSchema),
   /** Per-field confidence + hints for the SPA. */
   notes: v.array(provisioningDetectionNoteSchema),
 })

@@ -4,6 +4,12 @@ import * as v from 'valibot'
 // unions exactly, so a payload that validates here drops straight into the Pinia
 // stores without translation.
 
+/** A non-empty string (trimming is left to each caller that needs it). */
+export const nonEmpty = v.pipe(v.string(), v.minLength(1))
+
+/** A bounded, trimmed URL string (≤2000 chars). Not a full URL parse — the runtime validates reachability. */
+export const urlString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000))
+
 export const blockTypeSchema = v.picklist([
   'frontend',
   'service',
