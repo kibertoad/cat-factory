@@ -1,6 +1,6 @@
 # Initiative: documentation-type task improvements
 
-**Status:** in progress (WS1 item 1 + WS2 + WS3 + WS4 landed) · **Owner:** core · **Started:** 2026-07-04
+**Status:** in progress (WS1 + WS2 + WS3 + WS4 landed; only WS5 remains) · **Owner:** core · **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -177,9 +177,9 @@ two: backend loop, then UI).
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | --------- |
 | 0   | Tracker document (this file)                                                                                                                                                                                                              | —          | done   | (this PR) |
 | 1   | Per-kind Markdown template registry (built-in fallback) + weave into outliner/writer prompts (+ prompt version bumps)                                                                                                                     | WS1        | done   | (this PR) |
-| 2   | `role`-tagged (`template`/`exemplar`) workspace+`DocKind` document link, reusing the documents integration's link/read path (`DocumentLinkService`/`DocumentRepository`, incl. the existing `github` doc source) — no new fetch machinery | WS1        | todo   |           |
-| 3   | Workspace-linked template override resolution: outliner/writer prefer the `role:'template'` link's body over the built-in skeleton when one is linked for the kind                                                                        | WS1        | todo   |           |
-| 4   | Built-in curated exemplar links per kind, surfaced alongside the `role:'exemplar'` workspace links from item 2                                                                                                                            | WS1        | todo   |           |
+| 2   | `role`-tagged (`template`/`exemplar`) workspace+`DocKind` document link, reusing the documents integration's link/read path (`DocumentLinkService`/`DocumentRepository`, incl. the existing `github` doc source) — no new fetch machinery | WS1        | done   | (this PR) |
+| 3   | Workspace-linked template override resolution: outliner/writer prefer the `role:'template'` link's body over the built-in skeleton when one is linked for the kind                                                                        | WS1        | done   | (this PR) |
+| 4   | Built-in curated exemplar links per kind, surfaced alongside the `role:'exemplar'` workspace links from item 2                                                                                                                            | WS1        | done   | (this PR) |
 | 5   | `style.anti-llmisms` + `style.concise-actionable` fragments (new `collections/style.ts`)                                                                                                                                                  | WS2        | done   | #787      |
 | 6   | `doc-aware` trait + engine fragment folding for doc kinds; default-on selection for document tasks                                                                                                                                        | WS2        | done   | #787      |
 | 7   | Style fragments as review criteria for `doc-reviewer`                                                                                                                                                                                     | WS2        | done   | #787      |
@@ -255,6 +255,29 @@ placeholder}` in all 8 locales), guarded by exhaustive `Record<DocKindFieldKey, 
   prompt label; the exhaustive Records make a forgotten one a compile error. No prompt-version bump
   was needed (the inline `DOC_*_SYSTEM_PROMPT` text is unchanged; the fold only adds user-prompt
   content, and these prompts aren't in `PROMPT_VERSIONS`).
+- **WS1 items 2–4 landed via a `role`/`docKind` tag on the existing `documents` row (not a second
+  table):** two nullable columns (`role` ∈ `template`/`exemplar`, `doc_kind`) sit ALONGSIDE
+  `linked_block_id` on the projected `documents` row (D1 `0039_document_role_links.sql` ⇄ Drizzle
+  `documents` + generated migration; the Node migration is the merge node that collapses the two
+  pre-existing divergent snapshot leaves — see "Resolving conflicting Drizzle migrations"). The
+  `DocumentRepository` port gained `getRoleLink`/`listRoleLinks`/`listRoleLinksByWorkspace`/
+  `setRole`/`clearRole`/`clearRoleForKind`, mirrored across D1 ⇄ Drizzle and asserted by the
+  cross-runtime conformance suite (via a new `documentRepository()` harness probe, since the link
+  WRITE path needs an imported row the dev-open HTTP path can't create). `upsert` leaves the role
+  columns untouched (INSERT NULL / ON CONFLICT preserve), so import never clobbers a link; the run-
+  path reads `getRoleLink`/`listRoleLinks` are allow-listed in the mothership persistence RPC.
+  Resolution is the SINGLE seam **`resolveDocTemplate(kind, linkedBody?)`** (`@cat-factory/agents`):
+  it parses a linked template's H2 (or shallowest-section-level) headings into required sections via
+  kernel's `documentHeadings` (the gate's own extractor — no second Markdown parser), else the built-
+  in `docTemplateFor`. BOTH consumers go through it: the doc prompts read the engine-resolved
+  `context.block.docTemplateBody` (stamped by `AgentContextBuilder.resolveDocAuthoringContext` for
+  doc-aware kinds), and `GitHubDocQualityProvider` fetches the same `role:'template'` link server-
+  side — so the writer and the gate can never check against different sections. Exemplars are
+  additive: built-in `DOC_KIND_EXEMPLARS` (curated public URLs) + the workspace's `role:'exemplar'`
+  links, surfaced in the researcher/outliner/writer prompts. UI is a per-DocKind management panel in
+  the Integrations hub (`DocumentTemplatesModal.vue`, `documents.templates.*` i18n in all 8 locales);
+  no prompt-version bump (the inline `DOC_*_SYSTEM_PROMPT` text is unchanged, and they aren't in
+  `PROMPT_VERSIONS`).
 - **Editing a versioned prompt means bumping its number** (`agents/kinds/versions.ts` rule);
   any prompt-visible change to the `doc-*` kinds in WS1/WS2 bumps accordingly.
 - **Pipeline catalog edits need a `version` bump** on the touched pipeline (the reseed-offer

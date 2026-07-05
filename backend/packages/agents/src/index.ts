@@ -171,7 +171,7 @@ export {
   docTemplateFor,
   // WS1 items 2–3: resolve a kind's effective template given an optional workspace-linked template
   // body — the single seam the doc-authoring prompts AND the doc-quality gate provider share.
-  parseTemplateDocument,
+  // (`parseTemplateDocument` stays module-internal — `resolveDocTemplate` is the public entry.)
   resolveDocTemplate,
   requiredSectionTitles,
   renderTemplateSkeleton,
