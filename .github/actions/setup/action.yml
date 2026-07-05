@@ -1,8 +1,9 @@
 name: Setup pnpm + Node + install
 description: >
-  Shared toolchain setup for every job: pnpm, Node 26 (with the pnpm store cache),
-  the optional node_modules/.nuxt cache, the optional actions/cache-backed Turbo
-  remote cache, and a frozen-lockfile install. Checkout must have already run.
+  Shared toolchain setup for every job: pnpm, Node 26, ONE dependency cache (the
+  node_modules/.nuxt cache when enabled, else the pnpm store cache), the optional
+  actions/cache-backed Turbo remote cache, and a frozen-lockfile install that is
+  skipped entirely on an exact node_modules hit. Checkout must have already run.
 
 inputs:
   node-modules-cache:
@@ -29,19 +30,31 @@ runs:
 
     # An empty registry-url behaves as unset (setup-node only writes .npmrc auth
     # config when the input is non-empty).
+    #
+    # The pnpm store cache is enabled ONLY when the node_modules cache is off (the
+    # deploy/release/image-publish lanes). With the node_modules cache on, the store
+    # cache is pure waste: both key on hashFiles('pnpm-lock.yaml') and setup-node
+    # restores exact-match only, so they hit and miss in lockstep — on a hit the
+    # ~230MB store download is redundant (node_modules is already materialized and
+    # the install below is skipped), and on a miss the store is empty anyway.
+    # NOTE the ternary is deliberately inverted (`== 'false' && 'pnpm' || ''`): the
+    # `cond && '' || 'pnpm'` shape would ALWAYS yield 'pnpm' because '' is falsy.
     - name: Set up Node
       uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: 26
-        cache: pnpm
+        cache: ${{ inputs.node-modules-cache == 'false' && 'pnpm' || '' }}
         registry-url: ${{ inputs.registry-url }}
 
     - name: Cache node_modules
+      id: node-modules-cache
       if: ${{ inputs.node-modules-cache == 'true' }}
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        # Dependency dirs + Nuxt's prepared types (.nuxt), so `pnpm install`
-        # is a near-no-op on a hit and the frontend typecheck still resolves.
+        # Dependency dirs + Nuxt's prepared types (.nuxt, the `nuxt prepare`
+        # postinstall output), so a hit restores the complete post-install state —
+        # `pnpm install` is SKIPPED outright on an exact hit (workspace packages are
+        # symlinks into the checkout, so their sources are always live).
         path: |
           node_modules
           backend/packages/*/node_modules
@@ -54,7 +67,17 @@ runs:
           deploy/frontend/.nuxt
           deploy/node/node_modules
           deploy/local/node_modules
-        key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
+        # The manifests are in the key (not just the lockfile) because the install is
+        # skipped on an exact hit: a package.json edit that does NOT touch the lockfile
+        # (a bin/scripts change, or a forgotten lockfile update) must force a real
+        # install — a forgotten-lockfile PR then fails with the clear --frozen-lockfile
+        # error instead of a confusing module-not-found at test time.
+        key: node-modules-${{ runner.os }}-node26-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '**/package.json') }}
+        # A partial hit restores the previous tree for an INCREMENTAL install (the
+        # skip below only fires on an exact hit), so a lockfile-change PR pays a
+        # delta install instead of a cold one.
+        restore-keys: |
+          node-modules-${{ runner.os }}-node26-
 
     # Localhost proxy backed by actions/cache that exports TURBO_API/TURBO_TOKEN/
     # TURBO_TEAM for the job — no secrets, no external service. actions/cache is
@@ -65,6 +88,12 @@ runs:
       if: ${{ inputs.turbo-cache == 'true' }}
       uses: rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9 # v2.5.0
 
+    # Skipped on an exact node_modules cache hit: the cache paths above cover every
+    # directory install produces, so a restored cache IS the post-install state and
+    # the ~12s no-op reconcile pass buys nothing. Runs on a miss OR a restore-keys
+    # partial hit (cache-hit is 'true' only for the primary key), and always when the
+    # node_modules cache is disabled.
     - name: Install dependencies
+      if: ${{ inputs.node-modules-cache != 'true' || steps.node-modules-cache.outputs.cache-hit != 'true' }}
       shell: bash
       run: pnpm install --frozen-lockfile
