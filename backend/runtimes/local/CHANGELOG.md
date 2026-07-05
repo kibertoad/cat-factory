@@ -1,5 +1,52 @@
 # @cat-factory/local-server
 
+## 0.51.0
+
+### Minor Changes
+
+- accb8ec: feat(docs): attach read-only reference repositories to a document-authoring task
+
+  Let a document-type task carry a list of **reference repositories** the `doc-writer` agent clones
+  READ-ONLY while it drafts, so it can reuse existing solutions in those repos as a reference. The
+  writer is already containerized (`container-coding`), so no interim step is needed — the reference
+  repos become extra sibling checkouts it may read but can never write to.
+
+  - **Read-only by construction.** Reference repos flow through a NEW `referenceRepos` block field,
+    separate from the writable `involvedServiceIds`/`fanOutMultiRepo` path. The harness job spec
+    carries no branch/PR fields for a reference, the multi-repo coder clones it at its base branch
+    with no work branch, and the push phase skips it — three independent layers, so a reference repo
+    is structurally impossible to push to. Its clone URL is host-allowlisted like every other repo.
+  - **Any accessible repo, by name fragment.** A reference need not be a board service or in the
+    workspace's synced projection: the inspector picker reuses the SAME server-side, debounced repo
+    search as the add-service modal (extracted into a shared `useRepoSearch` composable), so any repo
+    the workspace's VCS connection or the signed-in user's PAT can reach can be attached.
+  - **Provider-neutral by construction.** The `ReferenceRepo` identity mirrors the kernel's VCS
+    vocabulary (`repoId` / `owner` / `name` / `defaultBranch` / `connectionId`, per `VcsRepoRef` /
+    `VcsConnectionRef`) rather than GitHub-specific names, and the clone URL + provider come from the
+    deployment-level `ResolveRepoOrigin` seam the primary already rides — so a GitLab deployment
+    clones references from GitLab with no extra wiring.
+  - **Deduped against the primary.** A reference pointing at the doc task's own repo (or a duplicate
+    attachment) is dropped by the shared sibling-checkout key, so it can't collide with an existing
+    clone directory and fail the run.
+  - **Symmetric persistence.** New `reference_repos` JSON column on `blocks`, mirrored across the D1
+    and Drizzle stores with a cross-runtime conformance round-trip assertion.
+
+  Bumps `@cat-factory/executor-harness` (new read-only reference-leg support in the coding harness) —
+  the runner image tag pins and `RECOMMENDED_HARNESS_IMAGE` are bumped in lockstep.
+
+### Patch Changes
+
+- Updated dependencies [accb8ec]
+  - @cat-factory/contracts@0.104.0
+  - @cat-factory/kernel@0.95.0
+  - @cat-factory/server@0.88.0
+  - @cat-factory/orchestration@0.77.0
+  - @cat-factory/executor-harness@1.35.0
+  - @cat-factory/node-server@0.79.0
+  - @cat-factory/agents@0.39.2
+  - @cat-factory/gitlab@0.7.11
+  - @cat-factory/integrations@0.70.1
+
 ## 0.50.0
 
 ### Minor Changes
