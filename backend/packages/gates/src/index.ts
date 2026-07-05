@@ -1,11 +1,18 @@
 import {
   CI_AGENT_KIND,
   CONFLICTS_AGENT_KIND,
+  DOC_QUALITY_AGENT_KIND,
   HUMAN_REVIEW_AGENT_KIND,
   POST_RELEASE_HEALTH_AGENT_KIND,
   registerGate,
 } from '@cat-factory/kernel'
-import { ciGate, conflictsGate, humanReviewGate, postReleaseHealthGate } from './gates.js'
+import {
+  ciGate,
+  conflictsGate,
+  docQualityGate,
+  humanReviewGate,
+  postReleaseHealthGate,
+} from './gates.js'
 
 // ---------------------------------------------------------------------------
 // The built-in polling-gate suite, authored ENTIRELY through the public gate-registry
@@ -33,18 +40,26 @@ export {
   RELEASE_HEALTH_PROVIDER,
   INCIDENT_ENRICHMENT_PROVIDER,
   PULL_REQUEST_REVIEW_PROVIDER,
+  DOC_QUALITY_PROVIDER,
   wireCiStatusProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
+  wireDocQualityProvider,
   clearGateProviders,
   applyGateProviders,
   warnUnwiredGates,
   type GateProviderOverrides,
   type GateWiringLogger,
 } from './providers.js'
-export { ciGate, conflictsGate, postReleaseHealthGate, humanReviewGate } from './gates.js'
+export {
+  ciGate,
+  conflictsGate,
+  postReleaseHealthGate,
+  humanReviewGate,
+  docQualityGate,
+} from './gates.js'
 export {
   classifyHumanReview,
   isApproved,
@@ -65,6 +80,7 @@ export function registerBuiltinGates(): void {
   registerGate(CONFLICTS_AGENT_KIND, conflictsGate)
   registerGate(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate)
   registerGate(HUMAN_REVIEW_AGENT_KIND, humanReviewGate)
+  registerGate(DOC_QUALITY_AGENT_KIND, docQualityGate)
 }
 
 // Side-effect registration: `import '@cat-factory/gates'` is enough.

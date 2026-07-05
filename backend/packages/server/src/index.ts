@@ -160,6 +160,10 @@ export {
   type GitHubCiStatusProviderDependencies,
 } from './github/GitHubCiStatusProvider.js'
 export {
+  GitHubDocQualityProvider,
+  type GitHubDocQualityProviderDependencies,
+} from './github/GitHubDocQualityProvider.js'
+export {
   GitHubPullRequestReviewProvider,
   type GitHubPullRequestReviewProviderDependencies,
 } from './github/GitHubPullRequestReviewProvider.js'

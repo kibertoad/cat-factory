@@ -148,8 +148,11 @@ export {
   DOC_WRITER_KIND,
   DOC_FINALIZER_KIND,
   DOC_REVIEWER_KIND,
+  DOC_FIXER_KIND,
   DOCUMENT_AGENT_KINDS,
   registerDocumentAgents,
+  resolveDocumentTarget,
+  type DocumentTarget,
 } from './agents/kinds/document.js'
 // Per-`DocKind` document templates: the single source of truth for a kind's expected shape,
 // woven into the outliner/writer prompts and (later) read by the doc-quality gate. The

@@ -35,9 +35,16 @@ const gate = computed<GateStepState | null>(() => step.value?.gate ?? null)
 
 const isCi = computed(() => step.value?.agentKind === 'ci')
 const isHumanReview = computed(() => step.value?.agentKind === 'human-review')
+const isDocQuality = computed(() => step.value?.agentKind === 'doc-quality')
 const meta = computed(() => agentKindMeta(step.value?.agentKind ?? 'ci'))
 const helperKind = computed(() =>
-  isHumanReview.value ? 'fixer' : isCi.value ? 'ci-fixer' : 'conflict-resolver',
+  isHumanReview.value
+    ? 'fixer'
+    : isCi.value
+      ? 'ci-fixer'
+      : isDocQuality.value
+        ? 'doc-fixer'
+        : 'conflict-resolver',
 )
 const helperMeta = computed(() => agentKindMeta(helperKind.value))
 
@@ -46,7 +53,9 @@ const subtitle = computed(() =>
     ? t('gates.subtitle.humanReview')
     : isCi.value
       ? t('gates.subtitle.ci')
-      : t('gates.subtitle.conflicts'),
+      : isDocQuality.value
+        ? t('gates.subtitle.docQuality')
+        : t('gates.subtitle.conflicts'),
 )
 
 // Human-review: approval progress + the freeform "request a fix" control.
@@ -314,6 +323,35 @@ const conflictVerdict = computed(() => {
                 <p v-else class="text-[13px] leading-relaxed text-slate-300">
                   {{ gate.lastFailureSummary || t('gates.ci.failureFallback') }}
                 </p>
+              </template>
+
+              <!-- Doc quality: the deterministic structural findings the gate raised -->
+              <template v-else-if="isDocQuality">
+                <h3 class="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t('gates.docQuality.findings') }}
+                </h3>
+                <div
+                  v-if="gate.lastFailureSummary"
+                  class="relative rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                >
+                  <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
+                  <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
+                    {{ gate.lastFailureSummary }}
+                  </p>
+                </div>
+                <p v-else class="text-[13px] leading-relaxed text-slate-300">
+                  {{ t('gates.docQuality.findingsFallback') }}
+                </p>
+                <a
+                  v-if="prUrl"
+                  :href="prUrl"
+                  target="_blank"
+                  rel="noopener"
+                  class="mt-2 inline-flex items-center gap-1 text-[12px] text-sky-300 hover:text-sky-200 hover:underline"
+                >
+                  {{ t('gates.docQuality.viewPr') }}
+                  <UIcon name="i-lucide-external-link" class="h-3 w-3" />
+                </a>
               </template>
 
               <!-- Conflicts: verdict + the resolver's account of what it left -->

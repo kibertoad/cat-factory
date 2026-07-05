@@ -2938,7 +2938,8 @@
     "subtitle": {
       "humanReview": "Czeka na recenzję kodu przez człowieka na PR, ponawiając korektora po komentarzach",
       "ci": "Blokuje PR do zielonego CI, ponawiając korektora CI przy niepowodzeniu",
-      "conflicts": "Blokuje PR do czystego scalenia, ponawiając rozwiązywacza przy konfliktach"
+      "conflicts": "Blokuje PR do czystego scalenia, ponawiając rozwiązywacza przy konfliktach",
+      "docQuality": "Sprawdza strukturę przygotowanego dokumentu, ponawiając korektora dokumentów przy problemach"
     },
     "status": {
       "passed": "Zaliczono",
@@ -2977,6 +2978,11 @@
     },
     "conflicts": {
       "mergeability": "Możliwość scalenia",
+      "viewPr": "Zobacz pull request na GitHub"
+    },
+    "docQuality": {
+      "findings": "Problemy dokumentu",
+      "findingsFallback": "Dokument przeszedł kontrole strukturalne.",
       "viewPr": "Zobacz pull request na GitHub"
     },
     "attemptsHeading": "Próby: {helper}",

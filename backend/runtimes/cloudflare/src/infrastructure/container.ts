@@ -228,6 +228,7 @@ import {
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
+  wireDocQualityProvider,
   warnUnwiredGates,
 } from '@cat-factory/gates'
 import {
@@ -236,7 +237,7 @@ import {
   registerGitLab,
   StaticGitLabTokenSource,
 } from '@cat-factory/gitlab'
-import { GitHubPullRequestReviewProvider } from '@cat-factory/server'
+import { GitHubDocQualityProvider, GitHubPullRequestReviewProvider } from '@cat-factory/server'
 import { GitHubCiStatusProvider } from './github/GitHubCiStatusProvider'
 import { GitHubMergeabilityProvider } from './github/GitHubMergeabilityProvider'
 import { GitHubBranchUpdater } from './github/GitHubBranchUpdater'
@@ -712,6 +713,9 @@ function selectMergeLifecycleDeps(
     )
     wirePullRequestReviewProvider(
       new GitHubPullRequestReviewProvider({ githubClient, resolveRepoTarget, blockRepository }),
+    )
+    wireDocQualityProvider(
+      new GitHubDocQualityProvider({ githubClient, resolveRepoTarget, blockRepository }),
     )
     deps.branchUpdater = new GitHubBranchUpdater({
       githubClient,

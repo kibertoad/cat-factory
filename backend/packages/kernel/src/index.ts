@@ -176,6 +176,8 @@ export {
   ON_CALL_AGENT_KIND,
   HUMAN_REVIEW_AGENT_KIND,
   FIXER_AGENT_KIND,
+  DOC_QUALITY_AGENT_KIND,
+  DOC_FIXER_AGENT_KIND,
   type CiVerdict,
   type ReleaseGateVerdict,
   aggregateCi,
@@ -190,6 +192,15 @@ export {
   describeRegressedSignals,
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
+
+// Pure structural analysis of a drafted Markdown document — the `doc-quality` gate's check.
+export {
+  type DocStructureInput,
+  type DocStructureAnalysis,
+  analyzeDocStructure,
+  hasDocStructureIssues,
+  resolveDocLinkPath,
+} from './domain/doc-quality-logic.js'
 
 export * from './ports/index.js'
 

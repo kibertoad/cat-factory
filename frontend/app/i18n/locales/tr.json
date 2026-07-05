@@ -2947,7 +2947,8 @@
     "subtitle": {
       "humanReview": "PR üzerinde bir insan kod incelemesini bekler, yorumlar üzerine düzelticiyi döngüye alır",
       "ci": "PR'ı yeşil CI üzerinde kapı altına alır, başarısızlıkta CI düzelticiyi döngüye alır",
-      "conflicts": "PR'ı temiz bir birleştirme üzerinde kapı altına alır, çakışmalarda çözücüyü döngüye alır"
+      "conflicts": "PR'ı temiz bir birleştirme üzerinde kapı altına alır, çakışmalarda çözücüyü döngüye alır",
+      "docQuality": "Hazırlanan belgenin yapısını denetler, sorunlarda belge düzelticiyi döngüye alır"
     },
     "status": {
       "passed": "Geçti",
@@ -2986,6 +2987,11 @@
     },
     "conflicts": {
       "mergeability": "Birleştirilebilirlik",
+      "viewPr": "Çekme isteğini GitHub'da görüntüle"
+    },
+    "docQuality": {
+      "findings": "Belge sorunları",
+      "findingsFallback": "Belge yapısal denetimleri geçti.",
       "viewPr": "Çekme isteğini GitHub'da görüntüle"
     },
     "attemptsHeading": "{helper} denemeleri",

@@ -2947,7 +2947,8 @@
     "subtitle": {
       "humanReview": "PR の人によるコードレビューを待ち、コメントに応じて fixer をループします",
       "ci": "CI がグリーンになるまで PR をゲートし、失敗時に CI fixer をループします",
-      "conflicts": "クリーンなマージになるまで PR をゲートし、コンフリクト時に resolver をループします"
+      "conflicts": "クリーンなマージになるまで PR をゲートし、コンフリクト時に resolver をループします",
+      "docQuality": "作成された文書の構造をチェックし、問題があれば doc fixer をループします"
     },
     "status": {
       "passed": "合格",
@@ -2986,6 +2987,11 @@
     },
     "conflicts": {
       "mergeability": "マージ可能性",
+      "viewPr": "GitHub でプルリクエストを表示"
+    },
+    "docQuality": {
+      "findings": "文書の問題",
+      "findingsFallback": "文書は構造チェックに合格しました。",
       "viewPr": "GitHub でプルリクエストを表示"
     },
     "attemptsHeading": "{helper} の試行",

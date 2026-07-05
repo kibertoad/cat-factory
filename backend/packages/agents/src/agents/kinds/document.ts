@@ -1,5 +1,5 @@
-import type { AgentRunContext, DocKind } from '@cat-factory/kernel'
-import { CONTEXT_BUDGET, estimateTokens } from '@cat-factory/kernel'
+import type { AgentRunContext, Block, DocKind } from '@cat-factory/kernel'
+import { CONTEXT_BUDGET, DOC_FIXER_AGENT_KIND, estimateTokens } from '@cat-factory/kernel'
 import type { DocKindFieldKey } from '@cat-factory/contracts'
 import { DOC_KIND_FIELDS } from '@cat-factory/contracts'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
@@ -41,6 +41,13 @@ export const DOC_WRITER_KIND = 'doc-writer'
 export const DOC_FINALIZER_KIND = 'doc-finalizer'
 /** The companion that reviews {@link DOC_WRITER_KIND}; its definition lives in ./companions. */
 export const DOC_REVIEWER_KIND = 'doc-reviewer'
+/**
+ * The helper the `doc-quality` gate dispatches on a failed structural precheck: it clones the
+ * document PR branch, addresses the gate's findings on the existing Markdown file, and pushes
+ * back (no new PR). The kind string is the kernel gate/helper constant so the gate and this
+ * registered definition can't drift.
+ */
+export const DOC_FIXER_KIND = DOC_FIXER_AGENT_KIND
 
 /** Filesystem-safe slug for a document title (the default file name under `docs/<kind>/`). */
 function docSlug(title: string): string {
@@ -106,23 +113,39 @@ function docKindFieldsSection(context: AgentRunContext, docKind: DocKind): strin
   ].join('\n')
 }
 
-/** The document fields on the task, defaulting `docKind` to `other` when unset. */
-function docFields(context: AgentRunContext): {
+/** The document fields resolved for a task block, defaulting `docKind` to `other` when unset. */
+export interface DocumentTarget {
   docKind: DocKind
   audience?: string
+  /** The in-repo Markdown path the document is written to (task override or the per-kind default). */
   targetPath: string
   outlineHints?: string
-} {
-  const fields = context.block.taskTypeFields
+}
+
+/**
+ * Resolve a document task's kind + target path from its `taskTypeFields`. Shared by the doc
+ * agent prompts AND the `doc-quality` gate provider, so the gate checks the EXACT path the
+ * writer authored (a task `targetPath` override, else `docs/<kind>/<slug>.md`) — never a
+ * second copy of the path logic.
+ */
+export function resolveDocumentTarget(
+  block: Pick<Block, 'title' | 'taskTypeFields'>,
+): DocumentTarget {
+  const fields = block.taskTypeFields
   const docKind = (fields?.docKind ?? 'other') as DocKind
   const targetPath =
-    fields?.targetPath?.trim() || `${DOC_KIND_DIR[docKind]}/${docSlug(context.block.title)}.md`
+    fields?.targetPath?.trim() || `${DOC_KIND_DIR[docKind]}/${docSlug(block.title)}.md`
   return {
     docKind,
     audience: fields?.audience?.trim() || undefined,
     targetPath,
     outlineHints: fields?.outlineHints?.trim() || undefined,
   }
+}
+
+/** The document fields on the task, defaulting `docKind` to `other` when unset. */
+function docFields(context: AgentRunContext): DocumentTarget {
+  return resolveDocumentTarget(context.block)
 }
 
 /**
@@ -220,6 +243,16 @@ const DOC_FINALIZER_SYSTEM_PROMPT =
   'from scratch or change the meaning. Edit the existing document file in place and only that ' +
   'file. The platform commits and pushes your changes — do not run git yourself.'
 
+const DOC_FIXER_SYSTEM_PROMPT =
+  'You are a documentation fixer. A deterministic document-quality gate flagged specific ' +
+  'structural problems with a drafted document — listed under the "doc-quality" step below. ' +
+  'Fix EVERY flagged issue on the existing document file: add any missing required section ' +
+  '(write real, substantive content for it — not a placeholder heading), remove leftover ' +
+  'template/placeholder markers, repair broken in-repo links, and correct the heading ' +
+  'hierarchy. Leave everything the gate did not flag untouched, and edit only that one document ' +
+  'file. The platform commits and pushes your changes onto the existing PR branch — do not run ' +
+  'git yourself and do not open a new pull request.'
+
 function docResearcherUserPrompt(context: AgentRunContext): string {
   return [
     `Pipeline: ${context.pipelineName}`,
@@ -265,6 +298,20 @@ function docFinalizerUserPrompt(context: AgentRunContext): string {
     '',
     `Polish the document at \`${targetPath}\` — clarity, consistency, structure and formatting — ` +
       'and apply any reviewer feedback. Edit it in place; do not rewrite from scratch.',
+  ].join('\n')
+}
+
+function docFixerUserPrompt(context: AgentRunContext): string {
+  const { targetPath } = docFields(context)
+  return [
+    `Pipeline: ${context.pipelineName}`,
+    docBriefSection(context, { materialized: true }),
+    priorWorkSection(context),
+    '',
+    `The document-quality gate flagged the issues listed above under "doc-quality". Fix every ` +
+      `one on \`${targetPath}\`: add the substance for any missing required section, remove ` +
+      `leftover placeholders, repair broken in-repo links, and correct the heading hierarchy. ` +
+      `Edit it in place; leave anything not flagged untouched.`,
   ].join('\n')
 }
 
@@ -337,6 +384,25 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       color: '#818cf8',
       description:
         'Final editorial pass over the drafted document — clarity, consistency, formatting and reviewer feedback.',
+      category: 'docs',
+    },
+  },
+  {
+    kind: DOC_FIXER_KIND,
+    systemPrompt: DOC_FIXER_SYSTEM_PROMPT,
+    userPrompt: docFixerUserPrompt,
+    // The `doc-quality` gate's helper: container-coding with a `pr` clone ⇒ fix the flagged
+    // structural issues in place on the document PR branch and push back (no new PR), exactly
+    // like `ci-fixer` relates to the `ci` gate. Registered like the license-fixer example — a
+    // custom gate's helper is just a registered container kind; the gate seam needs no new path.
+    agent: { surface: 'container-coding', clone: { branch: 'pr' } },
+    traits: [DOC_AWARE_TRAIT],
+    presentation: {
+      label: 'Doc Fixer',
+      icon: 'i-lucide-file-warning',
+      color: '#818cf8',
+      description:
+        'Addresses the document-quality gate’s structural findings on the drafted document and pushes the fix.',
       category: 'docs',
     },
   },

@@ -562,31 +562,37 @@ export function seedPipelines(): Pipeline[] {
       //                    below threshold (AI-to-AI convergence) — HUMAN GATE on the converged
       //                    draft, whose feedback the finalizer folds in via the revision context
       //   doc-finalizer  → final editorial pass on the PR branch (container-coding, no new PR)
+      //   doc-quality    → deterministic structural gate (required sections / placeholders /
+      //                    links / heading hierarchy); loops the `doc-fixer` on a red verdict
       //   conflicts → ci → merger → the same mergeability / CI / merge tail as a code pipeline
       id: 'pl_document',
       name: 'Author a document',
+      version: 2,
       agentKinds: [
         'doc-researcher',
         'doc-outliner',
         'doc-writer',
         'doc-reviewer',
         'doc-finalizer',
+        'doc-quality',
         'conflicts',
         'ci',
         'merger',
       ],
       // Human gates on the outline (index 1) and on the converged review (`doc-reviewer`,
-      // index 3, after its rework loop clears the bar). Everything else self-drives.
-      gates: [false, true, false, true, false, false, false, false],
+      // index 3, after its rework loop clears the bar). `doc-quality` is a POLLING gate (auto,
+      // not a human checkpoint), so its flag is false like ci/conflicts. Everything else self-drives.
+      gates: [false, true, false, true, false, false, false, false, false],
     },
     {
-      // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, then
-      // the standard mergeability / CI / merge tail — so even a quick doc can't merge over a
-      // conflict or a red build, just without the research / outline / finalize stages and
-      // their human gates.
+      // A lean document pipeline for a small / low-stakes doc: draft, auto-review loop, the
+      // deterministic doc-quality gate, then the standard mergeability / CI / merge tail — so
+      // even a quick doc can't merge over a conflict, a red build, or a malformed document,
+      // just without the research / outline / finalize stages and their human gates.
       id: 'pl_document_quick',
       name: 'Quick document',
-      agentKinds: ['doc-writer', 'doc-reviewer', 'conflicts', 'ci', 'merger'],
+      version: 2,
+      agentKinds: ['doc-writer', 'doc-reviewer', 'doc-quality', 'conflicts', 'ci', 'merger'],
     },
   ]
   // Every curated catalog pipeline is a read-only template: it can be cloned into an

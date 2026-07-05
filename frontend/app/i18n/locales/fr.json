@@ -2938,7 +2938,8 @@
     "subtitle": {
       "humanReview": "Attend une revue de code humaine sur la PR, en relançant le correcteur à chaque commentaire",
       "ci": "Bloque la PR jusqu'à une CI verte, en relançant le correcteur de CI en cas d'échec",
-      "conflicts": "Bloque la PR jusqu'à une fusion propre, en relançant le résolveur en cas de conflits"
+      "conflicts": "Bloque la PR jusqu'à une fusion propre, en relançant le résolveur en cas de conflits",
+      "docQuality": "Vérifie la structure du document rédigé, en relançant le correcteur de documents en cas de problème"
     },
     "status": {
       "passed": "Réussi",
@@ -2977,6 +2978,11 @@
     },
     "conflicts": {
       "mergeability": "Fusionnabilité",
+      "viewPr": "Voir la pull request sur GitHub"
+    },
+    "docQuality": {
+      "findings": "Problèmes du document",
+      "findingsFallback": "Le document a réussi les vérifications structurelles.",
       "viewPr": "Voir la pull request sur GitHub"
     },
     "attemptsHeading": "Tentatives du {helper}",
