@@ -1,3 +1,4 @@
+import { corsReflectsWhenUnset } from '@cat-factory/server'
 import { describe, expect, it } from 'vitest'
 import { applyLocalDefaults } from '../src/config.js'
 
@@ -56,6 +57,27 @@ describe('[local] applyLocalDefaults secrets', () => {
     expect(() => applyLocalDefaults({ ...SECRETS, ENCRYPTION_KEY: '%%%not-base64%%%' })).toThrow(
       /valid base64/,
     )
+  })
+})
+
+describe('[local] applyLocalDefaults CORS / ENVIRONMENT', () => {
+  it('defaults ENVIRONMENT to `local` so an unset CORS allow-list reflects the SPA origin', () => {
+    const env = applyLocalDefaults({ ...SECRETS })
+    // `local` is a recognised development value, so `corsReflectsWhenUnset` is true and the
+    // server reflects the requesting origin instead of default-denying — no manual
+    // CORS_ALLOWED_ORIGINS needed for the local SPA.
+    expect(env.ENVIRONMENT).toBe('local')
+    expect(corsReflectsWhenUnset(env.ENVIRONMENT)).toBe(true)
+  })
+
+  it('honours an explicit ENVIRONMENT (explicit wins)', () => {
+    const env = applyLocalDefaults({ ...SECRETS, ENVIRONMENT: 'staging' })
+    expect(env.ENVIRONMENT).toBe('staging')
+  })
+
+  it('leaves an explicit CORS_ALLOWED_ORIGINS untouched', () => {
+    const env = applyLocalDefaults({ ...SECRETS, CORS_ALLOWED_ORIGINS: 'http://localhost:4000' })
+    expect(env.CORS_ALLOWED_ORIGINS).toBe('http://localhost:4000')
   })
 })
 
