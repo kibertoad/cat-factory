@@ -4,6 +4,7 @@ import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
+import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
 
 // Team settings for an org account: the member roster (with combinable admin /
 // developer / product roles), pending email invitations, and the per-account
@@ -12,10 +13,15 @@ import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSett
 const props = defineProps<{ accountId: string }>()
 
 const accounts = useAccountsStore()
+const auth = useAuthStore()
 const toast = useToast()
 const { t, te } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 const busy = ref(false)
+
+// The account-wide model-family policy is a hosted / mothership-only control (the backend
+// reports `false` in plain local mode, where there is no account admin to govern).
+const modelPolicySupported = computed(() => auth.infrastructure?.modelPolicy?.supported ?? false)
 
 const ROLE_ITEMS = computed<{ label: string; value: AccountRole }[]>(() => [
   { label: t('layout.accountTeam.roles.admin'), value: 'admin' },
@@ -325,6 +331,11 @@ async function disconnectEmail() {
     <!-- deployment integration secrets (admin-only): Slack OAuth app + web-search keys -->
     <section v-if="isAdmin">
       <AccountDeploymentSettings :account-id="accountId" />
+    </section>
+
+    <!-- account-wide model-family allow/block policy (admin-only; hosted/mothership only) -->
+    <section v-if="isAdmin && modelPolicySupported">
+      <AccountModelPolicySettings :account-id="accountId" />
     </section>
   </div>
 </template>

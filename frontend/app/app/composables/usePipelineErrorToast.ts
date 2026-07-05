@@ -48,6 +48,8 @@ const CONFLICT_TITLE_KEYS: Record<
   provision_type_unhandled: 'errors.conflict.title.provision_type_unhandled',
   preset_unsatisfiable: 'errors.conflict.title.preset_unsatisfiable',
   visual_pipeline_no_frontend: 'errors.conflict.title.visual_pipeline_no_frontend',
+  model_policy_blocked: 'errors.conflict.title.model_policy_blocked',
+  model_policy_unsupported: 'errors.conflict.title.model_policy_unsupported',
 }
 
 /**

@@ -7,6 +7,7 @@
 "@cat-factory/worker": minor
 "@cat-factory/node-server": minor
 "@cat-factory/local-server": minor
+"@cat-factory/app": minor
 ---
 
 Add an account-wide model-family allow/block policy. An account admin can constrain which

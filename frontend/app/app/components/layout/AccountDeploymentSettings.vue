@@ -128,7 +128,11 @@ async function saveStorage() {
       ...(cs.forcePathStyle ? { forcePathStyle: true } : {}),
     }
   }
-  const input: Parameters<typeof store.save>[1] = { config: { contentStorage: config } }
+  // `config` fully REPLACES the stored non-secret config, so carry the rest forward
+  // (e.g. the model-family policy) — only `contentStorage` is edited here.
+  const input: Parameters<typeof store.save>[1] = {
+    config: { ...store.view?.config, contentStorage: config },
+  }
   if (backend === 's3') {
     const id = cs.accessKeyId.trim()
     const key = cs.secretAccessKey.trim()
