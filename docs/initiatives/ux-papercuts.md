@@ -126,9 +126,12 @@ per-file patches:
   `:aria-label` — so `i-lucide-maximize` (fit-to-content) is no longer an ambiguous
   "fullscreen" glyph.
 - **UX-09 — Dead double-click. DONE.** `BoardCanvas.vue`'s `onNodeDoubleClick` no longer
-  calls the inert `ui.toggleFrame` (frames are always expanded, so it gated nothing);
-  double-clicking a frame now `focusFrame`s it — centres the camera and zooms in, a quick
-  "focus this service" gesture. Epics (non-containers) stay a no-op.
+  calls the inert `ui.toggleFrame` (frames are always expanded, so it gated nothing).
+  Because a task card lives _inside_ its frame's Vue Flow node, the handler resolves the
+  real double-click target from the DOM (`blockIdFromEvent`): a task double-click opens
+  that task's focus view (`ui.focus`, the same gesture the card's review action uses),
+  while a double-click on frame chrome `focusFrame`s the frame — centres the camera and
+  zooms in, a quick "focus this service" gesture. Epics (non-containers) stay a no-op.
 - **UX-10 — Transient view state.** `stores/ui.ts:34,239,244` — `selectedBlockId`,
   `zoom`, `expandedFrames` are plain refs; `BoardCanvas.vue:178-181` only does
   `fit-view-on-init`. Fix: persist per-workspace (localStorage).

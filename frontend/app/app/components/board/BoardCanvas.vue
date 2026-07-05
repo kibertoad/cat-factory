@@ -102,10 +102,19 @@ function onNodeClick({ node }: NodeMouseEvent) {
   ui.select(node.id)
 }
 
-function onNodeDoubleClick({ node }: NodeMouseEvent) {
-  // Frames are always expanded (there's nothing to toggle), so double-click centres the
-  // camera on the frame and zooms it in — a quick "focus this service" gesture. Epics
-  // aren't containers, so their double-click stays a no-op.
+function onNodeDoubleClick({ event, node }: NodeMouseEvent) {
+  // Task cards live *inside* their frame node, so Vue Flow reports the frame here even
+  // when the double-click landed on a task. Resolve the real target from the DOM: a
+  // double-click on a task opens its focus view (the same "open this task" gesture as the
+  // card's review action), while a double-click on frame chrome centres the camera on the
+  // frame and zooms it in. Epics aren't containers, so their double-click stays a no-op.
+  const targetId = blockIdFromEvent(event)
+  const target = targetId ? board.getBlock(targetId) : undefined
+  if (target?.level === 'task') {
+    ui.select(target.id)
+    ui.focus(target.id)
+    return
+  }
   if (node.type === 'block') void focusFrame(node.id)
 }
 

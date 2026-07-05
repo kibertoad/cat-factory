@@ -16,6 +16,8 @@ Burns down the board zoom-control cluster from the UX papercuts initiative:
   `BOARD_MIN_ZOOM`/`BOARD_MAX_ZOOM` constants consumed by both the canvas and the
   button-disable logic so they can't drift (UX-16).
 - Double-clicking a service frame focuses it (centre + zoom in) instead of calling the
-  inert `toggleFrame` no-op (UX-09).
+  inert `toggleFrame` no-op; double-clicking a task card inside a frame now opens that
+  task's focus view (the double-click target is resolved from the DOM, since a task lives
+  inside its frame's Vue Flow node) (UX-09).
 - Dropping a pipeline on blank canvas (or a non-task) now shows the "aim at a task"
   nudge instead of silently vanishing (UX-07).
