@@ -97,8 +97,8 @@ pilots `stack-recipes-and-shared-stacks.md`.
      (per-doc-type subfolders shown only when that type is checked — no recursive schema
      renderer).
    - `InitiativePresetDescriptor`: `{ id, presentation: {label, icon, color, description},
-     fields, planningPipelineId, interview: 'full' | 'skip', humanReviewDefault,
-     defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? }`.
+fields, planningPipelineId, interview: 'full' | 'skip', humanReviewDefault,
+defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? }`.
      Labels are backend-supplied English (the established descriptor convention); only the
      surrounding chrome is i18n.
    - `InitiativePresetInputs`: a bounded JSON record (`string | string[] | boolean | number`),
@@ -151,19 +151,20 @@ pilots `stack-recipes-and-shared-stacks.md`.
 
 9. **Form** (`preset_docs_refresh`):
 
-   | Field | Type | Default | Notes |
-   |---|---|---|---|
-   | `docTypes` | checkbox-group | all four | `readme`, `diagrams`, `comments`, `business-rules` |
-   | `placementMode` | select | probe-detected | `root` (single `/docs`) vs `per-service` (monorepo) |
-   | `docsRoot` | path | `docs/` | probe-prefilled |
-   | `diagramsDir` | path | `docs/diagrams` | probe-prefilled; `showWhen: docTypes includes 'diagrams'` |
-   | `businessRulesDir` | path | `docs/business-logic` | probe-prefilled; `showWhen: includes 'business-rules'`; matches the business-documenter default |
-   | `scopeHint` | textarea | empty | optional "which services/areas" steer for the analyst |
-   | `humanReview` | checkbox | **false** | maps to the gate-override seam |
-   | `styleFragments` | checkbox-group | `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` | options from the Writing-style fragment category |
+   | Field              | Type           | Default                               | Notes                                                                                           |
+   | ------------------ | -------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+   | `docTypes`         | checkbox-group | all four                              | `readme`, `diagrams`, `comments`, `business-rules`                                              |
+   | `placementMode`    | select         | probe-detected                        | `root` (single `/docs`) vs `per-service` (monorepo)                                             |
+   | `docsRoot`         | path           | `docs/`                               | probe-prefilled                                                                                 |
+   | `diagramsDir`      | path           | `docs/diagrams`                       | probe-prefilled; `showWhen: docTypes includes 'diagrams'`                                       |
+   | `businessRulesDir` | path           | `docs/business-logic`                 | probe-prefilled; `showWhen: includes 'business-rules'`; matches the business-documenter default |
+   | `scopeHint`        | textarea       | empty                                 | optional "which services/areas" steer for the analyst                                           |
+   | `humanReview`      | checkbox       | **false**                             | maps to the gate-override seam                                                                  |
+   | `styleFragments`   | checkbox-group | `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` | options from the Writing-style fragment category                                                |
 
    READMEs get no placement field — they live beside the code by convention; the planner
    decides per-item `targetPath`s.
+
 10. **Detection** — new pure `docs-detect.logic.ts` over `RepoFiles` (prior art:
     `provision-detect.logic.ts`): bounded (~10 `listDirectory` calls, no file reads beyond
     root workspace manifests), never throws. Root `docs/` + `README.md`; monorepo markers
@@ -190,44 +191,45 @@ pilots `stack-recipes-and-shared-stacks.md`.
     overrides when `humanReview` is on.
 12. **Spawned pipelines / agent kinds:**
 
-    | Item type | Agent path | Pipeline |
-    |---|---|---|
-    | README refresh | reuse `doc-writer` (+ `doc-quality` gate; `targetPath` override) | `pl_document_quick` |
-    | Business rules | reuse `business-documenter` (placement passed via `targetPath`, turning its LLM-judgment default deterministic) | new lean `pl_business_docs` = `[business-documenter, conflicts, ci, merger]` |
-    | Mermaid diagrams | NEW `diagram-author` (container-coding): reads the code, authors/updates mermaid docs under `diagramsDir`, opens a PR | new `pl_diagrams` = `[diagram-author, doc-reviewer, conflicts, ci, merger]` |
-    | In-source comments | NEW `code-commenter` (container-coding): adds/clarifies why-not-what comments, no behaviour change — the CI tail is load-bearing | new `pl_code_comments` = `[code-commenter, conflicts, ci, merger]` |
+    | Item type          | Agent path                                                                                                                       | Pipeline                                                                     |
+    | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+    | README refresh     | reuse `doc-writer` (+ `doc-quality` gate; `targetPath` override)                                                                 | `pl_document_quick`                                                          |
+    | Business rules     | reuse `business-documenter` (placement passed via `targetPath`, turning its LLM-judgment default deterministic)                  | new lean `pl_business_docs` = `[business-documenter, conflicts, ci, merger]` |
+    | Mermaid diagrams   | NEW `diagram-author` (container-coding): reads the code, authors/updates mermaid docs under `diagramsDir`, opens a PR            | new `pl_diagrams` = `[diagram-author, doc-reviewer, conflicts, ci, merger]`  |
+    | In-source comments | NEW `code-commenter` (container-coding): adds/clarifies why-not-what comments, no behaviour change — the CI tail is load-bearing | new `pl_code_comments` = `[code-commenter, conflicts, ci, merger]`           |
 
     Minimal new-kind set: two. Merge policy is deliberately left to the workspace's merge
     preset (`autoMergeEnabled` etc. not overridden) — merge stays a workspace concern.
+
 13. **Sync semantics** — one-shot: completion = every item settled (PRs merged). Re-run by
     re-creating from the preset.
 
 ## Gap analysis
 
-| # | Gap | Covered by slice |
-|---|---|---|
-| G1 | No form descriptors beyond `select` (`AgentConfigDescriptor`) / flat `ProviderConfigField`; no conditional visibility | S1, S4 |
-| G2 | No per-run gate control — gates are baked into the pipeline | S2 |
-| G3 | Planning pipeline hardcoded to `pl_initiative` in the SPA; no preset entity fields | S1, S3 |
-| G4 | `buildTaskBlock` stamps only `estimate` — spawned tasks can't be typed doc tasks | S5 |
-| G5 | No deterministic docs-folder/monorepo-placement detection | S6 |
-| G6 | No mermaid-authoring or in-source-comments agent kinds | S7 |
-| G7 | No registrable initiative-preset concept at all | S1, S8, S9 |
+| #   | Gap                                                                                                                   | Covered by slice |
+| --- | --------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| G1  | No form descriptors beyond `select` (`AgentConfigDescriptor`) / flat `ProviderConfigField`; no conditional visibility | S1, S4           |
+| G2  | No per-run gate control — gates are baked into the pipeline                                                           | S2               |
+| G3  | Planning pipeline hardcoded to `pl_initiative` in the SPA; no preset entity fields                                    | S1, S3           |
+| G4  | `buildTaskBlock` stamps only `estimate` — spawned tasks can't be typed doc tasks                                      | S5               |
+| G5  | No deterministic docs-folder/monorepo-placement detection                                                             | S6               |
+| G6  | No mermaid-authoring or in-source-comments agent kinds                                                                | S7               |
+| G7  | No registrable initiative-preset concept at all                                                                       | S1, S8, S9       |
 
 ## Per-slice status checklist
 
-| # | Slice | Scope | Status | PR |
-|---|---|---|---|---|
-| 0 | This tracker | — | ✅ done | (this) |
-| 1 | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ⬜ todo | |
-| 2 | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes | SYSTEM | ⬜ todo | |
-| 3 | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId` | SYSTEM | ⬜ todo | |
-| 4 | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome | SYSTEM | ⬜ todo | |
-| 5 | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip | SYSTEM | ⬜ todo | |
-| 6 | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw) | PILOT | ⬜ todo | |
-| 7 | New kinds `diagram-author` / `code-commenter` (prompts, presentation, doc-aware trait) + `pl_diagrams` / `pl_code_comments` / `pl_business_docs` | PILOT | ⬜ todo | |
-| 8 | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, `seedPlan`, promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT | ⬜ todo | |
-| 9 | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates | BOTH | ⬜ todo | |
+| #   | Slice                                                                                                                                                                                                                                                    | Scope  | Status  | PR     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------ |
+| 0   | This tracker                                                                                                                                                                                                                                             | —      | ✅ done | (this) |
+| 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ⬜ todo |        |
+| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ⬜ todo |        |
+| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ⬜ todo |        |
+| 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ⬜ todo |        |
+| 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ⬜ todo |        |
+| 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                             | PILOT  | ⬜ todo |        |
+| 7   | New kinds `diagram-author` / `code-commenter` (prompts, presentation, doc-aware trait) + `pl_diagrams` / `pl_code_comments` / `pl_business_docs`                                                                                                         | PILOT  | ⬜ todo |        |
+| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, `seedPlan`, promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs`                                                                                | PILOT  | ⬜ todo |        |
+| 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                   | BOTH   | ⬜ todo |        |
 
 Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
 
