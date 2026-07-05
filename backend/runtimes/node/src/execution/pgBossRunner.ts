@@ -323,10 +323,13 @@ export function startStaleRunSweeper(
 
       // Auto-resume spend-paused runs once the monthly budget frees (parity with the Cloudflare
       // ExecutionWorkflow, whose parked instance re-checks the budget itself). `listStale` skips
-      // `paused` runs, so re-check them here: re-drive ONLY those whose workspace is no longer
+      // `paused` runs, so re-check them here: re-drive ONLY those whose WORKSPACE tier is no longer
       // over budget — a still-exhausted workspace causes no churn, and the re-driven advance
-      // flips the run back to `running` via the spend gate. `isExhausted` is read once per
-      // distinct workspace (not per run) to avoid a redundant budget read per paused run.
+      // flips the run back to `running` via the spend gate. This is a cheap per-workspace fast
+      // filter; the account/user budget tiers (which need the run's initiator, absent on the
+      // lightweight paused ref) are enforced authoritatively by the tier-aware step gate in
+      // `ExecutionService.stepInstance`, which simply re-pauses a run still over an account/user
+      // cap. `isExhausted` is read once per distinct workspace to avoid a redundant read per run.
       const paused = await container.agentRunRepository.listPausedExecutions()
       const exhaustedByWorkspace = new Map<string, boolean>()
       for (const ref of paused) {

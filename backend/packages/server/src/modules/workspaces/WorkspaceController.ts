@@ -371,12 +371,32 @@ export function workspaceController(): Hono<AppEnv> {
       deniedFrameIds,
     )
 
+    // Tiered budgets: the account-tier status (this workspace's owning account) and the
+    // signed-in caller's user-tier status + editable settings, plus the operator hard caps.
+    // Each tier's status is null when that tier is inactive (no configured limit + no cap).
+    const viewerUserId = c.get('user')?.id
+    const budgetAccountId = await container.workspaceService.accountOf(workspaceId)
+    const [accountSpend, userSpend, viewerUserSettings] = await Promise.all([
+      budgetAccountId
+        ? container.spendService.accountStatus(budgetAccountId)
+        : Promise.resolve(null),
+      viewerUserId ? container.spendService.userStatus(viewerUserId) : Promise.resolve(null),
+      viewerUserId && container.userSettings
+        ? container.userSettings.service.get(viewerUserId)
+        : Promise.resolve(undefined),
+    ])
+    const budgetCaps = container.spendService.budgetCaps()
+
     return c.json(
       {
         ...snapshot,
         blocks: redacted.blocks,
         executions: redacted.executions,
         spend,
+        ...(accountSpend ? { accountSpend } : {}),
+        ...(userSpend ? { userSpend } : {}),
+        ...(viewerUserSettings ? { userSettings: viewerUserSettings } : {}),
+        budgetCaps,
         ...(redacted.bootstrapJobs ? { bootstrapJobs: redacted.bootstrapJobs } : {}),
         ...(envConfigRepairJobs ? { envConfigRepairJobs } : {}),
         ...(redacted.notifications ? { notifications: redacted.notifications } : {}),

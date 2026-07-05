@@ -2352,11 +2352,22 @@
       },
       "budget": {
         "heading": "Monthly spend budget",
-        "body": "Token usage is metered per LLM call, priced, and gated by this budget. When reached, runs in this workspace pause and the board shows a warning. Leave blank to inherit the built-in default (about 100 EUR/month).",
+        "body": "Token usage is metered per LLM call, priced, and gated by these budgets. A run pauses when any tier it belongs to is exhausted. Leave a field blank for no limit on that tier (the workspace tier then inherits the built-in default, about 100 EUR/month).",
         "monthlyLimit": "Monthly limit",
         "defaultPlaceholder": "Default",
         "currency": "Currency (ISO 4217)",
-        "save": "Save budget"
+        "save": "Save budget",
+        "saveTier": "Save",
+        "workspace": "This workspace",
+        "account": "Account (all workspaces)",
+        "user": "You (all your runs)",
+        "accountBody": "A ceiling across every workspace in this account.",
+        "userBody": "A ceiling across every run you start, in any workspace.",
+        "hardCap": "Operator limit: {amount}",
+        "hardCapHint": "set by the deployment; the value can't exceed it",
+        "spent": "{spent} of {limit} spent this month",
+        "adminOnly": "Only an account admin can change the account budget.",
+        "noLimitPlaceholder": "No limit"
       },
       "toast": {
         "saved": "Settings saved",

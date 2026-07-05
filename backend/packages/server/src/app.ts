@@ -54,6 +54,7 @@ import { slackController, slackOAuthController } from './modules/slack/SlackCont
 import { vendorCredentialController } from './modules/providers/VendorCredentialController.js'
 import { personalSubscriptionController } from './modules/providers/PersonalSubscriptionController.js'
 import { localModelEndpointController } from './modules/localModels/LocalModelEndpointController.js'
+import { userSettingsController } from './modules/userSettings/UserSettingsController.js'
 import { userSecretController } from './modules/providers/UserSecretController.js'
 import { openRouterCatalogController } from './modules/openrouter/OpenRouterCatalogController.js'
 import {
@@ -108,6 +109,7 @@ export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', accountController())
   app.route('/', personalSubscriptionController())
   app.route('/', localModelEndpointController())
+  app.route('/', userSettingsController())
   // Per-user infra handler overrides (local mode); 503s where the service is unwired.
   app.route('/', environmentUserHandlerController())
   app.route('/', userSecretController())

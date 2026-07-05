@@ -292,6 +292,14 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // as the block/pipeline mutations above. Completes the read+write settings surface.
     upsert: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Per-user settings (the user-tier spend budget). Self-scoped: a user reads/writes only their
+  // OWN row (the `selfUser` rule requires args[0] to equal the token's userId), so both the
+  // read (snapshot + spend gate) and the write (the user's own budget edit) are safe over RPC —
+  // no admin gating is involved, unlike the account-tier budget (see accountRepository note).
+  userSettingsRepository: {
+    get: { scope: { kind: 'selfUser', arg: 0 } },
+    upsert: { scope: { kind: 'selfUser', arg: 0 } },
+  },
   mergePresetRepository: {
     list: { scope: { kind: 'workspace', arg: 0 } },
     // The merge lifecycle resolves a task's merge-threshold preset at run time
@@ -520,6 +528,12 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
   },
   tokenUsageRepository: {
     totalsSinceForWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    // Account/user budget-tier rollups (docs/initiatives/tiered-budgets.md), read on the spend
+    // gate + the snapshot. Account-scoped and self-user-scoped respectively, mirroring the
+    // account read + the per-user settings read above. (Metered WRITEs — `record` — stay out of
+    // the allow-list like all high-volume telemetry writes.)
+    totalsSinceForAccount: { scope: { kind: 'account', arg: 0 } },
+    totalsSinceForUser: { scope: { kind: 'selfUser', arg: 0 } },
   },
   // Telemetry is local-first by design (Phase 5), but two READS are on the synchronous run
   // path before that batch-sync lands — the kaizen grading step summarises an execution's LLM

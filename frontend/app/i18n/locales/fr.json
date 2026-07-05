@@ -2178,11 +2178,22 @@
       },
       "budget": {
         "heading": "Budget de dépenses mensuel",
-        "body": "L'utilisation des jetons est décomptée par appel LLM, valorisée et plafonnée par ce budget. Une fois atteint, les exécutions de cet espace de travail sont mises en pause et le tableau affiche un avertissement. Laissez vide pour hériter de la valeur par défaut intégrée (environ 100 EUR/mois).",
+        "body": "L'utilisation des jetons est décomptée par appel LLM, valorisée et plafonnée par ces budgets. Une exécution est mise en pause dès qu'un niveau auquel elle appartient est épuisé. Laissez un champ vide pour ne fixer aucune limite à ce niveau (le niveau de l'espace de travail hérite alors de la valeur par défaut intégrée, environ 100 EUR/mois).",
         "monthlyLimit": "Limite mensuelle",
         "defaultPlaceholder": "Par défaut",
         "currency": "Devise (ISO 4217)",
-        "save": "Enregistrer le budget"
+        "save": "Enregistrer le budget",
+        "saveTier": "Enregistrer",
+        "workspace": "Cet espace de travail",
+        "account": "Compte (tous les espaces de travail)",
+        "user": "Vous (toutes vos exécutions)",
+        "accountBody": "Un plafond pour tous les espaces de travail de ce compte.",
+        "userBody": "Un plafond pour toutes les exécutions que vous lancez, dans n'importe quel espace de travail.",
+        "hardCap": "Limite de l'opérateur : {amount}",
+        "hardCapHint": "définie par le déploiement ; la valeur ne peut pas la dépasser",
+        "spent": "{spent} sur {limit} dépensé ce mois-ci",
+        "adminOnly": "Seul un administrateur du compte peut modifier le budget du compte.",
+        "noLimitPlaceholder": "Aucune limite"
       },
       "toast": {
         "saved": "Paramètres enregistrés",

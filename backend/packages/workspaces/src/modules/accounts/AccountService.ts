@@ -30,6 +30,12 @@ export interface AccountServiceDependencies {
   clock: Clock
   /** Optional: resolve member display details (name/email/avatar) for the roster. */
   userRepository?: UserRepository
+  /**
+   * Optional: invalidate the spend service's cached account-tier limit when an account's
+   * budget changes, so the new ceiling takes effect immediately (wired to
+   * `SpendService.invalidateAccountLimit`).
+   */
+  onAccountBudgetChanged?: (accountId: string) => void
 }
 
 /** The signed-in identity the tenancy decisions are made against. */
@@ -50,6 +56,7 @@ function toWire(account: AccountRecord, roles: Account['roles']): Account {
     createdAt: account.createdAt,
     roles,
     ...(account.defaultCloudProvider ? { defaultCloudProvider: account.defaultCloudProvider } : {}),
+    ...(account.spendMonthlyLimit != null ? { spendMonthlyLimit: account.spendMonthlyLimit } : {}),
   }
 }
 
@@ -207,6 +214,13 @@ export class AccountService {
       await this.deps.accountRepository.updateSettings(accountId, {
         defaultCloudProvider: input.defaultCloudProvider ?? null,
       })
+    }
+    if ('spendMonthlyLimit' in input) {
+      await this.deps.accountRepository.updateSettings(accountId, {
+        spendMonthlyLimit: input.spendMonthlyLimit ?? null,
+      })
+      // Drop the spend service's cached account limit so the new ceiling takes effect now.
+      this.deps.onAccountBudgetChanged?.(accountId)
     }
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),

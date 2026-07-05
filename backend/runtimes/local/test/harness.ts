@@ -405,5 +405,13 @@ export function makeConformanceApp(
         describe: (kind) => svc.describe(kind as UserSecretKind),
       }
     },
+    userSettings: () => {
+      const svc = container.userSettings?.service
+      if (!svc) return undefined
+      return {
+        get: (userId) => svc.get(userId),
+        update: (userId, input) => svc.update(userId, input),
+      }
+    },
   }
 }

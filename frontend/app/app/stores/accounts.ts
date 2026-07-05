@@ -67,6 +67,17 @@ export const useAccountsStore = defineStore(
       return updated
     }
 
+    /**
+     * Set an account's monthly spend budget (the account tier). Admin-only on the
+     * backend; `null` clears the limit. Patches the loaded account in place on success.
+     */
+    async function setSpendMonthlyLimit(id: string, limit: number | null) {
+      const updated = await api.updateAccount(id, { spendMonthlyLimit: limit })
+      const i = accounts.value.findIndex((a) => a.id === id)
+      if (i >= 0) accounts.value[i] = updated
+      return updated
+    }
+
     // ---- members + invitations -------------------------------------------
 
     const members = ref<AccountMember[]>([])
@@ -139,6 +150,7 @@ export const useAccountsStore = defineStore(
       createOrg,
       switchTo,
       setDefaultCloudProvider,
+      setSpendMonthlyLimit,
       loadRoster,
       invite,
       revokeInvite,

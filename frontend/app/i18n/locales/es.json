@@ -2178,11 +2178,22 @@
       },
       "budget": {
         "heading": "Presupuesto de gasto mensual",
-        "body": "El uso de tokens se contabiliza por llamada al LLM, se valora y se limita con este presupuesto. Al alcanzarlo, las ejecuciones de este espacio de trabajo se pausan y el tablero muestra una advertencia. Déjalo en blanco para heredar el valor predeterminado integrado (unos 100 EUR/mes).",
+        "body": "El uso de tokens se contabiliza por llamada al LLM, se valora y se limita con estos presupuestos. Una ejecución se pausa cuando se agota cualquier nivel al que pertenece. Deja un campo en blanco para no poner límite a ese nivel (el nivel del espacio de trabajo hereda entonces el valor predeterminado integrado, unos 100 EUR/mes).",
         "monthlyLimit": "Límite mensual",
         "defaultPlaceholder": "Predeterminado",
         "currency": "Moneda (ISO 4217)",
-        "save": "Guardar presupuesto"
+        "save": "Guardar presupuesto",
+        "saveTier": "Guardar",
+        "workspace": "Este espacio de trabajo",
+        "account": "Cuenta (todos los espacios de trabajo)",
+        "user": "Tú (todas tus ejecuciones)",
+        "accountBody": "Un tope para todos los espacios de trabajo de esta cuenta.",
+        "userBody": "Un tope para todas las ejecuciones que inicies, en cualquier espacio de trabajo.",
+        "hardCap": "Límite del operador: {amount}",
+        "hardCapHint": "definido por el despliegue; el valor no puede superarlo",
+        "spent": "{spent} de {limit} gastado este mes",
+        "adminOnly": "Solo un administrador de la cuenta puede cambiar el presupuesto de la cuenta.",
+        "noLimitPlaceholder": "Sin límite"
       },
       "toast": {
         "saved": "Configuración guardada",

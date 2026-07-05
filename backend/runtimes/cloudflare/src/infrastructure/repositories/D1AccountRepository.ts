@@ -15,6 +15,7 @@ interface AccountRow {
   owner_user_id: string | null
   created_at: number
   default_cloud_provider: string | null
+  spend_monthly_limit: number | null
 }
 
 function rowToAccount(row: AccountRow): AccountRecord {
@@ -28,6 +29,7 @@ function rowToAccount(row: AccountRow): AccountRecord {
     ...(row.default_cloud_provider
       ? { defaultCloudProvider: row.default_cloud_provider as CloudProvider }
       : {}),
+    ...(row.spend_monthly_limit != null ? { spendMonthlyLimit: row.spend_monthly_limit } : {}),
   }
 }
 
@@ -65,7 +67,7 @@ export class D1AccountRepository implements AccountRepository {
   async create(account: AccountRecord): Promise<void> {
     await this.db
       .prepare(
-        'INSERT INTO accounts (id, type, name, github_account_login, owner_user_id, created_at, default_cloud_provider) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO accounts (id, type, name, github_account_login, owner_user_id, created_at, default_cloud_provider, spend_monthly_limit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
       .bind(
         account.id,
@@ -75,6 +77,7 @@ export class D1AccountRepository implements AccountRepository {
         account.ownerUserId,
         account.createdAt,
         account.defaultCloudProvider ?? null,
+        account.spendMonthlyLimit ?? null,
       )
       .run()
   }
@@ -84,11 +87,18 @@ export class D1AccountRepository implements AccountRepository {
   }
 
   async updateSettings(id: string, patch: AccountSettingsPatch): Promise<void> {
-    if (!('defaultCloudProvider' in patch)) return
-    await this.db
-      .prepare('UPDATE accounts SET default_cloud_provider = ? WHERE id = ?')
-      .bind(patch.defaultCloudProvider ?? null, id)
-      .run()
+    if ('defaultCloudProvider' in patch) {
+      await this.db
+        .prepare('UPDATE accounts SET default_cloud_provider = ? WHERE id = ?')
+        .bind(patch.defaultCloudProvider ?? null, id)
+        .run()
+    }
+    if ('spendMonthlyLimit' in patch) {
+      await this.db
+        .prepare('UPDATE accounts SET spend_monthly_limit = ? WHERE id = ?')
+        .bind(patch.spendMonthlyLimit ?? null, id)
+        .run()
+    }
   }
 
   async findPersonalByUser(userId: string): Promise<AccountRecord | null> {
