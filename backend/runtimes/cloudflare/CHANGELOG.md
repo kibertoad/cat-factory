@@ -1,5 +1,37 @@
 # @cat-factory/worker
 
+## 0.65.0
+
+### Minor Changes
+
+- f4c321e: feat(documents): add the `doc-quality` gate (WS4) to the forward document pipelines
+
+  A new deterministic polling gate `doc-quality`, authored through the public `registerGate`
+  seam in `@cat-factory/gates`, is inserted into `pl_document` (after `doc-finalizer`) and
+  `pl_document_quick` (after `doc-reviewer`). It reads the drafted document on the PR head
+  checkout-free via a new `DocQualityProvider` (wired per facade over `RepoFiles`) and checks
+  — against the WS1 template (`docTemplateFor`, the single source of truth) — that every
+  required section is present, no leftover placeholders remain, the heading hierarchy is sane,
+  and in-repo relative links resolve. On a red verdict it escalates to a new `doc-fixer`
+  container helper that repairs the document on the PR branch; a green document advances with
+  nothing spun up. Both doc pipelines' `version` is bumped (reseed offer).
+
+### Patch Changes
+
+- Updated dependencies [f4c321e]
+  - @cat-factory/kernel@0.88.0
+  - @cat-factory/agents@0.37.0
+  - @cat-factory/gates@0.4.0
+  - @cat-factory/server@0.83.0
+  - @cat-factory/caching@0.4.4
+  - @cat-factory/consensus@0.9.3
+  - @cat-factory/gitlab@0.7.3
+  - @cat-factory/integrations@0.65.3
+  - @cat-factory/observability-langfuse@0.7.135
+  - @cat-factory/orchestration@0.72.1
+  - @cat-factory/provider-cloudflare@0.7.144
+  - @cat-factory/spend@0.10.96
+
 ## 0.64.2
 
 ### Patch Changes

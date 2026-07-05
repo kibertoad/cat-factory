@@ -1,5 +1,12 @@
 # @cat-factory/spend
 
+## 0.10.96
+
+### Patch Changes
+
+- Updated dependencies [f4c321e]
+  - @cat-factory/kernel@0.88.0
+
 ## 0.10.95
 
 ### Patch Changes
