@@ -4,6 +4,7 @@ import type { Block } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
 import PipelineProgress from '~/components/pipeline/PipelineProgress.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const board = useBoardStore()
 const pipelines = usePipelinesStore()
@@ -106,7 +107,13 @@ function openApprovalFor(approvalId: string) {
             {{ instance ? t('focus.rerunPipeline') : t('focus.runPipeline') }}
           </UButton>
         </UDropdownMenu>
-        <UButton icon="i-lucide-x" color="neutral" variant="ghost" @click="close" />
+        <IconButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          :label="t('common.close')"
+          @click="close"
+        />
       </div>
     </header>
 

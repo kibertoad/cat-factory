@@ -8,6 +8,7 @@
 // options or hits the iteration cap. The converged direction — not the original description — is
 // what the downstream stage (the requirements review / the architect) consumes.
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   BrainstormItem,
@@ -281,7 +282,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <UBadge v-if="session" color="neutral" variant="subtle" size="sm">
               {{ t('brainstorm.iteration', { current: iteration, max: maxIterations }) }}
             </UBadge>
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
+            <IconButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :label="t('common.close')"
+              @click="close"
+            />
           </div>
         </header>
 
