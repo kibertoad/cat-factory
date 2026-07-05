@@ -92,9 +92,9 @@ describe('isAllowedByFamilyPolicy', () => {
 
     it('blocks an unclassified family (cannot prove membership) unless its route is trusted', () => {
       expect(isAllowedByFamilyPolicy('litellm-default', 'litellm', allow(['claude']))).toBe(false)
-      expect(isAllowedByFamilyPolicy('litellm-default', 'bedrock', allow(['claude'], ['bedrock']))).toBe(
-        true,
-      )
+      expect(
+        isAllowedByFamilyPolicy('litellm-default', 'bedrock', allow(['claude'], ['bedrock'])),
+      ).toBe(true)
     })
 
     it('admits any family reached over a trusted route (the residency-guaranteed-only stance)', () => {

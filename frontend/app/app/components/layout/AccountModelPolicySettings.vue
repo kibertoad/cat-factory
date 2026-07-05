@@ -63,9 +63,7 @@ const providerLabels: Record<(typeof TRUSTED_PROVIDERS)[number], string> = {
 }
 
 const modeItems = computed(() => MODES.map((m) => ({ label: modeLabels.value[m], value: m })))
-const regionItems = computed(() =>
-  REGIONS.map((r) => ({ label: regionLabels.value[r], value: r })),
-)
+const regionItems = computed(() => REGIONS.map((r) => ({ label: regionLabels.value[r], value: r })))
 
 // Editable local state (hydrated from the stored policy).
 const mode = ref<ModelPolicyMode>('off')

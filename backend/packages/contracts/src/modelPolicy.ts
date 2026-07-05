@@ -69,7 +69,11 @@ export const modelFamilyPolicySchema = v.object({
 export type ModelFamilyPolicy = v.InferOutput<typeof modelFamilyPolicySchema>
 
 /** The inert default: no restriction. */
-export const MODEL_POLICY_OFF: ModelFamilyPolicy = { mode: 'off', families: [], trustedProviders: [] }
+export const MODEL_POLICY_OFF: ModelFamilyPolicy = {
+  mode: 'off',
+  families: [],
+  trustedProviders: [],
+}
 
 /**
  * A built-in policy template the admin can apply into the editable account policy. `id`
