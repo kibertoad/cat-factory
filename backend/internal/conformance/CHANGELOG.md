@@ -1,5 +1,12 @@
 # @cat-factory/conformance
 
+## 0.10.38
+
+### Patch Changes
+
+- Updated dependencies [c66362f]
+  - @cat-factory/server@0.94.0
+
 ## 0.10.37
 
 ### Patch Changes
