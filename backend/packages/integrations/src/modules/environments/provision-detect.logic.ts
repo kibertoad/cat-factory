@@ -26,6 +26,7 @@ import {
   extractExternalNetworks,
   hasBuildDirective,
 } from '../compose/compose-environment.logic.js'
+import { RepoReadError } from './repo-read-error.js'
 
 // ---------------------------------------------------------------------------
 // Per-service provisioning AUTO-DETECTION (slice 11): a deterministic, pure-TS heuristic
@@ -40,8 +41,11 @@ import {
 
 /**
  * The narrow slice of {@link RepoFiles} the detector needs — a {@link RepoFiles} satisfies it
- * structurally, and a test supplies an in-memory fake. Reads are best-effort: a missing path
- * yields `null` / `[]` (never throws), so the heuristics degrade gracefully on partial repos.
+ * structurally, and a test supplies an in-memory fake. A MISSING path yields `null` / `[]`, so the
+ * heuristics degrade gracefully on partial repos. A genuine read fault (auth/permission revoked,
+ * rate limit, transport error) may THROW — the real GitHub/GitLab reader throws on any non-404
+ * status. The {@link Scanner} tolerates that (records it, keeps scanning best-effort) so a
+ * transient fault mid-scan can't lose an otherwise-good result; see {@link Scanner.readFault}.
  */
 export interface ProvisioningRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
@@ -294,6 +298,7 @@ function parseOne(content: string): Record<string, unknown> | null {
  */
 class Scanner {
   private reads = 0
+  private firstFault: string | undefined
   private readonly fileCache = new Map<string, string | null>()
   private readonly dirCache = new Map<string, { name: string; type: string; path: string }[]>()
   constructor(
@@ -306,13 +311,37 @@ class Scanner {
     return this.reads >= READ_BUDGET
   }
 
+  /**
+   * The message of the FIRST genuine read fault the reader threw (auth/permission revoked, rate
+   * limit, transport/token-mint error), else `undefined`. A miss (absent path) is NOT a fault. The
+   * caller raises {@link RepoReadError} when it detected nothing AND this is set — so a truly
+   * unreadable repo surfaces an actionable error instead of a misleading "nothing found".
+   */
+  get readFault(): string | undefined {
+    return this.firstFault
+  }
+
+  private recordFault(err: unknown): void {
+    if (this.firstFault === undefined) {
+      this.firstFault = err instanceof Error ? err.message : String(err)
+    }
+  }
+
   async getFile(path: string): Promise<string | null> {
     const cached = this.fileCache.get(path)
     if (cached !== undefined) return cached
     if (this.reads >= READ_BUDGET) return null
     this.reads++
-    const file = await this.reader.getFile(path, this.gitRef)
-    const content = file?.content ?? null
+    let content: string | null = null
+    try {
+      const file = await this.reader.getFile(path, this.gitRef)
+      content = file?.content ?? null
+    } catch (err) {
+      // A genuine read fault (non-404 — the reader turns 404 into null itself). Keep scanning
+      // best-effort (a transient fault mustn't lose a good result) but record it so an all-miss
+      // outcome can be reported as "couldn't read" rather than "nothing found".
+      this.recordFault(err)
+    }
     this.fileCache.set(path, content)
     return content
   }
@@ -338,7 +367,8 @@ class Scanner {
       const entries = await this.reader.listDirectory(path, this.gitRef)
       this.dirCache.set(path, entries)
       return entries
-    } catch {
+    } catch (err) {
+      this.recordFault(err)
       this.dirCache.set(path, [])
       return []
     }
@@ -1528,6 +1558,9 @@ export async function detectKubernetesProvisioning(
   }
 
   if (compose) return buildComposeRecommendation(scanner, root, compose, serviceBasename)
+  // Nothing detected. If that "nothing" is really "the repo couldn't be read" (the scan hit a
+  // genuine read fault), raise it rather than falsely reporting an empty repo.
+  if (scanner.readFault) throw new RepoReadError(scanner.readFault)
   return noneRecommendation()
 }
 
@@ -1624,9 +1657,12 @@ export async function detectCustomManifest(
     }
   }
 
-  // 2c. Not found anywhere. Keep a path the user deliberately entered (they may be pointing at a
-  // file to be generated); only fall back to the default location when there's no current value —
-  // never silently overwrite an explicit entry. Either way "generate" writes to the kept path.
+  // 2c. Not found anywhere. If the lookups couldn't actually READ the repo (a genuine fault, not a
+  // clean miss), surface that instead of a misleading "not found — will be created".
+  if (scanner.readFault) throw new RepoReadError(scanner.readFault)
+  // Keep a path the user deliberately entered (they may be pointing at a file to be generated);
+  // only fall back to the default location when there's no current value — never silently
+  // overwrite an explicit entry. Either way "generate" writes to the kept path.
   const target = currentPath || exact
   return rec(false, target, {
     field: 'manifestPath',

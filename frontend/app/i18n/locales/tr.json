@@ -465,6 +465,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "Bu bloğun deposu bağlı GitHub depoları arasında değil, bu yüzden okunamıyor. Bunun için GitHub'ı bağlayın veya eşitleyin, ardından yeniden deneyin.",
     "container": {
       "title": "İçerik",
       "hint": "Bu bloğun içindeki modüller ve görevler. Bir öğeye tıklayarak panoda seçin.",

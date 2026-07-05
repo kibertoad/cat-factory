@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { ProvisioningRepoReader } from './provision-detect.logic.js'
 import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
+import { RepoReadError } from './repo-read-error.js'
+
+// A reader that THROWS on every read (as the real GitHub/GitLab client does on a non-404 —
+// auth/permission/rate-limit/transport), to prove the detectors surface an unreadable repo as a
+// RepoReadError rather than a misleading "nothing found".
+function makeThrowingReader(
+  message = 'GitHub GET /contents → 403: forbidden',
+): ProvisioningRepoReader {
+  return {
+    async getFile() {
+      throw new Error(message)
+    },
+    async listDirectory() {
+      throw new Error(message)
+    },
+  }
+}
 
 // In-memory RepoFiles-shaped reader built from a flat path→content map. `listDirectory`
 // derives the immediate children (file vs dir) from the keys, mirroring the contents API.
@@ -260,6 +277,30 @@ releases:
     const rec = await detectKubernetesProvisioning(reader)
     expect(rec.detected).toBe(false)
     expect(rec.provisioning).toEqual({ type: 'infraless' })
+  })
+
+  it('throws RepoReadError (not a misleading "nothing found") when the repo is unreadable', async () => {
+    const reader = makeThrowingReader('GitHub GET /contents → 403: forbidden')
+    await expect(detectKubernetesProvisioning(reader)).rejects.toBeInstanceOf(RepoReadError)
+    await expect(detectKubernetesProvisioning(reader)).rejects.toThrow(/403: forbidden/)
+  })
+
+  it('still returns a best-effort result when a read faults but manifests were found', async () => {
+    // The root listing succeeds and yields the manifest; a later unrelated read faults. A partial
+    // fault must NOT lose the good result — only an ALL-miss + fault surfaces as an error.
+    let calls = 0
+    const good = makeReader({ 'k8s/deployment.yaml': deployment('registry/app:1.0.0') })
+    const reader: ProvisioningRepoReader = {
+      async getFile(path, ref) {
+        calls++
+        if (calls > 3) throw new Error('GitHub GET → 429: rate limited')
+        return good.getFile(path, ref)
+      },
+      listDirectory: good.listDirectory,
+    }
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.detected).toBe(true)
+    expect(rec.provisioning.type).toBe('kubernetes')
   })
 
   it('scopes detection to a monorepo service subdirectory', async () => {
@@ -914,5 +955,16 @@ describe('detectCustomManifest', () => {
     expect(rec.detected).toBe(false)
     expect(rec.provisioning).toMatchObject({ type: 'custom', manifestId: 'kargo' })
     expect(rec.provisioning.manifestPath).toBeUndefined()
+  })
+
+  it('throws RepoReadError when the repo is unreadable rather than reporting "not found"', async () => {
+    const reader = makeThrowingReader('GitHub GET /contents → 401: bad credentials')
+    await expect(
+      detectCustomManifest(reader, {
+        directory: 'services/api',
+        manifestId: 'kargo',
+        defaultPath: 'deploy/preview.yaml',
+      }),
+    ).rejects.toThrow(RepoReadError)
   })
 })

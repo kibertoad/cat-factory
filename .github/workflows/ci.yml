@@ -1,5 +1,17 @@
 name: CI
 
+# Runs on every PR (the full gate suite) and on push to main (post-merge). The two events
+# run DIFFERENT subsets, on purpose. Pure PRE-MERGE gates — lint/format, publish integrity,
+# the repo guards, changeset presence and workflow security — run ONLY on PRs (+ manual
+# dispatch): each is deterministic from the diff's content and none can block an already-
+# merged commit, so re-running them on main produces no signal a PR run didn't already give.
+# Push to main runs only the checks with genuine POST-MERGE value — build/typecheck (incl.
+# the Drizzle migration-lineage check that catches non-commutative merges), the test lanes,
+# and container acceptance — which surface integration/merge-race failures that no single
+# PR's `pull/<n>/merge` was ever tested against. Each PR-only job carries a
+# `github.event_name != 'push'` guard (dispatch still runs them so CI changes are measurable
+# on a branch); the `changeset` job predates this and uses the narrower pull_request-only form.
+
 on:
   push:
     branches: [main]
@@ -44,6 +56,14 @@ jobs:
       #                 forced true — see `scope`.)
       backendCode: ${{ steps.scope.outputs.backendCode }}
       code: ${{ steps.scope.outputs.code }}
+      # Shard shape for the sharded test lanes (test-worker / test-db / test-e2e), chosen by
+      # event. A push to `main` is post-merge and un-hurried, so it collapses each lane to a
+      # SINGLE shard (fewer runner-minutes, higher wall-clock — the intended trade). Every
+      # other event (a PR, or a manual workflow_dispatch used to measure sharded timing) keeps
+      # the full 3-way split. `shardMatrix` feeds the job `matrix.shard`; `shardTotal` is the
+      # `--shard=<i>/<N>` denominator (vitest/playwright accept the degenerate `1/1`).
+      shardMatrix: ${{ steps.shards.outputs.matrix }}
+      shardTotal: ${{ steps.shards.outputs.total }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -186,13 +206,38 @@ jobs:
             "(backendSrc=$BACKEND_SRC frontendSrc=$FRONTEND_SRC deploySrc=$DEPLOY_SRC" \
             "rootBuild=$ROOT_BUILD event=$EVENT_NAME)"
 
+      # Pick the shard shape for the sharded test lanes. Gate on `push` specifically (not
+      # "not a PR") so a manual workflow_dispatch — the way CI timing is measured before a
+      # change lands — still exercises the real 3-way split; only an actual push to `main`
+      # runs everything in one shard. `matrix` is a JSON array the jobs `fromJSON` into their
+      # `matrix.shard`; `total` is the `--shard` denominator (`1/1` is the valid "run all" case).
+      - id: shards
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = 'push' ]; then
+            matrix='[1]'
+            total=1
+          else
+            matrix='[1, 2, 3]'
+            total=3
+          fi
+          {
+            echo "matrix=$matrix"
+            echo "total=$total"
+          } >> "$GITHUB_OUTPUT"
+          echo "shardMatrix=$matrix | shardTotal=$total (event=$EVENT_NAME)"
+
   lint:
     name: Lint & format
-    # Skip on the Changesets "Release Packages" PR: its diff is bot-generated
-    # CHANGELOG.md entries + version bumps, which we don't author or gate on
-    # oxfmt, and lint is not a required check anyway. Mirrors the `changeset`
-    # job's skip below.
-    if: github.head_ref != 'changeset-release/main'
+    # PR-ONLY pre-merge gate: oxlint/oxfmt are deterministic per file and sherif checks
+    # cross-package manifest consistency — none of it yields a post-merge signal a PR run
+    # didn't already give (and a merge race that drifted a dep version would also break the
+    # build/test lanes that DO run on main), so this doesn't run on push to main.
+    # Also skip on the Changesets "Release Packages" PR: its diff is bot-generated
+    # CHANGELOG.md entries + version bumps, which we don't author or gate on oxfmt, and lint
+    # is not a required check anyway. Mirrors the `changeset` job's skip below.
+    if: ${{ github.event_name != 'push' && github.head_ref != 'changeset-release/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -217,13 +262,18 @@ jobs:
         run: pnpm lint:monorepo
 
   # The two pure-node repo guards (no install needed) used to open the `build-typecheck`
-  # job. They live in their OWN always-on job so that change-gating the build lanes on
-  # `code` (below) cannot take them along: both are exactly the checks a docs-/markdown-only
-  # PR is most likely to trip — the package catalog IS README.md content, and the image-tag
-  # consistency check reads the pinned tag files — so they must run on every PR regardless
-  # of scope, and the `Build` gate accepts nothing but `success` from this job.
+  # job. They live in their OWN job so that change-gating the build lanes on `code` (below)
+  # cannot take them along: both are exactly the checks a docs-/markdown-only PR is most
+  # likely to trip — the package catalog IS README.md content, and the image-tag consistency
+  # check reads the pinned tag files — so they must run on every PR regardless of scope.
+  # But they are PURE PRE-MERGE GATES with no post-merge signal (both deterministic from
+  # content, and deploy.yml re-runs the image-tag check on main anyway), so they do NOT run
+  # on push to main. On a PR the `Build` gate accepts nothing but `success` from this job; on
+  # push it is skipped and the gate tolerates that (see `build-gate`).
   repo-guards:
     name: Repo guards
+    # PR-only pre-merge gate (see the block comment above): skipped on push to main.
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -315,12 +365,18 @@ jobs:
 
   # Publish-integrity lane (split out of build-typecheck so its intrinsic ~1min doesn't sit on
   # the serial critical path). Needs the built dist/ (publint packs each package's output).
+  # PR-ONLY: this is a pure pre-merge gate — publint/attw/knip catch a broken publish artifact
+  # (empty-shell dist/, broken exports map, unused code) BEFORE it lands, and the real publish
+  # (release.yml) does its own fresh build + prepublishOnly. Re-running it on push to main gives
+  # no new signal (deterministic from content, and it can't un-merge the commit), so it is
+  # skipped there.
   publish-integrity:
     name: Publish integrity
     needs: changes
     # publint/attw/knip all analyse built output and source imports — meaningless on a
-    # docs-only diff, so this lane change-gates exactly like build-typecheck.
-    if: ${{ needs.changes.outputs.code == 'true' }}
+    # docs-only diff, so this lane change-gates exactly like build-typecheck. And, being a
+    # pre-merge gate, it is skipped on push to main (github.event_name != 'push').
+    if: ${{ github.event_name != 'push' && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -423,9 +479,10 @@ jobs:
   # the three build lanes are change-gated on `code`, so `skipped` is a legitimate result on
   # a docs-only PR — but only when the `changes` job itself succeeded (a failed detection
   # job would skip every lane on empty outputs and pass this gate with nothing built — the
-  # same fail-open hole `test-gate` closes). The always-on `repo-guards` job is never
-  # change-gated, so from it only `success` is accepted: a skip there means something went
-  # wrong.
+  # same fail-open hole `test-gate` closes). `repo-guards` and `publish-integrity` are
+  # PR-only pre-merge gates (they don't run on push to main): on a pull_request the gate
+  # demands `success` from `repo-guards` (it is never change-gated there, so a skip means
+  # something went wrong), while on push both are legitimately `skipped` and tolerated.
   build-gate:
     name: Build
     needs: [changes, repo-guards, build-typecheck, publish-integrity, frontend-check]
@@ -436,20 +493,28 @@ jobs:
     steps:
       - name: Verify all build lanes passed (or were correctly skipped)
         env:
+          EVENT: ${{ github.event_name }}
           CHANGES: ${{ needs.changes.result }}
           GUARDS: ${{ needs.repo-guards.result }}
           CORE: ${{ needs.build-typecheck.result }}
           PUBLISH: ${{ needs.publish-integrity.result }}
           FRONTEND: ${{ needs.frontend-check.result }}
         run: |
-          echo "changes: $CHANGES | repo-guards: $GUARDS | build-typecheck: $CORE" \
-            "| publish-integrity: $PUBLISH | frontend-check: $FRONTEND"
+          echo "event: $EVENT | changes: $CHANGES | repo-guards: $GUARDS" \
+            "| build-typecheck: $CORE | publish-integrity: $PUBLISH | frontend-check: $FRONTEND"
           if [ "$CHANGES" != 'success' ]; then
             echo "::error::change detection did not succeed; refusing to pass the build gate"
             exit 1
           fi
-          if [ "$GUARDS" != 'success' ]; then
-            echo "::error::the always-on repo-guards job reported '$GUARDS'"
+          # repo-guards is a PR-only gate: on a pull_request it must have run and passed (it
+          # is never change-gated); on push/dispatch to main it is skipped by design.
+          if [ "$EVENT" = 'pull_request' ]; then
+            if [ "$GUARDS" != 'success' ]; then
+              echo "::error::the repo-guards job reported '$GUARDS' on a PR"
+              exit 1
+            fi
+          elif [ "$GUARDS" != 'success' ] && [ "$GUARDS" != 'skipped' ]; then
+            echo "::error::the repo-guards job reported '$GUARDS'"
             exit 1
           fi
           for lane in "$CORE" "$PUBLISH" "$FRONTEND"; do
@@ -485,7 +550,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -500,8 +566,13 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # Pass the shard index + denominator via env (not inline `${{ }}` in the script body),
+      # so there's no template-injection surface — matching the `scope`/`shards` steps.
       - name: Run worker shard
-        run: pnpm --filter @cat-factory/worker exec vitest run --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/worker exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Every non-worker package that needs NO database: the pure-unit suites
   # (orchestration, integrations, server, agents, gates, …) plus the frontend layer.
@@ -566,7 +637,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
@@ -616,10 +688,15 @@ jobs:
       # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
       # two facades, the mothership-mode config, and their parallel workers never collide. Each
       # package's spec files are partitioned across the shards by vitest's --shard.
-      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/3)
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
+      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/${{ needs.changes.outputs.shardTotal }})
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
         run: |
-          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/3
-          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/3
+          pnpm --filter @cat-factory/node-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
+          pnpm --filter @cat-factory/local-server exec vitest run --shard="$SHARD/$SHARD_TOTAL"
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
@@ -656,7 +733,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 3-way split on PRs / dispatch, collapsed to a single shard on push to main.
+        shard: ${{ fromJSON(needs.changes.outputs.shardMatrix) }}
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
@@ -709,8 +787,13 @@ jobs:
           echo "::error::Postgres did not become ready"
           exit 1
 
+      # Shard index + denominator via env — no inline `${{ }}` in the script body (see the
+      # worker lane's note): keeps this off zizmor's template-injection radar.
       - name: Run e2e shard
-        run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ needs.changes.outputs.shardTotal }}
+        run: pnpm --filter @cat-factory/e2e exec playwright test --shard="$SHARD/$SHARD_TOTAL"
 
       # A red shard fails loudly on its own (the step above exits non-zero, incl. on a flaky
       # retry via `failOnFlakyTests`), so there is no combined-report merge job — the diagnosis
@@ -1110,8 +1193,12 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: pnpm changeset status --since="origin/${BASE_REF}"
 
+  # PR-ONLY pre-merge gate: actionlint + zizmor lint the workflow / composite-action files
+  # themselves, which is deterministic from their content and gives no post-merge signal — so
+  # it runs on PRs (and manual dispatch) but not on push to main.
   zizmor:
     name: Zizmor (workflow security)
+    if: ${{ github.event_name != 'push' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

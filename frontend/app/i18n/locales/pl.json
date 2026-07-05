@@ -465,6 +465,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "Repozytorium tego bloku nie znajduje się wśród połączonych repozytoriów GitHub, więc nie można go odczytać. Połącz lub zsynchronizuj GitHub dla tego repozytorium, a następnie spróbuj ponownie.",
     "container": {
       "title": "Zawartość",
       "hint": "Moduły i zadania wewnątrz tego bloku. Kliknij pozycję, aby zaznaczyć ją na tablicy.",

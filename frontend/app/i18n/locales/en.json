@@ -508,6 +508,7 @@
     }
   },
   "inspector": {
+    "detectRepoUnresolved": "This block's repository isn't among the connected GitHub repos, so it can't be read. Connect or sync GitHub for it, then retry.",
     "container": {
       "title": "Contents",
       "hint": "The modules and tasks inside this block. Click an entry to select it on the board.",
