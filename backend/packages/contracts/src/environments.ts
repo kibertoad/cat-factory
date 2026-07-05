@@ -548,6 +548,194 @@ export type EnvironmentBackendConfig = v.InferOutput<typeof environmentBackendCo
 export type EnvironmentBackendKind = EnvironmentBackendConfig['kind']
 
 // ---------------------------------------------------------------------------
+// Docker Compose STACK RECIPES — declarative multi-step bring-up for complex compose
+// repos (the lokalise-main pilot). A recipe extends a `docker-compose` service's
+// provisioning with ordered `-f` layering, `COMPOSE_PROFILES`, env-file materialization,
+// external networks / shared-stack refs, and imperative setup/teardown steps + a terminal
+// health gate. Every field is OPTIONAL, so an existing single-file `composePath` config
+// parses unchanged. The compose provider keys purely on the PERSISTED recipe — autodetection
+// and the environment analyst only RECOMMEND these fields (the build-flag rule).
+//
+// Runtime-BOUND execution (a host Docker daemon) lands local-facade-only — the documented
+// compose exception to runtime symmetry — but the shape here is fully symmetric + persisted
+// on the service frame like the rest of ServiceProvisioning. This same recipe shape is also
+// what the environment ANALYST returns as a draft (slice 8) and the per-field basis a
+// SharedStack reuses (slice 4). See docs/initiatives/stack-recipes-and-shared-stacks.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * A repo-relative path within the checkout (bounded, trimmed). The runtime applies the
+ * checkout-escape guard (`escapesCheckout`) at execution time — the schema only bounds length,
+ * because a `wait-file` path targeting a running container is legitimately container-absolute.
+ */
+const recipePathString = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500))
+
+/** A `COMPOSE_PROFILES` / external-network / shared-stack-ref / compose-service identifier. */
+const recipeName = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))
+
+/** A human label for a recipe step, surfaced per-step in the provisioning log. */
+const recipeStepName = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120))
+
+/** A command argv (not a shell string). Use `['sh', '-c', '…']` when a shell is genuinely needed. */
+const recipeCommand = v.pipe(v.array(nonEmpty), v.minLength(1))
+
+/**
+ * A per-step timeout budget (ms). Recipe steps run far longer than a management-API call — a
+ * ~5-minute cache warmup or a 40-image ECR pull — so the ceiling is generous (up to 1h). Each
+ * step gets its OWN budget, never a shared pool (the `BUILD_TIMEOUT_MS` precedent); absent ⇒
+ * the engine's per-kind default.
+ */
+const recipeTimeoutMs = v.pipe(v.number(), v.integer(), v.minValue(1000), v.maxValue(3_600_000))
+
+/** How often a `wait-*` step / health gate re-probes (ms). Absent ⇒ the engine default. */
+const recipePollIntervalMs = v.pipe(v.number(), v.integer(), v.minValue(250), v.maxValue(60_000))
+
+/** Accept only this HTTP status; absent ⇒ any 2xx. */
+const recipeExpectStatus = v.pipe(v.number(), v.integer(), v.minValue(100), v.maxValue(599))
+
+/** Require this substring in the HTTP response body. */
+const recipeExpectBody = v.pipe(v.string(), v.maxLength(500))
+
+/**
+ * Materialize a committed template into its gitignored target inside the checkout BEFORE `up`
+ * — e.g. `.env.dev.local-dist` → `.env.dev.local`, `.split.yaml.dist` → `.split.yaml`. Both
+ * paths are repo-relative and must pass the runtime's checkout-escape guard.
+ */
+export const recipeEnvFileSchema = v.object({
+  /** Committed template file read from the checkout. */
+  template: recipePathString,
+  /** Gitignored destination the template is copied to. */
+  target: recipePathString,
+})
+export type RecipeEnvFile = v.InferOutput<typeof recipeEnvFileSchema>
+
+/**
+ * One ordered step in a stack recipe, discriminated by `kind`. Every step carries a `name`
+ * (surfaced per-step in the provisioning log) and an optional per-step `timeoutMs`. Kinds:
+ *
+ * - `compose-exec`  — `docker compose exec <service> <argv…>` inside a running container
+ *   (composer install, migrations, cache warmup, index builds; a seed import pipes a `.sql`
+ *   dump via `stdinFile`).
+ * - `copy-file`     — an in-checkout template copy (a one-off subset of `envFiles`).
+ * - `wait-http`     — poll a URL until it returns the expected status / body substring.
+ * - `wait-file`     — poll for a file (in the checkout, or inside `service`'s container).
+ * - `host-command`  — an arbitrary command on the ORCHESTRATOR HOST. Trusted local facade
+ *   ONLY, behind an explicit opt-in flag (the `build`-flag pattern) and refused by every other
+ *   backend — the escape hatch for genuinely host-side steps.
+ */
+export const recipeStepSchema = v.variant('kind', [
+  v.object({
+    kind: v.literal('compose-exec'),
+    name: recipeStepName,
+    /** The compose `services:` key to exec inside. */
+    service: recipeName,
+    /** The command argv (not a shell string). */
+    command: recipeCommand,
+    /** Optional repo-relative file piped to the command's stdin (e.g. a `.sql` seed dump). */
+    stdinFile: v.optional(recipePathString),
+    /** Run as this user inside the container (`docker compose exec --user`). */
+    user: v.optional(recipeName),
+    /** Working directory inside the container (`--workdir`). */
+    workdir: v.optional(recipePathString),
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+  v.object({
+    kind: v.literal('copy-file'),
+    name: recipeStepName,
+    /** Source template, repo-relative. */
+    from: recipePathString,
+    /** Destination, repo-relative. */
+    to: recipePathString,
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+  v.object({
+    kind: v.literal('wait-http'),
+    name: recipeStepName,
+    /** URL to poll (typically a localhost/LAN endpoint the compose project publishes). */
+    url: urlString,
+    expectStatus: v.optional(recipeExpectStatus),
+    expectBodyContains: v.optional(recipeExpectBody),
+    intervalMs: v.optional(recipePollIntervalMs),
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+  v.object({
+    kind: v.literal('wait-file'),
+    name: recipeStepName,
+    /** Path to poll for: repo-relative in the checkout, or container-absolute when `service` is set. */
+    path: recipePathString,
+    /** When set, poll inside this compose service's container instead of the checkout. */
+    service: v.optional(recipeName),
+    intervalMs: v.optional(recipePollIntervalMs),
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+  v.object({
+    kind: v.literal('host-command'),
+    name: recipeStepName,
+    /** The command argv run on the orchestrator host (opt-in, local-facade only). */
+    command: recipeCommand,
+    /** Working directory on the host, repo-relative to the checkout; absent ⇒ the checkout root. */
+    workdir: v.optional(recipePathString),
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+])
+export type RecipeStep = v.InferOutput<typeof recipeStepSchema>
+export type RecipeStepKind = RecipeStep['kind']
+
+/**
+ * The recipe's TERMINAL readiness gate — polled after the setup steps until it passes or its
+ * budget elapses. `compose-healthy` (the default when absent) is today's `up --wait` behaviour;
+ * `http` polls a URL; `compose-exec` runs a command in a service until it exits 0 (e.g.
+ * `bin/console monitor:health`).
+ */
+export const recipeHealthGateSchema = v.variant('kind', [
+  v.object({ kind: v.literal('compose-healthy') }),
+  v.object({
+    kind: v.literal('http'),
+    url: urlString,
+    expectStatus: v.optional(recipeExpectStatus),
+    expectBodyContains: v.optional(recipeExpectBody),
+    intervalMs: v.optional(recipePollIntervalMs),
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+  v.object({
+    kind: v.literal('compose-exec'),
+    service: recipeName,
+    command: recipeCommand,
+    intervalMs: v.optional(recipePollIntervalMs),
+    timeoutMs: v.optional(recipeTimeoutMs),
+  }),
+])
+export type RecipeHealthGate = v.InferOutput<typeof recipeHealthGateSchema>
+
+/**
+ * A declarative Docker Compose STACK RECIPE — the imperative bring-up of a complex compose
+ * repo expressed as data. Extends a `docker-compose` service's provisioning; every field is
+ * optional, so a plain single-file `composePath` config carries no recipe and parses
+ * unchanged. Also the shape the environment ANALYST returns as a draft (slice 8) and the
+ * per-field basis a SharedStack reuses (slice 4). The compose provider consumes the PERSISTED
+ * recipe only — autodetection / the analyst merely recommend it.
+ */
+export const stackRecipeSchema = v.object({
+  /** Ordered `-f` compose files (base + overrides). Supersedes `composePath` when present. */
+  composeFiles: v.optional(v.array(recipePathString)),
+  /** `COMPOSE_PROFILES` to enable for the project. */
+  composeProfiles: v.optional(v.array(recipeName)),
+  /** Committed templates materialized into their gitignored targets before `up`. */
+  envFiles: v.optional(v.array(recipeEnvFileSchema)),
+  /** Networks the project expects to already exist (owned by a shared stack or the engine). */
+  externalNetworks: v.optional(v.array(recipeName)),
+  /** Ids of SharedStack entities that must be up first (slice 4). */
+  sharedStackRefs: v.optional(v.array(recipeName)),
+  /** Ordered post-`up` setup steps. */
+  setupSteps: v.optional(v.array(recipeStepSchema)),
+  /** Terminal readiness gate; absent ⇒ `compose-healthy` (today's `up --wait`). */
+  healthGate: v.optional(recipeHealthGateSchema),
+  /** Optional steps run before `down -v` on teardown. */
+  teardownSteps: v.optional(v.array(recipeStepSchema)),
+})
+export type StackRecipe = v.InferOutput<typeof stackRecipeSchema>
+
+// ---------------------------------------------------------------------------
 // Service-owned provisioning config (the "what + where") — on the service-frame Block.
 // ---------------------------------------------------------------------------
 
@@ -572,6 +760,14 @@ export const serviceProvisioningSchema = v.object({
    * contexts, in-checkout bind mounts, and relative `env_file`s resolve.
    */
   composeBuild: v.optional(v.boolean()),
+  /**
+   * `docker-compose`: the declarative STACK RECIPE for a complex multi-step bring-up —
+   * multi-`-f` layering, profiles, env-file materialization, external networks / shared-stack
+   * refs, ordered setup/teardown steps + a terminal health gate. Absent ⇒ the simple
+   * single-file `composePath` + `up --wait` path (when set, `recipe.composeFiles` supersedes
+   * `composePath`). See {@link stackRecipeSchema}.
+   */
+  recipe: v.optional(stackRecipeSchema),
   /** `custom`: the custom-manifest-type id this service produces (matched to a remote-custom handler). */
   manifestId: v.optional(manifestIdSchema),
   /** `custom`: optional path to the custom manifest within the repo. */
@@ -968,7 +1164,13 @@ export type ProvisioningDetectionConfidence = v.InferOutput<
 
 /** One inferred aspect of the recommendation, with its confidence + a human-readable rationale. */
 export const provisioningDetectionNoteSchema = v.object({
-  /** Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`. */
+  /**
+   * Which field this note explains: `provisionType` | `renderer` | `url` | `namespace` |
+   * `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` | `serviceDir` |
+   * `manifestRoot` | `composeService` | `composeBuild` | `composeFiles` | `composeProfiles` |
+   * `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` | `healthGate` |
+   * `seedDump` | `repoCli`.
+   */
   field: v.string(),
   confidence: provisioningDetectionConfidenceSchema,
   /** Rationale for the SPA to surface next to the field (e.g. "kustomization.yaml present ⇒ kustomize"). */
@@ -1049,18 +1251,90 @@ export type ProvisioningManifestRootCandidate = v.InferOutput<
 >
 
 /**
+ * A candidate Docker Compose file for `-f` layering (slice 2 detection). The base file(s) are
+ * pre-selected into `provisioning.recipe.composeFiles`; OS-specific overrides
+ * (`dev.wsl.override.yml`, `dev.mac.override.yml`) are surfaced here — annotated with `os` and
+ * NOT auto-layered — so the wizard binds the one matching the operator's machine.
+ */
+export const provisioningComposeFileCandidateSchema = v.object({
+  /** Repo-relative compose file path (a value `recipe.composeFiles` would take). */
+  path: v.string(),
+  /** The file's base name (e.g. `dev.wsl.override.yml`). */
+  name: v.string(),
+  /** For an OS-specific override, which OS it targets; absent ⇒ OS-neutral (a base layer). */
+  os: v.optional(v.picklist(['wsl', 'mac', 'linux', 'windows'])),
+  /** True for a base layer pre-selected into `composeFiles`; an OS override is opt-in. */
+  recommended: v.boolean(),
+})
+export type ProvisioningComposeFileCandidate = v.InferOutput<
+  typeof provisioningComposeFileCandidateSchema
+>
+
+/**
+ * A `COMPOSE_PROFILES` label the compose files declare (slice 2 detection). Surfaced
+ * default-OFF — an optional service group the user opts into; `recommended` is set only for a
+ * profile the detector deems part of the base bring-up (rare — most profiles are optional).
+ */
+export const provisioningProfileCandidateSchema = v.object({
+  /** The `profiles:` label (e.g. `peer`, `backends`). */
+  profile: v.string(),
+  /** Whether to pre-enable it (default false — profiles are opt-in). */
+  recommended: v.boolean(),
+})
+export type ProvisioningProfileCandidate = v.InferOutput<typeof provisioningProfileCandidateSchema>
+
+/**
+ * A `.sql` dump found under a seed-ish directory (`deployment/`, `seed/`, `db/`,
+ * `docker-entrypoint-initdb.d/`) — a LOW-confidence candidate the wizard confirms, turning it
+ * into a `compose-exec` seed-import step (piping the dump via `stdinFile`). Never auto-applied.
+ */
+export const provisioningSeedDumpCandidateSchema = v.object({
+  /** Repo-relative path of the SQL dump. */
+  path: v.string(),
+  /** The dump file's base name. */
+  name: v.string(),
+  /** The heuristic top pick among several dumps. */
+  recommended: v.boolean(),
+})
+export type ProvisioningSeedDumpCandidate = v.InferOutput<
+  typeof provisioningSeedDumpCandidateSchema
+>
+
+/**
+ * A REPORT-ONLY hint that the repo carries its OWN imperative bring-up — a Makefile, a
+ * `bin/*console*` repo CLI, a justfile/Taskfile with setup-looking targets. Detection never
+ * parses shell; it only flags the file so the wizard can suggest running the environment
+ * ANALYST (slice 8) to translate that bring-up into recipe steps. Its presence sets the
+ * "consider deep analysis" nudge.
+ */
+export const provisioningRepoCliHintSchema = v.object({
+  /** Repo-relative path of the CLI / build file that triggered the hint. */
+  path: v.string(),
+  /** What kind of imperative entry point it is. */
+  kind: v.picklist(['makefile', 'repo-cli', 'justfile', 'taskfile']),
+})
+export type ProvisioningRepoCliHint = v.InferOutput<typeof provisioningRepoCliHintSchema>
+
+/**
  * A non-binding provisioning recommendation detected from a service's repo. `provisioning`
- * carries the service-owned config to prefill (the "what + where"); `urlSource`/`namespace`
- * are engine-level suggestions the workspace handler owns (the detector can READ them from
- * the manifests but they aren't stored on the service); the candidate arrays + `notes` drive
- * the confirm UI. `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
+ * carries the service-owned config to prefill (the "what + where", now including a
+ * `docker-compose` service's {@link stackRecipeSchema | recipe} — layered compose files,
+ * profiles, env-file pairs, external networks); `urlSource`/`namespace` are engine-level
+ * suggestions the workspace handler owns (the detector can READ them from the manifests but
+ * they aren't stored on the service); the candidate arrays + `notes` drive the confirm UI.
+ * `detected: false` ⇒ nothing inferable (`provisioning.type` is `infraless`).
  *
  * The candidate arrays let the user CHOOSE instead of accepting a silent auto-pick:
  * `overlayCandidates` (which overlay within a kustomize root), `manifestRootCandidates` (which
- * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice), and
- * `composeServiceCandidates` (which compose service). Each note's `field` is one of
- * `provisionType` | `renderer` | `url` | `namespace` | `secretInjections` | `images` | `overlay` |
- * `helmReleases` | `compose` | `serviceDir` | `manifestRoot` | `composeService` | `composeBuild`.
+ * k8s root when several resolve), `serviceDirCandidates` (which root-shared monorepo slice),
+ * `composeServiceCandidates` (which compose service), `composeFileCandidates` (which OS override
+ * to layer), `profileCandidates` (which optional profiles to enable), and `seedDumpCandidates`
+ * (which SQL dump to seed from). `repoCliHint` flags a repo with its own imperative bring-up
+ * (a nudge toward the analyst). Each note's `field` is one of `provisionType` | `renderer` |
+ * `url` | `namespace` | `secretInjections` | `images` | `overlay` | `helmReleases` | `compose` |
+ * `serviceDir` | `manifestRoot` | `composeService` | `composeBuild` | `composeFiles` |
+ * `composeProfiles` | `envFiles` | `externalNetworks` | `sharedStackRefs` | `setupSteps` |
+ * `healthGate` | `seedDump` | `repoCli`.
  */
 export const provisioningRecommendationSchema = v.object({
   detected: v.boolean(),
@@ -1078,6 +1352,14 @@ export const provisioningRecommendationSchema = v.object({
   serviceDirCandidates: v.optional(v.array(provisioningServiceDirCandidateSchema)),
   /** Candidate compose services to pick from when the compose file declares several (advisory). */
   composeServiceCandidates: v.optional(v.array(provisioningComposeServiceCandidateSchema)),
+  /** Candidate compose files for `-f` layering (base pre-selected; OS overrides opt-in). */
+  composeFileCandidates: v.optional(v.array(provisioningComposeFileCandidateSchema)),
+  /** `COMPOSE_PROFILES` labels the compose files declare (surfaced default-off). */
+  profileCandidates: v.optional(v.array(provisioningProfileCandidateSchema)),
+  /** Low-confidence SQL seed dumps to confirm as `compose-exec` seed steps. */
+  seedDumpCandidates: v.optional(v.array(provisioningSeedDumpCandidateSchema)),
+  /** Report-only: the repo has its own imperative bring-up ⇒ suggest the environment analyst. */
+  repoCliHint: v.optional(provisioningRepoCliHintSchema),
   /** Per-field confidence + hints for the SPA. */
   notes: v.array(provisioningDetectionNoteSchema),
 })
