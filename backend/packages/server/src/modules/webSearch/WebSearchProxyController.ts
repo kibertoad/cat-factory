@@ -28,7 +28,7 @@ export function webSearchProxyController(): Hono<AppEnv> {
   // SearXNG's search endpoint shape: `/search?q=...&format=json`. We always answer
   // JSON regardless of the `format` param (the container only ever asks for json).
   app.get('/v1/web-search/search', async (c) => {
-    const { config, spendService, accountSettings } = c.get('container')
+    const { config, spendService, accountSettings, defaultWebSearchUpstream } = c.get('container')
 
     const secret = config.auth.sessionSecret
     if (!secret) {
@@ -46,16 +46,19 @@ export function webSearchProxyController(): Hono<AppEnv> {
     }
 
     // Resolve the search upstream from the run's account settings (web-search keys live in
-    // the per-account store). None configured ⇒ degrade gracefully with an empty result set
-    // (a 200, like a search that found nothing) rather than hard-erroring mid-run — and the
-    // executor only advertises `web_search` when the account has keys, so a well-formed run
-    // rarely reaches this branch.
-    const upstream =
+    // the per-account store); the account URL is untrusted, so it stays SSRF-guarded. When the
+    // account has none, fall back to the deployment-configured trusted default (local mode's
+    // self-hosted SearXNG, else undefined). None configured either way ⇒ degrade gracefully
+    // with an empty result set (a 200, like a search that found nothing) rather than
+    // hard-erroring mid-run — and the executor only advertises `web_search` when a usable
+    // upstream exists, so a well-formed run rarely reaches this branch.
+    const accountUpstream =
       accountSettings && session.accountId
         ? createWebSearchUpstream(
             (await accountSettings.service.resolve(session.accountId)).webSearch ?? {},
           )
         : undefined
+    const upstream = accountUpstream ?? defaultWebSearchUpstream
     if (!upstream) {
       return c.json({ query: '', number_of_results: 0, results: [] })
     }

@@ -97,6 +97,13 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
   constructor(
     baseUrl: string,
     private readonly apiKey?: string,
+    // `trusted` marks a DEPLOYMENT-configured URL (the operator's own SearXNG, e.g. local
+    // mode's `http://localhost:8080`) rather than an account-supplied one. The SSRF host
+    // guard exists because ACCOUNT URLs are untrusted; a trusted URL may point at a loopback/
+    // LAN host, so the host check is skipped for it. Everything else `safeFetch` gives us —
+    // manual redirect following, cross-origin credential/body stripping, the response byte
+    // cap — still applies. Untrusted (default) instances keep the full guard.
+    private readonly trusted = false,
   ) {
     this.base = baseUrl.replace(/\/+$/, '')
   }
@@ -110,7 +117,9 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
     url.searchParams.set('format', 'json')
     // Re-validate the (account-configured) host on every redirect hop so a permitted
     // base can't 302 the request — with the optional bearer attached — to an internal
-    // or metadata host.
+    // or metadata host. A trusted deployment upstream skips only this host check (see the
+    // `trusted` ctor arg); the rest of `safeFetch`'s protections still apply.
+    const assertSafe = this.trusted ? () => {} : assertSafeWebSearchUrl
     const res = await safeFetch(
       url.toString(),
       {
@@ -120,7 +129,7 @@ export class SearxngWebSearchUpstream implements WebSearchUpstream {
         },
         ...(opts.signal ? { signal: opts.signal } : {}),
       },
-      assertSafeWebSearchUrl,
+      assertSafe,
       makeSearchError,
     )
     if (!res.ok) {
@@ -158,5 +167,27 @@ export function createWebSearchUpstream(cfg: {
   if (brave) return new BraveWebSearchUpstream(brave)
   const searxng = cfg.searxngUrl?.trim()
   if (searxng) return new SearxngWebSearchUpstream(searxng, cfg.searxngApiKey?.trim())
+  return undefined
+}
+
+/**
+ * Build the DEPLOYMENT-DEFAULT web-search upstream from env-supplied config (a facade's own
+ * `WEB_SEARCH_*` vars), used by the proxy as a fallback when a run's account has no web-search
+ * config of its own. The counterpart to {@link createWebSearchUpstream}: the URL here comes from
+ * the deployment operator, not an account admin, so the SearXNG instance is constructed as
+ * `trusted` — it may point at a loopback/LAN host (local mode defaults to `http://localhost:8080`)
+ * without tripping the account-URL SSRF guard. Brave needs no bypass (fixed public endpoint).
+ * Returns undefined when nothing is configured (⇒ no deployment default; the account path still
+ * applies).
+ */
+export function createDefaultWebSearchUpstream(cfg: {
+  braveApiKey?: string
+  searxngUrl?: string
+  searxngApiKey?: string
+}): WebSearchUpstream | undefined {
+  const brave = cfg.braveApiKey?.trim()
+  if (brave) return new BraveWebSearchUpstream(brave)
+  const searxng = cfg.searxngUrl?.trim()
+  if (searxng) return new SearxngWebSearchUpstream(searxng, cfg.searxngApiKey?.trim(), true)
   return undefined
 }

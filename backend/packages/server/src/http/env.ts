@@ -26,7 +26,7 @@ import type { ResolveRepoTarget } from '../agents/ContainerAgentExecutor.js'
 import type { SessionPayload, SessionUser } from '../auth/signing.js'
 import type { AppConfig } from '../config/types.js'
 import type { PersistenceRegistry } from '../persistence/rpc.js'
-import type { RuntimeGateways } from '../runtime/gateways.js'
+import type { RuntimeGateways, WebSearchUpstream } from '../runtime/gateways.js'
 
 // The runtime-neutral request context shared by every controller. A facade builds a
 // `ServerContainer` per request (the domain `Core` plus the resolved config and the
@@ -52,6 +52,15 @@ export interface ServerContainer extends Core {
   consensusSessionRepository?: ConsensusSessionRepository
   /** Per-facade runtime seams (real-time delivery, …) the shared controllers use. */
   gateways: RuntimeGateways
+  /**
+   * A DEPLOYMENT-configured, trusted web-search upstream the search proxy falls back to when
+   * a run's account has no web-search config of its own. Built by the facade from its own
+   * `WEB_SEARCH_*` env (local mode defaults it on, pointing at a self-hosted SearXNG); unlike
+   * the account-supplied path it may target a loopback/LAN host (it's constructed `trusted`).
+   * Absent on facades that don't configure one (e.g. Cloudflare) — then the proxy behaves
+   * exactly as before (account path only, else an empty result set).
+   */
+  defaultWebSearchUpstream?: WebSearchUpstream
   /**
    * Facade-owned resources to release on graceful shutdown (e.g. the local mothership
    * boot's `node:sqlite` credential-store handle). The boot path invokes it from its

@@ -25,6 +25,17 @@ const MIN_ENCRYPTION_KEY_BYTES = 32
 
 const DEFAULT_PORT = '8787'
 
+// The self-hosted SearXNG the local docker-compose runs, reached by THIS host process (the
+// orchestrator runs on the host and hits the compose-published port; agent containers never
+// touch it — they go through the backend web-search proxy). The Node facade builds a TRUSTED
+// upstream from `WEB_SEARCH_SEARXNG_URL`, so a loopback URL is permitted (it bypasses the
+// account-URL SSRF guard). See `createDefaultWebSearchUpstream` in @cat-factory/server.
+const DEFAULT_LOCAL_SEARXNG_URL = 'http://localhost:8080'
+
+// `LOCAL_WEB_SEARCH` off-values disable the on-by-default self-hosted web search (mirrors the
+// off-value convention used for the harness-image refresh).
+const WEB_SEARCH_OFF_VALUES = new Set(['false', '0', 'off', 'no', 'none', 'disabled'])
+
 /**
  * Resolve a mandatory local-mode secret from env, throwing a clear, actionable error when it
  * isn't set. These secrets must be STABLE across restarts — the session secret signs the
@@ -84,8 +95,22 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   // `host.docker.internal` (Docker/Podman/OrbStack), `host.lima.internal` (Colima), or
   // the vmnet gateway (Apple). An explicit LOCAL_HARNESS_HOST_ALIAS / PUBLIC_URL wins.
   const hostAlias = resolveHostAlias(env)
+  // On by default: point the backend web-search proxy at the local docker-compose SearXNG so
+  // agents get web search with zero per-account key entry. `LOCAL_WEB_SEARCH=off` skips this
+  // auto-default (with no explicit URL set, WEB_SEARCH_SEARXNG_URL is then absent → the Node
+  // facade builds no upstream → the tool isn't advertised and the proxy degrades to empty). Per
+  // this loader's "explicit env always wins" contract, an operator-set WEB_SEARCH_SEARXNG_URL is
+  // preserved regardless (via `...env`).
+  const webSearchDisabled = WEB_SEARCH_OFF_VALUES.has(
+    (env.LOCAL_WEB_SEARCH ?? '').trim().toLowerCase(),
+  )
   return {
     ...env,
+    ...(webSearchDisabled
+      ? {}
+      : {
+          WEB_SEARCH_SEARXNG_URL: env.WEB_SEARCH_SEARXNG_URL?.trim() || DEFAULT_LOCAL_SEARXNG_URL,
+        }),
     // `|| 'true'` (not `??`) so an explicit empty `AUTH_DEV_OPEN=` still defaults open,
     // consistent with the other fields here; set `AUTH_DEV_OPEN=false` to close the gate.
     // devOpen keeps the API open for unauthenticated reads (and the test harness), but a
