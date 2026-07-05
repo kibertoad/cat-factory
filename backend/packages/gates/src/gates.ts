@@ -1,5 +1,6 @@
 import type {
   Block,
+  DocQualityReport,
   GateContext,
   GateDefinition,
   GateHelperCompletionArgs,
@@ -19,6 +20,8 @@ import {
   DEFAULT_MERGE_PRESET,
   describeFailingRepos,
   describeRegressedSignals,
+  DOC_FIXER_AGENT_KIND,
+  DOC_QUALITY_AGENT_KIND,
   FIXER_AGENT_KIND,
   headFields,
   HUMAN_REVIEW_AGENT_KIND,
@@ -33,6 +36,7 @@ import type { OnCallAssessment } from '@cat-factory/contracts'
 import { parseOnCallAssessment } from '@cat-factory/contracts'
 import {
   CI_STATUS_PROVIDER,
+  DOC_QUALITY_PROVIDER,
   INCIDENT_ENRICHMENT_PROVIDER,
   MERGEABILITY_PROVIDER,
   PULL_REQUEST_REVIEW_PROVIDER,
@@ -54,6 +58,13 @@ import {
  * manual-resolution message instead of churning to CI's default of 10.
  */
 const CONFLICT_RESOLVER_MAX_ATTEMPTS = 3
+
+/**
+ * Doc-fixer attempt cap. The gate's checks are deterministic and instant, and a fixer round
+ * pushes a real commit the next probe re-reads, so a small budget is enough — a document that
+ * still fails after two structural-fix rounds needs a human, not more container churn.
+ */
+const DOC_FIXER_MAX_ATTEMPTS = 2
 
 /** Format a 0..1 score as a rounded percentage for notification copy. */
 function pct(score: number): string {
@@ -205,6 +216,68 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
         `The pull request still conflicts with its base after ` +
         `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
         `manually, then retry the run.`,
+    }
+  },
+})
+
+/** Render a doc-quality report's findings into the fixer brief + give-up summary. */
+function renderDocQualityFindings(report: DocQualityReport): string {
+  const head = report.path
+    ? `The document at \`${report.path}\` failed the quality checks:`
+    : 'The document failed the quality checks:'
+  return [head, ...report.findings.map((f) => `- ${f}`)].join('\n')
+}
+
+/**
+ * Document-quality gate: run a DETERMINISTIC structural precheck against the drafted document
+ * on the PR head (required sections present, no leftover placeholders, sane heading hierarchy,
+ * in-repo links resolve) and escalate to a `doc-fixer` on a negative verdict. The checks are
+ * instant, so there is no `pending` state — the gate passes (nothing spun up) or fails. A
+ * pass-through until {@link wireDocQualityProvider} supplies a provider.
+ */
+export const docQualityGate = (ctx: GateContext): GateDefinition => ({
+  kind: DOC_QUALITY_AGENT_KIND,
+  helperKind: DOC_FIXER_AGENT_KIND,
+  wired: () => isProviderWired(DOC_QUALITY_PROVIDER),
+  unwiredOutput: 'Document-quality gate skipped (no document-quality provider configured).',
+  attemptBudget: () => DOC_FIXER_MAX_ATTEMPTS,
+  probe: async (workspaceId, blockId): Promise<GateProbe> => {
+    const report = await ctx.requireProvider(DOC_QUALITY_PROVIDER).check(workspaceId, blockId)
+    if (report.ok) {
+      return {
+        status: 'pass',
+        headSha: report.headSha,
+        passOutput: report.path
+          ? `Document-quality gate passed: \`${report.path}\` is well-formed.`
+          : 'Document-quality gate passed: no document to check.',
+      }
+    }
+    return {
+      status: 'fail',
+      headSha: report.headSha,
+      failureSummary: renderDocQualityFindings(report),
+    }
+  },
+  // Hand the structural findings to the doc-fixer as its brief (rendered into its prompt).
+  helperPriorOutput: (summary) => ({ agentKind: DOC_QUALITY_AGENT_KIND, output: summary }),
+  onExhausted: async ({ workspaceId, instance, block, step, summary }) => {
+    const attempts = step.gate?.attempts ?? 0
+    await ctx.raiseNotification(workspaceId, {
+      type: 'decision_required',
+      blockId: block.id,
+      executionId: instance.id,
+      title: `Document quality needs attention for "${block.title}"`,
+      body:
+        `The doc-fixer tried ${attempts} time(s) but the document still fails the quality ` +
+        `checks. ${summary ?? ''} Review the PR and retry the run once fixed.`.trim(),
+      payload: {
+        ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
+        pipelineName: instance.pipelineName,
+      },
+    })
+    return {
+      error:
+        `The document still fails the quality checks after ${attempts} doc-fixer attempt(s). ${summary ?? ''}`.trim(),
     }
   },
 })

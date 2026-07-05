@@ -109,6 +109,7 @@ import {
   GitHubAppRegistry,
   GitHubIdentityResolver,
   GitHubCiStatusProvider,
+  GitHubDocQualityProvider,
   GitHubMergeabilityProvider,
   GitHubPullRequestReviewProvider,
   GitHubBranchUpdater,
@@ -147,6 +148,7 @@ import {
   wireReleaseHealthProvider,
   wireIncidentEnrichment,
   wirePullRequestReviewProvider,
+  wireDocQualityProvider,
   warnUnwiredGates,
 } from '@cat-factory/gates'
 import {
@@ -1862,6 +1864,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     )
     wirePullRequestReviewProvider(
       new GitHubPullRequestReviewProvider({
+        githubClient: engineVcsClient,
+        resolveRepoTarget,
+        blockRepository: repos.blockRepository,
+      }),
+    )
+    wireDocQualityProvider(
+      new GitHubDocQualityProvider({
         githubClient: engineVcsClient,
         resolveRepoTarget,
         blockRepository: repos.blockRepository,

@@ -15,10 +15,11 @@ import type {
   RaiseNotificationInput,
 } from '@cat-factory/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ciGate, conflictsGate, postReleaseHealthGate } from './gates.js'
+import { ciGate, conflictsGate, docQualityGate, postReleaseHealthGate } from './gates.js'
 import {
   clearGateProviders,
   wireCiStatusProvider,
+  wireDocQualityProvider,
   wireMergeabilityProvider,
   wireReleaseHealthProvider,
 } from './providers.js'
@@ -67,13 +68,13 @@ describe('typed provider registry (the gate wiring seam)', () => {
 })
 
 describe('@cat-factory/gates registration', () => {
-  it('registers ci / conflicts / post-release-health / human-review through the public registry', () => {
+  it('registers ci / conflicts / doc-quality / post-release-health / human-review through the public registry', () => {
     clearRegisteredGates()
     registerBuiltinGates()
     const kinds = registeredGateFactories()
       .map((g) => g.kind)
       .sort()
-    expect(kinds).toEqual(['ci', 'conflicts', 'human-review', 'post-release-health'])
+    expect(kinds).toEqual(['ci', 'conflicts', 'doc-quality', 'human-review', 'post-release-health'])
   })
 })
 
@@ -166,6 +167,38 @@ describe('conflicts gate', () => {
     // The own repo IS resolvable by the single-repo resolver → escalate as normal.
     expect(probe.escalatable).toBeUndefined()
     expect(probe.conflictTarget).toEqual({ repo: 'o/own' })
+  })
+})
+
+describe('doc-quality gate', () => {
+  it('is a pass-through until a provider is wired', () => {
+    expect(docQualityGate(stubGateContext()).wired()).toBe(false)
+  })
+
+  it('passes on a clean document and fails with the findings on a malformed one', async () => {
+    let ok = true
+    wireDocQualityProvider({
+      check: async () =>
+        ok
+          ? { ok: true, headSha: 'sha', path: 'docs/prd/x.md', findings: [] }
+          : {
+              ok: false,
+              headSha: 'sha',
+              path: 'docs/prd/x.md',
+              findings: ['Missing required section: "Success Metrics".'],
+            },
+    })
+    const gate = docQualityGate(stubGateContext())
+    expect(gate.wired()).toBe(true)
+    const passed = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
+    expect(passed.status).toBe('pass')
+    expect(passed.passOutput).toContain('docs/prd/x.md')
+    ok = false
+    const failed = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
+    expect(failed.status).toBe('fail')
+    expect(failed.failureSummary).toContain('Success Metrics')
+    // The failing summary is what the doc-fixer helper is handed.
+    expect(gate.helperPriorOutput?.(failed.failureSummary ?? '')?.agentKind).toBe('doc-quality')
   })
 })
 

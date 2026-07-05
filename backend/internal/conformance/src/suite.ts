@@ -41,6 +41,7 @@ import type {
   BinaryArtifactStore,
   CiStatusProvider,
   DeployCloneTarget,
+  DocQualityProvider,
   EnvironmentProvider,
   GateProbe,
   Notification,
@@ -2099,6 +2100,85 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
         const failing = step.gate?.attemptLog?.[0]?.failingChecks ?? []
         expect(failing.map((c) => c.name)).toContain('peer-build')
         expect(failing.find((c) => c.name === 'peer-build')?.repo).toBe('o/peer')
+      })
+    })
+
+    describe('built-in doc-quality gate (externalized to @cat-factory/gates)', () => {
+      // The forward document pipelines' structural gate: a deterministic precheck of the drafted
+      // document that passes through when well-formed and escalates to the registered `doc-fixer`
+      // helper on a red verdict. Driving it over a faked DocQualityProvider proves the externalized
+      // gate + its wire-handle + each facade's import + the doc-fixer registered helper behave
+      // identically on every runtime — a drift fails here instead of shipping.
+      afterEach(() => clearGateProviders())
+
+      // A fake doc-quality provider whose verdict is supplied per-probe (a queue; last repeats).
+      const makeFakeDocQuality = (oks: boolean[]): DocQualityProvider => {
+        let i = 0
+        return {
+          check: async () => {
+            const ok = oks[Math.min(i, oks.length - 1)] ?? true
+            i += 1
+            return ok
+              ? { ok: true, headSha: 'sha', path: 'docs/prd/x.md', findings: [] }
+              : {
+                  ok: false,
+                  headSha: 'sha',
+                  path: 'docs/prd/x.md',
+                  findings: ['Missing required section: "Success Metrics".'],
+                }
+          },
+        }
+      }
+
+      it('passes through on a well-formed document without spinning up doc-fixer', async () => {
+        const app = harness.makeApp(
+          { asyncKinds: ['coder', 'doc-fixer'] },
+          { gateProviders: { docQuality: makeFakeDocQuality([true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Doc + quality',
+          agentKinds: ['coder', 'doc-quality'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'doc-quality')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts ?? 0).toBe(0)
+        expect(step.output).toContain('Document-quality gate passed')
+      })
+
+      it('escalates to doc-fixer on a malformed document, then advances when it re-probes clean', async () => {
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder', 'doc-fixer'],
+            pooledContainer: true,
+            pullRequest: { url: 'https://github.com/o/r/pull/1', number: 1, branch: 'feat/doc' },
+          },
+          // malformed first, well-formed after the doc-fixer ran
+          { gateProviders: { docQuality: makeFakeDocQuality([false, true]) } },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Doc + quality',
+          agentKinds: ['coder', 'doc-quality'],
+        })
+        const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect(start.status).toBe(201)
+        const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+        expect(exec.status).toBe('done')
+        const step = exec.steps.find((s) => s.agentKind === 'doc-quality')!
+        expect(step.state).toBe('done')
+        expect(step.gate?.attempts).toBe(1)
+        expect(step.gate?.attemptLog?.[0]?.outcome).toBe('completed')
       })
     })
 

@@ -369,6 +369,7 @@ export type {
 export type { BoardWritePort } from './board-operations.js'
 export type { PullRequestMerger, MergePrEntry, MergeAllOutcome } from './pr-merger.js'
 export type { CiCheck, RepoCiStatus, CiStatusReport, CiStatusProvider } from './ci-status.js'
+export type { DocQualityReport, DocQualityProvider } from './doc-quality.js'
 export type {
   ReviewThread,
   PullRequestComment,

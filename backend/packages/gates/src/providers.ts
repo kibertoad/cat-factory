@@ -3,6 +3,7 @@ import {
   isProviderWired,
   wireProvider,
   type CiStatusProvider,
+  type DocQualityProvider,
   type IncidentEnrichmentProvider,
   type ProviderToken,
   type PullRequestMergeabilityProvider,
@@ -36,6 +37,8 @@ export const INCIDENT_ENRICHMENT_PROVIDER =
 /** Token for the PR-review source the `human-review` gate probes (approval + threads). */
 export const PULL_REQUEST_REVIEW_PROVIDER =
   defineProviderToken<PullRequestReviewProvider>('pr-review')
+/** Token for the document structural-check source the `doc-quality` gate probes. */
+export const DOC_QUALITY_PROVIDER = defineProviderToken<DocQualityProvider>('doc-quality')
 
 /** Wire (or clear, with `undefined`) the CI check-runs source the `ci` gate probes. */
 export function wireCiStatusProvider(provider: CiStatusProvider | undefined): void {
@@ -66,7 +69,12 @@ export function wirePullRequestReviewProvider(
   wireProvider(PULL_REQUEST_REVIEW_PROVIDER, provider)
 }
 
-/** Clear every built-in gate provider (the four tokens above). Intended for tests. */
+/** Wire (or clear) the document structural-check source the `doc-quality` gate probes. */
+export function wireDocQualityProvider(provider: DocQualityProvider | undefined): void {
+  wireProvider(DOC_QUALITY_PROVIDER, provider)
+}
+
+/** Clear every built-in gate provider. Intended for tests. */
 export function clearGateProviders(): void {
   for (const token of [
     CI_STATUS_PROVIDER,
@@ -74,6 +82,7 @@ export function clearGateProviders(): void {
     RELEASE_HEALTH_PROVIDER,
     INCIDENT_ENRICHMENT_PROVIDER,
     PULL_REQUEST_REVIEW_PROVIDER,
+    DOC_QUALITY_PROVIDER,
   ] as ProviderToken<unknown>[]) {
     wireProvider(token, undefined)
   }
@@ -114,6 +123,11 @@ const PASS_THROUGH_GATES: ReadonlyArray<{
     token: PULL_REQUEST_REVIEW_PROVIDER,
     effect: 'PR review approval is never required',
   },
+  {
+    gate: 'doc-quality',
+    token: DOC_QUALITY_PROVIDER,
+    effect: 'document structure is never checked',
+  },
 ]
 
 // Dedupe so a per-request container rebuild (Cloudflare) doesn't re-log every build:
@@ -146,6 +160,7 @@ export interface GateProviderOverrides {
   releaseHealth?: ReleaseHealthProvider
   incidentEnrichment?: IncidentEnrichmentProvider
   prReview?: PullRequestReviewProvider
+  docQuality?: DocQualityProvider
 }
 
 /**
@@ -162,4 +177,5 @@ export function applyGateProviders(overrides: GateProviderOverrides | undefined)
   if (overrides.releaseHealth) wireReleaseHealthProvider(overrides.releaseHealth)
   if (overrides.incidentEnrichment) wireIncidentEnrichment(overrides.incidentEnrichment)
   if (overrides.prReview) wirePullRequestReviewProvider(overrides.prReview)
+  if (overrides.docQuality) wireDocQualityProvider(overrides.docQuality)
 }

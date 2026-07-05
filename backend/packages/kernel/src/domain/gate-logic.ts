@@ -70,6 +70,27 @@ export const HUMAN_REVIEW_AGENT_KIND = 'human-review'
  */
 export const FIXER_AGENT_KIND = 'fixer'
 
+/**
+ * The agent kind of the `doc-quality` gate step: a polling gate on the FORWARD
+ * document-authoring pipelines (`pl_document` / `pl_document_quick`) that runs a
+ * DETERMINISTIC structural precheck against the drafted document on the PR head
+ * (required sections present, no leftover placeholders, sane heading hierarchy,
+ * in-repo relative links resolve) and only escalates to the `doc-fixer` helper on a
+ * negative verdict. Like `ci`/`conflicts` it is NOT an LLM agent — it reads files
+ * checkout-free via a {@link DocQualityProvider}. A pass-through when no provider is wired.
+ */
+export const DOC_QUALITY_AGENT_KIND = 'doc-quality'
+
+/**
+ * The agent kind of the container agent the `doc-quality` gate dispatches on a failed
+ * precheck: a `container-coding` agent that clones the document PR branch, addresses the
+ * gate's structural findings on the existing Markdown file, and pushes back onto the same
+ * branch (no new PR) — the doc analogue of `ci-fixer`. Registered through the public
+ * `registerAgentKind` seam in `@cat-factory/agents` (its definition lives beside the other
+ * `doc-*` kinds); named here so the gate suite can reference it without importing agents.
+ */
+export const DOC_FIXER_AGENT_KIND = 'doc-fixer'
+
 // --- CI verdict logic -----------------------------------------------------------------
 
 /**

@@ -3030,7 +3030,8 @@
     "subtitle": {
       "humanReview": "Waits for a human code review on the PR, looping the fixer on comments",
       "ci": "Gates the PR on green CI, looping the CI fixer on failure",
-      "conflicts": "Gates the PR on a clean merge, looping the resolver on conflicts"
+      "conflicts": "Gates the PR on a clean merge, looping the resolver on conflicts",
+      "docQuality": "Checks the drafted document's structure, looping the doc fixer on problems"
     },
     "status": {
       "passed": "Passed",
@@ -3069,6 +3070,11 @@
     },
     "conflicts": {
       "mergeability": "Mergeability",
+      "viewPr": "View pull request on GitHub"
+    },
+    "docQuality": {
+      "findings": "Document issues",
+      "findingsFallback": "The document passed the structural checks.",
       "viewPr": "View pull request on GitHub"
     },
     "attemptsHeading": "{helper} attempts",

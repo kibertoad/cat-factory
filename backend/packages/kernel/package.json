@@ -26,13 +26,17 @@
   "scripts": {
     "build": "tsc -b tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "ai": "^6.0.214"
   },
   "devDependencies": {
-    "typescript": "7.0.1-rc"
+    "@vitest/coverage-v8": "^4.1.9",
+    "typescript": "7.0.1-rc",
+    "vitest": "^4.1.9"
   }
 }

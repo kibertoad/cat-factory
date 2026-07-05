@@ -437,6 +437,20 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     // of the generic prose step-detail panel. Shared with the conflicts gate.
     resultView: 'gate',
   },
+  // The forward document pipelines' structural gate. Seed-only (no `category`, like ci /
+  // conflicts) — it's part of `pl_document(_quick)`, not a standing palette block — but it
+  // needs display metadata so timelines/saved pipelines render it. Its helper `doc-fixer`
+  // is a registered kind, so it arrives via the workspace snapshot's `customAgentKinds`.
+  'doc-quality': {
+    kind: 'doc-quality',
+    label: 'Doc Quality Gate',
+    icon: 'i-lucide-file-check-2',
+    color: '#818cf8',
+    description:
+      'Checks the drafted document for required sections, placeholders, links and heading structure, looping the doc fixer on problems.',
+    // Opens the dedicated gate window (verdict, attempts, the document findings).
+    resultView: 'gate',
+  },
   'ci-fixer': {
     kind: 'ci-fixer',
     label: 'CI Fixer',
