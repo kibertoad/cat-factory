@@ -3230,8 +3230,6 @@
     "reReviewingStage": "更新されたバグ報告を再レビュー中… これを閉じてもかまいません。追加の入力が必要な場合のみ通知します。",
     "answerLabel": "回答",
     "answerPlaceholder": "この指摘に回答…",
-    "refineAnswerPlaceholder": "回答を改善…",
-    "saveAnswer": "回答を保存",
     "dismissIrrelevant": "無関係として却下",
     "reopen": "再オープン",
     "docHeading": "明確化されたバグ報告",

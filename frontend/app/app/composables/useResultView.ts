@@ -12,8 +12,17 @@
  *
  * A synchronous window (one that reads its data straight off the execution step, like the
  * test report) simply omits `onOpen`.
+ *
+ * `onClose` runs on EVERY close path — the X button, backdrop click, and the Escape key
+ * handled here — BEFORE the view is torn down, so a window with unsaved draft input (the
+ * review windows) can flush it in one place instead of every caller having to remember to.
+ * It runs synchronously; if it kicks off async work it must capture whatever it needs first,
+ * because `blockId`/the derived state go null the moment the view closes.
  */
-export function useResultView(viewId: string, opts?: { onOpen?: (blockId: string) => void }) {
+export function useResultView(
+  viewId: string,
+  opts?: { onOpen?: (blockId: string) => void; onClose?: () => void },
+) {
   const ui = useUiStore()
 
   const open = computed(() => ui.resultView?.view === viewId)
@@ -26,6 +35,7 @@ export function useResultView(viewId: string, opts?: { onOpen?: (blockId: string
   const stage = computed(() => (open.value ? (ui.resultView!.stage ?? null) : null))
 
   function close() {
+    if (open.value) opts?.onClose?.()
     ui.closeResultView()
   }
 

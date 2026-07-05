@@ -27,6 +27,10 @@ const { t } = useI18n()
 
 // Draft replies, keyed by item id, so editing one item doesn't disturb others.
 const drafts = ref<Record<string, string>>({})
+// The server-side reply each draft was last seeded/synced to, so the seeding watch can refresh
+// a draft when the recorded reply changes server-side WITHOUT clobbering one the human is
+// actively editing (mirrors the requirements window).
+const seededReply = ref<Record<string, string>>({})
 // Freeform "do it differently" comment when redoing a merge the human was unhappy with.
 const redoComment = ref('')
 const showRedo = ref(false)
@@ -39,10 +43,14 @@ const showRedo = ref(false)
 const { open, blockId, close } = useResultView('clarity-review', {
   onOpen: (id) => {
     drafts.value = {}
+    seededReply.value = {}
     redoComment.value = ''
     showRedo.value = false
     void clarity.load(id)
   },
+  // Flush any typed-but-unblurred answer before the view tears down (X, backdrop, Escape) so
+  // closing the window never silently drops it (UX-33).
+  onClose: () => void flushDrafts(),
 })
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const review = computed<ClarityReview | null>(() =>
@@ -144,17 +152,69 @@ function notifyError(title: string, e: unknown) {
   })
 }
 
-async function submitReply(item: ClarityReviewItem) {
-  if (!review.value) return
+// Answers auto-save on blur — no explicit "save" button (matching the requirements window, so
+// muscle memory carries across the two, UX-34). The textarea is pre-seeded with the recorded
+// reply (see the watch below); persist only when the trimmed draft actually differs from what's
+// already recorded, so blurring an untouched field is a no-op.
+async function persistDraft(item: ClarityReviewItem, r: ClarityReview | null = review.value) {
+  if (!r || frozen.value) return
   const text = (drafts.value[item.id] ?? '').trim()
-  if (!text) return
+  if (!text || text === (item.reply ?? '').trim()) return
   try {
-    await clarity.reply(review.value, item.id, text)
-    drafts.value = { ...drafts.value, [item.id]: '' }
+    await clarity.reply(r, item.id, text)
   } catch (e) {
     notifyError(t('clarity.error.saveAnswer'), e)
   }
 }
+
+// Persist every dirty draft before an action that consumes the answers (or on window close).
+// Snapshots the review up front and threads it through, so the persist completes even if the
+// window closes mid-flush (the reactive `review` goes null the moment the view tears down).
+async function flushDrafts() {
+  const r = review.value
+  if (!r) return
+  for (const item of r.items) {
+    if (item.status === 'open' || item.status === 'answered') await persistDraft(item, r)
+  }
+}
+
+// Seed a draft for each finding from its recorded reply so the textarea shows the current
+// answer (editing in place). New findings from a re-review get seeded; a draft the user hasn't
+// diverged from is refreshed when the recorded reply changes server-side; drafts the user is
+// actively editing are left untouched.
+watch(
+  review,
+  (r) => {
+    if (!r) return
+    const nextDrafts = { ...drafts.value }
+    const nextSeeded = { ...seededReply.value }
+    let changed = false
+    for (const item of r.items) {
+      const reply = item.reply ?? ''
+      if (!(item.id in nextDrafts)) {
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+        continue
+      }
+      const draft = nextDrafts[item.id] ?? ''
+      const seeded = nextSeeded[item.id] ?? ''
+      if (draft === seeded && draft !== reply) {
+        nextDrafts[item.id] = reply
+        nextSeeded[item.id] = reply
+        changed = true
+      } else if (draft === reply && seeded !== reply) {
+        nextSeeded[item.id] = reply
+        changed = true
+      }
+    }
+    if (changed) {
+      drafts.value = nextDrafts
+      seededReply.value = nextSeeded
+    }
+  },
+  { immediate: true },
+)
 
 async function setStatus(item: ClarityReviewItem, itemStatus: ClarityItemStatus) {
   if (!review.value) return
@@ -168,6 +228,7 @@ async function setStatus(item: ClarityReviewItem, itemStatus: ClarityItemStatus)
 async function incorporate(feedback?: string) {
   if (!review.value || !blockId.value) return
   try {
+    await flushDrafts()
     await clarity.incorporate(review.value, feedback)
   } catch (e) {
     notifyError(t('clarity.error.incorporate'), e)
@@ -208,6 +269,7 @@ async function proceed() {
   if (!blockId.value) return
   acting.value = true
   try {
+    await flushDrafts()
     await clarity.proceed(blockId.value)
     toast.add({ title: t('clarity.toast.proceeding'), icon: 'i-lucide-arrow-right' })
   } catch (e) {
@@ -269,7 +331,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           </div>
         </header>
 
-        <div class="flex min-h-0 flex-1">
+        <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
           <!-- main column -->
           <div class="min-w-0 flex-1 overflow-y-auto px-6 py-5">
             <p class="mb-4 text-sm text-slate-400">
@@ -372,9 +434,10 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         {{ item.detail }}
                       </p>
 
-                      <!-- recorded answer -->
+                      <!-- recorded answer (only for non-editable findings — for editable ones
+                           the answer lives in the textarea below, seeded from the reply) -->
                       <div
-                        v-if="item.reply"
+                        v-if="item.reply && item.status !== 'open' && item.status !== 'answered'"
                         class="mt-2 rounded-md border-s-2 border-slate-700 bg-slate-950/40 px-3 py-1.5 text-sm text-slate-300"
                       >
                         <span class="text-[10px] uppercase tracking-wide text-slate-500">
@@ -383,7 +446,8 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                         <p class="whitespace-pre-line">{{ item.reply }}</p>
                       </div>
 
-                      <!-- react: answer (relevant) or dismiss (irrelevant). Disabled once the
+                      <!-- react: answer (relevant) or dismiss (irrelevant). The answer
+                           auto-saves on blur — no explicit save button. Disabled once the
                            bug report is clarified / awaiting a higher-level decision. -->
                       <template v-if="item.status === 'open' || item.status === 'answered'">
                         <UTextarea
@@ -392,24 +456,11 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           autoresize
                           size="sm"
                           class="mt-2 w-full"
-                          :placeholder="
-                            item.reply
-                              ? t('clarity.refineAnswerPlaceholder')
-                              : t('clarity.answerPlaceholder')
-                          "
+                          :placeholder="t('clarity.answerPlaceholder')"
                           :disabled="frozen"
+                          @blur="persistDraft(item)"
                         />
                         <div class="mt-2 flex flex-wrap items-center gap-2">
-                          <UButton
-                            color="primary"
-                            variant="soft"
-                            size="xs"
-                            icon="i-lucide-corner-down-left"
-                            :disabled="!(drafts[item.id] ?? '').trim() || frozen"
-                            @click="submitReply(item)"
-                          >
-                            {{ t('clarity.saveAnswer') }}
-                          </UButton>
                           <UButton
                             color="neutral"
                             variant="ghost"
@@ -476,10 +527,15 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             </template>
           </div>
 
-          <!-- right action rail -->
-          <aside class="hidden w-72 shrink-0 flex-col border-s border-slate-800 lg:flex">
+          <!-- action rail: a right-hand column on wide screens, a bottom action bar below `lg`
+               (never hidden — the gate is otherwise unadvanceable on a laptop split-screen /
+               tablet, UX-32). The informational stats collapse away below `lg` to keep the
+               bottom bar compact; the actions themselves always show. -->
+          <aside
+            class="flex w-full shrink-0 flex-col border-t border-slate-800 lg:w-72 lg:border-s lg:border-t-0"
+          >
             <div class="flex flex-col gap-4 px-4 py-5">
-              <div v-if="review" class="space-y-2 text-xs text-slate-400">
+              <div v-if="review" class="hidden space-y-2 text-xs text-slate-400 lg:block">
                 <div class="flex items-center justify-between">
                   <span>{{ t('clarity.rail.findings') }}</span>
                   <span class="text-slate-300">{{ review.items.length }}</span>

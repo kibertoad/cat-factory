@@ -3230,8 +3230,6 @@
     "reReviewingStage": "Güncellenen hata raporu yeniden inceleniyor… Bunu kapatabilirsiniz, yalnızca daha fazla girdi gerekirse sizi bilgilendireceğiz.",
     "answerLabel": "Yanıt",
     "answerPlaceholder": "Bu bulguyu yanıtlayın…",
-    "refineAnswerPlaceholder": "Yanıtınızı iyileştirin…",
-    "saveAnswer": "Yanıtı kaydet",
     "dismissIrrelevant": "İlgisiz olarak göz ardı et",
     "reopen": "Yeniden aç",
     "docHeading": "Netleştirilmiş hata raporu",

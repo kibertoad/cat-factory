@@ -3218,8 +3218,6 @@
     "reReviewingStage": "Nouvelle relecture du rapport de bogue mis à jour… Vous pouvez fermer ceci, nous vous avertirons seulement si plus d'informations sont nécessaires.",
     "answerLabel": "Réponse",
     "answerPlaceholder": "Répondez à ce constat…",
-    "refineAnswerPlaceholder": "Affinez votre réponse…",
-    "saveAnswer": "Enregistrer la réponse",
     "dismissIrrelevant": "Écarter comme non pertinent",
     "reopen": "Rouvrir",
     "docHeading": "Rapport de bogue clarifié",
