@@ -9,6 +9,7 @@
 // description — is what every downstream agent step (the bug investigator, the coder)
 // consumes.
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import { parseOutputOutline } from '~/utils/agentOutput'
 import type {
   ClarityItemStatus,
@@ -327,7 +328,14 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
             <UBadge v-if="review" color="neutral" variant="subtle" size="sm">
               {{ t('clarity.iteration', { current: iteration, max: maxIterations }) }}
             </UBadge>
-            <UButton icon="i-lucide-x" color="neutral" variant="ghost" size="sm" @click="close" />
+            <IconButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :label="t('common.close')"
+              @click="close"
+            />
           </div>
         </header>
 

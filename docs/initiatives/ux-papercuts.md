@@ -7,7 +7,9 @@ review & consensus windows (UX-36/37); markdown prose + copy affordances in the 
 views (UX-43, UX-44 copy buttons); the review-window gate-actions + draft-persistence
 cluster (UX-32/33/34); the async-state / realtime / error-surfacing section E in full
 (UX-70..UX-77 — offline indicator, retrying refresh/resync, self-healing preview poll,
-retry affordances, sticky remedy toasts). This
+retry affordances, sticky remedy toasts); the accessibility icon-labeling / keyboard /
+focus / reduced-motion cluster (UX-62..66 — the `IconButton` primitive, keyboard-operable
+mini-steps, focus-visible rings, reduced-motion guards). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -431,42 +433,45 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 | ID    | Sev | Status | Finding                                                                                  |
 | ----- | --- | ------ | ---------------------------------------------------------------------------------------- |
-| UX-62 | P1  | todo   | Icon-only close/action buttons with no accessible name (widespread)                      |
-| UX-63 | P2  | todo   | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
-| UX-64 | P2  | todo   | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
-| UX-65 | P2  | todo   | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
-| UX-66 | P2  | todo   | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
+| UX-62 | P1  | done   | Icon-only close/action buttons with no accessible name (widespread)                      |
+| UX-63 | P2  | done   | No single labeling convention for icon buttons (title-only vs aria-only vs both vs none) |
+| UX-64 | P2  | done   | Clickable non-interactive `<div>` steps on board cards — not keyboard-operable           |
+| UX-65 | P2  | done   | Color-only focus indicator on hand-rolled inputs (`outline-none` + border-hue swap)      |
+| UX-66 | P2  | done   | Animations ignore `prefers-reduced-motion` (infinite board pulses, marching ants)        |
 | UX-67 | P2  | todo   | No light mode / system color-scheme support; palette hardcoded                           |
 | UX-68 | P3  | todo   | Keyboard-shortcuts cheatsheet lists 4 shortcuts; others undocumented                     |
 | UX-69 | P3  | todo   | Board nodes not in the tab order — no keyboard path to a specific card                   |
 
-- **UX-62 — Unlabeled icon buttons.** Representative: `focus/BlockFocusView.vue:108`,
-  `clarity/ClarityReviewWindow.vue:267`, `brainstorm/BrainstormWindow.vue:284`,
-  `panels/InspectorPanel.vue:265`, `panels/AgentStepDetail.vue:291`,
-  `panels/ObservabilityPanel.vue:200`, `settings/ModelConfigurationPanel.vue:289`,
-  `pipeline/PipelineBuilder.vue:488` — `<UButton icon="i-lucide-x">` with neither
-  `aria-label` nor `title`; the primary dismiss of most hand-rolled windows is
-  unnamed to screen readers. The `common.close` i18n key already exists.
-- **UX-63 — No convention.** `StepContainerStatus.vue:120-121` does both `:title`
-  and `:aria-label` (correct); elsewhere title-only (`ArtifactLightbox`,
-  `PipelineBuilder`), aria-only (`github/AddServiceFromRepoModal.vue:297`), or
-  nothing. Fix: an `IconButton` wrapper (or lint rule) enforcing `aria-label`.
-  Native `title` alone also never fires on touch — pair with `UTooltip`
-  (`ArtifactLightbox.vue:182-275`, `PipelineBuilder.vue:470-494`).
-- **UX-64 — Keyboard-dead click target.** `board/nodes/TaskPipelineMini.vue:82-86`
-  — `<div class="cursor-pointer" @click.stop="openStep(i)">` with no role, tabindex,
-  or key handler; the mini pipeline steps can't be opened by keyboard. Make it a
-  `<button>`.
-- **UX-65 — Invisible focus.** `humanTest/HumanTestWindow.vue:292`,
-  `followUp/FollowUpWindow.vue:203`, `gates/GateResultView.vue:289`,
-  `visualConfirm/VisualConfirmationWindow.vue:289,343` — raw inputs with
-  `focus:outline-none focus:border-amber-500` (hue-only, same width) fail
-  WCAG 2.4.7. Add `focus-visible:ring-2`.
-- **UX-66 — Motion never reduced.** `assets/css/main.css:45-95` — `board-pulse`,
-  `board-pulse-green`, marching-ants `board-dash` loop infinitely regardless of
-  `prefers-reduced-motion`; only `spa-loading-template.html:126` honors it. Wrap
-  keyframes in `@media (prefers-reduced-motion: no-preference)` or add a global
-  reduce reset.
+- **UX-62 — Unlabeled icon buttons. DONE.** Every icon-only dismiss button that had
+  neither `aria-label` nor `title` now routes through the new shared `common/IconButton.vue`
+  primitive with `:label="t('common.close')"`: `focus/BlockFocusView.vue`,
+  `clarity/ClarityReviewWindow.vue`, `brainstorm/BrainstormWindow.vue`,
+  `panels/InspectorPanel.vue`, `spec/ServiceSpecWindow.vue`,
+  `requirements/RequirementsReviewWindow.vue`. (The `AgentStepDetail` /
+  `ObservabilityPanel` / `ModelConfigurationPanel` / `PipelineBuilder` X buttons were
+  already `:title`-labeled and were left as-is; the `DocumentTemplatesModal` remove
+  buttons carry visible "Remove" text so they're already named.)
+- **UX-63 — No convention. DONE.** The convention is now a component, not a habit:
+  `common/IconButton.vue` (mirroring `common/CopyButton.vue`) requires a `label` prop
+  and applies it as BOTH `:title` (pointer tooltip) and `:aria-label` (screen readers),
+  passing every other UButton prop/listener through via `$attrs`. An icon-only button
+  with no accessible name is now unrepresentable through the primitive. (No `UTooltip`
+  exists in the app; `title`+`aria-label` is the established named-icon pattern —
+  `StepContainerStatus.vue` — so IconButton codifies exactly that.)
+- **UX-64 — Keyboard-dead click target. DONE.** `board/nodes/TaskPipelineMini.vue`'s
+  clickable `<div>` mini-step is now a real `<button type="button">` (keyboard-focusable
+  - operable), with `focus-visible:ring-2` and `text-start w-full` to preserve layout.
+- **UX-65 — Invisible focus. DONE.** The hue-only raw inputs now add
+  `focus-visible:ring-2 focus-visible:ring-<hue>/60` (hue matching each surface's accent)
+  alongside the existing `focus:border-*`: `humanTest/HumanTestWindow.vue`,
+  `followUp/FollowUpWindow.vue`, `gates/GateResultView.vue`, and both textareas in
+  `visualConfirm/VisualConfirmationWindow.vue`.
+- **UX-66 — Motion never reduced. DONE.** A `@media (prefers-reduced-motion: reduce)`
+  block in `assets/css/main.css` disables the decorative infinite pulses (`board-pulse`,
+  `board-pulse-green`) and the marching-ants edge animation; the matching pair in
+  `pipeline/PipelineProgress.vue`'s scoped styles (`step-active`, `followup-blink`) does
+  the same. Loading spinners (`animate-spin`) are deliberately untouched — a spinner's
+  motion IS its meaning.
 - **UX-67 — Dark-only.** Zero `dark:`/`useColorMode`/`prefers-color-scheme`
   matches; palette hardcoded to slate/`#0b1020` (`main.css:14-16`) with only a
   `--board-bg` variable. Light/high-contrast users have no option. At minimum,
@@ -570,6 +575,18 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 - **Action-bearing error toasts are sticky (`duration: 0`).** A toast whose value is a one-click
   remedy button ("Configure AI") must not auto-dismiss and take the remedy with it. Plain
   informational error toasts keep the default duration.
+- **Icon-only buttons go through `common/IconButton.vue` (never a bare `<UButton icon=…>`).**
+  The primitive requires a `label` and applies it as BOTH `:title` and `:aria-label`, so a
+  named-icon button is correct by construction (the app has no `UTooltip`; `title`+`aria-label`
+  is the pattern). It forwards all other UButton props/listeners via `$attrs`; `label` is a
+  declared prop so it strips off before reaching UButton's own visible-text `label`. For a
+  close/dismiss button use `:label="t('common.close')"` (the key already exists — no locale
+  churn). A clickable non-`<button>` element (a `<div @click>`) is the same defect for the
+  keyboard: make it a real `<button type="button">` with a `focus-visible:ring`. Hand-rolled
+  inputs that only swap the border hue on focus need `focus-visible:ring-2` too (hue-only fails
+  WCAG 2.4.7). Decorative infinite CSS animations must be silenced under
+  `@media (prefers-reduced-motion: reduce)` — but leave `animate-spin` loaders alone, their
+  motion is their meaning.
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).

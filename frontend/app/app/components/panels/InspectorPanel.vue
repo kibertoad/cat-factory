@@ -18,6 +18,7 @@ import TaskExecution from '~/components/panels/inspector/TaskExecution.vue'
 import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.vue'
 import EpicChildren from '~/components/panels/inspector/EpicChildren.vue'
 import InitiativeInspector from '~/components/panels/inspector/InitiativeInspector.vue'
+import IconButton from '~/components/common/IconButton.vue'
 import RecurringScheduleSettings from '~/components/panels/inspector/RecurringScheduleSettings.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -265,11 +266,12 @@ const showOriginalDescription = ref(false)
             </div>
           </div>
         </div>
-        <UButton
+        <IconButton
           icon="i-lucide-x"
           color="neutral"
           variant="ghost"
           size="xs"
+          :label="t('common.close')"
           @click="ui.select(null)"
         />
       </div>
