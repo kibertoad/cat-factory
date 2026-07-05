@@ -713,7 +713,15 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
               />
             </UFormField>
             <div class="flex justify-end gap-2">
-              <UButton color="neutral" variant="ghost" @click="showArchForm = false">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                @click="
+                  () => {
+                    showArchForm = false
+                  }
+                "
+              >
                 {{ t('common.cancel') }}
               </UButton>
               <UButton

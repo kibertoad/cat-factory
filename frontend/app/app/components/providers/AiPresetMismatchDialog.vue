@@ -75,7 +75,16 @@ function go(action: () => void) {
         </p>
 
         <div class="flex flex-wrap justify-end gap-2">
-          <UButton color="neutral" variant="ghost" size="sm" @click="open = false">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            @click="
+              () => {
+                open = false
+              }
+            "
+          >
             {{ t('providers.presetMismatch.later') }}
           </UButton>
           <UButton

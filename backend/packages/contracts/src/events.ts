@@ -9,6 +9,7 @@ import type { ClarityReview } from './clarity.js'
 import type { BrainstormSession } from './brainstorm.js'
 import type { KaizenGrading } from './kaizen.js'
 import type { Initiative } from './initiative.js'
+import type { DocInterviewSession } from './doc-interview.js'
 
 // Real-time events pushed from the per-workspace events hub to subscribed
 // browsers over WebSocket, replacing the old `tick` polling. The shape is shared
@@ -96,3 +97,9 @@ export type WorkspaceEvent =
    * the transition live without a refetch.
    */
   | { type: 'initiative'; initiative: Initiative; at: number }
+  /**
+   * A block's interactive document-interview session changed (WS5) — the doc-interview mirror of
+   * the `requirements` event. Carries the updated session so an open interview window / inspector
+   * reflects the transition (new questions, an answer, convergence) live without a refetch.
+   */
+  | { type: 'docInterview'; session: DocInterviewSession; at: number }

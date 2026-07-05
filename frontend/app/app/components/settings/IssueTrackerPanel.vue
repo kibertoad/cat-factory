@@ -234,7 +234,11 @@ const STATUS_UI: Record<
           size="sm"
           :color="trackerKind === null ? 'primary' : 'neutral'"
           :variant="trackerKind === null ? 'solid' : 'subtle'"
-          @click="trackerKind = null"
+          @click="
+            () => {
+              trackerKind = null
+            }
+          "
         >
           {{ t('settings.issueTracker.filing.none') }}
         </UButton>
@@ -243,7 +247,11 @@ const STATUS_UI: Record<
           size="sm"
           :color="trackerKind === 'github' ? 'primary' : 'neutral'"
           :variant="trackerKind === 'github' ? 'solid' : 'subtle'"
-          @click="trackerKind = 'github'"
+          @click="
+            () => {
+              trackerKind = 'github'
+            }
+          "
         >
           {{ t('settings.issueTracker.vendor.github') }}
         </UButton>
@@ -252,7 +260,11 @@ const STATUS_UI: Record<
           size="sm"
           :color="trackerKind === 'jira' ? 'primary' : 'neutral'"
           :variant="trackerKind === 'jira' ? 'solid' : 'subtle'"
-          @click="trackerKind = 'jira'"
+          @click="
+            () => {
+              trackerKind = 'jira'
+            }
+          "
         >
           Jira
         </UButton>
@@ -261,7 +273,11 @@ const STATUS_UI: Record<
           size="sm"
           :color="trackerKind === 'linear' ? 'primary' : 'neutral'"
           :variant="trackerKind === 'linear' ? 'solid' : 'subtle'"
-          @click="trackerKind = 'linear'"
+          @click="
+            () => {
+              trackerKind = 'linear'
+            }
+          "
         >
           Linear
         </UButton>

@@ -561,7 +561,16 @@ async function archive(prompt: SandboxPromptVersion) {
             </p>
             <UTextarea v-model="editText" :rows="16" class="w-full font-mono text-xs" autoresize />
             <div class="flex justify-end gap-2">
-              <UButton color="neutral" variant="ghost" size="sm" @click="editing = null">
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                @click="
+                  () => {
+                    editing = null
+                  }
+                "
+              >
                 {{ t('common.cancel') }}
               </UButton>
               <UButton

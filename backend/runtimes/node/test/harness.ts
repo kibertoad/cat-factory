@@ -32,6 +32,7 @@ import { type DrizzleDb, createDbClient } from '../src/db/client.js'
 import { migrate } from '../src/db/migrate.js'
 import {
   DrizzleClarityReviewRepository,
+  DrizzleDocInterviewRepository,
   DrizzleRequirementReviewRepository,
   DrizzleServiceRepository,
   createDrizzleRepositories,
@@ -352,6 +353,7 @@ export function makeConformanceApp(
     blockRepository: () => createDrizzleRepositories(db, { now: () => Date.now() }).blockRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
+    docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

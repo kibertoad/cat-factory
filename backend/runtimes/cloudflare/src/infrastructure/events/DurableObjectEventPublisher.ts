@@ -4,6 +4,7 @@ import type {
   BootstrapJob,
   ConsensusSession,
   ClarityReview,
+  DocInterviewSession,
   EnvConfigRepairJob,
   ExecutionInstance,
   Initiative,
@@ -100,6 +101,10 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
 
   async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
     await this.publish(workspaceId, { type: 'initiative', initiative, at: Date.now() })
+  }
+
+  async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
+    await this.publish(workspaceId, { type: 'docInterview', session, at: Date.now() })
   }
 
   private async publish(

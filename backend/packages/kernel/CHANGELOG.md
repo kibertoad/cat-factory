@@ -1,5 +1,95 @@
 # @cat-factory/kernel
 
+## 0.93.0
+
+### Minor Changes
+
+- 076d02f: feat(documents): interactive document-review sessions (doc-task WS5)
+
+  Between the outline and the draft, a document-authoring run now converses with the requester
+  instead of a single binary approve/revise gate. A new inline `doc-interviewer` step (inserted
+  after `doc-outliner` in `pl_document`, replacing the outline's human gate) asks a small batch of
+  clarifying questions about scope, audience and structure, parks the run on the standard durable
+  decision-wait while the human answers through a dedicated window, and iterates (up to a round
+  cap) until it synthesizes a refined **authoring brief** the `doc-writer`/`doc-finalizer` start
+  from (folded into their context via the agent-context builder).
+
+  The park/answer/resume/advance spine is now a shared `InterviewGateController<TEntity>`
+  parameterized by an `InterviewGateKind` strategy; both the document interviewer and the
+  interactive-planning (initiative) interviewer ride it, so the two gates can't drift. A document
+  task has no owning entity row, so its transcript is persisted in its own `doc_interview_sessions`
+  table — mirrored across D1 ⇄ Drizzle with a cross-runtime conformance assertion. The interview
+  window is wired through the universal result-view seam (`doc-interview`) and updates live over a
+  new `docInterview` workspace event. Pass-through when no interviewer model is wired, so document
+  pipelines run unchanged.
+
+  Hardening: a re-run of a document task now clears the block's prior session before interviewing
+  (so it starts clean instead of reusing a stale, already-converged one), the converged brief is
+  folded only into the two kinds that consume it (`doc-writer`/`doc-finalizer`), and a non-final
+  interviewer pass that returns neither questions nor a brief fails the run loudly instead of
+  silently skipping the interview with an empty brief.
+
+  Breaking: `pl_document` bumps to version 3 (the reseed offer), and its step indices shift (the
+  interviewer is inserted at index 2), so in-flight runs on the old shape should be restarted.
+
+### Patch Changes
+
+- 77bc73c: Update dependencies to the latest versions within the supply-chain release-age
+  window. The Vercel AI SDK family stays within the `ai@6` / `@ai-sdk/*` majors
+  that `workers-ai-provider@^3` peers require (`ai@6.0.219`,
+  `@ai-sdk/anthropic@3.0.92`, `@ai-sdk/openai@3.0.80`,
+  `@ai-sdk/openai-compatible@2.0.56`, `@ai-sdk/provider@3.0.13`,
+  `@ai-sdk/amazon-bedrock@4.0.128`). Other bumps include `@hono/node-server`,
+  `pg-boss`, `undici`, `markdown-it`, `@aws-sdk/client-s3`, `@clack/prompts`,
+  `@types/node`, and eligible transitive dependencies. `@cloudflare/workers-types`
+  is held at `4.x` because `wrangler@4` peers on `^4`.
+- Updated dependencies [076d02f]
+  - @cat-factory/contracts@0.102.0
+
+## 0.92.0
+
+### Minor Changes
+
+- 029a689: feat(environments): stack-recipe execution engine (shared-stacks initiative, slice 3)
+
+  Teach the Docker Compose environment provider to run a declarative STACK RECIPE — the imperative
+  bring-up of a complex multi-repo/multi-service stack (the acme-main pilot) expressed as data.
+  The recipe is service-owned (`ServiceProvisioning.recipe`, landed slice 1) and now reaches the
+  provider: `resolveProviderForType` folds it into the compose handler's `providerConfig.recipe` at
+  provision time (the compose analogue of merging a kube `manifestSource`), so the provider keys
+  purely on the persisted, merged config. Runtime-bound to the local facade (needs a host daemon) —
+  the documented compose exception to runtime symmetry; the contracts + persistence stay symmetric.
+
+  - **Multi-`-f` layering + profiles + env files** — `recipe.composeFiles` are read, `{{var}}`-
+    rendered, host-escape-checked and port-neutralized per layer (concurrent per-PR stacks never
+    collide), then written beside their originals in the checkout and passed as ordered `-f`s;
+    `recipe.composeProfiles` drives `COMPOSE_PROFILES`; `recipe.envFiles` materialize committed
+    templates into their gitignored targets before `up` (`.env.dev.local-dist` → `.env.dev.local`).
+  - **Setup-step runner** — ordered `setupSteps` after `up -d` (no `--wait` — readiness is the
+    recipe gate, since these stacks rarely declare healthchecks): `compose-exec` (composer install,
+    migrations, cache warmup; seed import pipes a `.sql` dump via stdin), `copy-file`, `wait-http`,
+    `wait-file` (container `test -f` or checkout), and the opt-in `host-command` (refused unless the
+    workspace handler sets `allowHostCommands`). Each step has its own timeout budget.
+  - **Terminal health gate** — `compose-healthy` (default, poll `ps`), `http`, or `compose-exec`
+    (e.g. `bin/console monitor:health`), polled until it passes or its budget elapses.
+  - **Per-step provisioning log** — the provider streams a `recordStep` entry per step (env file,
+    `up`, each setup step, health gate) into the environment provisioning log, so the "View logs"
+    drawer shows which step is running / died. Any step's failure tears the half-up stack down for a
+    clean retry and surfaces the step's own error as the deployer step's `lastError`.
+
+  New optional `ComposeRuntime` seams (implemented by the local docker-CLI runtime): `compose`
+  stdin-streaming, `copyCheckoutFile`, `checkoutFileExists`, `hostCommand`. All compose safety lines
+  carry over (host-escape guard on every recipe path, `include:`/cross-file `extends`/`privileged`
+  refused). Fixture-driven unit tests cover the new pure helpers and the provider recipe flow
+  (layering, env files, steps, stdin seed, HTTP gate, host-command opt-in, failure teardown).
+  Recipe `teardownSteps` execution is deferred (the recipe schema carries them; `down -v` remains
+  the teardown for now).
+
+### Patch Changes
+
+- Updated dependencies [029a689]
+  - @cat-factory/contracts@0.101.1
+
 ## 0.91.0
 
 ### Minor Changes

@@ -20,7 +20,7 @@
     "@cat-factory/local-server": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "typescript": "7.0.1-rc"
   }
 }

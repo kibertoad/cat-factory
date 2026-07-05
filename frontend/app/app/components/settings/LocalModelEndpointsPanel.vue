@@ -225,7 +225,11 @@ async function remove(p: LocalRunner) {
               size="xs"
               :disabled="busy"
               :title="t('settings.localModelEndpoints.edit')"
-              @click="provider = e.provider"
+              @click="
+                () => {
+                  provider = e.provider
+                }
+              "
             />
             <UButton
               icon="i-lucide-trash-2"

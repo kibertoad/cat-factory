@@ -138,6 +138,12 @@ export type {
   InfraEngine,
   ManifestId,
   ServiceProvisioning,
+  // Docker Compose stack recipes (the complex-monolith bring-up expressed as data).
+  StackRecipe,
+  RecipeStep,
+  RecipeStepKind,
+  RecipeHealthGate,
+  RecipeEnvFile,
   // Frontend-frame config (build/serve/mock knobs + backend bindings that double as links).
   FrontendConfig,
   FrontendBackendBinding,
@@ -201,6 +207,11 @@ export type {
   RequirementReviewItem,
   RequirementReviewStatus,
   RequirementReview,
+  // Interactive document-interview session shapes (WS5 of the document-task track).
+  DocInterviewQa,
+  DocInterviewStatus,
+  DocInterviewSession,
+  AnswerDocInterviewInput,
   // Kaizen (post-run grading agent) shapes.
   KaizenGradingStatus,
   KaizenGrading,

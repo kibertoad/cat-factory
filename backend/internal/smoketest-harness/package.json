@@ -21,7 +21,7 @@
     "valibot": "^1.4.2"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "typescript": "7.0.1-rc",
     "vitest": "^4.1.9"
   }

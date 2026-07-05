@@ -319,7 +319,11 @@ async function merge(pr: GitHubPullRequest) {
               :color="tab === tabItem.id ? 'primary' : 'neutral'"
               :variant="tab === tabItem.id ? 'soft' : 'ghost'"
               :icon="tabItem.icon"
-              @click="tab = tabItem.id"
+              @click="
+                () => {
+                  tab = tabItem.id
+                }
+              "
             >
               {{ tabItem.label }}
             </UButton>
@@ -342,7 +346,11 @@ async function merge(pr: GitHubPullRequest) {
                 color="neutral"
                 variant="soft"
                 icon="i-lucide-list-checks"
-                @click="managing ? (managing = false) : openManage()"
+                @click="
+                  () => {
+                    managing ? (managing = false) : openManage()
+                  }
+                "
               >
                 {{ managing ? t('common.close') : t('github.panel.manageRepos') }}
               </UButton>
@@ -385,7 +393,16 @@ async function merge(pr: GitHubPullRequest) {
                 </button>
               </div>
               <div class="flex items-center justify-end gap-2 pt-1">
-                <UButton color="neutral" variant="ghost" size="sm" @click="managing = false">
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="
+                    () => {
+                      managing = false
+                    }
+                  "
+                >
                   {{ t('common.cancel') }}
                 </UButton>
                 <UButton
@@ -502,7 +519,11 @@ async function merge(pr: GitHubPullRequest) {
                 color="neutral"
                 variant="soft"
                 icon="i-lucide-plus"
-                @click="showPrForm = !showPrForm"
+                @click="
+                  () => {
+                    showPrForm = !showPrForm
+                  }
+                "
               >
                 {{ t('github.panel.openPr') }}
               </UButton>

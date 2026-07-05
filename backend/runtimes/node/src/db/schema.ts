@@ -774,6 +774,32 @@ export const requirementReviews = pgTable(
   ],
 )
 
+// Interactive document-interview sessions (WS5; mirror of D1 migration 0040): one live session
+// per document-authoring block. The Q&A transcript lives as a JSON array (text) in `qa`;
+// `round`/`max_rounds` track the iterative interview loop; `brief` is the synthesized authoring
+// brief the writer starts from once the interview converges.
+export const docInterviewSessions = pgTable(
+  'doc_interview_sessions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    block_id: text('block_id').notNull(),
+    status: text('status').notNull(),
+    round: integer('round').notNull().default(0),
+    max_rounds: integer('max_rounds').notNull().default(4),
+    qa: text('qa').notNull().default('[]'),
+    brief: text('brief'),
+    model: text('model'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspace_id, t.id] }),
+    // getByBlock looks up a block's sessions (newest wins), mirroring D1 migration 0040.
+    index('idx_doc_interview_sessions_block').on(t.workspace_id, t.block_id),
+  ],
+)
+
 // Kaizen gradings (mirror of D1 migration 0015): one row per (run, step) recording the
 // post-run grade + recommendations the Kaizen agent produced. Recommendations are a JSON
 // array column. The unique (execution_id, step_index) index keeps scheduling idempotent.

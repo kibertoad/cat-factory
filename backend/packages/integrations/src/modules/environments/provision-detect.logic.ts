@@ -85,7 +85,7 @@ const COMPOSE_FILES = [
   'docker-compose.prod.yml',
   'docker-compose.dev.yaml',
   'docker-compose.dev.yml',
-  // A bare `dev.yml` base (the lokalise-main `docker/dev.yml` shape) — lowest priority so a
+  // A bare `dev.yml` base (the acme-main `docker/dev.yml` shape) — lowest priority so a
   // canonical name still wins, but recognized so a complex multi-file compose repo is detected
   // (its OS overrides `dev.<os>.override.yml` become recipe compose-file candidates).
   'dev.yaml',
@@ -209,8 +209,8 @@ const ENV_TEMPLATE_DIR_CANDIDATES = ['', 'config', 'env', 'docker', '.docker']
 // Cap on materialization pairs surfaced, so a decoy-heavy repo can't produce an unbounded recipe.
 const MAX_ENV_FILES = 20
 // Directories (relative to the service root) a SQL seed dump commonly lives under; each is scanned
-// at its own level AND one level into immediate child dirs (lokalise's
-// `deployment/lokalise-db-dummy/*.sql` shape).
+// at its own level AND one level into immediate child dirs (acme's
+// `deployment/acme-db-dummy/*.sql` shape).
 const SEED_DIRS = [
   'deployment',
   'seed',
@@ -1077,7 +1077,7 @@ async function detectRepoCliHint(
 
 /**
  * Build the `docker-compose` recommendation. Beyond the base `composePath` + build-mode detection,
- * this reads the STACK RECIPE a complex compose repo implies (the lokalise-main pilot): multi-`-f`
+ * this reads the STACK RECIPE a complex compose repo implies (the acme-main pilot): multi-`-f`
  * layering, external networks, env-file materialization → `recipe`; profiles + seed dumps →
  * candidate arrays the wizard confirms; a repo-CLI hint → the analyst nudge. When NONE of those are
  * present the output is exactly the simple single-file recommendation (no `recipe`, no extra notes).
