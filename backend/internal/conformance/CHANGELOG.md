@@ -1,5 +1,19 @@
 # @cat-factory/conformance
 
+## 0.10.35
+
+### Patch Changes
+
+- Updated dependencies [e66accb]
+  - @cat-factory/orchestration@0.81.0
+  - @cat-factory/server@0.91.0
+  - @cat-factory/contracts@0.108.1
+  - @cat-factory/agents@0.40.2
+  - @cat-factory/gates@0.4.13
+  - @cat-factory/integrations@0.73.2
+  - @cat-factory/kernel@0.99.1
+  - @cat-factory/prompt-fragments@0.10.15
+
 ## 0.10.34
 
 ### Patch Changes
