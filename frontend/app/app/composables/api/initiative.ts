@@ -3,12 +3,21 @@ import {
   cancelInitiativeContract,
   continueInitiativePlanningContract,
   createInitiativeContract,
+  dismissInitiativeFollowUpContract,
   getInitiativeByBlockContract,
   getInitiativeContract,
   listInitiativesContract,
   pauseInitiativeContract,
   proceedInitiativePlanningContract,
+  promoteInitiativeFollowUpContract,
   resumeInitiativeContract,
+  updateInitiativeItemContract,
+  updateInitiativePolicyContract,
+} from '@cat-factory/contracts'
+import type {
+  InitiativeExecutionPolicy,
+  PromoteInitiativeFollowUpInput,
+  UpdateInitiativeItemInput,
 } from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
@@ -66,5 +75,47 @@ export function initiativeApi({ send, ws }: ApiContext) {
 
     cancelInitiative: (workspaceId: string, blockId: string) =>
       send(cancelInitiativeContract, { pathPrefix: ws(workspaceId), pathParams: { blockId } }),
+
+    // Follow-up triage + item/policy editing (slice 4): keyed by initiative id.
+    promoteInitiativeFollowUp: (
+      workspaceId: string,
+      initiativeId: string,
+      followUpId: string,
+      body: PromoteInitiativeFollowUpInput,
+    ) =>
+      send(promoteInitiativeFollowUpContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { initiativeId, followUpId },
+        body,
+      }),
+
+    dismissInitiativeFollowUp: (workspaceId: string, initiativeId: string, followUpId: string) =>
+      send(dismissInitiativeFollowUpContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { initiativeId, followUpId },
+      }),
+
+    updateInitiativeItem: (
+      workspaceId: string,
+      initiativeId: string,
+      itemId: string,
+      body: UpdateInitiativeItemInput,
+    ) =>
+      send(updateInitiativeItemContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { initiativeId, itemId },
+        body,
+      }),
+
+    updateInitiativePolicy: (
+      workspaceId: string,
+      initiativeId: string,
+      body: InitiativeExecutionPolicy,
+    ) =>
+      send(updateInitiativePolicyContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { initiativeId },
+        body,
+      }),
   }
 }

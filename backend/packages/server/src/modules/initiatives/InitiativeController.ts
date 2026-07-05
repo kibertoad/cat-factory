@@ -3,12 +3,16 @@ import {
   cancelInitiativeContract,
   continueInitiativePlanningContract,
   createInitiativeContract,
+  dismissInitiativeFollowUpContract,
   getInitiativeByBlockContract,
   getInitiativeContract,
   listInitiativesContract,
   pauseInitiativeContract,
   proceedInitiativePlanningContract,
+  promoteInitiativeFollowUpContract,
   resumeInitiativeContract,
+  updateInitiativeItemContract,
+  updateInitiativePolicyContract,
 } from '@cat-factory/contracts'
 import type { InitiativesModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -117,6 +121,61 @@ export function initiativeController(): Hono<AppEnv> {
     if (!initiatives) return unavailable(c)
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.cancel(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  // ---- Follow-up triage + item/policy editing (slice 4) --------------------
+  // Mid-flight human curation of an executing initiative, keyed by initiative id. Each rides the
+  // service's rev-CAS single-writer path (so a human edit and a live tick can't clobber each
+  // other) and returns the updated entity for the SPA to patch.
+
+  buildHonoRoute(app, promoteInitiativeFollowUpContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { initiativeId, followUpId } = c.req.valid('param')
+    const updated = await initiatives.service.promoteFollowUp(
+      param(c, 'workspaceId'),
+      initiativeId,
+      followUpId,
+      c.req.valid('json'),
+    )
+    return c.json(updated, 200)
+  })
+
+  buildHonoRoute(app, dismissInitiativeFollowUpContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { initiativeId, followUpId } = c.req.valid('param')
+    const updated = await initiatives.service.dismissFollowUp(
+      param(c, 'workspaceId'),
+      initiativeId,
+      followUpId,
+    )
+    return c.json(updated, 200)
+  })
+
+  buildHonoRoute(app, updateInitiativeItemContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { initiativeId, itemId } = c.req.valid('param')
+    const updated = await initiatives.service.updateItem(
+      param(c, 'workspaceId'),
+      initiativeId,
+      itemId,
+      c.req.valid('json'),
+    )
+    return c.json(updated, 200)
+  })
+
+  buildHonoRoute(app, updateInitiativePolicyContract, async (c) => {
+    const initiatives = requireInitiatives(c)
+    if (!initiatives) return unavailable(c)
+    const { initiativeId } = c.req.valid('param')
+    const updated = await initiatives.service.updatePolicy(
+      param(c, 'workspaceId'),
+      initiativeId,
+      c.req.valid('json'),
+    )
+    return c.json(updated, 200)
   })
 
   return app

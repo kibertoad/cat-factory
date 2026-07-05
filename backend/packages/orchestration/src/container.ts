@@ -193,6 +193,7 @@ import { RecurringPipelineService } from './modules/recurring/RecurringPipelineS
 import { TrackerSettingsService } from './modules/recurring/TrackerSettingsService.js'
 import { InitiativeService } from './modules/initiative/InitiativeService.js'
 import { InitiativeLoopService } from './modules/initiative/InitiativeLoopService.js'
+import type { InitiativeRunHarvest } from './modules/initiative/initiative.logic.js'
 import { InitiativeInterviewService } from './modules/initiative/InitiativeInterviewService.js'
 import { BLUEPRINT_PIPELINE_ID } from '@cat-factory/kernel'
 import {
@@ -2302,8 +2303,12 @@ export function createCore(dependencies: CoreDependencies): Core {
   // the engine (the loop depends on `executionService.start`). Fire-and-forget; a null ref (the
   // loop unwired, or the settled block not part of an initiative) is a no-op.
   let initiativeLoopRef: InitiativeLoopService | undefined
-  const pokeInitiativeLoop = (workspaceId: string, initiativeBlockId: string): void => {
-    void initiativeLoopRef?.pokeForInitiativeBlock(workspaceId, initiativeBlockId)
+  const pokeInitiativeLoop = (
+    workspaceId: string,
+    initiativeBlockId: string,
+    harvest?: InitiativeRunHarvest,
+  ): void => {
+    void initiativeLoopRef?.pokeForInitiativeBlock(workspaceId, initiativeBlockId, harvest)
   }
 
   const executionService = new ExecutionService({

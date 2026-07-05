@@ -1,10 +1,13 @@
-import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
+import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
 import {
   answerInitiativeQuestionSchema,
   createInitiativeSchema,
   initiativeSchema,
+  promoteInitiativeFollowUpSchema,
+  updateInitiativeItemSchema,
+  updateInitiativePolicySchema,
 } from '../initiative.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -16,6 +19,10 @@ import { errorResponses, singleStringParam } from './_shared.js'
 
 const initiativeIdParams = singleStringParam('initiativeId')
 const blockIdParams = singleStringParam('blockId')
+const followUpParams = withObjectKeys(
+  v.object({ initiativeId: v.string(), followUpId: v.string() }),
+)
+const itemParams = withObjectKeys(v.object({ initiativeId: v.string(), itemId: v.string() }))
 
 /**
  * Create an initiative: materialises the initiative-level board block AND its
@@ -116,4 +123,47 @@ export const cancelInitiativeContract = defineApiContract({
   pathResolver: ({ blockId }) => `/blocks/${blockId}/initiative/cancel`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: v.nullable(initiativeSchema), ...errorResponses },
+})
+
+// ---- Follow-up triage + item/policy editing (slice 4) ----------------------
+// Mid-flight human curation of an executing initiative, keyed by initiative id (the tracker
+// window / inspector operate on the loaded entity, not the block). Each returns the updated
+// initiative so the SPA patches its cache (the live `initiative` event carries the same entity).
+
+/** Promote an `open` harvested follow-up into a new `pending` tracker item under a phase. */
+export const promoteInitiativeFollowUpContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: followUpParams,
+  pathResolver: ({ initiativeId, followUpId }) =>
+    `/initiatives/${initiativeId}/follow-ups/${followUpId}/promote`,
+  requestBodySchema: promoteInitiativeFollowUpSchema,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Dismiss a harvested follow-up without acting on it. */
+export const dismissInitiativeFollowUpContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: followUpParams,
+  pathResolver: ({ initiativeId, followUpId }) =>
+    `/initiatives/${initiativeId}/follow-ups/${followUpId}/dismiss`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Edit one tracker item and/or drive its status (retry a blocked item / skip it). */
+export const updateInitiativeItemContract = defineApiContract({
+  method: 'patch',
+  requestPathParamsSchema: itemParams,
+  pathResolver: ({ initiativeId, itemId }) => `/initiatives/${initiativeId}/items/${itemId}`,
+  requestBodySchema: updateInitiativeItemSchema,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
+})
+
+/** Replace an executing initiative's execution policy (concurrency + pipeline rules). */
+export const updateInitiativePolicyContract = defineApiContract({
+  method: 'put',
+  requestPathParamsSchema: initiativeIdParams,
+  pathResolver: ({ initiativeId }) => `/initiatives/${initiativeId}/policy`,
+  requestBodySchema: updateInitiativePolicySchema,
+  responsesByStatusCode: { 200: initiativeSchema, ...errorResponses },
 })

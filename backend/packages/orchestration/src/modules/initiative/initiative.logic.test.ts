@@ -4,17 +4,24 @@ import {
   activeItemCount,
   allItemsSettled,
   applyAnalysis,
+  applyDismissFollowUp,
   applyInterviewAnswer,
   applyInterviewOutcome,
   applyInterviewQuestions,
+  applyItemEdit,
   applyPlanDraft,
+  applyPolicyEdit,
+  applyPromoteFollowUp,
   applyRevertClaim,
+  applyRunHarvest,
   applySpawnClaim,
   assertInitiativeShapeAllowed,
   coerceInterviewOutput,
   deriveCurrentPhase,
   effectiveMaxConcurrent,
   eligibleItemsToSpawn,
+  extractRunHarvest,
+  harvestFollowUpId,
   initiativeProgress,
   initiativeSlug,
   interviewAtCap,
@@ -24,7 +31,11 @@ import {
   selectInitiativePipeline,
   validatePlanDraft,
 } from './initiative.logic.js'
-import type { InitiativeExecutionPolicy, InitiativeItem } from '@cat-factory/kernel'
+import type {
+  ExecutionInstance,
+  InitiativeExecutionPolicy,
+  InitiativeItem,
+} from '@cat-factory/kernel'
 
 const block = (level: Block['level']): Block => ({
   id: 'blk-1',
@@ -595,5 +606,294 @@ describe('spawn claim / revert + completion', () => {
         }),
       ),
     ).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Follow-up harvest + human curation (slice 4)
+// ---------------------------------------------------------------------------
+
+/** An executing initiative with one phase and one in-flight item linked to a spawned block. */
+const executingEntity = (): Initiative => ({
+  ...emptyEntity(),
+  status: 'executing',
+  phases: [{ id: 'p1', title: 'Phase one', goal: '' }],
+  items: [
+    {
+      id: 'a',
+      phaseId: 'p1',
+      title: 'Item A',
+      description: 'do A',
+      dependsOn: [],
+      status: 'in_progress',
+      blockId: 'blk-child-a',
+    },
+  ],
+  policy: {
+    maxConcurrent: 2,
+    rules: [],
+    defaultPipelineId: 'pl_full',
+    onMissingEstimate: 'default',
+  },
+})
+
+const runInstance = (overrides: Partial<ExecutionInstance> = {}): ExecutionInstance =>
+  ({
+    id: 'exec-1',
+    blockId: 'blk-child-a',
+    pipelineId: 'pl_full',
+    pipelineName: 'Full build',
+    currentStep: 0,
+    status: 'done',
+    steps: [
+      {
+        agentKind: 'coder',
+        state: 'done',
+        followUps: {
+          enabled: true,
+          items: [
+            {
+              id: 'fu-1',
+              kind: 'follow_up',
+              title: 'Extract shared helper',
+              detail: 'the parser is duplicated',
+              suggestedAction: 'move it to utils',
+              status: 'pending',
+              createdAt: 1,
+              updatedAt: 1,
+            },
+            {
+              id: 'q-1',
+              kind: 'question',
+              title: 'Which timezone?',
+              detail: '',
+              status: 'pending',
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        },
+      },
+    ],
+    ...overrides,
+  }) as unknown as ExecutionInstance
+
+describe('extractRunHarvest', () => {
+  it('lifts only follow_up-kind items (not questions) + the child block id', () => {
+    const harvest = extractRunHarvest(runInstance())
+    expect(harvest.childBlockId).toBe('blk-child-a')
+    expect(harvest.followUps).toHaveLength(1)
+    expect(harvest.followUps[0]).toMatchObject({ sourceId: 'fu-1', title: 'Extract shared helper' })
+    expect(harvest.failure).toBeNull()
+  })
+
+  it('captures the failure cause on a failed run', () => {
+    const harvest = extractRunHarvest(
+      runInstance({
+        status: 'failed',
+        failure: {
+          kind: 'agent',
+          message: 'container crashed',
+          detail: null,
+          hint: null,
+          occurredAt: 1,
+          lastSubtasks: null,
+        },
+      }),
+    )
+    expect(harvest.failure).toEqual({ kind: 'agent', detail: 'container crashed' })
+  })
+})
+
+describe('applyRunHarvest', () => {
+  it('folds follow-ups as open entries linked to the source item, and is idempotent', () => {
+    const entity = executingEntity()
+    const harvest = extractRunHarvest(runInstance())
+    const once = applyRunHarvest(entity, harvest, 100)
+    expect(once.followUps).toHaveLength(1)
+    expect(once.followUps![0]).toMatchObject({
+      id: harvestFollowUpId('blk-child-a', 'fu-1'),
+      sourceItemId: 'a',
+      status: 'open',
+      title: 'Extract shared helper',
+    })
+    // Suggested action is folded into the detail.
+    expect(once.followUps![0]!.detail).toContain('move it to utils')
+    // Re-harvesting the same run adds nothing (stable id) and returns the input unchanged.
+    expect(applyRunHarvest(once, harvest, 200)).toBe(once)
+  })
+
+  it('stamps the failing item note with the real cause (the deviation reads it)', () => {
+    const entity = executingEntity()
+    const harvest = extractRunHarvest(
+      runInstance({
+        status: 'failed',
+        failure: {
+          kind: 'agent',
+          message: 'tests failed',
+          detail: null,
+          hint: null,
+          occurredAt: 1,
+          lastSubtasks: null,
+        },
+      }),
+    )
+    const next = applyRunHarvest(entity, harvest, 100)
+    expect(next.items![0]!.note).toContain('tests failed')
+  })
+})
+
+describe('applyPromoteFollowUp', () => {
+  const seeded = (): Initiative =>
+    applyRunHarvest(executingEntity(), extractRunHarvest(runInstance()), 100)
+  const fuId = harvestFollowUpId('blk-child-a', 'fu-1')
+
+  it('creates a new pending item and marks the follow-up promoted', () => {
+    const next = applyPromoteFollowUp(seeded(), fuId, { phaseId: 'p1' })
+    const promoted = next.followUps!.find((f) => f.id === fuId)!
+    expect(promoted.status).toBe('promoted')
+    const newItem = next.items!.find((i) => i.id === promoted.promotedItemId)!
+    expect(newItem).toMatchObject({
+      phaseId: 'p1',
+      status: 'pending',
+      title: 'Extract shared helper',
+    })
+  })
+
+  it('honours a title/description/phase override', () => {
+    const next = applyPromoteFollowUp(seeded(), fuId, {
+      phaseId: 'p1',
+      title: 'Custom',
+      description: 'custom desc',
+    })
+    const newItem = next.items!.find((i) => i.title === 'Custom')!
+    expect(newItem.description).toBe('custom desc')
+  })
+
+  it('rejects an unknown phase', () => {
+    expect(() => applyPromoteFollowUp(seeded(), fuId, { phaseId: 'nope' })).toThrowError(/phase/)
+  })
+
+  it('is a no-op on an already-settled follow-up', () => {
+    const promoted = applyPromoteFollowUp(seeded(), fuId, { phaseId: 'p1' })
+    expect(applyPromoteFollowUp(promoted, fuId, { phaseId: 'p1' })).toBe(promoted)
+  })
+})
+
+describe('applyDismissFollowUp', () => {
+  it('marks an open follow-up dismissed and no-ops thereafter', () => {
+    const seeded = applyRunHarvest(executingEntity(), extractRunHarvest(runInstance()), 100)
+    const fuId = harvestFollowUpId('blk-child-a', 'fu-1')
+    const next = applyDismissFollowUp(seeded, fuId)
+    expect(next.followUps!.find((f) => f.id === fuId)!.status).toBe('dismissed')
+    expect(applyDismissFollowUp(next, fuId)).toBe(next)
+  })
+})
+
+describe('applyItemEdit', () => {
+  const blockedEntity = (): Initiative => ({
+    ...executingEntity(),
+    items: [
+      {
+        id: 'a',
+        phaseId: 'p1',
+        title: 'Item A',
+        description: 'do A',
+        dependsOn: [],
+        status: 'blocked',
+        note: 'boom',
+        blockId: null,
+      },
+    ],
+  })
+
+  it('retries a blocked item back to pending, clearing its note + link', () => {
+    const next = applyItemEdit(blockedEntity(), 'a', { action: 'retry' })
+    expect(next.items![0]).toMatchObject({ status: 'pending', note: undefined, blockId: null })
+  })
+
+  it('skips a blocked item', () => {
+    expect(applyItemEdit(blockedEntity(), 'a', { action: 'skip' }).items![0]!.status).toBe(
+      'skipped',
+    )
+  })
+
+  it('edits content of a pending/blocked item', () => {
+    const next = applyItemEdit(blockedEntity(), 'a', { title: 'Renamed', description: 'new' })
+    expect(next.items![0]).toMatchObject({ title: 'Renamed', description: 'new' })
+  })
+
+  it('refuses to edit an in-flight item', () => {
+    expect(() => applyItemEdit(executingEntity(), 'a', { title: 'X' })).toThrowError(/in_progress/)
+  })
+
+  it('refuses retry on a non-blocked item', () => {
+    expect(() => applyItemEdit(executingEntity(), 'a', { action: 'retry' })).toThrowError(/blocked/)
+  })
+
+  it('rejects an unknown item and a self/unknown dependency', () => {
+    expect(() => applyItemEdit(blockedEntity(), 'zzz', {})).toThrowError(/Unknown item/)
+    expect(() => applyItemEdit(blockedEntity(), 'a', { dependsOn: ['a'] })).toThrowError(/itself/)
+    expect(() => applyItemEdit(blockedEntity(), 'a', { dependsOn: ['ghost'] })).toThrowError(
+      /unknown item/,
+    )
+  })
+
+  it('rejects a re-scoped dependency that would introduce a cycle', () => {
+    // Two pending items where b already depends on a; editing a to depend on b closes the loop.
+    const twoItems: Initiative = {
+      ...executingEntity(),
+      items: [
+        { id: 'a', phaseId: 'p1', title: 'A', description: '', dependsOn: [], status: 'pending' },
+        {
+          id: 'b',
+          phaseId: 'p1',
+          title: 'B',
+          description: '',
+          dependsOn: ['a'],
+          status: 'pending',
+        },
+      ],
+    }
+    expect(() => applyItemEdit(twoItems, 'a', { dependsOn: ['b'] })).toThrowError(/cycle/)
+  })
+
+  it('refuses to curate an item on a non-executing initiative', () => {
+    const done: Initiative = { ...blockedEntity(), status: 'done' }
+    expect(() => applyItemEdit(done, 'a', { action: 'retry' })).toThrowError(/executing/)
+  })
+})
+
+describe('applyPolicyEdit', () => {
+  const policy: InitiativeExecutionPolicy = {
+    maxConcurrent: 5,
+    rules: [],
+    defaultPipelineId: 'pl_quick',
+    onMissingEstimate: 'default',
+  }
+
+  it('replaces the policy', () => {
+    expect(applyPolicyEdit(executingEntity(), policy).policy).toEqual(policy)
+  })
+
+  it('refuses to edit the policy of a non-executing initiative', () => {
+    expect(() => applyPolicyEdit({ ...executingEntity(), status: 'paused' }, policy)).toThrowError(
+      /executing/,
+    )
+  })
+})
+
+describe('curation status guard', () => {
+  const fuId = harvestFollowUpId('blk-child-a', 'fu-1')
+  // Harvest itself is loop-driven and unguarded, so seed a follow-up then settle the initiative;
+  // the human triage transforms are the ones gated on `executing`.
+  const settled: Initiative = {
+    ...applyRunHarvest(executingEntity(), extractRunHarvest(runInstance()), 1),
+    status: 'cancelled',
+  }
+
+  it('refuses promote/dismiss once the initiative is no longer executing', () => {
+    expect(() => applyPromoteFollowUp(settled, fuId, { phaseId: 'p1' })).toThrowError(/executing/)
+    expect(() => applyDismissFollowUp(settled, fuId)).toThrowError(/executing/)
   })
 })

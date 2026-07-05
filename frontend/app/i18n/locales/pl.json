@@ -4048,6 +4048,26 @@
       "hint": "Kontynuuj pozwala planiscie zadac kolejne pytania; Przejdz do planowania planuje na podstawie dotychczasowych odpowiedzi.",
       "proceed": "Przejdz do planowania",
       "continue": "Kontynuuj"
+    },
+    "followUpStatus": {
+      "open": "Otwarte",
+      "promoted": "Awansowane",
+      "dismissed": "Odrzucone"
+    },
+    "curation": {
+      "promote": "Awansuj do elementu",
+      "promoteConfirm": "Utworz element",
+      "dismiss": "Odrzuc",
+      "retry": "Ponow",
+      "skip": "Pomin",
+      "edit": "Edytuj",
+      "save": "Zapisz",
+      "cancel": "Anuluj",
+      "phaseField": "Faza",
+      "itemTitlePlaceholder": "Tytul elementu (domyslnie z zadania nastepczego)",
+      "maxConcurrentField": "Maks. rownoczesnych zadan",
+      "defaultPipelineField": "Domyslny pipeline",
+      "failed": "Nie udalo sie zaktualizowac inicjatywy"
     }
   }
 }
