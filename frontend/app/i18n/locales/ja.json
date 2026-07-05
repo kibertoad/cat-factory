@@ -833,6 +833,12 @@
       "involvedServicesHint": "このタスクに直接関与する接続済みサービス。各サービスはタスク自身のサービスと並んで一時的な環境として起動され、コーディングエージェントがそのリポジトリを変更することもあります。",
       "involvedServicesEmpty": "接続済みのサービスはありません。ここで選択するには、サービスフレームでサービスを接続してください。",
       "involvedServiceStale": "このタスクのサービスとの接続が解除されています。次回の変更時に削除されます。"
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {

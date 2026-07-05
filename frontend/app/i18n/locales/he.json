@@ -833,6 +833,12 @@
       "involvedServicesHint": "שירותים מחוברים המעורבים ישירות במשימה זו: כל אחד מהם מוקם כסביבה זמנית לצד השירות של המשימה, וסוכן הקוד עשוי לשנות גם את המאגרים שלהם.",
       "involvedServicesEmpty": "אין שירותים מחוברים. חברו שירותים במסגרת השירות כדי לבחור אותם כאן.",
       "involvedServiceStale": "כבר לא מחובר לשירות של משימה זו; הוא יוסר בשינוי הבא."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {

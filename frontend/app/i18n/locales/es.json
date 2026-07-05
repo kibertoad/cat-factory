@@ -833,6 +833,12 @@
       "involvedServicesHint": "Servicios conectados directamente involucrados en esta tarea: cada uno se levanta como un entorno efímero junto al servicio propio de la tarea, y el agente de código puede modificar también sus repositorios.",
       "involvedServicesEmpty": "No hay servicios conectados. Conecta servicios en el marco del servicio para seleccionarlos aquí.",
       "involvedServiceStale": "Ya no está conectado al servicio de esta tarea; se eliminará con el próximo cambio."
+    },
+    "referenceRepos": {
+      "title": "Repositorios de referencia",
+      "remove": "Quitar {repo}",
+      "connectFirst": "Conecta GitHub para adjuntar repositorios de referencia.",
+      "hint": "El escritor de documentos los clona en modo de solo lectura para reutilizar soluciones existentes como referencia al redactar. Nunca los modifica."
     }
   },
   "panels": {

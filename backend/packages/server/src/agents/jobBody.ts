@@ -78,6 +78,19 @@ export interface KindBodyParts {
    * implementer's system prompt in a multi-service run; absent otherwise.
    */
   multiRepoSection?: string
+  /**
+   * READ-ONLY reference repos to clone as sibling checkouts for a document-authoring run — each
+   * an origin-resolved harness `RepoSpec` with NO branch/PR fields (structurally unpushable). The
+   * coding body forwards them so the harness clones each at its own default branch and skips it in
+   * the push phase. Present only for the doc-writer on a task with reference repos attached.
+   */
+  referenceRepos?: { repo: Record<string, unknown> }[]
+  /**
+   * The backend-rendered "Reference repositories" system-prompt section (which repos are attached
+   * as read-only references, where each sibling checkout lives, and that the agent must never edit
+   * or commit them). Appended to the doc-writer's system prompt; absent otherwise.
+   */
+  referenceReposSection?: string
 }
 
 /**
@@ -277,14 +290,21 @@ export function buildRegisteredAgentBody(
           ...(opensPr ? { pr } : {}),
         }))
       : undefined
+    // Read-only reference repos (doc-writer): cloned as siblings with NO branch/PR fields, so
+    // the harness clones each and skips it in the push phase. Independent of the multi-repo
+    // fan-out above (references are never writable), so they carry no `newBranch`/`pr`.
+    const referenceRepos = parts.referenceRepos?.length
+      ? parts.referenceRepos.map((r) => ({ repo: r.repo }))
+      : undefined
     return {
       kind: 'agent',
       body: {
         ...common,
         mode: 'coding',
-        systemPrompt: parts.multiRepoSection
-          ? `${roleSystemPrompt}\n\n${parts.multiRepoSection}`
-          : roleSystemPrompt,
+        systemPrompt: appendSections(roleSystemPrompt, [
+          parts.multiRepoSection,
+          parts.referenceReposSection,
+        ]),
         userPrompt,
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
         ...(onPr ? {} : { newBranch: workBranch }),
@@ -292,6 +312,7 @@ export function buildRegisteredAgentBody(
         ...(opensPr ? { pr } : {}),
         ...(noChangesIsError ? {} : { noChangesIsError: false }),
         ...(peerRepos ? { peerRepos } : {}),
+        ...(referenceRepos ? { referenceRepos } : {}),
         ...(step.clone?.full ? { full: true } : {}),
         // A structured coding kind (repro-test) returns a JSON outcome alongside its pushed
         // commit; forward the output spec so the harness parses the final reply into `custom`
@@ -302,7 +323,9 @@ export function buildRegisteredAgentBody(
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
         // sentinel, so advertising it there would spend prompt tokens on items that are silently
         // discarded. The co-located-only case has no `peerRepos`, so it keeps follow-ups on.
-        ...(context.followUpCompanion && !onPr && !peerRepos ? { streamFollowUps: true } : {}),
+        ...(context.followUpCompanion && !onPr && !peerRepos && !referenceRepos
+          ? { streamFollowUps: true }
+          : {}),
         ...webTools,
       },
     }
@@ -444,6 +467,46 @@ export function renderMultiRepoWorkspaceSection(
   for (const checkout of checkouts) {
     if (checkout.primary) continue
     lines.push(describe(checkout))
+  }
+  return lines.join('\n')
+}
+
+/** Append the present (non-empty) system-prompt sections to a base prompt, blank-line separated. */
+function appendSections(base: string, sections: (string | undefined)[]): string {
+  const present = sections.filter((s): s is string => !!s)
+  return present.length ? [base, ...present].join('\n\n') : base
+}
+
+/**
+ * Render the "Reference repositories" system-prompt section for a document-authoring run. Attaching
+ * reference repos turns a doc-writer run into a multi-repo layout: the harness checks out the doc
+ * repo AND each reference repo as SIBLING directories under the workspace root (the cwd), so the
+ * section must name WHERE the writer's OWN repo lives (write the document there) and which sibling
+ * dirs are READ-ONLY references (read them to reuse existing solutions, never edit/commit/push).
+ * Directory names match the harness's `siblingDir` (`owner__name`), computed independently, so this
+ * MUST stay byte-identical to {@link siblingCheckoutDir}.
+ */
+export function renderReferenceReposSection(primary: RepoTarget, references: RepoTarget[]): string {
+  const primaryDir = siblingCheckoutDir(primary.owner, primary.name)
+  const own = primary.serviceDirectory
+    ? ` (this service lives in \`${primary.serviceDirectory}/\`)`
+    : ''
+  const lines = [
+    '## Reference repositories',
+    '',
+    'This task has reference repositories attached, so more than one repository is checked out. Each',
+    'is a SIBLING directory under your working directory (the workspace root); the root itself is NOT',
+    'a git repository. Write the document in YOUR repository below and commit it there (the platform',
+    'opens the pull request). The other repositories are READ-ONLY reference material: read them to',
+    'reuse existing solutions, conventions, and structure while drafting, but you must NEVER edit,',
+    'commit, or push anything in them — they are inputs to read, not code to change.',
+    '',
+    `Your repository (write the document here): \`${primary.owner}/${primary.name}\` → \`${primaryDir}/\`${own}`,
+    '',
+    'Read-only reference checkouts:',
+  ]
+  for (const ref of references) {
+    lines.push(`- \`${ref.owner}/${ref.name}\` → \`${siblingCheckoutDir(ref.owner, ref.name)}/\``)
   }
   return lines.join('\n')
 }

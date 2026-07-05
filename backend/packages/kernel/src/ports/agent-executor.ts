@@ -10,6 +10,7 @@ import type {
   InstanceSize,
   PullRequestRef,
   PeerPullRequest,
+  ReferenceRepo,
   ServiceProvisioning,
   StepSubtasks,
   StreamedFollowUp,
@@ -267,6 +268,15 @@ export interface AgentRunContext {
     description?: string
     envUrl?: string
   }[]
+  /**
+   * Read-only reference repositories attached to a document-authoring task (the doc-writer
+   * agent) — lifted verbatim by the engine from the task block's `referenceRepos`. The
+   * executor turns these into read-only sibling checkouts the agent may read but never write
+   * to. Each carries its own clone identity (owner/name/defaultBranch/installationId), so a
+   * repo outside the workspace's synced projection can still be cloned. Absent for non-doc
+   * tasks or a task with none attached.
+   */
+  referenceRepos?: ReferenceRepo[]
   /**
    * If this step previously raised a decision that a human has now resolved,
    * the resolved decision — so the agent can finish instead of re-raising it.

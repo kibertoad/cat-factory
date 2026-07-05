@@ -1,7 +1,11 @@
 import * as v from 'valibot'
 import { agentConfigValuesSchema } from './agent-config.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
-import { testerQualityConfigSchema, writebackOverrideSchema } from './entities.js'
+import {
+  referenceRepoSchema,
+  testerQualityConfigSchema,
+  writebackOverrideSchema,
+} from './entities.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'
 import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.js'
@@ -179,6 +183,9 @@ export const updateBlockSchema = v.partial(
     // own service; an empty array clears the selection. Capped like `serviceConnections`
     // so the write-gate's per-id cross-home resolve stays a bounded loop, not data-sized.
     involvedServiceIds: v.pipe(v.array(v.pipe(v.string(), v.maxLength(120))), v.maxLength(50)),
+    // Task-level (document tasks): read-only reference repos for the `doc-writer` agent; an
+    // empty array clears them. Capped so a clone fan-out stays bounded, not data-sized.
+    referenceRepos: v.pipe(v.array(referenceRepoSchema), v.maxLength(20)),
     // Per-task issue-tracker writeback overrides; null clears the override (inherit
     // the workspace setting). 'on'/'off' force the behaviour for this task.
     trackerCommentOnPrOpen: v.nullable(writebackOverrideSchema),

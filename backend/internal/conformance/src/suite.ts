@@ -1077,6 +1077,46 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(unconnected.status).toBe(422)
       })
 
+      it("round-trips a task's read-only reference repos (the JSON column) on every store", async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+
+        // `referenceRepos` is a task-level JSON column carrying the doc-writer agent's
+        // read-only reference repos, each a self-contained clone identity (NOT resolved from
+        // the repo projection). A runtime that forgot to map the column drops it on write, so
+        // this asserts it survives PATCH + a fresh snapshot read, and that clearing writes NULL
+        // (an empty array comes back absent), on D1 and Postgres alike.
+        const referenceRepos = [
+          { githubId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'main' },
+          {
+            githubId: 222,
+            owner: 'acme',
+            name: 'api-conventions',
+            defaultBranch: 'trunk',
+            installationId: 42,
+          },
+        ]
+        const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          referenceRepos,
+        })
+        expect(set.status).toBe(200)
+        expect(set.body.referenceRepos).toEqual(referenceRepos)
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+        expect(snap.body.blocks.find((b) => b.id === 'task_login')?.referenceRepos).toEqual(
+          referenceRepos,
+        )
+
+        // Clearing with an empty array writes NULL, so the field comes back absent (mirroring
+        // the other JSON-array block columns' empty-is-null convention).
+        const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+          referenceRepos: [],
+        })
+        expect(cleared.status).toBe(200)
+        expect(cleared.body.referenceRepos).toBeUndefined()
+      })
+
       it("records a multi-repo run's peer pull requests on the block (both stores)", async () => {
         // Service-connections phase 3: a coder run over a task with a connected involved service
         // opens a PR in the peer's repo too. The container reports it as `peerPullRequests`

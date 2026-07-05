@@ -876,6 +876,12 @@
       "involvedServicesHint": "Connected services directly involved in this task: each spins up as an ephemeral environment alongside this task's own service, and the coding agent may change their repositories too.",
       "involvedServicesEmpty": "No connected services. Connect services on the service frame to select them here.",
       "involvedServiceStale": "No longer connected to this task's service; it is dropped on the next change."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {

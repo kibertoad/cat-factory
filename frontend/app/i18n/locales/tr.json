@@ -833,6 +833,12 @@
       "involvedServicesHint": "Bu göreve doğrudan dahil olan bağlı servisler: her biri görevin kendi servisiyle birlikte geçici bir ortam olarak ayağa kaldırılır ve kodlama ajanı onların depolarında da değişiklik yapabilir.",
       "involvedServicesEmpty": "Bağlı servis yok. Burada seçebilmek için servis çerçevesinde servisleri bağlayın.",
       "involvedServiceStale": "Artık bu görevin servisine bağlı değil; bir sonraki değişiklikte kaldırılacak."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {

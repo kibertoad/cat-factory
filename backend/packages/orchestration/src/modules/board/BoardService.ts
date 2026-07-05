@@ -755,6 +755,14 @@ export class BoardService {
         if (error) throw new ValidationError(error)
       }
     }
+    // `referenceRepos` is a task-level attachment (read-only reference repos for the
+    // `doc-writer` agent); dropped on non-tasks so a frame never persists dead data. The
+    // repo identities are self-contained (contract-capped), so there is nothing to
+    // cross-validate against the board here.
+    if (effective.referenceRepos !== undefined && block.level !== 'task') {
+      const { referenceRepos: _ignored, ...rest } = effective
+      effective = rest
+    }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
     await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id)

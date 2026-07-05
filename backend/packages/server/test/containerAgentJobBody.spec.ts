@@ -186,6 +186,47 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
     expect(captured[0]).toMatchSnapshot()
   })
 
+  // Read-only reference repos (doc-writer): a doc task with reference repos attached dispatches a
+  // MULTI-REPO coding body carrying each reference as a READ-ONLY spec (repo only — no newBranch/pr)
+  // plus a "Reference repositories" system-prompt section naming the sibling directories.
+  const REFERENCE_REPOS: NonNullable<AgentRunContext['referenceRepos']> = [
+    { githubId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'trunk' },
+  ]
+
+  it('doc-writer emits read-only referenceRepos + a reference section', async () => {
+    await executor.startJob({ ...context('doc-writer'), referenceRepos: REFERENCE_REPOS })
+    const spec = captured[0]!.spec
+    expect(spec.mode).toBe('coding')
+    expect(spec.referenceRepos).toEqual([
+      {
+        repo: {
+          owner: 'acme',
+          name: 'design-system',
+          baseBranch: 'trunk',
+          cloneUrl: 'https://github.com/acme/design-system.git',
+          provider: 'github',
+        },
+      },
+    ])
+    // Structurally unpushable: the reference leg carries no branch or PR.
+    expect(spec.referenceRepos).not.toMatchObject([{ newBranch: expect.anything() }])
+    expect(spec.referenceRepos).not.toMatchObject([{ pr: expect.anything() }])
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('## Reference repositories')
+    expect(systemPrompt).toContain('acme__design-system/')
+  })
+
+  it('doc-writer with NO reference repos emits no referenceRepos field', async () => {
+    await executor.startJob(context('doc-writer'))
+    expect(captured[0]!.spec.referenceRepos).toBeUndefined()
+    expect(captured[0]!.spec.systemPrompt).not.toContain('## Reference repositories')
+  })
+
+  it('a non-reference kind (coder) ignores referenceRepos on the context (kind gate)', async () => {
+    await executor.startJob({ ...context('coder'), referenceRepos: REFERENCE_REPOS })
+    expect(captured[0]!.spec.referenceRepos).toBeUndefined()
+  })
+
   it('folds a tuned kind’s loosen-only guard overrides into the job body', async () => {
     // conflict-resolver carries a built-in tuning entry (more error headroom). The body
     // must carry it so the harness loosens the guard for that kind.

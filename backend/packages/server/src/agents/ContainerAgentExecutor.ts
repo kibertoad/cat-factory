@@ -29,6 +29,7 @@ import {
   type AgentKindRegistry,
   type AgentRouting,
   agentTuningFor,
+  DOC_WRITER_KIND,
   defaultAgentKindRegistry,
   isProxyableProvider,
   isReadOnlyAgentKind,
@@ -36,7 +37,11 @@ import {
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
 import { toRunResult } from './containerAgentResult.js'
-import { buildKindBody, renderMultiRepoWorkspaceSection } from './jobBody.js'
+import {
+  buildKindBody,
+  renderMultiRepoWorkspaceSection,
+  renderReferenceReposSection,
+} from './jobBody.js'
 import { UI_TESTER_AGENT_KIND, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
@@ -344,6 +349,15 @@ const MULTI_REPO_FANOUT_BUILTIN_KINDS: ReadonlySet<string> = new Set([
   IMPLEMENTER_AGENT_KIND,
   'ci-fixer',
 ])
+
+/**
+ * The kinds that consume a task's read-only `referenceRepos` — cloned as READ-ONLY sibling
+ * checkouts the agent may read (to reuse existing solutions) but never write to. Deliberately
+ * a SEPARATE gate from {@link MULTI_REPO_FANOUT_BUILTIN_KINDS}: reference repos are not involved
+ * services (never writable, no branch/PR, don't need to be board services), so they must not be
+ * folded into the fan-out path. Only the document writer reads them today.
+ */
+const REFERENCE_REPO_KINDS: ReadonlySet<string> = new Set([DOC_WRITER_KIND])
 
 /** A safe, collision-free `<base>.md` filename for a materialised context file. */
 function contextFileName(base: string, used: Set<string>): string {
@@ -1069,6 +1083,28 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       }
     }
 
+    // Read-only reference repos (document-authoring tasks): independent of the fan-out above —
+    // the doc-writer clones each attached repo as a READ-ONLY sibling checkout it may read but
+    // never writes to. The spec carries NO branch/PR fields, so it is structurally unpushable;
+    // the harness clones it at its own default branch and skips it in the push phase. Auth reuses
+    // the already-minted installation/PAT `ghToken` (a reference repo surfaced by the picker is by
+    // definition reachable by it), so no extra token mint. A reference repo may be outside the
+    // workspace projection, so its clone identity comes straight from the persisted attachment.
+    let referenceRepos: { repo: Record<string, unknown> }[] | undefined
+    let referenceReposSection: string | undefined
+    const attachedReferenceRepos = context.referenceRepos ?? []
+    if (attachedReferenceRepos.length > 0 && REFERENCE_REPO_KINDS.has(context.agentKind)) {
+      const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
+      const targets: RepoTarget[] = attachedReferenceRepos.map((r) => ({
+        installationId: r.installationId ?? repo.installationId,
+        owner: r.owner,
+        name: r.name,
+        baseBranch: r.defaultBranch,
+      }))
+      referenceRepos = targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) }))
+      referenceReposSection = renderReferenceReposSection(repo, targets)
+    }
+
     const { body, kind } = buildKindBody(
       promptContext,
       {
@@ -1079,6 +1115,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
         workBranchReady,
         ...(peerRepos ? { peerRepos } : {}),
         ...(multiRepoSection ? { multiRepoSection } : {}),
+        ...(referenceRepos ? { referenceRepos } : {}),
+        ...(referenceReposSection ? { referenceReposSection } : {}),
       },
       this.agentKindRegistry,
     )
