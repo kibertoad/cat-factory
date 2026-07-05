@@ -68,6 +68,23 @@ export interface AgentStepSpec {
   clone?: AgentCloneSpec
   /** Container coding surface only: how to stand dependencies up (tester). */
   infra?: 'none' | 'compose' | 'ephemeral-url'
+  /**
+   * Container-coding surface only: whether a run that produced NO file changes is a
+   * failure. The implementer (coder) fails a no-op; a kind that may legitimately produce
+   * nothing (e.g. `repro-test` conceding `not_reproducible`) sets this false so the run
+   * advances instead of failing. Default true (a coding no-op is a failure), matching the
+   * implementer. Ignored for non-coding surfaces.
+   */
+  noChangesTolerated?: boolean
+  /**
+   * Container-coding surface only: whether to OPEN a pull request after pushing the work
+   * branch. The implementer opens the run's PR; a kind that only SEEDS the shared work
+   * branch for a LATER step to open the PR on (e.g. `repro-test`, the first committing
+   * step — the coder then resumes the branch and opens the PR containing both the
+   * reproduction test and the fix) sets this false. Default true for a work-branch coding
+   * kind. Ignored for an in-place (PR-branch) coding kind, which never opens a new PR.
+   */
+  opensPr?: boolean
 }
 
 /** Context handed to a {@link RepoOp}. */

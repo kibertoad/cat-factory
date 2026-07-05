@@ -1,6 +1,7 @@
 import type { AgentRunContext, AgentStepSpec, RunnerDispatchKind } from '@cat-factory/kernel'
 import {
   type AgentKindRegistry,
+  bugFixGuidanceFor,
   composeBlockSystemPrompt,
   FOLLOW_UP_GUIDANCE,
   isContainerBackedCompanion,
@@ -102,9 +103,15 @@ export function buildKindBody(
   // the guidance that tells the Coder to stream loose-ends / side-tasks / questions to the
   // sentinel file the harness tails. Only when enabled, so a disabled companion (or any
   // other kind) never writes the file.
-  const roleSystemPrompt = context.followUpCompanion
+  const withFollowUp = context.followUpCompanion
     ? `${baseRoleSystemPrompt}\n\n${FOLLOW_UP_GUIDANCE}`
     : baseRoleSystemPrompt
+  // Bug-triage (phase G): when a prior `repro-test` step ran, augment the CODER's prompt with
+  // BUG_FIX_GUIDANCE — fix the reported issue, don't merely make the reproduction test pass.
+  // `bugFixGuidanceFor` returns '' for every other kind / when no repro-test preceded, so this
+  // is a no-op everywhere else.
+  const bugFix = bugFixGuidanceFor(context)
+  const roleSystemPrompt = bugFix ? `${withFollowUp}\n\n${bugFix}` : withFollowUp
 
   // A registered (custom or migrated) kind that declares an `agent` step dispatches
   // through the generic, manifest-driven `agent` harness kind — no per-kind case here.
@@ -186,6 +193,26 @@ export function buildKindBody(
 }
 
 /**
+ * Forward a kind's structured-output spec into the harness job body as a spreadable
+ * `{ output: {...} }` (or `{}` when the kind isn't structured). Shared by BOTH coding-surface
+ * kinds (a structured `container-coding` kind like `repro-test`, whose deliverable is a JSON
+ * outcome alongside its pushed commit) and explore-surface kinds — both parse the final reply the
+ * same way, so both forward the identical spec (the derived `shapeHint` plus the repair /
+ * fail-on-unusable flags). One source of truth so the two surfaces can't drift.
+ */
+function structuredOutputField(output: AgentStepSpec['output']): Record<string, unknown> {
+  if (output?.kind !== 'structured') return {}
+  return {
+    output: {
+      kind: 'structured',
+      ...(output.shapeHint ? { shapeHint: output.shapeHint } : {}),
+      ...(output.repair === false ? { repair: false } : {}),
+      ...(output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
+    },
+  }
+}
+
+/**
  * Build the generic `agent` job body for a registered kind from its declarative
  * {@link AgentStepSpec} — the single dispatch path that replaces the per-kind cases as
  * built-ins migrate. `container-explore` clones a branch read-only and returns prose
@@ -227,18 +254,27 @@ export function buildRegisteredAgentBody(
       title: `${context.block.title} (${context.pipelineName})`,
       body: prBody(context),
     }
+    // Whether this coding kind OPENS a PR: a work-branch coder does (unless it declares
+    // `opensPr: false` — a seed-only kind like `repro-test`, which pushes the failing test onto
+    // the work branch and lets the LATER coder open the one PR); an in-place fixer (`onPr`) never
+    // opens a new PR. Whether a no-op run is an ERROR: the implementer fails on a no-op, but an
+    // in-place fixer OR a kind that declares `noChangesTolerated` (repro-test conceding
+    // `not_reproducible`) treats it as a clean non-event.
+    const opensPr = !onPr && step.opensPr !== false
+    const noChangesIsError = !onPr && step.noChangesTolerated !== true
     // Multi-repo fan-out (service-connections phases 3–4): clone each connected involved-service
-    // repo as a sibling. The implementer (`!onPr`) opens the SAME work branch + an equivalent PR
-    // in each; the ci-fixer (`onPr`) RESUMES those same peer work branches to push fixes onto the
-    // existing peer PRs (no new PR — so no `pr` on its peer legs). The peer set is gated upstream
-    // to the coder + ci-fixer kinds (see MULTI_REPO_FANOUT_KINDS); the conflict-resolver never
-    // reaches here with peers set (it stays single-repo, targeting the one conflicted repo).
+    // repo as a sibling. A PR-opening implementer (`opensPr`) opens the SAME work branch + an
+    // equivalent PR in each; the ci-fixer (`onPr`) RESUMES those same peer work branches to push
+    // fixes onto the existing peer PRs, and a seed-only kind (`repro-test`) pushes the work branch
+    // per repo with no PR — so a peer leg carries `pr` only when this kind opens PRs. The peer set
+    // is gated upstream (see MULTI_REPO_FANOUT_KINDS / a registered kind's `fanOutMultiRepo`); the
+    // conflict-resolver never reaches here with peers set (it stays single-repo).
     const peerRepos = parts.peerRepos?.length
       ? parts.peerRepos.map((p) => ({
           repo: p.repo,
           ...(p.frameId ? { frameId: p.frameId } : {}),
           newBranch: workBranch,
-          ...(onPr ? {} : { pr }),
+          ...(opensPr ? { pr } : {}),
         }))
       : undefined
     return {
@@ -253,9 +289,14 @@ export function buildRegisteredAgentBody(
         branch: onPr ? (prBranch ?? repo.baseBranch) : repo.baseBranch,
         ...(onPr ? {} : { newBranch: workBranch }),
         pushBranch: onPr ? (prBranch ?? workBranch) : workBranch,
-        ...(onPr ? { noChangesIsError: false } : { pr }),
+        ...(opensPr ? { pr } : {}),
+        ...(noChangesIsError ? {} : { noChangesIsError: false }),
         ...(peerRepos ? { peerRepos } : {}),
         ...(step.clone?.full ? { full: true } : {}),
+        // A structured coding kind (repro-test) returns a JSON outcome alongside its pushed
+        // commit; forward the output spec so the harness parses the final reply into `custom`
+        // (same shape the explore branch sends). Absent for the plain coder/fixers.
+        ...structuredOutputField(step.output),
         // The Coder (follow-up companion enabled) streams forward-looking items out via the
         // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
@@ -289,16 +330,7 @@ export function buildRegisteredAgentBody(
       branch: exploreBranch,
       ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(step.clone?.full ? { full: true } : {}),
-      ...(step.output?.kind === 'structured'
-        ? {
-            output: {
-              kind: 'structured',
-              ...(step.output.shapeHint ? { shapeHint: step.output.shapeHint } : {}),
-              ...(step.output.repair === false ? { repair: false } : {}),
-              ...(step.output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
-            },
-          }
-        : {}),
+      ...structuredOutputField(step.output),
       ...webTools,
     },
   }
