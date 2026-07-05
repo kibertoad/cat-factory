@@ -490,36 +490,36 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    # SHARDED across 2 jobs via vitest's --shard (deterministic file partition), mirroring the
+    # SHARDED across 3 jobs via vitest's --shard (deterministic file partition), mirroring the
     # `test-worker` / `test-e2e` sharding. The Postgres-backed lane grew when the mothership-mode
     # conformance config was added (the local suite now also runs the shared suite against a
-    # remote-RPC backend), so sharding keeps wall-clock roughly flat. Each shard is its own job, so
-    # the Postgres service below is instantiated per shard — a fresh, private datastore each — and
-    # the harness still gives each vitest worker its own database within a shard.
+    # remote-RPC backend); 3 shards keep this lane off the blocking-path pole (each shard runs
+    # node-server then local-server sequentially, so its test step is the sum of both slices).
+    # Each shard is its own job, so the Postgres container below is started per shard — a fresh,
+    # private datastore each — and the harness still gives each vitest worker its own database
+    # within a shard.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cat_factory_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        shard: [1, 2, 3]
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      # Start Postgres in the BACKGROUND instead of a `services:` container: the service
+      # block's image pull + health check ran serially before the job's first step (~20s),
+      # whereas backgrounding it here hides that entirely behind setup + build. The
+      # readiness wait below gates the test step. Fully job-private, exactly like the
+      # service container was (each shard is its own runner VM).
+      - name: Start Postgres (background)
+        run: |
+          nohup bash -c 'docker run -d --name ci-postgres \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=cat_factory_test \
+            -p 5432:5432 postgres:18' > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -529,14 +529,32 @@ jobs:
       - name: Build libraries
         run: pnpm build
 
+      # Probe over TCP (-h 127.0.0.1) rather than the default unix socket: postgres's init
+      # sequence runs a temporary socket-only server, so a socket probe reports ready
+      # during init and races the real server's restart; TCP only answers once the final
+      # server is up. `docker exec` simply fails while the image is still pulling — the
+      # loop tolerates that.
+      - name: Wait for Postgres
+        run: |
+          for _ in $(seq 1 90); do
+            if docker exec ci-postgres pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/postgres-start.log" || true
+          docker logs ci-postgres || true
+          echo "::error::Postgres did not become ready"
+          exit 1
+
       # Node + Local share this one Postgres server; the harness gives each vitest worker
       # its own database (`<base>_node_<id>` / `<base>_local_<id>` / `<base>_mship_<id>`), so the
       # two facades, the mothership-mode config, and their parallel workers never collide. Each
       # package's spec files are partitioned across the shards by vitest's --shard.
-      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/2)
+      - name: Run Postgres-backed suites (shard ${{ matrix.shard }}/3)
         run: |
-          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/2
-          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/2
+          pnpm --filter @cat-factory/node-server exec vitest run --shard=${{ matrix.shard }}/3
+          pnpm --filter @cat-factory/local-server exec vitest run --shard=${{ matrix.shard }}/3
 
   # Playwright e2e: the real SPA against a real Node backend (real Postgres + real
   # WebSocket) with only the external deps faked (see backend/internal/e2e). Needs the
@@ -555,7 +573,7 @@ jobs:
   #
   # SHARDED across 3 jobs via Playwright's --shard (deterministic file partition), mirroring
   # the `test-worker` vitest sharding above. Each shard is its own job, so the Postgres
-  # service below is instantiated per shard — every shard gets a fresh, private datastore,
+  # container below is started per shard — every shard gets a fresh, private datastore,
   # which keeps the serial `workers: 1` config valid within a shard. Each shard emits a
   # `blob` report; the `test-e2e-report` job merges them into one HTML report. (Bumped 2 → 3
   # as the spec count grew — each shard runs its files serially, so more shards keeps the
@@ -573,26 +591,22 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: cat_factory_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      # Background Postgres boot, same rationale + shape as `test-db` above: hide the
+      # image pull behind setup/build/browser-install; the wait below gates the tests
+      # (Playwright's webServer boots the backend, whose migrate() is the first DB touch).
+      - name: Start Postgres (background)
+        run: |
+          nohup bash -c 'docker run -d --name ci-postgres \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=cat_factory_test \
+            -p 5432:5432 postgres:18' > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       - name: Setup pnpm + Node + install
         uses: ./.github/actions/setup
@@ -614,6 +628,20 @@ jobs:
 
       - name: Install Playwright Chromium
         run: pnpm --filter @cat-factory/e2e exec playwright install --with-deps chromium
+
+      # TCP probe, not the unix socket — see the `test-db` wait step for why.
+      - name: Wait for Postgres
+        run: |
+          for _ in $(seq 1 90); do
+            if docker exec ci-postgres pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/postgres-start.log" || true
+          docker logs ci-postgres || true
+          echo "::error::Postgres did not become ready"
+          exit 1
 
       - name: Run e2e shard
         run: pnpm --filter @cat-factory/e2e exec playwright test --shard=${{ matrix.shard }}/3
