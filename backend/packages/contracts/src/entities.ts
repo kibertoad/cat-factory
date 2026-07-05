@@ -850,6 +850,13 @@ export const agentFailureSchema = v.object({
   occurredAt: v.number(),
   /** Last subtask counts seen before the failure, for context (null if none). */
   lastSubtasks: v.nullable(stepSubtasksSchema),
+  /**
+   * Index of the pipeline step that was in flight when the run failed (the run's
+   * `currentStep` at fail time), so the per-attempt failure trail can be attributed to a
+   * specific step — the step-detail overlay filters its "execution history" to the failures
+   * recorded for that step. Absent on a bootstrap failure (no steps) and on legacy records.
+   */
+  stepIndex: v.optional(v.number()),
 })
 export type AgentFailure = v.InferOutput<typeof agentFailureSchema>
 

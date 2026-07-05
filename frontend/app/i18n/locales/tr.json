@@ -963,6 +963,8 @@
       "companionCapDetail": "Bir otomatik yeniden çalışma turu daha yapın, mevcut çıktıyı kabul ederek sonraki adıma geçin ya da durup görevi sıfırlayarak girdileri düzenleyip yeniden gönderin.",
       "infraAttempts": "Altyapı denemeleri",
       "hideInfraAttempts": "Altyapı denemelerini gizle",
+      "executionHistory": "Yürütme geçmişi",
+      "hideExecutionHistory": "Yürütme geçmişini gizle",
       "editingConclusions": "Sonuçlar düzenleniyor",
       "editConclusionsPlaceholder": "Aracının sonuçlarını düzenleyin; düzenlemeleriniz onayladığınızda kaydedilir…",
       "noProseOutput": "Bu aracı herhangi bir metin çıktısı üretmedi.",

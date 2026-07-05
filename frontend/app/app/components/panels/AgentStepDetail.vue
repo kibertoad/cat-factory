@@ -11,6 +11,7 @@ import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBind
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
+import FailureHistoryList from '~/components/board/FailureHistoryList.vue'
 import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
@@ -83,6 +84,19 @@ const runNotes = computed(() => (isFrontendFrame.value ? (instance.value?.notes 
 // executionId filter visible — most useful when the run failed to start a container.
 const showProvisioning = ref(false)
 const executionId = computed(() => instance.value?.id ?? null)
+
+// This step's own "execution history": the run-level failure trail narrowed to the failures
+// recorded for THIS step (each carries the `stepIndex` it failed at). Includes the current
+// failure when the run is presently failed at this step (it moves into `failureHistory` only on
+// the next retry). Revealed behind a toggle, mirroring the infra-attempts drawer above.
+const stepFailures = computed(() => {
+  const idx = ctx.value?.stepIndex
+  if (idx == null) return []
+  const trail = [...(instance.value?.failureHistory ?? [])]
+  if (instance.value?.failure) trail.push(instance.value.failure)
+  return trail.filter((f) => f.stepIndex === idx)
+})
+const showHistory = ref(false)
 
 // A failed run is no longer executing: a step left mid-flight (state still
 // `working`, no `finishedAt`) must stop looking live — no ticking clock, no
@@ -188,6 +202,8 @@ watch(
   () => {
     prose.reset()
     approval.resetForStep()
+    // Collapse the per-step execution history so reopening a different step starts clean.
+    showHistory.value = false
   },
 )
 
@@ -420,6 +436,35 @@ async function copyOutput() {
                   class="mt-2"
                   :execution-id="executionId"
                   :live="runLive"
+                />
+              </div>
+
+              <!-- this step's failure trail (the run-level history narrowed to this step),
+                   behind a toggle — mirrors the "previous errors" history on the task inspector
+                   but scoped to the step the user is looking at -->
+              <div v-if="stepFailures.length">
+                <UButton
+                  :icon="showHistory ? 'i-lucide-chevron-up' : 'i-lucide-history'"
+                  variant="ghost"
+                  size="xs"
+                  data-testid="step-execution-history-toggle"
+                  @click="
+                    () => {
+                      showHistory = !showHistory
+                    }
+                  "
+                >
+                  {{
+                    showHistory
+                      ? t('panels.stepDetail.hideExecutionHistory')
+                      : t('panels.stepDetail.executionHistory')
+                  }}
+                </UButton>
+                <FailureHistoryList
+                  v-if="showHistory"
+                  class="mt-2"
+                  :failures="stepFailures"
+                  data-testid="step-execution-history"
                 />
               </div>
 

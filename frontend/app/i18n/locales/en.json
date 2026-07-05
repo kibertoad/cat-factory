@@ -1006,6 +1006,8 @@
       "companionCapDetail": "Do one more automatic rework round, proceed to the next step accepting the current output, or stop and reset the task so you can edit the inputs and resubmit.",
       "infraAttempts": "Infrastructure attempts",
       "hideInfraAttempts": "Hide infrastructure attempts",
+      "executionHistory": "Execution history",
+      "hideExecutionHistory": "Hide execution history",
       "editingConclusions": "Editing the conclusions",
       "editConclusionsPlaceholder": "Edit the agent's conclusions; your edits are saved when you approve…",
       "noProseOutput": "This agent produced no prose output.",
