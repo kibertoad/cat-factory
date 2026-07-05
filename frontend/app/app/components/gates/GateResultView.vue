@@ -12,6 +12,7 @@ import StepRestartControl from '~/components/panels/StepRestartControl.vue'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import AttemptEntryHeader from '~/components/panels/AttemptEntryHeader.vue'
 import GateFailingCheckList from '~/components/gates/GateFailingCheckList.vue'
+import CopyButton from '~/components/common/CopyButton.vue'
 
 const board = useBoardStore()
 const execution = useExecutionStore()
@@ -252,12 +253,15 @@ const conflictVerdict = computed(() => {
                     <template v-else> {{ t('gates.humanReview.suffixAwaiting') }}</template>
                   </span>
                 </div>
-                <p
+                <div
                   v-if="gate.lastFailureSummary"
-                  class="mt-2 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] leading-relaxed text-slate-300"
+                  class="relative mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
                 >
-                  {{ gate.lastFailureSummary }}
-                </p>
+                  <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
+                  <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
+                    {{ gate.lastFailureSummary }}
+                  </p>
+                </div>
                 <a
                   v-if="prUrl"
                   :href="prUrl"
@@ -330,12 +334,15 @@ const conflictVerdict = computed(() => {
                 <!-- GitHub's API reports mergeability as a single bit (no file list), but the
                      conflict resolver discovers the conflicting files in the container and
                      reports them back — surface that account here. -->
-                <p
+                <div
                   v-if="gate.lastFailureSummary"
-                  class="mt-2 whitespace-pre-wrap rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2 text-[12px] leading-relaxed text-slate-300"
+                  class="relative mt-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
                 >
-                  {{ gate.lastFailureSummary }}
-                </p>
+                  <CopyButton :text="gate.lastFailureSummary" class="absolute end-1 top-1" />
+                  <p class="whitespace-pre-wrap pe-8 text-[12px] leading-relaxed text-slate-300">
+                    {{ gate.lastFailureSummary }}
+                  </p>
+                </div>
                 <a
                   v-if="prUrl"
                   :href="prUrl"

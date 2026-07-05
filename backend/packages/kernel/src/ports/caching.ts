@@ -1,3 +1,5 @@
+import type { GitHubRepo } from '../domain/types.js'
+import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 
 // ---------------------------------------------------------------------------
@@ -54,6 +56,29 @@ export interface GroupCacheHandle<T> {
 export interface AppCaches {
   /** The merged per-workspace prompt-fragment catalog, grouped by workspace id. */
   fragmentCatalog: GroupCacheHandle<ResolvedCatalogEntry[]>
+  /**
+   * The live body of a document-backed prompt fragment (the external
+   * Confluence/Notion/GitHub/… page), grouped by the workspace whose connection
+   * fetches it and keyed by `<source>:<externalId>`. A self-verifying cache: an
+   * entry entering its refresh window runs the source's cheap version probe and
+   * keeps its cached body when the page hasn't moved, so an agent run reads a
+   * fragment body without blocking on a live page fetch. Explicit writes (a
+   * fragment refresh/edit) invalidate it directly.
+   */
+  fragmentDocumentBody: GroupCacheHandle<DocumentContent>
+  /**
+   * The workspace's GitHub repo projection (`repoProjectionRepository.list`),
+   * grouped AND keyed by workspace id — the whole-projection re-list the
+   * block→repo resolver (`buildResolveRepoTarget`) runs on every agent dispatch and
+   * every durable poll tick (docs/initiatives/caching-layer.md slice 3). Coherence
+   * is invalidation-driven: every projection write (GitHub sync/webhook tombstone,
+   * repo link/monorepo-flag, bootstrap projection) drops the workspace group after
+   * the write commits. The installation lookup and the (tree-depth-bounded) block
+   * ancestry walk stay live, so a reparent or service repo-link change needs no
+   * invalidation. Pass-through on the Worker's isolate-safe profile (our own mutable
+   * D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
+   */
+  repoProjection: GroupCacheHandle<GitHubRepo[]>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }

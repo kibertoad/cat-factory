@@ -1,5 +1,129 @@
 # @cat-factory/agents
 
+## 0.33.1
+
+### Patch Changes
+
+- Updated dependencies [1f6d9fc]
+  - @cat-factory/kernel@0.85.0
+
+## 0.33.0
+
+### Minor Changes
+
+- 8eaa3f2: Universal writing-style fragments for document-authoring tasks (WS2 of the
+  documentation-type task initiative). Two built-in fragments — `style.anti-llmisms`
+  (cut the machine-written tells: filler intensifiers, hedging, throat-clearing,
+  summary-that-restates, bullet inflation) and `style.concise-actionable` (lead with
+  the point, active voice, one idea per paragraph, every recommendation names an actor
+  and an action) — now guide the document-authoring agents.
+
+  They reach those agents through a new `doc-aware` capability trait, the document
+  analogue of `code-aware`: the `doc-researcher` / `doc-outliner` / `doc-writer` /
+  `doc-finalizer` kinds carry it on their definitions and the `doc-reviewer` companion
+  carries it too, so the execution engine folds the block's selected style fragments
+  into each one's system prompt via the same `AgentContextBuilder` path `code-aware`
+  uses — no parallel fragment path in the prompt builders. Because the reviewer sees
+  the same bodies, the style guidance is both the writer's instruction and the
+  reviewer's criteria (an explicit clause in the companion prompt says so).
+
+  A new document task is pre-seeded with both style fragments (default-on,
+  user-removable like any block pin) via `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, seeded
+  onto the task's `fragmentIds` in `BoardService.addTask` — the selection default lives
+  at task creation, not hard-coded in a prompt.
+
+  The fragment "add" pickers (service, task, and workspace-default) now render their
+  options as labelled per-category sections instead of one flat list, so the catalog
+  stays navigable now that a block can pin across two tracks at once — the technical
+  collections (Node / React / …) and the Writing-style fragments.
+
+### Patch Changes
+
+- Updated dependencies [8eaa3f2]
+  - @cat-factory/prompt-fragments@0.10.0
+
+## 0.32.0
+
+### Minor Changes
+
+- e5ddaa4: Cache document-backed prompt-fragment bodies through the app caching seam
+  (caching-layer initiative, slice 2). A new `AppCaches.fragmentDocumentBody`
+  group cache serves a living fragment's external Confluence/Notion/GitHub/Figma/
+  Zeplin/Linear body, replacing the hand-rolled `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS`
+  in `FragmentLibraryService`: a run reads the cached body instead of blocking on a
+  live page fetch, and an entry entering its refresh window runs the source's cheap
+  version probe — keeping the cached body when the page hasn't moved, reloading in
+  the background when it has.
+
+  To support the probe, `DocumentContent` now carries an opaque `version` token and
+  `DocumentSourceProvider`/`DocumentContentResolver` gain a `probeVersion` method
+  (metadata-only, strictly cheaper than a full fetch), implemented across all
+  document providers. The self-verifying cache stays enabled on the Cloudflare
+  Worker (bounded staleness via the probe), unlike the mutable-state fragment
+  catalog.
+
+  Behavior change (pre-1.0, no back-compat): the durable `prompt_fragments.body` is
+  now the offline fallback + management-view content, refreshed only by an explicit
+  create/refresh; the live run-time body flows through the cache. Without a cache
+  wired, a run serves the persisted body and does not re-resolve live.
+
+- 6213771: Add a per-`DocKind` document template registry (WS1 of the documentation-type task
+  initiative). Each document kind now carries a structured template — required and optional
+  sections with per-section authoring guidance — that is the single source of truth for the
+  kind's expected shape. The templates are woven into the `doc-outliner` prompt (the outline
+  must cover the required sections) and the `doc-writer` prompt (start from the rendered
+  skeleton), replacing the previous one-line structure hint. A deployment can override a
+  kind's template through the public `registerDocTemplate` seam (an import side effect,
+  mirroring `registerPromptFragment`).
+
+### Patch Changes
+
+- Updated dependencies [e5ddaa4]
+  - @cat-factory/kernel@0.84.0
+
+## 0.31.0
+
+### Minor Changes
+
+- 9bac054: Caching initiative pilot (docs/initiatives/caching-layer.md, rows 0-1): introduce the
+  app-level caching seam and adopt it for the per-dispatch fragment-catalog resolve.
+
+  - New published package `@cat-factory/caching`: `createAppCaches(options)` builds the
+    named, typed in-memory read-through caches (layered-loader `GroupLoader`, LRU + TTL)
+    behind the new kernel `AppCaches`/`GroupCacheHandle` port. Redis is only ever an
+    invalidation bus, never a data tier; with no notification factory injected the
+    loaders are bare in-memory. The package deep-imports only layered-loader's in-memory
+    machinery so ioredis never enters the module graph outside the Node facade's
+    REDIS_URL-gated wiring.
+  - `FragmentLibraryService.resolveCatalog` now reads through the fragment-catalog cache
+    (group = workspace id), and every fragment write path — create / update / remove /
+    createFromDocument / refresh / the run-time document-body re-resolve / fragment-source
+    sync + unlink — invalidates it after commit (`invalidateCatalogTier`). The
+    `ResolvedCatalogEntry` type moved to `@cat-factory/kernel` so the port can name it.
+  - Node facade: `start()` builds the process-wide cache bag; when `REDIS_URL` is set,
+    each cache gets its own `cat-factory:cache:<name>` notification channel (prefix
+    overridable via the new `REDIS_CACHE_CHANNEL_PREFIX` env var) over dedicated
+    ioredis publisher/subscriber clients, so peers drop their in-memory entries on every
+    write — the same gating and resilience pattern as the realtime propagator. Local
+    mode stays bare in-memory (single-node by construction).
+  - Cloudflare Worker: wired with the ISOLATE-SAFE profile — the fragment catalog (mutable
+    cross-instance state) is pass-through, since an isolate has no cross-isolate
+    invalidation bus. Documented in the caching package README.
+  - Conformance: new `defineCacheSuite` asserts write-then-read coherence of the resolved
+    catalog on all three runtimes (Worker/Node/local).
+  - Staleness probes for the upcoming git-backed slices, on layered-loader 14.5.3's new
+    in-memory `isEntryStillCurrentFn` support: a cache profile may set
+    `ttlLeftBeforeRefreshInMsecs`, and `GroupCacheHandle.get` accepts an optional per-read
+    `isStillCurrent` probe — entries entering the refresh window get their TTL bumped when
+    the probe reports the source unmoved, and fall back to a full background reload
+    otherwise. `layered-loader` (maintainer-owned) is now excluded unversioned from the
+    `minimumReleaseAge` supply-chain gate, like the `@cat-factory/*` namespace.
+
+### Patch Changes
+
+- Updated dependencies [9bac054]
+  - @cat-factory/kernel@0.83.0
+
 ## 0.30.5
 
 ### Patch Changes

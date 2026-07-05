@@ -3,7 +3,9 @@ import { universalFragments } from '@cat-factory/prompt-fragments'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
+  DocumentContent,
   DocumentContentResolver,
+  DocumentSourceKind,
   FragmentOwnerKind,
   ResolvedFragment,
   UpdatePromptFragmentInput,
@@ -27,9 +29,6 @@ import {
 } from './fragment-catalog.js'
 import { slugFromPath } from './fragment-source.logic.js'
 
-/** Default freshness window for a document-backed fragment's live body (5 min). */
-export const DEFAULT_DOCUMENT_FRAGMENT_TTL_MS = 5 * 60 * 1000
-
 export interface FragmentLibraryServiceDependencies {
   promptFragmentRepository: PromptFragmentRepository
   workspaceRepository: WorkspaceRepository
@@ -50,8 +49,6 @@ export interface FragmentLibraryServiceDependencies {
    * uses each entry's last-resolved `body` unchanged.
    */
   documentContentResolver?: DocumentContentResolver
-  /** Freshness window for a document-backed body; defaults to {@link DEFAULT_DOCUMENT_FRAGMENT_TTL_MS}. */
-  documentFragmentTtlMs?: number
   /**
    * Read-through cache for the merged tenant catalog (`AppCaches.fragmentCatalog`,
    * docs/initiatives/caching-layer.md slice 1), grouped by workspace id. This
@@ -60,6 +57,18 @@ export interface FragmentLibraryServiceDependencies {
    * construction) ⇒ every resolve loads from the repositories.
    */
   catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
+  /**
+   * Read-through cache for a document-backed fragment's live external body
+   * (`AppCaches.fragmentDocumentBody`, docs/initiatives/caching-layer.md slice 2),
+   * grouped by the connection workspace and keyed per document. Self-verifying: an
+   * entry entering its refresh window runs the source's cheap version probe and
+   * keeps the cached body when the page hasn't moved, so a run reads the body
+   * without blocking on a live page fetch. Absent (direct test construction) ⇒ a
+   * run serves the last-persisted body and does NOT re-resolve live (the durable
+   * `prompt_fragments.body`, refreshed only by an explicit create/refresh, is the
+   * fallback).
+   */
+  documentBodyCache?: GroupCacheHandle<DocumentContent>
 }
 
 /**
@@ -78,8 +87,8 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly selector: FragmentSelector
   private readonly builtinsOverride?: PromptFragment[]
   private readonly documentResolver?: DocumentContentResolver
-  private readonly ttlMs: number
   private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
+  private readonly documentBodyCache?: GroupCacheHandle<DocumentContent>
 
   constructor(deps: FragmentLibraryServiceDependencies) {
     this.repo = deps.promptFragmentRepository
@@ -88,8 +97,8 @@ export class FragmentLibraryService implements FragmentResolver {
     this.selector = deps.selector ?? new DeterministicFragmentSelector()
     this.builtinsOverride = deps.builtins
     this.documentResolver = deps.documentContentResolver
-    this.ttlMs = deps.documentFragmentTtlMs ?? DEFAULT_DOCUMENT_FRAGMENT_TTL_MS
     this.catalogCache = deps.catalogCache
+    this.documentBodyCache = deps.documentBodyCache
   }
 
   /**
@@ -190,6 +199,7 @@ export class FragmentLibraryService implements FragmentResolver {
     }
     await this.repo.upsert(record)
     await this.invalidateCatalogTier(ownerKind, ownerId)
+    await this.invalidateDocumentBody(record)
     return recordToWire(record)
   }
 
@@ -234,6 +244,7 @@ export class FragmentLibraryService implements FragmentResolver {
     }
     await this.repo.upsert(next)
     await this.invalidateCatalogTier(ownerKind, ownerId)
+    await this.invalidateDocumentBody(next)
     return recordToWire(next)
   }
 
@@ -289,6 +300,7 @@ export class FragmentLibraryService implements FragmentResolver {
     }
     await this.repo.upsert(next)
     await this.invalidateCatalogTier(ownerKind, ownerId)
+    await this.invalidateDocumentBody(next)
     return recordToWire(next)
   }
 
@@ -303,6 +315,7 @@ export class FragmentLibraryService implements FragmentResolver {
     if (existing) {
       await this.repo.softDelete(ownerKind, ownerId, fragmentId, now)
       await this.invalidateCatalogTier(ownerKind, ownerId)
+      await this.invalidateDocumentBody(existing)
       return
     }
     await this.repo.upsert({
@@ -456,9 +469,14 @@ export class FragmentLibraryService implements FragmentResolver {
   }
 
   /**
-   * The live body for a document-backed catalog entry: re-fetch from the source
-   * when stale (and the resolver is wired), persisting the refresh; otherwise the
-   * cached body. Never throws — a failed fetch degrades to the cached body.
+   * The live body for a document-backed catalog entry, served through the
+   * document-body cache: on a cache miss it fetches from the source; an entry
+   * entering its refresh window runs the source's cheap version probe and keeps the
+   * cached body when the page hasn't moved (else a background reload). The read
+   * never blocks on a live fetch once warm, and a failed fetch degrades to the
+   * entry's last-persisted `body`. Without a cache wired the live re-resolve is
+   * off — the durable persisted body (refreshed only by an explicit create/refresh)
+   * is served as-is, since the freshness mechanism lives in the cache.
    */
   private async resolveDocumentBody(
     workspaceId: string,
@@ -466,40 +484,59 @@ export class FragmentLibraryService implements FragmentResolver {
   ): Promise<string> {
     const ref = entry.documentRef
     if (!ref || !this.documentResolver || entry.tier === 'builtin') return entry.body
-    const now = this.clock.now()
-    const fresh = entry.resolvedAt !== null && now - entry.resolvedAt < this.ttlMs
-    if (fresh) return entry.body
-    const ownerId =
-      entry.tier === 'account' ? await this.workspaces.accountOf(workspaceId) : workspaceId
-    if (!ownerId) return entry.body
-    // Re-read through the connection the fragment was linked/refreshed with — for an
-    // account-tier fragment that is a fixed workspace, not whichever workspace the run
-    // happens to be in (which may have no connection to this source). Pre-existing rows
-    // with no recorded workspace degrade to the run's own.
-    const viaWorkspaceId = entry.docViaWorkspaceId ?? workspaceId
+    if (!this.documentBodyCache) return entry.body
+    const resolver = this.documentResolver
+    // The connection workspace the body is cached + invalidated under. For a
+    // workspace-tier fragment that is its owning workspace (== the run's own). For an
+    // account-tier fragment it MUST be the recorded connection workspace, NOT the run's:
+    // the run can be any of the account's workspaces, so keying on it would fan the same
+    // document across N groups a later edit could never all invalidate. A legacy account
+    // row with none recorded can't be keyed stably, so it serves the durable persisted
+    // body — matching `invalidateDocumentBody`, which also skips it (best-effort).
+    const via = entry.docViaWorkspaceId ?? (entry.tier === 'account' ? null : workspaceId)
+    if (!via) return entry.body
     try {
-      const content = await this.documentResolver.fetch(viaWorkspaceId, ref.source, ref.externalId)
-      const existing = await this.repo.get(entry.tier, ownerId, entry.id)
-      if (existing) {
-        await this.repo.upsert({
-          ...existing,
-          title: content.title,
-          summary: buildExcerpt(content.body),
-          body: content.body,
-          docExternalId: content.externalId,
-          resolvedAt: now,
-          updatedAt: now,
-        })
-        // The cached catalog still carries the pre-refresh body + resolvedAt;
-        // without this, every subsequent run would re-fetch the document until
-        // the entry expired.
-        await this.invalidateCatalogTier(entry.tier, ownerId)
-      }
+      const content = await this.documentBodyCache.get(
+        documentBodyKey(ref.source, ref.externalId),
+        via,
+        () => resolver.fetch(via, ref.source, ref.externalId),
+        async (cached) => {
+          // An empty version token means the source exposes no version to compare, so the
+          // probe can't confirm freshness — treat it as stale so the entry falls through
+          // to a real reload (bounded by the TTL) instead of being pinned forever.
+          if (!cached.version) return false
+          return (await resolver.probeVersion(via, ref.source, ref.externalId)) === cached.version
+        },
+      )
       return content.body
     } catch {
       return entry.body // source unreachable → last-resolved body keeps the run going
     }
   }
+
+  /**
+   * Drop a document-backed fragment's cached live body after an explicit write
+   * (create/refresh/edit/remove) so the next run re-resolves it immediately rather
+   * than waiting out the refresh window. Best-effort: the cache is self-verifying
+   * via the version probe, so a group we can't resolve (a legacy row with no
+   * recorded connection workspace) simply relies on the probe/TTL instead. Peers
+   * drop their entry via the notification bus.
+   */
+  private async invalidateDocumentBody(record: PromptFragmentRecord): Promise<void> {
+    if (!this.documentBodyCache || !record.docSource || record.docExternalId === null) return
+    const via =
+      record.docViaWorkspaceId ?? (record.ownerKind === 'workspace' ? record.ownerId : null)
+    if (!via) return
+    await this.documentBodyCache.invalidate(
+      documentBodyKey(record.docSource, record.docExternalId),
+      via,
+    )
+  }
+}
+
+/** The document-body cache key: one entry per source document, within a workspace group. */
+function documentBodyKey(source: DocumentSourceKind, externalId: string): string {
+  return `${source}:${externalId}`
 }
 
 function recordToWire(record: PromptFragmentRecord): PromptFragment {

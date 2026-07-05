@@ -64,6 +64,17 @@ describe('BoardService document-repository task gating', () => {
     expect(task.taskType).toBe('document')
   })
 
+  it('pre-selects the writing-style fragments on a new document task (default-on)', async () => {
+    // A document task starts with the universal style fragments pinned so the `doc-aware`
+    // authoring/review kinds fold them in by default; the user can remove them like any pin.
+    const service = build('document')
+    const task = await service.addTask(WS, 'frame_docs', {
+      title: 'Write the RFC',
+      taskType: 'document',
+    })
+    expect(task.fragmentIds).toEqual(['style.anti-llmisms', 'style.concise-actionable'])
+  })
+
   it('accepts a spike task under a document repository', async () => {
     const service = build('document')
     const task = await service.addTask(WS, 'frame_docs', {
@@ -71,6 +82,8 @@ describe('BoardService document-repository task gating', () => {
       taskType: 'spike',
     })
     expect(task.taskType).toBe('spike')
+    // A non-document task carries no default style pins.
+    expect(task.fragmentIds).toBeUndefined()
   })
 
   it('still accepts a feature task under a normal service frame', async () => {
@@ -80,6 +93,7 @@ describe('BoardService document-repository task gating', () => {
       taskType: 'feature',
     })
     expect(task.taskType).toBe('feature')
+    expect(task.fragmentIds).toBeUndefined()
   })
 })
 

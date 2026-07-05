@@ -10,7 +10,9 @@ import { LinearGraphqlClient, linearAuthFromCredentials } from '../shared/linear
 import {
   LINEAR_DOCS_DESCRIPTOR,
   LINEAR_DOCUMENT_QUERY,
+  LINEAR_DOCUMENT_VERSION_QUERY,
   LINEAR_DOCUMENTS_SEARCH_QUERY,
+  linearDocumentVersion,
   mapLinearDocument,
   mapLinearDocumentSearch,
   parseLinearDocRef,
@@ -52,6 +54,19 @@ export class LinearDocumentProvider implements DocumentSourceProvider {
       document?: Parameters<typeof mapLinearDocument>[0]['document']
     }>(LINEAR_DOCUMENT_QUERY, { id: externalId })
     return mapLinearDocument(data)
+  }
+
+  /**
+   * The cheap version probe: query only the document's `updatedAt`, skipping the
+   * (potentially large) `content` field a full fetch downloads.
+   */
+  async probeVersion(credentials: DocumentCredentials, externalId: string): Promise<string> {
+    const client = new LinearGraphqlClient(linearAuthFromCredentials(credentials))
+    const data = await client.query<{ document?: { updatedAt?: string | null } | null }>(
+      LINEAR_DOCUMENT_VERSION_QUERY,
+      { id: externalId },
+    )
+    return linearDocumentVersion(data)
   }
 
   async search(credentials: DocumentCredentials, query: string): Promise<DocumentSearchResult[]> {

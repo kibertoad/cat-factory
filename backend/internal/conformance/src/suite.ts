@@ -1552,7 +1552,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
 
           const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
             name: 'Code + document',
-            agentKinds: ['coder', 'documenter'],
+            agentKinds: ['coder', 'documenter', 'doc-outliner'],
           })
           const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
             pipelineId: pipeline.body.id,
@@ -1565,7 +1565,13 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
           expect(coder.output).toContain('[frags]test.svc-standard[/frags]')
           expect(coder.selectedFragmentIds).toEqual(['test.svc-standard'])
 
-          // The documenter is neither code-aware nor spec-aware: no service fragments.
+          // The doc-outliner is `doc-aware`: it folds the same service fragments (the
+          // document writing-style path is the doc analogue of code-aware).
+          const outliner = exec.steps.find((s) => s.agentKind === 'doc-outliner')!
+          expect(outliner.output).toContain('[frags]test.svc-standard[/frags]')
+          expect(outliner.selectedFragmentIds).toEqual(['test.svc-standard'])
+
+          // The documenter is neither code-aware, doc-aware nor spec-aware: no fragments.
           const documenter = exec.steps.find((s) => s.agentKind === 'documenter')!
           expect(documenter.output).toContain('[frags][/frags]')
           expect(documenter.selectedFragmentIds ?? []).toEqual([])

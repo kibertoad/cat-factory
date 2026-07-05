@@ -70,9 +70,10 @@ function formatClock(ms?: number | null): string | null {
   return ms ? d(new Date(ms), 'long') : null
 }
 
+const { copy } = useCopyToClipboard()
 async function copyRunId() {
   const id = props.step.runId ?? props.instanceId
-  if (id) await navigator.clipboard?.writeText(id)
+  if (id) await copy(id)
 }
 </script>
 

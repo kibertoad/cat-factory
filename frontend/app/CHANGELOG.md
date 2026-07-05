@@ -1,5 +1,86 @@
 # @cat-factory/app
 
+## 0.87.5
+
+### Patch Changes
+
+- 8eaa3f2: Universal writing-style fragments for document-authoring tasks (WS2 of the
+  documentation-type task initiative). Two built-in fragments — `style.anti-llmisms`
+  (cut the machine-written tells: filler intensifiers, hedging, throat-clearing,
+  summary-that-restates, bullet inflation) and `style.concise-actionable` (lead with
+  the point, active voice, one idea per paragraph, every recommendation names an actor
+  and an action) — now guide the document-authoring agents.
+
+  They reach those agents through a new `doc-aware` capability trait, the document
+  analogue of `code-aware`: the `doc-researcher` / `doc-outliner` / `doc-writer` /
+  `doc-finalizer` kinds carry it on their definitions and the `doc-reviewer` companion
+  carries it too, so the execution engine folds the block's selected style fragments
+  into each one's system prompt via the same `AgentContextBuilder` path `code-aware`
+  uses — no parallel fragment path in the prompt builders. Because the reviewer sees
+  the same bodies, the style guidance is both the writer's instruction and the
+  reviewer's criteria (an explicit clause in the companion prompt says so).
+
+  A new document task is pre-seeded with both style fragments (default-on,
+  user-removable like any block pin) via `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, seeded
+  onto the task's `fragmentIds` in `BoardService.addTask` — the selection default lives
+  at task creation, not hard-coded in a prompt.
+
+  The fragment "add" pickers (service, task, and workspace-default) now render their
+  options as labelled per-category sections instead of one flat list, so the catalog
+  stays navigable now that a block can pin across two tracks at once — the technical
+  collections (Node / React / …) and the Writing-style fragments.
+
+## 0.87.4
+
+### Patch Changes
+
+- 633c4a9: UX papercuts (docs/initiatives/ux-papercuts.md): render agent prose as markdown and make
+  structured output copyable in the result-view surfaces (UX-43, UX-44 copy affordances).
+
+  - New shared `renderMarkdown()` reader (secure markdown-it, `html: false`, links decorated to
+    open safely in a new tab) + a reusable `common/MarkdownProse.vue` component that renders it
+    with the inspector's prose styling.
+  - The merger result view (rationale + pre-structured raw output), the consensus session window
+    (synthesis + round contributions), and the generic structured result view (prose summary) now
+    route their prose through `MarkdownProse` instead of a `whitespace-pre-wrap` plain-text dump,
+    so `**bold**`, lists, code, and links read as formatted prose — consistent with
+    `AgentStepDetail`'s reader.
+  - Copy affordances (the shared `common/CopyButton.vue`) added to the generic structured JSON
+    block and to the consensus synthesis + each round contribution, so a user can lift the
+    structured output without a manual select-all.
+
+## 0.87.3
+
+### Patch Changes
+
+- e73285e: UX papercuts (docs/initiatives/ux-papercuts.md): stop leaking raw internal identifiers into
+  the review and consensus windows (UX-36/37).
+
+  - The requirements- and clarity-review windows now render the reviewer's model through
+    `models.labelForRef(...)` (friendly `<label> · <provider>` label) instead of the raw
+    `provider:model` id, matching the pipeline step surfaces; it falls back to the bare ref when
+    the catalog hasn't loaded, so there is no regression.
+  - The consensus session window renders the step's `agentKind` through `agentKindMeta(...).label`
+    (a human title) instead of the raw enum, and each participant's model through
+    `models.labelForRef(...)` instead of the raw `modelId`.
+
+## 0.87.2
+
+### Patch Changes
+
+- 0d78224: UX papercuts (docs/initiatives/ux-papercuts.md): clipboard-feedback shared primitive
+  (UX-38/39).
+
+  - New `useCopyToClipboard()` composable wraps VueUse's `useClipboard` and always toasts the
+    outcome, only claiming success once the write actually landed — so a copy in an insecure
+    context or with a denied permission surfaces a failure toast instead of a silent no-op.
+  - All previously-silent copy handlers now route through it: `StepMetadataCard`/`StepRunMeta`
+    (run id), `AgentStepDetail` (raw output), `KubernetesEngineForm` (auto-setup command); the
+    origin pattern in `StepContainerStatus` is refactored onto the composable.
+  - New reusable `common/CopyButton.vue` (title + aria-label) makes error/detail surfaces
+    copyable: the failure stack-trace `<pre>` (`FailureDetail`, so both `AgentFailureCard` and
+    `AgentFailureHistory`), the consensus failure banner, and the gate failure summary.
+
 ## 0.87.1
 
 ### Patch Changes

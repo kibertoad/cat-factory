@@ -1,4 +1,10 @@
-import type { AppCaches, GroupCacheHandle, ResolvedCatalogEntry } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  DocumentContent,
+  GitHubRepo,
+  GroupCacheHandle,
+  ResolvedCatalogEntry,
+} from '@cat-factory/kernel'
 // Deep imports on purpose: layered-loader's root index eagerly requires its Redis
 // modules (and thereby `ioredis`), which must never load outside the Node facade's
 // REDIS_URL-gated notification wiring — the Worker imports this package too. The
@@ -47,6 +53,8 @@ export interface GroupCacheProfile {
 /** One profile entry per named cache in the kernel {@link AppCaches} bag. */
 export interface AppCachesProfile {
   fragmentCatalog: GroupCacheProfile
+  fragmentDocumentBody: GroupCacheProfile
+  repoProjection: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -54,17 +62,44 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // One merged catalog per workspace; the key varies only when the workspace's
   // account changes, so a small per-group bound is plenty.
   fragmentCatalog: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 500, maxItemsPerGroup: 4 },
+  // The live external body of a document-backed fragment, grouped by workspace and
+  // keyed per document. Self-verifying: an entry entering the last minute of its TTL
+  // runs the source's cheap version probe (bump on unchanged, background reload on
+  // change) so a run never blocks on a live page fetch.
+  fragmentDocumentBody: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 500,
+    maxItemsPerGroup: 64,
+    ttlLeftBeforeRefreshInMsecs: 60_000,
+  },
+  // One repo-projection list per workspace, keyed by workspace id (so exactly one
+  // entry per group). Invalidation-driven — no version probe (a DB read as the probe
+  // would cost as much as the DB read as the load).
+  repoProjection: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 1 },
 }
 
 /**
  * The Cloudflare Worker profile: every cache of mutable cross-instance state is
  * pass-through, because a Worker isolate has no cross-isolate invalidation bus
  * (and no Redis) — see the package README. Caches of immutable or self-verifying
- * entries (sha-pinned reads, static catalogs) may enable real TTLs here as later
- * slices add them.
+ * entries (sha-pinned reads, static catalogs) may enable real TTLs here.
+ *
+ * `fragmentDocumentBody` stays ENABLED here: its entries are external page content
+ * re-validated by a cheap version probe, so a peer isolate's cached body self-heals
+ * within the refresh window without an invalidation bus (the same reasoning that
+ * lets sha-pinned reads keep a TTL on the Worker) — its staleness is bounded by the
+ * probe, not indefinite. Only `fragmentCatalog`, which mirrors our own mutable D1
+ * state, must pass through.
  */
 export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   fragmentCatalog: { ...DEFAULT_APP_CACHES_PROFILE.fragmentCatalog, enabled: false },
+  fragmentDocumentBody: { ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody },
+  // Pass-through: the repo projection is our own mutable D1 state, and a Worker
+  // isolate has no cross-isolate invalidation bus (unlike `fragmentDocumentBody`,
+  // whose external entries self-verify via a version probe). So the Worker reads it
+  // live every time, exactly like `fragmentCatalog`.
+  repoProjection: { ...DEFAULT_APP_CACHES_PROFILE.repoProjection, enabled: false },
 }
 
 /**
@@ -208,10 +243,26 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.fragmentCatalog,
     options,
   )
+  const fragmentDocumentBody = buildGroupCache<DocumentContent>(
+    'fragment-document-body',
+    profile.fragmentDocumentBody,
+    options,
+  )
+  const repoProjection = buildGroupCache<GitHubRepo[]>(
+    'repo-projection',
+    profile.repoProjection,
+    options,
+  )
   return {
     fragmentCatalog,
+    fragmentDocumentBody,
+    repoProjection,
     close: async () => {
-      await fragmentCatalog.close()
+      await Promise.all([
+        fragmentCatalog.close(),
+        fragmentDocumentBody.close(),
+        repoProjection.close(),
+      ])
     },
   }
 }

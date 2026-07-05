@@ -939,6 +939,9 @@ function selectNodeRepoBootstrapper(deps: {
     typeof ContainerRepoBootstrapper
   >[0]['bootstrapJobRepository']
   repoRepository: ConstructorParameters<typeof ContainerRepoBootstrapper>[0]['repoRepository']
+  repoProjectionCache?: ConstructorParameters<
+    typeof ContainerRepoBootstrapper
+  >[0]['repoProjectionCache']
   githubClient: GitHubClient | undefined
   mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
@@ -959,6 +962,7 @@ function selectNodeRepoBootstrapper(deps: {
     installationRepository: deps.installationRepository,
     bootstrapJobRepository: deps.bootstrapJobRepository,
     repoRepository: deps.repoRepository,
+    ...(deps.repoProjectionCache ? { repoProjectionCache: deps.repoProjectionCache } : {}),
     githubClient: deps.githubClient,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
@@ -1530,6 +1534,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
     // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
     serviceRepository: repos.serviceRepository,
+    // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
+    // module + bootstrapper invalidate the same bag on every projection write.
+    repoProjectionCache: options.caches?.repoProjection,
   })
 
   // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
@@ -1969,6 +1976,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     installationRepository: githubInstallationRepository,
     bootstrapJobRepository,
     repoRepository: repoProjectionRepository,
+    ...(options.caches?.repoProjection
+      ? { repoProjectionCache: options.caches.repoProjection }
+      : {}),
     githubClient,
     mintInstallationToken: bootstrapMintInstallationToken,
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
