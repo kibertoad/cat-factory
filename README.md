@@ -128,6 +128,18 @@ deploy both halves on their end.
 | [`backend/packages/sandbox-fixtures`](./backend/packages/sandbox-fixtures)             | `@cat-factory/sandbox-fixtures`       | Hand-authored, graded no-repo fixtures (inline requirements/clarity/code-review/architecture inputs + expectations) the sandbox grades against.                                                                                                      |
 | [`backend/packages/cli`](./backend/packages/cli)                                       | `@cat-factory/cli`                    | Bootstrap CLI (`cat-factory init`): scaffolds a local-mode deployment on your machine — generates crypto secrets, mints a GitHub/GitLab PAT, writes gitignored `.env`. See [its README](./backend/packages/cli/README.md).                           |
 
+**AWS-stack packages** (opt-in) — three independent, capability-scoped AWS integrations, each
+registering into its own seam and sharing no dependencies, so a deployment pulls in only what it
+uses (and an all-AWS deployment composes all three):
+
+- [`@cat-factory/provider-bedrock`](./backend/packages/provider-bedrock) — Bedrock **LLM models**
+  (mixed into the `CompositeModelProvider`).
+- [`@cat-factory/provider-s3`](./backend/packages/provider-s3) — S3 **blob storage** (the kernel
+  `BinaryBlobBackend` port).
+- [`@cat-factory/eks`](./backend/packages/eks) — EKS **runner + environment backends**; see its
+  [README](./backend/packages/eks/README.md) for the design (AWS-SDK-free, WebCrypto SigV4 token
+  minting) and the floci integration-test setup.
+
 **Runtime facades** (one per deployment target; serve the same `@cat-factory/server` app):
 
 | Path                                                           | Package                     | Role                                                                                                                                                                                                                 |
