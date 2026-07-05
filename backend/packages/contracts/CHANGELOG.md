@@ -8,7 +8,7 @@
 
   Add the declarative `StackRecipe` shape to the `docker-compose` branch of `ServiceProvisioning`
   plus the recommendation-shape extensions the detector (slice 2) will populate — the contracts
-  foundation for provisioning complex multi-step compose repos (the lokalise-main pilot).
+  foundation for provisioning complex multi-step compose repos (the acme-monolith pilot).
 
   - New optional `recipe` field on `serviceProvisioningSchema` (`stackRecipeSchema`): ordered
     `-f` `composeFiles` layering, `composeProfiles`, `envFiles` materialization (template →

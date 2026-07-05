@@ -3,7 +3,7 @@ import { nonEmpty, urlString } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Docker Compose STACK RECIPES — declarative multi-step bring-up for complex compose
-// repos (the lokalise-main pilot). A recipe extends a `docker-compose` service's
+// repos (the acme-monolith pilot). A recipe extends a `docker-compose` service's
 // provisioning (see `serviceProvisioningSchema.recipe` in `environments.ts`) with
 // ordered `-f` layering, `COMPOSE_PROFILES`, env-file materialization, external
 // networks / shared-stack refs, and imperative setup/teardown steps + a terminal

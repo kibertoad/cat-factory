@@ -38,7 +38,7 @@ shape) with **autodetection** of the current layout and per-doc-type subfolder o
 human review is **off by default** (opt-in), and the recommended writing-style fragments
 (`style.anti-llmisms`, `style.concise-actionable`) are on by default (configurable).
 
-Everything in the preset system is generic; docs-refresh is the pilot the way lokalise-main
+Everything in the preset system is generic; docs-refresh is the pilot the way acme-monolith
 pilots `stack-recipes-and-shared-stacks.md`.
 
 **Locked decisions** (made with the product owner at design time):
