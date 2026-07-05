@@ -744,7 +744,12 @@
         "urlSource": "Suggested environment URL source: {source}. The workspace handler owns this; set it there.",
         "namespace": "Manifests pin namespace \"{namespace}\"; recommend honoring it on the workspace handler.",
         "confidenceHigh": "Detected",
-        "confidenceLow": "Suggestion"
+        "confidenceLow": "Suggestion",
+        "unavailable": {
+          "title": "Ephemeral environments aren't enabled",
+          "body": "Autodetect reads this repo to suggest a test-environment (Kubernetes or Docker Compose) config, but the ephemeral-environment integration is turned off for this deployment. This is separate from your GitHub connection. Whoever runs the server enables it (set ENVIRONMENTS_ENABLED and an encryption key); then autodetect and provisioning become available.",
+          "docs": "How to enable ephemeral environments"
+        }
       },
       "envWizard": {
         "title": "Compose environment setup",
