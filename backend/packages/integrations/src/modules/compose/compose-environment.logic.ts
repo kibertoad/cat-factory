@@ -355,12 +355,14 @@ export function extractExternalNetworks(doc: ComposeDoc): string[] {
     const d = def as Record<string, unknown>
     const external = d.external
     // `external: true` OR `external: { name }` marks the network as pre-existing; `external: false`
-    // (or absent) is a project-owned network we don't touch.
-    if (external !== true && !(external !== null && typeof external === 'object')) continue
-    const externalName =
-      external !== null && typeof external === 'object'
-        ? optionalString((external as Record<string, unknown>).name)
+    // (or absent) is a project-owned network we don't touch. An array (or other non-plain-object)
+    // value is malformed and does NOT mark the network external.
+    const externalObject =
+      external !== null && typeof external === 'object' && !Array.isArray(external)
+        ? (external as Record<string, unknown>)
         : undefined
+    if (external !== true && !externalObject) continue
+    const externalName = externalObject ? optionalString(externalObject.name) : undefined
     const resolved = optionalString(d.name) ?? externalName ?? key
     if (!seen.has(resolved)) {
       seen.add(resolved)

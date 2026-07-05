@@ -7,6 +7,8 @@ import {
   composeFileDir,
   ensureServicePublishes,
   escapesCheckout,
+  extractComposeProfiles,
+  extractExternalNetworks,
   hasBuildDirective,
   neutralizeHostPorts,
   parseComposeEnvConfig,
@@ -448,5 +450,40 @@ describe('renderEnvMap', () => {
     expect(renderEnvMap({ IMAGE: 'app:{{branch}}' }, { branch: 'main' })).toEqual({
       IMAGE: 'app:main',
     })
+  })
+})
+
+describe('extractExternalNetworks', () => {
+  it('resolves external networks from `external: true` and `external: { name }`, deduped', () => {
+    const doc = parse(
+      'networks:\n' +
+        '  a:\n    external: true\n' +
+        '  b:\n    external:\n      name: shared-bus\n' +
+        '  c:\n    external: true\n    name: shared-bus\n', // dup of b's resolved name
+    )
+    expect(extractExternalNetworks(doc)).toEqual(['a', 'shared-bus'])
+  })
+
+  it('ignores project-owned networks (`external: false` or absent)', () => {
+    const doc = parse('networks:\n  a:\n    external: false\n  b:\n    driver: bridge\n  c:\n')
+    expect(extractExternalNetworks(doc)).toEqual([])
+  })
+
+  it('does NOT treat a malformed array `external:` value as an external network', () => {
+    // `typeof [] === 'object'` — the guard must reject arrays, not fabricate a network named `a`.
+    const doc = parse('networks:\n  a:\n    external: []\n')
+    expect(extractExternalNetworks(doc)).toEqual([])
+  })
+})
+
+describe('extractComposeProfiles', () => {
+  it('unions + sorts every service profile label, handling a single-string profiles value', () => {
+    const doc = parse(
+      'services:\n' +
+        '  app:\n    profiles: [full]\n' +
+        '  peer:\n    profiles: [peer, backends]\n' +
+        '  solo:\n    profiles: extra\n', // single string, not a list
+    )
+    expect(extractComposeProfiles(doc)).toEqual(['backends', 'extra', 'full', 'peer'])
   })
 })

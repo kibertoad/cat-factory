@@ -91,6 +91,10 @@ const COMPOSE_FILES = [
   'dev.yaml',
   'dev.yml',
 ]
+// Bare `dev.ya?ml` is an AMBIGUOUS name — Ansible playbooks, tool/CLI config, and CI files all use
+// it — so unlike the canonical `compose.*`/`docker-compose.*` names it is only accepted as a compose
+// file when it actually declares a `services:` map (an empty/absent one ⇒ it isn't a compose file).
+const AMBIGUOUS_COMPOSE_FILES = new Set(['dev.yaml', 'dev.yml'])
 // Directories (relative to the service root) a compose file commonly nests under, in addition to
 // the root itself. One `listDir` per entry (cheap membership test against COMPOSE_FILES).
 const COMPOSE_DIR_CANDIDATES = ['', 'deploy', 'docker', '.docker', 'compose']
@@ -187,8 +191,18 @@ const MAX_IMAGES = 8
 
 // Template-file suffixes that materialize into a gitignored target (`.env.dev.local-dist` →
 // `.env.dev.local`, `.split.yaml.dist` → `.split.yaml`, `.env.example` → `.env`). Longest/most
-// specific first so a file is stripped by exactly one suffix.
-const ENV_TEMPLATE_SUFFIXES = ['-dist', '.dist', '.example', '.sample', '.template', '.tmpl']
+// specific first so a file is stripped by exactly one suffix. `strong` marks the config-template
+// conventions (`-dist`/`.dist`, near-exclusively used for env/config) that accept any config-like
+// target; the general `.example`/`.sample`/… suffixes accept only env-like targets so a non-env
+// `values.yaml.example` (a Helm values sample) isn't scheduled to materialize `values.yaml`.
+const ENV_TEMPLATE_SUFFIXES: { suffix: string; strong: boolean }[] = [
+  { suffix: '-dist', strong: true },
+  { suffix: '.dist', strong: true },
+  { suffix: '.example', strong: false },
+  { suffix: '.sample', strong: false },
+  { suffix: '.template', strong: false },
+  { suffix: '.tmpl', strong: false },
+]
 // Directories (relative to the service root) an env-template commonly sits in, beside the compose
 // file's own dir. One `listDir` each; bounded by the read budget.
 const ENV_TEMPLATE_DIR_CANDIDATES = ['', 'config', 'env', 'docker', '.docker']
@@ -270,9 +284,18 @@ function parseOne(content: string): Record<string, unknown> | null {
   }
 }
 
-/** Stateful repo reader with a hard read budget so detection can't fan out without bound. */
+/**
+ * Stateful repo reader with a hard read budget so detection can't fan out without bound. Reads are
+ * MEMOIZED per path: the compose + recipe passes list several dirs in common (the repo root is a
+ * candidate for k8s roots, compose dirs, env-template dirs, and the repo-CLI scan), so caching keeps
+ * each unique path to a single real round-trip and stops those overlaps from burning the budget. A
+ * cache hit is free (no budget spend) and deterministic, so the "first present name/dir wins"
+ * ordering and the budget short-circuit are unaffected.
+ */
 class Scanner {
   private reads = 0
+  private readonly fileCache = new Map<string, string | null>()
+  private readonly dirCache = new Map<string, { name: string; type: string; path: string }[]>()
   constructor(
     private readonly reader: ProvisioningRepoReader,
     private readonly gitRef: string | undefined,
@@ -284,10 +307,14 @@ class Scanner {
   }
 
   async getFile(path: string): Promise<string | null> {
+    const cached = this.fileCache.get(path)
+    if (cached !== undefined) return cached
     if (this.reads >= READ_BUDGET) return null
     this.reads++
     const file = await this.reader.getFile(path, this.gitRef)
-    return file?.content ?? null
+    const content = file?.content ?? null
+    this.fileCache.set(path, content)
+    return content
   }
 
   /** Read the first present file among `names` in `dir`; returns its content + matched name. */
@@ -303,11 +330,16 @@ class Scanner {
   }
 
   async listDir(path: string): Promise<{ name: string; type: string; path: string }[]> {
+    const cached = this.dirCache.get(path)
+    if (cached !== undefined) return cached
     if (this.reads >= READ_BUDGET) return []
     this.reads++
     try {
-      return await this.reader.listDirectory(path, this.gitRef)
+      const entries = await this.reader.listDirectory(path, this.gitRef)
+      this.dirCache.set(path, entries)
+      return entries
     } catch {
+      this.dirCache.set(path, [])
       return []
     }
   }
@@ -610,6 +642,9 @@ async function findCompose(scanner: Scanner, root: string): Promise<ComposeHit |
       const doc = content ? parseOne(content) : null
       const servicesRecord = asRecord(doc?.services) ?? {}
       const services = Object.keys(servicesRecord)
+      // An ambiguous bare `dev.ya?ml` is only a compose file when it declares services; otherwise
+      // it's some other `dev.yml` (CLI/CI/Ansible config) and must not be detected as compose.
+      if (AMBIGUOUS_COMPOSE_FILES.has(candidate) && services.length === 0) continue
       // Single source of truth with the provider's build-mode rejection: any service with a
       // `build:` means the stack builds from source, so build mode is required to provision it.
       const hasBuild = Object.values(servicesRecord).some((s) => hasBuildDirective(s))
@@ -870,14 +905,23 @@ function collectComposeFiles(compose: ComposeHit): {
 }
 
 /** Map a template file name to its materialization target (stripped suffix), or null when it isn't
- * a config/env template (`README.dist` → null; `.env.dev.local-dist` → `.env.dev.local`). */
+ * a config/env template (`README.dist` → null; `.env.dev.local-dist` → `.env.dev.local`;
+ * `values.yaml.example` → null — a Helm values sample, not env). A `strong` (`-dist`/`.dist`)
+ * suffix accepts any config-like target; the general suffixes accept only an env-like target. */
 function deriveEnvTemplateTarget(name: string): string | null {
-  for (const suffix of ENV_TEMPLATE_SUFFIXES) {
+  for (const { suffix, strong } of ENV_TEMPLATE_SUFFIXES) {
     if (name.length <= suffix.length || !name.endsWith(suffix)) continue
     const target = name.slice(0, -suffix.length)
-    return isConfigLikeName(target) ? target : null
+    const accepted = strong ? isConfigLikeName(target) : isEnvLikeName(target)
+    return accepted ? target : null
   }
   return null
+}
+
+/** True when a target is an env file per se — a dotfile or an `env`-bearing name (`.env`,
+ * `.env.dev.local`, `environment.local`). The bar the general (non-`dist`) template suffixes clear. */
+function isEnvLikeName(target: string): boolean {
+  return target.startsWith('.') || target.toLowerCase().includes('env')
 }
 
 /** True when a template's stripped target looks like an env/config file (so we don't materialize a
@@ -885,9 +929,7 @@ function deriveEnvTemplateTarget(name: string): string | null {
 function isConfigLikeName(target: string): boolean {
   const lower = target.toLowerCase()
   return (
-    target.startsWith('.') ||
-    lower.includes('env') ||
-    /\.(ya?ml|json|ini|conf|cfg|config|properties|toml|local)$/.test(lower)
+    isEnvLikeName(target) || /\.(ya?ml|json|ini|conf|cfg|config|properties|toml|local)$/.test(lower)
   )
 }
 
@@ -907,7 +949,10 @@ async function collectEnvFileTemplates(
   const pairs: RecipeEnvFile[] = []
   const seenTargets = new Set<string>()
   for (const dir of dirs) {
-    for (const entry of await scanner.listDir(dir)) {
+    // Sort by name so the dedup-by-target choice (first template seen wins) is deterministic
+    // regardless of the reader's directory-listing order.
+    const entries = [...(await scanner.listDir(dir))].sort((a, b) => a.name.localeCompare(b.name))
+    for (const entry of entries) {
       if (entry.type === 'dir') continue
       const target = deriveEnvTemplateTarget(entry.name)
       if (!target) continue
@@ -922,13 +967,18 @@ async function collectEnvFileTemplates(
   return pairs.sort((a, b) => a.template.localeCompare(b.template))
 }
 
+// Whole-token matches (bounded by `^`/`$` or a non-letter — `-`, `_`, `.`, digits — so `pre` does
+// NOT match inside `compressed` and `data` DOES match inside `add_data`) for the seed-dump ranking.
+const SEED_DATA_TOKENS = /(^|[^a-z])(seed|dummy|data|dump|fixture|sample)([^a-z]|$)/
+const SEED_SCHEMA_TOKENS = /(^|[^a-z])(pre|schema|structure|ddl|migration|create|drop)([^a-z]|$)/
+
 /** Rank a SQL dump for the seed pre-selection: prefer full seed/dummy data, deprioritize
- * schema/pre/structure-only dumps. Higher wins; ties keep discovery order. */
+ * schema/pre/structure-only dumps. Higher wins; ties break deterministically by path. */
 function rankSeedDump(name: string): number {
   const lower = name.toLowerCase()
   let score = 0
-  if (/(seed|dummy|data|dump|fixture|sample)/.test(lower)) score += 2
-  if (/(pre|schema|structure|ddl|migration|create|drop)/.test(lower)) score -= 1
+  if (SEED_DATA_TOKENS.test(lower)) score += 2
+  if (SEED_SCHEMA_TOKENS.test(lower)) score -= 1
   return score
 }
 
@@ -958,6 +1008,8 @@ async function collectSeedDumps(
     for (const entry of entries) {
       if (found.length >= MAX_SEED_DUMPS) break
       if (entry.type === 'dir') {
+        // A `migrations`/`migration` child holds schema DDL, not seed data — never a seed dump.
+        if (/^migrations?$/i.test(entry.name)) continue
         const childDir = joinPath(dir, entry.name)
         for (const child of await scanner.listDir(childDir)) {
           if (child.type !== 'dir') addSql(childDir, child.name)
@@ -969,6 +1021,9 @@ async function collectSeedDumps(
     }
   }
   if (found.length === 0) return []
+  // Sort by path so both the surfaced order and the pre-selection tie-break are deterministic
+  // regardless of the reader's directory-listing order.
+  found.sort((a, b) => a.path.localeCompare(b.path))
   let bestIdx = 0
   let bestScore = rankSeedDump(found[0]!.name)
   for (let i = 1; i < found.length; i++) {

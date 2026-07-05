@@ -759,6 +759,54 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     )
     expect(rec.repoCliHint).toEqual({ path: 'bin/dev-console', kind: 'repo-cli' })
   })
+
+  it('does NOT detect a bare dev.yml that declares no services as docker-compose', async () => {
+    // `dev.yml` is an ambiguous name (CLI / CI / Ansible config all use it); without a `services:`
+    // map it must not be mistaken for a compose file.
+    const reader = makeReader({ 'dev.yml': 'name: my-cli\ncommands:\n  build: make\n' })
+    const rec = await detectKubernetesProvisioning(reader, { prefer: 'docker-compose' })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.type).toBe('infraless')
+  })
+
+  it('does NOT surface schema migrations under a migrations/ dir as seed dumps', async () => {
+    const reader = makeReader({
+      'compose.yaml': 'services:\n  app:\n    image: nginx\n',
+      'db/migrations/0001_init.sql': 'CREATE TABLE ...',
+      'db/migrations/0002_add_data.sql': 'INSERT ...',
+      // A real seed dump beside the migrations IS surfaced.
+      'db/seed-data.sql': 'INSERT ...',
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.seedDumpCandidates?.map((c) => c.path)).toEqual(['db/seed-data.sql'])
+  })
+
+  it('does NOT materialize a non-env config sample (values.yaml.example) as an env file', async () => {
+    const reader = makeReader({
+      'compose.yaml': 'services:\n  app:\n    image: nginx\n',
+      // A Helm values sample — a `.example` on a config file, NOT an env template.
+      'values.yaml.example': 'replicas: 1\n',
+      // A real env template IS materialized.
+      '.env-dist': 'API_KEY=\n',
+    })
+    const rec = await detectKubernetesProvisioning(reader)
+    expect(rec.provisioning.recipe?.envFiles).toEqual([{ template: '.env-dist', target: '.env' }])
+  })
+
+  it('picks the same env template regardless of directory-listing order (deterministic dedup)', async () => {
+    const compose = 'services:\n  app:\n    image: nginx\n'
+    // Both templates resolve to the same `.env` target — the dedup must not depend on listing order.
+    const forward = await detectKubernetesProvisioning(
+      makeReader({ 'compose.yaml': compose, '.env-dist': 'A=\n', '.env.example': 'A=\n' }),
+    )
+    const reverse = await detectKubernetesProvisioning(
+      makeReader({ 'compose.yaml': compose, '.env.example': 'A=\n', '.env-dist': 'A=\n' }),
+    )
+    expect(forward.provisioning.recipe?.envFiles).toEqual([
+      { template: '.env-dist', target: '.env' },
+    ])
+    expect(reverse.provisioning.recipe?.envFiles).toEqual(forward.provisioning.recipe?.envFiles)
+  })
 })
 
 describe('detectCustomManifest', () => {
