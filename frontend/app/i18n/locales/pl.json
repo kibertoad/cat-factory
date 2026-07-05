@@ -2195,11 +2195,22 @@
       },
       "budget": {
         "heading": "Miesięczny budżet wydatków",
-        "body": "Zużycie tokenów jest mierzone na wywołanie LLM, wyceniane i ograniczane tym budżetem. Po jego osiągnięciu uruchomienia w tym obszarze roboczym są wstrzymywane, a tablica pokazuje ostrzeżenie. Pozostaw puste, aby odziedziczyć wbudowaną wartość domyślną (około 100 EUR/miesiąc).",
+        "body": "Zużycie tokenów jest mierzone na wywołanie LLM, wyceniane i ograniczane tymi budżetami. Uruchomienie jest wstrzymywane, gdy dowolny poziom, do którego należy, zostanie wyczerpany. Pozostaw pole puste, aby nie ustawiać limitu dla tego poziomu (poziom obszaru roboczego dziedziczy wtedy wbudowaną wartość domyślną, około 100 EUR/miesiąc).",
         "monthlyLimit": "Limit miesięczny",
         "defaultPlaceholder": "Domyślny",
         "currency": "Waluta (ISO 4217)",
-        "save": "Zapisz budżet"
+        "save": "Zapisz budżet",
+        "saveTier": "Zapisz",
+        "workspace": "Ten obszar roboczy",
+        "account": "Konto (wszystkie obszary robocze)",
+        "user": "Ty (wszystkie Twoje uruchomienia)",
+        "accountBody": "Pułap dla wszystkich obszarów roboczych na tym koncie.",
+        "userBody": "Pułap dla każdego uruchomienia, które rozpoczniesz, w dowolnym obszarze roboczym.",
+        "hardCap": "Limit operatora: {amount}",
+        "hardCapHint": "ustawiony przez wdrożenie; wartość nie może go przekroczyć",
+        "spent": "Wydano {spent} z {limit} w tym miesiącu",
+        "adminOnly": "Tylko administrator konta może zmienić budżet konta.",
+        "noLimitPlaceholder": "Bez limitu"
       },
       "toast": {
         "saved": "Ustawienia zapisane",

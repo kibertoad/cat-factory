@@ -323,22 +323,32 @@ export function startStaleRunSweeper(
 
       // Auto-resume spend-paused runs once the monthly budget frees (parity with the Cloudflare
       // ExecutionWorkflow, whose parked instance re-checks the budget itself). `listStale` skips
-      // `paused` runs, so re-check them here: re-drive ONLY those whose workspace is no longer
-      // over budget — a still-exhausted workspace causes no churn, and the re-driven advance
-      // flips the run back to `running` via the spend gate. `isExhausted` is read once per
-      // distinct workspace (not per run) to avoid a redundant budget read per paused run.
+      // `paused` runs, so re-check them here: re-drive ONLY those whose WORKSPACE and ACCOUNT
+      // tiers are both back under budget — a still-exhausted workspace/account causes no churn.
+      // Both are keyed only by the workspace (a workspace has one owning account), so the check
+      // is cached per distinct workspace, not per run. The USER tier is deliberately NOT checked
+      // here: it needs the run's initiator, which the lightweight paused ref doesn't carry, so a
+      // run paused solely on a user cap is re-driven and the tier-aware step gate in
+      // `ExecutionService.stepInstance` re-pauses it (a bounded, per-sweep one-step blip, not an
+      // un-gated run). So this is a best-effort resume, not a proof the run will advance.
       const paused = await container.agentRunRepository.listPausedExecutions()
       const exhaustedByWorkspace = new Map<string, boolean>()
+      const accountByWorkspace = new Map<string, string | null>()
       for (const ref of paused) {
         let exhausted = exhaustedByWorkspace.get(ref.workspaceId)
         if (exhausted === undefined) {
-          exhausted = await container.spendService.isOverBudget(ref.workspaceId)
+          let accountId = accountByWorkspace.get(ref.workspaceId)
+          if (accountId === undefined) {
+            accountId = (await container.workspaceService.accountOf(ref.workspaceId)) ?? null
+            accountByWorkspace.set(ref.workspaceId, accountId)
+          }
+          exhausted = await container.spendService.isOverBudget(ref.workspaceId, { accountId })
           exhaustedByWorkspace.set(ref.workspaceId, exhausted)
         }
         if (exhausted) continue
         log.info(
           { workspaceId: ref.workspaceId, executionId: ref.id },
-          'resuming spend-paused run (budget freed)',
+          're-driving spend-paused run (workspace/account budget free; step gate re-checks the user tier)',
         )
         await boss.send(
           QUEUE,

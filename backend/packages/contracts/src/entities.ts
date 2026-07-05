@@ -1912,11 +1912,12 @@ export const workspaceSchema = v.object({
 export type Workspace = v.InferOutput<typeof workspaceSchema>
 
 /**
- * The spend safeguard's view of the current billing period. Token usage is
- * tracked per LLM call and priced into a single currency; once `costSpent`
- * reaches `costLimit` the engine pauses runs and the frontend shows a warning.
- * Global across all workspaces (an operator's budget is org-wide), attached to
- * every snapshot by the worker so the client can render the warning anywhere.
+ * The spend safeguard's view of the current billing period for one budget tier.
+ * Token usage is tracked per LLM call and priced into a single currency; once
+ * `costSpent` reaches `costLimit` the engine pauses runs and the frontend shows a
+ * warning. The same shape describes each tier — workspace, account, and user — with
+ * the tier's own spent/limit. Attached to every snapshot by the facade so the client
+ * can render the warning anywhere.
  */
 export const spendStatusSchema = v.object({
   /** Start of the current billing period (epoch ms; calendar month, UTC). */
@@ -1935,6 +1936,23 @@ export const spendStatusSchema = v.object({
   exceeded: v.boolean(),
 })
 export type SpendStatus = v.InferOutput<typeof spendStatusSchema>
+
+/**
+ * Operator-configured hard ceilings on the account- and user-tier monthly budgets,
+ * from the deployment env vars `BUDGET_MAX_MONTHLY_PER_ACCOUNT` /
+ * `BUDGET_MAX_MONTHLY_PER_USER`. Null ⇒ that tier has no operator ceiling. Surfaced
+ * to the SPA so the budget configuration screens can show the hard limit and prevent
+ * a user from configuring a value above it. Values are in the base pricing currency.
+ */
+export const budgetCapsSchema = v.object({
+  /** Max monthly budget any account may configure. Null ⇒ no operator ceiling. */
+  accountMonthlyLimitMax: v.nullable(v.number()),
+  /** Max monthly budget any user may configure. Null ⇒ no operator ceiling. */
+  userMonthlyLimitMax: v.nullable(v.number()),
+  /** ISO 4217 currency the caps are expressed in (the base pricing currency). */
+  currency: v.string(),
+})
+export type BudgetCaps = v.InferOutput<typeof budgetCapsSchema>
 
 // The workspace snapshot schema lives in ./snapshot — it references
 // `bootstrapJobSchema` from ./bootstrap, which itself imports from this file, so

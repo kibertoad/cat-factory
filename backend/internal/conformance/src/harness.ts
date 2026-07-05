@@ -221,6 +221,13 @@ export interface ConformanceApp {
    */
   userSecrets?(): UserSecretsProbe | undefined
   /**
+   * The facade's per-user settings service (the user-tier spend budget) over its real store,
+   * so the suite can assert repository parity (the `user_settings` round-trip) across D1 and
+   * Postgres. User-scoped, so exercised through the service directly (the dev-open `call` path
+   * has no signed-in user). Undefined when the facade did not wire the store.
+   */
+  userSettings?(): UserSettingsProbe | undefined
+  /**
    * The facade's per-workspace OpenRouter dynamic-catalog service over its real store, so the
    * suite can assert repository/service parity (enabled-subset round-trip) across D1 and
    * Postgres. The HTTP routes need a signed-in user the dev-open `call` path lacks, so the
@@ -277,6 +284,15 @@ export interface LocalModelEndpointsProbe {
     provider: string,
   ): Promise<{ baseUrl: string; apiKey: string | null } | null>
   remove(userId: string, provider: string): Promise<void>
+}
+
+/** The subset of the per-user-settings service the conformance suite drives. */
+export interface UserSettingsProbe {
+  get(userId: string): Promise<{ spendMonthlyLimit: number | null }>
+  update(
+    userId: string,
+    input: { spendMonthlyLimit?: number | null },
+  ): Promise<{ spendMonthlyLimit: number | null }>
 }
 
 /** The subset of the user-secret service the conformance suite drives. */

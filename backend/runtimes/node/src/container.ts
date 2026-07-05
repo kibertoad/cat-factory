@@ -2304,6 +2304,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // limit). Wired unconditionally so the settings API + the limit enforcement + the
     // escalation sweep work identically to the Worker.
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    userSettingsRepository: repos.userSettingsRepository,
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,

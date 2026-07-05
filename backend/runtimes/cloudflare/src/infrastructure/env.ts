@@ -171,6 +171,14 @@ export interface Env {
   // The spend safeguard (monthly limit / currency / per-model price overrides) is now
   // configured PER WORKSPACE in the UI (the `workspace_settings` row), not via env — see
   // `@cat-factory/contracts` `workspace-settings.ts` + `SpendService`.
+  /**
+   * Operator hard ceiling on the ACCOUNT-tier monthly budget (base pricing currency). When
+   * set, no account may configure a monthly budget above this, and it acts as the effective
+   * account budget when none is configured. See docs/environment-variables.md.
+   */
+  BUDGET_MAX_MONTHLY_PER_ACCOUNT?: string
+  /** Operator hard ceiling on the USER-tier monthly budget. Same semantics per user. */
+  BUDGET_MAX_MONTHLY_PER_USER?: string
 
   // ---- Provider credentials -----------------------------------------------
   OPENAI_API_KEY?: string

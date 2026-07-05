@@ -106,6 +106,8 @@ export const accounts = pgTable(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     // The default cloud provider new services in this account inherit.
     default_cloud_provider: text('default_cloud_provider'),
+    // The account-tier monthly spend budget (base pricing currency). Null = none.
+    spend_monthly_limit: doublePrecision('spend_monthly_limit'),
   },
   // Enforce one personal account per user (a correctness constraint, not just a
   // lookup index) — the partial unique index `findPersonalByUser` relies on.
@@ -454,6 +456,9 @@ export const tokenUsage = pgTable(
   {
     id: text('id').primaryKey(),
     workspace_id: text('workspace_id').notNull(),
+    // Owning account + initiating user, denormalized for the account/user budget tiers.
+    account_id: text('account_id'),
+    user_id: text('user_id'),
     execution_id: text('execution_id'),
     agent_kind: text('agent_kind').notNull(),
     provider: text('provider').notNull(),
@@ -469,8 +474,18 @@ export const tokenUsage = pgTable(
     // LLM-proxy call + web-search + step gate; index (workspace_id, created_at) so it
     // doesn't scan the whole ledger and filter workspace_id row-by-row.
     index('idx_token_usage_workspace').on(t.workspace_id, t.created_at),
+    // Account/user tier rollups (`totalsSinceForAccount` / `totalsSinceForUser`).
+    index('idx_token_usage_account').on(t.account_id, t.created_at),
+    index('idx_token_usage_user').on(t.user_id, t.created_at),
   ],
 )
+
+export const userSettings = pgTable('user_settings', {
+  user_id: text('user_id').primaryKey(),
+  // The user-tier monthly spend budget (base pricing currency). Null = none.
+  spend_monthly_limit: doublePrecision('spend_monthly_limit'),
+  updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+})
 
 // Per-workspace model presets (mirror of D1 migration 0006's `model_presets`). A
 // preset is one `base_model_id` applied to every agent kind plus per-kind `overrides`

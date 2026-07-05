@@ -858,6 +858,31 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(after.body.currency).toBe('USD')
       })
 
+      it('round-trips the per-user (user-tier) budget (D1 ⇄ Postgres)', async () => {
+        // The user-tier budget lives in the `user_settings` table (PK user_id). It is user-scoped,
+        // so — like local model endpoints — it is exercised through the service directly (the
+        // dev-open HTTP `call` path has no signed-in user). Asserts the new table round-trips a
+        // nullable numeric identically on both stores.
+        const app = harness.makeApp()
+        const probe = app.userSettings?.()
+        if (!probe) return
+        const userId = 'usr_budget_conformance'
+
+        const before = await probe.get(userId)
+        expect(before.spendMonthlyLimit).toBeNull()
+
+        const saved = await probe.update(userId, { spendMonthlyLimit: 42 })
+        expect(saved.spendMonthlyLimit).toBe(42)
+        expect((await probe.get(userId)).spendMonthlyLimit).toBe(42)
+
+        // `0` is a real "no paid spend" limit, distinct from null (inherit/unlimited).
+        await probe.update(userId, { spendMonthlyLimit: 0 })
+        expect((await probe.get(userId)).spendMonthlyLimit).toBe(0)
+
+        await probe.update(userId, { spendMonthlyLimit: null })
+        expect((await probe.get(userId)).spendMonthlyLimit).toBeNull()
+      })
+
       it('round-trips the local-mode delegation toggle + a paired boolean (D1 ⇄ Postgres)', async () => {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()

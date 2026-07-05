@@ -101,6 +101,8 @@ describe('storage retention sweep', () => {
     const repo = new D1TokenUsageRepository({ db: env.DB })
     const base = {
       workspaceId: ws,
+      accountId: null,
+      userId: null,
       executionId: null,
       agentKind: 'architect',
       provider: 'openai',
@@ -209,6 +211,8 @@ describe('storage retention sweep', () => {
     await repo.record({
       id: 'tok_disabled',
       workspaceId: ws,
+      accountId: null,
+      userId: null,
       executionId: null,
       agentKind: 'architect',
       provider: 'openai',

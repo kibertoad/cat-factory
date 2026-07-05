@@ -2317,11 +2317,22 @@
       },
       "budget": {
         "heading": "Aylık harcama bütçesi",
-        "body": "Token kullanımı her LLM çağrısı için ölçülür, fiyatlandırılır ve bu bütçeyle sınırlandırılır. Ulaşıldığında bu çalışma alanındaki çalıştırmalar duraklatılır ve panoda bir uyarı gösterilir. Yerleşik varsayılanı (aylık yaklaşık 100 EUR) devralmak için boş bırakın.",
+        "body": "Token kullanımı her LLM çağrısı için ölçülür, fiyatlandırılır ve bu bütçelerle sınırlandırılır. Bir çalıştırma, ait olduğu herhangi bir katman tükendiğinde duraklatılır. O katmanda sınır olmaması için bir alanı boş bırakın (çalışma alanı katmanı bu durumda yerleşik varsayılanı, aylık yaklaşık 100 EUR devralır).",
         "monthlyLimit": "Aylık sınır",
         "defaultPlaceholder": "Varsayılan",
         "currency": "Para birimi (ISO 4217)",
-        "save": "Bütçeyi kaydet"
+        "save": "Bütçeyi kaydet",
+        "saveTier": "Kaydet",
+        "workspace": "Bu çalışma alanı",
+        "account": "Hesap (tüm çalışma alanları)",
+        "user": "Siz (başlattığınız tüm çalıştırmalar)",
+        "accountBody": "Bu hesaptaki tüm çalışma alanlarını kapsayan bir üst sınır.",
+        "userBody": "Herhangi bir çalışma alanında başlattığınız her çalıştırmayı kapsayan bir üst sınır.",
+        "hardCap": "Operatör sınırı: {amount}",
+        "hardCapHint": "dağıtım tarafından belirlenir; değer bunu aşamaz",
+        "spent": "Bu ay {limit} bütçenin {spent} kadarı harcandı",
+        "adminOnly": "Yalnızca bir hesap yöneticisi hesap bütçesini değiştirebilir.",
+        "noLimitPlaceholder": "Sınır yok"
       },
       "toast": {
         "saved": "Ayarlar kaydedildi",

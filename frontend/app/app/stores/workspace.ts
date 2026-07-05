@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { InfraSetup, SpendStatus, Workspace, WorkspaceSnapshot } from '~/types/domain'
+import type {
+  BudgetCaps,
+  InfraSetup,
+  SpendStatus,
+  Workspace,
+  WorkspaceSnapshot,
+} from '~/types/domain'
 import { useAccountsStore } from '~/stores/accounts'
 import { useBoardStore } from '~/stores/board'
 import { usePipelinesStore } from '~/stores/pipelines'
@@ -50,8 +56,14 @@ export const useWorkspaceStore = defineStore(
     const ready = ref(false)
     /** Set when bootstrap fails so the UI can show a retry. */
     const error = ref<string | null>(null)
-    /** Latest spend-safeguard status from the server (null until first load). */
+    /** Latest WORKSPACE-tier spend-safeguard status from the server (null until first load). */
     const spend = ref<SpendStatus | null>(null)
+    /** ACCOUNT-tier spend status (null when the tier is inactive or unavailable). */
+    const accountSpend = ref<SpendStatus | null>(null)
+    /** USER-tier spend status for the signed-in caller (null when inactive). */
+    const userSpend = ref<SpendStatus | null>(null)
+    /** Operator hard ceilings on the account/user budget tiers (null until first load). */
+    const budgetCaps = ref<BudgetCaps | null>(null)
     /**
      * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
      * storage) from the snapshot, driving the infra-setup banner. Null on an older backend that
@@ -93,6 +105,10 @@ export const useWorkspaceStore = defineStore(
       }
       workspaceId.value = snapshot.workspace.id
       spend.value = snapshot.spend ?? null
+      accountSpend.value = snapshot.accountSpend ?? null
+      userSpend.value = snapshot.userSpend ?? null
+      budgetCaps.value = snapshot.budgetCaps ?? null
+      useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
       infraSetup.value = snapshot.infraSetup ?? null
       // Keep the board list in step (e.g. a freshly created board, or a rename).
       const i = workspaces.value.findIndex((w) => w.id === snapshot.workspace.id)
@@ -254,6 +270,9 @@ export const useWorkspaceStore = defineStore(
       ready,
       error,
       spend,
+      accountSpend,
+      userSpend,
+      budgetCaps,
       infraSetup,
       init,
       switchTo,
