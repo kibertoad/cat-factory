@@ -4,6 +4,7 @@
 // the unified retry through the agentRuns store, so every surface (board card,
 // inspector, task panel) gets identical behaviour from one place. Replaces the
 // three hand-rolled bootstrap banners that used to duplicate this logic.
+import type { EnvironmentFailureReason } from '@cat-factory/contracts'
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import FailureDetail from '~/components/board/FailureDetail.vue'
 
@@ -14,9 +15,59 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const ui = useUiStore()
+const auth = useAuthStore()
+const board = useBoardStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
+// An `environment` failure is a provisioning/config problem, so offer a one-click jump to the
+// place it's configured alongside the retry — the same "Configure…" deep-link pattern the
+// infra-setup banners use.
+const isEnvironmentFailure = computed(() => failure.value?.kind === 'environment')
+const DEPLOY_RUNNER_UNWIRED: EnvironmentFailureReason = 'deploy_runner_unwired'
+
+// The provision type of the failed run's SERVICE frame (walk up to the frame, mirroring the
+// backend's `resolveServiceProvisioning`). Drives the K8s-specific gate below.
+const provisionType = computed(() => {
+  const block = board.getBlock(props.run.blockId)
+  return block ? board.serviceOf(block)?.provisioning?.type : undefined
+})
+
+// Where the deep-link should land. A `deploy_runner_unwired` cause is fixed by wiring the DEPLOY
+// RUNNER, which is the same self-hosted runner pool that runs agent containers (Infrastructure →
+// "Agent containers" / `runner-pool`) — NOT the environment-provider connection (Infrastructure →
+// "Test environments" / `environment`), where the generic banner would otherwise dead-end. So route
+// that cause to the runner-pool tab on a non-local deployment; local mode's fix is an env var (the
+// hint below, not a UI tab), and every OTHER environment failure is a provider-config problem that
+// belongs on the environment tab.
+const routesToRunnerPool = computed(
+  () =>
+    isEnvironmentFailure.value &&
+    failure.value?.reason === DEPLOY_RUNNER_UNWIRED &&
+    auth.localMode?.enabled !== true,
+)
+function openFailureSetup() {
+  ui.openProviderConnection(routesToRunnerPool.value ? 'runner-pool' : 'environment')
+}
+const failureSetupLabel = computed(() =>
+  routesToRunnerPool.value
+    ? t('board.failure.deployRunnerSetup')
+    : t('board.failure.environmentSetup'),
+)
+
+// The env-var hint is Kubernetes+local specific, so gate it precisely rather than showing it for
+// every environment failure: only for the machine-readable `deploy_runner_unwired` cause (NOT a
+// helm/apply error or a transient blip), only in local mode (where the deploy runtime is an env
+// var, not a UI connection the tab could fix), and only for a `kubernetes` provision (so a future
+// Nomad/custom provider triggering the same cause never shows kubectl/kustomize/helm guidance).
+const showEnvironmentLocalHint = computed(
+  () =>
+    isEnvironmentFailure.value &&
+    auth.localMode?.enabled === true &&
+    failure.value?.reason === DEPLOY_RUNNER_UNWIRED &&
+    provisionType.value === 'kubernetes',
+)
 const title = computed(() => {
   // A `dispatch` failure means the container/runner never accepted the job — say so
   // explicitly rather than the generic "Run failed", and show the verbatim provider
@@ -83,6 +134,22 @@ async function retry() {
       {{ failure.hint }}
     </p>
 
+    <!-- Local mode only: the deploy runtime is configured via env vars, not a UI connection, so
+         name the concrete .env fix rather than only pointing at the (unhelpful-here) tab. -->
+    <p
+      v-if="showEnvironmentLocalHint && !compact"
+      class="mt-1 text-[11px] leading-snug text-rose-400/70"
+      data-testid="agent-failure-environment-local-hint"
+    >
+      {{
+        t('board.failure.environmentLocalHint', {
+          runtime: 'LOCAL_DEPLOY_RUNTIME',
+          native: 'LOCAL_DEPLOY_HARNESS_ENTRY',
+          container: 'LOCAL_DEPLOY_IMAGE',
+        })
+      }}
+    </p>
+
     <FailureDetail
       v-if="!compact && failure"
       :detail="failure.detail"
@@ -91,19 +158,38 @@ async function retry() {
       pre-class="bg-rose-950/60 text-[10px] text-rose-200/80"
     />
 
-    <button
-      type="button"
-      class="nodrag mt-2 flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
-      :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
-      :disabled="retrying"
-      data-testid="agent-failure-retry"
-      @click.stop="retry"
-    >
-      <UIcon
-        :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
-        :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
-      />
-      {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
-    </button>
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
+        :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
+        :disabled="retrying"
+        data-testid="agent-failure-retry"
+        @click.stop="retry"
+      >
+        <UIcon
+          :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
+          :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
+        />
+        {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
+      </button>
+
+      <!-- Environment provisioning failures are almost always a deploy-backend / provider-config
+           issue, so link straight to where it's set up rather than leaving the user to hunt. The
+           destination + label follow the cause: a `deploy_runner_unwired` failure needs the runner
+           pool (Agent containers tab), every other cause needs the environment provider (Test
+           environments tab) — see `routesToRunnerPool`. -->
+      <button
+        v-if="isEnvironmentFailure"
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/20 text-rose-300 hover:bg-rose-900/50"
+        :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
+        data-testid="agent-failure-configure-environment"
+        @click.stop="openFailureSetup"
+      >
+        <UIcon name="i-lucide-settings" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
+        {{ failureSetupLabel }}
+      </button>
+    </div>
   </div>
 </template>

@@ -276,6 +276,9 @@
       "stalled": "実行が停止しました",
       "retryBootstrap": "ブートストラップを再試行",
       "retryRun": "実行を再試行",
+      "environmentSetup": "環境をセットアップ",
+      "deployRunnerSetup": "ランナープールをセットアップ",
+      "environmentLocalHint": "ローカルの一時環境では、kubectl/kustomize/helm を実行するためにデプロイランタイムが必要です。.env に {runtime} を設定してください。ネイティブモードはこれらのツールをホスト上で実行し（{native}）、コンテナモードはデプロイイメージ内で実行します（{container}）。",
       "showDetail": "詳細を表示",
       "retrying": "再試行中…",
       "history": {

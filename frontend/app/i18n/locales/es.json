@@ -276,6 +276,9 @@
       "stalled": "La ejecución se estancó",
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
+      "environmentSetup": "Configurar entornos",
+      "deployRunnerSetup": "Configurar pool de runners",
+      "environmentLocalHint": "Los entornos efímeros locales necesitan un runtime de despliegue para ejecutar kubectl/kustomize/helm. Define {runtime} en tu .env: el modo nativo ejecuta esas herramientas en tu host ({native}), el modo contenedor las ejecuta en la imagen de despliegue ({container}).",
       "showDetail": "Mostrar detalle",
       "retrying": "Reintentando…",
       "history": {

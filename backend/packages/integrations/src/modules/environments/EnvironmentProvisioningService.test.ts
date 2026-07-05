@@ -757,9 +757,14 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
     // No deployJobClient: buildProvisionJob returns a job (render needed) but nothing can run it.
     const service = makeAsyncService(provider, registry, {})
 
-    await expect(
-      service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF),
-    ).rejects.toThrow(/no runner transport is wired/i)
+    const error = await service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF).then(
+      () => null,
+      (e) => e as { message: string; details?: Record<string, unknown> },
+    )
+    expect(error?.message).toMatch(/no deploy runner wired/i)
+    // The machine-readable reason rides the error so the engine can propagate it onto the
+    // run's `AgentFailure.reason` (→ the SPA's precise, gated hint).
+    expect(error?.details?.reason).toBe('deploy_runner_unwired')
     expect(registry.records).toHaveLength(1)
     expect(registry.records[0]!.status).toBe('failed')
   })

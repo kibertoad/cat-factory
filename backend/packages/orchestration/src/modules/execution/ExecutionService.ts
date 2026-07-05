@@ -2884,8 +2884,9 @@ export class ExecutionService {
     message: string,
     kind: AgentFailureKind = 'agent',
     detail: string | null = null,
+    reason: string | null = null,
   ): Promise<void> {
-    return this.runStateMachine.failRun(workspaceId, executionId, message, kind, detail)
+    return this.runStateMachine.failRun(workspaceId, executionId, message, kind, detail, reason)
   }
 
   /**

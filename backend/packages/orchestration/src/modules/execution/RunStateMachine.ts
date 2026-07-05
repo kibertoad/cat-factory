@@ -490,6 +490,9 @@ export class RunStateMachine {
     message: string,
     kind: AgentFailureKind = 'agent',
     detail: string | null = null,
+    /** Machine-readable cause code (e.g. an environment failure's `deploy_runner_unwired`) so
+     *  the SPA can render precise guidance without string-matching the prose. */
+    reason: string | null = null,
   ): Promise<void> {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) return
@@ -510,6 +513,7 @@ export class RunStateMachine {
       message,
       detail,
       hint: EXECUTION_FAILURE_HINTS[kind] ?? null,
+      reason,
       occurredAt: this.clock.now(),
       lastSubtasks: instance.steps[instance.currentStep]?.subtasks ?? null,
       // Attribute the failure to the in-flight step so the step-detail overlay can filter its

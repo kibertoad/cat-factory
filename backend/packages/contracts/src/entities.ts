@@ -846,6 +846,14 @@ export const agentFailureSchema = v.object({
   detail: v.nullable(v.string()),
   /** Where to look next (e.g. "check the container logs for this job id"). */
   hint: v.nullable(v.string()),
+  /**
+   * Optional machine-readable cause code so the SPA can render precise, actionable guidance
+   * without string-matching the prose `message`/`detail` (the failure analogue of a
+   * {@link ConflictReason}). Kind-scoped: an `environment` failure carries an
+   * {@link EnvironmentFailureReason} (e.g. `deploy_runner_unwired`). Absent when the cause has
+   * no client-specific handling.
+   */
+  reason: v.optional(v.nullable(v.string())),
   /** Epoch ms the failure was recorded. */
   occurredAt: v.number(),
   /** Last subtask counts seen before the failure, for context (null if none). */

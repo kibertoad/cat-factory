@@ -10,6 +10,7 @@ export {
   CredentialRequiredError,
   assertFound,
   getErrorMessage,
+  getErrorReason,
   type DomainErrorCode,
   type CredentialRequiredReason,
   type ConflictReason,

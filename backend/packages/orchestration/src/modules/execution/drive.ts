@@ -70,8 +70,12 @@ export async function driveExecution(
 ): Promise<DriveOutcome> {
   const sleep = opts.sleep ?? instantSleep
   const log = opts.log ?? noopLogger
-  const fail = (message: string, kind: AgentFailureKind = 'agent', detail: string | null = null) =>
-    exec.failRun(workspaceId, executionId, message, kind, detail)
+  const fail = (
+    message: string,
+    kind: AgentFailureKind = 'agent',
+    detail: string | null = null,
+    reason: string | null = null,
+  ) => exec.failRun(workspaceId, executionId, message, kind, detail, reason)
 
   // Poll a parked gate (job / CI / conflicts) until it yields a non-awaiting result
   // or the budget is spent. Tolerates a bounded run of status-read failures.
@@ -172,7 +176,12 @@ export async function driveExecution(
       // (`companion_rejected`, with its raw reply as detail) — so the run records the
       // accurate kind, hint and detail instead of a generic "container reported a
       // failure". Defaults to `job_failed` for a genuine container-job failure.
-      await fail(result.error, result.failureKind ?? 'job_failed', result.detail ?? null)
+      await fail(
+        result.error,
+        result.failureKind ?? 'job_failed',
+        result.detail ?? null,
+        result.reason ?? null,
+      )
       return {}
     }
     if (result.kind === 'job_evicted') {
