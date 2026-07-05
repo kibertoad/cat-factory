@@ -1,5 +1,60 @@
 # @cat-factory/app
 
+## 0.91.0
+
+### Minor Changes
+
+- cfcb6c7: Add the recurring `pl_bug_triage` pipeline (bug-triage initiative, phase H).
+
+  - **kernel**: seed the built-in `pl_bug_triage` pipeline (`availability: 'recurring'`,
+    `bug-intake → bug-investigator → clarity-review → task-estimator → repro-test → coder →
+reviewer → tester-api → conflicts → ci → merger`) and export `BUG_TRIAGE_PIPELINE_ID`.
+  - **contracts**: add the `'bug-triage'` `ScheduleTemplate` value so the recurring modal seeds a
+    bug-triage block description.
+  - **orchestration**: seed the `'bug-triage'` template description; `RecurringPipelineService.create`
+    now emits a best-effort `boardChanged('block-added')` when it materialises the reused block, so a
+    schedule-created task appears live on every open board (parity with every other block creation).
+  - **app**: infer the `'bug-triage'` template from `pl_bug_triage` in the recurring modal, and add a
+    `bug-intake` display-metadata entry to the agent catalog (the inbound dual of `tracker`).
+
+  Recurring-only enforcement: a `pl_bug_triage` run refuses a one-off manual start and is hidden from
+  the add-task picker, while remaining attachable to a recurring schedule.
+
+- 48f9d97: Add opt-in AWS EKS runner + environment backends as a new standalone package
+  `@cat-factory/eks`. An EKS cluster's apiserver is a standard Kubernetes apiserver, so the
+  package reuses the native Kubernetes transport/provider from `@cat-factory/integrations`
+  verbatim and only supplies the EKS differentiator: a short-lived SigV4-presigned STS (IAM)
+  apiserver token, minted with WebCrypto (no runtime AWS SDK dependency).
+
+  - `@cat-factory/contracts`: new first-class `{ kind: 'eks' }` runner + environment backend
+    variants (`eksRunnerConfigSchema` / `eksProvisionConfigSchema`), the shared
+    `eksClusterFieldsSchema` (`region` / `clusterName` / optional `stsHost`, now shape-validated),
+    and the AWS secret-key constants. `'eks'` is now a reserved backend kind. `ProviderConfigField`
+    gains `number` / `checkbox` / `textarea` field types, and `ProviderDescriptor` gains
+    `configTemplate` / `values` so a native backend's typed config renders as a generic form.
+  - `@cat-factory/integrations`: `KubernetesApiClient` gains an optional async token-provider
+    seam (behaviour-preserving for the existing Kubernetes backend). `RunnerBackendProvider` gains
+    an optional `form` descriptor (the shared apiserver fields live once in
+    `kubernetesLogic.KUBERNETES_RUNNER_FORM_FIELDS`), so the Kubernetes/EKS runner backends
+    self-describe their connect form.
+  - `@cat-factory/node-server` + `@cat-factory/worker`: register the EKS backends by reference on
+    BOTH facades (symmetric with the native `kubernetes` backend they extend; a pass-through until
+    a workspace connects an `eks` backend). A real EKS cluster's private-CA apiserver is only
+    reachable from a runtime that can pin a custom CA (Node/local) — the same constraint a
+    private-CA `kubernetes` connection already carries, rejected up front at registration on the
+    Worker rather than failing silently.
+  - `@cat-factory/app`: the runner-pool connect form is now rendered generically from the backend
+    descriptor for every backend kind (built-in `kubernetes`, opt-in `eks`, and custom native
+    kinds) — the hardcoded `KubernetesRunnerForm.vue` was removed and the SPA no longer knows which
+    optional backends exist. See `docs/initiatives/descriptor-driven-infra-forms.md` for the
+    remaining env-axis + manifest-editor work.
+
+### Patch Changes
+
+- Updated dependencies [cfcb6c7]
+- Updated dependencies [48f9d97]
+  - @cat-factory/contracts@0.98.0
+
 ## 0.90.0
 
 ### Minor Changes
