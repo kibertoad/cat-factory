@@ -193,6 +193,26 @@ export function buildKindBody(
 }
 
 /**
+ * Forward a kind's structured-output spec into the harness job body as a spreadable
+ * `{ output: {...} }` (or `{}` when the kind isn't structured). Shared by BOTH coding-surface
+ * kinds (a structured `container-coding` kind like `repro-test`, whose deliverable is a JSON
+ * outcome alongside its pushed commit) and explore-surface kinds — both parse the final reply the
+ * same way, so both forward the identical spec (the derived `shapeHint` plus the repair /
+ * fail-on-unusable flags). One source of truth so the two surfaces can't drift.
+ */
+function structuredOutputField(output: AgentStepSpec['output']): Record<string, unknown> {
+  if (output?.kind !== 'structured') return {}
+  return {
+    output: {
+      kind: 'structured',
+      ...(output.shapeHint ? { shapeHint: output.shapeHint } : {}),
+      ...(output.repair === false ? { repair: false } : {}),
+      ...(output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
+    },
+  }
+}
+
+/**
  * Build the generic `agent` job body for a registered kind from its declarative
  * {@link AgentStepSpec} — the single dispatch path that replaces the per-kind cases as
  * built-ins migrate. `container-explore` clones a branch read-only and returns prose
@@ -276,16 +296,7 @@ export function buildRegisteredAgentBody(
         // A structured coding kind (repro-test) returns a JSON outcome alongside its pushed
         // commit; forward the output spec so the harness parses the final reply into `custom`
         // (same shape the explore branch sends). Absent for the plain coder/fixers.
-        ...(step.output?.kind === 'structured'
-          ? {
-              output: {
-                kind: 'structured',
-                ...(step.output.shapeHint ? { shapeHint: step.output.shapeHint } : {}),
-                ...(step.output.repair === false ? { repair: false } : {}),
-                ...(step.output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
-              },
-            }
-          : {}),
+        ...structuredOutputField(step.output),
         // The Coder (follow-up companion enabled) streams forward-looking items out via the
         // sentinel file; tell the harness to tail it. Only on the SINGLE-REPO implementer path:
         // the multi-repo flow (`peerRepos`) runs `runMultiRepoCoding`, which does NOT tail the
@@ -319,16 +330,7 @@ export function buildRegisteredAgentBody(
       branch: exploreBranch,
       ...(explorePeers ? { peerRepos: explorePeers } : {}),
       ...(step.clone?.full ? { full: true } : {}),
-      ...(step.output?.kind === 'structured'
-        ? {
-            output: {
-              kind: 'structured',
-              ...(step.output.shapeHint ? { shapeHint: step.output.shapeHint } : {}),
-              ...(step.output.repair === false ? { repair: false } : {}),
-              ...(step.output.failOnUnusableFinal ? { failOnUnusableFinal: true } : {}),
-            },
-          }
-        : {}),
+      ...structuredOutputField(step.output),
       ...webTools,
     },
   }
