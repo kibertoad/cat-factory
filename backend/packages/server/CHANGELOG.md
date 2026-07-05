@@ -1,5 +1,28 @@
 # @cat-factory/server
 
+## 0.89.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+- Updated dependencies [dd6df12]
+  - @cat-factory/contracts@0.105.0
+  - @cat-factory/kernel@0.96.0
+  - @cat-factory/orchestration@0.78.0
+  - @cat-factory/integrations@0.71.0
+  - @cat-factory/agents@0.39.3
+  - @cat-factory/prompt-fragments@0.10.11
+  - @cat-factory/spend@0.10.105
+
 ## 0.88.0
 
 ### Minor Changes

@@ -1,5 +1,57 @@
 # @cat-factory/orchestration
 
+## 0.78.0
+
+### Minor Changes
+
+- 5490103: Surface web search on container agent run details, and store/display performed search queries as telemetry.
+
+  - Container steps now carry a `search` availability fact (`{ available, provider }`), resolved backend-side at dispatch from the run's account web-search keys (else the deployment default). The observability drill-down shows whether web search was available and which provider (Brave / SearXNG) served the run — a static per-run fact, not gated by prompt-recording.
+  - New `agent_search_queries` telemetry sink records every web search a container agent performs through the backend search proxy (query, provider, result count), gated by the same double switch as agent-context snapshots (`LLM_RECORD_PROMPTS` + the workspace `storeAgentContext` setting) and pruned on the same telemetry retention window. Mirrored across the D1 (Cloudflare) and Drizzle/Postgres (Node) stores with a cross-runtime conformance suite, and surfaced on demand via `GET /workspaces/:ws/executions/:executionId/search-queries` in a new "Web search" observability view.
+
+- dd6df12: feat(environments): attach per-PR compose stacks to their shared stacks (shared-stacks slice 5)
+
+  Wire a stack recipe's `sharedStackRefs` + `externalNetworks` through to the per-PR consumer
+  environment, so a complex compose repo can reach the long-lived shared infra it depends on (the
+  acme `acme-net` shape). This is the provider-integration slice of the stack-recipes initiative.
+
+  - **Provider-before-consumer bring-up.** `SharedStackService.ensureRefsUp(workspaceId, refs)`
+    brings each referenced shared stack up (via the idempotent `ensureUp`) IN ORDER and returns the
+    deduped union of the Docker networks they own — or a blocking `error` (never a throw) for a
+    missing ref, a failed bring-up, or a deployment with no host daemon. It is exposed to the compose
+    provider as the new `ProvisionEnvironmentRequest.ensureSharedStacks` seam (a kernel
+    `SharedStackEnsureResult`), bound in `EnvironmentProvisioningService.buildProvisionRequest`.
+  - **External-network attach.** `ComposeEnvironmentProvider.provisionRecipe` ensures the shared
+    stacks up (streaming one `shared stacks (N)` provisioning-log step) and then attaches the per-PR
+    project to `externalNetworks ∪ managedNetworks` via a new pure `attachExternalNetworks` folded
+    into `prepareRecipeComposeFiles`: each network not already declared external across the merged
+    `-f` layers is declared top-level `{ external: true }` and joined by every service (preserving
+    the implicit `default` connectivity; skipping a `network_mode`-pinned service). The attach
+    reasons about the MERGED stack (all `-f` layers together), not each layer in isolation, so it
+    never re-adds `default` to a service the base intentionally scoped, never lands `networks` on a
+    service whose `network_mode` sits in another layer (which compose rejects at `up`), and refuses —
+    rather than silently overwrites — a requested network whose name collides with a project-owned
+    network in the recipe.
+  - Execution stays local-facade-bound (the documented compose runtime-binding exception); the recipe
+    rides the existing persisted `provisioning` blob, so there is no migration. A recipe that
+    references shared stacks on a deployment without the lifecycle wired fails loudly.
+
+### Patch Changes
+
+- e5b9462: Show a step's failure trail on its step-detail overlay. The step-detail overlay now has an "Execution history" toggle that reveals the prior failed attempts recorded for that specific step (plus the current failure when the run is presently failed at it): the run-level "previous errors" history narrowed to one step. Each `AgentFailure` now carries the `stepIndex` it failed at (stamped by the engine's failure funnel), so the trail can be attributed per step.
+- Updated dependencies [5490103]
+- Updated dependencies [e5b9462]
+- Updated dependencies [dd6df12]
+  - @cat-factory/contracts@0.105.0
+  - @cat-factory/kernel@0.96.0
+  - @cat-factory/integrations@0.71.0
+  - @cat-factory/agents@0.39.3
+  - @cat-factory/prompt-fragments@0.10.11
+  - @cat-factory/sandbox@0.9.12
+  - @cat-factory/spend@0.10.105
+  - @cat-factory/workspaces@0.11.23
+  - @cat-factory/caching@0.4.13
+
 ## 0.77.0
 
 ### Minor Changes
