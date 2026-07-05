@@ -652,6 +652,29 @@ export const agentContextSnapshots = telemetry.table(
   ],
 )
 
+// One web search a container agent performed through the backend search proxy. Recorded
+// best-effort (gated by the same LLM_RECORD_PROMPTS + storeAgentContext double switch as
+// agent_context_snapshots) and pruned on the same retention window. Mirrors the D1
+// agent_search_queries table column-for-column.
+export const agentSearchQueries = telemetry.table(
+  'agent_search_queries',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    // The upstream backend that served the search (`brave` | `searxng`), or null.
+    provider: text('provider'),
+    query: text('query').notNull().default(''),
+    result_count: integer('result_count').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_agent_search_queries_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_search_queries_created').on(t.created_at),
+  ],
+)
+
 // The unified provisioning event log lives in its OWN Postgres schema (`provisioning`)
 // rather than `public`, isolating its high write churn from the main tables (the
 // Cloudflare analogue is a separate D1 binding). One row per spin-up/down attempt

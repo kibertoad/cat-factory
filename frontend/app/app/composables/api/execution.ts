@@ -4,6 +4,7 @@ import {
   exportExecutionLlmMetricsContract,
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
+  getExecutionSearchQueriesContract,
   mergeBlockContract,
   rejectStepContract,
   requestStepChangesContract,
@@ -141,6 +142,14 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
     // folded-in fragments, injected files). Empty when not wired / storing is off.
     getAgentContext: (workspaceId: string, executionId: string) =>
       send(getExecutionAgentContextContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
+      }),
+
+    // The web searches each container agent performed in a run (query, provider,
+    // result count). Empty when not wired / storing is off.
+    getSearchQueries: (workspaceId: string, executionId: string) =>
+      send(getExecutionSearchQueriesContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId },
       }),

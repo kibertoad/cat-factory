@@ -16,6 +16,7 @@ import {
   type RunnerDispatchOptions,
   type RunnerJobRef,
   type SubscriptionVendor,
+  type WebSearchAvailability,
 } from '@cat-factory/kernel'
 import {
   CONTEXT_BUDGET,
@@ -508,14 +509,15 @@ export interface ContainerAgentExecutorDependencies {
   resolveRepoOrigin?: ResolveRepoOrigin
   /**
    * Resolve whether THIS run's account actually has a usable container web-search
-   * upstream, so a coding/ci-fixer job is told to point Pi's `web_search` tool at
-   * `${proxyBaseUrl}/web-search` ONLY when a search will really work (keys are now
-   * per-account, resolved by the proxy off the run's account). This keeps the advertised
-   * tool coupled to real availability — we don't offer `web_search` to a run whose account
-   * has no keys (it would just fail/return nothing). Absent / resolves false ⇒ container
-   * web search stays disabled for the run.
+   * upstream — and, if so, which provider serves it — so a coding/ci-fixer job is told to
+   * point Pi's `web_search` tool at `${proxyBaseUrl}/web-search` ONLY when a search will
+   * really work (keys are now per-account, resolved by the proxy off the run's account).
+   * This keeps the advertised tool coupled to real availability — we don't offer
+   * `web_search` to a run whose account has no keys (it would just fail/return nothing).
+   * The resolved `{available, provider}` is also surfaced on the step (run details) via the
+   * job handle. Absent / resolves `available:false` ⇒ container web search stays disabled.
    */
-  resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>
+  resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>
   /**
    * Resolve the workspace's private package-registry entries (npm private orgs, GitHub
    * Packages) for a container dispatch — decrypted host + scopes + token, rendered by
@@ -621,7 +623,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
    */
   async startJob(context: AgentRunContext): Promise<AgentJobHandle> {
     const { workspaceId, executionId } = this.requireIds(context)
-    const { body, model, provider, kind, subscriptionTokenId } = await this.buildJobBody(context)
+    const { body, model, provider, kind, subscriptionTokenId, search } =
+      await this.buildJobBody(context)
     // The job's id is per-STEP (run id + agent kind), so sibling steps that share this
     // run's container never collide in the harness's per-kind job registries; the run
     // itself is addressed by the execution id, so its container is reclaimed as a unit.
@@ -651,6 +654,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       provider,
       workspaceId,
       agentKind: context.agentKind,
+      search,
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
     }
   }
@@ -885,6 +889,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     provider: string
     kind: RunnerDispatchKind
     subscriptionTokenId?: string
+    search: WebSearchAvailability
   }> {
     const { workspaceId, executionId, blockId } = this.requireIds(context)
     // Per-STEP harness job id: unique within the run so this step's job never aliases
@@ -1008,12 +1013,14 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // when the run's account actually has a usable upstream (keys are per-account now), so
     // the agent is never handed a tool that always fails. Per-kind hint (coder/mocker/
     // analysis/… and any custom container kind resolves its own).
-    const webSearchEnabled = (await this.deps.resolveWebSearchEnabled?.(workspaceId)) ?? false
+    const search: WebSearchAvailability = (await this.deps.resolveWebSearchAvailability?.(
+      workspaceId,
+    )) ?? { available: false, provider: null }
     const webTools = {
       webToolsGuidance: webResearchGuidanceFor(context.agentKind, this.agentKindRegistry, {
         fetch: true,
       }),
-      ...(webSearchEnabled ? { webSearch: true } : {}),
+      ...(search.available ? { webSearch: true } : {}),
     }
 
     // Multi-repo coding (service-connections phases 3–4): when the implementer OR the ci-fixer
@@ -1088,6 +1095,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       model: `${ref.provider}:${ref.model}`,
       provider: ref.provider,
       kind,
+      search,
     }
   }
 

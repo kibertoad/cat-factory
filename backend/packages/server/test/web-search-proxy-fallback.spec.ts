@@ -23,7 +23,11 @@ function fakeUpstream(
   results: WebSearchResponse['results'],
 ): WebSearchUpstream & { calls: string[] } {
   const calls: string[] = []
-  return { calls, search: async (query: string) => (calls.push(query), { query, results }) }
+  return {
+    calls,
+    provider: 'searxng',
+    search: async (query: string) => (calls.push(query), { query, results }),
+  }
 }
 
 interface FakeContainer {

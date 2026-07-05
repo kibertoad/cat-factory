@@ -1090,6 +1090,16 @@
       "systemPrompt": "Prompt systemowy",
       "userPrompt": "Prompt użytkownika",
       "details": "Szczegóły"
+    },
+    "webSearch": "Wyszukiwanie w sieci",
+    "loadingSearch": "Ładowanie wyszukań w sieci…",
+    "noSearch": "Nie zarejestrowano wyszukań w sieci dla tego uruchomienia. Zapytania są rejestrowane, gdy wyszukiwanie w sieci jest uruchomione, a przestrzeń robocza ma włączone „Przechowuj pełny kontekst agenta”.",
+    "search": {
+      "available": "Dostępne",
+      "unavailable": "Niedostępne",
+      "provider": "Dostawca",
+      "resultsCount": "{count} wynik | {count} wyniki | {count} wyników",
+      "queriesTitle": "Wykonane wyszukiwania"
     }
   },
   "auth": {

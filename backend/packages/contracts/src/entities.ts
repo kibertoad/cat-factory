@@ -1197,6 +1197,25 @@ export const runContainerSchema = v.object({
 })
 export type RunContainer = v.InferOutput<typeof runContainerSchema>
 
+/** The web-search backend a run's container searches through, when search is available. */
+export const webSearchProviderSchema = v.picklist(['brave', 'searxng'])
+export type WebSearchProvider = v.InferOutput<typeof webSearchProviderSchema>
+
+/**
+ * Whether a container agent had web search available for its run, and — when it did —
+ * which upstream backend served it (resolved backend-side at dispatch from the run's
+ * account keys, else the deployment default). Surfaced on a container step so the run
+ * details can say "Web search: SearXNG" vs "Web search: unavailable"; it is a static
+ * dispatch-time fact, NOT gated by prompt-recording telemetry (the performed queries
+ * are — see the agent-search-query observability sink). `provider` is null when search
+ * was unavailable.
+ */
+export const webSearchAvailabilitySchema = v.object({
+  available: v.boolean(),
+  provider: v.nullable(webSearchProviderSchema),
+})
+export type WebSearchAvailability = v.InferOutput<typeof webSearchAvailabilitySchema>
+
 /**
  * The TERMINAL per-frame outcome of one environment a `deployer` step provisioned during a
  * multi-env fan-out (the task's own service frame + every involved-service frame): `ready`
@@ -1464,6 +1483,14 @@ export const pipelineStepSchema = v.object({
    * non-container steps and steps not yet dispatched. See {@link runContainerSchema}.
    */
   container: v.optional(v.nullable(runContainerSchema)),
+  /**
+   * Whether web search was available to this container step, and which upstream backend
+   * served it. Set at dispatch (a static per-run fact resolved from the account's
+   * web-search keys, else the deployment default). Only ever set on async (container)
+   * steps; absent on non-container steps and steps not yet dispatched. Distinct from the
+   * telemetry-gated per-query log — this is always surfaced. See {@link webSearchAvailabilitySchema}.
+   */
+  search: v.optional(v.nullable(webSearchAvailabilitySchema)),
   decision: v.nullable(decisionSchema),
   /**
    * Whether a human approval gate fires after this step completes. Copied from

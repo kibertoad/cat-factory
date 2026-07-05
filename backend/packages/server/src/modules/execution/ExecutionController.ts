@@ -4,6 +4,7 @@ import {
   exportExecutionLlmMetricsContract,
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
+  getExecutionSearchQueriesContract,
   getSpendStatusContract,
   mergeBlockContract,
   rejectStepContract,
@@ -108,6 +109,18 @@ export function executionController(): Hono<AppEnv> {
       ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
       : []
     return c.json({ executionId, snapshots }, 200)
+  })
+
+  // The web searches each container agent in a run performed through the search proxy:
+  // the query text, the provider that served it, and the result count. Empty when the
+  // search-query sink is not wired or the workspace disabled storing agent context.
+  buildHonoRoute(app, getExecutionSearchQueriesContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').searchQueryObservability
+    const searchQueries = observability
+      ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, searchQueries }, 200)
   })
 
   // LLM-friendly export of a run's model activity: a self-describing JSON bundle

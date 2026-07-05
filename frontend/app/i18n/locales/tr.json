@@ -1090,6 +1090,16 @@
       "systemPrompt": "Sistem istemi",
       "userPrompt": "Kullanıcı istemi",
       "details": "Ayrıntılar"
+    },
+    "webSearch": "Web araması",
+    "loadingSearch": "Web aramaları yükleniyor…",
+    "noSearch": "Bu çalıştırma için web araması kaydedilmedi. Sorgular, web araması çalıştığında ve çalışma alanında 'Tam aracı bağlamını depola' etkinleştirildiğinde yakalanır.",
+    "search": {
+      "available": "Kullanılabilir",
+      "unavailable": "Kullanılamıyor",
+      "provider": "Sağlayıcı",
+      "resultsCount": "{count} sonuç | {count} sonuç",
+      "queriesTitle": "Yapılan aramalar"
     }
   },
   "auth": {

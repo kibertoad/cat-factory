@@ -78,12 +78,14 @@ import {
   type RunnerPoolProvider,
   type TaskConnectionRepository,
   type TaskSourceProvider,
+  type WebSearchAvailability,
   CompositeNotificationChannel,
   SUBSCRIPTION_VENDORS,
   isAmbientNativeVendor,
 } from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
+  SearchQueryObservabilityService,
   type CoreDependencies,
   createCore,
   PACKAGE_REGISTRY_CIPHER_INFO,
@@ -131,6 +133,7 @@ import {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
   createDefaultWebSearchUpstream,
+  createWebSearchUpstream,
   makePreviewJobBuilder,
   makeResolveDeployCloneTarget,
   makeResolveRunRepoContext,
@@ -806,7 +809,7 @@ function buildNodeContainerExecutor(
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>,
   resolveUserGitHubToken?: ResolveUserGitHubToken,
   agentContextObservability?: AgentContextObservabilityService,
-  resolveWebSearchEnabled?: (workspaceId: string) => Promise<boolean>,
+  resolveWebSearchAvailability?: (workspaceId: string) => Promise<WebSearchAvailability>,
   resolveRepoOrigin?: ResolveRepoOrigin,
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>,
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>,
@@ -910,7 +913,7 @@ function buildNodeContainerExecutor(
     // Point container agents' web search at the backend search proxy (no provider key in
     // the sandbox), but only for a run whose account has keys (resolved per run — see the
     // call site), so the tool is never advertised to a run where it would just fail.
-    ...(resolveWebSearchEnabled ? { resolveWebSearchEnabled } : {}),
+    ...(resolveWebSearchAvailability ? { resolveWebSearchAvailability } : {}),
     // Decrypt the workspace's private-registry entries onto the job body (rendered by
     // the harness into ~/.npmrc), so private dependencies resolve on install.
     ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
@@ -1661,6 +1664,17 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     recordPrompts: config.observability.recordPrompts,
   })
+  // Agent-search-query observability sink: records each web search a container agent
+  // performed through the search proxy. Same double gate + retention window as the
+  // agent-context sink. Wired into the search proxy (write, via the container) AND
+  // createCore (read). Telemetry rows live in the `telemetry` Postgres schema.
+  const searchQueryObservability = new SearchQueryObservabilityService({
+    agentSearchQueryRepository: repos.agentSearchQueryRepository,
+    workspaceSettingsRepository: repos.workspaceSettingsRepository,
+    idGenerator,
+    clock,
+    recordPrompts: config.observability.recordPrompts,
+  })
   // Record a subscription harness's (Claude Code / Codex) per-call telemetry into the
   // SAME `llm_call_metrics` store the LLM proxy writes for Pi — those harnesses bypass
   // the proxy, so the executor lifts the metrics off the CLI stream and feeds them here.
@@ -1698,15 +1712,24 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         clock,
       })
     : undefined
-  const resolveWebSearchEnabled =
+  const resolveWebSearchAvailability =
     defaultWebSearchUpstream || webSearchAccountSettings
-      ? async (workspaceId: string): Promise<boolean> => {
-          // A deployment default serves every account, so the tool is on regardless.
-          if (defaultWebSearchUpstream) return true
-          if (!webSearchAccountSettings) return false
+      ? async (workspaceId: string): Promise<WebSearchAvailability> => {
+          // A deployment default serves every account, so the tool is on regardless — and
+          // it wins over the account path in the proxy, so its provider is the one that runs.
+          if (defaultWebSearchUpstream)
+            return { available: true, provider: defaultWebSearchUpstream.provider }
+          if (!webSearchAccountSettings) return { available: false, provider: null }
           const accountId = await repos.workspaceRepository.accountOf(workspaceId)
-          if (!accountId) return false
-          return Boolean((await webSearchAccountSettings.resolve(accountId)).webSearch)
+          if (!accountId) return { available: false, provider: null }
+          // Build the account upstream the SAME way the proxy resolves it, so the surfaced
+          // provider matches the one that will actually serve the run's searches.
+          const upstream = createWebSearchUpstream(
+            (await webSearchAccountSettings.resolve(accountId)).webSearch ?? {},
+          )
+          return upstream
+            ? { available: true, provider: upstream.provider }
+            : { available: false, provider: null }
         }
       : undefined
   // Private package registries (npm private orgs, GitHub Packages): sealed per-workspace
@@ -1742,7 +1765,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
     resolveUserGitHubToken,
     agentContextObservability,
-    resolveWebSearchEnabled,
+    resolveWebSearchAvailability,
     options.resolveRepoOrigin,
     resolvePackageRegistries,
     recordHarnessCalls,
@@ -2232,6 +2255,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // Re-exposed on the core for the agent-context read endpoint; the same instance
     // is injected into the container executor above for the write path.
     agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
     // Opt-in Langfuse trace sink (fans every recorded LLM call out as a generation).
     // Built only when configured; otherwise undefined and there is no external emission.
     llmTraceSink: buildLangfuseSink(config),

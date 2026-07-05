@@ -81,6 +81,12 @@ export type {
   RecordAgentContextInput,
 } from './agent-context.js'
 export type {
+  AgentSearchQuery,
+  AgentSearchQueryRecorder,
+  AgentSearchQueryRepository,
+  RecordAgentSearchQueryInput,
+} from './agent-search-queries.js'
+export type {
   LlmGenerationEvent,
   LlmToolSpan,
   LlmToolSpanContext,

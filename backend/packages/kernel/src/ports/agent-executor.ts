@@ -15,6 +15,7 @@ import type {
   StreamedFollowUp,
   TaskEstimate,
   TaskTypeFields,
+  WebSearchAvailability,
 } from '../domain/types.js'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
@@ -494,6 +495,14 @@ export interface AgentJobHandle {
    * executor needs it — absent ⇒ no kind-aware mapping + spans grouped under the run unlabelled.
    */
   agentKind?: string
+  /**
+   * Whether web search was available to this job's container and which upstream backend
+   * served it, resolved backend-side at dispatch (the run's account web-search keys, else
+   * the deployment default). Recorded on the step immediately so the run details surface
+   * "Web search: SearXNG" / "unavailable" without waiting for a poll. Absent for executors
+   * that don't resolve search availability (inline agents, tests).
+   */
+  search?: WebSearchAvailability
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */

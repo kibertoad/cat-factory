@@ -16,6 +16,8 @@ import type {
   EmailProviderKind,
   AgentContextSnapshot,
   AgentContextSnapshotRepository,
+  AgentSearchQuery,
+  AgentSearchQueryRepository,
   CloudProvider,
   AgentRunRef,
   AgentRunRepository,
@@ -167,6 +169,7 @@ import {
   localSettings,
   accounts,
   agentContextSnapshots,
+  agentSearchQueries,
   agentRuns,
   blocks,
   consensusSessions,
@@ -1570,6 +1573,65 @@ class DrizzleAgentContextSnapshotRepository implements AgentContextSnapshotRepos
       .delete(agentContextSnapshots)
       .where(lt(agentContextSnapshots.created_at, epochMs))
       .returning({ id: agentContextSnapshots.id })
+    return deleted.length
+  }
+}
+
+type AgentSearchQueryRow = typeof agentSearchQueries.$inferSelect
+
+/** The stored provider column is free-text; narrow it back to the wire union. */
+function parseSearchProvider(value: string | null): AgentSearchQuery['provider'] {
+  return value === 'brave' || value === 'searxng' ? value : null
+}
+
+function rowToAgentSearchQuery(row: AgentSearchQueryRow): AgentSearchQuery {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    executionId: row.execution_id,
+    agentKind: row.agent_kind,
+    provider: parseSearchProvider(row.provider),
+    query: row.query,
+    resultCount: row.result_count,
+    createdAt: row.created_at,
+  }
+}
+
+class DrizzleAgentSearchQueryRepository implements AgentSearchQueryRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(query: AgentSearchQuery): Promise<void> {
+    await this.db.insert(agentSearchQueries).values({
+      id: query.id,
+      workspace_id: query.workspaceId,
+      execution_id: query.executionId,
+      agent_kind: query.agentKind,
+      provider: query.provider,
+      query: query.query,
+      result_count: query.resultCount,
+      created_at: query.createdAt,
+    })
+  }
+
+  async listByExecution(workspaceId: string, executionId: string): Promise<AgentSearchQuery[]> {
+    const rows = await this.db
+      .select()
+      .from(agentSearchQueries)
+      .where(
+        and(
+          eq(agentSearchQueries.workspace_id, workspaceId),
+          eq(agentSearchQueries.execution_id, executionId),
+        ),
+      )
+      .orderBy(desc(agentSearchQueries.created_at), desc(agentSearchQueries.id))
+    return rows.map(rowToAgentSearchQuery)
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const deleted = await this.db
+      .delete(agentSearchQueries)
+      .where(lt(agentSearchQueries.created_at, epochMs))
+      .returning({ id: agentSearchQueries.id })
     return deleted.length
   }
 }
@@ -4328,6 +4390,7 @@ export interface CoreRepositories {
   tokenUsageRepository: TokenUsageRepository
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
+  agentSearchQueryRepository: AgentSearchQueryRepository
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
   modelPresetRepository: ModelPresetRepository
@@ -4370,6 +4433,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     tokenUsageRepository: new DrizzleTokenUsageRepository(db),
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentContextSnapshotRepository: new DrizzleAgentContextSnapshotRepository(db),
+    agentSearchQueryRepository: new DrizzleAgentSearchQueryRepository(db),
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     modelPresetRepository: new DrizzleModelPresetRepository(db),

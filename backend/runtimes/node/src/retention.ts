@@ -1,5 +1,6 @@
 import type {
   AgentContextSnapshotRepository,
+  AgentSearchQueryRepository,
   ResolveBinaryArtifactStore,
   Clock,
   CommitProjectionRepository,
@@ -35,6 +36,8 @@ export interface RetentionRepos {
   llmCallMetricRepository: Pick<LlmCallMetricRepository, 'deleteOlderThan'>
   // The agent-context observability sink rides the same window as llmCallMetrics.
   agentContextSnapshotRepository: Pick<AgentContextSnapshotRepository, 'deleteOlderThan'>
+  // The agent-search-query sink rides the same window as llmCallMetrics.
+  agentSearchQueryRepository: Pick<AgentSearchQueryRepository, 'deleteOlderThan'>
   pipelineScheduleRepository: Pick<PipelineScheduleRepository, 'pruneRunsBefore'>
   // Personal-credential per-run activations whose TTL has passed (individual-usage
   // subscriptions). Mirrors the Worker's activation-sweeper cron.
@@ -55,6 +58,7 @@ export interface RetentionResult {
   tokenUsage: number
   llmCallMetrics: number
   agentContextSnapshots: number
+  agentSearchQueries: number
   scheduleRuns: number
   activations: number
   provisioningLog: number
@@ -99,6 +103,10 @@ export async function sweepRetention(
     // Same window as the LLM call telemetry: heavy prompt + injected-file bodies.
     agentContextSnapshots: await prune(retention.llmCallMetricsMs, now, (c) =>
       repos.agentContextSnapshotRepository.deleteOlderThan(c),
+    ),
+    // Same window as the LLM call telemetry (performed web-search queries).
+    agentSearchQueries: await prune(retention.llmCallMetricsMs, now, (c) =>
+      repos.agentSearchQueryRepository.deleteOlderThan(c),
     ),
     // Fixed ~1-week window (not part of the configurable retention policy).
     scheduleRuns: await prune(SCHEDULE_RUN_RETENTION_MS, now, (c) =>
