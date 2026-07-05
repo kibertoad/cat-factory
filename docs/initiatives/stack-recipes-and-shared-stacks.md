@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-main pilot)
 
-**Status:** in progress (slices 1–4 landed = contracts + detection + recipe execution + SharedStack) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–5 landed = contracts + detection + recipe execution + SharedStack + provider integration) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -218,6 +218,33 @@ models acme-shared-services (one stack per machine/workspace, consumers attach o
 > `sharedStackRefs` on a service recipe are still parsed-not-attached — that ensure-first ordering +
 > `external: true` rewrite on the CONSUMER project is exactly slice 5. (4) per-step provisioning-log
 > streaming is a wired-but-unused `SharedStackService.provisioningLog` seam (a clean follow-up).
+>
+> **Landed (slice 5)** — a recipe's `sharedStackRefs` + `externalNetworks` now reach the consumer
+> project. `SharedStackService.ensureRefsUp(workspaceId, refs)` brings each referenced stack up (via
+> the idempotent `ensureUp`) IN ORDER and returns the deduped union of their `managedNetworks`, or a
+> blocking `error` (never throws) for a missing ref / failed bring-up / no host daemon — a new kernel
+> `SharedStackEnsureResult`. It is exposed on the provision request as the
+> `ProvisionEnvironmentRequest.ensureSharedStacks` seam, bound in
+> `EnvironmentProvisioningService.buildProvisionRequest` (the service gained an `ensureSharedStacks`
+> dep, wired in `createCore` from the now-earlier-built `sharedStacks` module — `createEnvironmentsModule`
+> takes the `SharedStackService`). In `ComposeEnvironmentProvider.provisionRecipe`, after the pure
+> fast-fail checks + reading the compose layers, the provider ensures the shared stacks up
+> (provider-before-consumer, streaming one `shared stacks (N)` provisioning-log step) and then attaches
+> the per-PR project to `externalNetworks ∪ managedNetworks` via a new pure
+> `attachExternalNetworks(doc, networks)` folded into `prepareRecipeComposeFiles` (new `attachNetworks`
+> option): each network NOT already declared external in the MERGED layers is declared top-level
+> `{ external: true }` and joined by every service (preserving the implicit `default` for a service on
+> no explicit network; skipping a `network_mode`-pinned service). **Gotchas for later slices:** (1) the
+> "already external" skip is computed across ALL `-f` layers first — so a network the base wires is
+> left entirely alone and an override layer never re-adds `default` to a service the base intentionally
+> scoped. (2) ensure runs BEFORE `prepareRecipeComposeFiles` validates YAML/service-defined (it needs
+> the managed networks to attach); since `ensureUp` is idempotent-cheap once a stack is up, a
+> first-run consumer with a malformed compose can bring the (reusable) shared stack up then fail — that
+> is acceptable, not wasted work. (3) this is local-facade-bound execution (no D1⇄Drizzle work — the
+> recipe rides the existing `provisioning` blob), validated by unit tests with a fake runtime, not
+> conformance; persistence parity is inherent. (4) `externalNetworks` NOT backed by a `sharedStackRef`
+> (nor pre-existing on the host) are still declared+attached but nothing CREATES them, so `up` fails
+> clearly — a preflight (slice 6) is the place to catch that up front.
 
 ### 3. Preflights (machine-prerequisite checks + guided remediation)
 
@@ -413,7 +440,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | done   | (this) |
 | 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | done   | (this) |
 | 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | done   | (this) |
-| 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | todo   |        |
+| 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | done   | (this) |
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | todo   |        |
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s                              | todo   |        |
 | 8   | **Environment analyst**: agent kind (structured draft recipe) + wizard draft-merge with provenance                                                        | todo   |        |

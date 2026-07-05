@@ -4,11 +4,18 @@ import type {
   IdGenerator,
   RecipeStepRecorder,
   SharedStack,
+  SharedStackEnsureResult,
   SharedStackRepository,
   UpdateSharedStackInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, requireWorkspace, ValidationError } from '@cat-factory/kernel'
+import {
+  assertFound,
+  ConflictError,
+  getErrorMessage,
+  requireWorkspace,
+  ValidationError,
+} from '@cat-factory/kernel'
 import {
   type ComposeRuntime,
   classifyComposePs,
@@ -190,6 +197,49 @@ export class SharedStackService {
     const run = this.bringUp(workspaceId, stack).finally(() => this.inflight.delete(id))
     this.inflight.set(id, run)
     return run
+  }
+
+  /**
+   * Bring UP the shared stacks a consumer recipe references (`recipe.sharedStackRefs`) and return
+   * the deduped union of the managed Docker networks they own — the provider-before-consumer step
+   * the compose environment provider runs before standing a per-PR project up, so it can attach to
+   * those networks as `external: true`. Each ref is ensured idempotently (a healthy stack is a
+   * no-op) IN ORDER, since a later stack may depend on an earlier one's network. Returns a blocking
+   * `error` — never throws — when a ref names no stack in the workspace, the runtime can't bring one
+   * up (no host daemon), or a bring-up fails, so the provider surfaces a deterministic provision
+   * failure with the real cause. This is the {@link ProvisionEnvironmentRequest.ensureSharedStacks}
+   * seam's implementation.
+   */
+  async ensureRefsUp(workspaceId: string, refs: string[]): Promise<SharedStackEnsureResult> {
+    const networks: string[] = []
+    const seen = new Set<string>()
+    for (const ref of refs) {
+      let stack: SharedStack
+      try {
+        stack = await this.ensureUp(workspaceId, ref)
+      } catch (err) {
+        // A missing ref (assertFound), a runtime that can't bring stacks up (no daemon), or a
+        // workspace-guard miss — all become a clear blocking reason for the provision.
+        return { ok: false, error: `shared stack '${ref}': ${getErrorMessage(err)}` }
+      }
+      if (stack.status !== 'running') {
+        // `ensureUp` persists (and returns) a `failed` stack rather than throwing; surface its
+        // lastError so the consumer's provisioning log shows why the shared infra didn't come up.
+        return {
+          ok: false,
+          error: `shared stack '${stack.name}' is not running: ${
+            stack.lastError ?? 'bring-up did not complete'
+          }`,
+        }
+      }
+      for (const network of stack.managedNetworks) {
+        if (!seen.has(network)) {
+          seen.add(network)
+          networks.push(network)
+        }
+      }
+    }
+    return { ok: true, networks }
   }
 
   /** Tear a shared stack down (`down -v`). A deliberate action; the stack row is preserved. */

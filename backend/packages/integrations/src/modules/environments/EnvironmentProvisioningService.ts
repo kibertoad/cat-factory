@@ -24,6 +24,7 @@ import type {
   RunRepoContext,
   SecretResolver,
   ServiceProvisioning,
+  SharedStackEnsureResult,
   UrlSafetyPolicy,
 } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
@@ -106,6 +107,16 @@ export interface EnvironmentProvisioningServiceDependencies {
     blockId: string,
     ref?: string,
   ) => Promise<DeployCloneTarget | null>
+  /**
+   * Bring the SHARED STACKS a compose stack recipe references up (provider-before-consumer) and
+   * return the managed Docker networks they own — the {@link SharedStackService.ensureRefsUp} seam,
+   * exposed on the provision request as {@link ProvisionEnvironmentRequest.ensureSharedStacks} so
+   * the compose provider can attach the per-PR project to those networks. Wired only where the
+   * shared-stack lifecycle exists (a host Docker daemon — the local facade); absent ⇒ a recipe that
+   * declares `sharedStackRefs` fails loudly at provision. Typed structurally (not the concrete
+   * service) so integrations stays decoupled.
+   */
+  ensureSharedStacks?: (workspaceId: string, refs: string[]) => Promise<SharedStackEnsureResult>
 }
 
 /**
@@ -486,6 +497,13 @@ export class EnvironmentProvisioningService {
           })
         }
       : undefined
+    // Bring the recipe's referenced shared stacks up + collect their managed networks, so the
+    // compose provider can attach the per-PR project to them. Bound to the workspace here (the
+    // provider only names the refs); wired only where the shared-stack lifecycle exists.
+    const ensureSharedStacks = this.deps.ensureSharedStacks
+      ? (refs: string[]): Promise<SharedStackEnsureResult> =>
+          this.deps.ensureSharedStacks!(workspaceId, refs)
+      : undefined
     return {
       manifest,
       inputs,
@@ -494,6 +512,7 @@ export class EnvironmentProvisioningService {
       ...(runRepo ? { runRepo } : {}),
       ...(clone ? { clone } : {}),
       ...(recordStep ? { recordStep } : {}),
+      ...(ensureSharedStacks ? { ensureSharedStacks } : {}),
       ...(this.deps.resolveRepoFilesForWorkspace
         ? {
             resolveRepoFiles: (coords) =>

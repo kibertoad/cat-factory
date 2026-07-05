@@ -421,6 +421,7 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
       files: Record<string, string>
       extra?: Record<string, unknown>
       recordStep?: ProvisionEnvironmentRequest['recordStep']
+      ensureSharedStacks?: ProvisionEnvironmentRequest['ensureSharedStacks']
     } = {
       files: {},
     },
@@ -431,6 +432,7 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
       clone: () =>
         Promise.resolve({ cloneUrl: 'https://github.com/acme/shop.git', ref: 'main', token: 't' }),
       ...(opts.recordStep ? { recordStep: opts.recordStep } : {}),
+      ...(opts.ensureSharedStacks ? { ensureSharedStacks: opts.ensureSharedStacks } : {}),
     })
 
   // A script that greenlights a whole recipe bring-up (up/exec/host green, ps healthy, port bound).
@@ -648,6 +650,83 @@ describe('ComposeEnvironmentProvider — stack recipes', () => {
     )
     expect(env.status).toBe('failed')
     expect(env.error).toContain('escapes the checkout')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('ensures shared stacks up FIRST, then attaches the project to their managed networks', async () => {
+    const ensureCalls: string[][] = []
+    const recipe: StackRecipe = { sharedStackRefs: ['ss_shared'] }
+    const { runtime, calls, checkoutFiles } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        ensureSharedStacks: async (refs) => {
+          ensureCalls.push(refs)
+          return { ok: true, networks: ['acme-net'] }
+        },
+      }),
+    )
+    expect(env.status).toBe('ready')
+    // The shared stack was ensured up before the consumer project was stood up.
+    expect(ensureCalls).toEqual([['ss_shared']])
+    // The rewritten compose declares acme-net external + joins `web` to it.
+    const composeFile = checkoutFiles.find((f) => f.relPath.includes('cat-factory'))!
+    const doc = parse(composeFile.content)
+    expect(doc.networks).toEqual({ 'acme-net': { external: true } })
+    expect(doc.services.web.networks).toEqual(['default', 'acme-net'])
+    // The daemon was only touched (up) after the ensure resolved.
+    expect(calls.some((a) => a.includes('up'))).toBe(true)
+  })
+
+  it('also attaches the recipe’s own declared externalNetworks (union with managed)', async () => {
+    const recipe: StackRecipe = {
+      sharedStackRefs: ['ss_shared'],
+      externalNetworks: ['extra-net'],
+    }
+    const { runtime, checkoutFiles } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        ensureSharedStacks: async () => ({ ok: true, networks: ['acme-net'] }),
+      }),
+    )
+    expect(env.status).toBe('ready')
+    const doc = parse(checkoutFiles.find((f) => f.relPath.includes('cat-factory'))!.content)
+    expect(doc.networks).toEqual({
+      'acme-net': { external: true },
+      'extra-net': { external: true },
+    })
+    // Attach order is the recipe's declared externalNetworks, then the managed ones (functionally
+    // irrelevant to compose; asserted here so the union is deterministic).
+    expect(doc.services.web.networks).toEqual(['default', 'extra-net', 'acme-net'])
+  })
+
+  it('fails (never touches the daemon) when a shared stack cannot be brought up', async () => {
+    const recipe: StackRecipe = { sharedStackRefs: ['ss_shared'] }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+        ensureSharedStacks: async () => ({ ok: false, error: "shared stack 'db' is not running" }),
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('Shared stacks could not be brought up')
+    expect(env.error).toContain("shared stack 'db' is not running")
+    expect(calls).toHaveLength(0)
+  })
+
+  it('fails loudly when a recipe references shared stacks but the seam is not wired', async () => {
+    const recipe: StackRecipe = { sharedStackRefs: ['ss_shared'] }
+    const { runtime, calls } = fakeRuntime(greenScript, { withCheckout: true })
+    // No `ensureSharedStacks` in the request → the deployment can't orchestrate shared stacks.
+    const env = await new ComposeEnvironmentProvider(runtime).provision(
+      recipeReq(recipe, {
+        files: { 'docker-compose.yml': 'services:\n  web:\n    image: nginx\n' },
+      }),
+    )
+    expect(env.status).toBe('failed')
+    expect(env.error).toContain('shared-stack orchestration is not available')
     expect(calls).toHaveLength(0)
   })
 })
