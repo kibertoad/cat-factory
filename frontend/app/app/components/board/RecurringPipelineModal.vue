@@ -86,6 +86,7 @@ const selectedPipelineLabel = computed(
 const template = computed<ScheduleTemplate>(() => {
   if (pipelineId.value === 'pl_tech_debt') return 'tech-debt'
   if (pipelineId.value === 'pl_dep_update') return 'dep-update'
+  if (pipelineId.value === 'pl_bug_triage') return 'bug-triage'
   return 'custom'
 })
 const isTechDebt = computed(() => template.value === 'tech-debt')

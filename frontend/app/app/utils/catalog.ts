@@ -410,6 +410,19 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Files a tracker ticket (GitHub issue / Jira) from the analysis before work starts.',
   },
+  // The inbound dual of `tracker`: a one-shot engine step that PULLS one matching open issue
+  // from the schedule's configured tracker board, marks it in-progress with a "taken by
+  // cat-factory" comment, and reseeds the recurring block from it. Runs no model; seeded only
+  // into the recurring bug-triage pipeline, so it is a display-metadata system kind (like
+  // `tracker`), not a palette archetype.
+  'bug-intake': {
+    kind: 'bug-intake',
+    label: 'Bug Intake',
+    icon: 'i-lucide-inbox',
+    color: '#fb923c',
+    description:
+      'Pulls one matching open issue from the configured tracker board, marks it in-progress, and seeds the run from it.',
+  },
   conflicts: {
     kind: 'conflicts',
     label: 'Conflicts Gate',

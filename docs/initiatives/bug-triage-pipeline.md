@@ -347,13 +347,50 @@ Notes for Phase H (which seeds `pl_bug_triage` using this kind):
 
 ### Phase H — the pipeline itself + end-to-end (design §1, §6, §9–10)
 
+Implemented on branch `claude/bug-triage-phase-h` (off `main`; the #752 stack has since merged).
+Zero harness changes / no image bump — every kind it wires already ships. This is the FINAL phase:
+the initiative is complete once it merges.
+
 | Item                                                                                                    | Status |
 | ------------------------------------------------------------------------------------------------------- | ------ |
-| `pl_bug_triage` seed (`availability: 'recurring'`) + `BUG_TRIAGE_PIPELINE_ID` + `'bug-triage'` template | todo   |
-| `task-estimator` placement + gating validation over the new shape (`pipelineShape.ts`)                  | todo   |
-| End-to-end conformance: schedule fire → intake → investigate → clarity → repro → fix → merge (fakes)    | todo   |
-| e2e spec (live pushed UI updates for the recurring run; `data-testid`s as needed)                       | todo   |
-| Docs: glossary entries (`bug-intake`, `repro-test`), CLAUDE.md flow note if warranted                   | todo   |
+| `pl_bug_triage` seed (`availability: 'recurring'`) + `BUG_TRIAGE_PIPELINE_ID` + `'bug-triage'` template | done   |
+| `task-estimator` placement + gating validation over the new shape (`pipelineShape.ts`)                  | done   |
+| End-to-end conformance: schedule fire → intake → investigate → clarity → repro → fix → merge (fakes)    | done   |
+| e2e spec (live pushed UI updates for the recurring run; `data-testid`s as needed)                       | done   |
+| Docs: glossary entries (`bug-intake`, `repro-test`), CLAUDE.md flow note if warranted                   | done   |
+
+Notes:
+
+- **The seed is the exact design §1 shape** (`bug-intake → bug-investigator → clarity-review →
+task-estimator → repro-test → coder → reviewer → tester-api → conflicts → ci → merger`), with
+  only `clarity-review` a human gate (`gates[2]`), mirroring `pl_bugfix`. It is `availability:
+'recurring'`, so `assertPipelineLaunchable` refuses a one-off manual start and the SPA hides it
+  from the add-task picker (`pipelineAllowedForManualStart`) while surfacing it in the recurring
+  modal (`pipelineAllowedForSchedule`). A dedicated `pipelineShape.test.ts` case pins the shape +
+  launch constraint + estimator-first placement; the pre-existing "every seed pipeline is valid"
+  loop already covers `validatePipelineShape`.
+- **The end-to-end conformance test drives the SEEDED `BUG_TRIAGE_PIPELINE_ID`** (not a hand-built
+  pipeline) through a schedule with a fake Jira backlog + a single lenient superset `customResult`
+  (each structured kind — investigator, repro-test — reads only its own fields), asserting the run
+  reaches an auto-merge `done` with intake pickup, a `clear` auto-pass, a `reproduced` outcome, and
+  the coder/reviewer/merger all finishing. Runs on all three facades.
+- **The e2e spec is the recurring round-trip**, the one assembled-product surface no other spec
+  covers: creating a schedule pushes its reused block live (see the `block-added` fix below) and
+  run-now drives THAT block to terminal over the WebSocket. Deliberately generic (a simple
+  `['architect','coder']` pipeline), because the e2e backend wires no fake task source and the
+  `FakeProfile` has no `customResult`/intake knob — the bug-triage step mechanics are asserted in
+  the deterministic conformance suite instead (per the e2e "backend side-effects belong in
+  conformance" rule), not by adding fake-tracker plumbing to the browser suite.
+- **Consistency fix carried in this PR:** `RecurringPipelineService.create` now emits a best-effort
+  `boardChanged('block-added')` when it materialises the reused block — every OTHER block creation
+  (`BoardService.addTask`, frame/module adds) already does, so a schedule-created task previously
+  failed to appear live on other open boards. Wired through the orchestration container's resolved
+  `executionEventPublisher` (symmetric across both runtimes by construction); the new e2e spec is
+  what exercises it end to end.
+- Added a `bug-intake` `SYSTEM_AGENT_META` display entry in the SPA catalog (mirroring `tracker`,
+  its outbound dual) so it renders on run timelines / saved pipelines; `bug-investigator` /
+  `repro-test` already arrive as registered `customAgentKinds`. No new i18n keys — pipeline names
+  aren't localized and no template-value-keyed strings exist.
 
 ## Conventions & gotchas carried between iterations
 

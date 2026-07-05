@@ -74,6 +74,7 @@ export {
   INITIATIVE_PIPELINE_ID,
   DEP_UPDATE_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
+  BUG_TRIAGE_PIPELINE_ID,
 } from './domain/seed.js'
 
 // Pure initiative vocabulary (agent-kind constants + pipeline-shape predicates),

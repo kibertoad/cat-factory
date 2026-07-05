@@ -17,7 +17,12 @@ import { taskSourceKindSchema } from './tasks.js'
 // ---------------------------------------------------------------------------
 
 /** Template a schedule was created from; drives the seeded block description. */
-export const scheduleTemplateSchema = v.picklist(['dep-update', 'tech-debt', 'custom'])
+export const scheduleTemplateSchema = v.picklist([
+  'dep-update',
+  'tech-debt',
+  'bug-triage',
+  'custom',
+])
 export type ScheduleTemplate = v.InferOutput<typeof scheduleTemplateSchema>
 
 const intakePredicateStringSchema = v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200))

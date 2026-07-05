@@ -2,6 +2,7 @@ import type {
   Block,
   Clock,
   CreateScheduleInput,
+  ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
   IdGenerator,
@@ -58,6 +59,13 @@ export interface RecurringPipelineServiceDependencies {
    * runs (there is no connection registry to consult).
    */
   taskConnectionService?: TaskConnectionService
+  /**
+   * Pushes a coarse `boardChanged` when a schedule's reused on-board block is created, so the new
+   * recurring task appears live on every open board (and every board mounting a shared service)
+   * without a reload — exactly like {@link BoardService.addTask}. Best-effort; the REST response
+   * already carried the created schedule, so an emit failure never fails the create.
+   */
+  executionEventPublisher?: ExecutionEventPublisher
 }
 
 /**
@@ -95,6 +103,8 @@ const TEMPLATE_DESCRIPTIONS: Record<ScheduleTemplate, string> = {
     'Recurring dependency-update pass: bring this service’s dependencies up to the latest compatible versions, update lockfiles, and make sure the build and tests still pass.',
   'tech-debt':
     'Recurring tech-debt remediation pass: analyse this service for the highest-value technical debt, file a tracking ticket, then implement the fix with tests.',
+  'bug-triage':
+    'Recurring bug-triage pass: pull one open bug from the configured tracker board, investigate it across the involved services, write a failing reproduction test, fix the reported issue, and drive the fix through review, testing and merge. WHICH board and which bugs qualify is set in this schedule’s issue-intake configuration.',
   custom: '',
 }
 
@@ -117,6 +127,7 @@ export class RecurringPipelineService {
   private readonly serviceRepository?: ServiceRepository
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly taskConnectionService?: TaskConnectionService
+  private readonly events?: ExecutionEventPublisher
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -130,6 +141,7 @@ export class RecurringPipelineService {
     this.serviceRepository = deps.serviceRepository
     this.workspaceMountRepository = deps.workspaceMountRepository
     this.taskConnectionService = deps.taskConnectionService
+    this.events = deps.executionEventPublisher
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -253,6 +265,14 @@ export class RecurringPipelineService {
       taskType: 'recurring',
     }
     await this.blockRepository.insert(workspaceId, block, serviceId)
+    // Push the new reused block live so it appears on every open board without a reload —
+    // like every other block creation (BoardService.addTask). Best-effort: the schedule is
+    // already persisted, so an event-bus hiccup must not fail the create.
+    try {
+      await this.events?.boardChanged(workspaceId, 'block-added', block.id)
+    } catch {
+      // best-effort; the REST response already carried the created schedule + block
+    }
 
     // An on-demand schedule carries a nominal (ignored) recurrence — it never auto-fires — so
     // the client need not send one. A scheduled one falls back to the same default if omitted.
