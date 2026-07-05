@@ -3,7 +3,8 @@
     "loading": "読み込み中…",
     "loadingBoard": "ボードを読み込み中…",
     "backendUnreachable": "バックエンドに接続できません",
-    "reconnecting": "再接続中…"
+    "reconnecting": "再接続中…",
+    "offline": "ライブ更新を受信していません"
   },
   "language": {
     "switcher": "言語",
@@ -81,6 +82,7 @@
       "moveFailed": "移動できませんでした",
       "deleteFailed": "削除できませんでした",
       "linkFailed": "タスクをリンクできませんでした",
+      "unlinkFailed": "依存関係を削除できませんでした",
       "recurringDeleteFailed": "定期パイプラインを削除できませんでした",
       "deleted": "\"{name}\" を削除しました",
       "moved": "\"{name}\" を移動しました"
@@ -1052,6 +1054,7 @@
     "loadingContext": "提供されたコンテキストを読み込み中…",
     "noCalls": "この実行で記録されたモデル呼び出しはありません。",
     "noContext": "この実行で保存されたエージェントコンテキストはありません。ワークスペースで「エージェントコンテキストを完全保存」が有効な場合、ディスパッチごとに記録されます。",
+    "contextError": "提供されたコンテキストを読み込めませんでした。",
     "summary": {
       "calls": "呼び出し",
       "tokensInOut": "トークン (入力 / 出力)",

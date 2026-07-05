@@ -3,7 +3,8 @@
     "loading": "טוען…",
     "loadingBoard": "טוען לוח…",
     "backendUnreachable": "לא ניתן להתחבר לבקאנד",
-    "reconnecting": "מתחבר מחדש…"
+    "reconnecting": "מתחבר מחדש…",
+    "offline": "לא מתקבלים עדכונים חיים"
   },
   "language": {
     "switcher": "שפה",
@@ -81,6 +82,7 @@
       "moveFailed": "לא ניתן היה להעביר",
       "deleteFailed": "לא ניתן היה למחוק",
       "linkFailed": "לא ניתן היה לקשר משימות",
+      "unlinkFailed": "לא ניתן להסיר את התלות",
       "recurringDeleteFailed": "לא ניתן היה למחוק את הצינור החוזר",
       "deleted": "\"{name}\" נמחק",
       "moved": "\"{name}\" הועבר"
@@ -1052,6 +1054,7 @@
     "loadingContext": "טוען את ההקשר שסופק…",
     "noCalls": "לא נרשמו קריאות מודל עבור ריצה זו.",
     "noContext": "לא אוחסן הקשר סוכן עבור ריצה זו. הוא נלכד בכל שיגור כשבסביבת העבודה מופעל 'אחסן הקשר סוכן מלא'.",
+    "contextError": "לא ניתן לטעון את ההקשר שסופק.",
     "summary": {
       "calls": "קריאות",
       "tokensInOut": "טוקנים (נכנס / יוצא)",

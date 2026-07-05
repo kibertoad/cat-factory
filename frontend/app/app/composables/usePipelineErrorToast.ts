@@ -93,6 +93,9 @@ export function usePipelineErrorToast() {
           : (conflict.message ?? t('errors.conflict.fallbackMessage')),
         color: 'error',
         icon: 'i-lucide-cpu',
+        // Stay until dismissed: an actionable toast whose remedy button vanishes on the ~5s
+        // auto-dismiss takes the one-click fix with it before the user can reach it.
+        duration: 0,
         actions: [
           {
             label: t('errors.conflict.providersUnconfigured.action'),
@@ -117,6 +120,9 @@ export function usePipelineErrorToast() {
           : (conflict.message ?? t('errors.conflict.fallbackMessage')),
         color: 'error',
         icon: 'i-lucide-image',
+        // Sticky, like the providers-unconfigured toast above: keep the "Configure storage"
+        // remedy reachable instead of letting it auto-dismiss.
+        duration: 0,
         actions: [
           {
             label: t('errors.conflict.binaryStorageUnconfigured.action'),

@@ -23,7 +23,11 @@ export const usePreviewStore = defineStore('preview', () => {
 
   // Active poll timers while a preview is `starting`, so a settled/left preview stops polling.
   const timers = new Map<string, ReturnType<typeof setTimeout>>()
+  // Consecutive poll-tick failures per frame while `starting`, so a transient blip keeps polling
+  // (self-heals) but a persistent failure eventually surfaces instead of spinning forever.
+  const pollErrors = new Map<string, number>()
   const POLL_INTERVAL_MS = 2_500
+  const POLL_MAX_ERRORS = 5
 
   function stopPolling(frameId: string) {
     const timer = timers.get(frameId)
@@ -31,6 +35,7 @@ export const usePreviewStore = defineStore('preview', () => {
       clearTimeout(timer)
       timers.delete(frameId)
     }
+    pollErrors.delete(frameId)
   }
 
   function apply(frameId: string, state: PreviewState) {
@@ -50,9 +55,26 @@ export const usePreviewStore = defineStore('preview', () => {
   async function refresh(frameId: string): Promise<void> {
     const ws = useWorkspaceStore()
     try {
-      apply(frameId, await api.getPreview(ws.requireId(), frameId))
-    } catch {
-      // A transient error leaves the last known state; stop polling so we don't spin.
+      const state = await api.getPreview(ws.requireId(), frameId)
+      pollErrors.delete(frameId)
+      apply(frameId, state)
+    } catch (err) {
+      // If we were polling a `starting` preview, a transient error must NOT silently wedge the
+      // amber "Starting…" forever with no recovery: keep polling (it self-heals when the runtime
+      // recovers) up to POLL_MAX_ERRORS, then surface the error and stop so the user isn't left
+      // staring at a permanent spinner.
+      if (byFrame.value[frameId]?.status === 'starting') {
+        const n = (pollErrors.get(frameId) ?? 0) + 1
+        if (n <= POLL_MAX_ERRORS) {
+          pollErrors.set(frameId, n)
+          timers.set(
+            frameId,
+            setTimeout(() => void refresh(frameId), POLL_INTERVAL_MS),
+          )
+          return
+        }
+        requestError.value[frameId] = err instanceof Error ? err.message : String(err)
+      }
       stopPolling(frameId)
     }
   }

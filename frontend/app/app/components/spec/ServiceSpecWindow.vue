@@ -88,6 +88,11 @@ function selectGroup(m: number, g: number) {
   selected.value = { m, g }
 }
 
+// Re-fetch after a load failure — the only escape used to be close-and-reopen.
+function retry() {
+  if (blockId.value) void serviceSpec.load(blockId.value)
+}
+
 // Exhaustive priority → label/chip map. Literal `t()` keys keep the typed-key drift
 // guard live, vs a runtime-built `spec.priority.${value}`.
 const PRIORITY_META: Record<RequirementPriority, { label: string; chip: string }> = {
@@ -187,10 +192,20 @@ function kindLabel(item: RequirementItem): string {
         <!-- error -->
         <div
           v-else-if="errored"
-          class="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-sm text-slate-400"
+          class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center text-sm text-slate-400"
         >
           <UIcon name="i-lucide-triangle-alert" class="h-6 w-6 text-amber-400" />
           {{ t('spec.error') }}
+          <UButton
+            icon="i-lucide-rotate-cw"
+            color="neutral"
+            variant="soft"
+            size="xs"
+            :loading="loading"
+            @click="retry"
+          >
+            {{ t('common.retry') }}
+          </UButton>
         </div>
 
         <!-- empty: no spec on the repo's default branch yet -->

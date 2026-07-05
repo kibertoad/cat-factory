@@ -5,7 +5,9 @@ cluster (UX-01/02/03/13, [#737](https://github.com/kibertoad/cat-factory/pull/73
 clipboard-feedback shared primitive (UX-38/39); friendly model/agent-kind labels in the
 review & consensus windows (UX-36/37); markdown prose + copy affordances in the result
 views (UX-43, UX-44 copy buttons); the review-window gate-actions + draft-persistence
-cluster (UX-32/33/34). This
+cluster (UX-32/33/34); the async-state / realtime / error-surfacing section E in full
+(UX-70..UX-77 — offline indicator, retrying refresh/resync, self-healing preview poll,
+retry affordances, sticky remedy toasts). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -378,46 +380,52 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
 
 | ID    | Sev | Status | Finding                                                                                 |
 | ----- | --- | ------ | --------------------------------------------------------------------------------------- |
-| UX-70 | P1  | todo   | Board whose WebSocket never connects is silently non-live — no indicator                |
-| UX-71 | P2  | todo   | Debounced board refresh swallows failures → silently stale board                        |
-| UX-72 | P2  | todo   | Reconnect declares "connected" even when the resync refresh failed                      |
-| UX-73 | P2  | todo   | Preview polling stops silently on transient error → stuck "Starting…" forever           |
-| UX-74 | P2  | todo   | Service-spec window error state has no retry                                            |
-| UX-75 | P3  | todo   | Observability panel error has no retry; context-load failure masquerades as empty state |
-| UX-76 | P3  | todo   | `removeDependency` has no error handling (sibling `toggleDependency` does)              |
-| UX-77 | P3  | todo   | Actionable error toasts auto-dismiss, taking their remedy button with them              |
+| UX-70 | P1  | done   | Board whose WebSocket never connects is silently non-live — no indicator                |
+| UX-71 | P2  | done   | Debounced board refresh swallows failures → silently stale board                        |
+| UX-72 | P2  | done   | Reconnect declares "connected" even when the resync refresh failed                      |
+| UX-73 | P2  | done   | Preview polling stops silently on transient error → stuck "Starting…" forever           |
+| UX-74 | P2  | done   | Service-spec window error state has no retry                                            |
+| UX-75 | P3  | done   | Observability panel error has no retry; context-load failure masquerades as empty state |
+| UX-76 | P3  | done   | `removeDependency` has no error handling (sibling `toggleDependency` does)              |
+| UX-77 | P3  | done   | Actionable error toasts auto-dismiss, taking their remedy button with them              |
 
-- **UX-70 — Never-connected is invisible.** `layout/ConnectionStatusBanner.vue:33,42`
-  gates on `everConnected`; if the very first WS handshake keeps failing
-  (proxy/firewall blocks WS while REST works, or `mintEventsTicket` throws at
-  `useWorkspaceStream.ts:117-122`) the board loads via REST but never goes live and
-  no banner ever appears — a user watching a run sees a frozen board. Fix: after N
-  failed initial attempts, show an "offline / not receiving live updates" state.
-- **UX-71 — Swallowed coarse refresh.** `useWorkspaceStream.ts:42-45` — a `board`
-  event triggers `void workspace.refresh()` with no catch/retry; one transient
-  failure leaves the board silently stale (a materialised module never appears).
-- **UX-72 — Optimistic reconnect.** `useWorkspaceStream.ts:152-160` — the resync
-  `refresh().catch(() => {})` is swallowed but `connected = true` is still set; a
-  reconnect whose reconcile failed presents as fully live while missing everything
-  from the outage, and the reconcile never retries.
-- **UX-73 — Preview stuck forever.** `stores/preview.ts:50-58` +
-  `panels/inspector/FrontendConfig.vue:405-411,456-470` — any fetch error during
-  `starting` polling stops the poll and sets nothing, so the amber "Starting…"
-  persists indefinitely with no error and no recovery short of Stop/Start.
-- **UX-74 — No retry on spec load.** `spec/ServiceSpecWindow.vue:180-186`
-  (+ `stores/serviceSpec.ts:55-56`) — static "couldn't load"; only escape is
-  close-and-reopen. Add a Retry calling `serviceSpec.load(blockId)`.
-- **UX-75 — Observability gaps.** `panels/ObservabilityPanel.vue:285-290` error
-  has no retry; `stores/observability.ts:130-134` swallows `loadContext` errors
-  entirely so a failure renders as the `noContext` empty state — indistinguishable
-  from a run with genuinely no captured context.
-- **UX-76 — Unhandled removeDependency.** `stores/board.ts:402-407` — no
-  try/catch; a failure rejects unhandled with no toast and the edge stays visible.
-  Mirror `toggleDependency` (:387-399).
-- **UX-77 — Vanishing remedies.** `composables/usePipelineErrorToast.ts:89-104,
-112-128,142-157` — the toasts carrying one-click remedies ("Configure AI",
-  "Configure storage") set no `duration`, so they auto-dismiss with the framework
-  default (~5s). Make action-bearing error toasts sticky (`duration: 0`).
+- **UX-70 — Never-connected is invisible. DONE.** `useWorkspaceStream` now tracks the
+  per-workspace connection lifecycle (`everConnected` + `connectionFailed`, reset on
+  `start()`): after `INITIAL_FAIL_ATTEMPTS` (3) failed connects with no successful handshake it
+  flags `connectionFailed`, and `ConnectionStatusBanner` renders a distinct rose "not receiving
+  live updates" strip (`data-testid="stream-offline"`, `i-lucide-wifi-off`) — separate from the
+  amber reconnecting strip (which only shows once we HAVE been live). The banner's local
+  `everConnected` tracking moved into the stream (passed as props) so both variants read the same
+  source of truth.
+- **UX-71 — Swallowed coarse refresh. DONE.** `debouncedBoardRefresh` now routes through
+  `refreshWithRetry(workspaceId)` (up to `REFRESH_MAX_ATTEMPTS`, backoff 0.4→4s), aborting between
+  attempts if the stream stopped or the workspace switched — one transient failure no longer leaves
+  the board silently stale.
+- **UX-72 — Optimistic reconnect. DONE.** The on-`open` resync uses the same
+  `refreshWithRetry` instead of `refresh().catch(() => {})`, so a reconnect whose first reconcile
+  fails now retries rather than presenting as fully live while missing the outage's events.
+  `connected` is still flipped even if every retry fails (we ARE connected; a refresh error must
+  not wedge the indicator / the e2e `data-connected` gate).
+- **UX-73 — Preview stuck forever. DONE.** `stores/preview.ts` `refresh` now, on a poll-tick
+  error while the last known state is `starting`, keeps polling up to `POLL_MAX_ERRORS` (5) — so a
+  transient blip self-heals — then surfaces the error into `requestError` and stops, instead of
+  silently wedging the amber "Starting…" forever. A successful tick resets the per-frame error
+  counter.
+- **UX-74 — No retry on spec load. DONE.** `spec/ServiceSpecWindow.vue`'s error state gained a
+  Retry button (`common.retry`, `:loading` bound to the store's loading flag) calling
+  `serviceSpec.load(blockId)`.
+- **UX-75 — Observability gaps. DONE.** `stores/observability.ts` now records
+  `contextErrors[executionId]` on a `loadContext` failure (cleared on each attempt); the panel's
+  context view shows a distinct error-with-retry state (`observability.contextError` + Retry)
+  before the `noContext` empty state, so a fetch failure no longer masquerades as "no context
+  stored". The calls view's existing error state also gained a Retry (`observability.load`).
+- **UX-76 — Unhandled removeDependency. DONE.** `stores/board.ts` `removeDependency` is now
+  wrapped in try/catch mirroring `toggleDependency`, toasting `board.toast.unlinkFailed` on
+  failure instead of rejecting unhandled with no feedback.
+- **UX-77 — Vanishing remedies. DONE.** The two action-bearing conflict toasts in
+  `usePipelineErrorToast` (`providers_unconfigured` → "Configure AI",
+  `binary_storage_unconfigured` → "Configure storage") now set `duration: 0` so the one-click
+  remedy stays reachable instead of auto-dismissing (~5s). Non-actionable toasts keep the default.
 
 ## F. Accessibility, keyboard & theming
 
@@ -546,6 +554,22 @@ w-72 … lg:flex">`, so below `lg` (laptop split-screen, tablet) the human could
   flush MUST snapshot whatever it needs (the review, the block id) synchronously up front —
   the reactive `blockId`/derived state go null the moment `closeResultView()` runs, so an
   async persist that re-reads them mid-flight silently no-ops.
+- **A best-effort async load that can fail must NOT swallow the error into an empty/idle state.**
+  A store's `catch {}` that sets nothing renders as "nothing here" — indistinguishable from
+  genuine emptiness (the `loadContext` → `noContext` trap, UX-75). Record a per-key error message
+  (`contextErrors`/`requestError`/`errors` shaped `Record<id, string | null>`), render a distinct
+  error state, and offer a Retry that re-invokes the same loader (reuse `common.retry` — no new
+  key). For a poll loop, a transient tick failure should keep polling up to a small cap (self-heal)
+  then surface the error and stop — never wedge a spinner forever (UX-73).
+- **Realtime resync/refresh retries; it does not fire-and-forget.** A coarse `workspace.refresh()`
+  driven by a `board` event or a socket (re)connect goes through a bounded retry-with-backoff
+  helper (`refreshWithRetry` in `useWorkspaceStream`) that aborts if the stream stopped or the
+  workspace switched — one transient failure must not leave the board silently stale. `connected`
+  is still announced even if every retry fails (we ARE connected; the resync is a best-effort
+  reconcile, and wedging the indicator would break the e2e `data-connected` gate).
+- **Action-bearing error toasts are sticky (`duration: 0`).** A toast whose value is a one-click
+  remedy button ("Configure AI") must not auto-dismiss and take the remedy with it. Plain
+  informational error toasts keep the default duration.
 - When fixing i18n papercuts (UX-13), remember the locale-parity CI check: adding,
   changing, OR removing an `en.json` key requires the same change in every other locale in
   the same PR (removing the two dead `clarity.*` keys above meant editing all 8 locales).

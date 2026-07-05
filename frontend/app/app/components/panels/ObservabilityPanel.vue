@@ -37,6 +37,16 @@ const exporting = computed(
 const error = computed(() =>
   executionId.value ? (observability.errors[executionId.value] ?? null) : null,
 )
+const contextError = computed(() =>
+  executionId.value ? (observability.contextErrors[executionId.value] ?? null) : null,
+)
+
+function retryCalls() {
+  if (executionId.value) void observability.load(executionId.value)
+}
+function retryContext() {
+  if (executionId.value) void observability.loadContext(executionId.value)
+}
 
 // Which view is shown: per-call model activity, the complete provided context, or the
 // performed web searches.
@@ -333,12 +343,22 @@ function exportJson() {
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingActivity') }}
             </p>
-            <p
+            <div
               v-else-if="error"
-              class="rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
+              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-6 text-center text-sm text-rose-400"
             >
               {{ error }}
-            </p>
+              <UButton
+                icon="i-lucide-rotate-cw"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                :loading="loading"
+                @click="retryCalls"
+              >
+                {{ t('common.retry') }}
+              </UButton>
+            </div>
             <p
               v-else-if="!calls.length"
               class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
@@ -493,6 +513,22 @@ function exportJson() {
               <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
               {{ t('observability.loadingContext') }}
             </p>
+            <div
+              v-else-if="contextError && !contextSnapshots.length"
+              class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-rose-900/60 py-8 text-center text-sm text-rose-400"
+            >
+              {{ t('observability.contextError') }}
+              <UButton
+                icon="i-lucide-rotate-cw"
+                color="neutral"
+                variant="soft"
+                size="xs"
+                :loading="contextLoading"
+                @click="retryContext"
+              >
+                {{ t('common.retry') }}
+              </UButton>
+            </div>
             <p
               v-else-if="!contextSnapshots.length"
               class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
