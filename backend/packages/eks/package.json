@@ -39,7 +39,6 @@
   "devDependencies": {
     "@types/node": "^26.0.1",
     "typescript": "7.0.1-rc",
-    "undici": "^8.5.0",
     "valibot": "^1.4.2",
     "vitest": "^4.1.9"
   }
