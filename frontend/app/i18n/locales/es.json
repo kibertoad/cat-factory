@@ -108,7 +108,11 @@
       "spendTitle": "Gasto de tokens este mes",
       "spendLimitReached": "Límite de gasto alcanzado: ejecuciones en pausa",
       "serviceAdded": "Se añadió {title}",
-      "serviceAddFailed": "No se pudo añadir el servicio"
+      "serviceAddFailed": "No se pudo añadir el servicio",
+      "zoomOut": "Alejar",
+      "zoomIn": "Acercar",
+      "fitView": "Ajustar al contenido",
+      "resetZoom": "Restablecer zoom al 100%"
     },
     "canvas": {
       "emptyTitle": "Tu tablero está vacío",

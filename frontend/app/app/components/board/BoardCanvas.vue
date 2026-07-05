@@ -6,7 +6,7 @@ import EpicNode from './nodes/EpicNode.vue'
 import TaskDependencyEdges from './TaskDependencyEdges.vue'
 import DependencyConnectOverlay from './DependencyConnectOverlay.vue'
 import { readDndPayload, blockIdFromEvent } from '~/utils/dnd'
-import { BOARD_FLOW_ID } from '~/composables/useBoardFlow'
+import { BOARD_FLOW_ID, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useBoardFlow'
 import { useTaskExpansion } from '~/composables/useTaskExpansion'
 import { useBlockDrag } from '~/composables/useBlockDrag'
 import { useFrameStacking } from '~/composables/useFrameStacking'
@@ -103,8 +103,10 @@ function onNodeClick({ node }: NodeMouseEvent) {
 }
 
 function onNodeDoubleClick({ node }: NodeMouseEvent) {
-  // Frames are containers: double-click expands to reveal their tasks.
-  ui.toggleFrame(node.id)
+  // Frames are always expanded (there's nothing to toggle), so double-click centres the
+  // camera on the frame and zooms it in — a quick "focus this service" gesture. Epics
+  // aren't containers, so their double-click stays a no-op.
+  if (node.type === 'block') void focusFrame(node.id)
 }
 
 function onPaneClick() {
@@ -147,7 +149,17 @@ async function onDrop(event: DragEvent) {
     const blockId = blockIdFromEvent(event)
     const target = blockId ? board.getBlock(blockId) : undefined
     const pipeline = pipelines.getPipeline(payload.pipelineId)
-    if (!target || !pipeline) return
+    // Unknown pipeline id is an internal glitch (nothing the user can act on); a drop
+    // onto blank canvas / a non-block, though, needs the same "aim at a task" nudge the
+    // wrong-level path gives — otherwise the drop just vanishes (UX-07).
+    if (!pipeline) return
+    if (!target) {
+      toast.add({
+        title: t('board.canvas.dropOntoTaskTitle'),
+        description: t('board.canvas.dropOntoTaskBody'),
+      })
+      return
+    }
     if (target.level !== 'task') {
       toast.add({
         title: t('board.canvas.dropOntoTaskTitle'),
@@ -179,8 +191,8 @@ async function onDrop(event: DragEvent) {
     <VueFlow
       :id="BOARD_FLOW_ID"
       :nodes="nodes"
-      :min-zoom="0.2"
-      :max-zoom="3"
+      :min-zoom="BOARD_MIN_ZOOM"
+      :max-zoom="BOARD_MAX_ZOOM"
       :default-viewport="{ x: 40, y: 20, zoom: 0.85 }"
       :pan-on-drag="panOnDrag"
       :elevate-nodes-on-select="false"

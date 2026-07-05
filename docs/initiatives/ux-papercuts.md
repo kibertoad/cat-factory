@@ -11,7 +11,9 @@ retry affordances, sticky remedy toasts); the accessibility icon-labeling / keyb
 focus / reduced-motion cluster (UX-62..66 — the `IconButton` primitive, keyboard-operable
 mini-steps, focus-visible rings, reduced-motion guards); the secret-input reveal cluster
 (UX-19/20 — the `SecretInput` primitive: every password field and every plaintext secret
-textarea now masks by default with an eye toggle). This
+textarea now masks by default with an eye toggle); the board zoom/canvas navigation cluster
+(UX-07/08/09/14/15/16 — labeled+clamp-disabled zoom controls, a click-to-reset-100% readout,
+double-click-to-focus a frame, and a nudge on blank-canvas pipeline drops). This
 document catalogs UX papercuts
 (small annoyances, missing affordances, rough edges) found in the SPA
 (`frontend/app/app`) during a systematic sweep on 2026-07-02. Every finding was
@@ -73,16 +75,16 @@ per-file patches:
 | UX-04 | P2  | todo        | Drag/reparent has no drop-target highlighting                                 |
 | UX-05 | P2  | todo        | Dependency drag-to-connect: no target highlight, silent no-op on invalid drop |
 | UX-06 | P2  | todo        | Dependency edges cannot be removed (or hovered) on the canvas                 |
-| UX-07 | P2  | todo        | Pipeline dropped on blank canvas gives no feedback                            |
-| UX-08 | P2  | todo        | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
-| UX-09 | P2  | todo        | Double-clicking a frame/epic is a dead no-op                                  |
+| UX-07 | P2  | done        | Pipeline dropped on blank canvas gives no feedback                            |
+| UX-08 | P2  | done        | Zoom / fit-view toolbar buttons lack tooltips; `maximize` glyph ambiguous     |
+| UX-09 | P2  | done        | Double-clicking a frame/epic is a dead no-op                                  |
 | UX-10 | P2  | todo        | Selection, zoom, viewport lost on reload / workspace switch                   |
 | UX-11 | P2  | todo        | Camera doesn't refit on workspace switch                                      |
 | UX-12 | P2  | todo        | No arrow-key navigation or keyboard block movement                            |
 | UX-13 | P2  | done (#737) | Hardcoded English toast `'Could not move'` in `moveBlock`                     |
-| UX-14 | P3  | todo        | No reset-zoom-to-100%; zoom readout not clickable                             |
-| UX-15 | P3  | todo        | Zoom/LOD readout hidden below `sm` breakpoint                                 |
-| UX-16 | P3  | todo        | Zoom buttons don't disable at min/max                                         |
+| UX-14 | P3  | done        | No reset-zoom-to-100%; zoom readout not clickable                             |
+| UX-15 | P3  | done        | Zoom/LOD readout hidden below `sm` breakpoint                                 |
+| UX-16 | P3  | done        | Zoom buttons don't disable at min/max                                         |
 | UX-17 | P3  | todo        | Desktop frame-resize grips are an 8px hit target                              |
 
 - **UX-01 — No undo after delete. DONE.** `stores/board.ts` `removeBlock` now
@@ -113,16 +115,20 @@ per-file patches:
   `components/board/TaskDependencyEdges.vue:163` — the whole SVG overlay is
   `pointer-events-none`. Removal requires re-running the exact same drag
   (`toggleDependency`), which is undiscoverable. Fix: clickable edge with hover "×".
-- **UX-07 — Silent failed pipeline drop.** `BoardCanvas.vue:138-160`. Wrong-level and
-  dependency-blocked drops toast, but `if (!target || !pipeline) return` swallows a
-  drop on empty canvas. Fix: "Drop a pipeline onto a task" toast.
-- **UX-08 — Untitled zoom controls.** `components/layout/BoardToolbar.vue:102-130`.
-  `zoom-in`/`zoom-out`/`i-lucide-maximize` (fit-to-content, reads as "fullscreen")
-  have no `:title`/aria-label, unlike the frame-header buttons.
-- **UX-09 — Dead double-click.** `BoardCanvas.vue:103-106` calls `ui.toggleFrame`,
-  but `BlockNode.vue:78` hardcodes `showExpanded = true` and
-  `ui.isFrameExpanded()` (`stores/ui.ts:262-264`) always returns `true` — the toggle
-  gates nothing. Remove the handler or repurpose (e.g. zoom-to-fit the frame).
+- **UX-07 — Silent failed pipeline drop. DONE.** `BoardCanvas.vue`'s `onDrop` split the
+  old `if (!target || !pipeline) return` — an unknown pipeline id stays a silent no-op
+  (internal glitch, nothing the user can act on), but a drop onto blank canvas / a
+  non-block now raises the same `board.canvas.dropOntoTask` nudge the wrong-level path
+  gives, so the drop never just vanishes.
+- **UX-08 — Untitled zoom controls. DONE.** The three zoom controls in
+  `BoardToolbar.vue` now route through the shared `common/IconButton.vue` primitive with
+  labels (`board.toolbar.zoomOut`/`zoomIn`/`fitView`), applied as both `:title` and
+  `:aria-label` — so `i-lucide-maximize` (fit-to-content) is no longer an ambiguous
+  "fullscreen" glyph.
+- **UX-09 — Dead double-click. DONE.** `BoardCanvas.vue`'s `onNodeDoubleClick` no longer
+  calls the inert `ui.toggleFrame` (frames are always expanded, so it gated nothing);
+  double-clicking a frame now `focusFrame`s it — centres the camera and zooms in, a quick
+  "focus this service" gesture. Epics (non-containers) stay a no-op.
 - **UX-10 — Transient view state.** `stores/ui.ts:34,239,244` — `selectedBlockId`,
   `zoom`, `expandedFrames` are plain refs; `BoardCanvas.vue:178-181` only does
   `fit-view-on-init`. Fix: persist per-workspace (localStorage).
@@ -135,9 +141,15 @@ per-file patches:
 - **UX-13 — Un-i18n'd move-failure toast. DONE.** `moveBlock`'s failure toast now uses
   `tr('board.toast.moveFailed')` (the key already existed) instead of the literal
   `'Could not move'`.
-- **UX-14/15/16 — Zoom polish.** `BoardToolbar.vue:102-130` + `BoardCanvas.vue:176-177`:
-  readout is static text (make it click-to-reset-100%), hidden below `sm`, and the
-  buttons stay enabled-but-inert at the 0.2/3.0 clamps.
+- **UX-14/15/16 — Zoom polish. DONE.** The `%`/LOD readout in `BoardToolbar.vue` is now a
+  real `<button>` (`board-zoom-reset`) that snaps the camera back to 100% via
+  `useBoardFlow().resetZoom()` (`zoomTo(1)`), titled `board.toolbar.resetZoom` with a
+  focus-visible ring (UX-14); it's always visible now (only the LOD sub-label drops below
+  `sm`) so the zoom level is never a mystery (UX-15); and the zoom-in/out `IconButton`s
+  `:disabled` at the clamps via `atMinZoom`/`atMaxZoom` computed against the shared
+  `BOARD_MIN_ZOOM`/`BOARD_MAX_ZOOM` constants (now sourced from `useBoardFlow.ts` and
+  consumed by `<VueFlow>` too, so the clamps can't drift from the button-disable logic)
+  (UX-16).
 - **UX-17 — Tiny resize grips.** `components/board/nodes/ModuleFrame.vue:83-91`,
   `BlockNode.vue:515-528` — `w-2`/`h-2` (8px) grips, widened only for
   `pointer-coarse:`. Add a larger invisible hit area for fine pointers.

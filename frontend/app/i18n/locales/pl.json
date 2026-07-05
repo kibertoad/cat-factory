@@ -108,7 +108,11 @@
       "spendTitle": "Wydatki na tokeny w tym miesiącu",
       "spendLimitReached": "Osiągnięto limit wydatków: uruchomienia wstrzymane",
       "serviceAdded": "Dodano {title}",
-      "serviceAddFailed": "Nie udało się dodać usługi"
+      "serviceAddFailed": "Nie udało się dodać usługi",
+      "zoomOut": "Pomniejsz",
+      "zoomIn": "Powiększ",
+      "fitView": "Dopasuj do zawartości",
+      "resetZoom": "Zresetuj powiększenie do 100%"
     },
     "canvas": {
       "emptyTitle": "Twoja tablica jest pusta",

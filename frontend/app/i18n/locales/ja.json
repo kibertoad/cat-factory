@@ -108,7 +108,11 @@
       "spendTitle": "今月のトークン消費量",
       "spendLimitReached": "消費上限に達しました。実行を一時停止しています",
       "serviceAdded": "{title} を追加しました",
-      "serviceAddFailed": "サービスを追加できませんでした"
+      "serviceAddFailed": "サービスを追加できませんでした",
+      "zoomOut": "縮小",
+      "zoomIn": "拡大",
+      "fitView": "内容に合わせる",
+      "resetZoom": "ズームを100%にリセット"
     },
     "canvas": {
       "emptyTitle": "ボードが空です",

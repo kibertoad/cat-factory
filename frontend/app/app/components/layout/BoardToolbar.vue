@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { useBoardFlow } from '~/composables/useBoardFlow'
+import { useBoardFlow, BOARD_MIN_ZOOM, BOARD_MAX_ZOOM } from '~/composables/useBoardFlow'
 import NotificationsInbox from '~/components/layout/NotificationsInbox.vue'
+import IconButton from '~/components/common/IconButton.vue'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -10,7 +11,7 @@ const workspaceSettings = useWorkspaceSettingsStore()
 const services = useServicesStore()
 const toast = useToast()
 const { t, n } = useI18n()
-const { fitView, zoomIn, zoomOut } = useBoardFlow()
+const { fitView, zoomIn, zoomOut, resetZoom } = useBoardFlow()
 
 async function mountService(serviceId: string, title: string) {
   try {
@@ -44,6 +45,10 @@ const mountableItems = computed(() =>
 )
 
 const zoomPct = computed(() => Math.round(ui.zoom * 100))
+// Disable the zoom buttons once the camera hits a clamp (Vue Flow pins the zoom exactly
+// at the limit, so a small epsilon guards against float drift). UX-16.
+const atMinZoom = computed(() => ui.zoom <= BOARD_MIN_ZOOM + 0.001)
+const atMaxZoom = computed(() => ui.zoom >= BOARD_MAX_ZOOM - 0.001)
 // Exhaustive (tier-2) map from level-of-detail → its label key, so adding an LOD
 // without a label fails the typecheck rather than leaking a raw key.
 const LOD_LABEL_KEYS = {
@@ -99,11 +104,13 @@ const decisionItems = computed(() =>
     class="absolute left-1/2 top-3 z-20 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-full border border-slate-700 bg-slate-900/90 px-2 py-1.5 shadow-xl backdrop-blur"
   >
     <!-- zoom controls -->
-    <UButton
+    <IconButton
+      :label="t('board.toolbar.zoomOut')"
       icon="i-lucide-zoom-out"
       color="neutral"
       variant="ghost"
       size="sm"
+      :disabled="atMinZoom"
       data-testid="board-zoom-out"
       @click="
         () => {
@@ -111,16 +118,28 @@ const decisionItems = computed(() =>
         }
       "
     />
-    <!-- The zoom %/LOD readout is the first thing to drop on narrow viewports. -->
-    <div class="hidden w-20 text-center text-xs tabular-nums text-slate-300 sm:block">
+    <!-- Click the readout to snap back to 100%. Always visible (only the LOD sub-label
+         drops on narrow viewports) so the zoom level is never a mystery. -->
+    <button
+      type="button"
+      class="w-16 rounded text-center text-xs tabular-nums text-slate-300 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-400/60 sm:w-20"
+      :title="t('board.toolbar.resetZoom')"
+      :aria-label="t('board.toolbar.resetZoom')"
+      data-testid="board-zoom-reset"
+      @click="resetZoom()"
+    >
       {{ zoomPct }}%
-      <div class="text-[9px] uppercase tracking-wide text-slate-500">{{ lodLabel }}</div>
-    </div>
-    <UButton
+      <span class="hidden text-[9px] uppercase tracking-wide text-slate-500 sm:block">{{
+        lodLabel
+      }}</span>
+    </button>
+    <IconButton
+      :label="t('board.toolbar.zoomIn')"
       icon="i-lucide-zoom-in"
       color="neutral"
       variant="ghost"
       size="sm"
+      :disabled="atMaxZoom"
       data-testid="board-zoom-in"
       @click="
         () => {
@@ -128,7 +147,8 @@ const decisionItems = computed(() =>
         }
       "
     />
-    <UButton
+    <IconButton
+      :label="t('board.toolbar.fitView')"
       icon="i-lucide-maximize"
       color="neutral"
       variant="ghost"

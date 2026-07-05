@@ -108,7 +108,11 @@
       "spendTitle": "צריכת טוקנים החודש",
       "spendLimitReached": "הוגעה למגבלת הצריכה — הריצות הושהו",
       "serviceAdded": "{title} נוסף",
-      "serviceAddFailed": "לא ניתן היה להוסיף את השירות"
+      "serviceAddFailed": "לא ניתן היה להוסיף את השירות",
+      "zoomOut": "הקטנה",
+      "zoomIn": "הגדלה",
+      "fitView": "התאמה לתוכן",
+      "resetZoom": "איפוס התקריב ל-100%"
     },
     "canvas": {
       "emptyTitle": "הלוח שלך ריק",
