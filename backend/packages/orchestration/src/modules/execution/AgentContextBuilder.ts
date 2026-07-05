@@ -6,6 +6,7 @@ import type {
   BrainstormSessionRepository,
   ClarityReviewRepository,
   CloudProvider,
+  DocKind,
   DocumentRecord,
   DocumentRepository,
   DocumentSourceKind,
@@ -232,6 +233,11 @@ export class AgentContextBuilder {
     // get the running service's selected fragments unioned with the block's own pins;
     // other kinds keep only their block pins. Recorded on the step for observability.
     const resolved = await this.resolveFragments(workspaceId, agentKind, step, block)
+    // For a document-authoring (doc-aware) kind, resolve the workspace's linked TEMPLATE +
+    // EXEMPLAR documents for the task's docKind (WS1 items 2–4). The template body overrides the
+    // built-in skeleton in the prompt (and the gate resolves the same override server-side); the
+    // exemplars are surfaced as good examples to emulate.
+    const docAuthoring = await this.resolveDocAuthoringContext(workspaceId, agentKind, block)
     return {
       agentKind,
       pipelineName: instance.pipelineName,
@@ -281,6 +287,11 @@ export class AgentContextBuilder {
         // so a kind's user-prompt builder can specialise on them — the document-authoring
         // agents read these. Sparse; omitted when none were collected.
         ...(block.taskTypeFields ? { taskTypeFields: block.taskTypeFields } : {}),
+        // Workspace-linked template / exemplar documents for a doc-authoring kind (WS1). Omitted
+        // when nothing is linked (the prompts then fall back to the built-in skeleton / built-in
+        // exemplars) or the kind isn't doc-aware.
+        ...(docAuthoring.docTemplateBody ? { docTemplateBody: docAuthoring.docTemplateBody } : {}),
+        ...(docAuthoring.docExemplars?.length ? { docExemplars: docAuthoring.docExemplars } : {}),
       },
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
@@ -589,6 +600,49 @@ export class AgentContextBuilder {
       // that this dispatch did not actually inject.
       step.selectedFragmentIds = undefined
       return null
+    }
+  }
+
+  /**
+   * Resolve the workspace's linked TEMPLATE + EXEMPLAR documents for a document-authoring
+   * (doc-aware) step's kind (WS1 items 2–4). A no-op unless the documents repository is wired AND
+   * the running kind is doc-aware — so it stays off the hot path for every non-document run. Two
+   * keyed reads (the singular template + the exemplar list), never a loop. The exemplar bodies are
+   * summarised to a short excerpt so the reference stays cheap; the template body travels whole
+   * (the prompt parses its sections). Never throws — a lookup failure degrades to the built-ins.
+   */
+  private async resolveDocAuthoringContext(
+    workspaceId: string,
+    agentKind: string,
+    block: Block,
+  ): Promise<{
+    docTemplateBody?: string
+    docExemplars?: NonNullable<AgentRunContext['block']['docExemplars']>
+  }> {
+    const documents = this.deps.documents
+    if (!documents) return {}
+    if (!hasTrait(agentKind, DOC_AWARE_TRAIT, this.deps.agentKindRegistry)) return {}
+    const docKind = (block.taskTypeFields?.docKind ?? 'other') as DocKind
+    try {
+      const [template, exemplars] = await Promise.all([
+        documents.getRoleLink(workspaceId, 'template', docKind),
+        documents.listRoleLinks(workspaceId, 'exemplar', docKind),
+      ])
+      return {
+        ...(template?.body?.trim() ? { docTemplateBody: template.body } : {}),
+        ...(exemplars.length
+          ? {
+              docExemplars: exemplars.map((d) => ({
+                title: d.title,
+                url: d.url,
+                excerpt: buildExcerpt(d.body || d.excerpt, CONTEXT_BUDGET.summaryChars),
+              })),
+            }
+          : {}),
+      }
+    } catch {
+      // A resolution failure must never wedge a run; fall back to the built-in template/exemplars.
+      return {}
     }
   }
 

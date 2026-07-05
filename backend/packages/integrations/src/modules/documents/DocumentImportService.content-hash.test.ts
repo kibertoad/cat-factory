@@ -37,6 +37,18 @@ function makeService(body: { value: string }) {
       return []
     },
     async linkBlock() {},
+    async getRoleLink() {
+      return null
+    },
+    async listRoleLinks() {
+      return []
+    },
+    async listRoleLinksByWorkspace() {
+      return []
+    },
+    async setRole() {},
+    async clearRole() {},
+    async clearRoleForKind() {},
   }
   const provider: Partial<DocumentSourceProvider> = {
     kind: 'confluence',

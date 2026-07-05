@@ -1,6 +1,8 @@
 import type {
   Block,
+  DocKind,
   DocumentBoardPlan,
+  DocumentLinkRole,
   SourceDocument,
   DocumentSourceKind,
   PlanFrame,
@@ -134,5 +136,46 @@ export class DocumentLinkService {
     )
     await this.deps.documentRepository.linkBlock(workspaceId, source, externalId, block.id)
     return toSourceDocument({ ...document, linkedBlockId: block.id })
+  }
+
+  /**
+   * Tag an already-imported document as the workspace's `template` or `exemplar` for a document
+   * kind (WS1 items 2–4). A `template` role is singular per kind — any prior template for the
+   * kind is cleared first, so linking a new one replaces the override. `exemplar` is additive.
+   * Reuses the same projected-document read path as {@link linkToBlock}; the only new surface is
+   * the role/`docKind` tag on the row.
+   */
+  async linkForKind(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<SourceDocument> {
+    const document = assertFound(
+      await this.deps.documentRepository.get(workspaceId, source, externalId),
+      'Document',
+      externalId,
+    )
+    if (role === 'template') {
+      await this.deps.documentRepository.clearRoleForKind(workspaceId, 'template', docKind)
+    }
+    await this.deps.documentRepository.setRole(workspaceId, source, externalId, role, docKind)
+    return toSourceDocument({ ...document, role, docKind })
+  }
+
+  /** Clear a document's workspace+`DocKind` role tag (built-in template resumes / exemplar drops). */
+  async unlinkForKind(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<void> {
+    await this.deps.documentRepository.clearRole(workspaceId, source, externalId)
+  }
+
+  /** Every role-tagged document in the workspace (drives the template/exemplar management UI). */
+  async listRoleLinks(workspaceId: string): Promise<SourceDocument[]> {
+    const rows = await this.deps.documentRepository.listRoleLinksByWorkspace(workspaceId)
+    return rows.map(toSourceDocument)
   }
 }

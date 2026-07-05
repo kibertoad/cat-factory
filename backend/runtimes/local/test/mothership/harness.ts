@@ -17,6 +17,7 @@ import {
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleDocumentRepository,
   DrizzleNotificationRepository,
   buildNodeContainer,
   createApp,
@@ -416,6 +417,7 @@ export function makeMothershipConformanceApp(
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
+    documentRepository: () => new DrizzleDocumentRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

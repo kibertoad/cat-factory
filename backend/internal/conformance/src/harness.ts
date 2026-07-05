@@ -5,6 +5,7 @@ import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
   BlockRepository,
+  DocumentRepository,
   DeployCloneTarget,
   EnvironmentProvider,
   ExecutionEventPublisher,
@@ -170,6 +171,14 @@ export interface ConformanceApp {
    * cards — and returns them for re-delivery — identically on D1 and Postgres.
    */
   notificationRepository(): NotificationRepository
+  /**
+   * The facade's document projections repository over its real store, so the suite can assert the
+   * WS1 workspace+`DocKind` role-link persistence (template singular-replace, exemplar multi,
+   * clear) identically on D1 and Postgres. The link WRITE surface is workspace-scoped and needs an
+   * imported document row, which the dev-open HTTP `call` path can't create (import needs a live
+   * source); like the other probes, the persistence is exercised through the repository directly.
+   */
+  documentRepository(): DocumentRepository
   /**
    * Seed an account-owned service row linked to a frame block straight into the facade's real
    * service store, so the frame-deletion test can assert the batched frame→service reclaim

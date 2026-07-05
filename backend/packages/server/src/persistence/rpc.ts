@@ -335,6 +335,13 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // per-dispatch run path as `get`/`listByBlock` above — so it must be allow-listed too
     // (else a task whose description contains any link fails the run with `unknown_method`).
     getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+    // Document-authoring run path (WS1): for a doc-aware kind, `AgentContextBuilder` resolves the
+    // workspace's linked TEMPLATE (singular) + EXEMPLAR (list) for the block's `docKind` on each
+    // dispatch, so both reads are on the run path exactly like `listByBlock`/`getByUrl`. arg0 is
+    // the workspaceId → the `workspace` rule. (The role-link WRITE surface + the whole-workspace
+    // list back the management UI, not the run path — they stay mothership-internal for now.)
+    getRoleLink: { scope: { kind: 'workspace', arg: 0 } },
+    listRoleLinks: { scope: { kind: 'workspace', arg: 0 } },
   },
   taskRepository: {
     listByBlock: { scope: { kind: 'workspace', arg: 0 } },

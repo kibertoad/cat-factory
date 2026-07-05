@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import { blockTypeSchema } from './primitives.js'
+import { blockTypeSchema, DOC_KINDS } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Document-source integration wire contracts. A workspace can connect to one or
@@ -25,6 +25,17 @@ export const documentSourceKindSchema = v.picklist([
   'linear',
 ])
 export type DocumentSourceKind = v.InferOutput<typeof documentSourceKindSchema>
+
+/**
+ * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
+ * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
+ * that kind (singular per kind — linking a new one replaces the prior override); `exemplar`
+ * links are a "good example to emulate" list the author agents are pointed at (multi-valued).
+ * Both ride the SAME document projection + read path as a block-scoped context link — the only
+ * new surface is this role/`docKind` tagging (see docs/initiatives/document-task-improvements.md).
+ */
+export const documentLinkRoleSchema = v.picklist(['template', 'exemplar'])
+export type DocumentLinkRole = v.InferOutput<typeof documentLinkRoleSchema>
 
 // ---- Provider self-description (drives the generic connect UI) ------------
 
@@ -92,6 +103,14 @@ export const sourceDocumentSchema = v.object({
   excerpt: v.string(),
   /** The board block this document is attached to as context, if any. */
   linkedBlockId: v.nullable(v.string()),
+  /**
+   * The workspace+`DocKind` link role this document plays, if any — `template` (its parsed
+   * sections override the kind's built-in skeleton) or `exemplar` (a good example to emulate).
+   * Null for a plain imported/block-linked document. Paired with {@link docKind}.
+   */
+  role: v.nullable(documentLinkRoleSchema),
+  /** The document kind a `role`-tagged link is scoped to (null when the document carries no role). */
+  docKind: v.nullable(v.picklist(DOC_KINDS)),
   /** When this projection row was last refreshed (epoch ms). */
   syncedAt: v.number(),
 })
@@ -205,3 +224,24 @@ export const linkDocumentSchema = v.object({
   blockId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type LinkDocumentInput = v.InferOutput<typeof linkDocumentSchema>
+
+/**
+ * Tag an imported page as the workspace's `template` or `exemplar` for a document kind (WS1).
+ * The page must already be imported (like {@link linkDocumentSchema}, the link references a
+ * projected document by its stable `(source, externalId)` key). A `template` role is singular
+ * per kind — linking a new one replaces the prior override.
+ */
+export const linkDocumentForKindSchema = v.object({
+  source: documentSourceKindSchema,
+  externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  role: documentLinkRoleSchema,
+  docKind: v.picklist(DOC_KINDS),
+})
+export type LinkDocumentForKindInput = v.InferOutput<typeof linkDocumentForKindSchema>
+
+/** Clear a document's workspace+`DocKind` role tag (falls back to the built-in template / drops the exemplar). */
+export const unlinkDocumentForKindSchema = v.object({
+  source: documentSourceKindSchema,
+  externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type UnlinkDocumentForKindInput = v.InferOutput<typeof unlinkDocumentForKindSchema>

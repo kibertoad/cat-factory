@@ -1584,6 +1584,9 @@
         "localRunners": {
           "label": "Mis ejecutores locales",
           "description": "Tus ejecutores de modelos en tu propia máquina (Ollama, LM Studio, vLLM…)."
+        },
+        "documentTemplates": {
+          "label": "Plantillas y ejemplos"
         }
       }
     },
@@ -2702,6 +2705,26 @@
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
       "attached": "Documento adjuntado",
       "attachFailed": "No se pudo adjuntar"
+    },
+    "templates": {
+      "title": "Plantillas y ejemplos de documentos",
+      "intro": "Asigna a un tipo de documento tu propia plantilla y documentos de ejemplo. Primero deben importarse mediante la integración de Documentos. Las secciones de una plantilla reemplazan el esqueleto integrado de ese tipo; los ejemplos guían a los agentes autores.",
+      "kindLabel": "Tipo de documento",
+      "importFirst": "Importa primero un documento: una plantilla o ejemplo es uno de tus documentos importados.",
+      "importButton": "Importar un documento",
+      "templateHeading": "Plantilla",
+      "templateHint": "Reemplaza el esqueleto integrado de {kind}. Una plantilla por tipo.",
+      "templateEmpty": "Usando la plantilla integrada.",
+      "exemplarsHeading": "Ejemplos a emular",
+      "exemplarsHint": "Buenos ejemplos que estudian los agentes autores, añadidos al conjunto integrado.",
+      "exemplarsEmpty": "No hay ejemplos vinculados.",
+      "pickLabel": "Documento importado",
+      "pickPlaceholder": "Elige un documento importado…",
+      "setTemplate": "Establecer como plantilla",
+      "addExemplar": "Añadir ejemplo",
+      "remove": "Quitar",
+      "linkFailed": "No se pudo actualizar el vínculo del documento",
+      "loadFailed": "No se pudieron cargar las plantillas de documentos"
     }
   },
   "tasks": {

@@ -11,7 +11,8 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 import { DOC_AWARE_TRAIT } from './traits.js'
 import { linkedContextSection } from '../prompts/standard.js'
 import {
-  docTemplateFor,
+  type DocTemplate,
+  resolveDocTemplate,
   templateOutlineGuidance,
   templateSkeletonGuidance,
   templateStructureLine,
@@ -154,6 +155,73 @@ function docFields(context: AgentRunContext): DocumentTarget {
 }
 
 /**
+ * The effective template for the running document task's kind: the workspace-linked template's
+ * parsed sections when the engine resolved one onto the context (`block.docTemplateBody`), else
+ * the built-in / deployment-registered skeleton. Every prompt reads the template through here so
+ * a workspace override and the built-in fallback share one path (mirrored by the `doc-quality`
+ * gate provider, which resolves the same override server-side).
+ */
+function effectiveDocTemplate(context: AgentRunContext, docKind: DocKind): DocTemplate {
+  return resolveDocTemplate(docKind, context.block.docTemplateBody)
+}
+
+/**
+ * Built-in curated "good example" documents per kind — public classics the author agents are
+ * pointed at (WS1 item 4), surfaced ALONGSIDE any workspace-linked `role: 'exemplar'` documents.
+ * A kind absent from the map simply contributes no built-in exemplars. Sparse by design.
+ */
+const DOC_KIND_EXEMPLARS: Partial<Record<DocKind, { title: string; url: string }[]>> = {
+  rfc: [
+    {
+      title: 'Rust RFC 2094 — non-lexical lifetimes (a thorough, well-argued RFC)',
+      url: 'https://rust-lang.github.io/rfcs/2094-nll.html',
+    },
+    {
+      title: 'React RFC — hooks (motivation → detailed design → drawbacks → alternatives)',
+      url: 'https://github.com/reactjs/rfcs/blob/main/text/0068-react-hooks.md',
+    },
+  ],
+  adr: [
+    {
+      title: 'MADR — Markdown Architecture Decision Records (canonical ADR structure)',
+      url: 'https://adr.github.io/madr/',
+    },
+  ],
+  prd: [
+    {
+      title: 'Figma — how to write a PRD (structure + worked example)',
+      url: 'https://www.figma.com/resource-library/how-to-write-a-prd/',
+    },
+  ],
+  runbook: [
+    {
+      title: 'Google SRE Workbook — playbooks / runbooks chapter',
+      url: 'https://sre.google/workbook/incident-response/',
+    },
+  ],
+}
+
+/**
+ * The "exemplars to emulate" section woven into the author prompts: the workspace-linked
+ * `role: 'exemplar'` documents (with a short excerpt each, resolved by the engine) followed by
+ * the built-in curated links for the kind. Empty when neither exists, so a bare document task's
+ * prompt is unchanged.
+ */
+function docExemplarsSection(context: AgentRunContext, docKind: DocKind): string {
+  const workspace = context.block.docExemplars ?? []
+  const builtins = DOC_KIND_EXEMPLARS[docKind] ?? []
+  if (workspace.length === 0 && builtins.length === 0) return ''
+  const lines = [
+    'Exemplary documents to emulate (study their structure, depth and tone — do not copy them verbatim):',
+    ...workspace.map((e) =>
+      e.excerpt ? `- ${e.title} — ${e.url}\n  ${e.excerpt}` : `- ${e.title} — ${e.url}`,
+    ),
+    ...builtins.map((e) => `- ${e.title} — ${e.url}`),
+  ]
+  return lines.join('\n')
+}
+
+/**
  * The shared "what document are we writing" brief woven into every doc-kind prompt.
  *
  * `structure: 'full'` (the default) spells out the section list via `templateStructureLine` —
@@ -167,7 +235,7 @@ function docBriefSection(
   opts: { materialized?: boolean; structure?: 'full' | 'summary' },
 ): string {
   const { docKind, audience, targetPath, outlineHints } = docFields(context)
-  const template = docTemplateFor(docKind)
+  const template = effectiveDocTemplate(context, docKind)
   const structure =
     opts.structure === 'summary' ? template.summary : templateStructureLine(template)
   const lines: string[] = [
@@ -259,12 +327,16 @@ const DOC_FIXER_SYSTEM_PROMPT =
   'git yourself and do not open a new pull request.'
 
 function docResearcherUserPrompt(context: AgentRunContext): string {
+  const { docKind } = docFields(context)
   return [
     `Pipeline: ${context.pipelineName}`,
     docBriefSection(context, {}),
+    docExemplarsSection(context, docKind),
     '',
     'Produce the research brief for this document. Be concise and concrete.',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function docOutlinerUserPrompt(context: AgentRunContext): string {
@@ -274,10 +346,13 @@ function docOutlinerUserPrompt(context: AgentRunContext): string {
     docBriefSection(context, { structure: 'summary' }),
     priorWorkSection(context),
     '',
-    templateOutlineGuidance(docTemplateFor(docKind)),
+    templateOutlineGuidance(effectiveDocTemplate(context, docKind)),
+    docExemplarsSection(context, docKind),
     '',
     'Produce the outline (sections + one-line intent each). Do not write the prose.',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function docWriterUserPrompt(context: AgentRunContext): string {
@@ -287,11 +362,14 @@ function docWriterUserPrompt(context: AgentRunContext): string {
     docBriefSection(context, { materialized: true, structure: 'summary' }),
     priorWorkSection(context),
     '',
-    templateSkeletonGuidance(docTemplateFor(docKind), context.block.title),
+    templateSkeletonGuidance(effectiveDocTemplate(context, docKind), context.block.title),
+    docExemplarsSection(context, docKind),
     '',
     `Write the full document to \`${targetPath}\` as Markdown, following the approved outline. ` +
       'The outline leads where it refined the skeleton; cover every required section.',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function docFinalizerUserPrompt(context: AgentRunContext): string {

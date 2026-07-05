@@ -1,4 +1,5 @@
 import type { DocKind } from '@cat-factory/kernel'
+import { documentHeadings } from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // Per-`DocKind` document TEMPLATES: the structured skeleton (required + optional
@@ -214,6 +215,63 @@ export function docTemplateFor(kind: DocKind): DocTemplate {
   return registered.get(kind) ?? DOC_TEMPLATES[kind]
 }
 
+/**
+ * The heading level that carries a linked template's SECTIONS. A single top-level `#` heading
+ * LEADING the document is its TITLE, so the sections are the shallowest level below it — the
+ * typical `# Title` + `## Section`s shape. Trailing top-level headings AFTER the sections (e.g.
+ * `# Appendix A`) don't disqualify the title: only the number of top-level headings BEFORE the
+ * first sub-heading decides, so a title + `##` sections + `#` appendices still yields the `##`
+ * sections (not the title + appendices). A document whose shallowest level is deeper than `#`, or
+ * has no sub-headings, is flat — its sections ARE that shallowest level (so `## S1` + `### detail`
+ * + `## S2` keeps the `##` sections). Returns null when there is no section structure to read: no
+ * headings at all, or a single lone heading (a bare title).
+ */
+function templateSectionLevel(headings: { level: number }[]): number | null {
+  // No headings, or a single lone heading (a bare title) — no section list to derive.
+  if (headings.length <= 1) return null
+  const levels = headings.map((h) => h.level)
+  const minLevel = Math.min(...levels)
+  const firstSubIndex = levels.findIndex((l) => l > minLevel)
+  // No sub-headings: the document is flat — its sections ARE the shallowest level.
+  if (firstSubIndex === -1) return minLevel
+  // A lone leading `#` title (exactly one top-level heading before the first sub-heading) means the
+  // sections are the shallowest sub-level; otherwise the shallowest level already holds the sections.
+  const topBeforeFirstSub = levels.slice(0, firstSubIndex).filter((l) => l === minLevel).length
+  return minLevel === 1 && topBeforeFirstSub === 1
+    ? Math.min(...levels.filter((l) => l > minLevel))
+    : minLevel
+}
+
+/**
+ * Parse a workspace-linked TEMPLATE document (raw Markdown) into a {@link DocTemplate} for a kind
+ * (WS1 item 3): its section headings become the required sections, so the SAME parsed sections
+ * feed both the author prompts and the `doc-quality` gate. Uses the kernel heading extractor the
+ * gate uses (no second Markdown parser) and keeps the kind's canonical `summary`. Falls back to
+ * the built-in template when the document carries no usable headings.
+ */
+export function parseTemplateDocument(markdown: string, kind: DocKind): DocTemplate {
+  const headings = documentHeadings(markdown)
+  const level = templateSectionLevel(headings)
+  if (level === null) return docTemplateFor(kind)
+  const sections = headings
+    .filter((h) => h.level === level && h.text.trim().length > 0)
+    .map((h) => ({ title: h.text.trim(), guidance: '', required: true }))
+  if (sections.length === 0) return docTemplateFor(kind)
+  return { kind, summary: docTemplateFor(kind).summary, sections }
+}
+
+/**
+ * The effective template for a kind given an OPTIONAL workspace-linked template body: the linked
+ * document's parsed sections when one is linked, else the built-in / deployment-registered
+ * fallback. THE single resolution seam both the doc-authoring prompts (via the engine-resolved
+ * `context.block.docTemplateBody`) and the `doc-quality` gate provider go through — do not add a
+ * parallel resolution path.
+ */
+export function resolveDocTemplate(kind: DocKind, linkedTemplateBody?: string | null): DocTemplate {
+  const body = linkedTemplateBody?.trim()
+  return body ? parseTemplateDocument(body, kind) : docTemplateFor(kind)
+}
+
 /** The titles of a template's required sections — the source of truth for the quality gate. */
 export function requiredSectionTitles(template: DocTemplate): string[] {
   return template.sections.filter((s) => s.required).map((s) => s.title)
@@ -238,7 +296,10 @@ export function renderTemplateSkeleton(template: DocTemplate, title = '<Document
   const lines: string[] = [`# ${title}`, '']
   for (const section of template.sections) {
     const marker = section.required ? '' : ' (optional)'
-    lines.push(`## ${section.title}${marker}`, '', `_${section.guidance}_`, '')
+    lines.push(`## ${section.title}${marker}`, '')
+    // A workspace-linked template's parsed sections carry no per-section guidance — skip the
+    // empty italic note rather than rendering a bare `__`.
+    if (section.guidance) lines.push(`_${section.guidance}_`, '')
   }
   return lines.join('\n').trimEnd()
 }
@@ -250,13 +311,15 @@ export function renderTemplateSkeleton(template: DocTemplate, title = '<Document
 export function templateOutlineGuidance(template: DocTemplate): string {
   const required = template.sections.filter((s) => s.required)
   const optional = template.sections.filter((s) => !s.required)
+  const bullet = (s: DocTemplateSection): string =>
+    s.guidance ? `- ${s.title} — ${s.guidance}` : `- ${s.title}`
   const lines = [
     `This is ${template.summary}. The outline MUST cover these required sections (in a sensible order, renamed only if the meaning is preserved):`,
-    ...required.map((s) => `- ${s.title} — ${s.guidance}`),
+    ...required.map(bullet),
   ]
   if (optional.length) {
     lines.push('Include these optional sections where they add value:')
-    lines.push(...optional.map((s) => `- ${s.title} — ${s.guidance}`))
+    lines.push(...optional.map(bullet))
   }
   return lines.join('\n')
 }

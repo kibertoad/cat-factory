@@ -198,7 +198,9 @@ export {
 export {
   type DocStructureInput,
   type DocStructureAnalysis,
+  type Heading,
   analyzeDocStructure,
+  documentHeadings,
   hasDocStructureIssues,
   resolveDocLinkPath,
 } from './domain/doc-quality-logic.js'

@@ -35,7 +35,8 @@ export interface DocStructureAnalysis {
   relativeLinks: string[]
 }
 
-interface Heading {
+/** A parsed Markdown heading: its depth (`#`=1 … `######`=6) and text. */
+export interface Heading {
   level: number
   text: string
 }
@@ -114,6 +115,15 @@ function extractHeadings(content: string): Heading[] {
     }
   }
   return headings
+}
+
+/**
+ * The ATX + setext headings of a Markdown document, front-matter and fenced code stripped first.
+ * Public so a workspace-linked TEMPLATE document can be parsed into its section headings (WS1
+ * item 3) with the SAME heading logic the gate uses — no second Markdown parser.
+ */
+export function documentHeadings(content: string): Heading[] {
+  return extractHeadings(stripFencedCode(stripFrontMatter(content)))
 }
 
 /** The significant lowercase words of a heading/section title (emphasis + punctuation dropped). */

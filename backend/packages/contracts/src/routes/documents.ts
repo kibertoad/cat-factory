@@ -7,11 +7,13 @@ import {
   documentSearchResultSchema,
   documentSourceDescriptorSchema,
   importDocumentSchema,
+  linkDocumentForKindSchema,
   linkDocumentSchema,
   planDocumentSchema,
   searchDocumentsSchema,
   sourceDocumentSchema,
   spawnDocumentSchema,
+  unlinkDocumentForKindSchema,
 } from '../documents.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
@@ -110,4 +112,31 @@ export const linkDocumentContract = defineApiContract({
   pathResolver: () => '/documents/link',
   requestBodySchema: linkDocumentSchema,
   responsesByStatusCode: { 201: sourceDocumentSchema, ...errorResponses },
+})
+
+// ---- Workspace+DocKind template / exemplar links (WS1 items 2–4) ----------
+// Role-tagged links scoped to a workspace + document kind (not a block), reusing the same
+// projected-document read path. A `template` link overrides the built-in skeleton for the kind;
+// `exemplar` links are the good-example set the author agents are pointed at.
+
+export const listDocumentRoleLinksContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/document-role-links',
+  responsesByStatusCode: { 200: documentListSchema, ...errorResponses },
+})
+
+export const linkDocumentForKindContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/document-role-links',
+  requestBodySchema: linkDocumentForKindSchema,
+  responsesByStatusCode: { 201: sourceDocumentSchema, ...errorResponses },
+})
+
+// externalId can contain slashes (a GitHub `owner/repo:path`), so the target is carried in the
+// body rather than the path — a POST-to-remove, mirroring the connect/import POST shapes.
+export const unlinkDocumentForKindContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/document-role-links/remove',
+  requestBodySchema: unlinkDocumentForKindSchema,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })

@@ -184,7 +184,10 @@
           "label": "エスカレーション経路",
           "placeholder": "失敗時の連絡先とエスカレーション方法"
         },
-        "researchQuestion": { "label": "リサーチの問い", "placeholder": "答えるべき問いや仮説" },
+        "researchQuestion": {
+          "label": "リサーチの問い",
+          "placeholder": "答えるべき問いや仮説"
+        },
         "optionsToCompare": {
           "label": "比較する選択肢",
           "placeholder": "互いに比較検討する選択肢"
@@ -1581,6 +1584,9 @@
         "localRunners": {
           "label": "マイローカルランナー",
           "description": "自分のマシンで動かすモデルランナー (Ollama、LM Studio、vLLM…)。"
+        },
+        "documentTemplates": {
+          "label": "テンプレートと例"
         }
       }
     },
@@ -2711,6 +2717,26 @@
       "empty": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
       "attached": "ドキュメントを添付しました",
       "attachFailed": "添付できませんでした"
+    },
+    "templates": {
+      "title": "ドキュメントのテンプレートと例",
+      "intro": "ドキュメントの種類に独自のテンプレートと例のドキュメントを割り当てます。まずドキュメント連携でインポートする必要があります。テンプレートのセクションはその種類の組み込みスケルトンを置き換え、例は作成エージェントの指針になります。",
+      "kindLabel": "ドキュメントの種類",
+      "importFirst": "先にドキュメントをインポートしてください。テンプレートや例はインポート済みのドキュメントから選びます。",
+      "importButton": "ドキュメントをインポート",
+      "templateHeading": "テンプレート",
+      "templateHint": "{kind} の組み込みスケルトンを置き換えます。種類ごとに1つ。",
+      "templateEmpty": "組み込みテンプレートを使用しています。",
+      "exemplarsHeading": "手本にする例",
+      "exemplarsHint": "作成エージェントが参考にする良い例で、組み込みの一覧に追加されます。",
+      "exemplarsEmpty": "リンクされた例はありません。",
+      "pickLabel": "インポート済みドキュメント",
+      "pickPlaceholder": "インポート済みドキュメントを選択…",
+      "setTemplate": "テンプレートに設定",
+      "addExemplar": "例を追加",
+      "remove": "削除",
+      "linkFailed": "ドキュメントのリンクを更新できませんでした",
+      "loadFailed": "ドキュメントテンプレートを読み込めませんでした"
     }
   },
   "tasks": {

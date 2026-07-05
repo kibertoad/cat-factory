@@ -1,4 +1,4 @@
-import type { DocumentSourceKind } from '../domain/types.js'
+import type { DocKind, DocumentLinkRole, DocumentSourceKind } from '../domain/types.js'
 import type { DocumentCredentials } from './document-source.js'
 
 // Persistence ports for the document-source integration. The worker implements
@@ -52,6 +52,16 @@ export interface DocumentRecord {
   /** FNV-1a digest of `body`, for cheap change detection across re-imports. */
   contentHash: string
   linkedBlockId: string | null
+  /**
+   * The workspace+`DocKind` link role this document plays, if any (WS1 items 2–4): `template`
+   * (its parsed sections override the kind's built-in skeleton — singular per kind) or
+   * `exemplar` (a good example the author agents emulate — multi-valued). Null for a plain
+   * imported/block-linked document. Paired with {@link docKind}; sits ALONGSIDE `linkedBlockId`
+   * (a document can be block-linked OR role-tagged), so the same projection + read path serves both.
+   */
+  role: DocumentLinkRole | null
+  /** The document kind a `role`-tagged link is scoped to (null when the document carries no role). */
+  docKind: DocKind | null
   syncedAt: number
   deletedAt: number | null
 }
@@ -80,4 +90,38 @@ export interface DocumentRepository {
     externalId: string,
     blockId: string | null,
   ): Promise<void>
+  // ---- Workspace+DocKind role links (WS1 items 2–4) -----------------------
+  /**
+   * The single live document tagged with `role` for `docKind` (newest wins), or null. Used for
+   * the singular `template` override — the outliner/writer prompts and the `doc-quality` gate
+   * both resolve the kind's effective template through this.
+   */
+  getRoleLink(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<DocumentRecord | null>
+  /** Every live document tagged with `role` for `docKind` (the multi-valued `exemplar` set). */
+  listRoleLinks(
+    workspaceId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<DocumentRecord[]>
+  /** Every live role-tagged document in the workspace, across roles + kinds (drives the management UI). */
+  listRoleLinksByWorkspace(workspaceId: string): Promise<DocumentRecord[]>
+  /** Tag a document with a workspace+`DocKind` role (sets `role`/`docKind`, leaving `linkedBlockId` alone). */
+  setRole(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+    role: DocumentLinkRole,
+    docKind: DocKind,
+  ): Promise<void>
+  /** Clear a single document's role tag (falls back to the built-in template / drops the exemplar). */
+  clearRole(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<void>
+  /**
+   * Clear the role tag on EVERY document matching (`role`, `docKind`) — used to enforce the
+   * singular `template`: the write path clears the prior template for a kind before setting the new one.
+   */
+  clearRoleForKind(workspaceId: string, role: DocumentLinkRole, docKind: DocKind): Promise<void>
 }
