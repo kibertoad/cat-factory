@@ -2376,7 +2376,6 @@ export function buildContainer(
     ...selectIncidentEnrichmentDeps(env, db),
     ...selectPackageRegistryDeps(env, db),
     ...(accountSettings ? { accountSettings } : {}),
-    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
     ...selectSlackDeps(config, db),
     ...selectEmailInvitationDeps(config, db),
     ...selectLangfuseSink(config),
@@ -2454,6 +2453,11 @@ export function buildContainer(
   return {
     ...createCore(dependencies),
     config,
+    // The deployment-wide trusted web-search upstream (built from this facade's own `WEB_SEARCH_*`
+    // env), read by `WebSearchProxyController` as the fallback when a run's account has no keys.
+    // Surfaced on the ServerContainer here (not part of `CoreDependencies`, so `createCore` doesn't
+    // carry it) — kept symmetric with the Node facade.
+    ...(defaultWebSearchUpstream ? { defaultWebSearchUpstream } : {}),
     // Hosted source-control PAT login: a user signs in with their OWN GitHub/GitLab PAT (the
     // shared `/auth/pat` flow resolves it to an account, held to the login/org/domain allowlist).
     // GitHub always; GitLab when configured. Mirrors the Node facade so a GitLab-only Worker
