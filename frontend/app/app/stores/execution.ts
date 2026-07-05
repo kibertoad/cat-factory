@@ -35,6 +35,11 @@ export const useExecutionStore = defineStore('execution', () => {
     return e.rev ?? 0
   }
 
+  /** A finished run — nothing further will execute or emit. Matches `runLive`/`runFailed`. */
+  function isTerminal(status: ExecutionInstance['status']): boolean {
+    return status === 'done' || status === 'failed'
+  }
+
   /**
    * Reconcile the cached executions with a server snapshot for `workspaceId`. A snapshot
    * is authoritative EXCEPT where a live `execution` event already advanced (or ADDED) a
@@ -45,15 +50,24 @@ export const useExecutionStore = defineStore('execution', () => {
    *     can't revert a just-terminal run to `running`. A terminal run emits nothing
    *     further, so a regression here would strand the UI until an unrelated refresh.
    *   - DROP: a run a live event just ADDED that the (older) snapshot never saw — keep it
-   *     rather than silently dropping it, but ONLY when the snapshot has no run for its block.
+   *     rather than silently dropping it, but ONLY when it is not the terminal predecessor a
+   *     retry replaced (see below).
    *
-   * The block-scoped caveat on DROP matters because a retry/restart REPLACES a block's run
-   * with a fresh one under a NEW id (the old run is deleted server-side), so the two attempts
-   * can't be reconciled by id or `rev`. Since there is exactly one run per block, a cached-only
-   * run whose block the snapshot already covers is that superseded predecessor — drop it.
+   * The DROP caveat matters because a retry/restart REPLACES a block's run with a fresh one
+   * under a NEW id (the old run is deleted server-side), so the two attempts can't be
+   * reconciled by id or `rev`. Since there is exactly one run per block, a cached-only run
+   * whose block the snapshot already covers is that superseded predecessor — drop it.
    * Preserving it would leave the dead `failed` run shadowing the running one in the by-block
    * projection (`agentRuns.byBlock`, last-write-wins), keeping the failure banner up and its
    * empty trail hiding the retry's carried-forward failure history.
+   *
+   * The drop is gated on the cached run being TERMINAL (`done`/`failed`): only a finished
+   * predecessor is ever superseded. A cached run still `running`/`blocked`/`paused` is a
+   * genuinely live-added run, so it must survive even when a stale reconnect snapshot (fetched
+   * before a retry, resolving late under load — see `useWorkspaceStream`) still lists its
+   * block's now-deleted predecessor. Dropping a live run there would strand the UI showing the
+   * dead attempt — the inverse of the bug this guard fixes — and `rev` can't catch it (the
+   * ids differ).
    */
   function hydrate(next: ExecutionInstance[], workspaceId: string) {
     const sameWorkspace = hydratedWorkspaceId === workspaceId
@@ -69,8 +83,12 @@ export const useExecutionStore = defineStore('execution', () => {
       const current = held.get(incoming.id)
       return current && revOf(current) > revOf(incoming) ? current : incoming
     })
+    // Preserve a cached-only run UNLESS it is the terminal predecessor a retry replaced: a
+    // finished (`done`/`failed`) run whose block the snapshot now covers under a fresh id.
+    // Gating on the CACHED run being terminal keeps a live `running`/`blocked`/`paused` run
+    // that a stale snapshot happens to omit.
     const preserved = [...held.values()].filter(
-      (e) => !incomingIds.has(e.id) && !incomingBlocks.has(e.blockId),
+      (e) => !incomingIds.has(e.id) && !(isTerminal(e.status) && incomingBlocks.has(e.blockId)),
     )
     instances.value = [...reconciled, ...preserved]
   }
@@ -98,7 +116,13 @@ export const useExecutionStore = defineStore('execution', () => {
   }
 
   function getByBlock(blockId: string) {
-    return instances.value.find((e) => e.blockId === blockId)
+    const runs = instances.value.filter((e) => e.blockId === blockId)
+    if (runs.length <= 1) return runs[0]
+    // A block only holds several runs transiently: a stale reconnect snapshot re-listing a
+    // retry's now-deleted terminal predecessor alongside the live successor. Prefer the live
+    // one so this projection agrees with `agentRuns.byBlock` (whose last-write-wins already
+    // resolves to it) — the failed predecessor is dead and about to fall out on the next read.
+    return runs.find((e) => !isTerminal(e.status)) ?? runs.at(-1)
   }
 
   /** How many decisions anywhere are awaiting a human. */

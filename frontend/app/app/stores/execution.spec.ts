@@ -94,6 +94,23 @@ describe('execution store snapshot/event reconcile', () => {
     expect(store.getByBlock('b1')?.id).toBe('e_new')
   })
 
+  it('keeps a live-added running run when a stale snapshot still lists its block predecessor', () => {
+    // A retry already minted e_new (running) for b1 — a live event added it to the cache...
+    store.hydrate(
+      [{ id: 'e_new', blockId: 'b1', steps: [], status: 'running', rev: 1 } as never],
+      'ws1',
+    )
+    // ...but a reconnect resync fetched BEFORE the retry resolves late (under load) and still
+    // carries the now-deleted predecessor e_old (failed) for the same block.
+    store.hydrate(
+      [{ id: 'e_old', blockId: 'b1', steps: [], status: 'failed', rev: 1 } as never],
+      'ws1',
+    )
+    // The live running run must survive — only a TERMINAL cached run is a superseded predecessor.
+    expect(store.getInstance('e_new')?.status).toBe('running')
+    expect(store.getByBlock('b1')?.id).toBe('e_new')
+  })
+
   it('a workspace switch replaces the cache outright (no cross-board leak)', () => {
     store.hydrate([run('e1', 1, 'running')], 'ws1')
     store.upsert(run('e2', 1, 'running'))
