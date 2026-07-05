@@ -1,5 +1,32 @@
 # @cat-factory/local-server
 
+## 0.54.0
+
+### Minor Changes
+
+- cc74273: Add an optional `backendRegistries` seam to `startLocal()`, threaded into `buildLocalContainer`
+  on both the Postgres and mothership boot paths (mirroring the existing `agentKindRegistry` seam).
+
+  This lets a deployment that registers a custom environment/runner backend by reference (e.g. a
+  Kargo ephemeral-environment provider) call `startLocal()` — and inherit its boot preflights
+  (harness-image refresh, container-runtime probe, PAT/auth warnings) — instead of re-implementing
+  the boot path with `start()` + `buildLocalContainer` by hand, which silently forgoes those
+  preflights (notably the recommended-executor-image pull at boot). Absent → unchanged (the
+  built-in-only default `manifest` + `kubernetes`).
+
+### Patch Changes
+
+- Updated dependencies [f596090]
+  - @cat-factory/contracts@0.110.0
+  - @cat-factory/kernel@0.101.0
+  - @cat-factory/orchestration@0.83.0
+  - @cat-factory/server@0.93.0
+  - @cat-factory/agents@0.40.4
+  - @cat-factory/gitlab@0.7.18
+  - @cat-factory/integrations@0.73.4
+  - @cat-factory/node-server@0.81.1
+  - @cat-factory/executor-harness@1.35.0
+
 ## 0.53.0
 
 ### Minor Changes
