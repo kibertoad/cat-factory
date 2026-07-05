@@ -88,6 +88,8 @@ export {
   isInitiativeAgentKind,
   hasInitiativeKinds,
 } from './domain/initiative-logic.js'
+// The interactive document-review interviewer agent-kind constant (WS5).
+export { DOC_INTERVIEWER_AGENT_KIND } from './domain/doc-interview-logic.js'
 // Installation-level extension point for predefined pipelines (mirrors the custom
 // agent-kind / model-provider registry seams): a deployment registers extra pipelines at
 // startup and `seedPipelines()` seeds them into every new workspace.

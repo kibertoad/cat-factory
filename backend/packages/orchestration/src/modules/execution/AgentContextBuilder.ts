@@ -6,6 +6,7 @@ import type {
   BrainstormSessionRepository,
   ClarityReviewRepository,
   CloudProvider,
+  DocInterviewRepository,
   DocKind,
   DocumentRecord,
   DocumentRepository,
@@ -131,6 +132,12 @@ export interface AgentContextBuilderDeps {
   documentUrlResolver?: DocumentUrlResolver
   tasks?: TaskRepository
   requirementReviews?: RequirementReviewRepository
+  /**
+   * Optional: the interactive document-interview session store (WS5). When wired, a
+   * doc-authoring run folds the block's converged authoring brief into the writer's context.
+   * Absent → the writer runs off the raw outline/description.
+   */
+  docInterviews?: DocInterviewRepository
   clarityReviews?: ClarityReviewRepository
   brainstormSessions?: BrainstormSessionRepository
   /**
@@ -292,6 +299,11 @@ export class AgentContextBuilder {
         // exemplars) or the kind isn't doc-aware.
         ...(docAuthoring.docTemplateBody ? { docTemplateBody: docAuthoring.docTemplateBody } : {}),
         ...(docAuthoring.docExemplars?.length ? { docExemplars: docAuthoring.docExemplars } : {}),
+        // The converged interactive-interview authoring brief (WS5), when the interview ran and
+        // synthesized one — the doc-writer folds it in as the refined spec to write from.
+        ...(docAuthoring.docInterviewBrief
+          ? { docInterviewBrief: docAuthoring.docInterviewBrief }
+          : {}),
       },
       ...(environment ? { environment } : {}),
       ...(service ? { service } : {}),
@@ -618,10 +630,15 @@ export class AgentContextBuilder {
   ): Promise<{
     docTemplateBody?: string
     docExemplars?: NonNullable<AgentRunContext['block']['docExemplars']>
+    docInterviewBrief?: string
   }> {
-    const documents = this.deps.documents
-    if (!documents) return {}
     if (!hasTrait(agentKind, DOC_AWARE_TRAIT, this.deps.agentKindRegistry)) return {}
+    // The converged interactive-interview brief (WS5) — folded into the writer's context so the
+    // draft starts from the refined spec, not the raw outline. Read independently of the
+    // template/exemplar links (they need the documents integration; the interview does not).
+    const interviewBrief = await this.resolveDocInterviewBrief(workspaceId, block)
+    const documents = this.deps.documents
+    if (!documents) return interviewBrief ? { docInterviewBrief: interviewBrief } : {}
     const docKind = (block.taskTypeFields?.docKind ?? 'other') as DocKind
     try {
       const [template, exemplars] = await Promise.all([
@@ -639,11 +656,27 @@ export class AgentContextBuilder {
               })),
             }
           : {}),
+        ...(interviewBrief ? { docInterviewBrief: interviewBrief } : {}),
       }
     } catch {
       // A resolution failure must never wedge a run; fall back to the built-in template/exemplars.
-      return {}
+      return interviewBrief ? { docInterviewBrief: interviewBrief } : {}
     }
+  }
+
+  /** The block's converged document-interview brief (WS5), or undefined when none / unwired. */
+  private async resolveDocInterviewBrief(
+    workspaceId: string,
+    block: Block,
+  ): Promise<string | undefined> {
+    if (!this.deps.docInterviews) return undefined
+    try {
+      const session = await this.deps.docInterviews.getByBlock(workspaceId, block.id)
+      if (session?.status === 'done' && session.brief?.trim()) return session.brief
+    } catch {
+      // Never wedge a run on a lookup failure; fall back to the raw outline/description.
+    }
+    return undefined
   }
 
   /**

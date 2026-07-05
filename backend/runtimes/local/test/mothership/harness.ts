@@ -17,6 +17,7 @@ import {
 import {
   type CoreRepositories,
   type DrizzleDb,
+  DrizzleDocInterviewRepository,
   DrizzleDocumentRepository,
   DrizzleNotificationRepository,
   buildNodeContainer,
@@ -418,6 +419,7 @@ export function makeMothershipConformanceApp(
     blockRepository: () => mothershipRepos().blockRepository,
     notificationRepository: () => new DrizzleNotificationRepository(db),
     documentRepository: () => new DrizzleDocumentRepository(db),
+    docInterviewRepository: () => new DrizzleDocInterviewRepository(db),
     seedService,
     getService,
     onboarding: () => makeOnboardingProbe(container),

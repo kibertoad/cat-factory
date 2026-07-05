@@ -2,6 +2,7 @@ import type { AgentRunContext, Block, DocKind } from '@cat-factory/kernel'
 import {
   CONTEXT_BUDGET,
   DOC_FIXER_AGENT_KIND,
+  DOC_INTERVIEWER_AGENT_KIND,
   DOC_QUALITY_AGENT_KIND,
   estimateTokens,
 } from '@cat-factory/kernel'
@@ -43,6 +44,15 @@ import {
 
 export const DOC_RESEARCHER_KIND = 'doc-researcher'
 export const DOC_OUTLINER_KIND = 'doc-outliner'
+/**
+ * The interactive-review INTERVIEWER (WS5). An inline gate the engine's DocInterviewController
+ * drives (park/answer/resume); the kind string is the kernel constant so the engine, the
+ * pipeline and this registered definition can't drift. Registered like the other doc kinds so it
+ * is a first-class palette block carrying its `doc-interview` result view, but the engine handles
+ * it specially — its registered system/user prompt is vestigial (the controller builds the real
+ * interviewer prompt in DocInterviewService).
+ */
+export const DOC_INTERVIEWER_KIND = DOC_INTERVIEWER_AGENT_KIND
 export const DOC_WRITER_KIND = 'doc-writer'
 export const DOC_FINALIZER_KIND = 'doc-finalizer'
 /** The companion that reviews {@link DOC_WRITER_KIND}; its definition lives in ./companions. */
@@ -278,6 +288,23 @@ function priorWorkSection(context: AgentRunContext): string {
   return lines.join('\n')
 }
 
+/**
+ * The refined authoring brief synthesized by the interactive document interview (WS5), when it
+ * ran and converged for this task. Rendered as the authoritative spec the author writes from —
+ * placed after the prior-work so it takes precedence over the raw outline it refined.
+ */
+function docInterviewBriefSection(context: AgentRunContext): string {
+  const brief = context.block.docInterviewBrief?.trim()
+  if (!brief) return ''
+  return [
+    '',
+    'Refined authoring brief (agreed with the requester in the interactive review — treat this ' +
+      'as the authoritative spec for scope, audience, structure and the points each section must ' +
+      'cover; it takes precedence over the earlier outline where they differ):',
+    brief,
+  ].join('\n')
+}
+
 /** Clamp text to roughly `maxTokens`, appending an ellipsis marker when it was cut. */
 function clampToBudget(text: string, maxTokens: number): string {
   if (estimateTokens(text) <= maxTokens) return text
@@ -299,6 +326,23 @@ const DOC_OUTLINER_SYSTEM_PROMPT =
   'of what each will cover, plus any cross-cutting notes (terminology, diagrams to include, ' +
   'open questions to resolve). The outline is reviewed by a human before drafting, so make it ' +
   'specific and easy to critique. Do NOT write the prose — only the structure.'
+
+const DOC_INTERVIEWER_SYSTEM_PROMPT =
+  'You are a documentation lead interviewing a stakeholder to refine a document before it is ' +
+  'written. Ask focused clarifying questions about scope, audience, depth and structure, then ' +
+  'synthesize a concise authoring brief once you have enough.'
+
+function docInterviewerUserPrompt(context: AgentRunContext): string {
+  return [
+    `Pipeline: ${context.pipelineName}`,
+    docBriefSection(context, { structure: 'summary' }),
+    priorWorkSection(context),
+    '',
+    'Interview the requester to refine this document, or synthesize the authoring brief.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
 
 const DOC_WRITER_SYSTEM_PROMPT =
   'You are a senior technical writer. Write the complete document as Markdown, following the ' +
@@ -361,6 +405,7 @@ function docWriterUserPrompt(context: AgentRunContext): string {
     `Pipeline: ${context.pipelineName}`,
     docBriefSection(context, { materialized: true, structure: 'summary' }),
     priorWorkSection(context),
+    docInterviewBriefSection(context),
     '',
     templateSkeletonGuidance(effectiveDocTemplate(context, docKind), context.block.title),
     docExemplarsSection(context, docKind),
@@ -378,6 +423,7 @@ function docFinalizerUserPrompt(context: AgentRunContext): string {
     `Pipeline: ${context.pipelineName}`,
     docBriefSection(context, { materialized: true }),
     priorWorkSection(context),
+    docInterviewBriefSection(context),
     '',
     `Polish the document at \`${targetPath}\` — clarity, consistency, structure and formatting — ` +
       'and apply any reviewer feedback. Edit it in place; do not rewrite from scratch.',
@@ -449,6 +495,27 @@ export const DOCUMENT_AGENT_KINDS: AgentKindDefinition[] = [
       description:
         'Turns the brief and research into a kind-appropriate document outline for human review before drafting.',
       category: 'docs',
+    },
+  },
+  {
+    kind: DOC_INTERVIEWER_KIND,
+    // Vestigial: the engine's DocInterviewController drives this gate and builds the real
+    // interviewer prompt in DocInterviewService — these are never invoked by the executor, but
+    // the registry requires a system prompt and they keep the kind self-describing.
+    systemPrompt: DOC_INTERVIEWER_SYSTEM_PROMPT,
+    userPrompt: docInterviewerUserPrompt,
+    agent: { surface: 'inline' },
+    traits: [DOC_AWARE_TRAIT],
+    presentation: {
+      label: 'Doc Interviewer',
+      icon: 'i-lucide-messages-square',
+      color: '#818cf8',
+      description:
+        'Converses with the requester to refine a document’s scope, audience and structure before drafting, synthesizing a refined authoring brief.',
+      category: 'docs',
+      // Opens the dedicated interactive-interview window (answer / continue / proceed) via the
+      // universal result-view seam, not the generic prose panel.
+      resultView: 'doc-interview',
     },
   },
   {

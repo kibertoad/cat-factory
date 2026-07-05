@@ -4,6 +4,7 @@ import type {
   BrainstormSession,
   ConsensusSession,
   ClarityReview,
+  DocInterviewSession,
   EnvConfigRepairJob,
   ExecutionEventPublisher,
   ExecutionInstance,
@@ -130,6 +131,12 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
   async initiativeChanged(workspaceId: string, initiative: Initiative): Promise<void> {
     for (const ws of await this.targets(workspaceId, initiative.blockId)) {
       await this.inner.initiativeChanged?.(ws, initiative)
+    }
+  }
+
+  async docInterviewChanged(workspaceId: string, session: DocInterviewSession): Promise<void> {
+    for (const ws of await this.targets(workspaceId, session.blockId)) {
+      await this.inner.docInterviewChanged?.(ws, session)
     }
   }
 }

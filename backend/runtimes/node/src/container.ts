@@ -2228,6 +2228,9 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // like a pipeline step: block-pin > workspace per-kind default > routing default
     // (which falls back to Cloudflare Workers AI unless a direct key is set).
     requirementReviewRepository: repos.requirementReviewRepository,
+    // Interactive document-interview sessions (WS5). Wired unconditionally; the interviewer
+    // reuses the requirements reviewer's model config resolved just below.
+    docInterviewRepository: repos.docInterviewRepository,
     // Kaizen agent (post-run grading). Wired unconditionally, mirroring the Cloudflare
     // facade, so the engine schedules gradings at run completion and the background sweep
     // runs them. The grader resolves its model for the `kaizen` kind exactly like a step.

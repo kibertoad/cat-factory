@@ -55,7 +55,7 @@ import {
   ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { DEFAULT_MERGE_PRESET } from '@cat-factory/kernel'
+import { DEFAULT_MERGE_PRESET, DOC_INTERVIEWER_AGENT_KIND } from '@cat-factory/kernel'
 import {
   REQUIREMENTS_REVIEW_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
@@ -96,6 +96,8 @@ import type { NotificationService } from '../notifications/NotificationService.j
 import type { InitiativeService } from '../initiative/InitiativeService.js'
 import type { InitiativeInterviewService } from '../initiative/InitiativeInterviewService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
+import type { DocInterviewService } from '../docInterview/DocInterviewService.js'
+import { DocInterviewController } from './DocInterviewController.js'
 import {
   type InitiativeRunHarvest,
   assertInitiativeShapeAllowed,
@@ -127,7 +129,11 @@ import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
 import type { TaskRepository } from '@cat-factory/kernel'
-import type { InitiativeRepository, RequirementReviewRepository } from '@cat-factory/kernel'
+import type {
+  DocInterviewRepository,
+  InitiativeRepository,
+  RequirementReviewRepository,
+} from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository } from '@cat-factory/kernel'
 import type {
@@ -199,12 +205,26 @@ export interface ExecutionServiceDependencies {
    */
   requirementReviewRepository?: RequirementReviewRepository
   /**
+   * Optional: when the interactive document-interview feature is configured (WS5), a block's
+   * synthesized authoring brief is read here and folded into the doc-writer's context. Absent
+   * → the writer runs off the raw outline/description unchanged.
+   */
+  docInterviewRepository?: DocInterviewRepository
+  /**
    * Optional: the requirements-review feature's service, present when the reviewer is
    * wired. Drives the special `requirements-review` gate step (run reviewer inline, the
    * iterative answer → incorporate → re-review loop). Absent → the gate step passes
    * through so pipelines run unchanged without the feature.
    */
   requirementReviewService?: RequirementReviewService
+  /**
+   * Optional: the interactive document-interview service (WS5). When wired, the
+   * `doc-interviewer` step converses with the human (park/answer/resume) to refine a
+   * document's scope/structure and synthesizes an authoring brief the writer starts from.
+   * Absent (or no model) → the interviewer step passes through so document pipelines run
+   * unchanged off the raw outline.
+   */
+  docInterviewService?: DocInterviewService
   /**
    * Optional: the inline reviewer for the test quality-control companion. When wired (and a
    * Tester step has the companion enabled), each Tester report is audited for coverage before
@@ -482,6 +502,7 @@ export class ExecutionService {
   private readonly board: BoardService
   private readonly spend: SpendService
   private readonly requirementReviewService?: RequirementReviewService
+  private readonly docInterviewService?: DocInterviewService
   private readonly clarityReviewService?: ClarityReviewService
   private readonly brainstormServices?: Record<BrainstormStage, BrainstormService>
   private readonly environmentProvisioning?: EnvironmentProvisioningService
@@ -514,6 +535,8 @@ export class ExecutionService {
   private readonly brainstormActions: BrainstormActions
   /** Drives the interactive-planning interviewer gate (exposed via {@link initiativeInterview}). */
   private readonly initiativeInterviewController?: InitiativeInterviewController
+  /** Drives the interactive document-interview gate (exposed via {@link docInterview}). */
+  private readonly docInterviewController?: DocInterviewController
   // `blueprintReconciler` / `notificationService` / `ticketTrackerProvider` /
   // `resolveRunRepoContext` / `runInitiatorScope` are NOT stored on the engine: their only
   // consumers (the ingest/follow-up/tracker/notification paths + the pre/post-op repo binding +
@@ -577,7 +600,9 @@ export class ExecutionService {
     documentUrlResolver,
     taskRepository,
     requirementReviewRepository,
+    docInterviewRepository,
     requirementReviewService,
+    docInterviewService,
     testerQualityReviewer,
     kaizenScheduler,
     clarityReviewRepository,
@@ -644,6 +669,7 @@ export class ExecutionService {
     this.board = boardService
     this.spend = spendService
     this.requirementReviewService = requirementReviewService
+    this.docInterviewService = docInterviewService
     this.clarityReviewService = clarityReviewService
     this.brainstormServices = brainstormServices
     this.environmentProvisioning = environmentProvisioning
@@ -656,6 +682,7 @@ export class ExecutionService {
       documentUrlResolver,
       tasks: taskRepository,
       requirementReviews: requirementReviewRepository,
+      docInterviews: docInterviewRepository,
       clarityReviews: clarityReviewRepository,
       brainstormSessions: brainstormSessionRepository,
       initiatives: initiativeRepository,
@@ -776,6 +803,20 @@ export class ExecutionService {
           initiativeService,
         })
       : undefined
+    // The interactive document-interview gate (WS5) — wired whenever the interview service is
+    // present. Without it (or without a model) the gate passes through, so document pipelines
+    // still run off the raw outline. Self-contained persistence lives in the service.
+    this.docInterviewController = docInterviewService
+      ? new DocInterviewController({
+          blockRepository,
+          executionRepository,
+          workRunner,
+          stateMachine: this.runStateMachine,
+          stepGraph: this.stepGraph,
+          events: executionEventPublisher,
+          docInterviewService,
+        })
+      : undefined
     // The per-step dispatch + completion spine. Composes the collaborators built above; the
     // merge subgraph stays on the engine, reached only through the injected `resolveMergePreset`
     // callback + the MergeResolver (which closes over the engine's `finalizeMerge`). The
@@ -805,6 +846,7 @@ export class ExecutionService {
       requirementsBrainstormKind: this.requirementsBrainstormKind,
       architectureBrainstormKind: this.architectureBrainstormKind,
       initiativeInterviewController: this.initiativeInterviewController,
+      docInterviewController: this.docInterviewController,
       runInitiatorScope: runInitiatorScopeFn,
       environmentProvisioning,
       ticketTrackerProvider,
@@ -881,6 +923,15 @@ export class ExecutionService {
    */
   get initiativeInterview(): InitiativeInterviewController | undefined {
     return this.initiativeInterviewController
+  }
+
+  /**
+   * Interactive document-interview window actions (answer / continue / proceed). Undefined when
+   * the interviewer isn't wired (no model / no session store) — the server controller then 503s,
+   * exactly like the other optional gate windows.
+   */
+  get docInterview(): DocInterviewController | undefined {
+    return this.docInterviewController
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -1878,6 +1929,11 @@ export class ExecutionService {
     if (step.agentKind === VISUAL_CONFIRM_AGENT_KIND) {
       throw new ConflictError(
         'Resolve the visual-confirmation gate through its window (approve / request a fix), not the approval gate',
+      )
+    }
+    if (step.agentKind === DOC_INTERVIEWER_AGENT_KIND) {
+      throw new ConflictError(
+        'Resolve the document interview through its interview window, not the approval gate',
       )
     }
     if (step.companion?.exceeded) {

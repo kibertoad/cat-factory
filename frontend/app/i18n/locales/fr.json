@@ -2645,6 +2645,22 @@
       "body": "Les notifications Slack seront interrompues jusqu'à la reconnexion."
     }
   },
+  "docInterview": {
+    "title": "Affiner le document",
+    "subtitle": "Répondez aux questions de l'intervieweur pour façonner le document",
+    "intro": "L'intervieweur affine ce document avant sa rédaction. Répondez à ses questions pour définir la portée, le public et la structure, puis continuez — ou procédez à la rédaction avec ce qu'il a.",
+    "empty": "Aucun entretien trouvé pour ce bloc.",
+    "brief": "Brief de rédaction",
+    "converged": "Aucune question en attente. L'intervieweur a ce qu'il lui faut et le document est en cours de rédaction.",
+    "answerPlaceholder": "Votre réponse",
+    "hint": "Continuer permet à l'intervieweur de poser des questions complémentaires ; Procéder rédige avec les réponses actuelles.",
+    "proceed": "Procéder à la rédaction",
+    "continue": "Continuer",
+    "status": {
+      "awaiting": "En attente de réponses",
+      "done": "Terminé"
+    }
+  },
   "documents": {
     "picker": {
       "searchPlaceholder": "Recherchez des pages ou collez une URL ou un ID…",

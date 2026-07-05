@@ -2718,6 +2718,22 @@
       "body": "Slack notifications will stop until you reconnect."
     }
   },
+  "docInterview": {
+    "title": "Refine the document",
+    "subtitle": "Answer the interviewer's questions so it can shape the document",
+    "intro": "The interviewer is refining this document before it's written. Answer its questions to shape the scope, audience and structure, then continue — or proceed to draft with what it has.",
+    "empty": "No interview found for this block.",
+    "brief": "Authoring brief",
+    "converged": "No questions are pending. The interviewer has what it needs and the document is being drafted.",
+    "answerPlaceholder": "Your answer",
+    "hint": "Continue lets the interviewer ask follow-ups; Proceed drafts with the answers so far.",
+    "proceed": "Proceed to draft",
+    "continue": "Continue",
+    "status": {
+      "awaiting": "Awaiting answers",
+      "done": "Done"
+    }
+  },
   "documents": {
     "picker": {
       "searchPlaceholder": "Search pages or paste a URL/ID…",

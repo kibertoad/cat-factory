@@ -66,6 +66,7 @@ import type {
   EnvConfigRepairRunner,
 } from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
+import type { DocInterviewRepository } from '@cat-factory/kernel'
 import type { KaizenGradingRepository, KaizenVerifiedComboRepository } from '@cat-factory/kernel'
 import type { ClarityReviewRepository } from '@cat-factory/kernel'
 import type { BrainstormSessionRepository, BrainstormStage } from '@cat-factory/kernel'
@@ -168,6 +169,7 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { RequirementReviewService } from './modules/requirements/RequirementReviewService.js'
+import { DocInterviewService } from './modules/docInterview/DocInterviewService.js'
 import {
   TesterQualityReviewService,
   type TesterQualityReviewer,
@@ -597,6 +599,15 @@ export interface CoreDependencies {
   // The document/task repositories above are reused, when wired, to fold linked
   // PRDs and tracker issues into the reviewed requirements.
   requirementReviewRepository?: RequirementReviewRepository
+  /**
+   * Persistence for the interactive document-interview feature (WS5). Mirrors
+   * `requirementReviewRepository`: both runtime facades wire it unconditionally. The
+   * doc-interview service reuses the requirements reviewer's model config below, and it is
+   * also read by the agent-context builder to fold the synthesized brief into the writer's
+   * context. The interviewer LLM is optional within the module (a document pipeline runs off
+   * the raw outline when no model is wired).
+   */
+  docInterviewRepository?: DocInterviewRepository
   /**
    * Persistence for the Kaizen agent (post-run grading of agent steps + the verified-combo
    * library). Both runtime facades wire both repos unconditionally. The Kaizen module
@@ -1579,6 +1590,38 @@ function createTesterQualityReviewer(
   })
 }
 
+/**
+ * Build the interactive document-interview service (WS5). Self-contained (owns its session
+ * store + the inline LLM); resolves its model exactly like the requirements reviewer (block
+ * pin → workspace per-kind default → routing default). Returns `undefined` when no session
+ * store is wired, so the `doc-interviewer` step passes through in unconfigured facades / tests.
+ * The LLM is optional within the service (the `enabled` getter is false without a model), so a
+ * store-but-no-model deployment still short-circuits the interviewer.
+ */
+function createDocInterviewService(deps: CoreDependencies): DocInterviewService | undefined {
+  const { docInterviewRepository } = deps
+  if (!docInterviewRepository) return undefined
+  return new DocInterviewService({
+    docInterviewRepository,
+    idGenerator: deps.idGenerator,
+    clock: deps.clock,
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
+    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
+    resolveBlockModel: deps.requirementReviewResolveModel,
+    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    resolveWorkspaceModelDefault: deps.modelPresetRepository
+      ? (workspaceId, agentKind, modelPresetId) =>
+          resolvePresetModelForKind(
+            deps.modelPresetRepository!,
+            workspaceId,
+            agentKind,
+            modelPresetId,
+          )
+      : undefined,
+  })
+}
+
 function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
@@ -2351,6 +2394,7 @@ export function createCore(dependencies: CoreDependencies): Core {
     notifications?.service,
     fragmentLibrary,
   )
+  const docInterview = createDocInterviewService(dependencies)
   const clarity = createClarityModule(dependencies, notifications?.service)
   const brainstorm = createBrainstormModule(dependencies, notifications?.service)
   // Built before the execution engine so the engine's terminal hook can schedule a
@@ -2401,6 +2445,7 @@ export function createCore(dependencies: CoreDependencies): Core {
         }
       : undefined,
     requirementReviewService: requirements?.service,
+    docInterviewService: docInterview,
     // The test quality-control companion's inline reviewer, resolved like every other inline
     // review (block pin → workspace preset → routing default). Built only when a model
     // provider is available; absent → the Tester gate's QC step is a pass-through.

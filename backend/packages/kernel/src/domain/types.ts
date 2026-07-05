@@ -201,6 +201,11 @@ export type {
   RequirementReviewItem,
   RequirementReviewStatus,
   RequirementReview,
+  // Interactive document-interview session shapes (WS5 of the document-task track).
+  DocInterviewQa,
+  DocInterviewStatus,
+  DocInterviewSession,
+  AnswerDocInterviewInput,
   // Kaizen (post-run grading agent) shapes.
   KaizenGradingStatus,
   KaizenGrading,
