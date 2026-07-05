@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (lokalise-main pilot)
 
-**Status:** in progress (slice 1 = contracts landed) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–2 landed = contracts + detection) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -253,6 +253,24 @@ Keep the non-binding `ProvisioningRecommendation` + per-field confidence shape. 
 All within the existing `READ_BUDGET` discipline; predicates exported once and shared with
 provisioning (the compose-build rule: never re-implement a predicate).
 
+> **Landed (slice 2)** in `backend/packages/integrations/src/modules/environments/provision-detect.logic.ts`
+> (`buildComposeRecommendation`, formerly the sync `composeRecommendation`), plus the compose-doc
+> predicates `extractExternalNetworks` / `extractComposeProfiles` in
+> `compose-environment.logic.ts` (so the slice-5 provider reuses them, not the detector). `findCompose`
+> now recognizes a bare `dev.yml` base (lowest priority — canonical names still win) and returns the
+> containing dir's listing + the parsed external networks / profiles. A recipe is populated ONLY when
+> the repo is actually recipe-shaped, so a plain single-file compose recommendation is byte-for-byte
+> unchanged (the exact-`toEqual` regression test still passes). Mapping: base + `<stem>.override.ya?ml`
+> → `recipe.composeFiles` (OS overrides → `composeFileCandidates` with `os`, opt-in); `external: true`
+> networks → `recipe.externalNetworks` (+ a `sharedStackRefs` nudge note, no ref fabricated);
+> `*-dist`/`*.example`/`*.dist` config templates → `recipe.envFiles`; `profiles:` → default-off
+> `profileCandidates` (never `recipe.composeProfiles`); seed-ish `*.sql` (one level deep) →
+> `seedDumpCandidates` (fullest pre-selected); `bin/*console*`/Makefile/justfile/Taskfile → the
+> report-only `repoCliHint`. Fixture-driven unit tests (incl. a combined lokalise-main-shaped repo)
+> cover every extension. Gotcha for later slices: several existing detector tests assert the WHOLE
+> recommendation with `toEqual`, so any new always-on field breaks them — gate additions behind an
+> "actually detected" check, as done here.
+
 ### 6. Environment analyst (LLM draft — opt-in, never silently applied)
 
 A new agent kind registered through the public seams (`registerAgentKind`,
@@ -338,7 +356,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
 | 0   | Tracker doc                                                                                                                                               | done   | (this) |
 | 1   | **Contracts**: `StackRecipe` fields on `ServiceProvisioning` + Valibot + recommendation shape extensions                                                  | done   | (this) |
-| 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | todo   |        |
+| 2   | **Detection extensions**: override layering, external networks, profiles, env templates, seed dumps, repo-CLI hint — + fixture-driven unit tests          | done   | (this) |
 | 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | todo   |        |
 | 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | todo   |        |
 | 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | todo   |        |

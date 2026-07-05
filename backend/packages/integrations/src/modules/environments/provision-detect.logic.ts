@@ -6,16 +6,26 @@ import type {
   KubernetesSecretInjection,
   KubernetesUrlSource,
   ProvisionType,
+  ProvisioningComposeFileCandidate,
   ProvisioningComposeServiceCandidate,
   ProvisioningDetectionNote,
   ProvisioningManifestRootCandidate,
   ProvisioningOverlayCandidate,
+  ProvisioningProfileCandidate,
   ProvisioningRecommendation,
+  ProvisioningRepoCliHint,
+  ProvisioningSeedDumpCandidate,
   ProvisioningServiceDirCandidate,
+  RecipeEnvFile,
   ServiceProvisioning,
+  StackRecipe,
 } from '@cat-factory/contracts'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
-import { hasBuildDirective } from '../compose/compose-environment.logic.js'
+import {
+  extractComposeProfiles,
+  extractExternalNetworks,
+  hasBuildDirective,
+} from '../compose/compose-environment.logic.js'
 
 // ---------------------------------------------------------------------------
 // Per-service provisioning AUTO-DETECTION (slice 11): a deterministic, pure-TS heuristic
@@ -75,6 +85,11 @@ const COMPOSE_FILES = [
   'docker-compose.prod.yml',
   'docker-compose.dev.yaml',
   'docker-compose.dev.yml',
+  // A bare `dev.yml` base (the lokalise-main `docker/dev.yml` shape) — lowest priority so a
+  // canonical name still wins, but recognized so a complex multi-file compose repo is detected
+  // (its OS overrides `dev.<os>.override.yml` become recipe compose-file candidates).
+  'dev.yaml',
+  'dev.yml',
 ]
 // Directories (relative to the service root) a compose file commonly nests under, in addition to
 // the root itself. One `listDir` per entry (cheap membership test against COMPOSE_FILES).
@@ -164,6 +179,45 @@ const ENV_EXAMPLE_FILES = ['.env.example', '.env.sample', '.env.template', '.env
 // where truncation is surfaced as a note (see `Scanner.exhausted`).
 const READ_BUDGET = 200
 const MAX_IMAGES = 8
+
+// ---- Slice 2: stack-recipe detection (compose repos) -----------------------------------------
+// All of the below feed a `docker-compose` recommendation's `recipe` + the recipe candidate arrays
+// (compose-file layering / profiles / seed dumps) + the report-only repo-CLI hint. Detection stays
+// deterministic + checkout-free; nothing is auto-applied beyond the pre-selected base layers.
+
+// Template-file suffixes that materialize into a gitignored target (`.env.dev.local-dist` →
+// `.env.dev.local`, `.split.yaml.dist` → `.split.yaml`, `.env.example` → `.env`). Longest/most
+// specific first so a file is stripped by exactly one suffix.
+const ENV_TEMPLATE_SUFFIXES = ['-dist', '.dist', '.example', '.sample', '.template', '.tmpl']
+// Directories (relative to the service root) an env-template commonly sits in, beside the compose
+// file's own dir. One `listDir` each; bounded by the read budget.
+const ENV_TEMPLATE_DIR_CANDIDATES = ['', 'config', 'env', 'docker', '.docker']
+// Cap on materialization pairs surfaced, so a decoy-heavy repo can't produce an unbounded recipe.
+const MAX_ENV_FILES = 20
+// Directories (relative to the service root) a SQL seed dump commonly lives under; each is scanned
+// at its own level AND one level into immediate child dirs (lokalise's
+// `deployment/lokalise-db-dummy/*.sql` shape).
+const SEED_DIRS = [
+  'deployment',
+  'seed',
+  'seeds',
+  'db',
+  'database',
+  'sql',
+  'docker-entrypoint-initdb.d',
+  'fixtures',
+  'dumps',
+]
+// Cap on seed-dump candidates surfaced.
+const MAX_SEED_DUMPS = 12
+// A `<stem>.<os>[.override].ya?ml` OS-specific compose override (`dev.wsl.override.yml`,
+// `compose.mac.yml`). The OS token is normalized to the candidate schema's `os` picklist.
+const OS_OVERRIDE_RE = /^(.+?)\.(wsl|mac|macos|osx|linux|windows|win)(?:\.override)?\.ya?ml$/i
+// Report-only repo-CLI hint (imperative bring-up the deterministic scan can't read — a nudge toward
+// the slice-8 analyst). Detection NEVER parses these files; it only flags their presence.
+const MAKEFILE_NAMES = ['Makefile', 'makefile', 'GNUmakefile']
+const JUSTFILE_NAMES = ['justfile', 'Justfile', '.justfile']
+const TASKFILE_NAMES = ['Taskfile.yml', 'Taskfile.yaml', 'taskfile.yml', 'taskfile.yaml']
 
 /** Join + normalize repo-relative path segments, collapsing `.`/`..` (resolves `../base` refs). */
 function joinPath(...parts: (string | undefined)[]): string {
@@ -520,17 +574,28 @@ async function findServiceDeployCandidates(
 interface ComposeHit {
   /** Repo-relative compose file path (the value `composePath` would take). */
   path: string
+  /** The directory the compose file was found in (repo-relative; `''` = the service/repo root). */
+  dir: string
+  /** The matched file name (e.g. `dev.yml`), used to derive the compose stem for the override family. */
+  baseName: string
+  /** The directory listing where the base was found — reused to collect the compose override family. */
+  entries: { name: string; type: string; path: string }[]
   /** The declared `services:` keys (empty when unparseable / none). */
   services: string[]
   /** True when any service declares a `build:` — the stack builds its images from source. */
   hasBuild: boolean
+  /** External networks the project expects to already exist (`external: true`) — resolved names. */
+  externalNetworks: string[]
+  /** `COMPOSE_PROFILES` labels declared across the file's services (deduped + sorted). */
+  profiles: string[]
 }
 
 /**
  * Locate a Docker Compose file for the service, checking the service root AND the dirs it commonly
  * nests under (`deploy/`, `docker/`, …). One `listDir` per candidate dir; the canonical file name
- * wins (COMPOSE_FILES is canonical-first). Also parses the `services:` keys so callers can surface
- * a service picker when several are declared.
+ * wins (COMPOSE_FILES is canonical-first). Also parses the `services:` keys (for the service
+ * picker), external networks + profiles (for the recipe), and the containing dir's listing (for the
+ * `-f` override family).
  */
 async function findCompose(scanner: Scanner, root: string): Promise<ComposeHit | null> {
   for (const dir of COMPOSE_DIR_CANDIDATES) {
@@ -542,12 +607,22 @@ async function findCompose(scanner: Scanner, root: string): Promise<ComposeHit |
       if (!names.has(candidate)) continue
       const path = joinPath(dirPath, candidate)
       const content = await scanner.getFile(path)
-      const servicesRecord = content ? (asRecord(parseOne(content)?.services) ?? {}) : {}
+      const doc = content ? parseOne(content) : null
+      const servicesRecord = asRecord(doc?.services) ?? {}
       const services = Object.keys(servicesRecord)
       // Single source of truth with the provider's build-mode rejection: any service with a
       // `build:` means the stack builds from source, so build mode is required to provision it.
       const hasBuild = Object.values(servicesRecord).some((s) => hasBuildDirective(s))
-      return { path, services, hasBuild }
+      return {
+        path,
+        dir: dirPath,
+        baseName: candidate,
+        entries,
+        services,
+        hasBuild,
+        externalNetworks: doc ? extractExternalNetworks(doc) : [],
+        profiles: doc ? extractComposeProfiles(doc) : [],
+      }
     }
   }
   return null
@@ -728,11 +803,237 @@ function buildComposeServiceCandidates(
   }))
 }
 
-function composeRecommendation(
+/** The compose "stem" of a file name — the name with its `.yaml`/`.yml` extension stripped. */
+function composeStem(baseName: string): string {
+  return baseName.replace(/\.ya?ml$/i, '')
+}
+
+/** Normalize an OS token from an override file name onto the candidate schema's `os` picklist. */
+function normalizeOs(token: string): NonNullable<ProvisioningComposeFileCandidate['os']> {
+  const t = token.toLowerCase()
+  if (t === 'wsl') return 'wsl'
+  if (t === 'mac' || t === 'macos' || t === 'osx') return 'mac'
+  if (t === 'linux') return 'linux'
+  return 'windows' // windows | win
+}
+
+/** The OS an override file targets when it belongs to `stem`'s family (`dev.wsl.override.yml`), else null. */
+function overrideOsFor(
+  name: string,
+  stem: string,
+): NonNullable<ProvisioningComposeFileCandidate['os']> | null {
+  const m = OS_OVERRIDE_RE.exec(name)
+  return m && m[1] === stem ? normalizeOs(m[2]!) : null
+}
+
+/** True when `name` is a NON-OS `<stem>.override.ya?ml` auto-merge override of the found base. */
+function isBaseOverride(name: string, stem: string): boolean {
+  const m = /^(.+?)\.override\.ya?ml$/i.exec(name)
+  return m !== null && m[1] === stem
+}
+
+/**
+ * Assemble the compose-file layering from the base file's own directory listing. The primary base +
+ * any `<stem>.override.ya?ml` auto-merge sibling become ordered base layers (pre-selected into
+ * `recipe.composeFiles`); OS-specific overrides (`dev.<os>.override.yml`) are surfaced as opt-in
+ * candidates annotated with `os` and NOT auto-layered. A lone base file with no family ⇒ `{}` (the
+ * simple `composePath` suffices — no recipe layering needed).
+ */
+function collectComposeFiles(compose: ComposeHit): {
+  composeFiles?: string[]
+  composeFileCandidates?: ProvisioningComposeFileCandidate[]
+} {
+  const stem = composeStem(compose.baseName)
+  const baseFiles: string[] = [compose.path]
+  const baseOverrideNames: string[] = []
+  const osOverrides: {
+    path: string
+    name: string
+    os: NonNullable<ProvisioningComposeFileCandidate['os']>
+  }[] = []
+  for (const entry of compose.entries) {
+    if (entry.type === 'dir' || entry.name === compose.baseName) continue
+    const os = overrideOsFor(entry.name, stem)
+    if (os) osOverrides.push({ path: joinPath(compose.dir, entry.name), name: entry.name, os })
+    else if (isBaseOverride(entry.name, stem)) baseOverrideNames.push(entry.name)
+  }
+  // No override family beyond the single base file ⇒ nothing to layer.
+  if (osOverrides.length === 0 && baseOverrideNames.length === 0) return {}
+
+  for (const name of baseOverrideNames.sort()) baseFiles.push(joinPath(compose.dir, name))
+  osOverrides.sort((a, b) => a.name.localeCompare(b.name))
+  const composeFileCandidates: ProvisioningComposeFileCandidate[] = [
+    ...baseFiles.map((path) => ({ path, name: path.split('/').pop() ?? path, recommended: true })),
+    ...osOverrides.map((o) => ({ path: o.path, name: o.name, os: o.os, recommended: false })),
+  ]
+  return { composeFiles: baseFiles, composeFileCandidates }
+}
+
+/** Map a template file name to its materialization target (stripped suffix), or null when it isn't
+ * a config/env template (`README.dist` → null; `.env.dev.local-dist` → `.env.dev.local`). */
+function deriveEnvTemplateTarget(name: string): string | null {
+  for (const suffix of ENV_TEMPLATE_SUFFIXES) {
+    if (name.length <= suffix.length || !name.endsWith(suffix)) continue
+    const target = name.slice(0, -suffix.length)
+    return isConfigLikeName(target) ? target : null
+  }
+  return null
+}
+
+/** True when a template's stripped target looks like an env/config file (so we don't materialize a
+ * `README.dist` or a `.tar.dist`). A dotfile, an `env`-bearing name, or a config extension. */
+function isConfigLikeName(target: string): boolean {
+  const lower = target.toLowerCase()
+  return (
+    target.startsWith('.') ||
+    lower.includes('env') ||
+    /\.(ya?ml|json|ini|conf|cfg|config|properties|toml|local)$/.test(lower)
+  )
+}
+
+/**
+ * Find committed env/config TEMPLATE files (`*-dist` / `*.example` / …) beside the compose file and
+ * in the service root's common config dirs, and pair each with its gitignored target. Deduped by
+ * target; bounded by `MAX_ENV_FILES`. These become `recipe.envFiles` — materialized before `up`.
+ */
+async function collectEnvFileTemplates(
+  scanner: Scanner,
+  root: string,
+  composeDir: string,
+): Promise<RecipeEnvFile[]> {
+  const dirs = [
+    ...new Set([composeDir, ...ENV_TEMPLATE_DIR_CANDIDATES.map((d) => joinPath(root, d))]),
+  ]
+  const pairs: RecipeEnvFile[] = []
+  const seenTargets = new Set<string>()
+  for (const dir of dirs) {
+    for (const entry of await scanner.listDir(dir)) {
+      if (entry.type === 'dir') continue
+      const target = deriveEnvTemplateTarget(entry.name)
+      if (!target) continue
+      const targetPath = joinPath(dir, target)
+      if (seenTargets.has(targetPath)) continue
+      seenTargets.add(targetPath)
+      pairs.push({ template: joinPath(dir, entry.name), target: targetPath })
+      if (pairs.length >= MAX_ENV_FILES)
+        return pairs.sort((a, b) => a.template.localeCompare(b.template))
+    }
+  }
+  return pairs.sort((a, b) => a.template.localeCompare(b.template))
+}
+
+/** Rank a SQL dump for the seed pre-selection: prefer full seed/dummy data, deprioritize
+ * schema/pre/structure-only dumps. Higher wins; ties keep discovery order. */
+function rankSeedDump(name: string): number {
+  const lower = name.toLowerCase()
+  let score = 0
+  if (/(seed|dummy|data|dump|fixture|sample)/.test(lower)) score += 2
+  if (/(pre|schema|structure|ddl|migration|create|drop)/.test(lower)) score -= 1
+  return score
+}
+
+/**
+ * Scan the seed-ish directories for `.sql` dumps (each dir + one level into its child dirs, the
+ * `deployment/<db>/*.sql` shape) and surface them as low-confidence candidates — the wizard confirms
+ * one into a `compose-exec` seed-import step (never auto-applied). The heuristically-fullest dump is
+ * pre-selected.
+ */
+async function collectSeedDumps(
+  scanner: Scanner,
+  root: string,
+): Promise<ProvisioningSeedDumpCandidate[]> {
+  const found: { path: string; name: string }[] = []
+  const seen = new Set<string>()
+  const addSql = (dir: string, name: string): void => {
+    if (!name.toLowerCase().endsWith('.sql')) return
+    const path = joinPath(dir, name)
+    if (seen.has(path)) return
+    seen.add(path)
+    found.push({ path, name })
+  }
+  for (const rel of SEED_DIRS) {
+    if (found.length >= MAX_SEED_DUMPS) break
+    const dir = joinPath(root, rel)
+    const entries = await scanner.listDir(dir)
+    for (const entry of entries) {
+      if (found.length >= MAX_SEED_DUMPS) break
+      if (entry.type === 'dir') {
+        const childDir = joinPath(dir, entry.name)
+        for (const child of await scanner.listDir(childDir)) {
+          if (child.type !== 'dir') addSql(childDir, child.name)
+          if (found.length >= MAX_SEED_DUMPS) break
+        }
+      } else {
+        addSql(dir, entry.name)
+      }
+    }
+  }
+  if (found.length === 0) return []
+  let bestIdx = 0
+  let bestScore = rankSeedDump(found[0]!.name)
+  for (let i = 1; i < found.length; i++) {
+    const score = rankSeedDump(found[i]!.name)
+    if (score > bestScore) {
+      bestScore = score
+      bestIdx = i
+    }
+  }
+  return found.map((f, i) => ({ path: f.path, name: f.name, recommended: i === bestIdx }))
+}
+
+/**
+ * A REPORT-ONLY hint that the repo carries its own imperative bring-up — a `bin/*console*` repo CLI,
+ * a Makefile, a justfile, or a Taskfile. Detection NEVER parses these files; it only flags the first
+ * one found (repo-CLI first, then Makefile → justfile → Taskfile) so the wizard can nudge toward the
+ * slice-8 analyst. `rootEntries` is the already-read root listing (no extra read for the top-level files).
+ */
+async function detectRepoCliHint(
+  scanner: Scanner,
+  root: string,
+  rootEntries: { name: string; type: string; path: string }[],
+): Promise<ProvisioningRepoCliHint | undefined> {
+  const fileNames = new Set(rootEntries.filter((e) => e.type !== 'dir').map((e) => e.name))
+  const hasBin = rootEntries.some((e) => e.type === 'dir' && e.name === 'bin')
+  if (hasBin) {
+    for (const entry of await scanner.listDir(joinPath(root, 'bin'))) {
+      if (entry.type === 'dir') continue
+      const lower = entry.name.toLowerCase()
+      if (
+        lower.includes('console') ||
+        lower.includes('cli') ||
+        lower === 'dev' ||
+        lower === 'setup'
+      ) {
+        return { path: joinPath(root, 'bin', entry.name), kind: 'repo-cli' }
+      }
+    }
+  }
+  for (const name of MAKEFILE_NAMES) {
+    if (fileNames.has(name)) return { path: joinPath(root, name), kind: 'makefile' }
+  }
+  for (const name of JUSTFILE_NAMES) {
+    if (fileNames.has(name)) return { path: joinPath(root, name), kind: 'justfile' }
+  }
+  for (const name of TASKFILE_NAMES) {
+    if (fileNames.has(name)) return { path: joinPath(root, name), kind: 'taskfile' }
+  }
+  return undefined
+}
+
+/**
+ * Build the `docker-compose` recommendation. Beyond the base `composePath` + build-mode detection,
+ * this reads the STACK RECIPE a complex compose repo implies (the lokalise-main pilot): multi-`-f`
+ * layering, external networks, env-file materialization → `recipe`; profiles + seed dumps →
+ * candidate arrays the wizard confirms; a repo-CLI hint → the analyst nudge. When NONE of those are
+ * present the output is exactly the simple single-file recommendation (no `recipe`, no extra notes).
+ */
+async function buildComposeRecommendation(
+  scanner: Scanner,
+  root: string,
   compose: ComposeHit,
   serviceBasename: string,
   kubernetesAlsoExists = false,
-): ProvisioningRecommendation {
+): Promise<ProvisioningRecommendation> {
   const notes: ProvisioningDetectionNote[] = [
     {
       field: 'provisionType',
@@ -770,14 +1071,92 @@ function composeRecommendation(
       message: `The compose file declares ${composeServiceCandidates.length} services; pre-selected "${rec?.service ?? composeServiceCandidates[0]!.service}" for this block. The file is the deploy target — the service choice is advisory; pick another if that's wrong.`,
     })
   }
+
+  // --- Stack recipe detection (populated only when the repo is actually recipe-shaped) ----------
+  const recipe: StackRecipe = {}
+  const rootEntries = await scanner.listDir(root)
+
+  const { composeFiles, composeFileCandidates } = collectComposeFiles(compose)
+  if (composeFiles) {
+    recipe.composeFiles = composeFiles
+    const osCount = composeFileCandidates!.filter((c) => c.os).length
+    notes.push({
+      field: 'composeFiles',
+      confidence: 'high',
+      message: `Layered ${composeFiles.length} compose file(s): ${composeFiles.join(' → ')}.${osCount > 0 ? ` ${osCount} OS-specific override(s) surfaced — pick the one matching your machine.` : ''}`,
+    })
+  }
+
+  if (compose.externalNetworks.length > 0) {
+    recipe.externalNetworks = compose.externalNetworks
+    notes.push({
+      field: 'externalNetworks',
+      confidence: 'high',
+      message: `This project expects external network(s) to already exist: ${compose.externalNetworks.join(', ')}. They must be created before it comes up.`,
+    })
+    notes.push({
+      field: 'sharedStackRefs',
+      confidence: 'low',
+      message: `Bind the external network(s) (${compose.externalNetworks.join(', ')}) to a shared stack so it is brought up first, or create them on the host manually.`,
+    })
+  }
+
+  const envFiles = await collectEnvFileTemplates(scanner, root, compose.dir)
+  if (envFiles.length > 0) {
+    recipe.envFiles = envFiles
+    notes.push({
+      field: 'envFiles',
+      confidence: 'low',
+      message: `Found ${envFiles.length} env/config template(s) to materialize before up: ${envFiles.map((e) => `${e.template} → ${e.target}`).join(', ')}. Confirm each pair.`,
+    })
+  }
+
+  const profileCandidates: ProvisioningProfileCandidate[] | undefined =
+    compose.profiles.length > 0
+      ? compose.profiles.map((profile) => ({ profile, recommended: false }))
+      : undefined
+  if (profileCandidates) {
+    notes.push({
+      field: 'composeProfiles',
+      confidence: 'low',
+      message: `The compose file declares ${profileCandidates.length} profile(s): ${compose.profiles.join(', ')}. All surfaced default-off — enable the optional service groups you need.`,
+    })
+  }
+
+  const seedDumpCandidates = await collectSeedDumps(scanner, root)
+  if (seedDumpCandidates.length > 0) {
+    const pick = seedDumpCandidates.find((s) => s.recommended)
+    notes.push({
+      field: 'seedDump',
+      confidence: 'low',
+      message: `Found ${seedDumpCandidates.length} SQL seed dump(s)${pick ? ` (pre-selected ${pick.path})` : ''}. Confirm one to import as a seed step; none is applied automatically.`,
+    })
+  }
+
+  const repoCliHint = await detectRepoCliHint(scanner, root, rootEntries)
+  if (repoCliHint) {
+    notes.push({
+      field: 'repoCli',
+      confidence: 'low',
+      message: `This repo has its own imperative bring-up (${repoCliHint.kind} at ${repoCliHint.path}); the deterministic scan can't read it. Consider running deep analysis to translate its setup into recipe steps.`,
+    })
+  }
+
+  const provisioning: ServiceProvisioning = {
+    type: 'docker-compose',
+    composePath: compose.path,
+    ...(compose.hasBuild ? { composeBuild: true } : {}),
+    ...(Object.keys(recipe).length > 0 ? { recipe } : {}),
+  }
+
   return {
     detected: true,
-    provisioning: {
-      type: 'docker-compose',
-      composePath: compose.path,
-      ...(compose.hasBuild ? { composeBuild: true } : {}),
-    },
+    provisioning,
     ...(composeServiceCandidates ? { composeServiceCandidates } : {}),
+    ...(composeFileCandidates ? { composeFileCandidates } : {}),
+    ...(profileCandidates ? { profileCandidates } : {}),
+    ...(seedDumpCandidates.length > 0 ? { seedDumpCandidates } : {}),
+    ...(repoCliHint ? { repoCliHint } : {}),
     notes,
   }
 }
@@ -1029,7 +1408,7 @@ export async function detectKubernetesProvisioning(
   // compose file exists. With no preference (or any non-compose tab) we keep the historical
   // kubernetes-first order.
   if (options.prefer === 'docker-compose' && compose) {
-    return composeRecommendation(compose, serviceBasename, roots.length > 0)
+    return buildComposeRecommendation(scanner, root, compose, serviceBasename, roots.length > 0)
   }
 
   // Colocated k8s manifests win (highest confidence). In a monorepo, ALSO surface a root-shared
@@ -1093,7 +1472,7 @@ export async function detectKubernetesProvisioning(
     }
   }
 
-  if (compose) return composeRecommendation(compose, serviceBasename)
+  if (compose) return buildComposeRecommendation(scanner, root, compose, serviceBasename)
   return noneRecommendation()
 }
 
