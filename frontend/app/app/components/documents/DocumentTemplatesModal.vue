@@ -133,7 +133,11 @@ async function unlink(doc: SourceDocument) {
                 :variant="kind === k ? 'soft' : 'ghost'"
                 size="xs"
                 class="uppercase"
-                @click="kind = k"
+                @click="
+                  () => {
+                    kind = k
+                  }
+                "
               >
                 {{ k }}
               </UButton>

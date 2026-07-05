@@ -281,7 +281,11 @@ function fail(title: string, e: unknown) {
             variant="ghost"
             size="sm"
             class="ms-auto"
-            @click="editor = null"
+            @click="
+              () => {
+                editor = null
+              }
+            "
           >
             {{ t('settings.modelConfiguration.back') }}
           </UButton>
@@ -292,7 +296,11 @@ function fail(title: string, e: unknown) {
             size="sm"
             :class="editor ? '' : 'ms-auto'"
             :title="t('settings.modelConfiguration.closeEsc')"
-            @click="open = false"
+            @click="
+              () => {
+                open = false
+              }
+            "
           />
         </header>
 
@@ -499,7 +507,16 @@ function fail(title: string, e: unknown) {
               </div>
 
               <div class="flex items-center justify-end gap-2">
-                <UButton color="neutral" variant="ghost" size="sm" @click="editor = null">
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="
+                    () => {
+                      editor = null
+                    }
+                  "
+                >
                   {{ t('common.cancel') }}
                 </UButton>
                 <UButton color="primary" size="sm" :loading="busy" @click="save">

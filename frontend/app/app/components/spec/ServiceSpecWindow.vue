@@ -147,7 +147,11 @@ function kindLabel(item: RequirementItem): string {
                 :variant="mode === 'structured' ? 'soft' : 'ghost'"
                 size="xs"
                 icon="i-lucide-list-tree"
-                @click="mode = 'structured'"
+                @click="
+                  () => {
+                    mode = 'structured'
+                  }
+                "
               >
                 {{ t('spec.mode.structured') }}
               </UButton>
@@ -158,7 +162,11 @@ function kindLabel(item: RequirementItem): string {
                 icon="i-lucide-square-check-big"
                 :disabled="!hasGherkin"
                 :title="hasGherkin ? t('spec.mode.gherkinTooltip') : t('spec.mode.gherkinNone')"
-                @click="mode = 'gherkin'"
+                @click="
+                  () => {
+                    mode = 'gherkin'
+                  }
+                "
               >
                 {{ t('spec.mode.gherkin') }}
               </UButton>
@@ -210,7 +218,11 @@ function kindLabel(item: RequirementItem): string {
               :variant="selected === null ? 'soft' : 'ghost'"
               size="xs"
               icon="i-lucide-info"
-              @click="selected = null"
+              @click="
+                () => {
+                  selected = null
+                }
+              "
             >
               {{ t('spec.overview') }}
             </UButton>

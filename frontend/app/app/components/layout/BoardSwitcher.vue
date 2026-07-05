@@ -300,7 +300,16 @@ async function submitPrompt() {
             />
           </UFormField>
           <div class="flex justify-end gap-2">
-            <UButton color="neutral" variant="ghost" :disabled="busy" @click="prompt = null">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              :disabled="busy"
+              @click="
+                () => {
+                  prompt = null
+                }
+              "
+            >
               {{ t('common.cancel') }}
             </UButton>
             <UButton type="submit" color="primary" :loading="busy">

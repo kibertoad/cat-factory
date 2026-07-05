@@ -213,9 +213,17 @@ function fmtTime(ms: number) {
     <template v-else-if="draft">
       <RecurringRecurrenceEditor v-model="draft" />
       <div class="flex justify-end gap-1.5 pt-1">
-        <UButton size="xs" variant="ghost" color="neutral" @click="editing = false">{{
-          t('common.cancel')
-        }}</UButton>
+        <UButton
+          size="xs"
+          variant="ghost"
+          color="neutral"
+          @click="
+            () => {
+              editing = false
+            }
+          "
+          >{{ t('common.cancel') }}</UButton
+        >
         <UButton size="xs" color="primary" :loading="busy" @click="saveEdit">{{
           t('common.save')
         }}</UButton>

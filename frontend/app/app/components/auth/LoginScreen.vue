@@ -386,7 +386,11 @@ const noSignInMethod = computed(
               :variant="p === remotePatProvider ? 'solid' : 'subtle'"
               :icon="PROVIDER_ICONS[p]"
               size="sm"
-              @click="remotePatProvider = p"
+              @click="
+                () => {
+                  remotePatProvider = p
+                }
+              "
             >
               {{ PROVIDER_LABELS[p] }}
             </UButton>

@@ -443,7 +443,11 @@ function notifyError(e: unknown) {
             :color="selectedKubeEngine === e ? 'primary' : 'neutral'"
             :variant="selectedKubeEngine === e ? 'soft' : 'ghost'"
             size="xs"
-            @click="selectedKubeEngine = e"
+            @click="
+              () => {
+                selectedKubeEngine = e
+              }
+            "
           >
             {{ t(KUBE_ENGINE_KEYS[e]) }}
           </UButton>

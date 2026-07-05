@@ -489,7 +489,11 @@ async function add() {
               :variant="taskType === ty.value ? 'soft' : 'ghost'"
               :icon="ty.icon"
               size="xs"
-              @click="taskType = ty.value"
+              @click="
+                () => {
+                  taskType = ty.value
+                }
+              "
             >
               {{ ty.label }}
             </UButton>
@@ -584,7 +588,11 @@ async function add() {
                   :variant="severity === s ? 'soft' : 'ghost'"
                   size="xs"
                   class="capitalize"
-                  @click="severity = severity === s ? '' : s"
+                  @click="
+                    () => {
+                      severity = severity === s ? '' : s
+                    }
+                  "
                 >
                   {{ s }}
                 </UButton>
@@ -621,7 +629,11 @@ async function add() {
                   :variant="docKind === k ? 'soft' : 'ghost'"
                   size="xs"
                   class="uppercase"
-                  @click="docKind = docKind === k ? '' : k"
+                  @click="
+                    () => {
+                      docKind = docKind === k ? '' : k
+                    }
+                  "
                 >
                   {{ k }}
                 </UButton>
@@ -761,7 +773,11 @@ async function add() {
                 variant="soft"
                 size="xs"
                 :icon="showDocPicker ? 'i-lucide-x' : 'i-lucide-plus'"
-                @click="showDocPicker = !showDocPicker"
+                @click="
+                  () => {
+                    showDocPicker = !showDocPicker
+                  }
+                "
               >
                 {{ showDocPicker ? t('board.addTask.done') : t('board.addTask.attach') }}
               </UButton>
@@ -832,7 +848,11 @@ async function add() {
                 variant="soft"
                 size="xs"
                 :icon="showIssuePicker ? 'i-lucide-x' : 'i-lucide-plus'"
-                @click="showIssuePicker = !showIssuePicker"
+                @click="
+                  () => {
+                    showIssuePicker = !showIssuePicker
+                  }
+                "
               >
                 {{ showIssuePicker ? t('board.addTask.done') : t('board.addTask.attach') }}
               </UButton>
