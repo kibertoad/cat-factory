@@ -1,5 +1,95 @@
 # @cat-factory/node-server
 
+## 0.79.0
+
+### Minor Changes
+
+- accb8ec: feat(docs): attach read-only reference repositories to a document-authoring task
+
+  Let a document-type task carry a list of **reference repositories** the `doc-writer` agent clones
+  READ-ONLY while it drafts, so it can reuse existing solutions in those repos as a reference. The
+  writer is already containerized (`container-coding`), so no interim step is needed — the reference
+  repos become extra sibling checkouts it may read but can never write to.
+
+  - **Read-only by construction.** Reference repos flow through a NEW `referenceRepos` block field,
+    separate from the writable `involvedServiceIds`/`fanOutMultiRepo` path. The harness job spec
+    carries no branch/PR fields for a reference, the multi-repo coder clones it at its base branch
+    with no work branch, and the push phase skips it — three independent layers, so a reference repo
+    is structurally impossible to push to. Its clone URL is host-allowlisted like every other repo.
+  - **Any accessible repo, by name fragment.** A reference need not be a board service or in the
+    workspace's synced projection: the inspector picker reuses the SAME server-side, debounced repo
+    search as the add-service modal (extracted into a shared `useRepoSearch` composable), so any repo
+    the workspace's VCS connection or the signed-in user's PAT can reach can be attached.
+  - **Provider-neutral by construction.** The `ReferenceRepo` identity mirrors the kernel's VCS
+    vocabulary (`repoId` / `owner` / `name` / `defaultBranch` / `connectionId`, per `VcsRepoRef` /
+    `VcsConnectionRef`) rather than GitHub-specific names, and the clone URL + provider come from the
+    deployment-level `ResolveRepoOrigin` seam the primary already rides — so a GitLab deployment
+    clones references from GitLab with no extra wiring.
+  - **Deduped against the primary.** A reference pointing at the doc task's own repo (or a duplicate
+    attachment) is dropped by the shared sibling-checkout key, so it can't collide with an existing
+    clone directory and fail the run.
+  - **Symmetric persistence.** New `reference_repos` JSON column on `blocks`, mirrored across the D1
+    and Drizzle stores with a cross-runtime conformance round-trip assertion.
+
+  Bumps `@cat-factory/executor-harness` (new read-only reference-leg support in the coding harness) —
+  the runner image tag pins and `RECOMMENDED_HARNESS_IMAGE` are bumped in lockstep.
+
+### Patch Changes
+
+- Updated dependencies [accb8ec]
+  - @cat-factory/contracts@0.104.0
+  - @cat-factory/kernel@0.95.0
+  - @cat-factory/server@0.88.0
+  - @cat-factory/orchestration@0.77.0
+  - @cat-factory/agents@0.39.2
+  - @cat-factory/consensus@0.9.11
+  - @cat-factory/eks@0.1.8
+  - @cat-factory/gates@0.4.8
+  - @cat-factory/gitlab@0.7.11
+  - @cat-factory/integrations@0.70.1
+  - @cat-factory/prompt-fragments@0.10.10
+  - @cat-factory/spend@0.10.104
+  - @cat-factory/caching@0.4.12
+  - @cat-factory/observability-langfuse@0.7.143
+  - @cat-factory/provider-bedrock@0.7.151
+  - @cat-factory/provider-cloudflare@0.7.152
+  - @cat-factory/provider-s3@0.2.93
+
+## 0.78.0
+
+### Minor Changes
+
+- cd435d1: Shared stacks (stack-recipes-and-shared-stacks initiative, slice 4): a workspace-scoped,
+  long-lived compose stack a per-PR consumer environment attaches to over an external network
+  (the acme-shared-services shape). Adds the `SharedStack` contract + `SharedStackRepository`
+  port, the D1 ⇄ Drizzle `shared_stacks` table with a cross-runtime conformance round-trip, a
+  `SharedStackService` lifecycle (CRUD everywhere + host-Docker `ensureUp`/`teardown` on the local
+  facade, reusing the compose recipe-runner), the `GET|POST|PATCH|DELETE /workspaces/:ws/shared-stacks`
+  (+ `ensure-up`/`teardown`) controller, and a "Shared stacks" panel in the Infrastructure window.
+  Bringing a stack up is local-facade-bound (host daemon), the documented compose exception to
+  runtime symmetry; persistence stays fully symmetric.
+
+### Patch Changes
+
+- Updated dependencies [cd435d1]
+  - @cat-factory/contracts@0.103.0
+  - @cat-factory/kernel@0.94.0
+  - @cat-factory/integrations@0.70.0
+  - @cat-factory/orchestration@0.76.0
+  - @cat-factory/server@0.87.0
+  - @cat-factory/agents@0.39.1
+  - @cat-factory/consensus@0.9.10
+  - @cat-factory/eks@0.1.7
+  - @cat-factory/gates@0.4.7
+  - @cat-factory/gitlab@0.7.10
+  - @cat-factory/prompt-fragments@0.10.9
+  - @cat-factory/spend@0.10.103
+  - @cat-factory/caching@0.4.11
+  - @cat-factory/observability-langfuse@0.7.142
+  - @cat-factory/provider-bedrock@0.7.150
+  - @cat-factory/provider-cloudflare@0.7.151
+  - @cat-factory/provider-s3@0.2.92
+
 ## 0.77.0
 
 ### Minor Changes

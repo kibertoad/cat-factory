@@ -28,6 +28,7 @@ export type {
   PromptFragment,
   PullRequestRef,
   PeerPullRequest,
+  ReferenceRepo,
   SpendStatus,
   StepApproval,
   StepReviewComment,
@@ -294,6 +295,11 @@ export type {
   RequirementConcernLevel,
   CreateMergePresetInput,
   UpdateMergePresetInput,
+  // Shared stacks (long-lived compose infra a consumer environment attaches to).
+  SharedStack,
+  SharedStackStatus,
+  CreateSharedStackInput,
+  UpdateSharedStackInput,
   // Consensus-orchestration shapes (optional `@cat-factory/consensus` mechanism)
   // + the core task-estimator triage that gates it.
   ConsensusStrategy,

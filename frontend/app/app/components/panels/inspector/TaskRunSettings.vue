@@ -480,6 +480,9 @@ const technicalLabel = computed(() => {
       </div>
     </div>
 
+    <!-- reference repositories: read-only repos the doc-writer reads while drafting (doc tasks) -->
+    <DocReferenceRepos v-if="block.taskType === 'document'" :block="block" />
+
     <!-- issue-tracker writeback overrides -->
     <div>
       <div class="mb-1 flex items-center justify-between">

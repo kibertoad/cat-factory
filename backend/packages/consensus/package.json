@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/consensus",
-  "version": "0.9.9",
+  "version": "0.9.11",
   "description": "Optional consensus-orchestration mechanism (specialist panel / debate / ranked voting) for cat-factory agent steps, with task-estimate gating.",
   "repository": {
     "type": "git",

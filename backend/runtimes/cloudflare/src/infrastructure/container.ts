@@ -215,6 +215,7 @@ import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessio
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
 import { D1InitiativeRepository } from './repositories/D1InitiativeRepository'
 import { D1MergePresetRepository } from './repositories/D1MergePresetRepository'
+import { D1SharedStackRepository } from './repositories/D1SharedStackRepository'
 import {
   D1SandboxPromptVersionRepository,
   D1SandboxFixtureRepository,
@@ -692,6 +693,10 @@ function selectMergeLifecycleDeps(
   const deps: Partial<CoreDependencies> = {
     notificationRepository: new D1NotificationRepository({ db }),
     mergePresetRepository: new D1MergePresetRepository({ db }),
+    // Shared stacks (long-lived compose infra a consumer environment attaches to). CRUD +
+    // persistence are runtime-symmetric; the Worker never brings a stack UP (no host daemon),
+    // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".
+    sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),

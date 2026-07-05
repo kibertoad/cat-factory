@@ -269,6 +269,9 @@ export const blocks = pgTable(
     // beyond its own service (JSON array of frame block ids) — spun up as ephemeral
     // environments too; the coding agent may change their repos.
     involved_service_ids: text('involved_service_ids'),
+    // Task-level (document tasks): read-only reference repos for the `doc-writer` agent —
+    // serialized JSON array of { githubId, owner, name, defaultBranch, installationId? }.
+    reference_repos: text('reference_repos'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),
@@ -1186,6 +1189,34 @@ export const mergeThresholdPresets = pgTable(
     // Fast lookup of a workspace's default preset (mirrors idx_merge_presets_default).
     index('idx_merge_presets_default').on(t.workspace_id, t.is_default),
   ],
+)
+
+// Shared stacks — long-lived compose infra a per-PR consumer environment attaches to over an
+// external network (mirror of D1 migration 0041's `shared_stacks`). JSON-shaped columns
+// (`compose_files`/`compose_profiles`/`env_files`/`managed_networks`/`setup_steps`/
+// `health_gate`) are `text` JSON; `allow_host_commands` is 0/1 to mirror D1. Behaviourally
+// identical to the D1 repo so the cross-runtime conformance suite asserts the same round-trip.
+export const sharedStacks = pgTable(
+  'shared_stacks',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    id: text('id').notNull(),
+    name: text('name').notNull(),
+    clone_url: text('clone_url').notNull(),
+    git_ref: text('git_ref'),
+    compose_files: text('compose_files').notNull().default('[]'),
+    compose_profiles: text('compose_profiles').notNull().default('[]'),
+    env_files: text('env_files').notNull().default('[]'),
+    managed_networks: text('managed_networks').notNull().default('[]'),
+    setup_steps: text('setup_steps').notNull().default('[]'),
+    health_gate: text('health_gate'),
+    allow_host_commands: integer('allow_host_commands').notNull().default(0),
+    status: text('status').notNull().default('stopped'),
+    last_error: text('last_error'),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.id] })],
 )
 
 // Sandbox (parallel prompt/model testing surface). Lives in a DEDICATED Postgres

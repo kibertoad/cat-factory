@@ -28,6 +28,7 @@ export type {
   DocKindFieldSpec,
   Block,
   PullRequestRef,
+  ReferenceRepo,
   CloudProvider,
   InstanceSize,
   ProvisionType,

@@ -98,6 +98,14 @@ export interface ComposeRuntime {
     argv: string[],
     opts?: { workdir?: string; env?: Record<string, string>; timeoutMs?: number },
   ): Promise<ComposeExecResult>
+  /**
+   * SHARED-STACK bring-up only: idempotently ensure a named Docker network exists (`docker network
+   * inspect <name> || docker network create <name>`), so a shared stack can create + own the
+   * external networks its consumers attach to (the acme `acme-net` shape). Not a compose subcommand,
+   * so it is its own seam. Optional; absent ⇒ a shared stack that declares managed networks fails
+   * loudly (no host daemon).
+   */
+  ensureNetwork?(name: string): Promise<ComposeExecResult>
 }
 
 /** The flat per-workspace config, read off `manifest.providerConfig`. */

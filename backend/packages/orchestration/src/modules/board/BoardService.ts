@@ -755,6 +755,16 @@ export class BoardService {
         if (error) throw new ValidationError(error)
       }
     }
+    // `referenceRepos` is a DOCUMENT-task-only attachment (read-only reference repos for the
+    // `doc-writer` agent): the inspector shows the picker only for `taskType === 'document'`, and
+    // the executor consumes it only for the doc-writer kind. Dropped on any other block (a frame, a
+    // module, or a non-document task) so nothing persists dead data no code path reads. The repo
+    // identities are self-contained (contract-capped), so there is nothing to cross-validate here.
+    const isDocumentTask = block.level === 'task' && block.taskType === 'document'
+    if (effective.referenceRepos !== undefined && !isDocumentTask) {
+      const { referenceRepos: _ignored, ...rest } = effective
+      effective = rest
+    }
     await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
     await this.emitBoardChanged(homeWorkspaceId, 'block-updated', id)

@@ -833,6 +833,12 @@
       "involvedServicesHint": "שירותים מחוברים המעורבים ישירות במשימה זו: כל אחד מהם מוקם כסביבה זמנית לצד השירות של המשימה, וסוכן הקוד עשוי לשנות גם את המאגרים שלהם.",
       "involvedServicesEmpty": "אין שירותים מחוברים. חברו שירותים במסגרת השירות כדי לבחור אותם כאן.",
       "involvedServiceStale": "כבר לא מחובר לשירות של משימה זו; הוא יוסר בשינוי הבא."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {
@@ -2113,6 +2119,52 @@
         "added": "המאגר נוסף",
         "addFailed": "הוספת המאגר נכשלה",
         "removeFailed": "הסרת רשומת המאגר נכשלה"
+      }
+    },
+    "sharedStacks": {
+      "tab": "מקבצים משותפים",
+      "intro": "תשתית Compose ארוכת-טווח (מסדי נתונים, ברוקרים, חיפוש, דואר) שמופעלת פעם אחת לכל סביבת עבודה ומשמשת מחדש בכל ההרצות ובקשות המשיכה. סביבת בדיקה מתחברת לרשת המנוהלת של מקבץ. הפעלת מקבץ מחייבת פריסת Docker מקומית; ב-backends אחרים עדיין ניתן לנהל את ההגדרה.",
+      "stackNoun": "מקבץ משותף",
+      "status": {
+        "stopped": "הופסק",
+        "starting": "מופעל",
+        "running": "פועל",
+        "failed": "נכשל"
+      },
+      "list": {
+        "heading": "מקבצים מוגדרים",
+        "start": "הפעלה",
+        "stop": "עצירה",
+        "edit": "עריכה",
+        "remove": "מחיקת מקבץ"
+      },
+      "add": {
+        "heading": "הוספת מקבץ משותף",
+        "name": "שם",
+        "cloneUrl": "כתובת שכפול של המאגר",
+        "cloneUrlHelp": "מאגר ה-git שבו נמצאים קובצי ה-Compose של המקבץ.",
+        "gitRef": "ענף או תג (אופציונלי)",
+        "composeFiles": "קובצי Compose",
+        "composeFilesHelp": "מופרדים בפסיקים, יחסית למאגר, לפי סדר הדריסה.",
+        "composeProfiles": "פרופילי Compose (אופציונלי)",
+        "managedNetworks": "רשתות מנוהלות (אופציונלי)",
+        "managedNetworksHelp": "רשתות שהמקבץ יוצר ומחזיק כדי שצרכנים יתחברו אליהן.",
+        "allowHostCommands": "אפשר שלבי הגדרה עם פקודות מארח",
+        "save": "הוספת מקבץ"
+      },
+      "edit": {
+        "heading": "עריכת מקבץ משותף",
+        "save": "שמירת שינויים",
+        "cancel": "ביטול"
+      },
+      "toast": {
+        "created": "המקבץ המשותף נוסף",
+        "createFailed": "לא ניתן להוסיף את המקבץ המשותף",
+        "updated": "המקבץ המשותף עודכן",
+        "updateFailed": "לא ניתן לעדכן את המקבץ המשותף",
+        "startFailed": "לא ניתן להפעיל את המקבץ המשותף",
+        "stopFailed": "לא ניתן לעצור את המקבץ המשותף",
+        "removeFailed": "לא ניתן למחוק את המקבץ המשותף"
       }
     },
     "localMode": {
