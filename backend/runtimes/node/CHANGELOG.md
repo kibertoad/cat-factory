@@ -1,5 +1,125 @@
 # @cat-factory/node-server
 
+## 0.72.0
+
+### Minor Changes
+
+- 49b498a: Bug-triage pipeline, Phase D — issue-intake foundations (ports + persistence).
+
+  The plumbing the upcoming `bug-intake` step (Phase E) drives: a predicate search across the
+  three task-source vendors, the per-schedule intake configuration, the "taken by cat-factory"
+  pickup writeback, and the replace-link that keeps a recurring block's issue context from
+  accumulating across fires. No engine step yet — this phase is ports, vendor implementations,
+  and persistence only.
+
+  - **`TaskSourceProvider.searchIssues` + `IssueIntakeQuery`** (kernel port): open issues on one
+    vendor board matching every predicate (title fragment / labels / issue type), oldest-first,
+    deduped against the already-worked exclusion list. Predicates are pushed into the vendor
+    query wherever expressible — Jira compiles ONE JQL (`statusCategory != Done`, `issuetype`,
+    `labels`, `summary ~`, `issuekey NOT IN`, `ORDER BY created ASC`; excluded ids validated
+    against the key shape so a malformed id can't inject), GitHub compiles search qualifiers
+    (`repo:` `is:open` `type:` `label:` `in:title`, the title fragment quoted as a literal phrase
+    so it can't inject a qualifier) with the API's `created-asc` sort (a new `order` param on
+    `GitHubClient.searchIssues`, honoured by the GitLab-backed client too) and filters the
+    exclusion list case-insensitively from a bounded, paged overscan, Linear compiles a GraphQL
+    `IssueFilter` (team, state type not completed/canceled, per-label `labels.some`,
+    `title.containsIgnoreCase`) asked for oldest-created-first, also paged so a run of
+    already-worked issues at the front can't starve the pickup.
+  - **`PipelineSchedule.issueIntake`** (contracts + both runtimes, kept symmetric): the
+    schedule-scoped intake config (`source`, per-vendor `board` scope, `predicates`, the GitHub
+    `inProgressLabel`) as a new `pipeline_schedules.issue_intake` JSON column — D1 migration
+    `0038_schedule_issue_intake.sql` ⇄ Drizzle schema + generated migration — parsed/serialized
+    by shared `@cat-factory/server` mapper helpers so the column can't drift, accepted on
+    schedule create/update (PATCH is tri-state: omitted = unchanged, null = clear), and pinned
+    by a cross-runtime conformance round-trip. Requiring it when the pipeline carries a
+    `bug-intake` step is Phase E's schedule validation.
+  - **`IssueWritebackProvider.onIssuePickedUp`**: comments "Taken by cat-factory" (+ run link)
+    on the block's linked issue(s) and marks them in-progress — Jira transitions into the
+    `indeterminate` status category (`pickDoneTransition` generalized into
+    `pickTransitionByCategory`), Linear transitions to the team's `started` state (the Linear
+    state pickers generalized into `pickStateIdByType`), GitHub applies the schedule's
+    `inProgressLabel` (default `in-progress`) via a new `GitHubClient.applyIssueLabel` that
+    creates the label — with the required colour — when absent.
+    Best-effort per issue like the existing hooks, and deliberately NOT gated on the workspace
+    writeback settings — claiming the issue is intake semantics. Wired in both facades.
+  - **`TaskLinkService.replaceForBlock`** + `TaskRepository.unlinkAllFromBlock`: detach every
+    issue linked to the reused block in ONE batched write (D1 ⇄ Drizzle), then link the newly
+    picked issue — so linked context never accumulates across recurring fires.
+
+- 49b498a: Registry DI migration — the agent-kind registry becomes app-owned (no module global).
+
+  Continues the [registry-DI initiative](docs/initiatives/registry-di-migration.md): the
+  plugin-style agent-kind registry (`registerAgentKind` into a module-level `Map`) is replaced by
+  an app-owned **`AgentKindRegistry`** instance the composition root news once
+  (`defaultAgentKindRegistry()`, pre-loaded with the built-in `bug-investigator` / document /
+  initiative kinds), threads through the single `CoreDependencies` object, and re-exposes on the
+  `Core` + `ServerContainer` for the HTTP snapshot projection. Module identity stops mattering, the
+  external-adapter "phantom Map" gotcha is gone, and tests get a fresh instance instead of
+  `clearRegisteredAgentKinds()`. This also fixes the phase-F worker-shard conformance flake at its
+  root: the shared suite's `clearRegisteredAgentKinds()` used to wipe the built-in kinds for the
+  rest of a single-module run.
+
+  **BREAKING** — the free module-global seams are removed from `@cat-factory/agents` (and the
+  facade re-exports): `registerAgentKind`/`registerAgentKinds`, `registered*` (`registeredAgentKind`,
+  `registeredAgentStep`, `registeredKindRequiresContainer`, `registeredSystemPrompt`,
+  `registeredUserPrompt`, `registeredConfigContributions`, `registeredPreOps`, `registeredPostOps`,
+  `registeredAgentPresentation`, `registeredStructuredOutput`, `registeredWebResearchHint`,
+  `registeredAgentTuning`, `registeredAgentKinds`), and `clearRegisteredAgentKinds`. Instead export
+  the `AgentKindRegistry` class + `defaultAgentKindRegistry()` factory; the pure prompt/catalog fns
+  (`systemPromptFor`/`userPromptFor`/`traitsFor`/`hasTrait`/`agentTuningFor`/`configContributionsFor`/
+  `configContributionCatalog`/`webResearchGuidanceFor`/`isInlineModelStep`) now take a `registry`
+  argument, and a deployment registers custom kinds **by reference** on the instance it injects into
+  `buildContainer` / `start()` / `startLocal()` (the `agentKindRegistry` seam), exactly like the
+  backend-registries pilot. The runtimes stay symmetric and the cross-runtime conformance suite
+  injects a pre-loaded registry to assert a custom kind resolves identically on every facade.
+
+  Also fixes a warm-pool bug in the executor-harness: the read-only multi-repo explore fan-out
+  (`runExploreMode`) was gated on `!job.persistentCheckout`, so a `bug-investigator` dispatched to a
+  warm local pool (which injects `persistentCheckout: true` on every job) silently dropped its peer
+  repos and only saw the primary. The guard is dropped — `runMultiRepoExplore` uses its own
+  ephemeral workspace, so the flag is harmlessly ignored.
+
+- 49b498a: Service connections Phase 3 — multi-repo coding. The implementer now fans a cross-service
+  change out across every connected involved-service repo, not just the task's own. A new
+  `resolveRepoTargets` resolves the task's own repo PLUS each involved service's repo, deduped
+  by repo (two services in one monorepo collapse into a single checkout with both
+  subdirectories noted; a service co-located in the primary's own repo rides the own-service
+  PR). `ContainerAgentExecutor` builds a `peerRepos` job body + a "Multi-repo workspace" prompt
+  section for the `coder` kind and works at the repo root so it can reach every involved
+  subtree. The executor-harness clones each peer repo as a SIBLING checkout under one workspace
+  root, runs the agent once across all of them, and opens one PR per repo it actually changed.
+  The own-service PR stays on `block.pullRequest`; the peer PRs are recorded on the new
+  `block.peerPullRequests` (`AgentRunResult.peerPullRequests` → engine → JSON column, mirrored
+  on D1 + Drizzle), with an `allPullRequests(block)` helper for the multi-repo-aware readers.
+  Peer clone URLs are host-allowlisted exactly like the primary. Bumps the runner image
+  (`peerRepos` job field + sibling-checkout flow).
+
+### Patch Changes
+
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+  - @cat-factory/kernel@0.86.0
+  - @cat-factory/integrations@0.65.0
+  - @cat-factory/orchestration@0.71.0
+  - @cat-factory/server@0.81.0
+  - @cat-factory/gitlab@0.7.0
+  - @cat-factory/agents@0.34.0
+  - @cat-factory/consensus@0.9.0
+  - @cat-factory/gates@0.3.0
+  - @cat-factory/prompt-fragments@0.10.1
+  - @cat-factory/spend@0.10.93
+  - @cat-factory/caching@0.4.1
+  - @cat-factory/observability-langfuse@0.7.132
+  - @cat-factory/provider-bedrock@0.7.140
+  - @cat-factory/provider-cloudflare@0.7.141
+  - @cat-factory/provider-s3@0.2.82
+
 ## 0.71.3
 
 ### Patch Changes

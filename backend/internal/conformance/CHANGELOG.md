@@ -1,5 +1,25 @@
 # @cat-factory/conformance
 
+## 0.10.16
+
+### Patch Changes
+
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [c20a69a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+- Updated dependencies [49b498a]
+  - @cat-factory/contracts@0.96.0
+  - @cat-factory/kernel@0.86.0
+  - @cat-factory/integrations@0.65.0
+  - @cat-factory/orchestration@0.71.0
+  - @cat-factory/server@0.81.0
+  - @cat-factory/agents@0.34.0
+  - @cat-factory/gates@0.3.0
+  - @cat-factory/prompt-fragments@0.10.1
+
 ## 0.10.15
 
 ### Patch Changes
