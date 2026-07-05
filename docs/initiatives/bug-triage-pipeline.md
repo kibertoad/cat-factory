@@ -297,8 +297,9 @@ Notes for Phase G/H (which build on this):
 
 ### Phase G — `repro-test` agent (design §7–8)
 
-Implemented on branch `claude/bug-triage-phase-g-repro-test`. **Harness change + image bump**
-(`1.34.8` → `1.34.9`): a `container-coding` kind whose deliverable is BOTH a pushed commit AND a
+Implemented in [PR #797](https://github.com/kibertoad/cat-factory/pull/797) (branch
+`claude/bug-triage-phase-g-repro-test`, off `main` — the #752 stack has since merged).
+**Harness change + image bump** (`1.34.8` → `1.34.9`): a `container-coding` kind whose deliverable is BOTH a pushed commit AND a
 structured JSON outcome is a new harness capability (coding mode never parsed structured output —
 only explore mode did), so like Phase F this phase is NOT harness-free. Pins synced via
 `pnpm sync:image-tags`. Also fans out multi-repo via the registry flag (`fanOutMultiRepo: true`),
