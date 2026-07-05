@@ -984,6 +984,8 @@
       "hideInfraAttempts": "Ukryj próby infrastrukturalne",
       "executionHistory": "Historia wykonania",
       "hideExecutionHistory": "Ukryj historię wykonania",
+      "attemptSucceeded": "Powodzenie",
+      "outputTruncated": "Wynik przycięty, aby zachować zwięzłość historii wykonania.",
       "editingConclusions": "Edytowanie wniosków",
       "editConclusionsPlaceholder": "Edytuj wnioski agenta; Twoje zmiany zostaną zapisane po zatwierdzeniu…",
       "noProseOutput": "Ten agent nie wytworzył wyniku tekstowego.",

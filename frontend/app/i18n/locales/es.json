@@ -984,6 +984,8 @@
       "hideInfraAttempts": "Ocultar intentos de infraestructura",
       "executionHistory": "Historial de ejecución",
       "hideExecutionHistory": "Ocultar historial de ejecución",
+      "attemptSucceeded": "Correcto",
+      "outputTruncated": "Salida recortada para mantener compacto el historial de ejecución.",
       "editingConclusions": "Editando las conclusiones",
       "editConclusionsPlaceholder": "Edita las conclusiones del agente; tus cambios se guardan cuando apruebas…",
       "noProseOutput": "Este agente no produjo salida en prosa.",

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { AgentFailure, AgentKind, PipelineStep } from '@cat-factory/kernel'
 import {
   carryForwardFailures,
+  carryForwardOutputs,
   MAX_FAILURE_HISTORY,
+  MAX_HISTORY_OUTPUT_CHARS,
+  MAX_OUTPUT_HISTORY,
   planResumedSteps,
   planRestartFromStep,
 } from './retry.logic.js'
@@ -208,5 +211,74 @@ describe('carryForwardFailures', () => {
     // The oldest is evicted; the newest is retained at the tail.
     expect(trail[0]).toEqual(full[1])
     expect(trail.at(-1)).toEqual(newest)
+  })
+})
+
+describe('carryForwardOutputs', () => {
+  it('records the successful outputs a restart discards, attributed to their step', () => {
+    // A fully-done run restarted from the architect (index 1): the architect + researcher +
+    // coder outputs are about to be dropped, so they're preserved with their step index.
+    const { steps, currentStep } = planRestartFromStep({ steps: fullSteps('done') }, 1)
+    const trail = carryForwardOutputs({ steps: fullSteps('done') }, currentStep, 999)
+    expect(currentStep).toBe(1)
+    // The preserved-before-the-restart step 0 is NOT recorded (it keeps its output on the step).
+    expect(trail.map((o) => o.stepIndex)).toEqual([1, 2, 3])
+    expect(trail[0]).toMatchObject({ stepIndex: 1, output: 'architect output', occurredAt: 4 })
+    // Sanity: the plan really did reset those steps' outputs (so the history is the only copy).
+    expect(steps[1]!.output).toBeUndefined()
+  })
+
+  it('records nothing for a retry (it resumes at the first UNFINISHED step)', () => {
+    // A retry resumes at the failed coder (index 3); no completed step is reset, so there is
+    // no successful output to preserve — the trail is just carried through untouched.
+    const { currentStep } = planResumedSteps({ steps: fullSteps('working'), currentStep: 3 })
+    const prior = [{ stepIndex: 0, occurredAt: 1, output: 'earlier restart' }]
+    expect(
+      carryForwardOutputs({ steps: fullSteps('working'), outputHistory: prior }, currentStep, 9),
+    ).toEqual(prior)
+  })
+
+  it('skips reset steps with no usable output (failed / never-run / whitespace-only)', () => {
+    const steps: PipelineStep[] = [
+      step('coder', 'done', { output: '   ', finishedAt: 2 }), // whitespace-only → skipped
+      step('tester-api', 'working', { output: 'partial', finishedAt: 3 }), // not done → skipped
+      step('merger', 'pending'), // never ran → skipped
+    ]
+    expect(carryForwardOutputs({ steps }, 0, 100)).toEqual([])
+  })
+
+  it('accumulates across successive restarts, oldest→newest', () => {
+    const prior = [{ stepIndex: 1, occurredAt: 4, output: 'from an earlier restart' }]
+    const steps: PipelineStep[] = [step('spec-writer', 'done', { output: 'spec', finishedAt: 10 })]
+    const trail = carryForwardOutputs({ steps, outputHistory: prior }, 0, 50)
+    expect(trail).toEqual([prior[0], { stepIndex: 0, occurredAt: 10, output: 'spec' }])
+  })
+
+  it('falls back to the supplied clock when a discarded step has no finishedAt', () => {
+    const steps: PipelineStep[] = [step('coder', 'done', { output: 'code' })]
+    expect(carryForwardOutputs({ steps }, 0, 777)).toEqual([
+      { stepIndex: 0, occurredAt: 777, output: 'code' },
+    ])
+  })
+
+  it('clips an oversized output and flags it truncated', () => {
+    const big = 'x'.repeat(MAX_HISTORY_OUTPUT_CHARS + 500)
+    const steps: PipelineStep[] = [step('architect', 'done', { output: big, finishedAt: 1 })]
+    const [entry] = carryForwardOutputs({ steps }, 0, 1)
+    expect(entry!.output).toHaveLength(MAX_HISTORY_OUTPUT_CHARS)
+    expect(entry!.truncated).toBe(true)
+  })
+
+  it('caps the trail at MAX_OUTPUT_HISTORY, dropping the oldest', () => {
+    const prior = Array.from({ length: MAX_OUTPUT_HISTORY }, (_, i) => ({
+      stepIndex: 0,
+      occurredAt: i,
+      output: `old ${i}`,
+    }))
+    const steps: PipelineStep[] = [step('coder', 'done', { output: 'newest', finishedAt: 999 })]
+    const trail = carryForwardOutputs({ steps, outputHistory: prior }, 0, 1)
+    expect(trail).toHaveLength(MAX_OUTPUT_HISTORY)
+    expect(trail[0]).toEqual(prior[1]) // oldest evicted
+    expect(trail.at(-1)).toMatchObject({ output: 'newest' })
   })
 })

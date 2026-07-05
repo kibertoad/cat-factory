@@ -984,6 +984,8 @@
       "hideInfraAttempts": "Masquer les tentatives d'infrastructure",
       "executionHistory": "Historique d'exécution",
       "hideExecutionHistory": "Masquer l'historique d'exécution",
+      "attemptSucceeded": "Réussi",
+      "outputTruncated": "Sortie tronquée pour garder l'historique d'exécution compact.",
       "editingConclusions": "Modification des conclusions",
       "editConclusionsPlaceholder": "Modifiez les conclusions de l'agent ; vos modifications sont enregistrées lorsque vous approuvez…",
       "noProseOutput": "Cet agent n'a produit aucune sortie en texte libre.",
