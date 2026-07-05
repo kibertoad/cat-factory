@@ -1082,11 +1082,19 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         const { workspace } = await createWorkspace()
         const wsId = workspace.id
 
-        // `referenceRepos` is a task-level JSON column carrying the doc-writer agent's
+        // `referenceRepos` is a DOCUMENT-task-only JSON column carrying the doc-writer agent's
         // read-only reference repos, each a self-contained clone identity (NOT resolved from
-        // the repo projection). A runtime that forgot to map the column drops it on write, so
-        // this asserts it survives PATCH + a fresh snapshot read, and that clearing writes NULL
-        // (an empty array comes back absent), on D1 and Postgres alike.
+        // the repo projection). BoardService.update drops it on any non-document block, so the
+        // round-trip is asserted on a real document task: a runtime that forgot to map the
+        // column drops it on write, so this checks it survives PATCH + a fresh snapshot read,
+        // and that clearing writes NULL (an empty array comes back absent), on D1 and Postgres.
+        const doc = await call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+          title: 'Author the API guide',
+          taskType: 'document',
+        })
+        expect(doc.status).toBe(201)
+        const docId = doc.body.id
+
         const referenceRepos = [
           { repoId: 111, owner: 'acme', name: 'design-system', defaultBranch: 'main' },
           {
@@ -1097,20 +1105,18 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
             connectionId: 42,
           },
         ]
-        const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        const set = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${docId}`, {
           referenceRepos,
         })
         expect(set.status).toBe(200)
         expect(set.body.referenceRepos).toEqual(referenceRepos)
 
         const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-        expect(snap.body.blocks.find((b) => b.id === 'task_login')?.referenceRepos).toEqual(
-          referenceRepos,
-        )
+        expect(snap.body.blocks.find((b) => b.id === docId)?.referenceRepos).toEqual(referenceRepos)
 
         // Clearing with an empty array writes NULL, so the field comes back absent (mirroring
         // the other JSON-array block columns' empty-is-null convention).
-        const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+        const cleared = await call<Block>('PATCH', `/workspaces/${wsId}/blocks/${docId}`, {
           referenceRepos: [],
         })
         expect(cleared.status).toBe(200)
