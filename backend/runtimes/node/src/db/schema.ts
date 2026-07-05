@@ -269,6 +269,9 @@ export const blocks = pgTable(
     // beyond its own service (JSON array of frame block ids) — spun up as ephemeral
     // environments too; the coding agent may change their repos.
     involved_service_ids: text('involved_service_ids'),
+    // Task-level (document tasks): read-only reference repos for the `doc-writer` agent —
+    // serialized JSON array of { githubId, owner, name, defaultBranch, installationId? }.
+    reference_repos: text('reference_repos'),
     // The account-owned service this block belongs to (migration 0031); will become the
     // physical scope key once the repositories switch off workspace_id.
     service_id: text('service_id'),

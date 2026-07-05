@@ -140,6 +140,56 @@ describe('parseAgentJob', () => {
     expect(job.peerRepos?.[0]?.pr).toBeUndefined()
   })
 
+  // Read-only reference repos (doc-writer): validated + host-allowlisted like the primary, and
+  // structurally unpushable — the parsed shape carries only the repo (+ optional token), never a
+  // branch or PR, so no wire field can turn a reference into a writable leg.
+  it('parses referenceRepos (validated + host-allowlisted, no branch/pr fields)', () => {
+    const job = parseAgentJob({
+      ...base,
+      mode: 'coding',
+      newBranch: 'cat-factory/blk',
+      referenceRepos: [
+        {
+          repo: {
+            owner: 'acme',
+            name: 'design-system',
+            baseBranch: 'main',
+            cloneUrl: 'https://github.com/acme/design-system.git',
+          },
+          // Branch/PR fields on the wire are IGNORED — a reference is never pushed.
+          newBranch: 'cat-factory/should-be-ignored',
+          pr: { title: 'nope', body: 'nope' },
+        },
+      ],
+    })
+    expect(job.referenceRepos).toHaveLength(1)
+    expect(job.referenceRepos?.[0]).toMatchObject({
+      repo: { owner: 'acme', name: 'design-system' },
+    })
+    // The parsed reference carries no branch/PR — the shape itself makes it unpushable.
+    expect(job.referenceRepos?.[0]).not.toHaveProperty('newBranch')
+    expect(job.referenceRepos?.[0]).not.toHaveProperty('pr')
+  })
+
+  it('rejects a reference repo whose clone URL host is not allow-listed (token-exfil guard)', () => {
+    expect(() =>
+      parseAgentJob({
+        ...base,
+        mode: 'coding',
+        referenceRepos: [
+          {
+            repo: {
+              owner: 'evil',
+              name: 'x',
+              baseBranch: 'main',
+              cloneUrl: 'https://evil.example.com/evil/x.git',
+            },
+          },
+        ],
+      }),
+    ).toThrow(/referenceRepos\[0\]\.repo\.cloneUrl/)
+  })
+
   it('accepts a structured explore job', () => {
     const job = parseAgentJob({
       ...base,

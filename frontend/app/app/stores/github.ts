@@ -157,6 +157,18 @@ export const useGitHubStore = defineStore('github', () => {
     }
   }
 
+  /**
+   * Search the installation/PAT-accessible repos server-side WITHOUT touching the shared
+   * `availableRepos`/`loadingAvailable` singleton — it returns the matches to the caller instead.
+   * This is the reusable form behind {@link useRepoSearch}: two independent pickers (the
+   * add-service modal and the doc-task reference-repo picker) can search concurrently without
+   * clobbering each other's results. A blank/short `q` (or no connection) returns `[]`.
+   */
+  async function searchAvailableRepos(q: string): Promise<GitHubAvailableRepo[]> {
+    if (!connected.value || q.trim() === '') return []
+    return api.listGitHubAvailableRepos(workspace.requireId(), q)
+  }
+
   /** Set the exact set of repos this workspace links, then refresh projections. */
   async function setLinkedRepos(repoGithubIds: number[]) {
     savingRepos.value = true
@@ -318,6 +330,7 @@ export const useGitHubStore = defineStore('github', () => {
     load,
     ensureLoaded,
     loadAvailableRepos,
+    searchAvailableRepos,
     setLinkedRepos,
     loadRepoTree,
     loadBranches,

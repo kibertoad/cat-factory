@@ -84,6 +84,21 @@ export interface PeerRepoSpec {
   ghToken?: string
 }
 
+/**
+ * A repository checked out READ-ONLY as a sibling alongside the primary during a
+ * document-authoring coding run — the doc-writer reads it (to reuse existing solutions as a
+ * reference) but the harness never creates a branch, commits, or opens a PR for it. Deliberately
+ * carries NO branch/PR fields (unlike {@link PeerRepoSpec}), so it is structurally impossible to
+ * push: the read-only guarantee is enforced by the shape itself, by cloning at the repo's own
+ * base branch with no work branch, and by skipping the leg in the push phase. The clone URL is
+ * host-allowlisted exactly like the primary `repo.cloneUrl`.
+ */
+export interface ReferenceRepoSpec {
+  repo: RepoSpec
+  /** Per-repo GitHub token; defaults to the job's `ghToken` (one installation per workspace today). */
+  ghToken?: string
+}
+
 function str(value: unknown, path: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new Error(`Invalid job: '${path}' must be a non-empty string`)
@@ -230,6 +245,28 @@ function parsePeerRepos(value: unknown): PeerRepoSpec[] {
         body: typeof p.body === 'string' ? p.body : '',
       }
     }
+    return spec
+  })
+}
+
+/**
+ * Parse the optional read-only reference-repo list (document-authoring runs). Each entry carries
+ * a full {@link RepoSpec} (validated + sanitised like the primary) and an optional per-repo token.
+ * Any branch/PR fields on the wire are IGNORED — a reference repo is never pushed, so the parsed
+ * shape has none to carry. A malformed list throws; an absent one yields `[]`.
+ */
+function parseReferenceRepos(value: unknown): ReferenceRepoSpec[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error("Invalid job: 'referenceRepos' must be an array")
+  return value.map((entry, i) => {
+    if (typeof entry !== 'object' || entry === null) {
+      throw new Error(`Invalid job: 'referenceRepos[${i}]' must be an object`)
+    }
+    const e = entry as Record<string, unknown>
+    const spec: ReferenceRepoSpec = {
+      repo: parseRepoSpec((e.repo ?? {}) as Record<string, unknown>),
+    }
+    if (typeof e.ghToken === 'string' && e.ghToken) spec.ghToken = e.ghToken
     return spec
   })
 }
@@ -592,6 +629,14 @@ export interface AgentJob extends HarnessAuthFields {
    */
   peerRepos?: PeerRepoSpec[]
   /**
+   * Coding mode (doc-writer): repositories to clone READ-ONLY as SIBLINGS for the agent to
+   * reference while it drafts the document. When present the agent works at the workspace ROOT
+   * (all checkouts are siblings under it); the harness clones each reference at its own base
+   * branch and NEVER creates a branch, commits, or opens a PR for it. Only the primary is
+   * pushed. Absent ⇒ single-repo run. Independent of {@link peerRepos} (those are writable).
+   */
+  referenceRepos?: ReferenceRepoSpec[]
+  /**
    * Coding mode: whether a no-op run (nothing changed) is a failure. The implementer
    * fails on a no-op; the in-place fixers (ci-fix / fix-tests) treat it as a non-fatal
    * no-op. Default true.
@@ -926,6 +971,7 @@ export function parseAgentJob(input: unknown): AgentJob {
       : undefined
   const infra = parseAgentInfraSpec(o.infra)
   const peerRepos = parsePeerRepos(o.peerRepos)
+  const referenceRepos = parseReferenceRepos(o.referenceRepos)
   const bootstrap = parseAgentBootstrapSpec(o.bootstrap)
   const contextFiles = parseContextFiles(o.contextFiles)
   const packageRegistries = parsePackageRegistries(o.packageRegistries)
@@ -957,6 +1003,7 @@ export function parseAgentJob(input: unknown): AgentJob {
       : {}),
     ...(pr ? { pr } : {}),
     ...(peerRepos.length ? { peerRepos } : {}),
+    ...(referenceRepos.length ? { referenceRepos } : {}),
     ...(o.noChangesIsError === false ? { noChangesIsError: false } : {}),
     ...(o.persistentCheckout === true ? { persistentCheckout: true } : {}),
     ...(o.streamFollowUps === true ? { streamFollowUps: true } : {}),
@@ -972,6 +1019,12 @@ export function parseAgentJob(input: unknown): AgentJob {
   // exfiltrate the token exactly like a rogue primary clone URL.
   for (const [i, peer] of (job.peerRepos ?? []).entries()) {
     assertAllowedHost(peer.repo.cloneUrl, `peerRepos[${i}].repo.cloneUrl`)
+  }
+  // Each reference repo's clone URL receives the installation/PAT token on clone (read-only,
+  // never pushed), so it must be an allowed host too — a body-supplied reference pointing at an
+  // attacker host would exfiltrate the token exactly like a rogue peer clone URL.
+  for (const [i, ref] of (job.referenceRepos ?? []).entries()) {
+    assertAllowedHost(ref.repo.cloneUrl, `referenceRepos[${i}].repo.cloneUrl`)
   }
   return job
 }

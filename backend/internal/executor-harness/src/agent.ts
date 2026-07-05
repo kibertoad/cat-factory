@@ -739,13 +739,14 @@ async function runCodingMode(job: AgentJob, opts: RunOptions): Promise<AgentResu
   // clone full, merge the base in to surface the conflicts, then complete the merge
   // commit + push (no PR). Keyed off job DATA (`mergeBase`), not the agent kind.
   if (job.mergeBase) return runConflictResolution(job, opts)
-  // Multi-repo coding (service-connections phase 3): clone every connected peer repo as a
-  // sibling, run the agent once across all of them, and open one PR per changed repo. Keyed
-  // off job DATA (`peerRepos`), not the agent kind — the implementer sets it when the task
-  // has involved services in distinct repos.
-  const result = job.peerRepos?.length
-    ? await runMultiRepoCoding(job, opts)
-    : await runSingleRepoCoding(job, opts)
+  // Multi-repo coding: clone every additional repo as a sibling and run the agent once across
+  // all of them. Keyed off job DATA, not the agent kind — set for the implementer's writable
+  // peer repos (service-connections phase 3, `peerRepos`) OR the doc-writer's READ-ONLY
+  // reference repos (`referenceRepos`, cloned but never pushed).
+  const result =
+    job.peerRepos?.length || job.referenceRepos?.length
+      ? await runMultiRepoCoding(job, opts)
+      : await runSingleRepoCoding(job, opts)
 
   // Structured coding kind (repro-test): fold the final reply's JSON onto `custom` so the
   // backend post-completion resolver records the outcome. Skipped on a failed run (its `error`

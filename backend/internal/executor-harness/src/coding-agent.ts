@@ -1,6 +1,13 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { AgentJob, AgentResult, HarnessAuthFields, PeerRepoSpec, RepoSpec } from './job.js'
+import type {
+  AgentJob,
+  AgentResult,
+  HarnessAuthFields,
+  PeerRepoSpec,
+  ReferenceRepoSpec,
+  RepoSpec,
+} from './job.js'
 import {
   branchAheadOfBase,
   branchHasCommitsSince,
@@ -435,6 +442,12 @@ interface RepoLeg {
   pr?: { title: string; body: string }
   frameId?: string
   primary: boolean
+  /**
+   * A READ-ONLY reference checkout (doc-writer's `referenceRepos`): cloned at its base branch for
+   * the agent to read, but NEVER given a work branch, committed, or pushed. Skipped entirely in the
+   * push phase, so it is structurally impossible for the run to write to it. Absent ⇒ a writable leg.
+   */
+  readOnly?: boolean
   /** The branch tip before the run — work iff the branch advances past it. */
   baseSha: string
   /** Whether an existing remote work branch was resumed (already carries prior work). */
@@ -461,6 +474,7 @@ export async function runMultiRepoCoding(
   const { signal } = opts
   const logger = (opts.log ?? log).child({ kind: 'multi-repo', jobId: job.jobId })
   const peers: PeerRepoSpec[] = job.peerRepos ?? []
+  const references: ReferenceRepoSpec[] = job.referenceRepos ?? []
   const primaryWorkBranch = job.pushBranch ?? job.newBranch ?? job.branch
 
   // Assign the sibling directory per repo via the shared deterministic allocator (`owner__name`,
@@ -496,6 +510,23 @@ export async function runMultiRepoCoding(
         resumed: false,
       }),
     ),
+    // Read-only reference repos (doc-writer): cloned as siblings the agent reads but never writes.
+    // `workBranch` is set to the base only to satisfy the type — a read-only leg never branches or
+    // pushes (guarded by `readOnly` in both the clone and push phases below).
+    ...references.map(
+      (reference): RepoLeg => ({
+        repo: reference.repo,
+        dirName: claimDir(reference.repo),
+        dir: '',
+        cloneBranch: reference.repo.baseBranch,
+        workBranch: reference.repo.baseBranch,
+        ghToken: reference.ghToken ?? job.ghToken,
+        primary: false,
+        readOnly: true,
+        baseSha: '',
+        resumed: false,
+      }),
+    ),
   ]
 
   return withWorkspace('multi', async (root) => {
@@ -505,6 +536,23 @@ export async function runMultiRepoCoding(
     for (const leg of legs) {
       const dir = join(root, leg.dirName)
       await mkdir(dir, { recursive: true })
+      // A read-only reference leg: clone its base branch for the agent to read, and stop there —
+      // no work branch, no resume, no base-refresh. It is skipped in the push phase, so it can
+      // never be written to. (Kept in the loop so it lands in the same workspace root as siblings.)
+      if (leg.readOnly) {
+        logger.info('multi-repo: cloning read-only reference', {
+          repo: leg.dirName,
+          cloneBranch: leg.cloneBranch,
+        })
+        await cloneRepo({
+          repo: { ...leg.repo, baseBranch: leg.cloneBranch },
+          ghToken: leg.ghToken,
+          dir,
+          signal,
+        })
+        leg.dir = dir
+        continue
+      }
       leg.resumed = await remoteBranchExists(leg.repo.cloneUrl, leg.workBranch, leg.ghToken, signal)
       if (leg.resumed) {
         logger.info('multi-repo: resuming existing branch', {
@@ -587,6 +635,9 @@ export async function runMultiRepoCoding(
     let primaryPrUrl: string | undefined
     const peerPullRequests: NonNullable<AgentResult['peerPullRequests']> = []
     for (const leg of legs) {
+      // A read-only reference leg is never committed or pushed — the third layer of the read-only
+      // guarantee (the spec carries no branch/PR, and the clone phase gave it no work branch).
+      if (leg.readOnly) continue
       await commitTrackedEdits(
         leg.dir,
         job.commitMessage ?? leg.pr?.title ?? 'Agent changes',

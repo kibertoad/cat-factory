@@ -315,6 +315,10 @@ export class AgentContextBuilder {
       ...(service ? { service } : {}),
       ...(frontend ? { frontend } : {}),
       ...(involvedServices?.length ? { involvedServices } : {}),
+      // Read-only reference repos for a doc-authoring task, lifted verbatim from the block —
+      // the executor clones them as read-only siblings for the doc-writer. A pure projection
+      // (identities are self-contained), so no repo reads here.
+      ...(block.referenceRepos?.length ? { referenceRepos: block.referenceRepos } : {}),
       ...(initiative ? { initiative } : {}),
       priorOutputs,
       decisions: instance.steps

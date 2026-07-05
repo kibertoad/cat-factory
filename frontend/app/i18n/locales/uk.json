@@ -833,6 +833,12 @@
       "involvedServicesHint": "З'єднані сервіси, безпосередньо залучені до цього завдання: кожен розгортається як тимчасове середовище поряд із власним сервісом завдання, і агент кодування може змінювати також їхні репозиторії.",
       "involvedServicesEmpty": "Немає з'єднаних сервісів. З'єднайте сервіси на рамці сервісу, щоб вибрати їх тут.",
       "involvedServiceStale": "Більше не з'єднаний із сервісом цього завдання; буде видалений під час наступної зміни."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {

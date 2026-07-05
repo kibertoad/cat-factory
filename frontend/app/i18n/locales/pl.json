@@ -833,6 +833,12 @@
       "involvedServicesHint": "Połączone usługi bezpośrednio zaangażowane w to zadanie: każda z nich uruchamiana jest jako środowisko tymczasowe obok własnej usługi zadania, a agent kodujący może też zmieniać ich repozytoria.",
       "involvedServicesEmpty": "Brak połączonych usług. Połącz usługi na ramce usługi, aby móc je tutaj wybrać.",
       "involvedServiceStale": "Nie jest już połączona z usługą tego zadania; zostanie usunięta przy następnej zmianie."
+    },
+    "referenceRepos": {
+      "title": "Reference repositories",
+      "remove": "Remove {repo}",
+      "connectFirst": "Connect GitHub to attach reference repositories.",
+      "hint": "The document writer clones these read-only to reuse existing solutions as a reference while drafting. It never changes them."
     }
   },
   "panels": {

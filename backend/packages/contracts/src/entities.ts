@@ -70,6 +70,44 @@ export const peerPullRequestSchema = v.object({
 export type PeerPullRequest = v.InferOutput<typeof peerPullRequestSchema>
 
 /**
+ * A repository attached to a document-authoring task purely as READ-ONLY reference: the
+ * `doc-writer` agent clones each one as a sibling checkout it may read (to reuse existing
+ * solutions as a reference) but NEVER writes to — no branch, no commit, no PR. Unlike an
+ * involved service ({@link blockSchema.entries.involvedServiceIds}), a reference repo is
+ * not a board service and need not be in the workspace's synced repo projection: it may be
+ * ANY repo the workspace's VCS connection (hosted) or the configured PAT (local) can reach,
+ * so its clone identity is stored self-contained here rather than resolved from the projection.
+ *
+ * Provider-neutral by construction: the fields mirror the kernel's VCS identity vocabulary
+ * (`VcsRepoRef` / `VcsConnectionRef`), NOT GitHub-specific names — the concrete provider is a
+ * deployment-level fact resolved server-side when the clone URL is built (see `ResolveRepoOrigin`
+ * in `@cat-factory/server`), so a GitHub or GitLab deployment persists the same shape.
+ */
+export const referenceRepoSchema = v.object({
+  /**
+   * The provider's canonical repo identity (GitHub numeric id / GitLab project id). Numeric on
+   * every provider this platform surfaces through the available-repos picker (`repoId` in the
+   * kernel's `VcsRepoRef` is stringly-typed to also admit path ids; the picker uses the numeric
+   * form for both).
+   */
+  repoId: v.number(),
+  /** The repo owner (org/user login, or GitLab group). */
+  owner: v.string(),
+  /** The repo name (or GitLab project). */
+  name: v.string(),
+  /** The branch the reference checkout is cloned at (the repo's default branch). */
+  defaultBranch: v.string(),
+  /**
+   * The VCS connection that can access this repo, when known (GitHub App installation / GitLab
+   * connection id — the `connectionId` of the kernel's `VcsConnectionRef`). Absent for a repo
+   * reachable only via the run initiator's own token (local mode / a `personal`-badged search
+   * hit), which is cloned with that token rather than the workspace connection's.
+   */
+  connectionId: v.optional(v.number()),
+})
+export type ReferenceRepo = v.InferOutput<typeof referenceRepoSchema>
+
+/**
  * Per-task override for an issue-tracker writeback action (see the workspace-level
  * `writebackCommentOnPrOpen` / `writebackResolveOnMerge` in tracker settings).
  * `on`/`off` force the behaviour for this task; absent ⇒ inherit the workspace setting.
@@ -247,6 +285,14 @@ export const blockSchema = v.object({
    * multi-repo-aware paths read {@link allPullRequests}. Absent for a single-repo task.
    */
   peerPullRequests: v.optional(v.array(peerPullRequestSchema)),
+  /**
+   * Task-level (document-authoring tasks): repositories attached as READ-ONLY reference
+   * material for the `doc-writer` agent — it clones each as a sibling checkout it may read
+   * to reuse existing solutions, but never writes to (see {@link referenceRepoSchema}).
+   * Distinct from {@link involvedServiceIds}: reference repos are not board services, carry
+   * their own clone identity, and are structurally unpushable. Absent on non-doc tasks.
+   */
+  referenceRepos: v.optional(v.array(referenceRepoSchema)),
   /**
    * Id of the merge threshold preset selected for this task (see
    * {@link mergeThresholdPresetSchema}). Drives the `merger` step's auto-merge
