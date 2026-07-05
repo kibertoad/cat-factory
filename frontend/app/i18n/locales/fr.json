@@ -276,6 +276,7 @@
       "stalled": "L’exécution est bloquée",
       "retryBootstrap": "Relancer l’initialisation",
       "retryRun": "Relancer l’exécution",
+      "environmentSetup": "Configurer les environnements",
       "showDetail": "Afficher le détail",
       "retrying": "Nouvelle tentative…",
       "history": {

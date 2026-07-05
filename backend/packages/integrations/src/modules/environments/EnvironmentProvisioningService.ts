@@ -324,7 +324,12 @@ export class EnvironmentProvisioningService {
     }
     if (!this.deps.deployJobClient) {
       const message =
-        'This environment needs the container deploy adapter, but no runner transport is wired.'
+        'This service provisions its environment with a container-based render ' +
+        '(real kubectl / kustomize / helm), but this deployment has no deploy runner wired to ' +
+        'run it. Configure a deploy backend for this deployment — a self-hosted runner pool ' +
+        '(Node), the LOCAL_DEPLOY_RUNTIME env (local mode), or the DeployContainer binding ' +
+        '(Cloudflare) — or switch this service to raw manifests, which provision with no ' +
+        'deploy container.'
       await this.captureProvisionFailure(args, resolved, message)
       throw new ValidationError(message)
     }

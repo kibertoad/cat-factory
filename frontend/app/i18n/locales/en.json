@@ -297,6 +297,7 @@
       "stalled": "Run stalled",
       "retryBootstrap": "Retry bootstrap",
       "retryRun": "Retry run",
+      "environmentSetup": "Set up environments",
       "showDetail": "Show detail",
       "retrying": "Retrying…",
       "history": {

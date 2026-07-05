@@ -14,9 +14,17 @@ const props = withDefaults(
 
 const { t } = useI18n()
 const agentRuns = useAgentRunsStore()
+const ui = useUiStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
+// An `environment` failure is a provisioning/config problem, so offer a one-click jump to the
+// place it's configured (Infrastructure → Test environments) alongside the retry — the same
+// "Configure…" deep-link pattern the infra-setup banners use.
+const isEnvironmentFailure = computed(() => failure.value?.kind === 'environment')
+function openEnvironmentConfig() {
+  ui.openProviderConnection('environment')
+}
 const title = computed(() => {
   // A `dispatch` failure means the container/runner never accepted the job — say so
   // explicitly rather than the generic "Run failed", and show the verbatim provider
@@ -91,19 +99,35 @@ async function retry() {
       pre-class="bg-rose-950/60 text-[10px] text-rose-200/80"
     />
 
-    <button
-      type="button"
-      class="nodrag mt-2 flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
-      :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
-      :disabled="retrying"
-      data-testid="agent-failure-retry"
-      @click.stop="retry"
-    >
-      <UIcon
-        :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
-        :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
-      />
-      {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
-    </button>
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/40 text-rose-200 hover:bg-rose-900/70 disabled:opacity-60"
+        :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
+        :disabled="retrying"
+        data-testid="agent-failure-retry"
+        @click.stop="retry"
+      >
+        <UIcon
+          :name="retrying ? 'i-lucide-loader-circle' : 'i-lucide-rotate-ccw'"
+          :class="[compact ? 'h-3 w-3' : 'h-3.5 w-3.5', { 'animate-spin': retrying }]"
+        />
+        {{ retrying ? t('board.failure.retrying') : compact ? t('common.retry') : retryLabel }}
+      </button>
+
+      <!-- Environment provisioning failures are almost always a deploy-backend / provider-config
+           issue, so link straight to where it's set up rather than leaving the user to hunt. -->
+      <button
+        v-if="isEnvironmentFailure"
+        type="button"
+        class="nodrag flex items-center gap-1 rounded-md bg-rose-900/20 text-rose-300 hover:bg-rose-900/50"
+        :class="compact ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'"
+        data-testid="agent-failure-configure-environment"
+        @click.stop="openEnvironmentConfig"
+      >
+        <UIcon name="i-lucide-settings" :class="compact ? 'h-3 w-3' : 'h-3.5 w-3.5'" />
+        {{ t('board.failure.environmentSetup') }}
+      </button>
+    </div>
   </div>
 </template>

@@ -759,7 +759,7 @@ describe('EnvironmentProvisioningService — async container-backed deploy lifec
 
     await expect(
       service.startProvision({ workspaceId: 'ws1', blockId: 'blk1' }, REF),
-    ).rejects.toThrow(/no runner transport is wired/i)
+    ).rejects.toThrow(/no deploy runner wired/i)
     expect(registry.records).toHaveLength(1)
     expect(registry.records[0]!.status).toBe('failed')
   })

@@ -276,6 +276,7 @@
       "stalled": "הריצה נתקעה",
       "retryBootstrap": "נסה שוב לאתחל",
       "retryRun": "נסה שוב להריץ",
+      "environmentSetup": "הגדרת סביבות",
       "showDetail": "הצג פרטים",
       "retrying": "מנסה שוב…",
       "history": {

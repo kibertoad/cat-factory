@@ -276,6 +276,7 @@
       "stalled": "Uruchomienie utknęło",
       "retryBootstrap": "Ponów inicjalizację",
       "retryRun": "Ponów uruchomienie",
+      "environmentSetup": "Skonfiguruj środowiska",
       "showDetail": "Pokaż szczegóły",
       "retrying": "Ponawianie…",
       "history": {

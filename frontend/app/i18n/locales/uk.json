@@ -276,6 +276,7 @@
       "stalled": "Запуск завис",
       "retryBootstrap": "Повторити ініціалізацію",
       "retryRun": "Повторити запуск",
+      "environmentSetup": "Налаштувати середовища",
       "showDetail": "Показати деталі",
       "retrying": "Повторення…",
       "history": {

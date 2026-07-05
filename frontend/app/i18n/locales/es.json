@@ -276,6 +276,7 @@
       "stalled": "La ejecución se estancó",
       "retryBootstrap": "Reintentar arranque",
       "retryRun": "Reintentar ejecución",
+      "environmentSetup": "Configurar entornos",
       "showDetail": "Mostrar detalle",
       "retrying": "Reintentando…",
       "history": {

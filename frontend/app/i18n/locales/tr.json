@@ -276,6 +276,7 @@
       "stalled": "Çalıştırma askıda kaldı",
       "retryBootstrap": "Bootstrap'ı yeniden dene",
       "retryRun": "Çalıştırmayı yeniden dene",
+      "environmentSetup": "Ortamları yapılandır",
       "showDetail": "Ayrıntıyı göster",
       "retrying": "Yeniden deneniyor…",
       "history": {
