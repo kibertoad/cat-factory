@@ -391,7 +391,8 @@
         "bootstrap_not_retryable": "Bootstrap yeniden denenemiyor",
         "bootstrap_reference_missing": "Referans mimari kayıp",
         "preset_unsatisfiable": "Model ön ayarı bu ardışık düzeni çalıştıramıyor",
-        "visual_pipeline_no_frontend": "Test edilecek bir frontend yok"
+        "visual_pipeline_no_frontend": "Test edilecek bir frontend yok",
+        "deployer_required_before_tester": "Tester’dan önce bir Deployer ekleyin"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
       "providersUnconfigured": {

@@ -3,7 +3,12 @@ import type { UrlSafetyPolicy } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { assertSafeAtlassianBaseUrl } from '@cat-factory/kernel'
 import { frontendOriginsForService } from '@cat-factory/contracts'
-import { assertSafeEnvironmentUrl, interpolateTemplate } from './environments.logic.js'
+import {
+  assertSafeEnvironmentUrl,
+  type EnvironmentIdentity,
+  interpolateTemplate,
+  shouldTeardownSuperseded,
+} from './environments.logic.js'
 
 // SSRF host-classification regression tests (Finding #6b). The guards must block
 // the obfuscated loopback/link-local/RFC1918 encodings that bypass a naive
@@ -170,5 +175,55 @@ describe('URL safety policy — trusted internal-host widening', () => {
     expect(() => assertSafeEnvironmentUrl('https://u:p@kargo', 'base URL', internalHosts)).toThrow(
       ValidationError,
     )
+  })
+})
+
+describe('shouldTeardownSuperseded', () => {
+  const k8s = (externalId: string | null): EnvironmentIdentity => ({
+    provisionType: 'kubernetes',
+    engine: 'remote-kubernetes',
+    externalId,
+  })
+
+  it('never tears down a prior with no real infra (null externalId)', () => {
+    // A `provisioning`/`failed` placeholder row provisioned nothing — nothing to reclaim.
+    expect(shouldTeardownSuperseded(k8s(null), k8s('cf-env-new'))).toBe(false)
+    expect(shouldTeardownSuperseded(k8s(null), null)).toBe(false)
+  })
+
+  it('tears down when nothing replaces it (the infraless flip)', () => {
+    expect(shouldTeardownSuperseded(k8s('cf-env-old'), null)).toBe(true)
+  })
+
+  it('tears down on a provider/type change', () => {
+    const next: EnvironmentIdentity = {
+      provisionType: 'custom',
+      engine: 'remote-custom',
+      externalId: null,
+    }
+    expect(shouldTeardownSuperseded(k8s('cf-env-old'), next)).toBe(true)
+  })
+
+  it('tears down on an engine change within the same type', () => {
+    const next: EnvironmentIdentity = {
+      provisionType: 'kubernetes',
+      engine: 'local-k3s',
+      externalId: null,
+    }
+    expect(shouldTeardownSuperseded(k8s('cf-env-old'), next)).toBe(true)
+  })
+
+  it('tears down when the new external id (namespace) is known and differs', () => {
+    expect(shouldTeardownSuperseded(k8s('cf-env-old'), k8s('cf-env-new'))).toBe(true)
+  })
+
+  it('keeps the deterministic overwrite-in-place: same type/engine, same external id', () => {
+    expect(shouldTeardownSuperseded(k8s('cf-env-1'), k8s('cf-env-1'))).toBe(false)
+  })
+
+  it('is conservative when the new external id is not yet known (async placeholder)', () => {
+    // The async `provisioning` insert has externalId=null; a matching type/engine ⇒ assume the
+    // deterministic same-namespace overwrite, so do NOT tear down (the TTL reaper is the backstop).
+    expect(shouldTeardownSuperseded(k8s('cf-env-1'), k8s(null))).toBe(false)
   })
 })

@@ -52,19 +52,21 @@ export class EnvironmentTeardownService {
   }
 
   private async teardownRecord(record: EnvironmentRecord): Promise<void> {
+    // Resolve the provider from the RECORD's stored provision type/engine (the handler that stood
+    // it up), not the workspace-primary — so a workspace with several per-type handlers tears each
+    // env down through the right one.
     const resolved = await this.deps.connectionService
-      .resolveProvider(record.workspaceId)
+      .resolveProviderForRecord(record)
       .catch(() => null)
     // If the provider was unregistered we can't call its API; just tombstone.
     if (resolved) {
-      const resolveSecret = await this.deps.connectionService.resolveSecrets(record.workspaceId)
       const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
       try {
         await resolved.provider.teardown({
           manifest: resolved.manifest,
           externalId: record.externalId,
           provisionFields,
-          resolveSecret,
+          resolveSecret: resolved.resolveSecret,
         })
       } catch (error) {
         // Log the verbatim provider error before it propagates (the sweep swallows

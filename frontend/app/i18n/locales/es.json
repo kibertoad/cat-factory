@@ -391,7 +391,8 @@
         "bootstrap_not_retryable": "La inicialización no se puede reintentar",
         "bootstrap_reference_missing": "La arquitectura de referencia ha desaparecido",
         "preset_unsatisfiable": "El preajuste de modelo no puede ejecutar esta canalización",
-        "visual_pipeline_no_frontend": "No hay frontend que probar"
+        "visual_pipeline_no_frontend": "No hay frontend que probar",
+        "deployer_required_before_tester": "Añade un Deployer antes del Tester"
       },
       "fallbackMessage": "Esta acción entra en conflicto con el estado actual.",
       "providersUnconfigured": {

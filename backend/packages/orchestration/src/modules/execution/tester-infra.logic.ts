@@ -1,4 +1,7 @@
 import type { ProvisionType } from '@cat-factory/kernel'
+import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
+import { HUMAN_TEST_AGENT_KIND, TESTER_KINDS } from './ci.logic.js'
+import { ACCEPTANCE_AGENT_KINDS } from '@cat-factory/agents'
 
 // Pure decision for the Tester's start-time infra gate — no IO, no ports. Given the
 // service's declared provision type, the runtime's Docker-in-Docker capability, and
@@ -82,6 +85,43 @@ export function decideTesterInfra(input: TesterInfraInput): TesterInfraDecision 
   }
   // `kubernetes` | `custom` — provisioned externally by a workspace handler.
   return input.handlerResolves ? { ok: true } : { ok: false, reason: 'provision-type-unhandled' }
+}
+
+/**
+ * The steps that CONSUME a provisioned environment to run against — the API/UI testers, the
+ * acceptance (`playwright`) runner, and the human-test gate. On a `kubernetes`/`custom` service each
+ * needs a `deployer` to have stood the environment up first (they read its coordinates, they never
+ * provision themselves), so a chain that reaches one without a preceding deployer would dead-end.
+ */
+export const ENV_CONSUMER_KINDS: readonly string[] = [
+  ...TESTER_KINDS,
+  ...ACCEPTANCE_AGENT_KINDS,
+  HUMAN_TEST_AGENT_KIND,
+]
+
+/**
+ * For a `kubernetes`/`custom` service: whether the ENABLED chain reaches an env-consuming step
+ * (tester / playwright / human-test) with NO enabled `deployer` before it — i.e. nothing would
+ * provision the environment the consumer needs, so the run would dead-end inside the consumer. The
+ * pure half of the run-start guard: `ExecutionService` resolves the service's provision type and
+ * translates a `true` verdict into an actionable launch error. Returns false for every other
+ * provision type (a `docker-compose` tester stands its stack up in-container; `infraless`/none/a
+ * frontend frame need no deployer) and whenever a deployer precedes the first consumer.
+ */
+export function needsDeployerBeforeConsumer(
+  agentKinds: readonly string[],
+  enabled: readonly boolean[] | undefined,
+  provisionType: ProvisionType | undefined,
+): boolean {
+  if (provisionType !== 'kubernetes' && provisionType !== 'custom') return false
+  let deployerSeen = false
+  for (let i = 0; i < agentKinds.length; i++) {
+    if (enabled?.[i] === false) continue
+    const kind = agentKinds[i]!
+    if (kind === DEPLOYER_AGENT_KIND) deployerSeen = true
+    else if (!deployerSeen && ENV_CONSUMER_KINDS.includes(kind)) return true
+  }
+  return false
 }
 
 /** The actionable error message for each refusal reason. */

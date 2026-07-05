@@ -391,7 +391,8 @@
         "bootstrap_not_retryable": "Ініціалізацію неможливо повторити",
         "bootstrap_reference_missing": "Еталонна архітектура зникла",
         "preset_unsatisfiable": "Пресет моделі не може запустити цей конвеєр",
-        "visual_pipeline_no_frontend": "Немає фронтенду для тестування"
+        "visual_pipeline_no_frontend": "Немає фронтенду для тестування",
+        "deployer_required_before_tester": "Додайте Deployer перед Tester"
       },
       "fallbackMessage": "Ця дія суперечить поточному стану.",
       "providersUnconfigured": {

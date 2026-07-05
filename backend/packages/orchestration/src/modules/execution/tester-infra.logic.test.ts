@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { decideTesterInfra, type TesterInfraInput } from './tester-infra.logic.js'
+import {
+  decideTesterInfra,
+  needsDeployerBeforeConsumer,
+  type TesterInfraInput,
+} from './tester-infra.logic.js'
 
 const base: TesterInfraInput = {
   provisionType: undefined,
@@ -121,5 +125,52 @@ describe('decideTesterInfra', () => {
         })
       })
     }
+  })
+})
+
+describe('needsDeployerBeforeConsumer', () => {
+  it('refuses a kubernetes chain whose tester has no deployer before it', () => {
+    expect(
+      needsDeployerBeforeConsumer(['coder', 'tester-api', 'merger'], undefined, 'kubernetes'),
+    ).toBe(true)
+  })
+
+  it('passes once a deployer precedes the first consumer', () => {
+    expect(
+      needsDeployerBeforeConsumer(
+        ['coder', 'deployer', 'tester-api', 'merger'],
+        undefined,
+        'custom',
+      ),
+    ).toBe(false)
+  })
+
+  it('passes a chain with no env-consumer at all', () => {
+    expect(
+      needsDeployerBeforeConsumer(['coder', 'reviewer', 'merger'], undefined, 'kubernetes'),
+    ).toBe(false)
+  })
+
+  it('never fires for docker-compose / infraless / undeclared services', () => {
+    const chain = ['coder', 'tester-api', 'merger']
+    expect(needsDeployerBeforeConsumer(chain, undefined, 'docker-compose')).toBe(false)
+    expect(needsDeployerBeforeConsumer(chain, undefined, 'infraless')).toBe(false)
+    expect(needsDeployerBeforeConsumer(chain, undefined, undefined)).toBe(false)
+  })
+
+  it('covers human-test and playwright as env-consumers', () => {
+    expect(needsDeployerBeforeConsumer(['coder', 'human-test'], undefined, 'kubernetes')).toBe(true)
+    expect(needsDeployerBeforeConsumer(['coder', 'playwright'], undefined, 'kubernetes')).toBe(true)
+  })
+
+  it('ignores a DISABLED deployer but honours a disabled consumer', () => {
+    // A disabled deployer never runs, so it does not satisfy the guard.
+    expect(
+      needsDeployerBeforeConsumer(['deployer', 'tester-api'], [false, true], 'kubernetes'),
+    ).toBe(true)
+    // A disabled consumer imposes no requirement.
+    expect(needsDeployerBeforeConsumer(['coder', 'tester-api'], [true, false], 'kubernetes')).toBe(
+      false,
+    )
   })
 })
