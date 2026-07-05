@@ -281,6 +281,12 @@ export {
   SharedStackService,
   type SharedStackServiceDependencies,
 } from './modules/sharedStack/SharedStackService.js'
+// Preflights: the runtime-neutral runner over an injected host-probe seam (local facade only).
+export {
+  PreflightService,
+  preflightBlockingFailures,
+  formatPreflightFailure,
+} from './modules/preflight/PreflightService.js'
 // Unified provisioning event log: the best-effort recorder every spin-up/down site
 // writes through, and the read service behind the "View logs" drawers + run details.
 export {

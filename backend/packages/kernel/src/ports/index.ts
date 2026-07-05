@@ -272,6 +272,7 @@ export type {
   RepairAgentRequest,
   RepairAgentSpec,
 } from './environment-provider.js'
+export type { PreflightProbeOutcome, PreflightHostProbes } from './preflight.js'
 export { type UrlSafetyPolicy, STRICT_URL_SAFETY_POLICY } from './url-safety-policy.js'
 export type {
   EnvironmentConnectionRecord,

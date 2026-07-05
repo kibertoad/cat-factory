@@ -265,6 +265,7 @@ export {
   type SlackModule,
   type MergePresetsModule,
   type SharedStacksModule,
+  type PreflightsModule,
   type SandboxModule,
   type WorkspaceSettingsModule,
   type ModelPresetsModule,

@@ -1,6 +1,6 @@
 # Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-main pilot)
 
-**Status:** in progress (slices 1–5 landed = contracts + detection + recipe execution + SharedStack + provider integration) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–6 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -269,6 +269,44 @@ custom remediation text). Surfaced in the wizard (live re-check button) and re-r
 provision start — a failed _required_ preflight fails fast with the remediation text in the
 provisioning log instead of a mid-provision mystery.
 
+> **Landed (slice 6)** — the preflight primitive end to end. Contracts (`contracts/src/preflights.ts`):
+> `PreflightCheckId` (the nine built-ins: `docker-daemon` / `disk-space` / `memory` / `registry-auth`
+> / `tcp-reachable` / `http-reachable` / `mkcert-ca` / `hosts-entries` / `env-secrets-marker`),
+> `PreflightParams` (a flat optional bag — a check reads the fields it needs), `PreflightRef`
+> (`check` + `params` + `required` [default true] + operator `remediation`/`label` overrides), and
+> `PreflightResult` (title + status `pass`/`fail`/`warn` + required + detail + remediation), wired onto
+> `stackRecipeSchema.prerequisites`. Kernel (`ports/preflight.ts`): the runtime-BOUND
+> `PreflightHostProbes` seam + `PreflightProbeOutcome`, and a `runPreflights` seam on
+> `ProvisionEnvironmentRequest`. Integrations `PreflightService` is runtime-neutral orchestration over
+> the probe seam (maps a ref → probe, shapes the verdict, downgrades a failing NON-required check to a
+> `warn`, renders the built-in or overridden remediation) with `preflightBlockingFailures` /
+> `formatPreflightFailure` helpers; `ComposeEnvironmentProvider.provisionRecipe` runs the checks FIRST
+> (before the daemon / clone / shared-stack work), streams one provisioning-log step per check, and
+> fails fast with the remediation when a required check is red. Wired in `createCore` as a
+> `PreflightsModule` (built only when `preflightHostProbes` is present) and threaded into
+> `EnvironmentProvisioningService.runPreflights`; the local facade builds `createDockerPreflightProbes`
+> (docker CLI + `node:*`) alongside the compose runtime. Controller: `POST
+/workspaces/:ws/preflights/run` (`runPreflightsContract`), 503 when the host-probe runtime isn't
+> wired. Unit tests: the service (fake probe states → every verdict + remediation, the tracker's
+> validation-plan #4), the provider (pass → provision / required fail → fast-fail + remediation /
+> non-required warn → proceed / declared-but-unwired → loud fail / per-check log stream), and the local
+> adapter (memory / env-marker / HTTP / refused TCP / missing binary → verdict, never a throw).
+> **Gotchas for later slices:** (1) preflight PROBES are local-facade-bound (the documented compose
+> exception), but the declaration + API + `runPreflights` seam are runtime-neutral and the recipe
+> rides the existing `provisioning` blob — so NO migration and no D1⇄Drizzle work; validation is unit
+> tests with fake probes, not conformance. (2) `runPreflights` mirrors `ensureSharedStacks`: a recipe
+> that DECLARES prerequisites on a deployment with no host-probe runtime fails LOUDLY rather than
+> silently skipping a safety gate. (3) `env-secrets-marker` reads a HOST path (absolute / cwd-relative)
+> — at provision start there is no checkout yet (preflights run before clone), so it can't point into
+> the per-run working tree; the wizard (slice 7) points it at a persistent location. (4) `http-reachable`
+>
+> - `tcp-reachable` deliberately bypass the SSRF allow-list (they probe VPN-only LAN hosts on the
+>   operator's trusted local machine, exactly what an allow-list would block — same posture as the
+>   `wait-http` recipe step). (5) **SharedStack preflights are NOT wired** — a `SharedStack` reuses the
+>   recipe vocabulary but carries no `prerequisites` column (that needs a D1⇄Drizzle migration); a
+>   shared stack's own bring-up already surfaces per-step failures, and its mkcert/hosts/ECR M-rows are a
+>   clean follow-up (add `prerequisites` to `sharedStackSchema` + enforce in `SharedStackService.bringUp`).
+
 ### 4. Recipe execution engine (compose provider path)
 
 Extend `ComposeEnvironmentProvider` + the `ComposeRuntime` seam (`runtimes/local/src/compose.ts`):
@@ -441,7 +479,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 3   | **Recipe execution engine**: multi-`-f`/profiles/envFiles + `setupSteps` runner + `healthGate` + per-step provisioning logs/timeouts (local facade pilot) | done   | (this) |
 | 4   | **SharedStack**: entity + table (D1 ⇄ Drizzle + conformance) + `SharedStackService` lifecycle + controller + SPA store/panel                              | done   | (this) |
 | 5   | **Provider integration**: `sharedStackRefs` ensure-first ordering + external-network attach in the compose provider                                       | done   | (this) |
-| 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | todo   |        |
+| 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | done   | (this) |
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s                              | todo   |        |
 | 8   | **Environment analyst**: agent kind (structured draft recipe) + wizard draft-merge with provenance                                                        | todo   |        |
 | 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                            | todo   |        |

@@ -3,6 +3,8 @@ import type {
   EnvironmentAccessHandle,
   EnvironmentManifest,
   EnvironmentStatus,
+  PreflightRef,
+  PreflightResult,
   ProviderConfigField,
 } from '../domain/types.js'
 import type { RunRepoContext } from './repo-files.js'
@@ -140,6 +142,18 @@ export interface ProvisionEnvironmentRequest {
    * (no host daemon), so a recipe that declares refs fails loudly instead of silently ignoring them.
    */
   ensureSharedStacks?: (refs: string[]) => Promise<SharedStackEnsureResult>
+  /**
+   * Run a stack recipe's machine PREREQUISITE checks (`recipe.prerequisites`) at provision start and
+   * return one verdict per ref — the compose provider streams each to the provisioning log and fails
+   * the provision fast (before the daemon / clone work) when any REQUIRED check fails, surfacing its
+   * remediation instead of a mystery deep inside a 40-image pull. Given the refs, it runs the host
+   * probes (docker daemon / disk / RAM / registry login / reachability / mkcert / hosts / secrets
+   * marker) and returns their results; it never throws (a probe error is a `fail` verdict). Bound by
+   * the provisioning service (which owns the workspace); the provider only names the refs. Absent ⇒
+   * the preflight host-probe runtime isn't wired (no host daemon), so a recipe that declares
+   * prerequisites fails loudly rather than silently skipping a declared safety gate.
+   */
+  runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
 }
 
 /**
