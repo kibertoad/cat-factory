@@ -2735,7 +2735,8 @@
       "setTemplate": "テンプレートに設定",
       "addExemplar": "例を追加",
       "remove": "削除",
-      "linkFailed": "ドキュメントのリンクを更新できませんでした"
+      "linkFailed": "ドキュメントのリンクを更新できませんでした",
+      "loadFailed": "ドキュメントテンプレートを読み込めませんでした"
     }
   },
   "tasks": {

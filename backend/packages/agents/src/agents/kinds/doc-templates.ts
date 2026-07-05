@@ -216,19 +216,30 @@ export function docTemplateFor(kind: DocKind): DocTemplate {
 }
 
 /**
- * The heading level that carries a linked template's SECTIONS. A single top-level heading with
- * deeper headings is the document TITLE, so the sections are the next level down (the typical
- * `# Title` + `## Section`s shape, even with a single section). A document whose shallowest level
- * repeats (or has no deeper headings) is flat — its sections ARE that shallowest level. Returns
- * null for a document with no headings at all.
+ * The heading level that carries a linked template's SECTIONS. A single top-level `#` heading
+ * LEADING the document is its TITLE, so the sections are the shallowest level below it — the
+ * typical `# Title` + `## Section`s shape. Trailing top-level headings AFTER the sections (e.g.
+ * `# Appendix A`) don't disqualify the title: only the number of top-level headings BEFORE the
+ * first sub-heading decides, so a title + `##` sections + `#` appendices still yields the `##`
+ * sections (not the title + appendices). A document whose shallowest level is deeper than `#`, or
+ * has no sub-headings, is flat — its sections ARE that shallowest level (so `## S1` + `### detail`
+ * + `## S2` keeps the `##` sections). Returns null when there is no section structure to read: no
+ * headings at all, or a single lone heading (a bare title).
  */
 function templateSectionLevel(headings: { level: number }[]): number | null {
-  if (headings.length === 0) return null
+  // No headings, or a single lone heading (a bare title) — no section list to derive.
+  if (headings.length <= 1) return null
   const levels = headings.map((h) => h.level)
   const minLevel = Math.min(...levels)
-  const minCount = levels.filter((l) => l === minLevel).length
-  const deeper = levels.filter((l) => l > minLevel)
-  return minCount === 1 && deeper.length > 0 ? Math.min(...deeper) : minLevel
+  const firstSubIndex = levels.findIndex((l) => l > minLevel)
+  // No sub-headings: the document is flat — its sections ARE the shallowest level.
+  if (firstSubIndex === -1) return minLevel
+  // A lone leading `#` title (exactly one top-level heading before the first sub-heading) means the
+  // sections are the shallowest sub-level; otherwise the shallowest level already holds the sections.
+  const topBeforeFirstSub = levels.slice(0, firstSubIndex).filter((l) => l === minLevel).length
+  return minLevel === 1 && topBeforeFirstSub === 1
+    ? Math.min(...levels.filter((l) => l > minLevel))
+    : minLevel
 }
 
 /**

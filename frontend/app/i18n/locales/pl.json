@@ -2723,7 +2723,8 @@
       "setTemplate": "Ustaw jako szablon",
       "addExemplar": "Dodaj przykład",
       "remove": "Usuń",
-      "linkFailed": "Nie udało się zaktualizować powiązania dokumentu"
+      "linkFailed": "Nie udało się zaktualizować powiązania dokumentu",
+      "loadFailed": "Nie udało się wczytać szablonów dokumentów"
     }
   },
   "tasks": {

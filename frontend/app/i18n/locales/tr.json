@@ -2735,7 +2735,8 @@
       "setTemplate": "Şablon olarak ayarla",
       "addExemplar": "Örnek ekle",
       "remove": "Kaldır",
-      "linkFailed": "Belge bağlantısı güncellenemedi"
+      "linkFailed": "Belge bağlantısı güncellenemedi",
+      "loadFailed": "Belge şablonları yüklenemedi"
     }
   },
   "tasks": {

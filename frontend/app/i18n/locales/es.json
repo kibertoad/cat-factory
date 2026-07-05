@@ -2723,7 +2723,8 @@
       "setTemplate": "Establecer como plantilla",
       "addExemplar": "Añadir ejemplo",
       "remove": "Quitar",
-      "linkFailed": "No se pudo actualizar el vínculo del documento"
+      "linkFailed": "No se pudo actualizar el vínculo del documento",
+      "loadFailed": "No se pudieron cargar las plantillas de documentos"
     }
   },
   "tasks": {

@@ -103,6 +103,49 @@ describe('document templates', () => {
       expect(parseTemplateDocument('just prose, no headings', 'adr')).toBe(DOC_TEMPLATES.adr)
     })
 
+    it('falls back to the built-in for a lone-title document (a single heading, no sections)', () => {
+      // A single heading is a bare title, not a section list — using it as the sole required
+      // section would demand a heading matching the title, so resume the built-in skeleton.
+      expect(parseTemplateDocument('# API Design Guidelines\n\nsome prose', 'adr')).toBe(
+        DOC_TEMPLATES.adr,
+      )
+    })
+
+    it('keeps the H2 sections when a titled template ends with H1 appendices', () => {
+      // A `#` title + `##` sections + trailing `#` appendices: the sections are the H2s, not the
+      // title + appendices (the writer prompt and the gate must not treat the title as a section).
+      const linked = [
+        '# RFC-1: Title',
+        '## Summary',
+        '## Motivation',
+        '## Detailed design',
+        '# Appendix A',
+        '# Appendix B',
+      ].join('\n')
+      expect(parseTemplateDocument(linked, 'rfc').sections.map((s) => s.title)).toEqual([
+        'Summary',
+        'Motivation',
+        'Detailed design',
+      ])
+    })
+
+    it('treats repeated top-level headings with no title as the sections (flat template)', () => {
+      const linked = ['# Summary', '# Motivation', '# Design'].join('\n')
+      expect(parseTemplateDocument(linked, 'rfc').sections.map((s) => s.title)).toEqual([
+        'Summary',
+        'Motivation',
+        'Design',
+      ])
+    })
+
+    it('keeps H2 sections that carry their own H3 sub-headings (no H1 title)', () => {
+      const linked = ['## Section One', '### detail', '## Section Two'].join('\n')
+      expect(parseTemplateDocument(linked, 'rfc').sections.map((s) => s.title)).toEqual([
+        'Section One',
+        'Section Two',
+      ])
+    })
+
     it('ignores headings inside fenced code when parsing a linked template', () => {
       const linked = ['# Title', '## Real Section', '```md', '## Not A Section', '```'].join('\n')
       expect(parseTemplateDocument(linked, 'other').sections.map((s) => s.title)).toEqual([

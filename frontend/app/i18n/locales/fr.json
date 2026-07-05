@@ -2723,7 +2723,8 @@
       "setTemplate": "Définir comme modèle",
       "addExemplar": "Ajouter un exemple",
       "remove": "Retirer",
-      "linkFailed": "Impossible de mettre à jour le lien du document"
+      "linkFailed": "Impossible de mettre à jour le lien du document",
+      "loadFailed": "Impossible de charger les modèles de documents"
     }
   },
   "tasks": {

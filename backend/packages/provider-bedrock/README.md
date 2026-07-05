@@ -35,7 +35,9 @@ if (env.BEDROCK_REGION) {
       secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
       sessionToken: env.AWS_SESSION_TOKEN,
       // BEDROCK_MODELS="anthropic.claude-…,meta.llama3-…" → the allow-list below
-      supportedModels: env.BEDROCK_MODELS?.split(',').map((m) => m.trim()).filter(Boolean),
+      supportedModels: env.BEDROCK_MODELS?.split(',')
+        .map((m) => m.trim())
+        .filter(Boolean),
     }),
   )
 }
@@ -74,13 +76,13 @@ message instead of a deep AWS SDK error. Omit `supportedModels` to forward any m
 
 ## Config (`BedrockResolverOptions`)
 
-| Option            | Purpose                                                                              |
-| ----------------- | ------------------------------------------------------------------------------------ |
-| `region`          | AWS region, e.g. `us-east-1`.                                                         |
-| `accessKeyId`     | Explicit AWS access key; omit to use the default AWS credential chain.               |
-| `secretAccessKey` | Explicit AWS secret key.                                                             |
-| `sessionToken`    | Explicit AWS session token (temporary credentials).                                  |
-| `baseURL`         | Override the Bedrock base URL (e.g. a VPC endpoint).                                  |
+| Option            | Purpose                                                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `region`          | AWS region, e.g. `us-east-1`.                                                             |
+| `accessKeyId`     | Explicit AWS access key; omit to use the default AWS credential chain.                    |
+| `secretAccessKey` | Explicit AWS secret key.                                                                  |
+| `sessionToken`    | Explicit AWS session token (temporary credentials).                                       |
+| `baseURL`         | Override the Bedrock base URL (e.g. a VPC endpoint).                                      |
 | `supportedModels` | Allow-list of Bedrock model ids; resolving anything outside it throws. Omit to allow any. |
 
 ## Related

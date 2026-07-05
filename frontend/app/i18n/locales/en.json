@@ -2796,7 +2796,8 @@
       "setTemplate": "Set as template",
       "addExemplar": "Add example",
       "remove": "Remove",
-      "linkFailed": "Couldn't update the document link"
+      "linkFailed": "Couldn't update the document link",
+      "loadFailed": "Couldn't load document templates"
     }
   },
   "tasks": {

@@ -30,7 +30,16 @@ watch(
   (isOpen) => {
     if (isOpen) {
       pick.value = undefined
-      Promise.all([documents.loadDocuments(), documents.loadRoleLinks()]).catch(() => {})
+      // Surface a load failure instead of silently rendering an empty panel (which would invite
+      // re-linking over links that still exist server-side).
+      Promise.all([documents.loadDocuments(), documents.loadRoleLinks()]).catch((e) => {
+        toast.add({
+          title: t('documents.templates.loadFailed'),
+          description: e instanceof Error ? e.message : String(e),
+          icon: 'i-lucide-triangle-alert',
+          color: 'error',
+        })
+      })
     }
   },
   { immediate: true },
@@ -39,10 +48,17 @@ watch(
 const template = computed(() => documents.templateFor(kind.value))
 const exemplars = computed(() => documents.exemplarsFor(kind.value))
 
-/** Imported documents the picker offers (any imported doc can be linked for any kind). */
-const docItems = computed(() =>
-  documents.documents.map((d) => ({ label: d.title, value: `${d.source}:${d.externalId}` })),
-)
+/**
+ * Imported documents the picker offers. A document row carries at most ONE (role, docKind) tag, so
+ * a doc already linked as any template/exemplar is excluded — re-linking it here would silently
+ * overwrite (and drop) its existing tag. Remove the existing link first to re-point it.
+ */
+const docItems = computed(() => {
+  const tagged = new Set(documents.roleLinks.map((d) => `${d.source}:${d.externalId}`))
+  return documents.documents
+    .filter((d) => !tagged.has(`${d.source}:${d.externalId}`))
+    .map((d) => ({ label: d.title, value: `${d.source}:${d.externalId}` }))
+})
 
 function findDoc(key: string): SourceDocument | undefined {
   return documents.documents.find((d) => `${d.source}:${d.externalId}` === key)

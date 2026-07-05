@@ -57,13 +57,13 @@ artifact's storage key.
 
 ## Config (`S3BinaryBlobBackendConfig`)
 
-| Option           | Purpose                                                                          |
-| ---------------- | -------------------------------------------------------------------------------- |
-| `region`         | AWS region (required).                                                            |
-| `bucket`         | Target bucket (required).                                                         |
-| `prefix`         | Optional key prefix, e.g. `artifacts/`, joined to the artifact's storage key.    |
-| `endpoint`       | Optional custom endpoint for S3-compatible stores (MinIO, etc.).                 |
-| `forcePathStyle` | Force path-style addressing (needed by most S3-compatible stores).               |
+| Option           | Purpose                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `region`         | AWS region (required).                                                                                    |
+| `bucket`         | Target bucket (required).                                                                                 |
+| `prefix`         | Optional key prefix, e.g. `artifacts/`, joined to the artifact's storage key.                             |
+| `endpoint`       | Optional custom endpoint for S3-compatible stores (MinIO, etc.).                                          |
+| `forcePathStyle` | Force path-style addressing (needed by most S3-compatible stores).                                        |
 | `credentials`    | Explicit `{ accessKeyId, secretAccessKey, sessionToken? }`; omit to use the default AWS credential chain. |
 
 ## Related
