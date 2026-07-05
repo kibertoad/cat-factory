@@ -39,7 +39,6 @@ import {
   renderTemplate,
   resolveProjectName,
   resolveRecipeComposeFiles,
-  rewrittenRecipeComposePath,
   tailOutput,
   templateVars,
   waitFileExecArgs,
@@ -672,8 +671,10 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     recipe: StackRecipe,
     config: ComposeEnvironmentConfig,
   ): string | null {
-    const steps = [...(recipe.setupSteps ?? []), ...(recipe.teardownSteps ?? [])]
-    if (!steps.some((s) => s.kind === 'host-command')) return null
+    // Only `setupSteps` execute in this slice (`teardownSteps` are deferred — `down -v` is the
+    // teardown), so gating on a teardown-only host-command would demand the opt-in for a step that
+    // never runs. Add `teardownSteps` back here when their execution lands.
+    if (!(recipe.setupSteps ?? []).some((s) => s.kind === 'host-command')) return null
     if (!config.allowHostCommands) {
       return "This recipe declares host-command step(s), but this workspace's compose handler has not enabled them (set 'Allow host commands')."
     }
@@ -731,6 +732,14 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
             ? { ok: true }
             : { ok: false, error: tailOutput(res.stderr || res.stdout) || `exit ${res.code}` }
         }
+        default:
+          // `isStackRecipe` is a structural guard, not a re-validation, so a stale/hand-edited
+          // config can carry an unknown step kind. Return a clean verdict rather than falling off
+          // the switch and returning `undefined` (which would crash the caller's `!result.ok`).
+          return {
+            ok: false,
+            error: `unsupported recipe step kind '${(step as { kind?: string }).kind ?? 'unknown'}'`,
+          }
       }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
@@ -780,7 +789,11 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
   ): Promise<ProbeResult> {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(SHORT_TIMEOUT_MS) })
-      const body = opts.expectBodyContains ? await res.text() : ''
+      // Read the body only when a substring is required; otherwise release it so the poll doesn't
+      // leave an unconsumed body pinning the connection on every re-probe.
+      let body = ''
+      if (opts.expectBodyContains) body = await res.text()
+      else await res.body?.cancel()
       return matchesHttpExpectation(res.status, body, opts)
         ? { done: true }
         : { done: false, error: `HTTP ${res.status}` }

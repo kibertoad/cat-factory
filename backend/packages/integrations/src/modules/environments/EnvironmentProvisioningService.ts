@@ -15,6 +15,7 @@ import type {
   ProvisionEnvironmentRequest,
   ProvisionType,
   ProvisionedEnvironment,
+  RecipeStepLog,
   ResolveRunRepoContext,
   RunnerDispatchKind,
   RunnerDispatchOptions,
@@ -466,13 +467,7 @@ export class EnvironmentProvisioningService {
     // lands in — filterable by run in the "View logs" drawer. Wired only when the log is; the
     // recorder itself never throws.
     const recordStep = this.deps.provisioningLog
-      ? async (log: {
-          name: string
-          outcome: 'success' | 'failure'
-          durationMs: number
-          detail?: string
-          error?: string
-        }): Promise<void> => {
+      ? async (log: RecipeStepLog): Promise<void> => {
           await this.deps.provisioningLog!.record({
             workspaceId,
             subsystem: 'environment',

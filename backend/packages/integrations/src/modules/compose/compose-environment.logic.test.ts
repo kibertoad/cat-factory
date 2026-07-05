@@ -633,6 +633,19 @@ describe('recipeCheckoutPathIssues', () => {
     expect(issues.some((i) => i.includes('.env.dev.local-dist'))).toBe(false)
     expect(issues.some((i) => i.includes('manifest.json'))).toBe(false)
   })
+  it('flags a checkout-escaping composeFiles layer (written back + feeds --project-directory)', () => {
+    const issues = recipeCheckoutPathIssues({
+      composeFiles: ['docker/dev.yml', '../../evil/dev.yml'],
+    })
+    expect(issues.some((i) => i.includes('../../evil/dev.yml'))).toBe(true)
+    expect(issues.some((i) => i.includes('docker/dev.yml'))).toBe(false)
+  })
+  it('ignores teardownStep paths (teardown execution is deferred)', () => {
+    const issues = recipeCheckoutPathIssues({
+      teardownSteps: [{ kind: 'copy-file', name: 'td', from: '/etc/passwd', to: '.env' }],
+    })
+    expect(issues).toEqual([])
+  })
 })
 
 describe('recipeProfilesEnv', () => {
@@ -661,6 +674,16 @@ describe('recipeStepTimeoutMs', () => {
     expect(recipeStepTimeoutMs({ kind: 'wait-http', name: 'w', url: 'http://x' })).toBe(
       DEFAULT_RECIPE_WAIT_TIMEOUT_MS,
     )
+    // An explicit `0` is honored, not treated as unset (`??`, not truthiness).
+    expect(
+      recipeStepTimeoutMs({
+        kind: 'compose-exec',
+        name: 's',
+        service: 'a',
+        command: ['x'],
+        timeoutMs: 0,
+      }),
+    ).toBe(0)
   })
 })
 

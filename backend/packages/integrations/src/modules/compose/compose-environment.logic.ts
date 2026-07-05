@@ -410,7 +410,7 @@ export function hasBuildDirective(service: unknown): boolean {
  * flagged `external: true` (or `external: { name }`). Returns each network's RESOLVED name (the
  * explicit `name:` on the network def, else the `name:` inside an `external` object, else the map
  * key), deduped in declaration order. These are created + owned OUTSIDE the per-PR project (by a
- * SharedStack or the engine — the lokalise `lokalise-net` shape): detection recommends them onto
+ * SharedStack or the engine — the acme `acme-net` shape): detection recommends them onto
  * `recipe.externalNetworks`, and the compose provider (slice 5) attaches the per-PR project to them
  * as `external: true`. Pure — no I/O.
  */
@@ -943,11 +943,13 @@ export function prepareRecipeComposeFiles(
 /**
  * Blocking host-escape issues for a recipe's checkout-relative paths, collected up front so a bad
  * recipe fails BEFORE the daemon is touched (the `prepareComposeProject` posture). Every path that
- * the engine reads/writes/execs INSIDE the checkout — env-file template+target pairs, `copy-file`
+ * the engine reads/writes/execs INSIDE the checkout — the `composeFiles` layers (written back beside
+ * their originals + feeding `--project-directory`), env-file template+target pairs, `copy-file`
  * from/to, a `compose-exec`/health `stdinFile`, a `host-command` `workdir`, and a checkout-target
  * `wait-file` — is run through {@link escapesCheckout} (repo-root-relative, depth 0). A container-
  * target `wait-file` path (its step names a `service`) is legitimately container-absolute and is
- * NOT checked here.
+ * NOT checked here. Only `setupSteps` are inspected — `teardownSteps` execution is deferred, so
+ * they can't touch the host yet; fold them in here when it lands.
  */
 export function recipeCheckoutPathIssues(recipe: StackRecipe): string[] {
   const issues: string[] = []
@@ -958,11 +960,16 @@ export function recipeCheckoutPathIssues(recipe: StackRecipe): string[] {
       )
     }
   }
+  // The compose-file layers are written back into the checkout + one feeds `--project-directory`, so
+  // an escaping path is a host-filesystem write escape — guarded like every other recipe path.
+  for (const composeFile of recipe.composeFiles ?? []) {
+    check(composeFile, 'compose file')
+  }
   for (const env of recipe.envFiles ?? []) {
     check(env.template, 'env-file template')
     check(env.target, 'env-file target')
   }
-  for (const step of [...(recipe.setupSteps ?? []), ...(recipe.teardownSteps ?? [])]) {
+  for (const step of recipe.setupSteps ?? []) {
     if (step.kind === 'copy-file') {
       check(step.from, `step '${step.name}' from`)
       check(step.to, `step '${step.name}' to`)
@@ -985,10 +992,11 @@ export function recipeProfilesEnv(recipe: StackRecipe): Record<string, string> {
 
 /** The per-step timeout budget (ms): the step's own `timeoutMs`, else the per-kind default. */
 export function recipeStepTimeoutMs(step: RecipeStep): number {
-  if (step.timeoutMs) return step.timeoutMs
-  return step.kind === 'wait-http' || step.kind === 'wait-file'
-    ? DEFAULT_RECIPE_WAIT_TIMEOUT_MS
-    : DEFAULT_RECIPE_STEP_TIMEOUT_MS
+  const perKindDefault =
+    step.kind === 'wait-http' || step.kind === 'wait-file'
+      ? DEFAULT_RECIPE_WAIT_TIMEOUT_MS
+      : DEFAULT_RECIPE_STEP_TIMEOUT_MS
+  return step.timeoutMs ?? perKindDefault
 }
 
 /** The re-probe interval (ms) of a `wait-*` step: its own `intervalMs`, else the default. */

@@ -219,6 +219,11 @@ function runComposeWithStdin(
       child.kill('SIGTERM')
       finish({ code: 1, stdout, stderr: `could not read stdin file '${filePath}': ${String(err)}` })
     })
+    // The child can exit before stdin is fully written (an early auth/syntax failure, or the
+    // SIGTERM on timeout); the still-writing pipe then emits EPIPE on `child.stdin`. Without a
+    // handler that is an unhandled 'error' that crashes the whole process, so swallow it and stop
+    // the source — the child's own exit code + stderr (via 'close'/'error') is the real outcome.
+    child.stdin.on('error', () => rs.destroy())
     rs.pipe(child.stdin)
   })
 }

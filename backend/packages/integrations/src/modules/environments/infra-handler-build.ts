@@ -119,7 +119,7 @@ export function handlerConfigToBackendConfig(
       if (!service?.recipe) {
         return { kind: backendKind, manifest: config.manifest } as EnvironmentBackendConfig
       }
-      const providerConfig = { ...(config.manifest.providerConfig ?? {}), recipe: service.recipe }
+      const providerConfig = { ...config.manifest.providerConfig, recipe: service.recipe }
       return {
         kind: backendKind,
         manifest: { ...config.manifest, providerConfig },

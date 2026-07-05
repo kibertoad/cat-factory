@@ -7,7 +7,7 @@
 feat(environments): stack-recipe execution engine (shared-stacks initiative, slice 3)
 
 Teach the Docker Compose environment provider to run a declarative STACK RECIPE — the imperative
-bring-up of a complex multi-repo/multi-service stack (the lokalise-main pilot) expressed as data.
+bring-up of a complex multi-repo/multi-service stack (the acme-main pilot) expressed as data.
 The recipe is service-owned (`ServiceProvisioning.recipe`, landed slice 1) and now reaches the
 provider: `resolveProviderForType` folds it into the compose handler's `providerConfig.recipe` at
 provision time (the compose analogue of merging a kube `manifestSource`), so the provider keys

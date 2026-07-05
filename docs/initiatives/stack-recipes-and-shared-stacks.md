@@ -1,4 +1,4 @@
-# Initiative: Stack recipes & shared stacks — complex-monolith environments (lokalise-main pilot)
+# Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-main pilot)
 
 **Status:** in progress (slices 1–3 landed = contracts + detection + recipe execution) · **Owner:** environments · **Started:** 2026-07-05
 
@@ -12,14 +12,14 @@ single compose file (image-pull or, since `compose-build-from-source.md`, build-
 the local facade) or a Kubernetes manifest tree. The motivating pilot for this initiative is the
 opposite extreme — a **complex multi-repo system**:
 
-- **lokalise-main** — a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
+- **acme-main** — a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
   variants + nginx + ~10 private-ECR microservices + 4 node watch-build containers), whose
   bring-up is **imperative**: env-file materialization → secrets → compose up → `composer
 install` → MySQL seed import → Doctrine migrations → ES index build → health-loop gate.
-- **lokalise-shared-services** — a _separate sibling repo_ providing the shared infra stack
+- **acme-shared-services** — a _separate sibling repo_ providing the shared infra stack
   (~17 services: MySQL/Postgres/Valkey/RabbitMQ/Kafka/ES/Mailpit/Envoy/…) that runs **once per
   machine, long-lived**, and that consumer repos attach to over an external Docker network
-  (`lokalise-net`).
+  (`acme-net`).
 
 Neither fits any primitive cat-factory has. The intended end state:
 
@@ -39,45 +39,45 @@ Primary execution target: the **local facade** (host Docker daemon). Runner-pool
 stretch slice. Cloudflare Containers can never host this class of system (no host daemon, no
 privileged DinD at this scale) — that asymmetry is documented, not fought.
 
-Everything here is **generic**; lokalise is the pilot consumer that proves the primitives, the
+Everything here is **generic**; acme is the pilot consumer that proves the primitives, the
 way the .NET+Angular+SQL-Server app piloted build-from-source.
 
 ## The pilot system (facts the design must cover)
 
-### lokalise-main bring-up (from its `bin/dev-console app setup`)
+### acme-main bring-up (from its `bin/dev-console app setup`)
 
 The repo's own CLI (`bin/dev-console`, a generated bashly script; **WSL/mac/linux only**,
 refuses Git-Bash/msys) performs, in order:
 
 1. Docker running check; sudo prompt.
-2. Resolve/clone the sibling `lokalise-shared-services` repo (`LOKALISE_SHARED_SERVICES_DIR`
-   env → `../lokalise-shared-services` → persisted path → interactive prompt; **hard-fails on
+2. Resolve/clone the sibling `acme-shared-services` repo (`ACME_SHARED_SERVICES_DIR`
+   env → `../acme-shared-services` → persisted path → interactive prompt; **hard-fails on
    non-TTY when unset**).
 3. Install OS deps (curl, s3cmd, jq, … + HashiCorp Vault CLI).
 4. Delegate `shared-services setup` (see below).
 5. `users sync postgres` on the shared stack.
 6. Write `services/app/.env.local`, copy `.env.dev.local-dist` → `.env.dev.local`.
-7. **Vault OIDC login (Google SSO, browser)** and pull `kv/lokalise-main/dev/*` secrets into
+7. **Vault OIDC login (Google SSO, browser)** and pull `kv/acme-main/dev/*` secrets into
    `.env.dev.local` + `docker/.env.<service>` files.
 8. Hand-copy `services/app/.split.yaml.dist` → `.split.yaml` (documented manual step).
 9. `docker compose pull/build/up -d` — `docker/dev.yml` + OS override
-   (`dev.wsl.override.yml` / `dev.mac.override.yml`); attaches to external `lokalise-net`;
+   (`dev.wsl.override.yml` / `dev.mac.override.yml`); attaches to external `acme-net`;
    ~10 service images from **private ECR** (`053497547689.dkr.ecr.eu-central-1.amazonaws.com`,
-   `ecr.prod.lokalise.cloud`); no healthchecks in the compose file — ordering is imperative.
+   `ecr.prod.acme.cloud`); no healthchecks in the compose file — ordering is imperative.
 10. `composer install` inside the app container.
-11. MySQL seed import (`deployment/lokalise-db-dummy/lokalise-dummy.sql` + `lokalise-pre-dummy.sql`).
+11. MySQL seed import (`deployment/acme-db-dummy/acme-dummy.sql` + `acme-pre-dummy.sql`).
 12. `bin/console cache:warmup` (~4–5 min first run).
 13. Doctrine migrations (main + `services_db` on Postgres).
-14. Integration tag sync; ES `lokalise:elastic:create-indexes --delete --all` + full reindex;
+14. Integration tag sync; ES `acme:elastic:create-indexes --delete --all` + full reindex;
     expert-search reindex (each preceded by a wait-for-endpoint loop).
 15. Block until the frontend watch-builds emit `public/js/compiled/ui/manifest.json`.
 16. Loop `bin/console monitor:health` until green. Healthy = that command +
-    `https://lokalise.local` + Mailpit UI.
+    `https://acme.local` + Mailpit UI.
 
-### lokalise-shared-services (its `bin/shared-services setup`)
+### acme-shared-services (its `bin/shared-services setup`)
 
-sysctl tweaks → mkcert CA + wildcard certs (`*.lokalise.local`, `*.lokalise.internal`) →
-`/etc/hosts` managed block (sudo) → `docker network create lokalise-net` → `.env.shared` →
+sysctl tweaks → mkcert CA + wildcard certs (`*.acme.local`, `*.acme.internal`) →
+`/etc/hosts` managed block (sudo) → `docker network create acme-net` → `.env.shared` →
 (interactive prompts, safe defaults on non-TTY) → **AWS SSO + ECR login** → compose pull →
 `up -d` → wait-healthy → `users sync` (mysql + proxysql mirror + postgres + cockroach via CLI)
 → Debezium connector registration.
@@ -177,7 +177,7 @@ lastError, updatedAt }`. New table mirrored D1 ⇄ Drizzle + conformance round-t
 
 - `ensureUp(stackId)` — idempotent: clone/refresh the stack repo into a per-stack working dir
   (reuse the `ComposeRuntime.checkout` seam from build mode), create managed networks
-  (`docker network create lokalise-net` if absent), `compose up -d` with profiles, wait
+  (`docker network create acme-net` if absent), `compose up -d` with profiles, wait
   healthy, run setup steps (users sync, Debezium registration). Re-entrant: already-healthy →
   no-op. Concurrent provisions coalesce on one `ensureUp`.
 - `status(stackId)` / `refresh(stackId)` / explicit `teardown(stackId)`. **Never** swept with
@@ -190,8 +190,8 @@ lastError, updatedAt }`. New table mirrored D1 ⇄ Drizzle + conformance round-t
   `…/teardown`); SPA store + a panel in the Infrastructure window.
 
 This is the compose analogue of the k8s helm `scope: 'shared'` singleton, and it directly
-models lokalise-shared-services (one stack per machine/workspace, consumers attach over
-`lokalise-net`).
+models acme-shared-services (one stack per machine/workspace, consumers attach over
+`acme-net`).
 
 ### 3. Preflights (machine-prerequisite checks + guided remediation)
 
@@ -201,14 +201,14 @@ automated; remediation is human instructions** — this is exactly where VPN / S
 mkcert live, as guided one-time machine setup rather than pretend-automation. Built-in checks
 (local facade impl):
 
-- docker daemon reachable; free disk / RAM vs a recipe-declared minimum (lokalise wants ≥16 GB).
+- docker daemon reachable; free disk / RAM vs a recipe-declared minimum (acme wants ≥16 GB).
 - registry reachability + `docker login` state per registry named in the recipe's images
   (detects "ECR token expired" _before_ a 40-image pull fails; we check, never store, creds —
   G9 stays out of scope).
 - TCP/HTTP reachability probes for recipe-declared endpoints (a VPN-only Vault/ECR host
   unreachable → "connect Tailscale" remediation).
 - mkcert CA present in the trust store; expected `/etc/hosts` entries present.
-- env-file secrets markers present (e.g. lokalise's `# BOF SECRETS #` block in
+- env-file secrets markers present (e.g. acme's `# BOF SECRETS #` block in
   `.env.dev.local`) — detects "Vault step not done yet" without knowing anything about Vault.
 
 Recipes declare which checks apply (`prerequisites: PreflightRef[]`, with per-check params +
@@ -241,20 +241,21 @@ multi-`-f` layering is the sanctioned alternative; `privileged` refused).
 > them beside their originals + passes ordered `-f`s, materializes `envFiles`, `up -d` under
 > `COMPOSE_PROFILES` (**no `--wait`** — these stacks rarely declare healthchecks, so readiness is
 > the recipe's own gate), runs `setupSteps` (`compose-exec` [seed import pipes a `.sql` via the new
+>
 > > `compose` stdin seam], `copy-file`, `wait-http`, `wait-file` [container `test -f` or checkout],
-> `host-command` [opt-in via the handler's `allowHostCommands` + the runtime's `hostCommand` seam]),
-> then polls the `healthGate` (`compose-healthy`/`http`/`compose-exec`). Per-step verdicts stream
-> through the new kernel `ProvisionEnvironmentRequest.recordStep` seam (bound in
-> `EnvironmentProvisioningService.buildProvisionRequest` to a `subsystem:'environment'` provisioning
-> log entry) — env file, `up`, each step, health gate — so the "View logs" drawer shows which step
-> ran/died; a failing step tears the half-up stack down and surfaces its own error as `lastError`.
-> New pure helpers + the `ComposeRuntime` recipe seams (`compose` stdin, `copyCheckoutFile`,
-> `checkoutFileExists`, `hostCommand`) live in `compose-environment.logic.ts` / `runtimes/local`.
-> **Gotchas for later slices:** recipe execution is local-facade-bound (no D1⇄Drizzle work — the
-> recipe rides the existing `provisioning` blob, so persistence parity is inherent), so its
-> validation is unit tests with a fake `ComposeRuntime`, not conformance. `teardownSteps` execution
-> is deferred (`down -v` is the teardown for now). `externalNetworks`/`sharedStackRefs` are parsed
-> but NOT yet attached — that is slice 5.
+> > `host-command` [opt-in via the handler's `allowHostCommands` + the runtime's `hostCommand` seam]),
+> > then polls the `healthGate` (`compose-healthy`/`http`/`compose-exec`). Per-step verdicts stream
+> > through the new kernel `ProvisionEnvironmentRequest.recordStep` seam (bound in
+> > `EnvironmentProvisioningService.buildProvisionRequest` to a `subsystem:'environment'` provisioning
+> > log entry) — env file, `up`, each step, health gate — so the "View logs" drawer shows which step
+> > ran/died; a failing step tears the half-up stack down and surfaces its own error as `lastError`.
+> > New pure helpers + the `ComposeRuntime` recipe seams (`compose` stdin, `copyCheckoutFile`,
+> > `checkoutFileExists`, `hostCommand`) live in `compose-environment.logic.ts` / `runtimes/local`.
+> > **Gotchas for later slices:** recipe execution is local-facade-bound (no D1⇄Drizzle work — the
+> > recipe rides the existing `provisioning` blob, so persistence parity is inherent), so its
+> > validation is unit tests with a fake `ComposeRuntime`, not conformance. `teardownSteps` execution
+> > is deferred (`down -v` is the teardown for now). `externalNetworks`/`sharedStackRefs` are parsed
+> > but NOT yet attached — that is slice 5.
 
 ### 5. Detection extensions (`provision-detect.logic.ts` — deterministic, checkout-free)
 
@@ -293,7 +294,7 @@ provisioning (the compose-build rule: never re-implement a predicate).
 > `*-dist`/`*.example`/`*.dist` config templates → `recipe.envFiles`; `profiles:` → default-off
 > `profileCandidates` (never `recipe.composeProfiles`); seed-ish `*.sql` (one level deep) →
 > `seedDumpCandidates` (fullest pre-selected); `bin/*console*`/Makefile/justfile/Taskfile → the
-> report-only `repoCliHint`. Fixture-driven unit tests (incl. a combined lokalise-main-shaped repo)
+> report-only `repoCliHint`. Fixture-driven unit tests (incl. a combined acme-main-shaped repo)
 > cover every extension. Gotcha for later slices: several existing detector tests assert the WHOLE
 > recommendation with `toEqual`, so any new always-on field breaks them — gate additions behind an
 > "actually detected" check, as done here.
@@ -309,7 +310,7 @@ win on fields both produce; analyst-only fields arrive editable + flagged with p
 ("suggested by analysis of `bin/src/lib/setup.sh:112`"). The deterministic detector remains the
 only thing that runs without opt-in. This is how `bin/dev-console app setup`'s ordering
 (composer → seed → migrate → index → health) becomes a recipe without cat-factory hardcoding
-lokalise knowledge.
+acme knowledge.
 
 ### 7. Wizard UX (detect → review → preflight → trial → save)
 
@@ -335,40 +336,40 @@ repo but nothing is configured. All copy through i18n with locale parity from da
 
 Recipe-provisioned environments surface through the existing `environment: 'ephemeral'` + URL
 path (`testerInfraSpec` in `backend/packages/server/src/agents/prompts.ts`) — no tester-side
-changes needed beyond what `tester-environment-access.md` already tracks. Lokalise's seeded
+changes needed beyond what `tester-environment-access.md` already tracks. Acme's seeded
 login users belong in that initiative's **Slice B credential pools** (explicitly non-secret
 test data); this tracker takes a dependency on it rather than duplicating it.
 
-## The lokalise mapping table (pilot acceptance)
+## The acme mapping table (pilot acceptance)
 
 Classification: **A** = fully automatable (unattended once configured) · **C** = automatable
 with credentials/one-time login provided · **M** = inherently manual, guided by a preflight
 with remediation instructions.
 
-| Bring-up element                                                        | Covered by                                                        | Class |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------- | ----- |
-| Tailscale VPN enrollment/connection                                     | Preflight: reachability probe of VPN-only hosts + instructions    | M     |
-| AWS SSO + ECR login (both registries)                                   | Preflight: registry auth state + login instructions               | M     |
-| Vault OIDC (Google SSO) secrets → `.env.dev.local`, `docker/.env.*`     | Preflight: secrets-marker check + instructions (run repo's step)  | M     |
-| mkcert install + CA trust                                               | Preflight: CA-in-truststore check + instructions                  | M     |
-| `/etc/hosts` entries, sysctl tweaks (sudo)                              | Preflight: hosts-entries check + instructions                     | M     |
-| Private clone of both repos                                             | Existing PAT-backed clone seam (`resolveDeployCloneTarget`)       | C     |
-| ECR image pulls (after login)                                           | Compose pull inside provision                                     | C     |
-| `docker network create lokalise-net`                                    | SharedStack `managedNetworks`                                     | A     |
-| shared-services compose up + wait-healthy (public + ECR images)         | SharedStack `ensureUp` + healthGate                               | A/C   |
-| shared-services `users sync` (mysql/proxysql/postgres/cockroach)        | SharedStack `setupSteps` (`compose-exec`)                         | A     |
-| Debezium connector registration                                         | SharedStack `setupSteps` (`wait-http` + `compose-exec`/HTTP step) | A     |
-| `.split.yaml.dist` → `.split.yaml`, `.env.dev.local-dist` → target      | Recipe `envFiles` materialization                                 | A     |
-| `docker/dev.yml` + OS override layering, external `lokalise-net` attach | Recipe `composeFiles` + `externalNetworks` + `sharedStackRefs`    | A     |
-| `composer install`, cache warmup                                        | Recipe `setupSteps` (`compose-exec`, own timeout)                 | A     |
-| MySQL seed import (`deployment/lokalise-db-dummy/*.sql`)                | Recipe `setupSteps` (seed via `compose-exec` mysql client)        | A     |
-| Doctrine migrations (main + services_db)                                | Recipe `setupSteps` (`compose-exec`)                              | A     |
-| ES index create + reindex, expert-search reindex                        | Recipe `setupSteps` (`wait-http` + `compose-exec`)                | A     |
-| Frontend build gate (`public/js/compiled/ui/manifest.json`)             | Recipe `setupSteps` (`wait-file`)                                 | A     |
-| `bin/console monitor:health` readiness loop                             | Recipe `healthGate` (`compose-exec`)                              | A     |
-| Test login users (register + Mailpit confirm)                           | `tester-environment-access.md` Slice B credential pools (seeded)  | A     |
+| Bring-up element                                                    | Covered by                                                        | Class |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------- | ----- |
+| Tailscale VPN enrollment/connection                                 | Preflight: reachability probe of VPN-only hosts + instructions    | M     |
+| AWS SSO + ECR login (both registries)                               | Preflight: registry auth state + login instructions               | M     |
+| Vault OIDC (Google SSO) secrets → `.env.dev.local`, `docker/.env.*` | Preflight: secrets-marker check + instructions (run repo's step)  | M     |
+| mkcert install + CA trust                                           | Preflight: CA-in-truststore check + instructions                  | M     |
+| `/etc/hosts` entries, sysctl tweaks (sudo)                          | Preflight: hosts-entries check + instructions                     | M     |
+| Private clone of both repos                                         | Existing PAT-backed clone seam (`resolveDeployCloneTarget`)       | C     |
+| ECR image pulls (after login)                                       | Compose pull inside provision                                     | C     |
+| `docker network create acme-net`                                    | SharedStack `managedNetworks`                                     | A     |
+| shared-services compose up + wait-healthy (public + ECR images)     | SharedStack `ensureUp` + healthGate                               | A/C   |
+| shared-services `users sync` (mysql/proxysql/postgres/cockroach)    | SharedStack `setupSteps` (`compose-exec`)                         | A     |
+| Debezium connector registration                                     | SharedStack `setupSteps` (`wait-http` + `compose-exec`/HTTP step) | A     |
+| `.split.yaml.dist` → `.split.yaml`, `.env.dev.local-dist` → target  | Recipe `envFiles` materialization                                 | A     |
+| `docker/dev.yml` + OS override layering, external `acme-net` attach | Recipe `composeFiles` + `externalNetworks` + `sharedStackRefs`    | A     |
+| `composer install`, cache warmup                                    | Recipe `setupSteps` (`compose-exec`, own timeout)                 | A     |
+| MySQL seed import (`deployment/acme-db-dummy/*.sql`)                | Recipe `setupSteps` (seed via `compose-exec` mysql client)        | A     |
+| Doctrine migrations (main + services_db)                            | Recipe `setupSteps` (`compose-exec`)                              | A     |
+| ES index create + reindex, expert-search reindex                    | Recipe `setupSteps` (`wait-http` + `compose-exec`)                | A     |
+| Frontend build gate (`public/js/compiled/ui/manifest.json`)         | Recipe `setupSteps` (`wait-file`)                                 | A     |
+| `bin/console monitor:health` readiness loop                         | Recipe `healthGate` (`compose-exec`)                              | A     |
+| Test login users (register + Mailpit confirm)                       | `tester-environment-access.md` Slice B credential pools (seeded)  | A     |
 
-**Honesty note:** a full lokalise-main environment requires the five **M** rows done once per
+**Honesty note:** a full acme-main environment requires the five **M** rows done once per
 machine (and the ECR login refreshed ~8-hourly — the preflight makes the stale-token case a
 clear actionable failure). After that, re-provisions are unattended. The **public-image subset**
 of shared-services + a synthetic consumer runs with zero M/C rows — that is the CI-validated
@@ -390,7 +391,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                | todo   |        |
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + `InfraSetupBanner` nudge + i18n (all locales) + `data-testid`s                              | todo   |        |
 | 8   | **Environment analyst**: agent kind (structured draft recipe) + wizard draft-merge with provenance                                                        | todo   |        |
-| 9   | **Lokalise pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                        | todo   |        |
+| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                            | todo   |        |
 | 10  | **Validation harness**: golden-run script + shared-services public-subset smoke (compose up + consumer attach + health + teardown-keeps-stack)            | todo   |        |
 | S1  | _Stretch_: recipe execution on self-hosted runner pools (heavy stacks for hosted deployments)                                                             | todo   |        |
 | S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                            | todo   |        |
@@ -398,15 +399,15 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 
 ## Validation plan (no human testing)
 
-Both lokalise repos are accessible programmatically (local clones at `C:\sources\lokalise-main`
-and `C:\sources\lokalise-shared-services`; git-cloneable in CI-adjacent environments with a
+Both acme repos are accessible programmatically (local clones at `C:\sources\acme-main`
+and `C:\sources\acme-shared-services`; git-cloneable in CI-adjacent environments with a
 deploy key). The layers, cheapest first:
 
 1. **Fixture-driven detection unit tests** (slice 2, runs everywhere incl. Windows via
    `pnpm test:run` in `backend/packages/integrations`): copy sanitized real files —
    `docker/dev.yml`, `dev.wsl.override.yml`/`dev.mac.override.yml`, shared-services
    `docker-compose.yml`, `.env.dev.local-dist`, `.split.yaml.dist` — into test fixtures; assert
-   the exact recommended `composeFiles` ordering, `externalNetworks: ['lokalise-net']`,
+   the exact recommended `composeFiles` ordering, `externalNetworks: ['acme-net']`,
    profiles, envFiles pairs, seed-dump candidates, and the repo-CLI hint.
 2. **Recipe-engine unit tests** (slice 3): fake `ComposeRuntime`/command runner; assert step
    ordering, per-step log capture + timeout enforcement, failure surfacing onto
@@ -427,14 +428,14 @@ deploy key). The layers, cheapest first:
    shared-services **public-image subset** (mysql, postgres, valkey, rabbitmq, mailpit, kafka,
    ES + envoy/proxysql; ECR-hosted cockroach/fauxqs/languagetool/okapi excluded via
    profiles/overrides) as a SharedStack; provision a minimal synthetic consumer repo (small
-   compose file attaching to `lokalise-net`, one seed step, one `wait-http` health gate);
+   compose file attaching to `acme-net`, one seed step, one `wait-http` health gate);
    assert health-gate pass, then environment teardown **leaves the shared stack running**;
    finally explicit stack teardown. Runs as a scriptable harness (local `pnpm` script first;
    CI job once stable — same trust-earning path as the e2e suite).
 7. **Wizard e2e spec** (slice 7, Playwright suite conventions — `data-testid` only, seeded
    workspace, live-push assertions): detect → review → save against a fixture repo with the
    fake executor; analyst path mocked at the backend boundary.
-8. **Full lokalise-main bring-up is explicitly NOT CI-validated** — it requires VPN + Vault +
+8. **Full acme-main bring-up is explicitly NOT CI-validated** — it requires VPN + Vault +
    ECR. It is validated _indirectly_: every A-row of the mapping table has a unit/smoke test
    equivalent, every M-row has a preflight simulation test, and the golden detection run pins
    the real repo's shape. A human running the pilot once per machine is a product milestone,
@@ -445,13 +446,13 @@ deploy key). The layers, cheapest first:
 - **All compose safety lines from `compose-build-from-source.md` still apply**: host-escape
   checks on every path-bearing reference (now including `envFiles` targets and recipe file
   args), `include:`/cross-file `extends` refused (multi-`-f` layering is the sanctioned
-  alternative — lokalise needs no `include:`), `privileged` refused, private base-image auth
+  alternative — acme needs no `include:`), `privileged` refused, private base-image auth
   stays check-only.
 - **`host-command` is the only trust boundary widening** — it must stay behind its own opt-in
   flag, local-facade-only, and be visibly labeled in the wizard. Everything else runs inside
   the compose project's containers.
 - **Recipes must not assume the repo's own CLI is runnable on the orchestrator host** —
-  lokalise's `bin/dev-console` and `bin/shared-services` both refuse Git-Bash/msys and expect
+  acme's `bin/dev-console` and `bin/shared-services` both refuse Git-Bash/msys and expect
   Linux/WSL. The engine executes compose/steps itself; the analyst _translates_ a repo CLI into
   recipe steps rather than shelling out to it (that's what `host-command` + S3 are for if ever
   truly needed).
@@ -461,7 +462,7 @@ deploy key). The layers, cheapest first:
 - **Long-lived ≠ leak-proof**: SharedStacks are deliberately excluded from the run-scoped
   teardown/TTL sweeps — make that exclusion explicit in the sweeper code + tests, or a future
   "cleanup" change will helpfully reap them.
-- **Non-TTY defaults matter** — every step the engine runs must behave with no TTY (lokalise's
+- **Non-TTY defaults matter** — every step the engine runs must behave with no TTY (acme's
   own scripts hard-fail or default in places); never depend on interactive prompts.
 - **Local-facade-only runtime binding is the documented exception** to runtime symmetry
   (compose already is); the _persistence + contracts_ for recipes/stacks/preflights are still
@@ -475,10 +476,10 @@ deploy key). The layers, cheapest first:
   by preflights. Storing registry/Vault credentials in cat-factory (S2 revisits modeling, not
   storage).
 - Running this class of stack on the Cloudflare Worker or plain-Node facades (no host daemon).
-- Replacing lokalise's `dev-console` for its human developers — cat-factory consumes the same
+- Replacing acme's `dev-console` for its human developers — cat-factory consumes the same
   repos but drives its own engine.
 - Kargo preenv integration (shared-services' `deployment/docker-compose.kargo.yml` is a useful
   reference shape only).
 - Envoy vhost / `users.d` / Debezium _authoring_ for new consumers — the pilot uses the
-  conventions lokalise repos already contain; generating those files is a possible future
+  conventions acme repos already contain; generating those files is a possible future
   analyst skill, not this initiative.
