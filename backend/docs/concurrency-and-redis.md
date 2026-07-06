@@ -42,6 +42,28 @@ The general principle: when the invariant lives next to the data, enforce it **i
 database** (a version column, `FOR UPDATE SKIP LOCKED`, a unique index). That keeps the
 two runtime facades symmetric (D1 ⇄ Postgres) and adds no operational surface.
 
+## Inline LLM concurrency limiting (in-process, per vendor)
+
+Inline (non-container) LLM calls resolve a model through the `ModelProvider` seam and
+call the AI SDK directly. A burst of them — a consensus fan-out, the requirements
+recommendation writer, a sandbox sweep — can hammer a subscription vendor. A
+`VendorConcurrencyLimiter` (`@cat-factory/agents`) caps how many inline calls to a
+subscription/shared-pool vendor (`claude` / `codex` / `glm` / `kimi` / `deepseek`) run at
+once. It is a `LimitedModelProvider` decorator (sibling to `InstrumentedModelProvider`),
+applied as the OUTERMOST resolver wrap in each facade via `wrapResolverWithLimiter`, keyed
+by `subscriptionVendorForRef(ref)`. Everything else (your own OpenAI/Anthropic API keys,
+Cloudflare, local runners) passes through uncapped. Configured by
+`LLM_SUBSCRIPTION_MAX_CONCURRENCY` (default 3 per vendor; `_<VENDOR>` overrides one; `0`
+disables).
+
+This is **in-process only** — one limiter per Node process (per container/tenant) or per
+Worker isolate — which is exactly the scope of a single inline fan-out. It is NOT global
+rate-limiting: it bounds in-flight concurrency, not requests-per-minute, and does not
+coordinate across replicas or isolates. On Node/Worker an inline subscription ref is
+degraded to a pool/API-key provider before resolve, so the cap bites mainly in local mode
+(the prewarmed-container inline subscription backend keeps the ref); elsewhere it is a
+wired pass-through. Cross-replica/global rate-limiting stays out of scope, per below.
+
 ## Where Redis _would_ genuinely fit (future, out of scope)
 
 Two scaling concerns are the legitimate Redis use-cases, both **Node-only** (Cloudflare

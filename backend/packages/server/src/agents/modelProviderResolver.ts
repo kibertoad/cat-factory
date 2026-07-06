@@ -3,7 +3,9 @@ import {
   InstrumentedModelProvider,
   type ModelResolver,
   type ProviderRegistry,
+  type VendorConcurrencyLimiter,
   anthropicResolver,
+  limitModelProvider,
   openAiCompatibleResolver,
   openAiResolver,
 } from '@cat-factory/agents'
@@ -96,6 +98,27 @@ export function createScopedModelProviderResolver(
         })
       }
       return composite
+    },
+  }
+}
+
+/**
+ * Wrap a {@link ModelProviderResolver} so every resolved provider caps concurrent inline calls
+ * to a subscription vendor behind the shared {@link VendorConcurrencyLimiter}. Apply this as the
+ * OUTERMOST wrap in a facade — after `createScopedModelProviderResolver`'s instrumentation AND
+ * after any facade-specific wrap (local's subscription-inline harness) — so the limiter sees the
+ * un-degraded subscription ref and its queue wait is excluded from generation timing. A
+ * pass-through limiter (nothing capped) returns the resolver unchanged. Keep the three facade
+ * wiring points in step (see "Keep the runtimes symmetric").
+ */
+export function wrapResolverWithLimiter(
+  resolver: ModelProviderResolver,
+  limiter: VendorConcurrencyLimiter,
+): ModelProviderResolver {
+  if (limiter.isEmpty) return resolver
+  return {
+    async forScope(scope: ModelScope): Promise<ModelProvider> {
+      return limitModelProvider(await resolver.forScope(scope), limiter)
     },
   }
 }

@@ -11,6 +11,11 @@ export {
   type InlineObservabilityContext,
 } from './instrumented.js'
 export {
+  VendorConcurrencyLimiter,
+  limitModelProvider,
+  vendorConcurrencyLimiterFromEnv,
+} from './limited.js'
+export {
   anthropicResolver,
   baseProviderRegistry,
   cloudflareRestResolver,

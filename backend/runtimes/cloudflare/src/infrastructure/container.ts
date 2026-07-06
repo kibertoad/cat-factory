@@ -31,6 +31,7 @@ import {
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
+  vendorConcurrencyLimiterFromEnv,
 } from '@cat-factory/agents'
 import { cloudflareBindingRegistry } from '@cat-factory/provider-cloudflare'
 import {
@@ -116,6 +117,7 @@ import {
   createDefaultWebSearchUpstream,
   createWebSearchUpstream,
   createScopedModelProviderResolver,
+  wrapResolverWithLimiter,
   ENV_HELP,
   configProblem,
   GitHubIdentityResolver,
@@ -326,7 +328,7 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
         }
       : undefined
   const localModelEndpoints = buildLocalModelEndpointService(env, db, { now: () => Date.now() })
-  const resolver = createScopedModelProviderResolver({
+  const scoped = createScopedModelProviderResolver({
     apiKeys: buildApiKeyService(env, db, { now: () => Date.now() }),
     baseUrlFor: (provider) => baseUrlFor(provider, env) ?? undefined,
     extraRegistries,
@@ -335,6 +337,16 @@ function buildModelProviderResolver(env: Env, db: D1Database): ModelProviderReso
       : undefined,
     instrument,
   })
+  // Cap concurrent inline calls to a subscription vendor. On the Worker the inline path
+  // degrades subscription refs before resolve, so this is a wired pass-through in practice;
+  // it bounds concurrency within one isolate (no cross-isolate/global limiting — see
+  // backend/docs/concurrency-and-redis.md), symmetric with the Node facade's wrap.
+  const resolver = wrapResolverWithLimiter(
+    scoped,
+    vendorConcurrencyLimiterFromEnv(
+      (key) => (env as unknown as Record<string, string | undefined>)[key],
+    ),
+  )
   modelResolverCache.set(env, resolver)
   return resolver
 }
