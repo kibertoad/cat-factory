@@ -20,10 +20,14 @@ const isDestructive = computed(() => current.value?.variant === 'destructive')
 </script>
 
 <template>
+  <!-- z-[70]: UModal has no z-index of its own, and confirms are triggered from inside
+       the app's full-screen z-50 windows (Model Configuration, Human Test) whose
+       dropdowns sit at z-[60] — the dialog must stack above both or it opens invisibly
+       behind the window. -->
   <UModal
     v-model:open="model"
     :title="current?.title ?? t('common.confirm.defaultTitle')"
-    :ui="{ content: 'max-w-md' }"
+    :ui="{ overlay: 'z-[70]', content: 'z-[70] max-w-md' }"
   >
     <template #body>
       <div class="flex items-start gap-3" data-testid="confirm-dialog">
