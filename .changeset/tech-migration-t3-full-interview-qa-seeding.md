@@ -17,8 +17,10 @@ preset-less initiative are byte-for-byte unchanged.
   interviewer (blank until it converges when the human gave no description).
 - **orchestration**: `InitiativeInterviewService` now adds a generic "the answers above include the
   intake-form responses the stakeholder already provided — treat them as SETTLED, do NOT re-ask what
-  the form covers, build on them" steering line to the interviewer prompt when the initiative is
-  form-backed (its filled fields were frozen as `presetInputs`). Gated so `preset_generic` / a
-  preset-less initiative never sees it, keeping their interviewer prompt unchanged. The interviewer
-  digs into the fuzzy, judgment-dependent aspects the form could not capture (downtime tolerance,
-  data-migration constraints, compat posture) rather than repeating the form.
+  the form covers, build on them" steering line to the interviewer prompt when the preset form
+  actually seeded qa. The gate re-derives that from the SAME seeder the create flow ran (over the
+  frozen `presetInputs`), so it can never disagree with what was seeded: `preset_generic` (empty
+  form), a preset-less initiative, and a preset whose visible fields were all left blank never see
+  it, keeping their interviewer prompt unchanged. The interviewer digs into the fuzzy,
+  judgment-dependent aspects the form could not capture (downtime tolerance, data-migration
+  constraints, compat posture) rather than repeating the form.

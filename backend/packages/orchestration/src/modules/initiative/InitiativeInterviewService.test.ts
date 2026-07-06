@@ -1,12 +1,63 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { MockLanguageModelV3 } from 'ai/test'
 import type { Block, Initiative, ModelProvider } from '@cat-factory/kernel'
+import { clearRegisteredInitiativePresets, registerInitiativePreset } from '@cat-factory/kernel'
 import { InitiativeInterviewService } from './InitiativeInterviewService.js'
 
 // The interviewer runs a real `generateText` over the model the `ModelProvider` resolves; inject a
 // deterministic `MockLanguageModelV3` (the AI SDK's own test double) that CAPTURES the prompt it is
 // handed, so we can assert the T3 "build on the intake form, do NOT re-ask" steering appears ONLY
-// for a FORM-backed initiative — mirroring DocInterviewService.test.ts.
+// when the preset FORM actually seeded qa — mirroring DocInterviewService.test.ts. `formSeeded`
+// re-derives that from the real seeder over the registered preset, so these register real presets.
+
+const MIGRATION_PRESET_ID = 'preset_migration'
+/** A FULL-interview preset with two REQUIRED fields — a filled form seeds two qa exchanges. */
+function registerMigrationPreset() {
+  registerInitiativePreset({
+    descriptor: {
+      id: MIGRATION_PRESET_ID,
+      presentation: {
+        label: 'Technological migration',
+        icon: 'i-lucide-database',
+        color: '#000',
+        description: 'Swap a load-bearing technology behind a safety net.',
+      },
+      fields: [
+        { key: 'fromTech', label: 'From', type: 'text', required: true },
+        { key: 'toTech', label: 'To', type: 'text', required: true },
+      ],
+      planningPipelineId: 'pl_initiative',
+      interview: 'full',
+      humanReviewDefault: true,
+      defaultFragmentIds: [],
+    },
+  })
+}
+
+const OPTIONAL_PRESET_ID = 'preset_optional_only'
+/**
+ * A FULL-interview preset whose only field is OPTIONAL — so `{ notes: '' }` is a reachable frozen
+ * `presetInputs` (validation allows a blank optional field, sanitize keeps the present empty value)
+ * that seeds NO qa. This is the case the old `presetInputs`-cardinality gate got wrong.
+ */
+function registerOptionalOnlyPreset() {
+  registerInitiativePreset({
+    descriptor: {
+      id: OPTIONAL_PRESET_ID,
+      presentation: {
+        label: 'Optional-only',
+        icon: 'i-lucide-pencil',
+        color: '#000',
+        description: 'A preset whose fields are all optional.',
+      },
+      fields: [{ key: 'notes', label: 'Notes', type: 'textarea' }],
+      planningPipelineId: 'pl_initiative',
+      interview: 'full',
+      humanReviewDefault: true,
+      defaultFragmentIds: [],
+    },
+  })
+}
 
 function capturingModel() {
   let lastPrompt = ''
@@ -71,13 +122,20 @@ const initiative = (over: Partial<Initiative>): Initiative =>
 const FORM_STEERING = 'intake-form responses'
 
 describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
+  beforeEach(() => {
+    clearRegisteredInitiativePresets()
+    registerMigrationPreset()
+    registerOptionalOnlyPreset()
+  })
+  afterEach(() => clearRegisteredInitiativePresets())
+
   it('tells the interviewer to build on the form when the initiative is form-backed', async () => {
     const cap = capturingModel()
     await makeService(cap.model).runInterview(
       'ws_1',
       BLOCK,
       initiative({
-        presetId: 'preset_migration',
+        presetId: MIGRATION_PRESET_ID,
         presetInputs: { fromTech: 'MSSQL', toTech: 'PostgreSQL 16' },
         qa: [
           { id: 'iqa-1', question: 'From', answer: 'MSSQL' },
@@ -111,6 +169,25 @@ describe('InitiativeInterviewService — build-on-form steering (T3)', () => {
       initiative({
         presetId: 'preset_generic',
         qa: [{ id: 'iqa-1', question: 'Prior?', answer: 'A' }],
+      }),
+      { finalize: false },
+    )
+    expect(cap.prompt()).not.toContain(FORM_STEERING)
+  })
+
+  it('omits the steering when a form-backed preset seeded NO qa (all visible fields blank)', async () => {
+    const cap = capturingModel()
+    await makeService(cap.model).runInterview(
+      'ws_1',
+      BLOCK,
+      // `presetInputs` is non-empty (the optional field was posted, present but blank), yet the form
+      // seeded nothing — so the interviewer answers below are ALL interviewer-gathered, not form
+      // facts. The gate must key off what the form actually seeded, not `presetInputs` cardinality,
+      // or it would falsely tell the model those answers were "the intake-form responses".
+      initiative({
+        presetId: OPTIONAL_PRESET_ID,
+        presetInputs: { notes: '' },
+        qa: [{ id: 'iqa-1', question: 'Downtime tolerance?', answer: 'Zero' }],
       }),
       { finalize: false },
     )
