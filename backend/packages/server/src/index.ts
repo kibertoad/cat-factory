@@ -65,6 +65,7 @@ export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/en
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 export {
   createScopedModelProviderResolver,
+  wrapResolverWithLimiter,
   type ScopedModelProviderOptions,
 } from './agents/modelProviderResolver.js'
 export {

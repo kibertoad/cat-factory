@@ -6,6 +6,7 @@ import {
   inlineWebSearchOptionsFromEnv,
   resolveAgentConfig,
   isProxyableProvider,
+  vendorConcurrencyLimiterFromEnv,
 } from '@cat-factory/agents'
 // Opt-in AWS EKS backends (runner + environment), registered by reference below (the Worker
 // facade registers the same pair, keeping the runtimes symmetric with the native `kubernetes`
@@ -150,6 +151,7 @@ import {
   logger,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
+  wrapResolverWithLimiter,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). Importing
 // it registers the gates via the public seam; the facade wires each gate's provider below.
@@ -1602,7 +1604,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     localModelEndpoints,
   )
-  const modelProviderResolver = options.wrapModelProviderResolver
+  const wrappedModelProviderResolver = options.wrapModelProviderResolver
     ? options.wrapModelProviderResolver(baseModelProviderResolver, {
         ...(personalSubscriptions
           ? {
@@ -1618,6 +1620,15 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           : {}),
       })
     : baseModelProviderResolver
+  // Cap concurrent inline calls to a subscription vendor, OUTERMOST so it sits outside the
+  // local facade's subscription-inline harness wrap above (and therefore sees the un-degraded
+  // subscription ref). One limiter per container = per process for a stock node, per tenant in
+  // mothership mode; a pass-through when nothing is capped. Symmetric with the Worker's wrap in
+  // `buildModelProviderResolver` (see "Keep the runtimes symmetric").
+  const modelProviderResolver = wrapResolverWithLimiter(
+    wrappedModelProviderResolver,
+    vendorConcurrencyLimiterFromEnv((key) => env[key]),
+  )
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
     options.cloudflareModelsEnabled ?? !!(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_API_TOKEN)
