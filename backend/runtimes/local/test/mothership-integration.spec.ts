@@ -104,6 +104,7 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         // token via `/local/mothership/connect` instead of a static env token.
         LOCAL_MOTHERSHIP_TOKEN: token,
         LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+        LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
         LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
         LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
         // The ephemeral-environment integration wires from ENCRYPTION_KEY (always set here),

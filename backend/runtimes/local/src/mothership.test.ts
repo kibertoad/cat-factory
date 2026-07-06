@@ -14,12 +14,14 @@ import { type SqliteWorkQueue, createWorkQueue } from './sqlite/workQueue.js'
 // Unit coverage for the mothership composition seam (docs/initiatives/mothership-mode.md):
 //   - the boot-mode probe,
 //   - composeMothership wiring the remote (RPC) org repos + the local node:sqlite credential
-//     store (org reads hit the mothership over HTTP; credentials stay local),
+//     store (org reads hit the mothership over HTTP; credentials — incl. the subscription-token /
+//     personal-subscription / activation trio — stay local),
 //   - the in-process work runner's per-execution serialization (the no-pg-boss drive analogue).
 // All in-process / in-memory — no Postgres, no network, no Docker.
 
 const BASE_ENV = (over: Record<string, string | undefined>): NodeJS.ProcessEnv => ({
   LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+  LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
   LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
   LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   ...over,
@@ -522,6 +524,7 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     LOCAL_MOTHERSHIP_URL: 'https://m.test',
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',
+    LOCAL_MOTHERSHIP_SETTINGS_DB: ':memory:',
     LOCAL_MOTHERSHIP_WORK_DB: ':memory:',
     LOCAL_MOTHERSHIP_TOKEN_DB: ':memory:',
   }
@@ -540,9 +543,14 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     // The API-key pool is wired from the LOCAL sqlite credential store (sealed with the local key).
     expect(container.apiKeys).toBeDefined()
     expect(container.localModelEndpoints).toBeDefined()
-    // The per-user Postgres-only services are OFF in mothership mode (no db; PR 3 makes them local).
-    expect(container.subscriptions).toBeUndefined()
-    expect(container.personalSubscriptions).toBeUndefined()
+    // The subscription-credential services are now wired from the LOCAL sqlite store too (PR 3 —
+    // the subscription-token pool + per-user personal creds + their per-run activations are
+    // laptop-local, leased + decrypted by the local container executor). Previously OFF in
+    // mothership mode; now ON because their local-sqlite bucket exists.
+    expect(container.subscriptions).toBeDefined()
+    expect(container.personalSubscriptions).toBeDefined()
+    // The local-mode settings panel is served from the LOCAL sqlite singleton (no Postgres).
+    expect(container.localSettings).toBeDefined()
     // The SPA flag is surfaced so the UI can label local-vs-mothership storage.
     expect(container.config.localMode?.mothership).toBe(true)
   })
