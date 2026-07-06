@@ -504,6 +504,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // host-reachable URL for a browsable preview — the genuine local/node differentiator over
     // the Worker's self-contained UI-test container.
     frontendPreview: { supported: true },
+    // The account-wide model policy needs an account admin governing a shared tenant. Plain
+    // local mode is a single developer on their own machine (no such governance), so it is
+    // unsupported there; mothership mode delegates org state to a hosted account, so it is on.
+    modelPolicy: { supported: !!mothership },
   })
 
   // Mothership mode has no pg-boss: drive runs in-process through the SAME advance/poll loop with

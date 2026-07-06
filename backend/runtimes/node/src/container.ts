@@ -1362,6 +1362,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     execution: { available: ['runner-pool'], active: 'runner-pool' },
     testEnv: { available: ['environment-provider'], active: 'environment-provider' },
     frontendPreview: { supported: previewTransportWired },
+    // A remote Node deployment has account admins to govern the account-wide model policy.
+    // (Local mode sets `config.infrastructure` itself before delegating here, so its
+    // mothership-gated value wins over this `??=`.)
+    modelPolicy: { supported: true },
   })
   const clock = new SystemClock()
   const idGenerator = new CryptoIdGenerator()
@@ -2520,6 +2524,10 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
           baseUrlFor: (provider) => baseUrlForNode(provider, env),
           localModelEndpoints,
           openRouterCatalog,
+          accountSettings,
+          workspaceAccountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
+          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+          ...(options.caches ? { caches: options.caches } : {}),
         },
         workspaceId,
         initiatedBy,

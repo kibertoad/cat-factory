@@ -399,6 +399,8 @@
         "bootstrap_reference_missing": "L’architecture de référence a disparu",
         "preset_unsatisfiable": "Le préréglage de modèle ne peut pas exécuter ce pipeline",
         "visual_pipeline_no_frontend": "Aucun frontend à tester",
+        "model_policy_blocked": "Modèle bloqué par la politique du compte",
+        "model_policy_unsupported": "La politique de modèles n'est pas disponible ici",
         "deployer_required_before_tester": "Ajoutez un Deployer avant le Testeur"
       },
       "fallbackMessage": "Cette action est en conflit avec l’état actuel.",
@@ -2375,6 +2377,65 @@
         "kubeOverrideNoun": "le remplacement Kubernetes",
         "customNoun": "ce gestionnaire"
       }
+    },
+    "modelPolicy": {
+      "title": "Politique d'accès aux modèles",
+      "description": "Restreint les familles de modèles que les équipes de ce compte peuvent utiliser. Le risque lié à la résidence des données dépend de la route de service : une route de confiance (à résidence garantie) peut donc exempter une famille autrement bloquée.",
+      "regionLabel": "Région d'exploitation",
+      "applyPreset": "Appliquer un préréglage :",
+      "modeLabel": "Mode de la politique",
+      "modes": {
+        "off": "Aucune restriction",
+        "blocklist": "Bloquer les familles listées",
+        "allowlist": "Autoriser uniquement les familles listées"
+      },
+      "familiesBlockLabel": "Familles bloquées",
+      "familiesAllowLabel": "Familles autorisées",
+      "trustedLabel": "Routes de confiance (à résidence garantie)",
+      "trustedHint": "Une famille bloquée reste disponible lorsqu'elle est servie via l'une de ces routes.",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "États-Unis",
+        "europe": "Europe",
+        "china": "Chine",
+        "other": "Autre"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "Bloquer les familles hébergées en Chine",
+          "description": "Bloque DeepSeek, Qwen, Kimi et GLM ; ne les autorise que via une route à résidence garantie (p. ex. Bedrock)."
+        },
+        "eu-block-cn": {
+          "label": "UE : bloquer les familles hébergées en Chine",
+          "description": "Bloque DeepSeek, Qwen, Kimi et GLM ; une route UE à résidence garantie (p. ex. Bedrock) reste autorisée."
+        },
+        "eu-guaranteed-only": {
+          "label": "UE : routes à résidence garantie uniquement",
+          "description": "N'autorise un modèle que lorsqu'il est servi via une route à résidence garantie."
+        },
+        "cn-prefer-domestic": {
+          "label": "Préférer les familles hébergées en Chine",
+          "description": "Autorise les familles hébergées en Chine (plus Llama) et toute route à résidence garantie."
+        },
+        "other-block-cn": {
+          "label": "Bloquer les familles hébergées en Chine",
+          "description": "Bloque DeepSeek, Qwen, Kimi et GLM ; ne les autorise que via une route à résidence garantie."
+        }
+      },
+      "saved": "Politique d'accès aux modèles enregistrée",
+      "saveFailed": "Impossible d'enregistrer la politique d'accès aux modèles"
     }
   },
   "providers": {

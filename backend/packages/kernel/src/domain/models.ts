@@ -1,5 +1,7 @@
 import {
   type ModelCost,
+  type ModelFamily,
+  type ModelFamilyPolicy,
   type ModelOption,
   type OpenRouterModelMeta,
   type SubscriptionVendor,
@@ -102,6 +104,12 @@ export interface SubscriptionVariant {
 export interface SelectableModel {
   /** Stable id stored on a block, e.g. `qwen`. */
   id: string
+  /**
+   * The coarse model FAMILY this entry belongs to, used by the account-wide allow/block
+   * policy (`familyForModelId` / `isAllowedByFamilyPolicy`). Absent for gateway entries
+   * with no single family (an operator's LiteLLM route) — those are UNCLASSIFIED.
+   */
+  family?: ModelFamily
   /** Model-family label shown in the picker, e.g. `Qwen3`. */
   label: string
   /** One-line description shown alongside the label. */
@@ -128,6 +136,7 @@ export interface SelectableModel {
 export const MODEL_CATALOG: SelectableModel[] = [
   {
     id: 'cloudflare-llama',
+    family: 'llama',
     label: 'Llama 3.1',
     description: "Meta's fast 8B instruct model — Cloudflare Workers AI's default.",
     cloudflare: {
@@ -138,6 +147,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'qwen',
+    family: 'qwen',
     label: 'Qwen3',
     description: "Alibaba's Qwen3 — Qwen3-30B on Cloudflare, flagship Qwen3-Max when direct.",
     cloudflare: {
@@ -153,6 +163,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'kimi-k2.7',
+    family: 'kimi',
     label: 'Kimi K2.7',
     description:
       "Moonshot AI's latest 1T-param agentic-coding model (structured outputs), 256K context — " +
@@ -170,6 +181,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'kimi',
+    family: 'kimi',
     label: 'Kimi K2.6',
     description:
       "Moonshot AI's frontier-scale agentic model with a 256K context, on Cloudflare or " +
@@ -198,6 +210,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'kimi-k2.5',
+    family: 'kimi',
     label: 'Kimi K2.5',
     description:
       "Moonshot AI's prior-generation 1T-param agentic model, 256K context (Cloudflare Workers AI).",
@@ -209,6 +222,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'deepseek',
+    family: 'deepseek',
     label: 'DeepSeek R1',
     description:
       "DeepSeek's reasoning: the 80K R1 Qwen-32B distill on Cloudflare, or the flagship " +
@@ -242,6 +256,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'deepseek-v4-pro',
+    family: 'deepseek',
     label: 'DeepSeek V4 Pro',
     description:
       "DeepSeek's flagship V4 Pro agentic-coding model, served on Cloudflare (131K context).",
@@ -257,6 +272,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'glm',
+    family: 'glm',
     label: 'GLM-5.2',
     description:
       "Z.ai's agentic-coding model: 256K context on Cloudflare, or the full 1M-token " +
@@ -273,6 +289,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   // subscription token (Claude Pro/Max, ChatGPT Plus/Pro), direct to the vendor.
   {
     id: 'claude-opus',
+    family: 'claude',
     label: 'Claude Opus 4.8',
     description:
       "Anthropic's most capable model — run via Claude Code on your Claude subscription, " +
@@ -289,6 +306,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'claude-sonnet',
+    family: 'claude',
     label: 'Claude Sonnet 4.6',
     description: "Anthropic's balanced speed/intelligence model, run via Claude Code.",
     subscription: {
@@ -298,6 +316,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'gpt-5.5',
+    family: 'openai',
     label: 'GPT-5.5',
     description:
       "OpenAI's flagship — run via Codex on your ChatGPT subscription, or pay-as-you-go " +
@@ -314,6 +333,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   },
   {
     id: 'gpt-5.4',
+    family: 'openai',
     label: 'GPT-5.4',
     description: "OpenAI's cost-efficient mid-tier, run via Codex on your ChatGPT subscription.",
     subscription: {
@@ -329,6 +349,7 @@ export const MODEL_CATALOG: SelectableModel[] = [
   // reachable via the dynamic per-workspace OpenRouter catalog (`openRouterSelectableModels`).
   {
     id: 'gemini',
+    family: 'gemini',
     label: 'Gemini 3 Pro',
     description: "Google's Gemini 3 Pro via OpenRouter — 1M-token context, billed at Google rates.",
     openrouter: {
@@ -358,6 +379,60 @@ const BY_ID = new Map(MODEL_CATALOG.map((m) => [m.id, m]))
 /** Look up a catalog model by id, or `undefined` for an unknown/empty id. */
 export function getSelectableModel(id: string | undefined | null): SelectableModel | undefined {
   return id ? BY_ID.get(id) : undefined
+}
+
+// The OpenRouter slug vendor-prefix → family map. A dynamic `openrouter:<vendor>/<model>`
+// id carries no catalog `family`, but its slug prefix names the vendor, so blocking a
+// family (e.g. `deepseek`) also blocks its OpenRouter passthrough (`openrouter:deepseek/…`).
+// A prefix not listed here is UNCLASSIFIED (returns null).
+const OPENROUTER_SLUG_FAMILY: Record<string, ModelFamily> = {
+  deepseek: 'deepseek',
+  qwen: 'qwen',
+  moonshotai: 'kimi',
+  anthropic: 'claude',
+  openai: 'openai',
+  google: 'gemini',
+  'z-ai': 'glm',
+  zai: 'glm',
+  'meta-llama': 'llama',
+}
+
+/**
+ * The coarse model family a model id belongs to for the account-wide allow/block policy,
+ * or `null` when it can't be classified (an operator's LiteLLM gateway route, an
+ * OpenRouter slug whose vendor prefix isn't recognised, or a per-user local runner). A
+ * catalog id resolves via its declared `family`; a dynamic `openrouter:<slug>` id via the
+ * slug's vendor prefix.
+ */
+export function familyForModelId(id: string | undefined | null): ModelFamily | null {
+  const model = getSelectableModel(id)
+  if (model) return model.family ?? null
+  const or = parseOpenRouterModelId(id)
+  if (or) {
+    const vendor = or.model.split('/', 1)[0]?.toLowerCase()
+    return vendor ? (OPENROUTER_SLUG_FAMILY[vendor] ?? null) : null
+  }
+  return null
+}
+
+/**
+ * Whether a model is permitted by the account-wide family policy, evaluated against its
+ * `(family, effective-provider)`. `off` ⇒ always allowed. `trustedProviders` (residency-
+ * guaranteed routes, e.g. `bedrock`) exempt an otherwise-blocked family. An UNCLASSIFIED
+ * family (null) is allowed under a blocklist (nothing to match) but blocked under an
+ * allowlist (can't prove membership), unless its provider is trusted.
+ */
+export function isAllowedByFamilyPolicy(
+  id: string | undefined | null,
+  effectiveProvider: string | undefined | null,
+  policy: ModelFamilyPolicy | undefined,
+): boolean {
+  if (!policy || policy.mode === 'off') return true
+  const trusted = !!effectiveProvider && policy.trustedProviders.includes(effectiveProvider)
+  if (trusted) return true
+  const family = familyForModelId(id)
+  const listed = family !== null && policy.families.includes(family)
+  return policy.mode === 'blocklist' ? !listed : listed
 }
 
 // Context window (total input + output tokens) for every concrete ref the catalog
@@ -421,6 +496,14 @@ export interface ProviderCapabilities {
    * not this set.
    */
   openRouterModels?: Set<string>
+  /**
+   * The account-wide model-family allow/block policy in force for this workspace's owning
+   * account, when the deployment supports it and the account has set one (mode !== `off`).
+   * Absent ⇒ no policy restriction. Applied by `toOption` (the catalog `available` /
+   * `policyBlocked` flags) and the pipeline start guard, on top of the configuration-based
+   * usability above.
+   */
+  modelPolicy?: ModelFamilyPolicy
 }
 
 /** Resolve the informational list cost for a model ref (e.g. from spend pricing). */
@@ -535,12 +618,16 @@ function toOption(
 ): ModelOption {
   const variant = effectiveVariant(model, caps)
   const cost = costFor?.(variant.ref)
+  // The account-wide family policy gates on the EFFECTIVE route's provider, so a
+  // residency-guaranteed route (e.g. Bedrock) can exempt an otherwise-blocked family.
+  const policyBlocked = !isAllowedByFamilyPolicy(model.id, variant.ref.provider, caps.modelPolicy)
   const option: ModelOption = {
     id: model.id,
     label: model.label,
     description: model.description,
     flavor: variant.flavor,
-    available: isModelUsable(model.id, caps),
+    available: isModelUsable(model.id, caps) && !policyBlocked,
+    ...(policyBlocked ? { policyBlocked: true } : {}),
     providerLabel: variant.providerLabel,
     provider: variant.ref.provider,
     model: variant.ref.model,

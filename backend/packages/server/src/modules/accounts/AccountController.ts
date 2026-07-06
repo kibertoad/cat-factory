@@ -18,6 +18,7 @@ import {
   updateAccountContract,
   updateAccountSettingsContract,
 } from '@cat-factory/contracts'
+import { ConflictError } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
@@ -272,10 +273,26 @@ export function accountController(): Hono<AppEnv> {
     if (!container.accountSettings) return settingsUnavailable(c)
     const { accountId } = c.req.valid('param')
     await container.accountService.requireAdmin(accountId, user.id)
-    return c.json(
-      await container.accountSettings.service.write(accountId, c.req.valid('json')),
-      200,
-    )
+    const input = c.req.valid('json')
+    // The account-wide model-family policy is a hosted/mothership-only control (no account
+    // admin governs a single-developer local machine). Refuse to STORE a non-`off` policy
+    // where the deployment doesn't support it, so a policy can never be set-but-ignored.
+    if (
+      input.config?.modelPolicy &&
+      input.config.modelPolicy.mode !== 'off' &&
+      !(container.config.infrastructure?.modelPolicy?.supported ?? false)
+    ) {
+      throw new ConflictError(
+        'The account-wide model-family policy is not available on this deployment (it is a ' +
+          'hosted / mothership-mode feature, not plain local mode).',
+        'model_policy_unsupported',
+      )
+    }
+    const view = await container.accountSettings.service.write(accountId, input)
+    // The write may have changed the account's model-family policy; drop the cached read so
+    // the `/models` catalog + start guard see it at once (cross-node when a bus is wired).
+    await container.caches.accountModelPolicy.invalidate(accountId, accountId)
+    return c.json(view, 200)
   })
 
   return app

@@ -399,6 +399,8 @@
         "bootstrap_reference_missing": "Architektura referencyjna zniknęła",
         "preset_unsatisfiable": "Ten zestaw modeli nie może uruchomić tego potoku",
         "visual_pipeline_no_frontend": "Brak frontendu do przetestowania",
+        "model_policy_blocked": "Model zablokowany przez politykę konta",
+        "model_policy_unsupported": "Polityka modeli jest tu niedostępna",
         "deployer_required_before_tester": "Dodaj Deployer przed Testerem"
       },
       "fallbackMessage": "Ta akcja jest sprzeczna z bieżącym stanem.",
@@ -2375,6 +2377,65 @@
         "kubeOverrideNoun": "nadpisanie Kubernetes",
         "customNoun": "tę obsługę"
       }
+    },
+    "modelPolicy": {
+      "title": "Polityka dostępu do modeli",
+      "description": "Ogranicza, które rodziny modeli mogą uruchamiać zespoły tego konta. Ryzyko rezydencji danych zależy od trasy obsługi, więc zaufana trasa (z gwarantowaną rezydencją) może zwolnić rodzinę, która w innym przypadku byłaby zablokowana.",
+      "regionLabel": "Region działania",
+      "applyPreset": "Zastosuj szablon:",
+      "modeLabel": "Tryb polityki",
+      "modes": {
+        "off": "Bez ograniczeń",
+        "blocklist": "Blokuj wymienione rodziny",
+        "allowlist": "Zezwól tylko na wymienione rodziny"
+      },
+      "familiesBlockLabel": "Zablokowane rodziny",
+      "familiesAllowLabel": "Dozwolone rodziny",
+      "trustedLabel": "Zaufane trasy (z gwarantowaną rezydencją)",
+      "trustedHint": "Zablokowana rodzina pozostaje dostępna, gdy jest obsługiwana przez jedną z tych tras.",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "Stany Zjednoczone",
+        "europe": "Europa",
+        "china": "Chiny",
+        "other": "Inny"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "Blokuj rodziny hostowane w Chinach",
+          "description": "Blokuje DeepSeek, Qwen, Kimi i GLM; zezwala na nie tylko przez trasę z gwarantowaną rezydencją (np. Bedrock)."
+        },
+        "eu-block-cn": {
+          "label": "UE: blokuj rodziny hostowane w Chinach",
+          "description": "Blokuje DeepSeek, Qwen, Kimi i GLM; trasa UE z gwarantowaną rezydencją (np. Bedrock) pozostaje dozwolona."
+        },
+        "eu-guaranteed-only": {
+          "label": "UE: tylko trasy z gwarantowaną rezydencją",
+          "description": "Zezwala na model tylko wtedy, gdy jest obsługiwany przez trasę z gwarantowaną rezydencją."
+        },
+        "cn-prefer-domestic": {
+          "label": "Preferuj rodziny hostowane w Chinach",
+          "description": "Zezwala na rodziny hostowane w Chinach (oraz Llama) i dowolną trasę z gwarantowaną rezydencją."
+        },
+        "other-block-cn": {
+          "label": "Blokuj rodziny hostowane w Chinach",
+          "description": "Blokuje DeepSeek, Qwen, Kimi i GLM; zezwala na nie tylko przez trasę z gwarantowaną rezydencją."
+        }
+      },
+      "saved": "Zapisano politykę dostępu do modeli",
+      "saveFailed": "Nie udało się zapisać polityki dostępu do modeli"
     }
   },
   "providers": {

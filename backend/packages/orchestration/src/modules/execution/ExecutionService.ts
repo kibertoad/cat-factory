@@ -45,6 +45,7 @@ import {
 import {
   assertFound,
   ConflictError,
+  isAllowedByFamilyPolicy,
   isModelUsable,
   isModelUsableInline,
   type ModelRef,
@@ -1192,10 +1193,21 @@ export class ExecutionService {
     //    inline-capable model, or a preset whose inline steps resolve to one), so a subscription
     //    model that satisfies the container steps but strands the reviewer/brainstorm/estimator
     //    is refused up front instead of failing mid-run against an ungated env default.
+    //  - `policyBlocked`: the account-wide model-family policy blocks the model on its
+    //    effective route — a distinct, more actionable reason than "unconfigured", so it is
+    //    checked FIRST and short-circuits the other buckets for that id.
     const unconfigured = new Set<string>()
     const inlineUnsatisfiable = new Set<string>()
+    const policyBlocked = new Set<string>()
     const check = (id: string | undefined, inline: boolean): void => {
       if (!id) return
+      if (
+        caps.modelPolicy &&
+        !isAllowedByFamilyPolicy(id, resolveModelRef(id, caps)?.provider, caps.modelPolicy)
+      ) {
+        policyBlocked.add(id)
+        return
+      }
       if (!isModelUsable(id, caps)) unconfigured.add(id)
       else if (inline && !isModelUsableInline(id, caps, runsInline)) inlineUnsatisfiable.add(id)
     }
@@ -1215,6 +1227,15 @@ export class ExecutionService {
       )
       agentKinds.forEach((kind, i) =>
         check(ids[i], isInlineModelStep(kind, this.agentKindRegistry)),
+      )
+    }
+    if (policyBlocked.size > 0) {
+      throw new ConflictError(
+        `This pipeline uses models blocked by the account's model-family policy: ` +
+          `${[...policyBlocked].join(', ')}. Pick a model from an allowed family (or a ` +
+          'residency-guaranteed route), or ask an account admin to adjust the policy.',
+        'model_policy_blocked',
+        { models: [...policyBlocked] },
       )
     }
     if (unconfigured.size > 0) {

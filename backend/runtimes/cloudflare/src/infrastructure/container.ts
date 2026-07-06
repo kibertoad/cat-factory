@@ -2127,6 +2127,8 @@ export function buildContainer(
     // The Worker only runs the self-contained UI-test container (torn down with the run); it
     // has no long-lived host serve, so a browsable frontend preview is unsupported here.
     frontendPreview: { supported: false },
+    // The hosted Worker facade has account admins to govern the account-wide model policy.
+    modelPolicy: { supported: true },
   })
   const db = env.DB
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
@@ -2318,6 +2320,10 @@ export function buildContainer(
     defaultBackend: contentStorageCapability.defaultBackend,
   })
 
+  // Built once and shared: the `caches` container field AND the account-policy read the
+  // capability resolver runs through it (both need the same instance).
+  const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
+
   const dependencies: CoreDependencies = {
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
@@ -2434,7 +2440,7 @@ export function buildContainer(
     // invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
     // Pass-through handles are stateless, so the per-request build costs nothing.
-    caches: createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE }),
+    caches,
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
       resolveWorkspaceCapabilities(
@@ -2446,6 +2452,11 @@ export function buildContainer(
           baseUrlFor: (provider) => baseUrlFor(provider, env),
           localModelEndpoints,
           openRouterCatalog,
+          accountSettings,
+          workspaceAccountOf: (workspaceId) =>
+            new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+          caches,
         },
         workspaceId,
         initiatedBy,

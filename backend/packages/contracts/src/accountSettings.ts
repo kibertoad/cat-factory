@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { modelFamilyPolicySchema } from './modelPolicy.js'
 
 // ---------------------------------------------------------------------------
 // Per-account (deployment-wide) integration settings, moved out of env vars into a
@@ -55,6 +56,12 @@ export type ContentStorageConfig = v.InferOutput<typeof contentStorageConfigSche
  */
 export const accountSettingsConfigSchema = v.object({
   contentStorage: v.optional(contentStorageConfigSchema),
+  /**
+   * Account-wide model-family allow/block policy (see {@link modelFamilyPolicySchema}).
+   * Absent / `off` ⇒ no restriction. Only settable on runtimes that support it
+   * (Cloudflare / remote Node / mothership — never plain local mode).
+   */
+  modelPolicy: v.optional(modelFamilyPolicySchema),
 })
 export type AccountSettingsConfig = v.InferOutput<typeof accountSettingsConfigSchema>
 

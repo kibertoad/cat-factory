@@ -1,4 +1,5 @@
 import type {
+  AccountModelPolicyCacheValue,
   AppCaches,
   DocumentContent,
   GitHubRepo,
@@ -55,6 +56,7 @@ export interface AppCachesProfile {
   fragmentCatalog: GroupCacheProfile
   fragmentDocumentBody: GroupCacheProfile
   repoProjection: GroupCacheProfile
+  accountModelPolicy: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -77,6 +79,14 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // entry per group). Invalidation-driven — no version probe (a DB read as the probe
   // would cost as much as the DB read as the load).
   repoProjection: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 1 },
+  // One resolved model-family policy per account, keyed by account id (one entry per
+  // group). Slow-moving (admin-changed); invalidation-driven, no version probe.
+  accountModelPolicy: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 2000,
+    maxItemsPerGroup: 1,
+  },
 }
 
 /**
@@ -100,6 +110,9 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // whose external entries self-verify via a version probe). So the Worker reads it
   // live every time, exactly like `fragmentCatalog`.
   repoProjection: { ...DEFAULT_APP_CACHES_PROFILE.repoProjection, enabled: false },
+  // Pass-through for the same reason: the account policy is our own mutable D1 state
+  // with no cross-isolate invalidation bus on the Worker.
+  accountModelPolicy: { ...DEFAULT_APP_CACHES_PROFILE.accountModelPolicy, enabled: false },
 }
 
 /**
@@ -253,15 +266,22 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.repoProjection,
     options,
   )
+  const accountModelPolicy = buildGroupCache<AccountModelPolicyCacheValue>(
+    'account-model-policy',
+    profile.accountModelPolicy,
+    options,
+  )
   return {
     fragmentCatalog,
     fragmentDocumentBody,
     repoProjection,
+    accountModelPolicy,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
         fragmentDocumentBody.close(),
         repoProjection.close(),
+        accountModelPolicy.close(),
       ])
     },
   }

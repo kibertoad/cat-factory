@@ -28,6 +28,13 @@ export function buildInfrastructureCapabilities(input: {
    * runs the self-contained UI-test container, so it passes `false`.
    */
   frontendPreview: { supported: boolean }
+  /**
+   * Whether this deployment supports the account-wide model-family allow/block policy.
+   * `true` on Cloudflare / remote Node and in mothership mode; `false` in plain local mode
+   * (no account admin to govern a single-developer machine). The SPA hides the policy admin
+   * section and the server refuses to store a non-`off` policy when `false`.
+   */
+  modelPolicy: { supported: boolean }
 }): InfrastructureCapabilities {
   return {
     execution: {
@@ -37,5 +44,6 @@ export function buildInfrastructureCapabilities(input: {
     },
     testEnv: { available: input.testEnv.available, active: input.testEnv.active },
     frontendPreview: { supported: input.frontendPreview.supported },
+    modelPolicy: { supported: input.modelPolicy.supported },
   }
 }
