@@ -68,6 +68,42 @@ async function tick() {
   await new Promise((r) => setTimeout(r, 0))
 }
 
+/**
+ * A fake LanguageModel whose doStream returns a finite, immediately-closing stream and counts
+ * how many times doStream was entered, to observe that the limiter holds a permit across the
+ * whole stream (a second stream can't start until the first is drained).
+ */
+function makeStreamModel(counter: { starts: number }): LanguageModel {
+  return {
+    specificationVersion: 'v3',
+    provider: 'fake',
+    modelId: 'fake-model',
+    supportedUrls: {},
+    async doGenerate() {
+      throw new Error('not used')
+    },
+    async doStream() {
+      counter.starts += 1
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', id: '0', delta: 'x' })
+            controller.close()
+          },
+        }),
+      }
+    },
+  } as unknown as LanguageModel
+}
+
+async function drain(stream: ReadableStream): Promise<void> {
+  const reader = stream.getReader()
+  while (true) {
+    const { done } = await reader.read()
+    if (done) break
+  }
+}
+
 describe('Semaphore', () => {
   it('never runs more than its permit count concurrently and completes all', async () => {
     const sem = new Semaphore(2)
@@ -88,6 +124,40 @@ describe('Semaphore', () => {
   it('rejects a non-positive permit count', () => {
     expect(() => new Semaphore(0)).toThrow()
     expect(() => new Semaphore(-1)).toThrow()
+  })
+
+  it('cancels a queued acquire on abort without consuming a permit', async () => {
+    const sem = new Semaphore(1)
+    const gate = makeGate()
+    const held = sem.run(gate.task) // takes the only permit
+    await tick()
+
+    const controller = new AbortController()
+    const queued = sem.acquire(controller.signal) // blocks behind `held`
+    const rejected = queued.then(
+      () => 'resolved',
+      () => 'rejected',
+    )
+    await tick()
+    controller.abort()
+    expect(await rejected).toBe('rejected')
+
+    // The aborted waiter freed its spot: a fresh acquire still gets the permit once `held` ends.
+    gate.releaseAll()
+    await held
+    const release = await sem.acquire()
+    expect(typeof release).toBe('function')
+    release()
+  })
+
+  it('ignores an abort that fires after the permit was already granted', async () => {
+    const sem = new Semaphore(1)
+    const controller = new AbortController()
+    const release = await sem.acquire(controller.signal) // granted immediately
+    controller.abort() // must not throw or double-release
+    release()
+    // The permit is back: the next acquire resolves.
+    expect(typeof (await sem.acquire())).toBe('function')
   })
 })
 
@@ -150,6 +220,29 @@ describe('vendorConcurrencyLimiterFromEnv', () => {
     expect(limiter.isEmpty).toBe(true)
     expect(limiter.limitFor('claude')).toBeUndefined()
   })
+
+  it('treats a negative value as uncapped rather than falling back to the default', () => {
+    const env: Record<string, string> = {
+      LLM_SUBSCRIPTION_MAX_CONCURRENCY: '-1',
+      LLM_SUBSCRIPTION_MAX_CONCURRENCY_KIMI: '2',
+    }
+    const limiter = vendorConcurrencyLimiterFromEnv((key) => env[key])
+    // Global -1 uncaps everything without an explicit override (no silent fallback to 3)...
+    expect(limiter.limitFor('claude')).toBeUndefined()
+    // ...but an explicit per-vendor override still wins.
+    expect(limiter.limitFor('kimi')).toBe(2)
+  })
+
+  it('lets a per-vendor override win even when the global default is 0', () => {
+    const env: Record<string, string> = {
+      LLM_SUBSCRIPTION_MAX_CONCURRENCY: '0',
+      LLM_SUBSCRIPTION_MAX_CONCURRENCY_KIMI: '2',
+    }
+    const limiter = vendorConcurrencyLimiterFromEnv((key) => env[key])
+    expect(limiter.isEmpty).toBe(false)
+    expect(limiter.limitFor('kimi')).toBe(2)
+    expect(limiter.limitFor('claude')).toBeUndefined()
+  })
 })
 
 describe('LimitedModelProvider', () => {
@@ -201,6 +294,29 @@ describe('LimitedModelProvider', () => {
     }
     await Promise.all(runs)
     expect(gate.maxActive).toBe(2)
+  })
+
+  it('holds a permit across a stream, gating concurrent streamed calls', async () => {
+    const counter = { starts: 0 }
+    const provider = new LimitedModelProvider(
+      providerReturning(makeStreamModel(counter)),
+      new VendorConcurrencyLimiter({ kimi: 1 }),
+    )
+    const wrapped = provider.resolve(KIMI_SUBSCRIPTION_REF) as unknown as {
+      doStream: (o: unknown) => Promise<{ stream: ReadableStream }>
+    }
+
+    // First stream takes the only permit; the second's acquire blocks before doStream runs.
+    const first = await wrapped.doStream({ prompt: [] })
+    const secondPending = wrapped.doStream({ prompt: [] })
+    await tick()
+    expect(counter.starts).toBe(1) // second inner stream not started yet — permit held
+
+    // Draining the first stream releases the permit, letting the second start.
+    await drain(first.stream)
+    const second = await secondPending
+    expect(counter.starts).toBe(2)
+    await drain(second.stream)
   })
 })
 

@@ -1,9 +1,9 @@
 import { wrapLanguageModel } from 'ai'
-import type { LanguageModel } from 'ai'
+import type { LanguageModel, LanguageModelMiddleware } from 'ai'
 import type { SubscriptionVendor } from '@cat-factory/contracts'
 import type { ModelProvider, ModelRef } from '@cat-factory/kernel'
 import { ALL_SUBSCRIPTION_VENDORS, subscriptionVendorForRef } from '@cat-factory/kernel'
-import { Semaphore } from './semaphore.js'
+import { type PermitRelease, Semaphore } from './semaphore.js'
 
 // Bounds how many INLINE LLM calls to a subscription/shared-pool vendor run at once, so a
 // burst of inline generations (a consensus fan-out, the requirements recommendation writer,
@@ -31,19 +31,26 @@ const DEFAULT_SUBSCRIPTION_INLINE_CONCURRENCY = 3
 /** Env var for the default cap; `${VAR}_<VENDOR>` (e.g. `_CLAUDE`) overrides one vendor. */
 const SUBSCRIPTION_INLINE_CONCURRENCY_ENV = 'LLM_SUBSCRIPTION_MAX_CONCURRENCY'
 
+/**
+ * Parse an env value into a cap. A numeric value clamps to `>= 0`, so any non-positive number
+ * (`0`, `-1`, …) means "uncapped" — an operator who writes `-1` for "no limit" gets exactly
+ * that rather than a silent fallback to the default cap. A blank or non-numeric value returns
+ * `undefined` so the caller falls back to the layer below it (per-vendor → global → default).
+ */
 function parseLimit(raw: string | undefined): number | undefined {
   if (raw === undefined || raw.trim() === '') return undefined
   const n = Number(raw)
-  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : undefined
 }
 
 /**
  * Read the per-vendor caps from the environment (shared by every facade so the two runtimes
  * parse identically). `LLM_SUBSCRIPTION_MAX_CONCURRENCY` sets the default cap for all five
  * subscription vendors (falls back to {@link DEFAULT_SUBSCRIPTION_INLINE_CONCURRENCY}); a
- * `LLM_SUBSCRIPTION_MAX_CONCURRENCY_<VENDOR>` (e.g. `_KIMI`) overrides one vendor. Set the
- * default to `0` to disable inline concurrency limiting entirely (the limiter becomes a
- * pure pass-through).
+ * `LLM_SUBSCRIPTION_MAX_CONCURRENCY_<VENDOR>` (e.g. `_KIMI`) overrides that ONE vendor and always
+ * wins (specific beats general). Any value `<= 0` is uncapped, so setting the default to `0`
+ * uncaps every vendor that has no explicit per-vendor override; to disable limiting entirely,
+ * leave the per-vendor overrides unset (or `0`) as well.
  */
 function vendorConcurrencyLimitsFromEnv(
   get: (key: string) => string | undefined,
@@ -64,6 +71,9 @@ export function vendorConcurrencyLimiterFromEnv(
 ): VendorConcurrencyLimiter {
   return new VendorConcurrencyLimiter(vendorConcurrencyLimitsFromEnv(get))
 }
+
+/** A release that returns nothing to reclaim — the no-op for an uncapped vendor. */
+const NOOP_RELEASE: PermitRelease = () => {}
 
 /**
  * Holds one {@link Semaphore} per capped vendor. Build it ONCE per process (Node) / per
@@ -89,10 +99,23 @@ export class VendorConcurrencyLimiter {
     return this.semaphores.size === 0
   }
 
-  /** Run `fn` under the vendor's permit, or immediately if the vendor is uncapped. */
-  async run<T>(vendor: SubscriptionVendor, fn: () => PromiseLike<T>): Promise<T> {
+  /**
+   * Acquire a permit for `vendor`, resolving with its release; an uncapped vendor resolves with
+   * a no-op release immediately. Pass `signal` so a queued acquire for a cancelled call bails.
+   */
+  acquire(vendor: SubscriptionVendor, signal?: AbortSignal): Promise<PermitRelease> {
     const sem = this.semaphores.get(vendor)
-    return sem ? sem.run(fn) : fn()
+    return sem ? sem.acquire(signal) : Promise.resolve(NOOP_RELEASE)
+  }
+
+  /** Run `fn` under the vendor's permit, or immediately if the vendor is uncapped. */
+  async run<T>(
+    vendor: SubscriptionVendor,
+    fn: () => PromiseLike<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    const sem = this.semaphores.get(vendor)
+    return sem ? sem.run(fn, signal) : fn()
   }
 }
 
@@ -100,9 +123,11 @@ export class VendorConcurrencyLimiter {
  * A {@link ModelProvider} decorator that gates each resolved subscription-vendor model behind
  * the shared {@link VendorConcurrencyLimiter}. Mirrors {@link InstrumentedModelProvider}'s
  * shape (wrap the resolved model with an AI SDK middleware); apply it as the OUTERMOST wrap so
- * the queue wait is excluded from the instrumentation's generation timing. Only `generateText`
- * (buffered) inline callers exist today, so only `wrapGenerate` is gated — a streamed call
- * passes through, since holding a permit across a live stream would need different semantics.
+ * the queue wait is excluded from the instrumentation's generation timing. Both the buffered
+ * (`wrapGenerate`) and streaming (`wrapStream`) paths are gated: a permit is held for the whole
+ * generation, and for a stream it is held until the stream ends / errors / is cancelled — so a
+ * streamed call counts against the cap exactly like a buffered one. A queued call whose request
+ * is aborted releases its slot instead of head-of-line blocking behind it.
  */
 export class LimitedModelProvider implements ModelProvider {
   constructor(
@@ -120,12 +145,54 @@ export class LimitedModelProvider implements ModelProvider {
     }
     return wrapLanguageModel({
       model: model as Parameters<typeof wrapLanguageModel>[0]['model'],
-      middleware: {
-        specificationVersion: 'v3',
-        wrapGenerate: ({ doGenerate }) => this.limiter.run(vendor, doGenerate),
-      },
+      middleware: this.middlewareFor(vendor),
     })
   }
+
+  private middlewareFor(vendor: SubscriptionVendor): LanguageModelMiddleware {
+    return {
+      specificationVersion: 'v3',
+      wrapGenerate: ({ doGenerate, params }) =>
+        this.limiter.run(vendor, doGenerate, params.abortSignal),
+      wrapStream: async ({ doStream, params }) => {
+        // Hold the permit across the whole stream, not just the doStream() call: acquire before
+        // starting and release when the stream terminates (drained / errored / cancelled).
+        const release = await this.limiter.acquire(vendor, params.abortSignal)
+        try {
+          const result = await doStream()
+          return { ...result, stream: releaseWhenDone(result.stream, release) }
+        } catch (err) {
+          release()
+          throw err
+        }
+      },
+    }
+  }
+}
+
+/** Pipe `stream` through so `release` fires exactly once when it ends, errors, or is cancelled. */
+function releaseWhenDone<T>(stream: ReadableStream<T>, release: PermitRelease): ReadableStream<T> {
+  const reader = stream.getReader()
+  return new ReadableStream<T>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read()
+        if (done) {
+          release()
+          controller.close()
+          return
+        }
+        controller.enqueue(value)
+      } catch (err) {
+        release()
+        controller.error(err)
+      }
+    },
+    cancel(reason) {
+      release()
+      return reader.cancel(reason)
+    },
+  })
 }
 
 /** Wrap `inner` with a per-vendor concurrency cap. A pass-through limiter returns `inner`. */

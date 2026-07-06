@@ -108,8 +108,9 @@ export function createScopedModelProviderResolver(
  * OUTERMOST wrap in a facade — after `createScopedModelProviderResolver`'s instrumentation AND
  * after any facade-specific wrap (local's subscription-inline harness) — so the limiter sees the
  * un-degraded subscription ref and its queue wait is excluded from generation timing. A
- * pass-through limiter (nothing capped) returns the resolver unchanged. Keep the three facade
- * wiring points in step (see "Keep the runtimes symmetric").
+ * pass-through limiter (nothing capped) returns the resolver unchanged. There are two call sites
+ * — the Worker's `buildModelProviderResolver` and Node's `buildNodeContainer` (local inherits
+ * Node's via `buildLocalContainer`); keep them in step (see "Keep the runtimes symmetric").
  */
 export function wrapResolverWithLimiter(
   resolver: ModelProviderResolver,

@@ -52,9 +52,12 @@ subscription/shared-pool vendor (`claude` / `codex` / `glm` / `kimi` / `deepseek
 once. It is a `LimitedModelProvider` decorator (sibling to `InstrumentedModelProvider`),
 applied as the OUTERMOST resolver wrap in each facade via `wrapResolverWithLimiter`, keyed
 by `subscriptionVendorForRef(ref)`. Everything else (your own OpenAI/Anthropic API keys,
-Cloudflare, local runners) passes through uncapped. Configured by
-`LLM_SUBSCRIPTION_MAX_CONCURRENCY` (default 3 per vendor; `_<VENDOR>` overrides one; `0`
-disables).
+Cloudflare, local runners) passes through uncapped. Both the buffered and streaming inline
+paths are gated (a stream holds its permit until it ends), and a queued call whose request is
+aborted releases its slot rather than head-of-line blocking. Configured by
+`LLM_SUBSCRIPTION_MAX_CONCURRENCY` (default 3 per vendor; `_<VENDOR>` overrides that one vendor
+and always wins). Any value `<= 0` is uncapped, so a default of `0` uncaps every vendor without
+an explicit per-vendor override; leave the overrides unset too to turn the feature off entirely.
 
 This is **in-process only** — one limiter per Node process (per container/tenant) or per
 Worker isolate — which is exactly the scope of a single inline fan-out. It is NOT global
