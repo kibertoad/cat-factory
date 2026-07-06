@@ -144,9 +144,10 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
     // Mergeability is probed PER PR across the task's own + peer repos. Any PR still
-    // computing → keep polling; the FIRST conflicted PR (own-service or a peer) is the
-    // single-repo conflict-resolver's target — a git conflict is per-repo textual, so the
-    // resolver stays single-repo (unlike the ci-fixer).
+    // computing → keep polling; the FIRST conflicted PR (own-service or a peer) becomes the
+    // conflict-resolver's target — a git conflict is per-repo textual, so the resolver stays
+    // single-repo (unlike the ci-fixer), but it is now pointed AT the conflicted repo (own or
+    // peer) via `conflictTarget`, so a peer conflict escalates like an own-repo one.
     const report = await ctx
       .requireProvider(MERGEABILITY_PROVIDER)
       .getMergeability(workspaceId, blockId)
@@ -175,19 +176,14 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
           : 'Conflict gate passed: the PR merges cleanly with its base.',
       }
     }
-    // The single-repo conflict-resolver can only touch the OWN repo, so a conflict on a PEER
-    // repo (own-first, so any non-first entry — carrying a `frameId`) is NOT auto-fixable here:
-    // decline escalation so the engine goes straight to the manual-resolution give-up instead
-    // of burning the whole attempt budget on an own-repo resolver that can't reach it. (Peer-repo
-    // resolver dispatch is a tracked follow-up; see the service-connections Phase 4 tracker.)
-    const isPeerConflict = conflicted.frameId !== undefined
+    // Escalate to the single-repo conflict-resolver, pointed at the conflicted repo. On a
+    // MULTI-repo block we tag which repo conflicted (own-service or a peer, carrying its
+    // `frameId`) so the engine dispatches the resolver AT that repo; a single-repo block has
+    // only the own repo, which the port documents as the implicit (absent) target.
     return {
       status: 'fail',
       ...heads,
       headSha: conflicted.headSha,
-      ...(isPeerConflict ? { escalatable: false } : {}),
-      // Only tag the conflicted repo on a MULTI-repo block — a single-repo block has just the
-      // own repo, which the port documents as the implicit (absent) target.
       ...(multi
         ? {
             conflictTarget: {
@@ -201,19 +197,10 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   },
   onExhausted: async ({ step }) => {
     const target = step.gate?.conflictTarget
-    // A peer-repo conflict was never escalated (the own-repo resolver can't fix it), so phrase
-    // the give-up around manual resolution rather than "after N attempts".
-    if (target && (step.gate?.attempts ?? 0) === 0) {
-      return {
-        error:
-          `The pull request for ${target.repo} conflicts with its base and can't be ` +
-          `auto-resolved (peer-repo conflict resolution isn't wired yet). Resolve the ` +
-          `conflict manually, then retry the run.`,
-      }
-    }
+    const which = target?.repo ? `The pull request for ${target.repo}` : 'The pull request'
     return {
       error:
-        `The pull request still conflicts with its base after ` +
+        `${which} still conflicts with its base after ` +
         `${step.gate?.attempts ?? 0} conflict-resolver attempt(s). Resolve the conflict ` +
         `manually, then retry the run.`,
     }

@@ -32,6 +32,7 @@ import {
   initiativePlannerUserPrompt,
   MERGE_ASSESSMENT_SHAPE_HINT,
   MERGER_SYSTEM_PROMPT,
+  mergerMultiRepoUserPrompt,
   mergerUserPrompt,
   ON_CALL_ASSESSMENT_SHAPE_HINT,
   ON_CALL_SYSTEM_PROMPT,
@@ -65,13 +66,14 @@ export interface KindBodyParts {
   workBranch: string
   workBranchReady: boolean
   /**
-   * Peer repos to clone as siblings and open a PR in during a MULTI-REPO run
-   * (service-connections phase 3) — each an origin-resolved harness `RepoSpec` plus the
-   * involved service frame it belongs to. The coding body adds the shared work branch + the
-   * same PR shape as the primary. Present only for the implementer on a task whose involved
-   * connected services resolve to DISTINCT repos; the harness ignores it for other kinds.
+   * Peer repos to clone as siblings during a MULTI-REPO run (service-connections phase 3–4) —
+   * each an origin-resolved harness `RepoSpec` plus the involved service frame it belongs to. The
+   * coding body adds the shared work branch + the same PR shape as the primary (coder/ci-fixer);
+   * the read-only explore body (bug-investigator, merger) forwards them for sibling cloning. A
+   * `cloneBranch` (merger) pins which branch a read-only peer is checked out at — its PR branch,
+   * so the combined diff sees the PR change — else the peer is cloned at its default branch.
    */
-  peerRepos?: { repo: Record<string, unknown>; frameId?: string }[]
+  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
   /**
    * The backend-rendered "Multi-repo workspace" system-prompt section (which repo is primary,
    * where each involved service lives, how the checkouts are laid out). Appended to the coding
@@ -338,7 +340,13 @@ export function buildRegisteredAgentBody(
   // `runMultiRepoExplore` just clones them (`{ repo, frameId }`) and runs the agent at the
   // workspace root. The layout section names each repo/subdir + role.
   const explorePeers = parts.peerRepos?.length
-    ? parts.peerRepos.map((p) => ({ repo: p.repo, ...(p.frameId ? { frameId: p.frameId } : {}) }))
+    ? parts.peerRepos.map((p) => ({
+        repo: p.repo,
+        ...(p.frameId ? { frameId: p.frameId } : {}),
+        // The merger pins each read-only peer to its PR branch so the combined diff sees the PR
+        // change; the bug-investigator omits it (cloned at the repo's default branch).
+        ...(p.cloneBranch ? { cloneBranch: p.cloneBranch } : {}),
+      }))
     : undefined
   return {
     kind: 'agent',
@@ -476,6 +484,39 @@ export function renderMultiRepoWorkspaceSection(
   for (const checkout of checkouts) {
     if (checkout.primary) continue
     lines.push(describe(checkout))
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Render the "Multi-repo pull request" system-prompt section for a `merger` scoring a multi-repo
+ * task (service-connections phase 4): the task opened one PR per changed repo, and the merger
+ * assesses the COMBINED change. Each repo is a READ-ONLY sibling checkout (own-service first, then
+ * peers) already on its PR branch, so the section names each repo's sibling directory (matching the
+ * harness's `siblingDir`) and the exact per-repo diff command, and instructs the agent to weigh the
+ * whole cross-repo change as ONE assessment. Distinct from {@link renderMultiRepoWorkspaceSection}
+ * (which is for a coding fan-out — "commit inside each, one PR per repo"); the merger writes nothing.
+ */
+export function renderMergerMultiRepoSection(
+  repos: { owner: string; name: string; baseBranch: string }[],
+): string {
+  const lines = [
+    '## Multi-repo pull request',
+    '',
+    'This pull request spans MORE THAN ONE repository (one PR per changed repo). Each repository',
+    'below is checked out as a SIBLING directory under your working directory (the workspace root,',
+    'which is NOT a git repository), already on its pull-request branch (HEAD). Assess the COMBINED',
+    "change: inspect EACH repository's diff against its base, weigh the whole cross-repo change",
+    'together, and return ONE assessment covering all of them — NOT one assessment per repo.',
+    '',
+    'Repositories (run each diff inside that repository’s own directory):',
+  ]
+  for (const r of repos) {
+    const dir = siblingCheckoutDir(r.owner, r.name)
+    lines.push(
+      `- \`${r.owner}/${r.name}\` → \`${dir}/\` (base \`${r.baseBranch}\`): ` +
+        `\`cd ${dir} && git fetch origin ${r.baseBranch} && git diff origin/${r.baseBranch}...HEAD\``,
+    )
   }
   return lines.join('\n')
 }
@@ -678,7 +719,13 @@ export function buildMigratedBuiltInBody(
     // is ready" answer and never touched the markers). The backend supplies only a compact
     // task reference for intent.
     case CONFLICT_RESOLVER_AGENT_KIND: {
-      if (!prBranch) {
+      // The branch to resolve on is the shared per-task work branch every repo's PR rides
+      // (`cat-factory/<blockId>`, opened via `newBranch: workBranch` for the own service AND
+      // every peer). The own PR's recorded branch equals it by construction; `parts.workBranch`
+      // is the robust value when the OWN service had no change (no own `pullRequest`) but a
+      // PEER repo did (the peer-conflict case — `parts.repo` was swapped to that peer upstream).
+      const resolveBranch = prBranch ?? parts.workBranch
+      if (!resolveBranch) {
         throw new Error(
           'Conflict-resolver needs the implementation PR branch to resolve conflicts on',
         )
@@ -692,11 +739,26 @@ export function buildMigratedBuiltInBody(
         registry,
         `Task: ${context.block.title}${description ? `\n\n${description}` : ''}`,
       )
-      return { kind: built.kind, body: { ...built.body, mergeBase: repo.baseBranch } }
+      // Pin the clone/push branch to the resolved work branch (the generic `pr`-clone path falls
+      // back to the base branch when there is no own PR, which would clone the wrong ref for a
+      // peer-only conflict) and merge THIS repo's base in to surface the conflicts.
+      return {
+        kind: built.kind,
+        body: {
+          ...built.body,
+          branch: resolveBranch,
+          pushBranch: resolveBranch,
+          mergeBase: repo.baseBranch,
+        },
+      }
     }
     // The merger clones the PR head (full, to diff vs base) and returns ONLY the
-    // complexity/risk/impact assessment JSON; the engine performs the real merge.
-    case MERGER_AGENT_KIND:
+    // complexity/risk/impact assessment JSON; the engine performs the real merge. On a MULTI-REPO
+    // task (`parts.peerRepos` set) it clones each peer PR's repo as a read-only full sibling too
+    // (the explore fan-out) and scores the COMBINED diff — the section naming the sibling
+    // checkouts + per-repo diff commands is appended to the system prompt by the explore builder.
+    case MERGER_AGENT_KIND: {
+      const multiRepo = (parts.peerRepos?.length ?? 0) > 0
       return buildRegisteredAgentBody(
         context,
         parts,
@@ -707,8 +769,9 @@ export function buildMigratedBuiltInBody(
         },
         MERGER_SYSTEM_PROMPT,
         registry,
-        mergerUserPrompt(context, repo),
+        multiRepo ? mergerMultiRepoUserPrompt(context) : mergerUserPrompt(context, repo),
       )
+    }
     // The on-call agent clones the BASE branch (full, to locate + diff the merged
     // release commit) and returns ONLY the regression assessment JSON. It is
     // `code-aware` (it reads the released code to correlate the diff with the

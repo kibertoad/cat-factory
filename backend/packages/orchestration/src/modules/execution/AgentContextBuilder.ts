@@ -293,6 +293,9 @@ export class AgentContextBuilder {
         ...(block.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
         ...(agentConfig ? { agentConfig } : {}),
         ...(block.pullRequest ? { pullRequest: block.pullRequest } : {}),
+        // Peer PRs from a multi-repo run (own-service PR stays on `pullRequest`) — the merger
+        // reads these to clone each peer's PR branch and score the combined cross-repo diff.
+        ...(block.peerPullRequests?.length ? { peerPullRequests: block.peerPullRequests } : {}),
         ...(contextDocs.length ? { contextDocs } : {}),
         ...(contextTasks.length ? { contextTasks } : {}),
         // The task-estimator's triage, when produced earlier in this run — the

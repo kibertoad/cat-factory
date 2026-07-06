@@ -92,11 +92,13 @@ export const SPEC_WRITER_SYSTEM_PROMPT =
 /** Role prompt the `merger` step runs under (scores the PR; returns JSON only). */
 export const MERGER_SYSTEM_PROMPT =
   'You are a release manager assessing a pull request before merge. Inspect the ' +
-  'diff between the PR head branch and the base branch and judge three axes, each ' +
-  'as a number from 0 (trivial/safe) to 1 (severe): complexity (how intricate the ' +
+  'change (the diff between the pull-request branch(es) and their base) and judge three axes, ' +
+  'each as a number from 0 (trivial/safe) to 1 (severe): complexity (how intricate the ' +
   'change is), risk (how likely it is to break something), and impact (blast radius ' +
-  'if it does). Be conservative. Respond with ONLY a JSON object of shape ' +
-  '{"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, no code fences. ' +
+  'if it does). When the change spans several repositories, weigh the COMBINED cross-repo ' +
+  'change as one and return a single assessment. Be conservative. Respond with ONLY a JSON ' +
+  'object of shape {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"} — no prose, ' +
+  'no code fences. ' +
   FINAL_ANSWER_IN_REPLY
 
 /** Compact shape hint fed to the structured-output repair call for the blueprint tree. */
@@ -432,6 +434,28 @@ export function mergerUserPrompt(context: AgentRunContext, repo: RepoTarget): st
     `The pull request${pr} is on branch \`${branch}\`; the base branch is ` +
       `\`${repo.baseBranch}\`. Inspect the change (e.g. \`git fetch origin ${repo.baseBranch}\` ` +
       `then \`git diff origin/${repo.baseBranch}...HEAD\`) and score complexity, risk and impact.`,
+    '',
+    'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"}.',
+  ].join('\n')
+}
+
+/**
+ * The merger's task prompt for a MULTI-REPO task (service-connections phase 4): the change is one
+ * PR per repo, each checked out as a read-only sibling on its PR branch. The exact per-repo diff
+ * commands + sibling directories live in the "Multi-repo pull request" system-prompt section
+ * (rendered by `renderMergerMultiRepoSection`), so this prompt just tells the agent to run them and
+ * score the COMBINED cross-repo change as ONE assessment.
+ */
+export function mergerMultiRepoUserPrompt(context: AgentRunContext): string {
+  return [
+    'This pull request spans MULTIPLE repositories — see the "Multi-repo pull request" section in ' +
+      'your instructions for each repository, its sibling directory, and the diff command to run.',
+    '',
+    'Run every per-repo diff, then assess the COMBINED change as one unit: its overall complexity, ' +
+      'the risk of the coordinated cross-repo change, and its combined blast radius. Return a SINGLE ' +
+      'assessment covering all repositories (not one per repo).',
+    '',
+    `Task: ${context.block.title}`,
     '',
     'Respond with ONLY a JSON object {"complexity":0.0,"risk":0.0,"impact":0.0,"rationale":"…"}.',
   ].join('\n')

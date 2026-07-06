@@ -130,11 +130,11 @@ describe('conflicts gate', () => {
     expect(failed.escalatable).toBeUndefined()
   })
 
-  it('escalates an OWN-repo conflict but declines a PEER-repo conflict (single-repo resolver only)', async () => {
+  it('escalates a PEER-repo conflict, tagging the peer as the conflict-resolver target', async () => {
     // Multi-repo: own PR is mergeable, the peer PR conflicts. The single-repo conflict-resolver
-    // can only touch the own repo, so a peer conflict must NOT escalate (it would burn the whole
-    // attempt budget on a container that can't reach the conflicted repo); the gate records the
-    // peer as the conflict target and declines escalation.
+    // is now dispatched AT the conflicted peer repo (the executor swaps its repo target from
+    // `conflictTarget`), so the peer conflict escalates like an own-repo one — the gate records
+    // the peer as the conflict target and does NOT decline escalation.
     wireMergeabilityProvider({
       getMergeability: async () => ({
         repos: [
@@ -146,7 +146,8 @@ describe('conflicts gate', () => {
     const gate = conflictsGate(stubGateContext())
     const probe = await gate.probe('ws', 'b', {} as PipelineStep['gate'] & {})
     expect(probe.status).toBe('fail')
-    expect(probe.escalatable).toBe(false)
+    // No longer declined: a peer conflict escalates to the resolver targeting that peer.
+    expect(probe.escalatable).toBeUndefined()
     expect(probe.conflictTarget).toEqual({ repo: 'o/peer', frameId: 'frm_peer' })
     expect(probe.headSha).toBe('peersha')
     expect(probe.headShas).toEqual({ 'o/own': 'ownsha', 'o/peer': 'peersha' })

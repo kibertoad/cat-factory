@@ -40,10 +40,16 @@ import { ModelRouter } from './ModelRouter.js'
 import { toRunResult } from './containerAgentResult.js'
 import {
   buildKindBody,
+  renderMergerMultiRepoSection,
   renderMultiRepoWorkspaceSection,
   renderReferenceReposSection,
 } from './jobBody.js'
-import { UI_TESTER_AGENT_KIND, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
+import {
+  CONFLICT_RESOLVER_AGENT_KIND,
+  MERGER_AGENT_KIND,
+  UI_TESTER_AGENT_KIND,
+  type HarnessCallsRecordInput,
+} from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import type { RepoCheckout, ResolveRepoTargets } from './resolveRepoTarget.js'
@@ -1046,9 +1052,15 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // the own-service PR and is named in the section so the agent edits its subtree. Any involved
     // service present ⇒ the agent works at the repo ROOT (not just its own service subdir) so it
     // can reach every involved subtree; `commonForKind` swaps `repo`.
-    let peerRepos: { repo: Record<string, unknown>; frameId?: string }[] | undefined
+    let peerRepos:
+      | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+      | undefined
     let multiRepoSection: string | undefined
     let commonForKind = common
+    // The repo target the per-kind body builds against — the task's own service by default, but
+    // swapped to a PEER repo when the conflicts gate targets the conflict-resolver at a connected
+    // service (see the conflict-resolver block below).
+    let repoForKind = repo
     const involvedServices = context.involvedServices ?? []
     const fansOutMultiRepo =
       MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
@@ -1086,6 +1098,95 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
             ...common,
             repo: buildRepoSpec(rootTarget, origin(rootTarget)),
           }
+        }
+      }
+    }
+
+    // Conflict-resolver PEER targeting (service-connections phase 4 follow-up): when the
+    // conflicts gate detected the conflict on a connected involved service's repo, it hands the
+    // resolver `context.conflictTarget`. Point the (single-repo) resolver at that PEER repo —
+    // resolve its target and swap `repo`/`common.repo` — instead of the task's own service. The
+    // resolver clones the peer's PR (work) branch and merges the peer's base in (jobBody pins the
+    // branch to the shared work branch and reads `mergeBase` off this swapped target). An own-repo
+    // conflict carries no `frameId`, so this is a no-op and the resolver targets the own service.
+    const conflictFrameId =
+      context.agentKind === CONFLICT_RESOLVER_AGENT_KIND
+        ? context.conflictTarget?.frameId
+        : undefined
+    if (conflictFrameId && this.deps.resolveRepoTargets) {
+      const { checkouts } = await this.deps.resolveRepoTargets(
+        workspaceId,
+        blockId,
+        [conflictFrameId],
+        repo,
+      )
+      const peer = checkouts.find(
+        (c) => !c.primary && c.involved.some((i) => i.frameId === conflictFrameId),
+      )
+      if (peer) {
+        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
+        repoForKind = peer.target
+        commonForKind = { ...common, repo: buildRepoSpec(peer.target, origin(peer.target)) }
+      }
+    }
+
+    // Merger combined-diff (service-connections phase 4 follow-up): a multi-repo task opened one PR
+    // per changed repo. The merger scores the COMBINED change by cloning EVERY PR's repo as a
+    // read-only sibling at its PR branch (the read-only explore fan-out) and diffing each vs its
+    // base. Driven by the PRs that actually exist (`block.peerPullRequests`), not the involved-
+    // services set — a peer with no change opened no PR, so there is nothing to score there. The
+    // own-service PR rides the primary checkout (the merger clones `pr` full); the peers are added
+    // here with their own PR branch to check out, plus a section naming the sibling diff commands.
+    const peerPrs = context.block.peerPullRequests ?? []
+    if (
+      context.agentKind === MERGER_AGENT_KIND &&
+      peerPrs.length > 0 &&
+      this.deps.resolveRepoTargets
+    ) {
+      const frameIds = peerPrs.map((p) => p.frameId).filter((f): f is string => !!f)
+      if (frameIds.length > 0) {
+        const { checkouts } = await this.deps.resolveRepoTargets(
+          workspaceId,
+          blockId,
+          frameIds,
+          repo,
+        )
+        const origin = this.deps.resolveRepoOrigin ?? githubRepoOrigin
+        const legs: {
+          spec: Record<string, unknown>
+          frameId: string
+          cloneBranch: string
+          target: RepoTarget
+        }[] = []
+        for (const pr of peerPrs) {
+          if (!pr.frameId) continue
+          const checkout = checkouts.find(
+            (c) => !c.primary && c.involved.some((i) => i.frameId === pr.frameId),
+          )
+          if (!checkout) continue
+          legs.push({
+            spec: buildRepoSpec(checkout.target, origin(checkout.target)),
+            frameId: pr.frameId,
+            cloneBranch: pr.ref.branch ?? workBranch,
+            target: checkout.target,
+          })
+        }
+        if (legs.length > 0) {
+          peerRepos = legs.map((l) => ({
+            repo: l.spec,
+            frameId: l.frameId,
+            cloneBranch: l.cloneBranch,
+          }))
+          // The own service rides the primary checkout at its PR head (clone `pr`, or base when the
+          // own service had no change); list it first so the section names its diff command too.
+          multiRepoSection = renderMergerMultiRepoSection([
+            { owner: repo.owner, name: repo.name, baseBranch: repo.baseBranch },
+            ...legs.map((l) => ({
+              owner: l.target.owner,
+              name: l.target.name,
+              baseBranch: l.target.baseBranch,
+            })),
+          ])
         }
       }
     }
@@ -1134,7 +1235,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       {
         common: commonForKind,
         webTools,
-        repo,
+        repo: repoForKind,
         workBranch,
         workBranchReady,
         ...(peerRepos ? { peerRepos } : {}),

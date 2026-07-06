@@ -35,7 +35,10 @@ interface Captured {
   kind: RunnerDispatchKind | undefined
 }
 
-function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[] } {
+function makeExecutor(depsOverride: Partial<ContainerAgentExecutorDependencies> = {}): {
+  executor: ContainerAgentExecutor
+  captured: Captured[]
+} {
   const captured: Captured[] = []
   const transport: RunnerTransport = {
     async dispatch(ref, spec, kind) {
@@ -69,6 +72,7 @@ function makeExecutor(): { executor: ContainerAgentExecutor; captured: Captured[
     // Read-only agents only probe the work branch; return true so the read-only body
     // resolves to the shared work branch (the more interesting path).
     ensureWorkBranch: async () => true,
+    ...depsOverride,
   }
   return { executor: new ContainerAgentExecutor(deps), captured }
 }
@@ -77,6 +81,7 @@ function context(
   agentKind: string,
   overrides: Partial<AgentRunContext['block']> = {},
   service?: AgentRunContext['service'],
+  extra: Partial<AgentRunContext> = {},
 ): AgentRunContext {
   return {
     agentKind: agentKind as AgentRunContext['agentKind'],
@@ -96,6 +101,7 @@ function context(
     resolvedDecision: null,
     priorOutputs: [],
     decisions: [],
+    ...extra,
   }
 }
 
@@ -268,6 +274,112 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
   it('omits packageRegistries when no resolver is wired', async () => {
     await executor.startJob(context('coder'))
     expect(captured[0]!.spec.packageRegistries).toBeUndefined()
+  })
+})
+
+describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
+  // Service-connections phase 4 follow-ups: the conflict-resolver is dispatched AT a conflicted
+  // PEER repo, and the merger scores the COMBINED diff across every PR's repo. Both need the plural
+  // repo resolver wired so the executor can resolve a connected service's repo target.
+  const OWN_TARGET = { installationId: 7, owner: 'acme', name: 'widgets', baseBranch: 'main' }
+  const PEER_TARGET = { installationId: 7, owner: 'acme', name: 'billing', baseBranch: 'develop' }
+
+  // A plural resolver that returns the own service (primary) plus one peer resolved from
+  // `frm_peer`. It only returns the peer when that frame is among the requested involved ids,
+  // mirroring the real resolver (which resolves exactly the frames it is asked about).
+  const resolveRepoTargets = async (
+    _ws: string,
+    _blk: string,
+    frameIds: string[],
+    primary: typeof OWN_TARGET = OWN_TARGET,
+  ) => ({
+    checkouts: [
+      { target: primary, primary: true, involved: [] },
+      ...(frameIds.includes('frm_peer')
+        ? [{ target: PEER_TARGET, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+        : []),
+    ],
+  })
+
+  it('conflict-resolver targets the conflicted PEER repo when the gate hands a conflictTarget', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      }),
+    )
+    const spec = captured[0]!.spec
+    // The harness clones the PEER repo (not the own `widgets`)…
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'billing' })
+    // …merges the PEER's base in to surface its conflicts…
+    expect(spec.mergeBase).toBe('develop')
+    // …and resolves on the shared per-task work branch every repo's PR rides.
+    expect(spec.branch).toBe('cat-factory/blk_1')
+    expect(spec.pushBranch).toBe('cat-factory/blk_1')
+  })
+
+  it('conflict-resolver stays on the OWN repo when the conflictTarget has no frameId', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        // An own-repo conflict carries no frameId (single-repo, implicit own target).
+        conflictTarget: { repo: 'acme/widgets' } as never,
+      }),
+    )
+    const spec = captured[0]!.spec
+    expect(spec.repo).toMatchObject({ owner: 'acme', name: 'widgets' })
+    expect(spec.mergeBase).toBe('main')
+  })
+
+  const PEER_PR = {
+    repo: 'acme/billing',
+    frameId: 'frm_peer',
+    ref: { url: 'https://github.com/acme/billing/pull/3', number: 3, branch: 'cat-factory/blk_1' },
+  }
+
+  it('merger scores the COMBINED diff: peers cloned read-only (full) at their PR branch + a multi-repo section', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(context('merger', { pullRequest: PR, peerPullRequests: [PEER_PR] }))
+    const spec = captured[0]!.spec
+    // Read-only explore, full clone (so `git diff origin/<base>...HEAD` has the merge base).
+    expect(spec.mode).toBe('explore')
+    expect(spec.full).toBe(true)
+    // The peer PR's repo is a read-only sibling checked out at ITS PR branch (no newBranch/pr).
+    expect(spec.peerRepos).toEqual([
+      {
+        repo: {
+          owner: 'acme',
+          name: 'billing',
+          baseBranch: 'develop',
+          cloneUrl: 'https://github.com/acme/billing.git',
+          provider: 'github',
+        },
+        frameId: 'frm_peer',
+        cloneBranch: 'cat-factory/blk_1',
+      },
+    ])
+    expect(spec.peerRepos).not.toMatchObject([{ newBranch: expect.anything() }])
+    expect(spec.peerRepos).not.toMatchObject([{ pr: expect.anything() }])
+    // The system prompt names both sibling checkouts + their per-repo diff commands…
+    const systemPrompt = spec.systemPrompt as string
+    expect(systemPrompt).toContain('## Multi-repo pull request')
+    expect(systemPrompt).toContain('acme__widgets/')
+    expect(systemPrompt).toContain('acme__billing/')
+    expect(systemPrompt).toContain('git diff origin/develop...HEAD')
+    // …and the user prompt is the combined-diff variant (ONE assessment across repos).
+    const userPrompt = spec.userPrompt as string
+    expect(userPrompt).toContain('spans MULTIPLE repositories')
+    expect(userPrompt).toContain('SINGLE')
+  })
+
+  it('merger stays single-repo when the task opened no peer PRs', async () => {
+    const { executor, captured } = makeExecutor({ resolveRepoTargets })
+    await executor.startJob(context('merger', { pullRequest: PR }))
+    const spec = captured[0]!.spec
+    expect(spec.peerRepos).toBeUndefined()
+    expect(spec.systemPrompt).not.toContain('## Multi-repo pull request')
+    // The single-repo prompt still names the own diff.
+    expect(spec.userPrompt as string).toContain('git diff origin/main...HEAD')
   })
 })
 
