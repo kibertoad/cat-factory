@@ -51,6 +51,36 @@ The D1 schema migrations ship **with the library**; `migrations_dir` points at
 the pnpm symlink, copy them locally and repoint `migrations_dir` (see the comment
 in `wrangler.toml`).
 
+## Choosing the default model preset
+
+Every workspace's model-preset library is seeded on first use with three built-ins
+(Kimi K2.7, GLM-5.2, Claude Opus 4.8); the Worker marks **Kimi K2.7** the default (it runs
+on the bare Cloudflare AI binding). The library API already accepts an override — the app
+builder reads `defaultModelPresetId` off `createApp`'s `overrides`
+(a `Partial<CoreDependencies>`):
+
+```ts
+import { createApp } from '@cat-factory/worker/app'
+import { MODEL_PRESET_SEED_IDS } from '@cat-factory/worker'
+
+const app = createApp({ overrides: { defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude } })
+```
+
+The catch is that this deployment's `src/index.ts` **re-exports the library's ready-made
+`default` handler**, which is more than `fetch`: it also carries the `scheduled` cron
+sweeper (durable-run re-drive, GitHub reconcile, retention, Kaizen) and the `queue`
+consumer. So overriding the default here is not a one-line option — you have to author your
+own entry that calls `createApp({ overrides })` for `fetch` **and** reproduces the
+`scheduled` + `queue` handlers, or those background jobs silently stop. Use the library's
+own [`backend/runtimes/cloudflare/src/index.ts`](../../backend/runtimes/cloudflare/src/index.ts)
+as the template (it builds the app exactly this way and defines the full handler) and add
+`defaultModelPresetId` to the `overrides` it already passes.
+
+`MODEL_PRESET_SEED_IDS` (`.kimi` / `.glm` / `.claude`) is re-exported from the library, so
+you don't need a direct `@cat-factory/kernel` import. The override applies only at the
+**first** seed of a workspace, so a user's later manual default choice is always preserved.
+Most deployments keep the stock one-line re-export and leave the default at Kimi.
+
 ## Run & deploy
 
 ```sh

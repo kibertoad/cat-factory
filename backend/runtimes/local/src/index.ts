@@ -58,3 +58,7 @@ export {
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
+// The built-in model-preset ids + the catalog fallback default, re-exported so a local deploy-app
+// wrapper can name a preset when passing `startLocal({ defaultModelPresetId })` without a direct
+// `@cat-factory/kernel` import (parity with the Node facade).
+export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'

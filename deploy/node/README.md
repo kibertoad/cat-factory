@@ -53,6 +53,30 @@ spend budget, execution tuning) are documented inline in `.env.example`. As with
 Worker, the auth gate **fails closed**: set the OAuth/session secrets for real auth, or
 `AUTH_DEV_OPEN=true` (non-production only) to run open while developing.
 
+## Choosing the default model preset
+
+Every workspace's model-preset library is seeded on first use with three built-ins
+(Kimi K2.7, GLM-5.2, Claude Opus 4.8); the Node facade marks **Kimi K2.7** as the
+default because it runs on the bare Cloudflare AI baseline. To ship a different
+out-of-the-box default, pass `defaultModelPresetId` to `start()` — the entry (`src/main.ts`)
+is yours to edit:
+
+```ts
+import { start, MODEL_PRESET_SEED_IDS } from '@cat-factory/node-server'
+
+start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude }).catch((err: unknown) => {
+  console.error('failed to start cat-factory node server:', err)
+  process.exit(1)
+})
+```
+
+`MODEL_PRESET_SEED_IDS` is re-exported from the library (`.kimi` / `.glm` / `.claude`), so
+you don't need a direct `@cat-factory/kernel` import. This is a **deployment-level fact**
+resolved at composition time, not an env var — the same programmatic seam as the
+`agentKindRegistry` option. It applies only at the **first** seed of a workspace, so a
+user's later manual default choice is always preserved; changing it does not retroactively
+re-flag existing workspaces (they can reseed from the UI).
+
 ## Run
 
 ```sh
