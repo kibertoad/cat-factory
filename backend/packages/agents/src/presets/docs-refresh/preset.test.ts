@@ -210,10 +210,24 @@ describe('preset_docs_refresh — seedPlan (spawn decoration)', () => {
     const draft = draftFixture()
     // Two diagram items whose titles slug identically must not both stamp the same `.md` path.
     draft.items.push(
-      { id: 'd2', phaseId: 'diagrams', title: 'Billing architecture', description: '', dependsOn: [] },
-      { id: 'd3', phaseId: 'diagrams', title: 'Billing Architecture!', description: '', dependsOn: [] },
+      {
+        id: 'd2',
+        phaseId: 'diagrams',
+        title: 'Billing architecture',
+        description: '',
+        dependsOn: [],
+      },
+      {
+        id: 'd3',
+        phaseId: 'diagrams',
+        title: 'Billing Architecture!',
+        description: '',
+        dependsOn: [],
+      },
     )
-    const items = new Map(parseInitiativePlanDraft(preset.seedPlan!(draft, FULL_INPUTS)).items.map((i) => [i.id, i]))
+    const items = new Map(
+      parseInitiativePlanDraft(preset.seedPlan!(draft, FULL_INPUTS)).items.map((i) => [i.id, i]),
+    )
     const paths = ['d1', 'd2', 'd3'].map((id) => items.get(id)?.spawn?.taskTypeFields?.targetPath)
     expect(new Set(paths).size).toBe(3)
     expect(paths[0]).toBe('docs/diagrams/billing-architecture.md')

@@ -99,6 +99,8 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         ENVIRONMENT: 'test',
         ENCRYPTION_KEY,
         AUTH_SESSION_SECRET: SESSION_SECRET,
+        // Local mode requires HARNESS_SHARED_SECRET (the container inbound-auth secret).
+        HARNESS_SHARED_SECRET: 'mothership-test-harness-shared-secret',
         LOCAL_MOTHERSHIP_URL: mothershipUrl,
         // Omitted (undefined) for the connect-flow test: the node boots inert and acquires its
         // token via `/local/mothership/connect` instead of a static env token.
