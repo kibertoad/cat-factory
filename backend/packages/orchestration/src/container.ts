@@ -1484,9 +1484,7 @@ function createEnvironmentsModule(
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
       : {}),
-    ...(deps.detectionConventions
-      ? { detectionConventions: deps.detectionConventions }
-      : {}),
+    ...(deps.detectionConventions ? { detectionConventions: deps.detectionConventions } : {}),
     ...(canRepair
       ? {
           dispatchConfigRepair: (input) =>
@@ -2124,9 +2122,7 @@ function createSharedStacksModule(
       : {}),
     // Same deployment-level detection-convention extensions the environment detector honours, so
     // shared-stack `detect` recognises the org's house compose layout too.
-    ...(deps.detectionConventions
-      ? { detectionConventions: deps.detectionConventions }
-      : {}),
+    ...(deps.detectionConventions ? { detectionConventions: deps.detectionConventions } : {}),
     // Re-run a stack's declared machine-prerequisite checks at bring-up start. Present only where
     // the host-probe seam is wired (the local facade — same runtime binding as `composeRuntime`).
     ...(preflightService ? { runPreflights: (refs) => preflightService.run(refs) } : {}),

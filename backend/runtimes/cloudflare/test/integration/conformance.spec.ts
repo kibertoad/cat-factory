@@ -79,9 +79,7 @@ const harness: ConformanceHarness = {
         // Inject the deployment-level detection-convention extensions (a fake in the suite) so
         // convention-honouring service-provisioning detection is asserted against real D1,
         // identically to Node — catching a facade that forgot the config→deps threading.
-        ...(opts?.detectionConventions
-          ? { detectionConventions: opts.detectionConventions }
-          : {}),
+        ...(opts?.detectionConventions ? { detectionConventions: opts.detectionConventions } : {}),
         // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
         // full QC loop is driven against real D1 without a model, identically to Node.
         ...(opts?.testerQualityReviewer

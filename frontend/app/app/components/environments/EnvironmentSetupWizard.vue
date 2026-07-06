@@ -261,7 +261,9 @@ function next() {
                 data-testid="env-setup-cli-nudge"
               >
                 <UIcon name="i-lucide-lightbulb" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>{{ t('environmentWizard.analysis.cliNudge', { path: repoCliHint.path }) }}</span>
+                <span>{{
+                  t('environmentWizard.analysis.cliNudge', { path: repoCliHint.path })
+                }}</span>
               </p>
               <div class="flex items-center justify-between gap-2">
                 <div class="min-w-0">

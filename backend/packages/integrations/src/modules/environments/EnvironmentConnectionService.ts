@@ -747,9 +747,7 @@ export class EnvironmentConnectionService {
         gitRef: input.gitRef ?? bound.baseBranch,
         ...(input.directory ? { directory: input.directory } : {}),
         ...(input.prefer ? { prefer: input.prefer } : {}),
-        ...(this.deps.detectionConventions
-          ? { conventions: this.deps.detectionConventions }
-          : {}),
+        ...(this.deps.detectionConventions ? { conventions: this.deps.detectionConventions } : {}),
       }),
     )
   }

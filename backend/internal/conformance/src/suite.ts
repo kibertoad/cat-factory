@@ -5029,7 +5029,11 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
                 const seg = rest.split('/')[0]!
                 if (seen.has(seg)) continue
                 seen.add(seg)
-                entries.push({ name: seg, type: rest.includes('/') ? 'dir' : 'file', path: prefix + seg })
+                entries.push({
+                  name: seg,
+                  type: rest.includes('/') ? 'dir' : 'file',
+                  path: prefix + seg,
+                })
               }
               return entries
             },

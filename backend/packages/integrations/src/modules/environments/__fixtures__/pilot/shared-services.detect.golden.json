@@ -1,16 +1,9 @@
 {
   "detected": true,
   "name": "acme-shared-services",
-  "composeFiles": [
-    "docker-compose.yml"
-  ],
-  "composeProfiles": [
-    "backends",
-    "peer"
-  ],
-  "managedNetworks": [
-    "acme-net"
-  ],
+  "composeFiles": ["docker-compose.yml"],
+  "composeProfiles": ["backends", "peer"],
+  "managedNetworks": ["acme-net"],
   "envFiles": [
     {
       "template": ".env.shared.example",

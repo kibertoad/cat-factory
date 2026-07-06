@@ -5,12 +5,8 @@
     "composePath": "docker/dev.yml",
     "composeBuild": true,
     "recipe": {
-      "composeFiles": [
-        "docker/dev.yml"
-      ],
-      "externalNetworks": [
-        "acme-net"
-      ],
+      "composeFiles": ["docker/dev.yml"],
+      "externalNetworks": ["acme-net"],
       "envFiles": [
         {
           "template": "services/app/.env.dev.local-dist",
