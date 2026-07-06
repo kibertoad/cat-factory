@@ -3451,10 +3451,12 @@
     "create": {
       "title": "Initiative erstellen",
       "inFrame": "Neue Initiative in {frame}",
+      "preset": "Typ",
       "titleField": "Titel",
       "titlePlaceholder": "z. B. Die API auf das neue Auth-Modell migrieren",
       "goalField": "Ziel",
       "goalPlaceholder": "Beschreiben Sie das Ziel, die Einschränkungen und den groben Umfang. Der Planer verfeinert dies zu einem mehrphasigen Plan.",
+      "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes).",
       "hint": "Es läuft noch nichts: Führen Sie nach dem Erstellen die Initiative-Planning-Pipeline auf dem Block aus. Sie analysiert die Codebasis und entwirft den mehrphasigen Plan zu Ihrer Freigabe.",
       "submit": "Initiative erstellen",
       "failedTitle": "Die Initiative konnte nicht erstellt werden"

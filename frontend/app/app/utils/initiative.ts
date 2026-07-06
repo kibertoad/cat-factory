@@ -2,6 +2,8 @@ import type {
   InitiativeFollowUp,
   InitiativeItem,
   InitiativeItemStatus,
+  InitiativePresetDescriptor,
+  InitiativePresetInputs,
   InitiativeStatus,
 } from '~/types/domain'
 
@@ -66,6 +68,34 @@ export const INITIATIVE_FOLLOWUP_STATUS_CHIPS: Record<InitiativeFollowUp['status
   open: 'warning',
   promoted: 'success',
   dismissed: 'neutral',
+}
+
+/**
+ * The initial, typed create-form values a preset descriptor implies — its field DEFAULTS folded
+ * into the `InitiativePresetInputs` shape the renderer + wire contract expect (`checkbox-group` →
+ * `string[]`, `checkbox` → boolean, `number` → number, everything else a string). Only fields with
+ * a meaningful default are seeded, so unfilled optional fields stay absent (equivalent to unset for
+ * validation) and never freeze an empty value. The probe prefill and the user's edits layer on top.
+ */
+export function defaultPresetInputs(
+  descriptor: InitiativePresetDescriptor,
+): InitiativePresetInputs {
+  const inputs: InitiativePresetInputs = {}
+  for (const field of descriptor.fields) {
+    if (field.type === 'checkbox-group') {
+      if (field.defaultValues?.length) inputs[field.key] = [...field.defaultValues]
+    } else if (field.type === 'checkbox') {
+      if (field.default === 'true') inputs[field.key] = true
+    } else if (field.type === 'number') {
+      const parsed = Number(field.default)
+      if (field.default !== undefined && field.default !== '' && Number.isFinite(parsed)) {
+        inputs[field.key] = parsed
+      }
+    } else if (field.default) {
+      inputs[field.key] = field.default
+    }
+  }
+  return inputs
 }
 
 /** Item statuses that count as settled — mirrors the backend terminal-status set. */

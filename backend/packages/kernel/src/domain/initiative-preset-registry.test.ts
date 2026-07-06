@@ -127,6 +127,13 @@ describe('isPresetFieldVisible', () => {
     expect(isPresetFieldVisible(boolField, { advanced: false })).toBe(false)
     expect(isPresetFieldVisible(boolField, {})).toBe(false)
   })
+  it('treats an absent value as `false` for a boolean `equals: false` (unchecked box is unset)', () => {
+    const offField = field({ key: 'simpleDir', showWhen: { key: 'advanced', equals: false } })
+    // An off checkbox is absent from the inputs, so `equals: false` must still match at first render.
+    expect(isPresetFieldVisible(offField, {})).toBe(true)
+    expect(isPresetFieldVisible(offField, { advanced: false })).toBe(true)
+    expect(isPresetFieldVisible(offField, { advanced: true })).toBe(false)
+  })
 })
 
 describe('validateInitiativePresetInputs', () => {
