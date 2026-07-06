@@ -56,7 +56,16 @@ export class ModelPresetService {
     this.workspaceRepository = deps.workspaceRepository
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
-    this.defaultPresetId = deps.defaultPresetId ?? DEFAULT_MODEL_PRESET_ID
+    // Resolve the deployment's seeded-default id to a REAL catalog id up front. Only a
+    // built-in can be seeded as the first-seed default, so a `defaultPresetId` that matches no
+    // catalog seed (a stale/mistyped value from a deploy-app wrapper) is a misconfiguration:
+    // fall back to the catalog default (Kimi) rather than letting `ensureSeeded` seed a fresh
+    // workspace with NO default at all (which would break the single-default invariant and
+    // leave the settings UI with nothing selected).
+    const requested = deps.defaultPresetId ?? DEFAULT_MODEL_PRESET_ID
+    this.defaultPresetId = seedModelPresets().some((p) => p.id === requested)
+      ? requested
+      : DEFAULT_MODEL_PRESET_ID
   }
 
   /** List a workspace's presets, seeding the built-in presets if none exist yet. */
