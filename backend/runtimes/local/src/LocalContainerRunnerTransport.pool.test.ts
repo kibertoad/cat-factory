@@ -66,12 +66,22 @@ function okFetch(jobView: unknown = { state: 'running' }) {
 
 const repoSpec = (owner: string, name: string) => ({ repo: { owner, name }, mode: 'coding' })
 
+// `sharedSecret` is a REQUIRED constructor argument (no random per-process fallback), so default
+// it for these pool unit tests, which don't exercise the secret.
+type MkOpts = Omit<
+  ConstructorParameters<typeof LocalContainerRunnerTransport>[0],
+  'sharedSecret'
+> & { sharedSecret?: string }
+function mkTransport(opts: MkOpts): LocalContainerRunnerTransport {
+  return new LocalContainerRunnerTransport({ sharedSecret: 'sek', ...opts })
+}
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('LocalContainerRunnerTransport (warm pool)', () => {
   it('does not double-lease one idle member to two CONCURRENT runs', async () => {
     const { exec, calls } = fakeDockerPool()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 4,
       exec,
@@ -96,7 +106,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
   it('leases a member once and reuses it for a later run (one docker run, persistentCheckout injected)', async () => {
     const { exec, calls } = fakeDockerPool()
     const fetchImpl = okFetch()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       sharedSecret: 'sek',
       poolSize: 1,
@@ -141,7 +151,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       void init
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 1,
       exec,
@@ -172,7 +182,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
 
   it('returns a member to the pool on release (no rm) instead of tearing it down', async () => {
     const { exec, calls } = fakeDockerPool()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 2,
       exec,
@@ -186,7 +196,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
 
   it('starts a transient over-capacity member for a concurrent lease and removes it on release', async () => {
     const { exec, calls } = fakeDockerPool()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 1,
       exec,
@@ -219,7 +229,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       }
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 1,
       exec,
@@ -243,7 +253,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 1,
       exec,
@@ -262,7 +272,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
 
   it('drains pool orphans from a previous process and pre-warms at boot', async () => {
     const { exec, calls } = fakeDockerPool({ poolMembers: ['orphan-1', 'orphan-2'] })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 2,
       poolMinWarm: 2,
@@ -282,7 +292,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
     // 3 on the first release — silently violating the warm floor. minWarm is now clamped to
     // poolSize, so exactly poolSize members are pre-warmed.
     const { exec, calls } = fakeDockerPool()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 2,
       poolMax: 10,
@@ -296,7 +306,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
 
   it('applySettings resizes the warm pool live, trimming idle members beyond the new size', async () => {
     const { exec, calls } = fakeDockerPool()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 3,
       poolMinWarm: 3,
@@ -318,7 +328,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
     // pooling ON mid-flight. The in-flight run must keep polling its per-run container, not
     // the (empty) pool — otherwise it would be spuriously evicted.
     const { exec } = fakeDockerPool()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 0,
       exec,
@@ -353,7 +363,7 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
       listRunContainers: vi.fn(async () => []),
     }
     const fetchImpl = okFetch()
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       poolSize: 4,
       adapter,

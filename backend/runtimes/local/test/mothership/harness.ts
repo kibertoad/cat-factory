@@ -98,6 +98,8 @@ const SUT_ENV: NodeJS.ProcessEnv = {
   ENVIRONMENT: 'test',
   ENCRYPTION_KEY,
   AUTH_SESSION_SECRET: SESSION_SECRET,
+  // Local mode requires the harness inbound-auth secret (the SUT boots through applyLocalDefaults).
+  HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
   SLACK_ENABLED: 'true',
   PROMPT_LIBRARY_ENABLED: 'true',
   DOCUMENT_SOURCES: 'confluence,notion,github,figma,zeplin,linear',

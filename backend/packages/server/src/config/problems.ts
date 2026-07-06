@@ -98,6 +98,12 @@ export const ENV_HELP = {
     remedy:
       'Configure a GitHub App (GITHUB_APP_PRIVATE_KEY + GITHUB_APP_ID), WORKER_PUBLIC_URL, AUTH_SESSION_SECRET, and a runner backend (the EXEC_CONTAINER binding, or a registered runner pool with RUNNERS_ENABLED).',
   },
+  HARNESS_SHARED_SECRET: {
+    summary:
+      'Shared secret the orchestrator injects into each agent container and sends on every harness call (the `x-harness-secret` header) so a job container only accepts requests from this service.',
+    remedy:
+      'Set HARNESS_SHARED_SECRET to a random string of at least 16 characters. Generate one with `pnpm secrets` (deploy/local) or `openssl rand -hex 32`. It must stay STABLE across restarts — a fresh value each boot fails auth against containers still running from before the restart, so re-attach breaks and in-flight runs flap.',
+  },
 } satisfies Record<string, { summary: string; remedy: string }>
 
 /**

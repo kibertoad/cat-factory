@@ -12,6 +12,9 @@ import { resolveHostAlias } from './runtimes/index.js'
 const MIN_SESSION_SECRET_LENGTH = 32
 /** The system encryption key must decode to at least this many bytes (AES-256). */
 const MIN_ENCRYPTION_KEY_BYTES = 32
+// The harness inbound-auth secret gates every call between this service and its agent
+// containers, and local mode may be reachable on a LAN — so reject a trivially-guessable value.
+const MIN_HARNESS_SECRET_LENGTH = 16
 
 // Local mode is a single developer running the whole product on their own machine.
 // It reuses the Node facade's config loader verbatim and only changes the defaults
@@ -35,13 +38,16 @@ const DEFAULT_LOCAL_SEARXNG_URL = 'http://localhost:8080'
 
 /**
  * Resolve a mandatory local-mode secret from env, throwing a clear, actionable error when it
- * isn't set. These secrets must be STABLE across restarts — the session secret signs the
- * session JWT (a fresh value each boot invalidates the persisted session and forces a
- * re-login) and the encryption key seals credentials at rest (a fresh value orphans them) — so
- * local mode requires them explicitly rather than auto-generating an unstable per-process
- * value that silently breaks on the next restart. The hosted Node facade requires them too, so
- * this also keeps the facades aligned. `pnpm secrets` (deploy/local) prints both in the right
- * format.
+ * isn't set. These secrets must be STABLE across restarts:
+ *   - the session secret signs the session JWT (a fresh value each boot invalidates the
+ *     persisted session and forces a re-login);
+ *   - the encryption key seals credentials at rest (a fresh value orphans them);
+ *   - the harness shared secret authenticates every call between this service and its agent
+ *     containers (a fresh per-process value fails auth against a container still running from
+ *     before a restart, so re-attach breaks and in-flight runs flap).
+ * So local mode requires them explicitly rather than auto-generating an unstable per-process
+ * value that silently breaks on the next restart. `pnpm secrets` (deploy/local) prints all
+ * three in the right format.
  */
 function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
   // Presence + trim + the ENV_HELP meaning/remedy come from the shared `requireEnv` (both these
@@ -81,7 +87,27 @@ function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
       })
     }
   }
+  // Reject a too-short harness secret: local mode may be reachable on a LAN and this value is
+  // the only auth between the service and its agent containers.
+  if (name === 'HARNESS_SHARED_SECRET' && value.length < MIN_HARNESS_SECRET_LENGTH) {
+    throw configProblem({
+      key: 'HARNESS_SHARED_SECRET',
+      summary: ENV_HELP.HARNESS_SHARED_SECRET.summary,
+      remedy: `Must be at least ${MIN_HARNESS_SECRET_LENGTH} characters (got ${value.length}). Generate a strong one with \`pnpm secrets\` in deploy/local.`,
+    })
+  }
   return value
+}
+
+/**
+ * Read + validate the mandatory {@link HARNESS_SHARED_SECRET}, throwing the same loud config
+ * error as the other required secrets when it's missing/blank/too-short. The runner transport
+ * factories call this so the secret is a genuinely REQUIRED constructor argument — the transports
+ * never invent a random per-process value (which would break re-attach across a restart). Safe to
+ * call on env already run through {@link applyLocalDefaults} (idempotent revalidation).
+ */
+export function requireHarnessSharedSecret(env: NodeJS.ProcessEnv): string {
+  return requireStableSecret(env, 'HARNESS_SHARED_SECRET')
 }
 
 /**
@@ -140,6 +166,12 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // boot orphans every credential sealed under the previous one. Generate with `pnpm secrets`
     // in deploy/local.
     ENCRYPTION_KEY: requireStableSecret(env, 'ENCRYPTION_KEY'),
+    // Inbound-auth secret injected into every agent container and sent on each harness call.
+    // REQUIRED and must be stable: the local runner transports otherwise mint a RANDOM
+    // per-process value, so after a restart polls against a container still running from before
+    // fail auth — the run flaps instead of re-attaching (docs/race-condition-audit-2026-07.md).
+    // Generate with `pnpm secrets` in deploy/local.
+    HARNESS_SHARED_SECRET: requireStableSecret(env, 'HARNESS_SHARED_SECRET'),
     // The harness (inside the container) posts to `${PUBLIC_URL}/v1`; the runtime's host
     // alias routes back to this service on the host. The docker-family transport
     // publishes that alias on Linux via `--add-host=<alias>:host-gateway`.

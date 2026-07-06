@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { NativeCliDeployTransport, buildLocalDeployTransport } from './NativeCliDeployTransport.js'
 
+// The harness inbound-auth secret is a REQUIRED constructor argument on every runner transport,
+// so a build path (native entry set / container image set) needs it in the env; the deploy-unused
+// paths that return null must not.
+const SECRET = { HARNESS_SHARED_SECRET: 'deploy-test-harness-secret' }
+
 // `buildLocalDeployTransport` selects the local DEPLOY backend from the environment. Pure
 // construction (no process spawn / container run happens until the first dispatch), so the
 // selection logic is unit-testable directly.
@@ -13,7 +18,10 @@ describe('buildLocalDeployTransport', () => {
   })
 
   it('builds the native deploy-harness host-process transport when its entry is set', () => {
-    const t = buildLocalDeployTransport({ LOCAL_DEPLOY_HARNESS_ENTRY: '/srv/deploy/server.ts' })
+    const t = buildLocalDeployTransport({
+      ...SECRET,
+      LOCAL_DEPLOY_HARNESS_ENTRY: '/srv/deploy/server.ts',
+    })
     expect(t).toBeInstanceOf(NativeCliDeployTransport)
   })
 
@@ -23,6 +31,7 @@ describe('buildLocalDeployTransport', () => {
 
   it('builds a job-scoped container transport when container mode + image are set', () => {
     const t = buildLocalDeployTransport({
+      ...SECRET,
       LOCAL_DEPLOY_RUNTIME: 'container',
       LOCAL_DEPLOY_IMAGE: 'ghcr.io/acme/cat-factory-deploy:0.2.2',
     })
