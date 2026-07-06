@@ -334,7 +334,10 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   the renderer.** The renderer is pure/stateless; the modal seeds defaults on open + preset-change,
   then layers the probe prefill, then the user's edits. Only meaningful defaults are seeded (an
   unchecked box / empty string / empty multi-select stays ABSENT), so the frozen inputs never carry
-  an empty value. A slice-8 `default`/`defaultValues` on a descriptor field is what surfaces here.
+  an empty value. The renderer's `set` enforces the same invariant on EDITS — clearing a field
+  (blank string / empty multi-select / unchecked box) drops the key rather than storing `''`/`[]`/
+  `false`, so `sanitize` can't freeze an empty value onto the entity (a numeric `0` is kept). A
+  slice-8 `default`/`defaultValues` on a descriptor field is what surfaces here.
 - **[S4] The picker defaults to `preset_generic` and hides itself when only that preset exists**, so
   a stock install is byte-for-byte today's form. The modal ALWAYS sends `presetId` (generic when
   unpicked) — safe because the server always resolves `preset_generic`. When slice 8 registers
@@ -342,7 +345,13 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
 - **[S4] Probe prefill is stale-guarded and best-effort.** The modal fires `probePreset` on
   preset/frame selection behind a monotonic token and only merges detected values for KNOWN field
   keys over the defaults; a slow response from a since-changed preset is discarded, and any error
-  degrades to `{}` (defaults) — the probe never blocks or clears the form.
+  degrades to `{}` (defaults) — the probe never blocks or clears the form. A detected value
+  overrides the seeded DEFAULT but not a USER edit: the merge only fills a key still equal to its
+  pre-probe baseline, so a slow probe can't clobber a value typed while it was in flight.
+- **[S4] `showWhen: { equals: false }` matches an unchecked box.** Because an off checkbox stays
+  ABSENT (above), `isPresetFieldVisible` (`@cat-factory/contracts`) reads an absent value as `false`
+  when the condition compares a boolean — so a field gated on an off box shows at first render, not
+  only after a toggle on→off. Both facades' validate/sanitize inherit this via the shared function.
 
 ## Out of scope
 

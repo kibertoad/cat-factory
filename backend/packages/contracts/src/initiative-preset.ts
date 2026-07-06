@@ -167,7 +167,14 @@ export function isPresetFieldVisible(
   const cond = field.showWhen
   if (!cond) return true
   const value = inputs[cond.key]
-  if (cond.equals !== undefined) return value === cond.equals
+  if (cond.equals !== undefined) {
+    // An unchecked checkbox is ABSENT from the inputs (an off box stays unset — see the create
+    // form's `defaultPresetInputs` / renderer), so an absent value reads as `false` when the
+    // condition compares against a boolean. Without this, `equals: false` would never match at
+    // initial render (only after a toggle on→off), hiding a field that should be shown.
+    const actual = value === undefined && typeof cond.equals === 'boolean' ? false : value
+    return actual === cond.equals
+  }
   if (cond.includes !== undefined) return Array.isArray(value) && value.includes(cond.includes)
   // A `showWhen` with neither predicate is a malformed condition — treat as always visible.
   return true

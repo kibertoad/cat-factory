@@ -9,10 +9,11 @@ import type {
   UpdateInitiativeItemInput,
 } from '~/types/domain'
 
-/** The built-in generic preset id (mirrors kernel's `GENERIC_INITIATIVE_PRESET_ID`). */
-const GENERIC_PRESET_ID = 'preset_generic'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBoardStore } from '~/stores/board'
+
+/** The built-in generic preset id (mirrors kernel's `GENERIC_INITIATIVE_PRESET_ID`). */
+export const GENERIC_PRESET_ID = 'preset_generic'
 
 /**
  * Initiative state — the long-running multi-task work containers, keyed by their

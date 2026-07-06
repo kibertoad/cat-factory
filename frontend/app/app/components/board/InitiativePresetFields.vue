@@ -28,10 +28,23 @@ const visibleFields = computed(() =>
   props.descriptor.fields.filter((f) => isPresetFieldVisible(f, model.value)),
 )
 
-/** Immutably set (or, for `undefined`, clear) one field's value on the model. */
+/**
+ * An "empty" value that must stay ABSENT from the model rather than freeze on the entity: an
+ * unchecked (`false`) checkbox, a blank string, or an empty multi-select. A numeric `0` is a real
+ * value and is kept (strict `=== false`/`=== ''` never match it).
+ */
+function isEmptyValue(value: InitiativePresetInputValue): boolean {
+  return value === false || value === '' || (Array.isArray(value) && value.length === 0)
+}
+
+/**
+ * Immutably set one field's value on the model, DROPPING empty values so a cleared field never
+ * freezes an empty `''`/`[]`/`false` (mirrors `ProviderConnectionTab`'s delete-when-blank and what
+ * the shared `validate`/`sanitize` treat as unset — an unchecked box / blank field stays absent).
+ */
 function set(key: string, value: InitiativePresetInputValue | undefined): void {
   const next = { ...model.value }
-  if (value === undefined) delete next[key]
+  if (value === undefined || isEmptyValue(value)) delete next[key]
   else next[key] = value
   model.value = next
 }

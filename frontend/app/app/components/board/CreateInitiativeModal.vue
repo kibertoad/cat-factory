@@ -14,12 +14,10 @@ import {
   sanitizeInitiativePresetInputs,
   validateInitiativePresetInputs,
 } from '@cat-factory/contracts'
-import type { InitiativePresetInputs } from '~/types/domain'
+import type { InitiativePresetInputs, InitiativePresetInputValue } from '~/types/domain'
 import { defaultPresetInputs } from '~/utils/initiative'
+import { GENERIC_PRESET_ID } from '~/stores/initiative'
 import InitiativePresetFields from '~/components/board/InitiativePresetFields.vue'
-
-/** The built-in generic preset id (mirrors kernel's `GENERIC_INITIATIVE_PRESET_ID`). */
-const GENERIC_PRESET_ID = 'preset_generic'
 
 const ui = useUiStore()
 const board = useBoardStore()
@@ -58,18 +56,34 @@ function applyPreset(): void {
   void runProbe()
 }
 
+/** Whether two preset values are equal (shallow — arrays compared element-wise). */
+function sameValue(
+  a: InitiativePresetInputValue | undefined,
+  b: InitiativePresetInputValue | undefined,
+): boolean {
+  if (Array.isArray(a) && Array.isArray(b))
+    return a.length === b.length && a.every((x, i) => x === b[i])
+  return a === b
+}
+
 /** Best-effort repo-detection prefill: merge detected values (known fields only) over the defaults. */
 async function runProbe(): Promise<void> {
   const descriptor = selectedPreset.value
   const frameId = ui.createInitiativeFrameId
   if (!descriptor?.probe || !frameId) return
   const seq = ++probeSeq
+  // The just-seeded descriptor defaults; a detected value overrides these but NOT a user edit.
+  const baseline = inputs.value
   const detected = await initiatives.probePreset(descriptor.id, frameId)
   // Discard a stale response (the user re-picked a preset / closed the modal meanwhile).
   if (seq !== probeSeq || selectedPreset.value?.id !== descriptor.id) return
   const known = new Set(descriptor.fields.map((f) => f.key))
   const merged: InitiativePresetInputs = { ...inputs.value }
-  for (const [key, value] of Object.entries(detected)) if (known.has(key)) merged[key] = value
+  for (const [key, value] of Object.entries(detected)) {
+    // Prefill only known fields the user hasn't edited since the probe fired (still at the default),
+    // so a slow probe can't clobber a value the user typed while it was in flight.
+    if (known.has(key) && sameValue(merged[key], baseline[key])) merged[key] = value
+  }
   inputs.value = merged
 }
 

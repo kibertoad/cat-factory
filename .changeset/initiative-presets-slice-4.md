@@ -1,5 +1,6 @@
 ---
 '@cat-factory/app': minor
+'@cat-factory/contracts': patch
 ---
 
 Initiative presets — slice 4: SPA preset picker + generic descriptor-driven create form.
@@ -25,3 +26,9 @@ Initiative presets — slice 4: SPA preset picker + generic descriptor-driven cr
   descriptor. Store `create` now forwards `presetId`/`presetInputs`; new `probePreset` store action
   - `probeInitiativePreset` API binding. i18n chrome (`initiative.create.preset` /
     `.pathInvalid`) added across all locales.
+- Review follow-ups: the renderer now DROPS emptied fields (blank string / empty multi-select /
+  unchecked box) so a cleared field stays absent instead of freezing an empty value on the entity;
+  the in-flight probe no longer clobbers a value the user typed while it was loading; and
+  `isPresetFieldVisible` (`@cat-factory/contracts`) treats an absent value as `false` for a boolean
+  `equals: false` condition, so a `showWhen`-gated field appears at first render for an unchecked box
+  (previously only after a toggle) — the same shared function both facades already use.
