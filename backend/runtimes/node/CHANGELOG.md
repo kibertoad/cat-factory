@@ -1,5 +1,18 @@
 # @cat-factory/node-server
 
+## 0.86.1
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+  - @cat-factory/agents@0.43.1
+  - @cat-factory/orchestration@0.95.1
+  - @cat-factory/server@0.99.5
+  - @cat-factory/consensus@0.10.1
+  - @cat-factory/provider-bedrock@0.7.171
+  - @cat-factory/provider-cloudflare@0.7.172
+
 ## 0.86.0
 
 ### Minor Changes
