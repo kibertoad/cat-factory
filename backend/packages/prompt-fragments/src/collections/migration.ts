@@ -78,3 +78,12 @@ export const migrationFragments: PromptFragment[] = [
     appliesTo: { agentKinds: ['coder', 'doc-writer'] },
   },
 ]
+
+/**
+ * The ids of the migration fragments, in catalog order — the single source of truth for "which
+ * best-practice fragments a technological migration applies by default". Derived from
+ * {@link migrationFragments} so it can never drift from the definitions. Consumed by the
+ * `preset_tech_migration` preset: its descriptor's `defaultFragmentIds` (T8) and the
+ * `seedMigrationPlan` post-processor (T7), which stamps them onto every spawned migration task.
+ */
+export const MIGRATION_FRAGMENT_IDS: readonly string[] = migrationFragments.map((f) => f.id)

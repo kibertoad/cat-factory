@@ -30,6 +30,10 @@ export const FRAGMENTS: PromptFragment[] = [
 // board service seeding a new document task's fragments, the docs-refresh preset building its
 // `styleFragments` form options) draws on the same source of truth the catalog is built from.
 export { styleFragments, DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from './collections/style.js'
+// Re-export the migration fragment ids so the `preset_tech_migration` preset draws its default
+// fragment set from the same source of truth the catalog is built from (T7's `seedMigrationPlan`
+// + T8's descriptor `defaultFragmentIds`).
+export { MIGRATION_FRAGMENT_IDS } from './collections/migration.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(
