@@ -104,6 +104,36 @@ export async function createSimplePipeline(
   )
 }
 
+/** An initiative as the create endpoint returns it (only the fields the specs read). */
+export interface CreatedInitiative {
+  /** The initiative-level anchor block placed on the board (also the block planning runs against). */
+  block: { id: string }
+  /** The persisted initiative entity. */
+  initiative: { id: string; blockId: string }
+}
+
+/**
+ * Create an initiative under the service frame `frameId` from a preset — the same endpoint
+ * `CreateInitiativeModal` posts to. Returns the created entity + its anchor block, which the
+ * backend pushes onto the board live (`initiative-added`). Planning is started SEPARATELY via the
+ * ordinary execution endpoint against the anchor block with the preset's planning pipeline id
+ * (there is no dedicated "start planning" route) — see {@link startRun}.
+ */
+export async function createInitiative(
+  request: APIRequestContext,
+  workspaceId: string,
+  frameId: string,
+  presetId: string,
+  presetInputs?: Record<string, unknown>,
+  title = 'E2E initiative',
+): Promise<CreatedInitiative> {
+  return json<CreatedInitiative>(
+    await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/initiatives`, {
+      data: { frameId, title, presetId, ...(presetInputs ? { presetInputs } : {}) },
+    }),
+  )
+}
+
 /** Start a run of `pipelineId` against `blockId`. */
 export async function startRun(
   request: APIRequestContext,

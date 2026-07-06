@@ -201,6 +201,7 @@ function selectTask() {
     v-if="task && statusMeta"
     :data-block-id="task.id"
     :data-status="task.status"
+    :data-task-type="task.taskType"
     data-testid="task-card"
     class="nodrag w-full cursor-pointer rounded-lg border bg-slate-950/70 p-2 text-start transition"
     :class="[

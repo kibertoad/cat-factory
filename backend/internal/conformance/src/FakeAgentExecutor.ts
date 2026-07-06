@@ -157,6 +157,16 @@ export interface FakeAgentOptions {
    */
   customResult?: unknown
   /**
+   * The multi-phase plan draft the `initiative-planner` step returns as `result.initiativePlan`
+   * (an {@link InitiativePlanDraft}); the engine ingests it via `InitiativeService.ingestPlan`.
+   * Set it whenever a test drives an initiative PLANNING pipeline to completion — the planner's
+   * post-completion resolver FAULTS the run when the plan is absent, so without this the fake's
+   * generic prose result would fail every planning run. The analyst/committer need no companion
+   * option: the analyst's benign prose feeds `recordAnalysis`, and the committer is a
+   * deterministic engine step that never calls the executor. Omitted ⇒ no plan channel.
+   */
+  initiativePlan?: unknown
+  /**
    * Forward-looking follow-up / question items the async `coder` streams on its FIRST
    * running poll (the deterministic analogue of the harness tailing the sentinel file), so
    * the conformance suite can exercise the Follow-up companion gate (park until decided →
@@ -346,6 +356,19 @@ export class FakeAgentExecutor implements AgentExecutor {
         output: `[${context.agentKind}] produced structured output for "${context.block.title}"`,
         model: 'fake',
         custom: this.options.customResult ?? { ok: true },
+      }
+    }
+
+    // The initiative PLANNER returns the multi-phase plan the engine ingests
+    // (`InitiativeService.ingestPlan` → the preset's phase-template normalizer + `seedPlan`),
+    // then the loop spawns the decorated tasks. Without this channel the planner's
+    // post-completion resolver faults the run (an absent plan is a hard error), so a test that
+    // drives create-with-preset → auto-plan → spawn supplies the draft via `initiativePlan`.
+    if (context.agentKind === 'initiative-planner' && this.options.initiativePlan !== undefined) {
+      return {
+        output: `[initiative-planner] planned "${context.block.title}"`,
+        model: 'fake',
+        initiativePlan: this.options.initiativePlan,
       }
     }
 
