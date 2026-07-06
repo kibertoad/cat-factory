@@ -23,6 +23,7 @@ import { customAgentKindSchema } from './agent-presentation.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
 import { initiativeSchema } from './initiative.js'
+import { initiativePresetDescriptorSchema } from './initiative-preset.js'
 import { sharedStackSchema } from './shared-stacks.js'
 
 // The full board snapshot returned by GET /workspaces/:id (and POST /workspaces).
@@ -216,6 +217,15 @@ export const workspaceSnapshotSchema = v.object({
    * when the initiatives module is wired, so optional on the wire.
    */
   initiatives: v.optional(v.array(initiativeSchema)),
+  /**
+   * The registered INITIATIVE PRESETS (built-in `preset_generic` + any a deployment mixed in via
+   * `registerInitiativePreset`), each a serialisable descriptor (form + planning-pipeline binding
+   * + defaults + `probe` flag). The SPA's create-initiative picker renders these and starts the
+   * chosen preset's `planningPipelineId`. Static (process-global registry), workspace-independent;
+   * attached by the shared `WorkspaceController` (so it is symmetric across runtimes), optional on
+   * the wire — the SPA falls back to the built-in generic pipeline when absent.
+   */
+  initiativePresets: v.optional(v.array(initiativePresetDescriptorSchema)),
   /**
    * Per-area infrastructure-setup status (ephemeral environments / agent executor / binary
    * storage), computed server-side from whatever THIS deployment wired — so the SPA can raise

@@ -131,6 +131,9 @@ export const useWorkspaceStore = defineStore(
       useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
       useInitiativesStore().hydrate(snapshot.initiatives)
+      // Registered initiative presets (built-in generic + any a deployment mixed in): drive the
+      // create picker and which planning pipeline "Run planning" starts. Workspace-independent.
+      useInitiativesStore().hydratePresets(snapshot.initiativePresets)
       useTrackerStore().hydrate(snapshot.trackerSettings)
       useServicesStore().hydrate(snapshot.mounts ?? [], snapshot.serviceCatalog ?? [])
       // Merge the deployment's registered custom agent kinds into the palette catalog so a

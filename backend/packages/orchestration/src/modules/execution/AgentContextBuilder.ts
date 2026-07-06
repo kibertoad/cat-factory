@@ -13,6 +13,7 @@ import type {
   DocumentSourceKind,
   ExecutionInstance,
   FrontendConfig,
+  Initiative,
   InitiativeRepository,
   PipelineStep,
   RequirementReviewRepository,
@@ -20,7 +21,7 @@ import type {
   TaskRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { buildExcerpt, CONTEXT_BUDGET } from '@cat-factory/kernel'
+import { buildExcerpt, CONTEXT_BUDGET, getInitiativePreset } from '@cat-factory/kernel'
 import {
   CODE_AWARE_TRAIT,
   DOC_AWARE_TRAIT,
@@ -224,8 +225,9 @@ export class AgentContextBuilder {
     const frontend = await this.resolveFrontendConfig(workspaceId, block)
     const involvedServices = await this.resolveInvolvedServices(workspaceId, block)
     // An initiative-level run (the planning pipeline) carries the interview + analysis
-    // context so the analyst/planner prompts fold in the human's intent and prior findings.
-    const initiative = await this.resolveInitiativeContext(workspaceId, block)
+    // context so the analyst/planner prompts fold in the human's intent and prior findings,
+    // plus the preset steering resolved for THIS step's kind.
+    const initiative = await this.resolveInitiativeContext(workspaceId, block, agentKind)
     const agentConfig = block.agentConfig
     // A finalized architecture-brainstorm direction is surfaced ADDITIVELY (it does not
     // replace the description) as a synthetic prior output so the architect and downstream
@@ -339,13 +341,16 @@ export class AgentContextBuilder {
 
   /**
    * The planning context for an `initiative`-level run: the interviewer's synthesized
-   * goal / constraints / non-goals + the answered Q&A digest, and the analyst's codebase
-   * analysis. Returns undefined for non-initiative blocks, when no initiative store is wired,
-   * or when the block has no initiative entity yet.
+   * goal / constraints / non-goals + the answered Q&A digest, the analyst's codebase
+   * analysis, and — when the initiative was created from a PRESET — the preset's identity +
+   * frozen inputs + the per-kind planning-prompt steering resolved for `agentKind`. Returns
+   * undefined for non-initiative blocks, when no initiative store is wired, or when the block
+   * has no initiative entity yet.
    */
   private async resolveInitiativeContext(
     workspaceId: string,
     block: Block,
+    agentKind: string,
   ): Promise<AgentRunContext['initiative']> {
     if (block.level !== 'initiative' || !this.deps.initiatives) return undefined
     const initiative = await this.deps.initiatives.getByBlock(workspaceId, block.id)
@@ -353,13 +358,35 @@ export class AgentContextBuilder {
     const qa = (initiative.qa ?? [])
       .filter((q) => q.answer?.trim())
       .map((q) => ({ question: q.question, answer: q.answer }))
+    const preset = this.resolveInitiativePresetContext(initiative, agentKind)
     return {
       ...(initiative.goal ? { goal: initiative.goal } : {}),
       ...(initiative.constraints?.length ? { constraints: initiative.constraints } : {}),
       ...(initiative.nonGoals?.length ? { nonGoals: initiative.nonGoals } : {}),
       ...(qa.length ? { qa } : {}),
       ...(initiative.analysisSummary ? { analysisSummary: initiative.analysisSummary } : {}),
+      ...(preset ? { preset } : {}),
     }
+  }
+
+  /**
+   * Resolve the preset steering an initiative's planning step carries: the registered preset's
+   * label + its `promptAdditions` entry for the RUNNING kind (analyst / planner). Returns undefined
+   * — so the prompt is unchanged — when the entity carries no `presetId`, names an unknown preset,
+   * or the preset has no steering for this kind. The built-in generic preset registers no
+   * `promptAdditions`, so it contributes nothing and the generic planning prompt stays byte-for-byte
+   * today's. (The frozen form reaches the prompt via the seeded `qa` digest, not here.)
+   */
+  private resolveInitiativePresetContext(
+    initiative: Pick<Initiative, 'presetId'>,
+    agentKind: string,
+  ): NonNullable<AgentRunContext['initiative']>['preset'] | undefined {
+    if (!initiative.presetId) return undefined
+    const registration = getInitiativePreset(initiative.presetId)
+    if (!registration) return undefined
+    const promptAddition = registration.promptAdditions?.[agentKind]?.trim()
+    if (!promptAddition) return undefined
+    return { label: registration.descriptor.presentation.label, promptAddition }
   }
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */

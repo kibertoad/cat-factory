@@ -28,6 +28,7 @@ import {
   itemDependenciesMet,
   phaseIsHalted,
   reconcileItem,
+  seedPresetInterviewQa,
   selectInitiativePipeline,
   validatePlanDraft,
 } from './initiative.logic.js'
@@ -36,6 +37,7 @@ import type {
   InitiativeExecutionPolicy,
   InitiativeItem,
 } from '@cat-factory/kernel'
+import type { InitiativePresetDescriptor } from '@cat-factory/contracts'
 
 const block = (level: Block['level']): Block => ({
   id: 'blk-1',
@@ -895,5 +897,88 @@ describe('curation status guard', () => {
   it('refuses promote/dismiss once the initiative is no longer executing', () => {
     expect(() => applyPromoteFollowUp(settled, fuId, { phaseId: 'p1' })).toThrowError(/executing/)
     expect(() => applyDismissFollowUp(settled, fuId)).toThrowError(/executing/)
+  })
+})
+
+describe('seedPresetInterviewQa', () => {
+  const descriptor = (): InitiativePresetDescriptor => ({
+    id: 'preset_docs_refresh',
+    presentation: { label: 'Documentation refresh', icon: 'i', color: '#000', description: 'd' },
+    fields: [
+      {
+        key: 'docTypes',
+        label: 'Documentation types',
+        type: 'checkbox-group',
+        options: [
+          { value: 'readme', label: 'READMEs' },
+          { value: 'diagrams', label: 'Mermaid diagrams' },
+        ],
+      },
+      {
+        key: 'placementMode',
+        label: 'Placement',
+        type: 'select',
+        options: [
+          { value: 'root', label: 'Single /docs' },
+          { value: 'per-service', label: 'Per service' },
+        ],
+      },
+      { key: 'docsRoot', label: 'Docs root', type: 'path' },
+      {
+        key: 'diagramsDir',
+        label: 'Diagrams dir',
+        type: 'path',
+        showWhen: { key: 'docTypes', includes: 'diagrams' },
+      },
+      { key: 'scopeHint', label: 'Scope', type: 'textarea' },
+      { key: 'humanReview', label: 'Human review', type: 'checkbox' },
+    ],
+    planningPipelineId: 'pl_initiative_docs',
+    interview: 'skip',
+    humanReviewDefault: false,
+    defaultFragmentIds: [],
+  })
+
+  const seqIds = () => {
+    let n = 0
+    return () => `iqa-${++n}`
+  }
+
+  it('seeds one answered exchange per filled visible field, mapping option values to labels', () => {
+    const qa = seedPresetInterviewQa(
+      descriptor(),
+      {
+        docTypes: ['readme', 'diagrams'],
+        placementMode: 'per-service',
+        docsRoot: 'docs/',
+        diagramsDir: 'docs/diagrams',
+        scopeHint: '', // blank → skipped
+        humanReview: false, // unchecked → skipped (matches the create-time "present" rule)
+      },
+      seqIds(),
+    )
+    expect(qa).toEqual([
+      { id: 'iqa-1', question: 'Documentation types', answer: 'READMEs, Mermaid diagrams' },
+      { id: 'iqa-2', question: 'Placement', answer: 'Per service' },
+      { id: 'iqa-3', question: 'Docs root', answer: 'docs/' },
+      { id: 'iqa-4', question: 'Diagrams dir', answer: 'docs/diagrams' },
+    ])
+  })
+
+  it('skips a field hidden by its showWhen even when a stale value is present', () => {
+    const qa = seedPresetInterviewQa(
+      descriptor(),
+      { docTypes: ['readme'], diagramsDir: 'docs/diagrams' },
+      seqIds(),
+    )
+    // `diagrams` not selected ⇒ `diagramsDir` is hidden ⇒ its stale value is ignored.
+    expect(qa.map((q) => q.question)).toEqual(['Documentation types'])
+  })
+
+  it('records a CHECKED checkbox as "Yes" and an empty multi-select as nothing', () => {
+    expect(seedPresetInterviewQa(descriptor(), { humanReview: true }, seqIds())).toEqual([
+      { id: 'iqa-1', question: 'Human review', answer: 'Yes' },
+    ])
+    expect(seedPresetInterviewQa(descriptor(), { docTypes: [] }, seqIds())).toEqual([])
   })
 })

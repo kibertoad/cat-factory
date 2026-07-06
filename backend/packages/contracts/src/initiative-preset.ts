@@ -251,6 +251,44 @@ export function validateInitiativePresetInputs(
   return problems
 }
 
+/**
+ * Reduce a filled preset form to the values SAFE to freeze on the entity: only fields the
+ * descriptor declares AND that are currently VISIBLE (their `showWhen` holds). Unknown keys and
+ * hidden fields — whose stale values {@link validateInitiativePresetInputs} deliberately skips —
+ * are dropped, so a hidden field can never freeze an unvalidated value (e.g. a `path` that escapes
+ * the repo). Pure + total; run AFTER validation, on a form already known valid.
+ */
+export function sanitizeInitiativePresetInputs(
+  descriptor: InitiativePresetDescriptor,
+  inputs: InitiativePresetInputs,
+): InitiativePresetInputs {
+  const sanitized: InitiativePresetInputs = {}
+  for (const field of descriptor.fields) {
+    if (!isPresetFieldVisible(field, inputs)) continue
+    const value = inputs[field.key]
+    if (value !== undefined) sanitized[field.key] = value
+  }
+  return sanitized
+}
+
+/**
+ * Render one filled preset value as human-readable prose (option labels preferred over raw
+ * values, `checkbox-group` joined, boolean → `Yes`/`No`). Shared by the create flow's skip-interview
+ * qa seeding and the SPA form review so a field reads identically in both. Backend-supplied English
+ * (the `describeConfig` convention). Pure + total.
+ */
+export function renderInitiativePresetValue(
+  field: InitiativePresetField,
+  value: InitiativePresetInputValue,
+): string {
+  const labelOf = (v: string): string =>
+    (field.options ?? []).find((o) => o.value === v)?.label ?? v
+  if (Array.isArray(value)) return value.map(labelOf).join(', ')
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'number') return String(value)
+  return labelOf(value)
+}
+
 /** Strictly parse a bounded preset-inputs record. Throws on shape violations. */
 export function parseInitiativePresetInputs(value: unknown): InitiativePresetInputs {
   return v.parse(initiativePresetInputsSchema, value)
