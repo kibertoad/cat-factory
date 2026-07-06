@@ -736,20 +736,20 @@
       }
     },
     "modelPolicy": {
-      "title": "Model access policy",
-      "description": "Restrict which model families this account’s teams can run. Data-residency risk depends on the serving route, so a trusted (residency-guaranteed) route can exempt an otherwise-blocked family.",
-      "regionLabel": "Operating region",
-      "applyPreset": "Apply preset:",
-      "modeLabel": "Policy mode",
+      "title": "Modellzugriffsrichtlinie",
+      "description": "Beschränkt, welche Modellfamilien die Teams dieses Kontos ausführen dürfen. Das Datenresidenz-Risiko hängt von der Bereitstellungsroute ab, daher kann eine vertrauenswürdige (residenzgarantierte) Route eine andernfalls blockierte Familie freigeben.",
+      "regionLabel": "Betriebsregion",
+      "applyPreset": "Vorlage anwenden:",
+      "modeLabel": "Richtlinienmodus",
       "modes": {
-        "off": "No restriction",
-        "blocklist": "Block listed families",
-        "allowlist": "Allow only listed families"
+        "off": "Keine Einschränkung",
+        "blocklist": "Aufgeführte Familien blockieren",
+        "allowlist": "Nur aufgeführte Familien zulassen"
       },
-      "familiesBlockLabel": "Blocked families",
-      "familiesAllowLabel": "Allowed families",
-      "trustedLabel": "Trusted (residency-guaranteed) routes",
-      "trustedHint": "A blocked family stays available when it is served over one of these routes.",
+      "familiesBlockLabel": "Blockierte Familien",
+      "familiesAllowLabel": "Zugelassene Familien",
+      "trustedLabel": "Vertrauenswürdige (residenzgarantierte) Routen",
+      "trustedHint": "Eine blockierte Familie bleibt verfügbar, wenn sie über eine dieser Routen bereitgestellt wird.",
       "families": {
         "claude": "Claude (Anthropic)",
         "openai": "OpenAI / ChatGPT",
@@ -761,38 +761,38 @@
         "glm": "GLM (Z.ai)"
       },
       "regions": {
-        "usa": "United States",
-        "europe": "Europe",
+        "usa": "Vereinigte Staaten",
+        "europe": "Europa",
         "china": "China",
-        "other": "Other"
+        "other": "Andere"
       },
       "providers": {
         "bedrock": "AWS Bedrock"
       },
       "presets": {
         "us-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route (e.g. Bedrock)."
+          "label": "In China gehostete Familien blockieren",
+          "description": "Blockiert DeepSeek, Qwen, Kimi und GLM; erlaubt sie nur über eine residenzgarantierte Route (z. B. Bedrock)."
         },
         "eu-block-cn": {
-          "label": "EU: block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; a residency-guaranteed EU route (e.g. Bedrock) stays allowed."
+          "label": "EU: in China gehostete Familien blockieren",
+          "description": "Blockiert DeepSeek, Qwen, Kimi und GLM; eine residenzgarantierte EU-Route (z. B. Bedrock) bleibt zulässig."
         },
         "eu-guaranteed-only": {
-          "label": "EU: residency-guaranteed routes only",
-          "description": "Allow a model only when it is served over a residency-guaranteed route."
+          "label": "EU: nur residenzgarantierte Routen",
+          "description": "Erlaubt ein Modell nur, wenn es über eine residenzgarantierte Route bereitgestellt wird."
         },
         "cn-prefer-domestic": {
-          "label": "Prefer China-hosted families",
-          "description": "Allow China-hosted families (plus Llama) and any residency-guaranteed route."
+          "label": "In China gehostete Familien bevorzugen",
+          "description": "Erlaubt in China gehostete Familien (plus Llama) und jede residenzgarantierte Route."
         },
         "other-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route."
+          "label": "In China gehostete Familien blockieren",
+          "description": "Blockiert DeepSeek, Qwen, Kimi und GLM; erlaubt sie nur über eine residenzgarantierte Route."
         }
       },
-      "saved": "Model access policy saved",
-      "saveFailed": "Could not save the model access policy"
+      "saved": "Modellzugriffsrichtlinie gespeichert",
+      "saveFailed": "Modellzugriffsrichtlinie konnte nicht gespeichert werden"
     }
   },
   "inspector": {
@@ -3639,8 +3639,8 @@
         "provision_type_unhandled": "Kein Handler für diesen Bereitstellungstyp",
         "preset_unsatisfiable": "Modell-Preset kann diese Pipeline nicht ausführen",
         "visual_pipeline_no_frontend": "Kein Frontend zum Testen",
-        "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here",
+        "model_policy_blocked": "Modell durch Kontorichtlinie blockiert",
+        "model_policy_unsupported": "Modellrichtlinie hier nicht verfügbar",
         "deployer_required_before_tester": "Füge einen Deployer vor dem Tester hinzu"
       },
       "fallbackMessage": "Diese Aktion steht im Konflikt mit dem aktuellen Zustand.",

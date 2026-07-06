@@ -399,8 +399,8 @@
         "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה",
         "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו",
         "visual_pipeline_no_frontend": "אין frontend לבדיקה",
-        "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here",
+        "model_policy_blocked": "המודל נחסם על ידי מדיניות החשבון",
+        "model_policy_unsupported": "מדיניות המודלים אינה זמינה כאן",
         "deployer_required_before_tester": "הוסף Deployer לפני ה-Tester"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
@@ -2379,20 +2379,20 @@
       }
     },
     "modelPolicy": {
-      "title": "Model access policy",
-      "description": "Restrict which model families this account’s teams can run. Data-residency risk depends on the serving route, so a trusted (residency-guaranteed) route can exempt an otherwise-blocked family.",
-      "regionLabel": "Operating region",
-      "applyPreset": "Apply preset:",
-      "modeLabel": "Policy mode",
+      "title": "מדיניות גישה למודלים",
+      "description": "מגבילה אילו משפחות מודלים הצוותים של חשבון זה יכולים להריץ. סיכון תושבוּת הנתונים תלוי בנתיב השירות, ולכן נתיב מהימן (עם תושבוּת מובטחת) יכול לפטור משפחה שאחרת הייתה חסומה.",
+      "regionLabel": "אזור הפעילות",
+      "applyPreset": "החל תבנית:",
+      "modeLabel": "מצב המדיניות",
       "modes": {
-        "off": "No restriction",
-        "blocklist": "Block listed families",
-        "allowlist": "Allow only listed families"
+        "off": "ללא הגבלה",
+        "blocklist": "חסום את המשפחות ברשימה",
+        "allowlist": "אפשר רק את המשפחות ברשימה"
       },
-      "familiesBlockLabel": "Blocked families",
-      "familiesAllowLabel": "Allowed families",
-      "trustedLabel": "Trusted (residency-guaranteed) routes",
-      "trustedHint": "A blocked family stays available when it is served over one of these routes.",
+      "familiesBlockLabel": "משפחות חסומות",
+      "familiesAllowLabel": "משפחות מותרות",
+      "trustedLabel": "נתיבים מהימנים (עם תושבוּת מובטחת)",
+      "trustedHint": "משפחה חסומה נשארת זמינה כאשר היא מוגשת דרך אחד מהנתיבים האלה.",
       "families": {
         "claude": "Claude (Anthropic)",
         "openai": "OpenAI / ChatGPT",
@@ -2404,38 +2404,38 @@
         "glm": "GLM (Z.ai)"
       },
       "regions": {
-        "usa": "United States",
-        "europe": "Europe",
-        "china": "China",
-        "other": "Other"
+        "usa": "ארצות הברית",
+        "europe": "אירופה",
+        "china": "סין",
+        "other": "אחר"
       },
       "providers": {
         "bedrock": "AWS Bedrock"
       },
       "presets": {
         "us-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route (e.g. Bedrock)."
+          "label": "חסום משפחות המתארחות בסין",
+          "description": "חוסם את DeepSeek, Qwen, Kimi ו-GLM; מתיר אותן רק דרך נתיב עם תושבוּת מובטחת (למשל Bedrock)."
         },
         "eu-block-cn": {
-          "label": "EU: block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; a residency-guaranteed EU route (e.g. Bedrock) stays allowed."
+          "label": "האיחוד האירופי: חסום משפחות המתארחות בסין",
+          "description": "חוסם את DeepSeek, Qwen, Kimi ו-GLM; נתיב של האיחוד האירופי עם תושבוּת מובטחת (למשל Bedrock) נשאר מותר."
         },
         "eu-guaranteed-only": {
-          "label": "EU: residency-guaranteed routes only",
-          "description": "Allow a model only when it is served over a residency-guaranteed route."
+          "label": "האיחוד האירופי: רק נתיבים עם תושבוּת מובטחת",
+          "description": "מתיר מודל רק כאשר הוא מוגש דרך נתיב עם תושבוּת מובטחת."
         },
         "cn-prefer-domestic": {
-          "label": "Prefer China-hosted families",
-          "description": "Allow China-hosted families (plus Llama) and any residency-guaranteed route."
+          "label": "העדף משפחות המתארחות בסין",
+          "description": "מתיר משפחות המתארחות בסין (וגם Llama) וכל נתיב עם תושבוּת מובטחת."
         },
         "other-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route."
+          "label": "חסום משפחות המתארחות בסין",
+          "description": "חוסם את DeepSeek, Qwen, Kimi ו-GLM; מתיר אותן רק דרך נתיב עם תושבוּת מובטחת."
         }
       },
-      "saved": "Model access policy saved",
-      "saveFailed": "Could not save the model access policy"
+      "saved": "מדיניות הגישה למודלים נשמרה",
+      "saveFailed": "לא ניתן היה לשמור את מדיניות הגישה למודלים"
     }
   },
   "providers": {

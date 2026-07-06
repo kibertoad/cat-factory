@@ -399,8 +399,8 @@
         "bootstrap_reference_missing": "Еталонна архітектура зникла",
         "preset_unsatisfiable": "Пресет моделі не може запустити цей конвеєр",
         "visual_pipeline_no_frontend": "Немає фронтенду для тестування",
-        "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here",
+        "model_policy_blocked": "Модель заблоковано політикою облікового запису",
+        "model_policy_unsupported": "Політика моделей тут недоступна",
         "deployer_required_before_tester": "Додайте Deployer перед Tester"
       },
       "fallbackMessage": "Ця дія суперечить поточному стану.",
@@ -2368,20 +2368,20 @@
       }
     },
     "modelPolicy": {
-      "title": "Model access policy",
-      "description": "Restrict which model families this account’s teams can run. Data-residency risk depends on the serving route, so a trusted (residency-guaranteed) route can exempt an otherwise-blocked family.",
-      "regionLabel": "Operating region",
-      "applyPreset": "Apply preset:",
-      "modeLabel": "Policy mode",
+      "title": "Політика доступу до моделей",
+      "description": "Обмежує, які родини моделей можуть запускати команди цього облікового запису. Ризик резидентності даних залежить від маршруту обслуговування, тож довірений маршрут (із гарантованою резидентністю) може звільнити родину, яку інакше було б заблоковано.",
+      "regionLabel": "Регіон роботи",
+      "applyPreset": "Застосувати шаблон:",
+      "modeLabel": "Режим політики",
       "modes": {
-        "off": "No restriction",
-        "blocklist": "Block listed families",
-        "allowlist": "Allow only listed families"
+        "off": "Без обмежень",
+        "blocklist": "Блокувати перелічені родини",
+        "allowlist": "Дозволити лише перелічені родини"
       },
-      "familiesBlockLabel": "Blocked families",
-      "familiesAllowLabel": "Allowed families",
-      "trustedLabel": "Trusted (residency-guaranteed) routes",
-      "trustedHint": "A blocked family stays available when it is served over one of these routes.",
+      "familiesBlockLabel": "Заблоковані родини",
+      "familiesAllowLabel": "Дозволені родини",
+      "trustedLabel": "Довірені маршрути (із гарантованою резидентністю)",
+      "trustedHint": "Заблокована родина залишається доступною, коли обслуговується через один із цих маршрутів.",
       "families": {
         "claude": "Claude (Anthropic)",
         "openai": "OpenAI / ChatGPT",
@@ -2393,38 +2393,38 @@
         "glm": "GLM (Z.ai)"
       },
       "regions": {
-        "usa": "United States",
-        "europe": "Europe",
-        "china": "China",
-        "other": "Other"
+        "usa": "Сполучені Штати",
+        "europe": "Європа",
+        "china": "Китай",
+        "other": "Інше"
       },
       "providers": {
         "bedrock": "AWS Bedrock"
       },
       "presets": {
         "us-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route (e.g. Bedrock)."
+          "label": "Блокувати родини, розміщені в Китаї",
+          "description": "Блокує DeepSeek, Qwen, Kimi та GLM; дозволяє їх лише через маршрут із гарантованою резидентністю (напр. Bedrock)."
         },
         "eu-block-cn": {
-          "label": "EU: block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; a residency-guaranteed EU route (e.g. Bedrock) stays allowed."
+          "label": "ЄС: блокувати родини, розміщені в Китаї",
+          "description": "Блокує DeepSeek, Qwen, Kimi та GLM; маршрут ЄС із гарантованою резидентністю (напр. Bedrock) залишається дозволеним."
         },
         "eu-guaranteed-only": {
-          "label": "EU: residency-guaranteed routes only",
-          "description": "Allow a model only when it is served over a residency-guaranteed route."
+          "label": "ЄС: лише маршрути з гарантованою резидентністю",
+          "description": "Дозволяє модель лише тоді, коли вона обслуговується через маршрут із гарантованою резидентністю."
         },
         "cn-prefer-domestic": {
-          "label": "Prefer China-hosted families",
-          "description": "Allow China-hosted families (plus Llama) and any residency-guaranteed route."
+          "label": "Надавати перевагу родинам, розміщеним у Китаї",
+          "description": "Дозволяє родини, розміщені в Китаї (а також Llama), і будь-який маршрут із гарантованою резидентністю."
         },
         "other-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route."
+          "label": "Блокувати родини, розміщені в Китаї",
+          "description": "Блокує DeepSeek, Qwen, Kimi та GLM; дозволяє їх лише через маршрут із гарантованою резидентністю."
         }
       },
-      "saved": "Model access policy saved",
-      "saveFailed": "Could not save the model access policy"
+      "saved": "Політику доступу до моделей збережено",
+      "saveFailed": "Не вдалося зберегти політику доступу до моделей"
     }
   },
   "providers": {

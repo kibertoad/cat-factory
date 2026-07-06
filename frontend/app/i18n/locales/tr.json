@@ -399,8 +399,8 @@
         "bootstrap_reference_missing": "Referans mimari kayıp",
         "preset_unsatisfiable": "Model ön ayarı bu ardışık düzeni çalıştıramıyor",
         "visual_pipeline_no_frontend": "Test edilecek bir frontend yok",
-        "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here",
+        "model_policy_blocked": "Model, hesap politikası tarafından engellendi",
+        "model_policy_unsupported": "Model politikası burada kullanılamıyor",
         "deployer_required_before_tester": "Tester’dan önce bir Deployer ekleyin"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
@@ -2380,20 +2380,20 @@
       }
     },
     "modelPolicy": {
-      "title": "Model access policy",
-      "description": "Restrict which model families this account’s teams can run. Data-residency risk depends on the serving route, so a trusted (residency-guaranteed) route can exempt an otherwise-blocked family.",
-      "regionLabel": "Operating region",
-      "applyPreset": "Apply preset:",
-      "modeLabel": "Policy mode",
+      "title": "Model erişim politikası",
+      "description": "Bu hesabın ekiplerinin hangi model ailelerini çalıştırabileceğini kısıtlar. Veri yerleşimi riski hizmet rotasına bağlıdır; bu nedenle güvenilir (yerleşimi garantili) bir rota, aksi takdirde engellenmiş bir aileyi muaf tutabilir.",
+      "regionLabel": "Çalışma bölgesi",
+      "applyPreset": "Ön ayarı uygula:",
+      "modeLabel": "Politika modu",
       "modes": {
-        "off": "No restriction",
-        "blocklist": "Block listed families",
-        "allowlist": "Allow only listed families"
+        "off": "Kısıtlama yok",
+        "blocklist": "Listelenen aileleri engelle",
+        "allowlist": "Yalnızca listelenen ailelere izin ver"
       },
-      "familiesBlockLabel": "Blocked families",
-      "familiesAllowLabel": "Allowed families",
-      "trustedLabel": "Trusted (residency-guaranteed) routes",
-      "trustedHint": "A blocked family stays available when it is served over one of these routes.",
+      "familiesBlockLabel": "Engellenen aileler",
+      "familiesAllowLabel": "İzin verilen aileler",
+      "trustedLabel": "Güvenilir (yerleşimi garantili) rotalar",
+      "trustedHint": "Engellenen bir aile, bu rotalardan biri üzerinden sunulduğunda kullanılabilir kalır.",
       "families": {
         "claude": "Claude (Anthropic)",
         "openai": "OpenAI / ChatGPT",
@@ -2405,38 +2405,38 @@
         "glm": "GLM (Z.ai)"
       },
       "regions": {
-        "usa": "United States",
-        "europe": "Europe",
-        "china": "China",
-        "other": "Other"
+        "usa": "Amerika Birleşik Devletleri",
+        "europe": "Avrupa",
+        "china": "Çin",
+        "other": "Diğer"
       },
       "providers": {
         "bedrock": "AWS Bedrock"
       },
       "presets": {
         "us-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route (e.g. Bedrock)."
+          "label": "Çin'de barındırılan aileleri engelle",
+          "description": "DeepSeek, Qwen, Kimi ve GLM'yi engeller; bunlara yalnızca yerleşimi garantili bir rota üzerinden izin verir (ör. Bedrock)."
         },
         "eu-block-cn": {
-          "label": "EU: block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; a residency-guaranteed EU route (e.g. Bedrock) stays allowed."
+          "label": "AB: Çin'de barındırılan aileleri engelle",
+          "description": "DeepSeek, Qwen, Kimi ve GLM'yi engeller; yerleşimi garantili bir AB rotası (ör. Bedrock) izinli kalır."
         },
         "eu-guaranteed-only": {
-          "label": "EU: residency-guaranteed routes only",
-          "description": "Allow a model only when it is served over a residency-guaranteed route."
+          "label": "AB: yalnızca yerleşimi garantili rotalar",
+          "description": "Bir modele yalnızca yerleşimi garantili bir rota üzerinden sunulduğunda izin verir."
         },
         "cn-prefer-domestic": {
-          "label": "Prefer China-hosted families",
-          "description": "Allow China-hosted families (plus Llama) and any residency-guaranteed route."
+          "label": "Çin'de barındırılan aileleri tercih et",
+          "description": "Çin'de barındırılan ailelere (ve Llama'ya) ve yerleşimi garantili herhangi bir rotaya izin verir."
         },
         "other-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route."
+          "label": "Çin'de barındırılan aileleri engelle",
+          "description": "DeepSeek, Qwen, Kimi ve GLM'yi engeller; bunlara yalnızca yerleşimi garantili bir rota üzerinden izin verir."
         }
       },
-      "saved": "Model access policy saved",
-      "saveFailed": "Could not save the model access policy"
+      "saved": "Model erişim politikası kaydedildi",
+      "saveFailed": "Model erişim politikası kaydedilemedi"
     }
   },
   "providers": {

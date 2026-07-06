@@ -1527,7 +1527,7 @@ string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
 
 4. A **locale-parity** CI check couples translations to `en.json` edits: a PR that adds,
    changes, or removes an `en.json` message key MUST make the SAME change in every other locale
-   (`es/fr/he/ja/pl/tr/uk`), else it fails. It runs in the `build-typecheck` job via
+   (`de/es/fr/he/it/ja/pl/tr/uk`), else it fails. It runs in the `build-typecheck` job via
    `node frontend/app/scripts/i18n-locale-parity.mjs --since origin/<base>` (also
    `pnpm --filter @cat-factory/app run i18n:parity`). This is **change-coupling against the PR
    merge-base**, NOT full key-parity: it enforces ONLY the keys THIS PR touched in `en`, so the
@@ -1536,6 +1536,18 @@ string>`** keyed off the source-of-truth union (e.g. `CONFLICT_TITLE_KEYS` in
    ref) it passes. **Consequence for the incremental rule below:** you may still add `en` keys
    ahead of the components that use them, but when you do, add the translated value to all
    locales in the SAME PR — an `en`-only string edit now fails CI.
+
+**Translate for real — NEVER ship an English string as a non-`en` locale value.** The parity
+gate checks only that the KEY exists in every locale, not that its VALUE differs from English, so
+it will happily pass a locale whose value is a verbatim copy of the `en` text. That copy is a bug,
+not a translation: it ships English to a Spanish / Japanese / … reader and silently rots (a later
+maintainer can't tell a forgotten placeholder from a deliberate choice). When you add or change an
+`en` key, write the ACTUAL translation for each locale in the SAME edit. The ONLY values that may
+legitimately match `en` are proper nouns / brand names that are identical across languages
+(model-family labels like `Claude (Anthropic)`, `DeepSeek`, `AWS Bedrock`, `OpenAI / ChatGPT`);
+everything else — prose, hints, region/country names, verbs — must be localized. If you genuinely
+cannot produce a translation for some language, say so explicitly in the PR rather than committing
+an English placeholder that reads as done.
 
 Migration is incremental — `usePipelineErrorToast` is the pilot; most components still hold
 inline strings, so **when you touch a component, lift its visible copy into the catalog**

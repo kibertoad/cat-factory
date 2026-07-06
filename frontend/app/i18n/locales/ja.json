@@ -399,8 +399,8 @@
         "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません",
         "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません",
         "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません",
-        "model_policy_blocked": "Model blocked by account policy",
-        "model_policy_unsupported": "Model policy not available here",
+        "model_policy_blocked": "アカウントのポリシーによりモデルがブロックされています",
+        "model_policy_unsupported": "モデルポリシーはここでは利用できません",
         "deployer_required_before_tester": "テスターの前にDeployerを追加してください"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
@@ -2380,20 +2380,20 @@
       }
     },
     "modelPolicy": {
-      "title": "Model access policy",
-      "description": "Restrict which model families this account’s teams can run. Data-residency risk depends on the serving route, so a trusted (residency-guaranteed) route can exempt an otherwise-blocked family.",
-      "regionLabel": "Operating region",
-      "applyPreset": "Apply preset:",
-      "modeLabel": "Policy mode",
+      "title": "モデルアクセスポリシー",
+      "description": "このアカウントのチームが実行できるモデルファミリーを制限します。データレジデンシーのリスクは提供経路に依存するため、信頼された（レジデンシー保証済みの）経路であれば、通常はブロックされるファミリーを除外できます。",
+      "regionLabel": "運用リージョン",
+      "applyPreset": "プリセットを適用:",
+      "modeLabel": "ポリシーモード",
       "modes": {
-        "off": "No restriction",
-        "blocklist": "Block listed families",
-        "allowlist": "Allow only listed families"
+        "off": "制限なし",
+        "blocklist": "リストされたファミリーをブロック",
+        "allowlist": "リストされたファミリーのみ許可"
       },
-      "familiesBlockLabel": "Blocked families",
-      "familiesAllowLabel": "Allowed families",
-      "trustedLabel": "Trusted (residency-guaranteed) routes",
-      "trustedHint": "A blocked family stays available when it is served over one of these routes.",
+      "familiesBlockLabel": "ブロックするファミリー",
+      "familiesAllowLabel": "許可するファミリー",
+      "trustedLabel": "信頼された（レジデンシー保証済みの）経路",
+      "trustedHint": "ブロックされたファミリーでも、これらの経路のいずれかで提供される場合は利用可能なままです。",
       "families": {
         "claude": "Claude (Anthropic)",
         "openai": "OpenAI / ChatGPT",
@@ -2405,38 +2405,38 @@
         "glm": "GLM (Z.ai)"
       },
       "regions": {
-        "usa": "United States",
-        "europe": "Europe",
-        "china": "China",
-        "other": "Other"
+        "usa": "アメリカ合衆国",
+        "europe": "ヨーロッパ",
+        "china": "中国",
+        "other": "その他"
       },
       "providers": {
         "bedrock": "AWS Bedrock"
       },
       "presets": {
         "us-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route (e.g. Bedrock)."
+          "label": "中国でホストされるファミリーをブロック",
+          "description": "DeepSeek、Qwen、Kimi、GLM をブロックし、レジデンシー保証済みの経路（例: Bedrock）経由でのみ許可します。"
         },
         "eu-block-cn": {
-          "label": "EU: block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; a residency-guaranteed EU route (e.g. Bedrock) stays allowed."
+          "label": "EU: 中国でホストされるファミリーをブロック",
+          "description": "DeepSeek、Qwen、Kimi、GLM をブロックしますが、レジデンシー保証済みの EU 経路（例: Bedrock）は許可されたままです。"
         },
         "eu-guaranteed-only": {
-          "label": "EU: residency-guaranteed routes only",
-          "description": "Allow a model only when it is served over a residency-guaranteed route."
+          "label": "EU: レジデンシー保証済みの経路のみ",
+          "description": "レジデンシー保証済みの経路で提供される場合にのみモデルを許可します。"
         },
         "cn-prefer-domestic": {
-          "label": "Prefer China-hosted families",
-          "description": "Allow China-hosted families (plus Llama) and any residency-guaranteed route."
+          "label": "中国でホストされるファミリーを優先",
+          "description": "中国でホストされるファミリー（および Llama）と、レジデンシー保証済みの任意の経路を許可します。"
         },
         "other-block-cn": {
-          "label": "Block China-hosted families",
-          "description": "Block DeepSeek, Qwen, Kimi and GLM; allow them only over a residency-guaranteed route."
+          "label": "中国でホストされるファミリーをブロック",
+          "description": "DeepSeek、Qwen、Kimi、GLM をブロックし、レジデンシー保証済みの経路経由でのみ許可します。"
         }
       },
-      "saved": "Model access policy saved",
-      "saveFailed": "Could not save the model access policy"
+      "saved": "モデルアクセスポリシーを保存しました",
+      "saveFailed": "モデルアクセスポリシーを保存できませんでした"
     }
   },
   "providers": {
