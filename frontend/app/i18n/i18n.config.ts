@@ -61,6 +61,16 @@ export default defineI18nConfig(() => ({
       currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
       percent: { style: 'percent', maximumFractionDigits: 1 },
     },
+    de: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
+    it: {
+      decimal: { style: 'decimal' },
+      currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
+      percent: { style: 'percent', maximumFractionDigits: 1 },
+    },
     he: {
       decimal: { style: 'decimal' },
       currency: { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol' },
@@ -95,6 +105,14 @@ export default defineI18nConfig(() => ({
       long: { dateStyle: 'long', timeStyle: 'short' },
     },
     fr: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    de: {
+      short: { dateStyle: 'medium' },
+      long: { dateStyle: 'long', timeStyle: 'short' },
+    },
+    it: {
       short: { dateStyle: 'medium' },
       long: { dateStyle: 'long', timeStyle: 'short' },
     },
