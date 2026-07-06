@@ -1,5 +1,6 @@
 import type { Block, ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
 import { inlineModelRef, resolveScopedModelProvider } from '@cat-factory/kernel'
+import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import type { TestReport } from '@cat-factory/contracts'
 import { TESTER_QC_AGENT_KIND } from '@cat-factory/contracts'
 import { generateText } from 'ai'
@@ -46,6 +47,8 @@ export interface TesterQualityReviewDeps {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  /** Resolve the block's run/execution + initiator, folded into the inline model scope. */
+  resolveRunContext?: ResolveBlockRunContext
 }
 
 /**
@@ -80,7 +83,8 @@ export class TesterQualityReviewService implements TesterQualityReviewer {
     block: Block,
     report: TestReport,
   ): Promise<{ outcome: TesterQualityOutcome; model: string | null } | null> {
-    const modelProvider = await resolveScopedModelProvider(workspaceId, this.deps)
+    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, block)
     // No model resolvable ⇒ pass-through (the gate proceeds), like the requirements reviewer.
     if (!modelProvider || !ref) return null

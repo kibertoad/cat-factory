@@ -3,6 +3,7 @@ import {
   inlineModelRef,
   isModelUsableInline,
   nativeVendorForRef,
+  subscriptionVendorForRef,
   type ModelRef,
   type ProviderCapabilities,
 } from '@cat-factory/kernel'
@@ -35,6 +36,39 @@ describe('nativeVendorForRef', () => {
   it('is undefined for a plain (non-harness / pi) ref', () => {
     expect(nativeVendorForRef(QWEN_DIRECT)).toBeUndefined()
     expect(nativeVendorForRef({ ...QWEN_DIRECT, harness: 'pi' })).toBeUndefined()
+  })
+})
+
+describe('subscriptionVendorForRef', () => {
+  it('maps EVERY subscription vendor from its catalog ref (not just the native ambient two)', () => {
+    expect(subscriptionVendorForRef(CLAUDE_SUB)).toBe('claude')
+    expect(subscriptionVendorForRef(CODEX_SUB)).toBe('codex')
+    // The non-native claude-code vendors — served inline only through the container backend —
+    // ARE mapped here (unlike nativeVendorForRef, which excludes them).
+    expect(subscriptionVendorForRef(GLM_SUB)).toBe('glm')
+    expect(
+      subscriptionVendorForRef({
+        provider: 'moonshot',
+        model: 'kimi-k2.6',
+        harness: 'claude-code',
+      }),
+    ).toBe('kimi')
+    expect(
+      subscriptionVendorForRef({
+        provider: 'deepseek',
+        model: 'deepseek-chat',
+        harness: 'claude-code',
+      }),
+    ).toBe('deepseek')
+  })
+
+  it('is undefined for a non-subscription ref or an unknown subscription ref', () => {
+    expect(subscriptionVendorForRef(QWEN_DIRECT)).toBeUndefined()
+    expect(subscriptionVendorForRef({ ...QWEN_DIRECT, harness: 'pi' })).toBeUndefined()
+    // A claude-code ref not in the catalog's subscription set has no known vendor.
+    expect(
+      subscriptionVendorForRef({ provider: 'nope', model: 'x', harness: 'claude-code' }),
+    ).toBeUndefined()
   })
 })
 

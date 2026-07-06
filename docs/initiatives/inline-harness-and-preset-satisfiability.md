@@ -182,13 +182,92 @@ container opt-in was wrong.
   machine and the explicit product choice (default on). Set `LOCAL_NATIVE_INLINE=off` to restore the
   up-front `preset_unsatisfiable` refusal.
 
-### C2 — prewarmed-container inline backend ⬜ todo (the compatibility path)
+### C2 — prewarmed-container inline backend ✅ done (2026-07-06) (the compatibility path)
+
+Landed as designed below. Summary of what shipped:
+
+- **Harness `inline` kind** (`executor-harness/src/inline.ts` + `parseInlineJob`): a one-shot,
+  no-checkout completion that reuses `runSubscriptionHarness`'s credential-env setup and returns
+  `{ text, usage, finishReason }`. Image bumped 1.35.0 → 1.36.0 (pins re-synced via
+  `pnpm sync:image-tags`).
+- **Kernel**: `subscriptionVendorForRef(ref)` (catalog reverse-map, ANY subscription vendor);
+  `ModelScope.executionId`; `resolveScopedModelProvider(scope, deps)`.
+- **Transport**: `LocalContainerRunnerTransport.runInline(req)` leases a warm member (transient
+  when pooling is off), POSTs the `inline` job, polls to completion (`pollInlineJob`), releases.
+- **Local resolver**: `wrapResolverWithInlineHarness({ inlineHarnesses, hostCliVendors, runInline,
+leasePersonal/leasePooled })` — host CLI when the native vendor's binary is present, else the
+  container on a leased credential (personal per-run activation for an individual vendor, pooled
+  token otherwise). `makeInlineHarnessPredicate` broadened to ANY subscription vendor whose
+  harness is enabled (so GLM/Kimi/DeepSeek now qualify — previously host-CLI-only).
+- **Node seam**: `wrapModelProviderResolver(inner, deps)` now receives the lease closures;
+  `buildNodeContainer` builds the subscription services before the resolver wrap.
+- **Threading**: `executionId` + initiator `userId` into the inline scope via `scopeForBlockRun`
+  (`inlineScope.ts`) — the iterative reviewers, doc/initiative interviewers, tester QC, Kaizen,
+  and the AI/consensus agent executors. `resolveBlockRunContext(deps)` wires it from the block's
+  active run for the engine-driven inline services.
+
+Gotchas surfaced:
+
+- **No `docker exec` seam exists** — the ONLY way into a warm container is `POST /jobs`; the
+  `inline` kind is the seam (chose this over adding an exec primitive, which would duplicate the
+  credential-env setup outside the image).
+- **`LOCAL_NATIVE_INLINE` now gates BOTH backends** (host CLI + container), broadened from
+  "host-CLI ambient allow-list" to "inline subscription harnesses enabled". `off` still refuses a
+  subscription-only inline step up front. Host-vs-container SELECTION lives in the provider, not
+  the predicate.
+- **Individual-vendor container lease needs run context** (`executionId` + `userId`). Sandbox
+  (no run) and Kaizen (activation deleted post-run) are pooled-only in practice; they fail loudly
+  for an individual vendor rather than silently mis-running.
+
+Original design (kept for reference):
 
 Goal: run the inline subscription CLI inside a **prewarmed local container** on the LEASED/configured
 subscription credential, so the inline path works even when the host has no `claude`/`codex` binary
 (and in mothership mode without touching the host), at warm-pool latency. This is the "increase
 compatibility" half of the product ask and is deliberately deferred because it is cross-cutting and
 credential-sensitive:
+
+#### C2 implementation plan (decided 2026-07-06)
+
+Two decisions locked in: (1) the container runs the one-shot CLI via a NEW harness **`/inline`
+job kind** (reuses `runSubscriptionHarness`'s credential-env setup verbatim — the single
+credential-handling site — at the cost of an executor-harness image bump), NOT a `docker exec`
+seam; (2) **full C2** — pooled (Kimi/DeepSeek, workspaceId lease) AND personal/individual
+(claude/codex/glm, executionId+userId lease), including the run-context threading.
+
+Slices (build bottom-up):
+
+- **Harness `inline` kind** (`executor-harness`): `parseInlineJob` (`job.ts`) + `handleInline`
+  (`inline.ts`, runs `runSubscriptionHarness` in a throwaway temp cwd, returns
+  `{ text, usage, finishReason }`) + register in `server.ts` `KINDS`. Bump the image tag +
+  the 4 pins (harness `version`, `deploy/backend` `package.json`/`wrangler.toml`,
+  `RECOMMENDED_HARNESS_IMAGE`).
+- **Kernel**: `subscriptionVendorForRef(ref)` (catalog reverse-map, ANY subscription vendor,
+  not just native-ambient); add `executionId?` + `initiatedByUserId?` to `ModelScope`; widen
+  `resolveScopedModelProvider(scope, deps)` to accept the fuller scope.
+- **Transport**: `LocalContainerRunnerTransport.runInline(req)` — lease a warm member
+  (`acquireMember`, synthetic `inline-*` runId; works pool-off too as a transient member),
+  POST the `inline` job, poll to completion (new `pollInlineJob` in `harnessHttp.ts`), release
+  the member. Plus `hostCliAvailable(vendor)` probe (`which claude`/`codex`).
+- **Local container-inline runner + provider**: an `InlineCliRunner` that, per-scope, leases the
+  credential (personal via `leasePersonalSubscriptionToken(executionId,userId,vendor)` / pooled
+  via `leaseSubscriptionToken(workspaceId,vendor)`) and calls `transport.runInline`. Selection:
+  host-CLI when `LOCAL_NATIVE_INLINE` names the vendor AND the host CLI is present, else the
+  container backend. Broaden `inlineHarnessRef` to accept ANY subscription vendor when the
+  container backend is available.
+- **Node wiring seam**: reorder `buildNodeContainer` so `subscriptions`/`personalSubscriptions`
+  build BEFORE the model-resolver wrap; change `wrapModelProviderResolver` to
+  `(inner, leaseDeps) => resolver` and pass the lease closures.
+- **Threading** executionId + initiator userId into the inline resolution scope:
+  `AiAgentExecutor` + `ConsensusAgentExecutor` (add `executionId` to their `forScope`);
+  `KaizenService` (`grading.executionId`); `IterativeReviewService` (new run-context param
+  threaded from `ExecutionService` review-gate + the re-review HTTP path); `SandboxRunService`
+  stays pooled-only (no run context).
+- **Tests + tracker + changesets**; keep the runtimes symmetric where the change is shared
+  (the kernel scope + threading are runtime-neutral; the container-inline runner is local-only,
+  like the host-CLI runner).
+
+Original C2 notes (still accurate):
 
 - **Run-context threading (the blocker).** For an INDIVIDUAL-usage vendor (`claude`/`codex`/`glm`,
   the `claude-opus` case) the token is leased per-run via

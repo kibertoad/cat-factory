@@ -37,7 +37,11 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { NativeRoutingRunnerTransport } from './NativeRoutingRunnerTransport.js'
-import { makeInlineHarnessPredicate, wrapResolverWithInlineHarness } from './harnessInline.js'
+import {
+  detectHostInlineClis,
+  makeInlineHarnessPredicate,
+  wrapResolverWithInlineHarness,
+} from './harnessInline.js'
 import { buildLocalDeployTransport } from './NativeCliDeployTransport.js'
 import { applyLocalDefaults } from './config.js'
 import { OFF_VALUES } from './envFlags.js'
@@ -609,12 +613,24 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // transport (buildNodeContainer builds the job builder from local's PAT-backed seams). The
     // capability was already advertised `frontendPreview.supported: true` above.
     previewTransport: createLocalPreviewTransportFromEnv(env),
-    // Serve ambient-eligible subscription harness refs (Claude Code / Codex) as INLINE CLI
-    // calls, so the inline reviewers/brainstorm/estimator + inline agent kinds run on the
-    // developer's subscription — the inline analogue of the container ambient-auth path. Gated
-    // by `LOCAL_NATIVE_INLINE` (default on), independent of the container-native opt-in above.
+    // Serve enabled subscription harness refs (Claude Code / Codex + the non-native
+    // claude-code vendors GLM/Kimi/DeepSeek) as INLINE calls: the developer's OWN host CLI
+    // when its binary is present (ambient login, unmetered), else a warm CONTAINER on a LEASED
+    // subscription credential — so the inline reviewers/brainstorm/estimator + inline agent
+    // kinds run on the subscription even without a host CLI (and in mothership mode). Gated by
+    // `LOCAL_NATIVE_INLINE` (default on), independent of the container-native opt-in above. The
+    // per-run personal / pooled lease seams are supplied by `buildNodeContainer` (built from the
+    // same subscription services the container executor uses) via the wrap `deps` argument.
     ...(inlineAgents
-      ? { wrapModelProviderResolver: wrapResolverWithInlineHarness(inlineHarnesses) }
+      ? {
+          wrapModelProviderResolver: (inner, leaseDeps) =>
+            wrapResolverWithInlineHarness({
+              inlineHarnesses,
+              hostCliVendors: detectHostInlineClis(env),
+              runInline: (req) => resolveContainerTransport().then((t) => t.runInline(req)),
+              ...leaseDeps,
+            })(inner),
+        }
       : {}),
     // Auto-provision the synthetic per-workspace installation so the integration reports
     // connected with no manual connect step.

@@ -97,6 +97,54 @@ export async function pollHarnessJob(opts: {
   return (await res.json()) as RunnerJobView
 }
 
+/** The inline completion a finished `inline` job records (mirrors the harness `InlineResult`). */
+export interface InlineJobResult {
+  text: string
+  finishReason?: 'stop' | 'length'
+  usage?: { inputTokens?: number; outputTokens?: number }
+}
+
+/** The harness `/jobs/{id}` view for an `inline` job (its own result shape, not RunnerJobView). */
+export interface InlineJobView {
+  state: 'running' | 'done' | 'failed'
+  result?: InlineJobResult
+  error?: string
+}
+
+/**
+ * GET an INLINE harness job by id. Same eviction semantics as {@link pollHarnessJob} (a 404 or
+ * a connection error against a dead backend maps to a terminal eviction), but typed for the
+ * inline result shape ({@link InlineJobResult}) rather than the coding {@link RunnerJobView}.
+ */
+export async function pollInlineJob(opts: {
+  fetchImpl: typeof fetch
+  endpoint: HarnessEndpoint
+  jobId: string
+  secret: string
+  timeoutMs: number
+  isDead: () => boolean | Promise<boolean>
+}): Promise<InlineJobView> {
+  let res: Response
+  try {
+    res = await opts.fetchImpl(
+      harnessUrl(opts.endpoint, `/jobs/${encodeURIComponent(opts.jobId)}`),
+      {
+        method: 'GET',
+        headers: { [SECRET_HEADER]: opts.secret },
+        signal: AbortSignal.timeout(opts.timeoutMs),
+      },
+    )
+  } catch (err) {
+    if (await opts.isDead()) return { state: 'failed', error: EVICTION_ERROR }
+    throw err
+  }
+  if (res.status === 404) return { state: 'failed', error: EVICTION_ERROR }
+  if (!res.ok) {
+    throw new Error(`Inline container job poll failed (HTTP ${res.status}): ${await safeText(res)}`)
+  }
+  return (await res.json()) as InlineJobView
+}
+
 /** A single quick `/health` probe (no retry); false on any error/non-OK. */
 export async function harnessHealthy(
   fetchImpl: typeof fetch,

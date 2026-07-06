@@ -1,7 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { parseAgentJob } from './job.js'
+import { parseAgentJob, parseInlineJob } from './job.js'
 import { handleAgent } from './agent.js'
+import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
 import { JobRegistry, loadRunnerLimits, type JobResultBase, type RunOptions } from './runner.js'
 import { log } from './logger.js'
@@ -83,6 +84,13 @@ const KINDS: Record<string, KindEntry> = {
     mode: job.mode,
     repo: `${job.repo.owner}/${job.repo.name}`,
     branch: job.branch,
+  })),
+  // The one-shot, no-checkout inline completion (requirements reviewer / brainstorm /
+  // task-estimator / inline document kinds) on a leased subscription credential — the
+  // container analogue of the local host-CLI inline runner. See inline.ts.
+  inline: defineKind(parseInlineJob, handleInline, (job) => ({
+    harness: job.harness,
+    model: job.model,
   })),
 }
 

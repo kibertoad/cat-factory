@@ -70,6 +70,7 @@ import {
   type ModelProviderResolver,
   type NotificationChannel,
   type PersonalSubscriptionRepository,
+  type SubscriptionVendor,
   type ProviderApiKeyRepository,
   type ProviderSubscriptionTokenRepository,
   type ProvisioningSubsystem,
@@ -490,6 +491,26 @@ function buildNodeVcsIdentityRegistry(config: AppConfig): VcsIdentityRegistry {
   return registry
 }
 
+/**
+ * The subscription-credential lease seams `buildNodeContainer` hands to
+ * {@link NodeContainerOptions.wrapModelProviderResolver}. Present only when the corresponding
+ * subscription service is configured (ENCRYPTION_KEY + a token store). The local facade's
+ * inline-harness wrap uses them to lease a credential for an inline subscription call run in a
+ * warm container — the personal per-run activation for an individual vendor, the pooled token
+ * otherwise — mirroring `ContainerAgentExecutor.resolveAuth`.
+ */
+export interface ModelProviderResolverWrapDeps {
+  leasePersonalSubscriptionToken?: (
+    executionId: string,
+    userId: string,
+    vendor: SubscriptionVendor,
+  ) => Promise<{ secret: string }>
+  leaseSubscriptionToken?: (
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+  ) => Promise<{ secret: string }>
+}
+
 export interface NodeContainerOptions {
   /**
    * The Drizzle/Postgres client (the single persistence layer). OPTIONAL: a mothership-mode
@@ -638,12 +659,19 @@ export interface NodeContainerOptions {
   /**
    * Wrap the model-provider resolver right after it's built, so a sibling facade can add a
    * flavour the base resolver lacks. Local mode wraps it so a subscription HARNESS ref
-   * (`claude-code` / `codex`) resolves to a CLI-backed inline model driving the developer's
-   * ambient CLI — the inline analogue of its container ambient-auth path. Undefined → the
-   * base Node resolver (HTTP providers only). Applied to both the inline executor and
-   * `createCore`, so the reviewer/brainstorm/estimator + the inline agent kinds all use it.
+   * (`claude-code` / `codex`) resolves to a CLI-backed inline model — driving the developer's
+   * ambient CLI when present, else a warm container on a LEASED subscription credential (the
+   * inline analogue of its container ambient-auth / leased-token paths). The lease seams are
+   * passed in `deps` (built here from the same subscription services the container executor
+   * uses), so the wrap can lease a per-run personal activation / a pooled token for the inline
+   * call. Undefined → the base Node resolver (HTTP providers only). Applied to both the inline
+   * executor and `createCore`, so the reviewer/brainstorm/estimator + the inline agent kinds
+   * all use it.
    */
-  wrapModelProviderResolver?: (inner: ModelProviderResolver) => ModelProviderResolver
+  wrapModelProviderResolver?: (
+    inner: ModelProviderResolver,
+    deps: ModelProviderResolverWrapDeps,
+  ) => ModelProviderResolver
   /**
    * Override the git origin (clone URL + provider) for a run's repo. The default builds a
    * `github.com` URL; the local GitLab facade injects a builder emitting the configured
@@ -1543,6 +1571,31 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     apiKeys,
     config.spend.currency,
   )
+  // The subscription-token pool (Claude Code / Codex credentials), shared by the
+  // container executor (lease + usage feedback) and the vendor-credential controller.
+  // Built HERE (before the model-provider wrap below) so its lease closures can be handed
+  // to `wrapModelProviderResolver` — the local facade's inline-harness wrap serves an
+  // inline subscription ref through a warm container on a LEASED credential, so it needs the
+  // same lease seams the container executor uses (built once, shared by both).
+  const subscriptions = buildNodeSubscriptionService(
+    env,
+    db,
+    repos.workspaceRepository,
+    idGenerator,
+    clock,
+    options.providerSubscriptionTokenRepository,
+  )
+  // The per-user individual-usage subscription store (Claude), shared by the
+  // container executor's personal lease, the personal-subscription controller, and the
+  // inline-harness wrap's per-run personal lease.
+  const personalSubscriptions = buildNodePersonalSubscriptionService(
+    env,
+    db,
+    idGenerator,
+    clock,
+    options.personalSubscriptionRepository,
+    options.subscriptionActivationRepository,
+  )
   const baseModelProviderResolver = buildModelProviderResolver(
     env,
     db,
@@ -1550,7 +1603,20 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     localModelEndpoints,
   )
   const modelProviderResolver = options.wrapModelProviderResolver
-    ? options.wrapModelProviderResolver(baseModelProviderResolver)
+    ? options.wrapModelProviderResolver(baseModelProviderResolver, {
+        ...(personalSubscriptions
+          ? {
+              leasePersonalSubscriptionToken: (executionId, userId, vendor) =>
+                personalSubscriptions.leaseForRun(executionId, userId, vendor),
+            }
+          : {}),
+        ...(subscriptions
+          ? {
+              leaseSubscriptionToken: (workspaceId, vendor) =>
+                subscriptions.leaseToken(workspaceId, vendor),
+            }
+          : {}),
+      })
     : baseModelProviderResolver
   // Cloudflare Workers AI is opt-in on Node: enabled when the REST creds are present.
   const cloudflareModelsEnabled =
@@ -1688,26 +1754,6 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
         ...(resolveDeployCloneTarget ? { resolveDeployCloneTarget } : {}),
       }
     : {}
-  // The subscription-token pool (Claude Code / Codex credentials), shared by the
-  // container executor (lease + usage feedback) and the vendor-credential controller.
-  const subscriptions = buildNodeSubscriptionService(
-    env,
-    db,
-    repos.workspaceRepository,
-    idGenerator,
-    clock,
-    options.providerSubscriptionTokenRepository,
-  )
-  // The per-user individual-usage subscription store (Claude), shared by the
-  // container executor's personal lease and the personal-subscription controller.
-  const personalSubscriptions = buildNodePersonalSubscriptionService(
-    env,
-    db,
-    idGenerator,
-    clock,
-    options.personalSubscriptionRepository,
-    options.subscriptionActivationRepository,
-  )
   // Agent-context observability sink: records the complete, redacted context provided
   // to each container agent (composed prompts + folded-in fragments + injected files).
   // Gated by the deployment prompt-recording switch + the workspace storeAgentContext

@@ -116,6 +116,10 @@ export class AiAgentExecutor implements AgentExecutor {
       return this.modelProviderResolver.forScope({
         workspaceId: context.workspaceId,
         userId: context.initiatedByUserId,
+        // The run this inline call belongs to, so a facade that serves a subscription ref
+        // inline through a leased per-run activation (the container inline backend) can lease
+        // the initiator's credential — the inline analogue of the container executor's lease.
+        executionId: context.executionId,
       })
     }
     if (this.modelProvider) return this.modelProvider

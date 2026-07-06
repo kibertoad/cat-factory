@@ -13,9 +13,11 @@ import type { LocalSettings } from '@cat-factory/contracts'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,
+  type InlineJobResult,
   delay,
   harnessHealthy,
   harnessUrl,
+  pollInlineJob,
   pollHarnessJob,
   postHarnessJob,
   waitForHarnessHealth,
@@ -134,6 +136,26 @@ export interface LocalContainerRunnerTransportOptions {
   poolIdleTtlMs?: number
 }
 
+/** A one-shot inline completion to run inside a leased warm container (the `inline` kind). */
+export interface InlineContainerRequest {
+  harness: 'claude-code' | 'codex'
+  /** Real vendor model id, e.g. `claude-opus-4-8`. */
+  model: string
+  /** Composed system prompt (role + fragments). */
+  system: string
+  /** The concrete user prompt. */
+  prompt: string
+  maxOutputTokens?: number
+  /** Leased subscription credential (absent for an ambient-auth call). */
+  subscriptionToken?: string
+  /** Anthropic-compatible base URL for a non-Anthropic claude-code vendor (GLM/Kimi/DeepSeek). */
+  subscriptionBaseUrl?: string
+  /** Run on the container's own ambient CLI login (no leased token). */
+  ambientAuth?: boolean
+  /** Aborts the poll loop (the inline caller's signal). */
+  signal?: AbortSignal
+}
+
 /** A warm-pool container the transport leases to runs (lease state is in-process). */
 interface PoolMember extends ContainerEndpoint {
   /** Internal member id (used only for the container name; never a run-id label). */
@@ -161,6 +183,8 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
   private readonly requestTimeoutMs: number
+  /** Poll cadence for a one-shot inline job (see {@link runInline}). */
+  private readonly inlinePollIntervalMs = 400
   private readonly privilegedTestJobs: boolean
   private poolSize: number
   private poolMax: number
@@ -413,6 +437,78 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       await this.adapter.remove(this.exec, c.containerId).catch(() => undefined)
     }
     return orphans.length
+  }
+
+  // --- inline (one-shot, no-checkout subscription completion) --------------
+
+  /**
+   * Run a ONE-SHOT inline completion (the `inline` harness kind) inside a warm-pool
+   * container on a leased subscription credential — the container backend for the local
+   * inline LLM steps (requirements reviewer / brainstorm / task-estimator / inline document
+   * kinds) when the host has no `claude`/`codex` binary (or in mothership mode). It leases a
+   * member (repo-affinity-free — an inline call has no checkout), POSTs the inline job, polls
+   * to completion, and ALWAYS returns the member. When pooling is disabled it leases a
+   * transient member (a cold container torn down on release), so it works with or without a
+   * warm pool — the pool only decides latency. The subscription token is injected into the
+   * job body and turned into `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_*` INSIDE the harness (the
+   * same credential-env path the coding kinds use), never at this transport layer.
+   */
+  async runInline(req: InlineContainerRequest): Promise<InlineJobResult> {
+    // Synthetic per-call id: leases pool state like a run, but tears down on release. The
+    // random suffix keeps concurrent inline calls from sharing a member/lease.
+    const runId = `inline-${randomBytes(8).toString('hex')}`
+    const jobId = `${runId}-job`
+    const member = await this.acquireMember(runId, undefined)
+    try {
+      await this.postJob(member, {
+        kind: 'inline',
+        jobId,
+        harness: req.harness,
+        model: req.model,
+        systemPrompt: req.system,
+        userPrompt: req.prompt,
+        ...(req.maxOutputTokens != null ? { maxOutputTokens: req.maxOutputTokens } : {}),
+        ...(req.subscriptionToken ? { subscriptionToken: req.subscriptionToken } : {}),
+        ...(req.subscriptionBaseUrl ? { subscriptionBaseUrl: req.subscriptionBaseUrl } : {}),
+        ...(req.ambientAuth ? { ambientAuth: true } : {}),
+      })
+      return await this.awaitInline(member, jobId, req.signal)
+    } finally {
+      // Return the member to the pool (or tear down a transient/over-capacity one), exactly
+      // like a coding run's release — reusing the same path so lease bookkeeping can't drift.
+      await this.releasePooled({ runId, jobId }).catch(() => undefined)
+    }
+  }
+
+  /** Poll an inline job to a terminal state, throwing on failure/eviction/abort. */
+  private async awaitInline(
+    member: PoolMember,
+    jobId: string,
+    signal: AbortSignal | undefined,
+  ): Promise<InlineJobResult> {
+    for (;;) {
+      if (signal?.aborted) throw new Error('inline container job aborted')
+      const view = await pollInlineJob({
+        fetchImpl: this.fetchImpl,
+        endpoint: member,
+        jobId,
+        secret: this.sharedSecret,
+        timeoutMs: this.requestTimeoutMs,
+        isDead: async () => {
+          if (await this.adapter.isRunning(this.exec, member.containerId)) return false
+          this.dropMember(member)
+          return true
+        },
+      })
+      if (view.state === 'done') {
+        if (!view.result) throw new Error('inline container job finished with no result')
+        return view.result
+      }
+      if (view.state === 'failed') {
+        throw new Error(view.error || 'inline container job failed')
+      }
+      await delay(this.inlinePollIntervalMs)
+    }
   }
 
   // --- warm pool ----------------------------------------------------------

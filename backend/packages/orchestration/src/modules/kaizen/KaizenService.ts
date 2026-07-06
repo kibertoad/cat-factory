@@ -213,7 +213,11 @@ export class KaizenService {
         )
         return
       }
-      const { ref, provider } = await this.resolveModel(workspaceId, grading.blockId)
+      const { ref, provider } = await this.resolveModel(
+        workspaceId,
+        grading.blockId,
+        grading.executionId,
+      )
       const model = provider.resolve(ref)
       const result = await generateText({
         model,
@@ -290,8 +294,13 @@ export class KaizenService {
   private async resolveModel(
     workspaceId: string,
     blockId: string,
+    executionId: string,
   ): Promise<{ provider: ModelProvider; ref: ModelRef }> {
-    const provider = await resolveScopedModelProvider(workspaceId, this.deps)
+    // Carry the graded run's execution so a leased-per-run inline subscription backend can lease
+    // its activation. (No initiator id is threaded — the Kaizen grader is a background process;
+    // a pooled vendor needs only the workspace, and an individual vendor's activation is anyway
+    // deleted when the run completed, so it fails loudly rather than silently mis-grading.)
+    const provider = await resolveScopedModelProvider({ workspaceId, executionId }, this.deps)
     const ref = await this.modelFor(workspaceId, blockId)
     if (!provider || !ref) throw new Error('No model is configured for the Kaizen agent')
     return { provider, ref }
