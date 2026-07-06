@@ -76,11 +76,13 @@ export {
   seedPipelines,
   BLUEPRINT_PIPELINE_ID,
   INITIATIVE_PIPELINE_ID,
+  INITIATIVE_DOCS_PIPELINE_ID,
   DEP_UPDATE_PIPELINE_ID,
   TECH_DEBT_PIPELINE_ID,
   BUG_TRIAGE_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   BUSINESS_DOCS_PIPELINE_ID,
+  DOCUMENT_QUICK_PIPELINE_ID,
 } from './domain/seed.js'
 
 // Pure initiative vocabulary (agent-kind constants + pipeline-shape predicates),

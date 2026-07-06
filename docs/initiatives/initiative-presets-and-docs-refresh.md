@@ -234,7 +234,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                                                    | SYSTEM | ✅ done | #890   |
 | 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                                                            | PILOT  | ✅ done | #894   |
 | 7   | New kind `code-commenter` (prompt, presentation, doc-aware) + `pl_code_comments` / `pl_business_docs`; diagrams + READMEs reuse `doc-writer`/`pl_document_quick` (a Mermaid doc is just Markdown — no diagram kind)                                                                     | PILOT  | ✅ done | #903   |
-| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ⬜ todo |        |
+| 8   | `preset_docs_refresh` registration: descriptor (form), `detect` = S6, **`phaseTemplate`** (shape enforcement — reuse T1/T2, see the inter-phase follow-up), `seedPlan` (spawn DECORATION only), promptAdditions (analyst audit + planner shaping), review mapping, `pl_initiative_docs` | PILOT  | ✅ done | #911   |
 | 9   | E2E (create-with-preset → auto-plan → spawn-with-decoration) + worked-example custom preset + `backend/docs/initiative-presets.md` + cross-doc updates                                                                                                                                  | BOTH   | ⬜ todo |        |
 
 Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
@@ -251,7 +251,10 @@ slices affects that tracker's critical path.
 Two items surfaced in S7's design review. Neither blocks S7 landing; both shape S8.
 
 1. **Adopt the generic `phaseTemplate` shape enforcement for `preset_docs_refresh` (do it in S8;
-   do NOT hand-roll phase shaping in `seedPlan`).** The technological-migration initiative landed a
+   do NOT hand-roll phase shaping in `seedPlan`).** — ✅ done in S8 (#911): `preset_docs_refresh`
+   declares a `phaseTemplate` (Foundations `required` + optional per-doc-type phases,
+   `allowAdditionalPhases: false`) and `seedPlan` does per-item DECORATION only; see the [S8] gotchas.
+   The technological-migration initiative landed a
    generic initiative-preset capability we should reuse: **T1** (#895) added
    `InitiativePresetDescriptor.phaseTemplate` (`initiativePresetPhaseTemplateSchema`,
    `contracts/src/initiative-preset.ts`) + a planner prompt fold that renders a "required plan
@@ -444,6 +447,51 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   side-effect kind — must NOT carry `FINAL_ANSWER_IN_REPLY`. Its pipeline's `ci` step is
   load-bearing (it proves the diff is behaviour-neutral). The "one pipeline, swap one step" itch S7
   raised is the deferred templated-pipelines follow-up above — resist re-adding per-type kinds.
+- **[S8] The preset SELF-REGISTERS as a module side effect of `@cat-factory/agents`** (the
+  `@cat-factory/gates` pattern: `registerDocsRefreshPreset()` at the bottom of
+  `agents/src/presets/docs-refresh/preset.ts`, re-exported from the agents index so importing the
+  package evaluates it). This is the sanctioned wiring for a BUILT-IN registered through the
+  module-global preset seam — NO per-facade `registerInitiativePreset` call, so the two runtimes
+  cannot drift on it (unlike a container-instance registry, which needs symmetric per-facade wiring).
+  T8's `preset_tech_migration` copies this exactly. (A DEPLOYMENT preset registers from its own
+  composition root instead — the `example-custom-agent` model.)
+- **[S8] Plan SHAPE lives in `phaseTemplate`, DECORATION in `seedPlan` — never entangled** (the
+  T1/T2 governing gotcha, realised here). The descriptor declares `foundations` `required: true` +
+  each per-doc-type phase (`readme`/`diagrams`/`comments`/`business-rules`) OPTIONAL with
+  `allowAdditionalPhases: false`; the generic ingest normalizer enforces it. `seedPlan` NEVER touches
+  phases — it only stamps each item's `pipelineId` + `spawn` bag keyed off the item's `phaseId`. The
+  planner emits only the checked doc types' phases (steered by the promptAdditions); the normalizer
+  tolerates the omitted optional phases.
+- **[S8] `humanReview` maps to the SPAWNED-task gates ONLY; the planning run is unattended.**
+  `pl_initiative_docs` has NO human gate and is started via the plain execution endpoint, which
+  deliberately takes no gate override ([S2]/[S3]: gates are not exposed on HTTP). So the docs-refresh
+  "review" gate is on each produced doc PR, not the plan: `seedPlan` reads the frozen
+  `presetInputs.humanReview` and emits `spawn.gates` (threaded by the loop through the slice-2 seam).
+  The pure `docsReviewGates(pipelineId, humanReview)` emits the FULL per-pipeline boolean array (the
+  [S2] whole-array rule), gating the **`merger`** step so the human reviews the CI-green PR right
+  before it merges — the same review point for every doc pipeline, matching the form's "review each
+  documentation change before it merges" promise (NOT a mid-pipeline `doc-reviewer` gate that would
+  still auto-merge afterwards). The placement is DERIVED from the pipeline's `agentKinds` (the
+  `merger` index), so the override is parallel to the pipeline by construction rather than a
+  hand-maintained array — a `preset.test.ts` guard asserts exactly one `true`, on the merge step,
+  length-matched to `agentKinds` (a mismatch would fail the spawn's `ExecutionService.start` check).
+- **[S8] Only a DERIVABLE single-file `.md` path gets a `targetPath`; everything else is placed
+  from the item DESCRIPTION.** `targetPath` is `.md`-only (`isSafeDocPath`) and single-file, and —
+  crucially — `seedPlan` can only ever set a path it DERIVES itself, because the planner's structured
+  output has no `spawn` field (`INITIATIVE_PLANNER_SYSTEM_PROMPT`) so `coerceInitiativePlan` never
+  carries a planner-authored path through to the hook. So `seedPlan` derives `<docsRoot>/<slug>.md`
+  for `foundations` and `<diagramsDir>/<slug>.md` for `diagrams` (each **deduplicated** via
+  `uniqueDocPath`, so two same-slug titles never collide on one file). `readme` (its per-service path
+  is beside the code — un-derivable here), `code-commenter` (a module DIR) and `business-documenter`
+  (MANY docs under a dir) all name their placement in the planner-authored DESCRIPTION and carry NO
+  `targetPath` — the writer places them. (So `code-commenter`'s S7 `targetPath` reader is dormant for
+  docs-refresh — expected.)
+- **[S8] Diagrams reuse `doc-writer` with `docKind: 'other'` — no new `diagrams` DocKind.** Adding a
+  `diagrams` value to `DOC_KINDS` (contracts) would ripple into the frontend doc-kind labels + the
+  i18n locale-parity gate for no real gain. The inter-phase note's "or `other`" path is taken: the
+  planner brief steers an Overview + the diagrams so the `doc-quality` `other` template
+  (Overview + Details required sections) accepts a diagram doc. Revisit only if diagram docs start
+  failing `doc-quality` in practice.
 
 ## Out of scope
 
