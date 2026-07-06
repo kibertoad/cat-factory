@@ -1,8 +1,8 @@
 ---
-"@cat-factory/app": patch
-"@cat-factory/node-server": patch
-"@cat-factory/conformance": patch
-"@cat-factory/example-custom-agent": patch
+'@cat-factory/app': patch
+'@cat-factory/node-server': patch
+'@cat-factory/conformance': patch
+'@cat-factory/example-custom-agent': patch
 ---
 
 Initiative presets slice 9: the E2E baseline + a worked-example deployment preset.

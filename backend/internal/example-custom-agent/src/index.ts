@@ -351,7 +351,12 @@ export const ORG_AUDIT_PRESET: InitiativePresetRegistration = {
     // committer — so no new planning pipeline is registered; all deviation is descriptor data + hooks.
     planningPipelineId: 'pl_initiative',
     interview: 'full',
-    humanReviewDefault: true,
+    // No human-review opt-in: `humanReviewDefault` prefills a `humanReview` FORM field that a
+    // `seedPlan` reads to stamp a per-run gate override (the built-in docs-refresh pilot's pattern).
+    // This example is decoration-only — its `seedPlan` touches nothing but `pipelineId` — so it
+    // exposes no such field and wires no override; the flag stays `false` to match that reality.
+    // (The plan itself is still human-reviewed at `pl_initiative`'s post-planner approval gate.)
+    humanReviewDefault: false,
     defaultFragmentIds: [],
     // Plan SHAPE: exactly one required `org-audit` phase (`allowAdditionalPhases: false`), enforced by
     // the generic ingest normalizer — this preset NEVER hand-rolls shape in `seedPlan`.
