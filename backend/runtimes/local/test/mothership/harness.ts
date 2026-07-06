@@ -268,6 +268,14 @@ export function makeMothershipConformanceApp(
     overrides,
     providerApiKeyRepository: credentialStore.providerApiKeyRepository,
     localModelEndpointRepository: credentialStore.localModelEndpointRepository,
+    // Inject the subscription-credential trio from the local sqlite store too, exactly as
+    // `buildLocalContainer` does in production — so the mothership SUT wires these buckets locally
+    // (subscription + personal-subscription services ON, activation cleared into the local bucket)
+    // instead of routing them remotely. Keeps the conformance topology faithful to the real local
+    // facade and makes the engine core's activation clear-on-completion hit the local repo.
+    providerSubscriptionTokenRepository: credentialStore.providerSubscriptionTokenRepository,
+    personalSubscriptionRepository: credentialStore.personalSubscriptionRepository,
+    subscriptionActivationRepository: credentialStore.subscriptionActivationRepository,
     cloudflareModelsEnabled: opts?.cloudflareModelsEnabled ?? true,
     gateProviders: opts?.gateProviders,
     ...(opts?.backendRegistries ? { backendRegistries: opts.backendRegistries } : {}),

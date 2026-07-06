@@ -551,9 +551,10 @@ export interface NodeContainerOptions {
   /**
    * Override the per-run personal-credential activation repository (short-lived, system-key-only
    * re-encryptions). The local-sqlite credential seam for mothership mode; undefined → the Drizzle
-   * repo over {@link db} (routed through {@link pickRepoSource} for its engine consumer when db is
-   * absent). Two consumers share this ONE instance: the personal-subscription service (mint) and
-   * the engine core (clear on run completion), so the override is threaded into both.
+   * repo over {@link db}. Two consumers share this ONE instance: the personal-subscription service
+   * (mint) and the engine core (clear on run completion), so the override is threaded into both. In
+   * mothership mode (no db) it is ALWAYS injected, so — unlike the org/durable stores — its engine
+   * consumer is never routed remotely through {@link pickRepoSource}.
    */
   subscriptionActivationRepository?: SubscriptionActivationRepository
   /**
@@ -2263,23 +2264,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     // re-seals the token for the run, and the LOCAL container executor decrypts it), injected via
     // `options.subscriptionActivationRepository` — the SAME instance the personal-subscription
     // service above mints into, so mint + clear agree. Absent (plain Node / siloed-Postgres local)
-    // → the Drizzle repo over `db`.
-    //
-    // DEAD CODE (TODO: investigate dropping): the `sourced(...)` REMOTE-ROUTING branch for this
-    // repo is now unreachable in practice. It was the mothership-mode stopgap (route activation to
-    // the mothership, where its methods aren't allow-listed, so `deleteByExecution` returned a
-    // clean `unknown_method`) before the local-sqlite bucket — its intended home — existed. Now the
-    // local facade ALWAYS injects `options.subscriptionActivationRepository` in mothership mode, so
-    // `sourced` only ever runs its `build()` leg (Drizzle over a present `db`); its `remote[name]`
-    // leg for this repo can no longer be hit. Kept as a defensive fallback for a hypothetical direct
-    // `buildNodeContainer({ db: undefined })` with no override; drop `sourced` here (inline the
-    // Drizzle build) once we're sure no such caller exists.
+    // → the Drizzle repo over `db`. This is NEVER routed through `sourced` (the remote registry):
+    // every no-db (mothership) caller injects the override — `buildLocalContainer` in production
+    // and `makeMothershipConformanceApp` in tests — so `db` here is always a real Postgres handle,
+    // and routing an activation clear to the mothership (where `deleteByExecution` isn't
+    // allow-listed) is a path no caller takes.
     subscriptionActivationRepository:
-      options.subscriptionActivationRepository ??
-      sourced(
-        'subscriptionActivationRepository',
-        (d) => new DrizzleSubscriptionActivationRepository(d),
-      ),
+      options.subscriptionActivationRepository ?? new DrizzleSubscriptionActivationRepository(db),
     // In-org shared services. When a realtime hub is wired (start()), the engine's
     // event publisher (composed above) is a `FanOutEventPublisher` over these two repos,
     // so a shared service's live events reach every board that mounts it — parity with
