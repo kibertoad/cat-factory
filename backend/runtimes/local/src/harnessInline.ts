@@ -258,10 +258,10 @@ export function detectHostInlineClis(
 }
 
 /** Runs a one-shot inline job inside a leased warm container (the transport's `runInline`). */
-export type RunInlineInContainer = (req: InlineContainerRequest) => Promise<InlineJobResult>
+type RunInlineInContainer = (req: InlineContainerRequest) => Promise<InlineJobResult>
 
 /** The subscription-credential lease seams the container inline path needs (from buildNodeContainer). */
-export interface InlineLeaseDeps {
+interface InlineLeaseDeps {
   /** Lease the run-initiator's activated personal credential (individual vendors). */
   leasePersonalSubscriptionToken?: (
     executionId: string,
