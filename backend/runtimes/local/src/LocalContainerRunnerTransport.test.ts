@@ -38,6 +38,17 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+// `sharedSecret` is now a REQUIRED constructor argument (the transport never invents a random
+// per-process value — that broke re-attach across restarts). These unit tests don't exercise the
+// secret, so default it here and let a case override via `opts`.
+type MkOpts = Omit<
+  ConstructorParameters<typeof LocalContainerRunnerTransport>[0],
+  'sharedSecret'
+> & { sharedSecret?: string }
+function mkTransport(opts: MkOpts): LocalContainerRunnerTransport {
+  return new LocalContainerRunnerTransport({ sharedSecret: 'sek', ...opts })
+}
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('LocalContainerRunnerTransport', () => {
@@ -49,7 +60,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (url.endsWith('/jobs')) return jsonResponse({ jobId: 'job-1', state: 'running' }, 202)
       throw new Error(`unexpected fetch ${url}`)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       sharedSecret: 'sek',
       exec,
@@ -81,7 +92,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -113,7 +124,7 @@ describe('LocalContainerRunnerTransport', () => {
       }
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -141,7 +152,7 @@ describe('LocalContainerRunnerTransport', () => {
       })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -165,7 +176,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -180,7 +191,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       privilegedTestJobs: false,
       exec,
@@ -196,7 +207,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -217,7 +228,7 @@ describe('LocalContainerRunnerTransport', () => {
       }
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -231,7 +242,7 @@ describe('LocalContainerRunnerTransport', () => {
   it('reports an eviction when no container exists for the job', async () => {
     // ps returns nothing → the job has no container.
     const { exec } = fakeDocker({ ps: '' })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: (() => {
@@ -251,7 +262,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (url.includes('/jobs/')) throw new Error('ECONNREFUSED')
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -268,7 +279,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -279,7 +290,7 @@ describe('LocalContainerRunnerTransport', () => {
 
     // A second release (now uncached, ps empty) does not throw.
     const empty = fakeDocker({ ps: '' })
-    const t2 = new LocalContainerRunnerTransport({ image: 'i', exec: empty.exec })
+    const t2 = mkTransport({ image: 'i', exec: empty.exec })
     await expect(t2.release({ runId: 'missing', jobId: 'missing' })).resolves.toBeUndefined()
   })
 
@@ -291,7 +302,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (url.includes('/jobs/')) return new Response('not found', { status: 404 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -309,7 +320,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (url.endsWith('/health')) return new Response('ok', { status: 200 })
       return new Response('boom', { status: 500 })
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -344,7 +355,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -362,7 +373,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (args[0] === 'ps') return Promise.resolve({ stdout: 'c1\nc2\n', stderr: '' })
       return Promise.resolve({ stdout: '', stderr: '' })
     }
-    const transport = new LocalContainerRunnerTransport({ image: 'harness:test', exec })
+    const transport = mkTransport({ image: 'harness:test', exec })
     const reaped = await transport.reapExited()
     expect(reaped).toBe(2)
     const psCall = calls.find((c) => c[0] === 'ps')!
@@ -374,7 +385,7 @@ describe('LocalContainerRunnerTransport', () => {
 
   it('reapExited is a no-op (count 0) when no exited containers exist', async () => {
     const { exec, calls } = fakeDocker({ ps: '' })
-    const transport = new LocalContainerRunnerTransport({ image: 'harness:test', exec })
+    const transport = mkTransport({ image: 'harness:test', exec })
     expect(await transport.reapExited()).toBe(0)
     expect(calls.some((c) => c[0] === 'rm')).toBe(false)
   })
@@ -392,7 +403,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (sub === 'logs') return Promise.resolve({ stdout: 'boom: missing env VAR\n', stderr: '' })
       return Promise.resolve({ stdout: '', stderr: '' })
     }
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       // Huge so the assertion proves fail-fast, not just a short timeout elapsing.
@@ -422,7 +433,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (sub === 'logs') return Promise.resolve({ stdout: 'panic: harness crashed\n', stderr: '' })
       return Promise.resolve({ stdout: '', stderr: '' })
     }
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       readyTimeoutMs: 60_000,
@@ -448,7 +459,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (sub === 'logs') return Promise.resolve({ stdout: 'still booting\n', stderr: '' })
       return Promise.resolve({ stdout: '', stderr: '' })
     }
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       exec,
       readyTimeoutMs: 40,
@@ -469,7 +480,7 @@ describe('LocalContainerRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalContainerRunnerTransport({
+    const transport = mkTransport({
       image: 'harness:test',
       env: { HARNESS_WORKSPACE_ROOT: '/ws', HARNESS_CLEAN_KEEP: 'node_modules,.venv' },
       exec,

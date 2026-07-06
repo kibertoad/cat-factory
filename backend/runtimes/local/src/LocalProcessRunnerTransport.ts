@@ -1,5 +1,4 @@
 import { type ChildProcess, spawn } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import type {
@@ -9,6 +8,7 @@ import type {
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { sanitizedChildEnv } from './childEnv.js'
+import { requireHarnessSharedSecret } from './config.js'
 import {
   EVICTION_ERROR,
   type HarnessEndpoint,
@@ -44,8 +44,13 @@ export interface LocalProcessRunnerTransportOptions {
   nodePath?: string
   /** Extra args to pass to node before the entry (e.g. `--experimental-strip-types`). */
   nodeArgs?: string[]
-  /** Shared secret injected as `HARNESS_SHARED_SECRET` + sent on every call. Default random. */
-  sharedSecret?: string
+  /**
+   * Shared secret injected as `HARNESS_SHARED_SECRET` + sent on every call. REQUIRED and must be
+   * STABLE across restarts (the factory reads it via `requireHarnessSharedSecret`, which throws
+   * loudly when unset); a per-process value would fail auth against a still-running harness after
+   * a restart. The transport never invents one.
+   */
+  sharedSecret: string
   /** Extra env for the harness process (e.g. GITHUB_ALLOWED_HOSTS). */
   env?: Record<string, string>
   /**
@@ -107,7 +112,7 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     this.harnessEntry = options.harnessEntry
     this.nodePath = options.nodePath ?? process.execPath
     this.nodeArgs = options.nodeArgs ?? []
-    this.sharedSecret = options.sharedSecret ?? randomBytes(24).toString('hex')
+    this.sharedSecret = options.sharedSecret
     this.extraEnv = options.env ?? {}
     this.envMode = options.envMode ?? 'sanitized'
     this.fetchImpl = options.fetchImpl ?? fetch
@@ -319,7 +324,7 @@ export function createLocalProcessTransportFromEnv(
   return new LocalProcessRunnerTransport({
     harnessEntry,
     ...(nodeArgs ? { nodeArgs } : {}),
-    sharedSecret: env.HARNESS_SHARED_SECRET?.trim() || undefined,
+    sharedSecret: requireHarnessSharedSecret(env),
     ...(allowedHosts ? { env: { GITHUB_ALLOWED_HOSTS: allowedHosts } } : {}),
   })
 }

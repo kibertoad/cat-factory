@@ -521,6 +521,8 @@ describe('buildLocalContainer (mothership, no Postgres)', () => {
     AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
     // The LOCAL key sealing the credential store — distinct from (and never) the mothership's.
     ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+    // Required inbound-auth secret for the agent-container transports (applyLocalDefaults enforces it).
+    HARNESS_SHARED_SECRET: 'mothership-test-harness-secret',
     LOCAL_MOTHERSHIP_URL: 'https://m.test',
     LOCAL_MOTHERSHIP_TOKEN: 'machine-tok',
     LOCAL_MOTHERSHIP_CREDENTIAL_DB: ':memory:',

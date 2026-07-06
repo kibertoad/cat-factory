@@ -68,6 +68,9 @@ const TEST_ENV: NodeJS.ProcessEnv = {
   // Local mode requires AUTH_SESSION_SECRET (a fixed value is fine for the suite; it must
   // clear the 32-char minimum the local config loader enforces).
   AUTH_SESSION_SECRET: 'test-session-secret-0123456789abcdef',
+  // Local mode requires HARNESS_SHARED_SECRET (the container inbound-auth secret); a fixed
+  // value clears the 16-char minimum the loader enforces.
+  HARNESS_SHARED_SECRET: 'test-harness-shared-secret',
   // Enable the Slack notification transport so its module + channel wire up through
   // the local facade (parity with the Node/Worker test envs); the conformance Slack
   // CRUD asserts persistence parity and the channel bails when no Slack is connected.

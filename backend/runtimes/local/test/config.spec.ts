@@ -2,14 +2,16 @@ import { corsReflectsWhenUnset } from '@cat-factory/server'
 import { describe, expect, it } from 'vitest'
 import { applyLocalDefaults } from '../src/config.js'
 
-// Local mode REQUIRES the two crypto secrets (AUTH_SESSION_SECRET, ENCRYPTION_KEY) — they must
-// stay stable across restarts (a fresh session secret invalidates the persisted session and
-// forces a re-login; a fresh encryption key orphans credentials sealed at rest), so the loader
-// throws loudly when either is missing instead of auto-generating an unstable per-process value.
-// A complete set of secrets to satisfy the happy-path cases.
+// Local mode REQUIRES three secrets (AUTH_SESSION_SECRET, ENCRYPTION_KEY, HARNESS_SHARED_SECRET) —
+// each must stay stable across restarts (a fresh session secret invalidates the persisted session
+// and forces a re-login; a fresh encryption key orphans credentials sealed at rest; a fresh
+// harness secret fails auth against agent containers still running from before the restart, so
+// re-attach breaks), so the loader throws loudly when any is missing instead of auto-generating an
+// unstable per-process value. A complete set of secrets to satisfy the happy-path cases.
 const SECRETS = {
   AUTH_SESSION_SECRET: 'a'.repeat(64),
   ENCRYPTION_KEY: Buffer.alloc(32).toString('base64'),
+  HARNESS_SHARED_SECRET: 'h'.repeat(32),
 }
 
 describe('[local] applyLocalDefaults secrets', () => {
@@ -17,6 +19,7 @@ describe('[local] applyLocalDefaults secrets', () => {
     const env = applyLocalDefaults({ ...SECRETS })
     expect(env.AUTH_SESSION_SECRET).toBe(SECRETS.AUTH_SESSION_SECRET)
     expect(env.ENCRYPTION_KEY).toBe(SECRETS.ENCRYPTION_KEY)
+    expect(env.HARNESS_SHARED_SECRET).toBe(SECRETS.HARNESS_SHARED_SECRET)
   })
 
   it('throws when AUTH_SESSION_SECRET is missing', () => {
@@ -57,6 +60,27 @@ describe('[local] applyLocalDefaults secrets', () => {
     expect(() => applyLocalDefaults({ ...SECRETS, ENCRYPTION_KEY: '%%%not-base64%%%' })).toThrow(
       /valid base64/,
     )
+  })
+
+  it('throws when HARNESS_SHARED_SECRET is missing', () => {
+    const { HARNESS_SHARED_SECRET: _drop, ...rest } = SECRETS
+    expect(() => applyLocalDefaults(rest)).toThrow(/HARNESS_SHARED_SECRET/)
+  })
+
+  it('treats a blank HARNESS_SHARED_SECRET as missing', () => {
+    expect(() => applyLocalDefaults({ ...SECRETS, HARNESS_SHARED_SECRET: '   ' })).toThrow(
+      /HARNESS_SHARED_SECRET/,
+    )
+  })
+
+  it('rejects a too-short HARNESS_SHARED_SECRET (local mode may be LAN-reachable)', () => {
+    expect(() => applyLocalDefaults({ ...SECRETS, HARNESS_SHARED_SECRET: 'short' })).toThrow(
+      /at least 16 characters/,
+    )
+    // Exactly 16 is accepted.
+    expect(() =>
+      applyLocalDefaults({ ...SECRETS, HARNESS_SHARED_SECRET: 'a'.repeat(16) }),
+    ).not.toThrow()
   })
 })
 

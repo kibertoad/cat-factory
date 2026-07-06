@@ -5,6 +5,7 @@ import type {
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
+import { requireHarnessSharedSecret } from './config.js'
 import { createRuntimeAdapter } from './runtimes/index.js'
 import { LocalContainerRunnerTransport } from './LocalContainerRunnerTransport.js'
 import { LocalProcessRunnerTransport } from './LocalProcessRunnerTransport.js'
@@ -92,7 +93,6 @@ export function buildLocalDeployTransport(
         `using the native default`,
     )
   }
-  const sharedSecret = env.HARNESS_SHARED_SECRET?.trim() || undefined
   if (mode === 'container') {
     const image = env.LOCAL_DEPLOY_IMAGE?.trim()
     if (!image) {
@@ -105,11 +105,13 @@ export function buildLocalDeployTransport(
       return null
     }
     // poolSize 0: a deploy is one-shot per run, so cold-start its own container and tear it
-    // down on release — no warm pool (that's an agent-throughput optimisation).
+    // down on release — no warm pool (that's an agent-throughput optimisation). Require the
+    // harness secret only now that we're actually building a transport (a deploy-unused env
+    // that returns null above must NOT demand it).
     const container = new LocalContainerRunnerTransport({
       image,
       adapter: createRuntimeAdapter(env),
-      ...(sharedSecret ? { sharedSecret } : {}),
+      sharedSecret: requireHarnessSharedSecret(env),
       ...(env.LOCAL_DOCKER_NETWORK?.trim() ? { network: env.LOCAL_DOCKER_NETWORK.trim() } : {}),
       // The deploy harness never nests a docker daemon (it talks to the apiserver over the
       // network), so it never needs the privileged Tester path.
@@ -133,7 +135,8 @@ export function buildLocalDeployTransport(
   }
   return new NativeCliDeployTransport({
     harnessEntry,
-    ...(sharedSecret ? { sharedSecret } : {}),
+    // Required only on the construction path (the deploy-unused early returns above must not).
+    sharedSecret: requireHarnessSharedSecret(env),
     // The deploy harness shells out to the developer's kubectl/kustomize/helm, which run on
     // ambient cloud/cluster env (KUBECONFIG, AWS_*, …) — so it inherits the full environment
     // rather than the sanitized agent allow-list.

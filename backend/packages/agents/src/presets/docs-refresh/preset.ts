@@ -384,7 +384,7 @@ function seedPlan(draft: InitiativePlanDraft, inputs: InitiativePresetInputs): I
     // Merge OVER any planner-authored spawn (so a planner `agentConfig` etc. survives) — the
     // decorated fields we own win.
     const spawn = {
-      ...(item.spawn ?? {}),
+      ...item.spawn,
       ...(deco.taskType ? { taskType: deco.taskType } : {}),
       ...(Object.keys(taskTypeFields).length ? { taskTypeFields } : {}),
       ...(styleFragmentIds.length ? { fragmentIds: styleFragmentIds } : {}),

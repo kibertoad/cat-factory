@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
 import { promisify } from 'node:util'
 import type { LocalSettings } from '@cat-factory/contracts'
 import {
@@ -24,6 +23,7 @@ import {
   createRuntimeAdapter,
   DockerRuntimeAdapter,
 } from './runtimes/index.js'
+import { requireHarnessSharedSecret } from './config.js'
 import { harnessAllowedHosts } from './github.js'
 import { resolveHarnessImage } from './harnessImage.js'
 
@@ -46,7 +46,12 @@ const execFileAsync = promisify(execFile)
 export interface LocalPreviewTransportOptions {
   image: string
   adapter?: ContainerRuntimeAdapter
-  sharedSecret?: string
+  /**
+   * Shared secret injected as `HARNESS_SHARED_SECRET` + sent on every call. REQUIRED and must be
+   * STABLE across restarts (the factory reads it via `requireHarnessSharedSecret`, which throws
+   * loudly when unset); the transport never invents a per-process value.
+   */
+  sharedSecret: string
   network?: string
   env?: Record<string, string>
   exec?: ContainerExec
@@ -111,7 +116,7 @@ export class LocalPreviewTransport implements PreviewTransport {
         pooling: true,
       })
     this.image = options.image
-    this.sharedSecret = options.sharedSecret ?? randomBytes(24).toString('hex')
+    this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
     this.exec = options.exec ?? defaultExec(this.adapter.binary)
@@ -285,7 +290,7 @@ export function createLocalPreviewTransportFromEnv(
   return new LocalPreviewTransport({
     image: resolveHarnessImage(env),
     adapter: createRuntimeAdapter(env),
-    sharedSecret: env.HARNESS_SHARED_SECRET?.trim() || undefined,
+    sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
     ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
   })

@@ -29,6 +29,7 @@ import {
   createRuntimeAdapter,
   DockerRuntimeAdapter,
 } from './runtimes/index.js'
+import { requireHarnessSharedSecret } from './config.js'
 import { harnessAllowedHosts } from './github.js'
 import { resolveHarnessImage } from './harnessImage.js'
 
@@ -92,10 +93,13 @@ export interface LocalContainerRunnerTransportOptions {
    */
   adapter?: ContainerRuntimeAdapter
   /**
-   * Shared secret injected as `HARNESS_SHARED_SECRET` and sent as the
-   * `x-harness-secret` header on every call. Defaults to a random per-process value.
+   * Shared secret injected as `HARNESS_SHARED_SECRET` and sent as the `x-harness-secret` header
+   * on every call. REQUIRED and must be STABLE across restarts: a per-process value would fail
+   * auth against a container still running from before a restart, so the run flaps instead of
+   * re-attaching. The factory reads it via `requireHarnessSharedSecret` (config), which throws
+   * loudly when it's unset — the transport never invents one.
    */
-  sharedSecret?: string
+  sharedSecret: string
   /** Optional `--network` for the container (docker family only). */
   network?: string
   /** Extra `-e KEY=VALUE` env passed into the container (rarely needed). */
@@ -216,7 +220,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         pooling: true,
       })
     this.image = options.image
-    this.sharedSecret = options.sharedSecret ?? randomBytes(24).toString('hex')
+    this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
     this.exec = options.exec ?? defaultExec(this.adapter.binary)
@@ -857,7 +861,7 @@ export function createLocalContainerTransportFromEnv(
   return new LocalContainerRunnerTransport({
     image,
     adapter: createRuntimeAdapter(env),
-    sharedSecret: env.HARNESS_SHARED_SECRET?.trim() || undefined,
+    sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
     // Default on: the Tester stands its docker-compose infra up via Docker-in-Docker,
     // which needs a privileged job container. Set to `false` for runtimes that run

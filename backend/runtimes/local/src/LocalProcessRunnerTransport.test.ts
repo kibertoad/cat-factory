@@ -21,6 +21,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+// `sharedSecret` is a REQUIRED constructor argument (no random per-process fallback), so default
+// it here; the one case that asserts on it passes the same 'sek'.
+type MkOpts = Omit<ConstructorParameters<typeof LocalProcessRunnerTransport>[0], 'sharedSecret'> & {
+  sharedSecret?: string
+}
+function mkTransport(opts: MkOpts): LocalProcessRunnerTransport {
+  return new LocalProcessRunnerTransport({ sharedSecret: 'sek', ...opts })
+}
+
 afterEach(() => vi.restoreAllMocks())
 
 describe('LocalProcessRunnerTransport', () => {
@@ -32,7 +41,7 @@ describe('LocalProcessRunnerTransport', () => {
       if (url.endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ jobId: 'j', state: 'running' }, 202)
     })
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/path/server.js',
       sharedSecret: 'sek',
       spawnImpl: spawnImpl as unknown as typeof import('node:child_process').spawn,
@@ -70,7 +79,7 @@ describe('LocalProcessRunnerTransport', () => {
         return jsonResponse({ state: 'done', result: { prUrl: 'https://x/1' } })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -88,7 +97,7 @@ describe('LocalProcessRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -104,7 +113,7 @@ describe('LocalProcessRunnerTransport', () => {
   it('kills the child when the harness never becomes healthy (no leaked process per retry)', async () => {
     const child = fakeChild()
     const fetchImpl = vi.fn(async () => new Response('nope', { status: 500 }))
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -121,7 +130,7 @@ describe('LocalProcessRunnerTransport', () => {
     const child = fakeChild()
     // Health never OK, generous deadline: the start only settles when shutdown kills the child.
     const fetchImpl = vi.fn(async () => new Response('starting', { status: 503 }))
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -147,7 +156,7 @@ describe('LocalProcessRunnerTransport', () => {
     const child = fakeChild()
     const spawnImpl = vi.fn((_cmd: string, _args: readonly string[], _opts: unknown) => child)
     const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       spawnImpl: spawnImpl as unknown as typeof import('node:child_process').spawn,
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -170,7 +179,7 @@ describe('LocalProcessRunnerTransport', () => {
     const child = fakeChild()
     const spawnImpl = vi.fn((_cmd: string, _args: readonly string[], _opts: unknown) => child)
     const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       envMode: 'inherit',
       spawnImpl: spawnImpl as unknown as typeof import('node:child_process').spawn,
@@ -189,7 +198,7 @@ describe('LocalProcessRunnerTransport', () => {
       if (String(input).endsWith('/health')) return new Response('ok', { status: 200 })
       return jsonResponse({ state: 'running' }, 202)
     })
-    const transport = new LocalProcessRunnerTransport({
+    const transport = mkTransport({
       harnessEntry: '/h.js',
       spawnImpl: (() => child) as unknown as typeof import('node:child_process').spawn,
       fetchImpl: fetchImpl as unknown as typeof fetch,
