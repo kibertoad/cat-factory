@@ -4276,6 +4276,25 @@
       }
     }
   },
+  "modelPreset": {
+    "health": {
+      "title": "モデルプリセットの更新",
+      "allValid": "組み込みのモデルプリセットはすべて最新です。",
+      "newHeading": "新しいプリセットがあります",
+      "newDescription": "新しい組み込みモデルプリセットが追加されました。このボードのライブラリに追加してください。",
+      "add": "追加",
+      "updatesHeading": "更新あり",
+      "updatesDescription": "これらの組み込みモデルプリセットの新しいバージョンがあります。再シードして取り込みます（既定と並び順は保持されます）。",
+      "versionAvailable": "バージョン {from} → {to} が利用可能です。",
+      "reseed": "再シード",
+      "reseedAll": "すべて更新 ({count})",
+      "dismiss": "閉じる",
+      "done": "完了",
+      "toast": {
+        "reseedFailed": "モデルプリセットを再シードできませんでした"
+      }
+    }
+  },
   "initiative": {
     "create": {
       "title": "イニシアチブを作成",

@@ -360,6 +360,42 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(afterForce?.status).toBe('paused')
         expect(afterForce?.rev).toBe(2)
       })
+
+      // Run diagnostics (dispatch context — backend/model/repo — for after-the-fact
+      // investigation) ride in the `detail` JSON, so a repo that serialized `detail`
+      // differently would drop them. Asserted at the repository layer so D1 and Postgres
+      // are proven to round-trip the whole diagnostics object identically.
+      it('round-trips run diagnostics through upsert/get', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const withDiagnostics: ExecutionInstance = {
+          id: 'exec_diag',
+          blockId: 'blk_diag',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+          diagnostics: {
+            lastDispatch: {
+              stepIndex: 2,
+              agentKind: 'coder',
+              model: 'anthropic:claude-opus-4-8',
+              executionBackend: 'local-native',
+              repo: { owner: 'acme', name: 'widget', baseBranch: 'main', provider: 'github' },
+              at: 1_700_000_000_000,
+            },
+            host: { platform: 'win32' },
+          },
+        }
+        await repo.upsert(workspace.id, withDiagnostics)
+
+        const loaded = await repo.get(workspace.id, 'exec_diag')
+        expect(loaded?.diagnostics).toEqual(withDiagnostics.diagnostics)
+      })
     })
 
     describe('one live execution run per block (insertLive)', () => {
@@ -1363,18 +1399,25 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         const { call, createWorkspace } = harness.makeApp()
         const { workspace } = await createWorkspace()
 
-        // A fresh workspace is lazily seeded with the built-in presets: Kimi K2.7
-        // (the default, everything Kimi) and GLM-5.2.
+        // A fresh workspace is lazily seeded with the built-in catalog: Kimi K2.7 (the
+        // Cloudflare-runnable default in the conformance harnesses, everything Kimi), GLM-5.2,
+        // and Claude Opus 4.8. Each built-in carries its catalog version.
         const initial = await call<ModelPreset[]>(
           'GET',
           `/workspaces/${workspace.id}/model-presets`,
         )
         expect(initial.status).toBe(200)
         const seeded = initial.body
-        expect(seeded.length).toBeGreaterThanOrEqual(2)
+        expect(seeded.length).toBeGreaterThanOrEqual(3)
         const def = seeded.find((p) => p.isDefault)
         expect(def?.baseModelId).toBe('kimi-k2.7')
+        expect(def?.version).toBe(1)
         expect(seeded.some((p) => p.baseModelId === 'glm')).toBe(true)
+        // The Claude-only built-in ships in the catalog (default only in local mode; here it's
+        // present but non-default since the conformance harnesses seed with Kimi as the default).
+        const claude = seeded.find((p) => p.id === 'mdp_claude')
+        expect(claude?.baseModelId).toBe('claude-opus')
+        expect(claude?.isDefault).toBe(false)
 
         // Create a new preset with a per-agent override and promote it to default.
         const created = await call<ModelPreset>(
@@ -1411,6 +1454,52 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         // The library rides along on the workspace snapshot.
         const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
         expect((snapshot.body.modelPresets ?? []).some((p) => p.name === 'Mixed')).toBe(true)
+      })
+
+      it('ships catalog versions on the snapshot and reseeds a built-in (drift repair + new appeared)', async () => {
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace()
+        const wsId = workspace.id
+        const base = `/workspaces/${wsId}/model-presets`
+
+        // The snapshot ships the built-in catalog versions so the SPA can offer a reseed.
+        const snap = await call<{ modelPresetCatalogVersions?: Record<string, number> }>(
+          'GET',
+          `/workspaces/${wsId}`,
+        )
+        expect(snap.body.modelPresetCatalogVersions).toMatchObject({
+          mdp_kimi: 1,
+          mdp_glm: 1,
+          mdp_claude: 1,
+        })
+
+        // Seed, then drift a built-in (rename + change its base model). Reseed must restore the
+        // canonical definition + version while preserving the user's default + ordering.
+        await call('GET', base)
+        await call('PATCH', `${base}/mdp_kimi`, { name: 'Tampered', baseModelId: 'glm' })
+        const reseeded = await call<ModelPreset>('POST', `${base}/mdp_kimi/reseed`)
+        expect(reseeded.status).toBe(200)
+        expect(reseeded.body.name).toBe('Kimi K2.7')
+        expect(reseeded.body.baseModelId).toBe('kimi-k2.7')
+        expect(reseeded.body.version).toBe(1)
+        // The default is preserved across a reseed (the conformance harnesses default to Kimi).
+        expect(reseeded.body.isDefault).toBe(true)
+
+        // Reseeding a NEW built-in the workspace doesn't have yet materialises it (the
+        // "appeared upstream" case): delete the claude preset, then reseed it back.
+        await call('DELETE', `${base}/mdp_claude`)
+        const afterDelete = await call<ModelPreset[]>('GET', base)
+        expect(afterDelete.body.some((p) => p.id === 'mdp_claude')).toBe(false)
+        const readded = await call<ModelPreset>('POST', `${base}/mdp_claude/reseed`)
+        expect(readded.status).toBe(200)
+        expect(readded.body.baseModelId).toBe('claude-opus')
+        // Re-materialising a non-default built-in must not steal the default from Kimi.
+        expect(readded.body.isDefault).toBe(false)
+
+        // A custom (non-catalog) preset cannot be reseeded — delete it instead.
+        const custom = await call<ModelPreset>('POST', base, { name: 'Custom', baseModelId: 'glm' })
+        const badReseed = await call('POST', `${base}/${custom.body.id}/reseed`)
+        expect(badReseed.status).toBe(422)
       })
     })
   })

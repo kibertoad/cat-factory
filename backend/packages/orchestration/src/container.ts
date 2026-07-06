@@ -839,6 +839,13 @@ export interface CoreDependencies {
    */
   modelPresetRepository?: ModelPresetRepository
   /**
+   * The catalog id of the built-in model preset a fresh workspace is seeded with as its
+   * DEFAULT: Cloudflare/Node deploy `mdp_kimi` (Cloudflare-runnable on the bare baseline),
+   * local deploy `mdp_claude`. Deployment-level, applied only at first seed, so a user's
+   * later manual default choice is always preserved. Absent → the catalog default (Kimi).
+   */
+  defaultModelPresetId?: string
+  /**
    * Resolve the provider capabilities (configured direct API keys + subscription
    * vendors + whether Cloudflare AI is enabled) for a workspace and the run initiator.
    * The pipeline-start guard uses it to block a run whose steps' canonical models have
@@ -2321,6 +2328,7 @@ function createModelPresetsModule(deps: CoreDependencies): ModelPresetsModule | 
     workspaceRepository: deps.workspaceRepository,
     idGenerator: deps.idGenerator,
     clock: deps.clock,
+    ...(deps.defaultModelPresetId ? { defaultPresetId: deps.defaultModelPresetId } : {}),
   })
   return { service }
 }

@@ -3269,6 +3269,25 @@
       }
     }
   },
+  "modelPreset": {
+    "health": {
+      "title": "Model preset updates",
+      "allValid": "All built-in model presets are up to date.",
+      "newHeading": "New presets available",
+      "newDescription": "New built-in model presets have shipped. Add them to this board's library.",
+      "add": "Add",
+      "updatesHeading": "Updates available",
+      "updatesDescription": "A newer version of these built-in model presets has shipped. Reseed to adopt it (the default and ordering are kept).",
+      "versionAvailable": "Version {from} → {to} available.",
+      "reseed": "Reseed",
+      "reseedAll": "Update all ({count})",
+      "dismiss": "Dismiss",
+      "done": "Done",
+      "toast": {
+        "reseedFailed": "Could not reseed model preset"
+      }
+    }
+  },
   "palette": {
     "hint": "Click an agent to append it to the pipeline.",
     "customAgents": "Custom agents"

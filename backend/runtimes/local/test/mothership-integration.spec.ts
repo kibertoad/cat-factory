@@ -8,6 +8,7 @@ import {
   createApp as createNodeApp,
 } from '@cat-factory/node-server'
 import { HmacSigner, TOKEN_AUDIENCE } from '@cat-factory/server'
+import { MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
 import type { Account, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import type { Pipeline } from '@cat-factory/contracts'
 import { buildLocalContainer } from '../src/container.js'
@@ -118,9 +119,12 @@ describe('mothership mode — functional integration (real RPC backend)', () => 
         // only, never exercised end-to-end. The mothership assembles it the same way.
       },
       overrides: { agentExecutor: new FakeAgentExecutor() },
-      // The built-in default model preset routes every kind to a Cloudflare-served model, so the
-      // execution start guard needs that provider available to start a run (parity with the
-      // conformance harness). The FakeAgentExecutor still does the actual "work".
+      // Local mode's PRODUCTION default model preset is Claude (subscription-only, no Cloudflare
+      // flavour), but this test drives runs through the FakeAgentExecutor with only Cloudflare
+      // enabled, so pin the seeded default to Kimi K2.7 — a Cloudflare-served model the execution
+      // start guard accepts (parity with the conformance harness). The FakeAgentExecutor still
+      // does the actual "work"; real local mode keeps Claude.
+      defaultModelPresetId: MODEL_PRESET_SEED_IDS.kimi,
       cloudflareModelsEnabled: true,
     })
     const app = createNodeApp(container, { ...process.env, AUTH_DEV_OPEN: 'true' })

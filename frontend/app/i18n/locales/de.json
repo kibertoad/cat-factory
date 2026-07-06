@@ -4374,6 +4374,25 @@
       }
     }
   },
+  "modelPreset": {
+    "health": {
+      "title": "Modell-Preset-Updates",
+      "allValid": "Alle integrierten Modell-Presets sind auf dem neuesten Stand.",
+      "newHeading": "Neue Presets verfügbar",
+      "newDescription": "Neue integrierte Modell-Presets sind verfügbar. Füge sie zur Bibliothek dieses Boards hinzu.",
+      "add": "Hinzufügen",
+      "updatesHeading": "Updates verfügbar",
+      "updatesDescription": "Eine neuere Version dieser integrierten Modell-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen (Standard und Reihenfolge bleiben erhalten).",
+      "versionAvailable": "Version {from} → {to} verfügbar.",
+      "reseed": "Erneut seeden",
+      "reseedAll": "Alle aktualisieren ({count})",
+      "dismiss": "Schließen",
+      "done": "Fertig",
+      "toast": {
+        "reseedFailed": "Modell-Preset konnte nicht erneut geseedet werden"
+      }
+    }
+  },
   "environmentWizard": {
     "title": "Eine Testumgebung einrichten",
     "subtitle": "Erkenne, prüfe und speichere ein Docker-Compose-Rezept, damit der Deployer es bereitstellt.",

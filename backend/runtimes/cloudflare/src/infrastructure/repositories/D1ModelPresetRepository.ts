@@ -8,6 +8,7 @@ interface ModelPresetRow {
   base_model_id: string
   overrides: string
   is_default: number
+  version: number | null
   created_at: number
 }
 
@@ -25,6 +26,7 @@ function rowToPreset(row: ModelPresetRow): ModelPreset {
     baseModelId: row.base_model_id,
     overrides,
     isDefault: row.is_default === 1,
+    ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
 }
@@ -87,13 +89,14 @@ export class D1ModelPresetRepository implements ModelPresetRepository {
       this.db
         .prepare(
           `INSERT INTO model_presets
-             (workspace_id, id, name, base_model_id, overrides, is_default, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
+             (workspace_id, id, name, base_model_id, overrides, is_default, version, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (workspace_id, id) DO UPDATE SET
              name = excluded.name,
              base_model_id = excluded.base_model_id,
              overrides = excluded.overrides,
-             is_default = excluded.is_default`,
+             is_default = excluded.is_default,
+             version = excluded.version`,
         )
         .bind(
           workspaceId,
@@ -102,6 +105,7 @@ export class D1ModelPresetRepository implements ModelPresetRepository {
           preset.baseModelId,
           JSON.stringify(preset.overrides),
           preset.isDefault ? 1 : 0,
+          preset.version ?? null,
           preset.createdAt,
         ),
     )

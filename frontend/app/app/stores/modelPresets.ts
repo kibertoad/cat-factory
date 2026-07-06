@@ -18,9 +18,18 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
   const api = useApi()
 
   const presets = ref<ModelPreset[]>([])
+  /**
+   * Current built-in catalog versions (`seedModelPresets()`), keyed by preset id, from the
+   * workspace snapshot. The keys ARE the set of built-in ids: a stored preset whose id is a
+   * key here is a built-in (and is outdated when its `version` is below the catalog value),
+   * and a key with no matching stored preset is a NEW built-in the workspace can add. Drives
+   * `useModelPresetHealth`.
+   */
+  const catalogVersions = ref<Record<string, number>>({})
 
-  function hydrate(list: ModelPreset[]) {
+  function hydrate(list: ModelPreset[], versions?: Record<string, number>) {
     presets.value = [...list].sort((a, b) => a.createdAt - b.createdAt)
+    if (versions) catalogVersions.value = versions
   }
 
   /** The workspace default (fallback for a task that picks none). */
@@ -61,5 +70,43 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
     await ws.refresh()
   }
 
-  return { presets, defaultPreset, resolve, modelForKind, hydrate, create, update, remove }
+  /**
+   * Reseed a built-in preset from the backend's current catalog: adopt an updated definition,
+   * repair a drifted one, or materialise a NEW built-in that appeared after the workspace was
+   * created. The `presetId` is the catalog id (e.g. `mdp_kimi`). Refreshes the snapshot.
+   */
+  async function reseed(presetId: string) {
+    const ws = useWorkspaceStore()
+    const updated = await api.reseedModelPreset(ws.requireId(), presetId)
+    await ws.refresh()
+    return updated
+  }
+
+  /**
+   * Reseed several built-ins in one go, refreshing the snapshot ONCE at the end rather than
+   * after every id (each `reseed` refetches the whole board, so a per-id refresh in a loop is
+   * wasteful). The POSTs run sequentially so the backend's single-default invariant settles
+   * deterministically.
+   */
+  async function reseedMany(presetIds: string[]) {
+    const ws = useWorkspaceStore()
+    for (const presetId of presetIds) {
+      await api.reseedModelPreset(ws.requireId(), presetId)
+    }
+    await ws.refresh()
+  }
+
+  return {
+    presets,
+    catalogVersions,
+    defaultPreset,
+    resolve,
+    modelForKind,
+    hydrate,
+    create,
+    update,
+    remove,
+    reseed,
+    reseedMany,
+  }
 })

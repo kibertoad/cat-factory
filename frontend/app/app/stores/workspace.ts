@@ -127,7 +127,10 @@ export const useWorkspaceStore = defineStore(
       useSharedStacksStore().hydrate(snapshot.sharedStacks ?? [])
       useWorkspaceSettingsStore().hydrate(snapshot.settings)
       useAgentConfigStore().hydrate(snapshot.agentConfigCatalog ?? [])
-      useModelPresetsStore().hydrate(snapshot.modelPresets ?? [])
+      useModelPresetsStore().hydrate(
+        snapshot.modelPresets ?? [],
+        snapshot.modelPresetCatalogVersions,
+      )
       useServiceFragmentDefaultsStore().hydrate(snapshot.serviceFragmentDefaults?.fragmentIds)
       useRecurringPipelinesStore().hydrate(snapshot.recurringPipelines ?? [])
       useInitiativesStore().hydrate(snapshot.initiatives)

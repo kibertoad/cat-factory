@@ -43,3 +43,17 @@ export const deleteModelPresetContract = defineApiContract({
   pathResolver: ({ presetId }) => `/model-presets/${presetId}`,
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })
+
+/**
+ * Reseed a built-in model preset from the current catalog (`seedModelPresets()`): adopt an
+ * updated definition, repair a drifted one, or materialise a NEW built-in that appeared after
+ * the workspace was created. The `presetId` is the catalog id (e.g. `mdp_kimi`). Rejects an id
+ * not in the catalog (a custom preset — delete it instead).
+ */
+export const reseedModelPresetContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: presetIdParams,
+  pathResolver: ({ presetId }) => `/model-presets/${presetId}/reseed`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: modelPresetSchema, ...errorResponses },
+})
