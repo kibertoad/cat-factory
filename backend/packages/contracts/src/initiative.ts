@@ -375,8 +375,32 @@ export const createInitiativeSchema = v.object({
   frameId: v.pipe(v.string(), v.trim(), v.minLength(1)),
   title: titleField,
   description: v.optional(proseField, ''),
+  /**
+   * The initiative PRESET this initiative is created from (see `initiative-preset.ts`). Absent ⇒
+   * the preset-less generic behaviour, byte-for-byte today's (the SPA picker sends
+   * `preset_generic` by default). An unknown id is a validation error; the descriptor validates
+   * {@link presetInputs} at create.
+   */
+  presetId: v.optional(idField),
+  /**
+   * The user's filled preset form. Validated against the resolved descriptor at create
+   * ({@link validateInitiativePresetInputs}) and FROZEN on the entity's `presetInputs`.
+   */
+  presetInputs: v.optional(initiativePresetInputsSchema),
 })
 export type CreateInitiativeInput = v.InferOutput<typeof createInitiativeSchema>
+
+/**
+ * Probe a preset's repo-detection PREFILL for a service frame. Resolves the frame's repo and
+ * runs the preset's `detect` hook over it, returning the detected form values. Best-effort: the
+ * endpoint returns `{}` (descriptor defaults) whenever GitHub is unwired, the frame has no linked
+ * repo, or the preset has no `detect` hook — it never blocks create.
+ */
+export const probeInitiativePresetSchema = v.object({
+  /** The service frame whose repo the probe reads. */
+  frameId: v.pipe(v.string(), v.trim(), v.minLength(1)),
+})
+export type ProbeInitiativePresetInput = v.InferOutput<typeof probeInitiativePresetSchema>
 
 /** Record the human's answer to one pending planning-interview question. */
 export const answerInitiativeQuestionSchema = v.object({

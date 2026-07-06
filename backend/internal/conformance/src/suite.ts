@@ -189,6 +189,28 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(statuses).toContain(created.body.infraSetup!.binaryStorage)
       })
 
+      it('advertises the registered initiative presets on the snapshot (both create + read)', async () => {
+        // The initiative-preset registry is process-global, so the shared WorkspaceController
+        // attaches `initiativePresets` for BOTH facades. The runtime-agnostic invariant: the
+        // built-in generic preset is always present, binds the generic planning pipeline, and
+        // runs the interviewer — a facade that dropped the field (or a broken registry read)
+        // fails here rather than shipping an empty create picker.
+        const { call, createWorkspace } = harness.makeApp()
+        const { workspace } = await createWorkspace({ seed: false })
+
+        const snap = await call<WorkspaceSnapshot>('GET', `/workspaces/${workspace.id}`)
+        const generic = snap.body.initiativePresets?.find((p) => p.id === 'preset_generic')
+        expect(generic).toBeDefined()
+        expect(generic!.planningPipelineId).toBe('pl_initiative')
+        expect(generic!.interview).toBe('full')
+        // The generic preset has no `detect` hook, so its `probe` flag is derived false.
+        expect(generic!.probe ?? false).toBe(false)
+
+        // The create response carries the same registry projection.
+        const created = await call<WorkspaceSnapshot>('POST', '/workspaces', { seed: false })
+        expect(created.body.initiativePresets?.some((p) => p.id === 'preset_generic')).toBe(true)
+      })
+
       it('persists and updates a board name + description identically on every store', async () => {
         const { call } = harness.makeApp()
         const created = await call<WorkspaceSnapshot>('POST', '/workspaces', {

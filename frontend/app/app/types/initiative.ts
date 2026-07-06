@@ -13,6 +13,7 @@ export type {
   InitiativeItemStatus,
   InitiativePhase,
   InitiativePipelineRule,
+  InitiativePresetDescriptor,
   InitiativeQa,
   InitiativeStatus,
   PromoteInitiativeFollowUpInput,

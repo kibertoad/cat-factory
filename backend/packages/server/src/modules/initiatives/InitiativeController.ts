@@ -6,18 +6,22 @@ import {
   dismissInitiativeFollowUpContract,
   getInitiativeByBlockContract,
   getInitiativeContract,
+  initiativePresetInputsSchema,
   listInitiativesContract,
   pauseInitiativeContract,
+  probeInitiativePresetContract,
   proceedInitiativePlanningContract,
   promoteInitiativeFollowUpContract,
   resumeInitiativeContract,
   updateInitiativeItemContract,
   updateInitiativePolicyContract,
 } from '@cat-factory/contracts'
+import { getInitiativePreset } from '@cat-factory/kernel'
 import type { InitiativesModule } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
+import * as v from 'valibot'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -65,6 +69,37 @@ export function initiativeController(): Hono<AppEnv> {
     if (!initiatives) return unavailable(c)
     const { blockId } = c.req.valid('param')
     return c.json(await initiatives.service.getByBlock(param(c, 'workspaceId'), blockId), 200)
+  })
+
+  // Run a preset's repo-detection PREFILL probe against a frame's repo, to seed the create form.
+  // Best-effort by contract: `{}` (descriptor defaults) whenever the preset has no `detect` hook,
+  // GitHub isn't wired, the frame isn't under a linked repo, or `detect` fails — so the form
+  // never blocks on it. Resolves the frame's repo through the same `resolveRunRepoContext` seam
+  // the service-spec read uses, so it is runtime-symmetric (both facades wire the resolver).
+  buildHonoRoute(app, probeInitiativePresetContract, async (c) => {
+    const { presetId } = c.req.valid('param')
+    const { frameId } = c.req.valid('json')
+    const detect = getInitiativePreset(presetId)?.detect
+    if (!detect) return c.json({}, 200)
+    const resolve = c.get('container').resolveRunRepoContext
+    if (!resolve) return c.json({}, 200)
+    let ctx
+    try {
+      ctx = await resolve(param(c, 'workspaceId'), frameId)
+    } catch {
+      // A frame under no linked repo throws in the resolver; treat as "no prefill".
+      return c.json({}, 200)
+    }
+    if (!ctx) return c.json({}, 200)
+    try {
+      const detected = await detect(ctx.repo)
+      // Defensive parse: `detect` is trusted backend code but a bug returning an oversized /
+      // malformed value must degrade to descriptor defaults, never surface to the form.
+      const parsed = v.safeParse(initiativePresetInputsSchema, detected)
+      return c.json(parsed.success ? parsed.output : {}, 200)
+    } catch {
+      return c.json({}, 200)
+    }
   })
 
   // ---- Interactive planning (slice 2) --------------------------------------

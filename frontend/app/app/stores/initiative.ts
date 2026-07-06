@@ -3,9 +3,13 @@ import { computed, ref } from 'vue'
 import type {
   Initiative,
   InitiativeExecutionPolicy,
+  InitiativePresetDescriptor,
   PromoteInitiativeFollowUpInput,
   UpdateInitiativeItemInput,
 } from '~/types/domain'
+
+/** The built-in generic preset id (mirrors kernel's `GENERIC_INITIATIVE_PRESET_ID`). */
+const GENERIC_PRESET_ID = 'preset_generic'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useBoardStore } from '~/stores/board'
 
@@ -30,11 +34,32 @@ export const useInitiativesStore = defineStore('initiatives', () => {
   const byBlock = ref<Record<string, Initiative>>({})
   /** True while a create call is in flight (the modal's submit spinner). */
   const creating = ref(false)
+  /**
+   * The registered initiative-preset descriptors from the snapshot (built-in generic + any a
+   * deployment mixed in). Drives the create picker and — already today — which planning pipeline
+   * "Run planning" starts. Empty until a snapshot hydrates it; the SPA falls back to the generic
+   * pipeline when a preset can't be resolved.
+   */
+  const presets = ref<InitiativePresetDescriptor[]>([])
 
   const all = computed(() => Object.values(byBlock.value))
 
   function forBlock(blockId: string): Initiative | null {
     return byBlock.value[blockId] ?? null
+  }
+
+  /** Resolve a preset descriptor by id (defaulting to the generic preset), or null when unknown. */
+  function presetById(presetId: string | undefined): InitiativePresetDescriptor | null {
+    return presets.value.find((p) => p.id === (presetId ?? GENERIC_PRESET_ID)) ?? null
+  }
+
+  /**
+   * The planning pipeline id to start for an initiative: its preset descriptor's
+   * `planningPipelineId`, falling back to the built-in `pl_initiative` when presets haven't
+   * hydrated or the initiative names a preset the snapshot didn't carry.
+   */
+  function planningPipelineIdFor(initiative: Initiative | null): string {
+    return presetById(initiative?.presetId)?.planningPipelineId ?? 'pl_initiative'
   }
 
   /**
@@ -54,6 +79,12 @@ export const useInitiativesStore = defineStore('initiatives', () => {
       map[initiative.blockId] = existing && existing.rev > initiative.rev ? existing : initiative
     }
     byBlock.value = map
+  }
+
+  /** Replace the registered preset descriptors from a snapshot (idempotent on reload). */
+  function hydratePresets(next: InitiativePresetDescriptor[] | undefined) {
+    if (next === undefined) return
+    presets.value = next
   }
 
   /** Patch from a live `initiative` stream event or a call response (newest rev wins). */
@@ -237,13 +268,17 @@ export const useInitiativesStore = defineStore('initiatives', () => {
   return {
     available,
     byBlock,
+    presets,
     all,
     creating,
     resuming,
     controlling,
     curating,
     forBlock,
+    presetById,
+    planningPipelineIdFor,
     hydrate,
+    hydratePresets,
     upsert,
     create,
     load,

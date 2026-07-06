@@ -13,11 +13,18 @@ import type {
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
+import type {
+  InitiativePresetDescriptor,
+  InitiativePresetField,
+  InitiativePresetInputs,
+  InitiativePresetInputValue,
+} from '@cat-factory/contracts'
 import {
   INITIATIVE_ITEM_TERMINAL_STATUSES,
   INITIATIVE_PROSE_MAX,
   INITIATIVE_SHORT_MAX,
   INITIATIVE_TITLE_MAX,
+  isPresetFieldVisible,
 } from '@cat-factory/contracts'
 
 // Pure initiative computations — no IO, no ports — reused by the InitiativeService,
@@ -387,6 +394,54 @@ export function interviewAtCap(initiative: Initiative): boolean {
 /** Fold the analyst's codebase-analysis prose onto the entity. */
 export function applyAnalysis(initiative: Initiative, summary: string): Initiative {
   return { ...initiative, analysisSummary: summary.trim().slice(0, INITIATIVE_PROSE_MAX) }
+}
+
+// ---------------------------------------------------------------------------
+// Preset skip-interview seeding (slice 3) — for a preset whose `interview` is `skip`, the FORM
+// the user filled IS the interview. At create the service seeds the `qa` log with one answered
+// exchange per filled, VISIBLE field (label → rendered value), so the existing tracker digest +
+// planning-prompt path (`initiativeContextLines`) surface the form with no interviewer step.
+// Pure + total.
+// ---------------------------------------------------------------------------
+
+/** Render one filled preset value as human-readable prose (option labels preferred over raw values). */
+function renderPresetInputValue(
+  value: InitiativePresetInputValue,
+  field: InitiativePresetField,
+): string {
+  const labelOf = (v: string): string =>
+    (field.options ?? []).find((o) => o.value === v)?.label ?? v
+  if (Array.isArray(value)) return value.map(labelOf).join(', ')
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'number') return String(value)
+  return labelOf(value)
+}
+
+/**
+ * Seed the `qa` digest for a SKIP-interview preset from the filled form: one answered exchange
+ * (`question` = the field label, `answer` = the rendered value) per VISIBLE field carrying a
+ * non-empty value. Hidden (`showWhen`-failed) and blank fields are skipped. The result feeds the
+ * entity's `qa` at create, so the analyst / planner prompts (and the committed tracker digest)
+ * read the form AS the interview. Ids come from the caller's generator.
+ */
+export function seedPresetInterviewQa(
+  descriptor: InitiativePresetDescriptor,
+  inputs: InitiativePresetInputs,
+  nextId: () => string,
+): InitiativeQa[] {
+  const qa: InitiativeQa[] = []
+  for (const field of descriptor.fields) {
+    if (!isPresetFieldVisible(field, inputs)) continue
+    const value = inputs[field.key]
+    // An UNSET field is skipped — mirroring the create-time "present" notion in
+    // `validateInitiativePresetInputs`: an undefined value, an unchecked (`false`) checkbox, and
+    // (via the blank `answer` guard below) an empty string / empty multi-select are all "not filled".
+    if (value === undefined || value === false) continue
+    const answer = renderPresetInputValue(value, field).trim()
+    if (!answer) continue
+    qa.push({ id: nextId(), question: field.label.trim(), answer: clampShort(answer) })
+  }
+  return qa
 }
 
 // ---------------------------------------------------------------------------

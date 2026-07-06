@@ -219,6 +219,11 @@ function initiativeContextLines(
   const init = context.initiative
   if (!init) return []
   const lines: string[] = []
+  // Preset steering FIRST — it frames the step's role for this initiative kind (e.g. "you are a
+  // documentation gap-auditor"). Only a preset with a `promptAdditions` entry for this kind
+  // contributes; the generic preset adds nothing, so the generic prompt is unchanged.
+  const addition = init.preset?.promptAddition?.trim()
+  if (addition) lines.push('', `## Initiative preset: ${init.preset!.label}`, '', addition)
   if (init.goal?.trim()) lines.push('', '## Agreed goal', '', init.goal.trim())
   if (init.constraints?.length) {
     lines.push('', '## Constraints', '', ...init.constraints.map((c) => `- ${c}`))

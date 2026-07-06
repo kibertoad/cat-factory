@@ -19,8 +19,14 @@ const initiative = computed(() => initiatives.forBlock(props.block.id))
 
 const status = computed<InitiativeStatus>(() => initiative.value?.status ?? 'planning')
 
-// The ONLY pipeline runnable on an initiative block (see the engine's runnable guard).
-const planningPipeline = computed(() => pipelines.pipelines.find((p) => p.id === 'pl_initiative'))
+// The planning pipeline runnable on this initiative block: its preset descriptor's
+// `planningPipelineId` (a preset picks its own planning pipeline — the generic preset keeps
+// `pl_initiative`), falling back to `pl_initiative` when presets haven't hydrated. The engine's
+// runnable guard still enforces that only an initiative-shaped pipeline runs here.
+const planningPipeline = computed(() => {
+  const id = initiatives.planningPipelineIdFor(initiative.value)
+  return pipelines.pipelines.find((p) => p.id === id)
+})
 const running = computed(() => !!props.block.executionId)
 
 // The interviewer has parked the planning run with questions awaiting answers.

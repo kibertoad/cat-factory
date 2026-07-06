@@ -310,6 +310,20 @@ export interface AgentRunContext {
     nonGoals?: string[]
     qa?: { question: string; answer: string }[]
     analysisSummary?: string
+    /**
+     * The initiative PRESET this run was created from (slice 3), resolved by the engine from the
+     * entity's `presetId` against the preset registry. `label` names it; `inputs` are the frozen
+     * filled form values; `promptAddition` is the preset's per-agent-kind planning-prompt steering
+     * for THIS step's kind (already resolved for the running kind — the analyst/planner render it
+     * into their prompt). Absent for a preset-less (generic) initiative, and the built-in generic
+     * preset contributes no `promptAddition`, so it stays byte-for-byte today's behaviour.
+     */
+    preset?: {
+      id: string
+      label: string
+      inputs?: Record<string, string | string[] | boolean | number>
+      promptAddition?: string
+    }
   }
 }
 
