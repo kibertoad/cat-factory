@@ -361,15 +361,21 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   `taskTypeFieldsSchema`'s `isSafeDocPath` check at the trust boundary — there is NO separate
   path-validation pass, and slice 8's `seedPlan` needs none. `assertPipelinesExist` runs on the
   SEEDED draft (so a `seedPlan` that adds `pipelineId`s is still checked).
-- **[S5] `buildTaskBlock` folds `spawn.{taskTypeFields,fragmentIds,agentConfig}` sparsely** (empty
-  bag omitted), mirroring `BoardService.addTask`, so a decoration-less item stays byte-identical to
-  the pre-slice-5 block. `spawn.gates` was already threaded in slice 2; the rest lands here.
-  `applyPlanDraft` now carries `d.spawn` onto the persisted item (like the other draft content
-  fields) — that's the wire from the planner draft to the loop's block builder.
+- **[S5] `buildTaskBlock` folds `spawn.{taskType,taskTypeFields,fragmentIds,agentConfig}` sparsely**
+  (empty bag omitted), mirroring `BoardService.addTask`, so a decoration-less item stays
+  byte-identical to the pre-slice-5 block. `spawn.taskType` is REQUIRED for a typed spawn to
+  classify correctly: `taskType` (not `taskTypeFields`) is what keys the per-type task limit
+  (`ExecutionService`) and the SPA's document affordances (the inspector doc-repo picker), so a
+  `document` item that stamped only `taskTypeFields` would still count as a `feature` and hide the
+  picker — hence the `taskType` field on `initiativeItemSpawnSchema`. A `document`-typed spawn with
+  no explicit `fragmentIds` inherits `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`, exactly as `addTask`
+  seeds them. `spawn.gates` was already threaded in slice 2; the rest lands here. `applyPlanDraft`
+  now carries `d.spawn` onto the persisted item (like the other draft content fields) — that's the
+  wire from the planner draft to the loop's block builder.
 - **[S5] The spawn bag rides the `doc` blob** (symmetric by construction), but the convention still
   demands an explicit conformance assertion for it — added to `initiative-suite.ts`. The spawned
-  BLOCK's decoration fields (`taskTypeFields`/`fragmentIds`/`agentConfig`) are already covered by the
-  block-store parity assertions, so slice 5 only adds the item-`spawn` round-trip.
+  BLOCK's decoration fields (`taskType`/`taskTypeFields`/`fragmentIds`/`agentConfig`) are already
+  covered by the block-store parity assertions, so slice 5 only adds the item-`spawn` round-trip.
 
 ## Out of scope
 

@@ -7,6 +7,7 @@ import type {
   PipelineRepository,
 } from '@cat-factory/kernel'
 import { ConflictError, NoopEventPublisher } from '@cat-factory/kernel'
+import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -300,13 +301,15 @@ describe('InitiativeLoopService', () => {
     )
   })
 
-  it("folds a spawned item's preset decoration onto the task block (taskTypeFields/fragmentIds/agentConfig)", async () => {
+  it("folds a spawned item's preset decoration onto the task block (taskType/taskTypeFields/fragmentIds/agentConfig)", async () => {
     // Slice 5's `buildTaskBlock` decoration: an item's `spawn` bag comes out as a first-class
-    // TYPED task block (a doc task's docKind/targetPath, its writing-style fragments, per-agent
-    // config) instead of a bare description block — so a docs-refresh item spawns a real doc task.
+    // TYPED task block (its `taskType`, a doc task's docKind/targetPath, its writing-style
+    // fragments, per-agent config) instead of a bare description block — so a docs-refresh item
+    // spawns a real doc task that classifies as `document`, not the default `feature`.
     const decorated = item({
       id: 'a',
       spawn: {
+        taskType: 'document',
         taskTypeFields: { docKind: 'reference', targetPath: 'docs/api/reference.md' },
         fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
         agentConfig: { 'tester.environment': 'local' },
@@ -323,15 +326,36 @@ describe('InitiativeLoopService', () => {
       level: 'task',
       parentId: frame.id,
       initiativeId: initiativeBlock.id,
+      taskType: 'document',
       taskTypeFields: { docKind: 'reference', targetPath: 'docs/api/reference.md' },
       fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
       agentConfig: { 'tester.environment': 'local' },
     })
   })
 
-  it('leaves a decoration-less spawned block bare (no empty taskTypeFields/fragmentIds/agentConfig)', async () => {
+  it('defaults a document-typed spawn with no explicit fragments to the writing-style fragments (mirrors addTask)', async () => {
+    // A `document` spawn that carries no `fragmentIds` still gets the default writing-style
+    // fragments, exactly as `BoardService.addTask` seeds them — so a spawned doc task is
+    // byte-identical to a hand-created one whether or not the preset supplied fragments.
+    const decorated = item({
+      id: 'a',
+      spawn: { taskType: 'document', taskTypeFields: { docKind: 'reference' } },
+    })
+    const h = harness({ items: [decorated] })
+    await h.initiatives.insert('ws-1', makeInitiative([decorated]))
+
+    await h.loop.runDue(clockNow)
+
+    const entity = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
+    const block = await h.blocks.get('ws-1', entity!.items![0]!.blockId!)
+    expect(block).toMatchObject({ taskType: 'document' })
+    expect(block!.fragmentIds).toEqual([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS])
+  })
+
+  it('leaves a decoration-less spawned block bare (no taskType/taskTypeFields/fragmentIds/agentConfig)', async () => {
     // An item with no `spawn` bag (the generic-preset / no-preset case) must spawn a block
-    // byte-identical to the pre-slice-5 shape — no empty decoration keys accreted.
+    // byte-identical to the pre-slice-5 shape — no empty decoration keys accreted, and no
+    // `taskType` (so it classifies as the default `feature`, unchanged from before).
     const h = harness({ items: [item({ id: 'a' })] })
     await h.initiatives.insert('ws-1', makeInitiative([item({ id: 'a' })]))
 
@@ -339,6 +363,7 @@ describe('InitiativeLoopService', () => {
 
     const entity = await h.initiatives.getByBlock('ws-1', initiativeBlock.id)
     const block = await h.blocks.get('ws-1', entity!.items![0]!.blockId!)
+    expect(block).not.toHaveProperty('taskType')
     expect(block).not.toHaveProperty('taskTypeFields')
     expect(block).not.toHaveProperty('fragmentIds')
     expect(block).not.toHaveProperty('agentConfig')

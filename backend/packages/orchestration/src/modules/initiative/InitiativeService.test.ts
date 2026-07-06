@@ -303,6 +303,7 @@ describe('InitiativeService.ingestPlan — seedPlan (slice 5)', () => {
       items: d.items.map((it) => ({
         ...it,
         spawn: {
+          taskType: 'document' as const,
           taskTypeFields: { docKind: 'reference' as const, targetPath: `${inputs.docsRoot}api.md` },
           fragmentIds: ['style.anti-llmisms'],
         },
@@ -314,6 +315,7 @@ describe('InitiativeService.ingestPlan — seedPlan (slice 5)', () => {
     const ingested = await service.ingestPlan('ws-1', blockId, draft)
 
     expect(ingested!.items![0]!.spawn).toEqual({
+      taskType: 'document',
       taskTypeFields: { docKind: 'reference', targetPath: 'docs/api.md' },
       fragmentIds: ['style.anti-llmisms'],
     })

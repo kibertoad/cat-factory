@@ -241,8 +241,8 @@ export function defineInitiativeSuite(
     })
 
     it('round-trips a preset-authored item spawn bag through the CAS (slice 5)', async () => {
-      // The spawn decoration (`item.spawn`: the typed-task `taskTypeFields`, best-practice
-      // `fragmentIds`, per-agent `agentConfig`, and the per-run gate override) rides the entity's
+      // The spawn decoration (`item.spawn`: the `taskType`, the typed-task `taskTypeFields`,
+      // best-practice `fragmentIds`, per-agent `agentConfig`, and the per-run gate override) rides the entity's
       // `doc` blob, so both stores must (de)serialise the nested bag intact — it's exactly what the
       // loop's `buildTaskBlock` folds onto the spawned task block, so a store that dropped it would
       // silently spawn a bare description block instead of a first-class doc task.
@@ -261,6 +261,7 @@ export function defineInitiativeSuite(
             dependsOn: [],
             status: 'pending',
             spawn: {
+              taskType: 'document',
               taskTypeFields: { docKind: 'reference', targetPath: 'docs/api/reference.md' },
               fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
               agentConfig: { 'tester.environment': 'local' },
