@@ -1,7 +1,7 @@
 import type { InitiativePlanDraft, InitiativePresetInputs } from '@cat-factory/contracts'
 import { parseInitiativePlanDraft } from '@cat-factory/contracts'
 import { DOCUMENT_QUICK_PIPELINE_ID, seedPipelines } from '@cat-factory/kernel'
-import { MIGRATION_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
+import { migrationFragmentIdsFor } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import { MIGRATION_PHASE_IDS } from './phases.js'
 import {
@@ -111,10 +111,26 @@ describe('seedMigrationPlan — coding items', () => {
 })
 
 describe('seedMigrationPlan — migration fragments', () => {
-  it('stamps the migration fragments on EVERY spawned item', () => {
-    for (const item of seed({}).items) {
-      expect(item.spawn?.fragmentIds).toEqual([...MIGRATION_FRAGMENT_IDS])
+  it('stamps the migration fragments that APPLY to each item’s primary producer', () => {
+    // Every spawned item carries migration fragments, but scoped to its producing agent kind so a
+    // fragment whose `appliesTo` excludes that kind is not over-injected: coding items (coder) get
+    // the coder subset, document items (doc-writer) get the doc-writer subset (which drops the
+    // coding-only behaviour-preservation standard).
+    const items = byId(seed({}))
+    const coderIds = migrationFragmentIdsFor('coder')
+    const docWriterIds = migrationFragmentIdsFor('doc-writer')
+    // Sanity: the two subsets genuinely differ (behaviour-preservation is coder-only), so this test
+    // actually exercises the scoping rather than asserting one identical list twice.
+    expect(coderIds).not.toEqual(docWriterIds)
+
+    for (const id of ['cov1', 'cov2', 'del1', 'ver1']) {
+      expect(items.get(id)?.spawn?.fragmentIds).toEqual(coderIds)
     }
+    for (const id of ['bz1', 'td1']) {
+      expect(items.get(id)?.spawn?.fragmentIds).toEqual(docWriterIds)
+    }
+    // The injected confidence-case DOCUMENT is authored by the doc-writer too.
+    expect(confidenceOf(seed({}))?.spawn?.fragmentIds).toEqual(docWriterIds)
   })
 })
 

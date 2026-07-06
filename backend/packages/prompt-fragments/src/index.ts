@@ -31,9 +31,10 @@ export const FRAGMENTS: PromptFragment[] = [
 // `styleFragments` form options) draws on the same source of truth the catalog is built from.
 export { styleFragments, DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from './collections/style.js'
 // Re-export the migration fragment ids so the `preset_tech_migration` preset draws its default
-// fragment set from the same source of truth the catalog is built from (T7's `seedMigrationPlan`
-// + T8's descriptor `defaultFragmentIds`).
-export { MIGRATION_FRAGMENT_IDS } from './collections/migration.js'
+// fragment set from the same source of truth the catalog is built from: `MIGRATION_FRAGMENT_IDS`
+// (T8's descriptor `defaultFragmentIds`) + `migrationFragmentIdsFor` (T7's `seedMigrationPlan`,
+// which stamps the per-agent-kind subset that respects each fragment's `appliesTo`).
+export { MIGRATION_FRAGMENT_IDS, migrationFragmentIdsFor } from './collections/migration.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(

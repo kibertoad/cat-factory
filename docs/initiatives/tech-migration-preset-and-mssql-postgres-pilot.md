@@ -416,15 +416,29 @@ New, migration-specific:
   purely off `item.phaseId`. It exports the field-key constants (`FIELD_MIGRATION_DOCS_DIR`,
   `FIELD_HUMAN_REVIEW`, `DEFAULT_MIGRATION_DOCS_DIR`) and `migrationReviewGates` for T8's descriptor
   to reuse — the form's field keys/defaults are defined ONCE here, not retyped in the descriptor.
-  The default migration fragment ids come from `@cat-factory/prompt-fragments` (`MIGRATION_FRAGMENT_IDS`,
-  derived from `migrationFragments`), stamped on EVERY spawned item; T8's `defaultFragmentIds` draws
-  the same set.
-- **[T7] Per-phase archetype (which item is a document vs coding) is derived from the phase, not a
-  planner marker** — `coerceInitiativePlan` strips the planner's `spawn`, so the hook can't read a
-  hint off the draft. Phases 1/3 are DOCUMENT phases (blast-zone report / transition-design), phase 2
-  is coverage CODING closed by the confidence-case DOCUMENT, phases 4/5 are CODING. The confidence
-  case is matched within phase 2 by a title heuristic (`/confidence[- ]?case/`) so a planner-authored
-  one is canonicalized rather than duplicated; absent, it is injected as the last phase-2 item.
+  The migration fragment ids come from `@cat-factory/prompt-fragments`: T8's `defaultFragmentIds`
+  draws the full `MIGRATION_FRAGMENT_IDS`, while T7 stamps per item the subset that APPLIES to the
+  item's primary producer via `migrationFragmentIdsFor(agentKind)` (`coder` for coding items,
+  `doc-writer` for documents). This is deliberate: manual per-block `fragmentIds` pins bypass a
+  fragment's `appliesTo` at run time (the resolver folds pinned bodies in unconditionally — only the
+  automatic service-fragment selector consults `appliesTo`), so the scoping is applied at STAMP time
+  instead, or a doc task would receive the coding-only `migration.behaviour-preservation` standard.
+- **[T7] The shared `seedPlan` primitives live in `presets/plan-helpers.ts`.** `strInput`, `fileSlug`,
+  `uniqueDocPath`, and the merge-step gate-override derivation (`mergeGateOverride`) are ONE
+  implementation shared by docs-refresh and tech-migration — do NOT re-copy them per preset.
+  `migrationReviewGates` / `docsReviewGates` are thin per-preset wrappers over `mergeGateOverride`.
+- **[T7] Per-phase archetype (which item is a document vs coding) is a DATA table, derived from the
+  phase, not a planner marker** — `coerceInitiativePlan` strips the planner's `spawn`, so the hook
+  can't read a hint off the draft. The document phases + their docKind/canonical-filename/gate policy
+  are declared once in `DOC_PHASE_DECORATIONS` (mirroring docs-refresh's `PHASE_DECORATIONS`); a phase
+  with no entry is CODING. Phases 1/3 are DOCUMENT phases (blast-zone report / transition-design),
+  phase 2 is coverage CODING closed by the confidence-case DOCUMENT, phases 4/5 are CODING. The
+  confidence case is matched within phase 2 by a title heuristic ANCHORED at the title start
+  (`/^(verb )*confidence[-\s]?case\b/`) so a coverage item that merely mentions it is not hijacked; a
+  planner-authored one is canonicalized rather than duplicated, and absent it is injected last.
+- **[T7] An `always`-gated document asserts its gate.** `asDocument` THROWS if an intrinsic control
+  point (confidence-case / transition-design) resolves to no merge gate (a doc pipeline with no
+  `merger` step) rather than silently shipping it unattended — the invariant is enforced, not hoped.
 - **[T7] Coding items carry NO gate override.** Their pipeline is chosen at spawn time by the policy's
   estimate rules (`pl_quick`/`pl_full`), so a length-correct `spawn.gates` array can't be pre-computed
   at seed time (and `selectInitiativePipeline` lives in orchestration, which agents can't import). This

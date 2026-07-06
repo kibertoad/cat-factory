@@ -14,6 +14,11 @@ canonicalizing a planner-authored one or injecting it when omitted — caps phas
 items (scrubbing dropped ids from every surviving `dependsOn`), and applies the human-review gate
 policy (confidence-case + transition-design are always gated as the coverage→delivery control points;
 `humanReview` additionally gates the informational blast-zone report). Every spawned item carries the
-`migration.*` fragments, now exposed as `MIGRATION_FRAGMENT_IDS` from `@cat-factory/prompt-fragments`
-(derived from the fragment definitions, the single source of truth T8's `defaultFragmentIds` reuses).
-Pure + total; no runtime behaviour changes until T8 registers the preset.
+`migration.*` fragments that APPLY to its primary producer — `coder` for coding items, `doc-writer`
+for documents — via the new `migrationFragmentIdsFor(agentKind)` from `@cat-factory/prompt-fragments`
+(alongside the full-set `MIGRATION_FRAGMENT_IDS` T8's `defaultFragmentIds` reuses), so a document
+task no longer receives the coding-only behaviour-preservation standard (manual `fragmentIds` pins
+bypass `appliesTo` at run time, so the scoping is applied at stamp time). The shared `seedPlan`
+primitives (`strInput`/`fileSlug`/`uniqueDocPath`/`mergeGateOverride`) are lifted into
+`presets/plan-helpers.ts` so docs-refresh and tech-migration share one implementation. Pure + total;
+no runtime behaviour changes until T8 registers the preset.
