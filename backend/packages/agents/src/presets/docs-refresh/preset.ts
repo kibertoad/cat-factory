@@ -12,8 +12,10 @@ import {
   INITIATIVE_DOCS_PIPELINE_ID,
   joinRepoPath,
   registerInitiativePreset,
+  seedPipelines,
 } from '@cat-factory/kernel'
 import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS, styleFragments } from '@cat-factory/prompt-fragments'
+import { moduleSlug } from '../../repo-ops/render.js'
 import { detectDocsLayout } from './docs-detect.logic.js'
 
 // ---------------------------------------------------------------------------
@@ -226,41 +228,58 @@ function strInput(inputs: InitiativePresetInputs, key: string, fallback: string)
   return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
-/** A filesystem-safe, lower-kebab file slug for a derived `.md` target path. */
+/**
+ * A filesystem-safe, lower-kebab file slug for a derived `.md` target path — the package's shared
+ * {@link moduleSlug} (single slug implementation) capped to a filename-sane length. A degenerate
+ * (empty / all-punctuation) title falls back to `moduleSlug`'s `module`; `seedPlan` deduplicates
+ * the composed path anyway, so two such items never collide on one file.
+ */
 function fileSlug(title: string): string {
-  const slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-  return slug || 'doc'
+  return moduleSlug(title).slice(0, 60)
+}
+
+/**
+ * Ensure a derived `.md` path is unique within one plan: on collision, insert `-2`, `-3`, … before
+ * the extension (the {@link uniqueSlugId} pattern) and record it. Two items whose titles slug to the
+ * same name under the same directory would otherwise stamp the SAME `targetPath`, spawning two doc
+ * tasks that open competing PRs writing one file. Only derived paths are deduped (planner-authored
+ * placement rides the item description, not `targetPath`).
+ */
+function uniqueDocPath(path: string, taken: Set<string>): string {
+  if (!taken.has(path)) {
+    taken.add(path)
+    return path
+  }
+  const dot = path.lastIndexOf('.')
+  const base = dot === -1 ? path : path.slice(0, dot)
+  const ext = dot === -1 ? '' : path.slice(dot)
+  let n = 2
+  let candidate = `${base}-${n}${ext}`
+  while (taken.has(candidate)) candidate = `${base}-${++n}${ext}`
+  taken.add(candidate)
+  return candidate
 }
 
 /**
  * The per-run gate-override array for a spawned documentation pipeline when human review is opted
  * in — a FULL boolean array parallel to the pipeline's own `agentKinds` (the slice-2 gate-override
- * contract: `ExecutionService.start` rejects a length mismatch). Human review is placed at the
- * pipeline's natural review point: the converged `doc-reviewer` for `pl_document_quick`, and the
- * `merger` (review the green PR before it ships) for the lean author→conflicts→ci→merger pipelines
- * that have no reviewer step. `undefined` (human review OFF, the default) leaves the pipeline's own
- * gates — which are none for all three — so a decoration-less run stays unattended.
+ * contract: `ExecutionService.start` rejects a length mismatch). The gate is placed on the `merger`
+ * step so the human reviews the CI-green PR right BEFORE it merges — the same point for every doc
+ * pipeline, matching the form's "review each documentation change before it merges" promise (rather
+ * than gating a mid-pipeline `doc-reviewer` that still auto-merges afterwards).
  *
- * The array lengths here are pinned to the seed pipelines' shapes by `preset.test.ts`, so a change
- * to one of those pipelines that this override no longer matches fails a test rather than a spawn.
+ * The placement is DERIVED from the pipeline's `agentKinds` (the merge step's index), so it stays
+ * correct by construction if a pipeline's shape changes — never a hand-maintained array parallel to
+ * a pipeline this preset doesn't own. `undefined` (human review OFF, the default, or a pipeline with
+ * no merge step) leaves the pipeline's own gates — none for all three — so a run stays unattended.
  */
 export function docsReviewGates(pipelineId: string, humanReview: boolean): boolean[] | undefined {
   if (!humanReview) return undefined
-  switch (pipelineId) {
-    case DOCUMENT_QUICK_PIPELINE_ID:
-      // [doc-writer, doc-reviewer, doc-quality, conflicts, ci, merger] — gate the converged review.
-      return [false, true, false, false, false, false]
-    case CODE_COMMENTS_PIPELINE_ID:
-    case BUSINESS_DOCS_PIPELINE_ID:
-      // [author, conflicts, ci, merger] — no reviewer, so gate the merge (review the green PR).
-      return [false, false, false, true]
-    default:
-      return undefined
-  }
+  const kinds = seedPipelines().find((p) => p.id === pipelineId)?.agentKinds
+  if (!kinds) return undefined
+  const gateIdx = kinds.lastIndexOf('merger')
+  if (gateIdx === -1) return undefined
+  return kinds.map((_, i) => i === gateIdx)
 }
 
 /** The spawn shape each phase's items take (the deterministic decoration `seedPlan` stamps). */
@@ -268,8 +287,8 @@ interface PhaseDecoration {
   pipelineId: string
   taskType?: 'document'
   docKind?: DocKind
-  /** How the item's `.md` target path is placed: derived under a dir, planner-authored, or none. */
-  placement: 'docs-root' | 'diagrams-dir' | 'authored-readme' | 'none'
+  /** How the item's `.md` target path is placed: derived under a dir, or none (writer-placed). */
+  placement: 'docs-root' | 'diagrams-dir' | 'none'
 }
 
 const PHASE_DECORATIONS: Record<string, PhaseDecoration> = {
@@ -280,12 +299,17 @@ const PHASE_DECORATIONS: Record<string, PhaseDecoration> = {
     docKind: 'reference',
     placement: 'docs-root',
   },
-  // README: a doc that lives BESIDE the code — the planner authors the per-service target path.
+  // README: a doc that lives BESIDE the code, so its path is per-service and cannot be DERIVED
+  // here (seedPlan doesn't know each service's directory). The planner names the README's path in
+  // the item description (steered by the promptAdditions) and the doc-writer places it — the same
+  // description-placed shape as `comments`/`business-rules`. It CANNOT ride `taskTypeFields.targetPath`:
+  // the planner's structured output has no `spawn` field (see `INITIATIVE_PLANNER_SYSTEM_PROMPT`),
+  // so `coerceInitiativePlan` never carries one through to `seedPlan`.
   [DOC_TYPE_README]: {
     pipelineId: DOCUMENT_QUICK_PIPELINE_ID,
     taskType: 'document',
     docKind: 'reference',
-    placement: 'authored-readme',
+    placement: 'none',
   },
   // Diagrams: a Mermaid `.md` a doc-writer produces, placed under the diagrams dir. `docKind: other`
   // (there is no `diagrams` DocKind) — its template's required sections (Overview + Details) suit a
@@ -310,7 +334,11 @@ const PHASE_DECORATIONS: Record<string, PhaseDecoration> = {
   },
 }
 
-/** The derived `.md` target path for an item, or undefined when placement is planner-authored/none. */
+/**
+ * The derived `.md` target path for an item (undefined when the placement is writer-placed). The
+ * composed path is deduplicated by {@link uniqueDocPath} in `seedPlan`, so a title collision never
+ * yields two items writing the same file.
+ */
 function targetPathFor(
   deco: PhaseDecoration,
   item: InitiativeDraftItem,
@@ -321,10 +349,6 @@ function targetPathFor(
       return `${joinRepoPath(strInput(inputs, FIELD_DOCS_ROOT, DEFAULT_DOCS_ROOT), fileSlug(item.title))}.md`
     case 'diagrams-dir':
       return `${joinRepoPath(strInput(inputs, FIELD_DIAGRAMS_DIR, DEFAULT_DIAGRAMS_DIR), fileSlug(item.title))}.md`
-    case 'authored-readme':
-      // The planner decides a README's path (beside its service); preserve it if authored + safe
-      // (the ingest re-parse re-validates it), else leave unset for the writer to place.
-      return item.spawn?.taskTypeFields?.targetPath?.trim() || undefined
     case 'none':
       return undefined
   }
@@ -343,23 +367,26 @@ function seedPlan(draft: InitiativePlanDraft, inputs: InitiativePresetInputs): I
   const styleFragmentIds = Array.isArray(inputs[FIELD_STYLE_FRAGMENTS])
     ? (inputs[FIELD_STYLE_FRAGMENTS] as string[])
     : []
+  // Track derived `.md` paths across the whole plan so two same-slug items never collide on one file.
+  const usedPaths = new Set<string>()
 
   const items = draft.items.map((item): InitiativeDraftItem => {
     const deco = PHASE_DECORATIONS[item.phaseId]
     if (!deco) return item
 
-    const targetPath = targetPathFor(deco, item, inputs)
-    const taskTypeFields =
-      deco.docKind || targetPath
-        ? {
-            ...(deco.docKind ? { docKind: deco.docKind } : {}),
-            ...(targetPath ? { targetPath } : {}),
-          }
-        : undefined
+    const derived = targetPathFor(deco, item, inputs)
+    const targetPath = derived ? uniqueDocPath(derived, usedPaths) : undefined
+    const taskTypeFields = {
+      ...(deco.docKind ? { docKind: deco.docKind } : {}),
+      ...(targetPath ? { targetPath } : {}),
+    }
     const gates = docsReviewGates(deco.pipelineId, humanReview)
+    // Merge OVER any planner-authored spawn (so a planner `agentConfig` etc. survives) — the
+    // decorated fields we own win.
     const spawn = {
+      ...(item.spawn ?? {}),
       ...(deco.taskType ? { taskType: deco.taskType } : {}),
-      ...(taskTypeFields ? { taskTypeFields } : {}),
+      ...(Object.keys(taskTypeFields).length ? { taskTypeFields } : {}),
       ...(styleFragmentIds.length ? { fragmentIds: styleFragmentIds } : {}),
       ...(gates ? { gates } : {}),
     }
@@ -399,12 +426,13 @@ const PLANNER_STEERING = [
   'Build the plan around the required plan shape above, following the documentation audit. Include a',
   'phase ONLY for a documentation type the user requested; omit the others (they are optional).',
   '',
-  'Phase `foundations`: create or normalize any MISSING placement directories the later phases write',
-  'into — usually 0–1 items, and NONE when the directories already exist.',
+  'Phase `foundations`: ALWAYS present it (the required plan shape mandates it), but give it an item',
+  'ONLY to create or normalize a MISSING placement directory a later phase writes into — usually 0–1',
+  'items, and leave it with NO items when the directories already exist. Never drop the phase itself.',
   '',
   'Bounded item granularity per phase:',
-  '- `readme` — one item per in-scope service (its README lives beside the code; set the item’s',
-  '  target path accordingly).',
+  '- `readme` — one item per in-scope service. Its README lives BESIDE the code, so name the exact',
+  '  repo-relative path (e.g. `services/auth/README.md`) in the item description for the writer.',
   '- `diagrams` — one item per in-scope service (architecture + the key flows), written under the',
   '  diagrams directory from the interview.',
   '- `comments` — one item per worst under-documented module from the audit, capped at 5; name the',
