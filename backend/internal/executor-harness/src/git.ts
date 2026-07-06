@@ -61,14 +61,18 @@ const GIT_TIMEOUT_MS = Math.max(
 // Emptying the helper list (`credential.helper=` with no value RESETS the multi-valued config,
 // dropping the system/global/local helpers) removes GCM from the chain, so git falls back to
 // the harness's own askpass helper — which returns the per-job PAT we already hold (see
-// `authEnv`). `credential.interactive=false` is belt-and-suspenders for any backend that still
-// runs. The token is never in argv; only this non-secret config is.
-const NON_INTERACTIVE_CREDENTIAL_ARGS = [
-  '-c',
-  'credential.helper=',
-  '-c',
-  'credential.interactive=false',
-]
+// `authEnv`). The token is never in argv; only this non-secret config is.
+//
+// DO NOT re-add `-c credential.interactive=false` here. It reads like harmless belt-and-braces
+// but modern git (≥ 2.47, incl. the executor image + host git) HONORS `credential.interactive`
+// and treats invoking GIT_ASKPASS as "interactive" — so with it set git SKIPS the askpass
+// entirely and dies with "fatal: unable to get password from user", failing EVERY authenticated
+// clone/push on both the native and container paths (it clones a public base repo fine — that
+// needs no auth — then fails only at push, which is what makes it look intermittent). The GCM
+// popup it was meant to belt-and-braces against is already fully handled by the emptied helper
+// list above plus `GIT_TERMINAL_PROMPT=0` / `GCM_INTERACTIVE=never` in the env (see authEnv /
+// nonInteractiveGitEnv). Exported so a unit test can pin that this arg never creeps back in.
+export const NON_INTERACTIVE_CREDENTIAL_ARGS = ['-c', 'credential.helper=']
 
 /**
  * Env applied to git commands that DON'T carry {@link authEnv} (local ops like config/checkout/

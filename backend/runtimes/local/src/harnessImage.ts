@@ -24,7 +24,7 @@ import { isOffValue } from './envFlags.js'
  * `@cat-factory/executor-harness`'s version (the value CI tags the published image with, and
  * the same tag `deploy/backend` pins). Bump it whenever the harness image bumps.
  */
-export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.37.0'
+export const RECOMMENDED_HARNESS_IMAGE = 'ghcr.io/kibertoad/cat-factory-executor:1.37.1'
 
 /**
  * The effective harness image ref: an explicit `LOCAL_HARNESS_IMAGE` wins (a custom build, a
