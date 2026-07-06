@@ -222,7 +222,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------ |
 | 0   | This tracker                                                                                                                                                                                                                                             | —      | ✅ done | (this) |
 | 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ✅ done | #812   |
-| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ⬜ todo |        |
+| 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ✅ done | #TBD   |
 | 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ⬜ todo |        |
 | 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ⬜ todo |        |
 | 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ⬜ todo |        |
@@ -269,6 +269,24 @@ Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
 - **[S1] Create-flow input validation is `validateInitiativePresetInputs(descriptor, inputs)`**
   (contracts, pure, returns `string[]` — empty ⇒ valid). Slice 3 maps a non-empty result to one
   `ValidationError`; it already enforces unknown-key/type/options/required-visible/path-safety.
+- **[S2] The gate override is a FULL boolean array indexed by the pipeline's ORIGINAL step index**
+  (parallel to `pipeline.gates`, length = `pipeline.agentKinds.length`), NOT a sparse patch:
+  `ExecutionService.start(…, gatesOverride?)` applies `gatesOverride?.[i] ?? pipeline.gates?.[i] ??
+false` per step, so an override entry of `false` genuinely turns a pipeline gate OFF (it isn't
+  a "leave as-is"). Slice 8's review mapping must therefore emit the WHOLE array (compute it from
+  the pipeline's own gate positions + the `humanReview` choice), not just the gates it wants to flip.
+- **[S2] The override needs NO separate persistence.** It is copied onto the run's steps'
+  `requiresApproval` at start, and retry/restart rebuild from the STORED steps (`planResumedSteps`/
+  `resetStep` preserve `requiresApproval`), so a resumed run keeps the override for free — do not add
+  a `gates` column/field to the run.
+- **[S2] The loop threads `item.spawn?.gates`, nothing else, in slice 2.** The rest of the `spawn`
+  bag (`taskTypeFields`/`fragmentIds`/`agentConfig`) is slice 5's `buildTaskBlock` decoration; keep
+  them separate so the two slices don't entangle.
+- **[S2] Conformance for an engine seam with no HTTP surface goes through a harness probe.** The
+  gate override isn't (and shouldn't be) exposed on `POST /blocks/:id/executions`, so the suite calls
+  it via a new `ConformanceApp.startExecution(ws, block, pipeline, { gates })` probe (each facade
+  wires it to `container.executionService.start`). Reuse that probe for any future start-time seam a
+  preset needs rather than widening the public start endpoint.
 
 ## Out of scope
 
@@ -285,4 +303,7 @@ Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
 - **Monorepo scope selection**: is the free-text `scopeHint` enough, or should the probe
   populate a per-service multi-select (heavier probe, nicer UX)? Decide during S4/S8.
 - **Should spawn-time gate overrides surface in the task inspector UI** (so a human can see
-  why a spawned task does/doesn't pause)? Decide during S2.
+  why a spawned task does/doesn't pause)? **Resolved (S2): no bespoke UI.** The override is
+  copied onto the run's steps' `requiresApproval`, which the existing run/step detail already
+  renders as per-step approval gates — a spawned task shows exactly the gates it will pause on,
+  with no new surface. Revisit only if a preset needs to explain the mapping's *rationale*.

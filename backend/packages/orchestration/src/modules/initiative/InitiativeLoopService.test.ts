@@ -249,7 +249,55 @@ describe('InitiativeLoopService', () => {
       }),
     )
     await h.loop.runDue(clockNow)
-    expect(h.start).toHaveBeenCalledWith('ws-1', expect.any(String), 'pl_heavy')
+    // `start(ws, blockId, pipelineId, initiatedBy, activate, origin, gatesOverride)` — a spawned
+    // run is system-initiated (no initiator/activation), manual origin, and (here) no override.
+    expect(h.start).toHaveBeenCalledWith(
+      'ws-1',
+      expect.any(String),
+      'pl_heavy',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
+  })
+
+  it("threads a spawned item's per-run gate override into its run (spawn.gates)", async () => {
+    // The preset gate-override seam (slice 2): an item's `spawn.gates` — a docs-refresh task's
+    // human-review mapping — is passed straight through to `ExecutionService.start` as the run's
+    // gate override, so the spawned run gates (or doesn't) per the preset, not the pipeline default.
+    const gatedItem = item({ id: 'a', spawn: { gates: [true, false, false] } })
+    const h = harness({ items: [gatedItem] })
+    await h.initiatives.insert('ws-1', makeInitiative([gatedItem]))
+
+    await h.loop.runDue(clockNow)
+
+    expect(h.start).toHaveBeenCalledWith(
+      'ws-1',
+      expect.any(String),
+      'pl_full',
+      undefined,
+      undefined,
+      undefined,
+      [true, false, false],
+    )
+  })
+
+  it('passes no gate override for an item with no spawn decoration', async () => {
+    const h = harness({ items: [item({ id: 'a' })] })
+    await h.initiatives.insert('ws-1', makeInitiative([item({ id: 'a' })]))
+
+    await h.loop.runDue(clockNow)
+
+    expect(h.start).toHaveBeenCalledWith(
+      'ws-1',
+      expect.any(String),
+      'pl_full',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('reconciles a finished task, copies the PR, and completes the initiative', async () => {

@@ -412,6 +412,16 @@ export function makeMothershipConformanceApp(
     createWorkspace,
     createOrgWorkspace,
     drive,
+    startExecution: (workspaceId, blockId, pipelineId, opts) =>
+      container.executionService.start(
+        workspaceId,
+        blockId,
+        pipelineId,
+        undefined,
+        undefined,
+        undefined,
+        opts?.gates,
+      ),
     driveBootstrap,
     driveEnvConfigRepair,
     executionEmits,

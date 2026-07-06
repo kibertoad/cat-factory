@@ -62,6 +62,18 @@ export interface TestApp {
    */
   drive(workspaceId: string, maxRounds?: number): Promise<ExecutionInstance[]>
   /**
+   * Start a run straight through the real `ExecutionService`, optionally with a per-run gate
+   * override (the initiative-preset gate-override seam) — a path no HTTP route exposes. Uses the
+   * same core overrides `drive` does (against the shared local D1), so the conformance suite can
+   * assert the override lands on the persisted run steps + drives identically to Node/local.
+   */
+  startExecution(
+    workspaceId: string,
+    blockId: string,
+    pipelineId: string,
+    opts?: { gates?: boolean[] },
+  ): Promise<ExecutionInstance>
+  /**
    * Drive a bootstrap job's poll loop to a terminal state, mirroring what the
    * durable BootstrapWorkflow does in production. Returns the number of polls.
    */
@@ -159,6 +171,24 @@ export function makeApp(
     )
   }
 
+  async function startExecution(
+    workspaceId: string,
+    blockId: string,
+    pipelineId: string,
+    opts?: { gates?: boolean[] },
+  ): Promise<ExecutionInstance> {
+    const c = buildContainer(env, coreOverrides, { gateProviders: appOptions.gateProviders })
+    return c.executionService.start(
+      workspaceId,
+      blockId,
+      pipelineId,
+      undefined,
+      undefined,
+      undefined,
+      opts?.gates,
+    )
+  }
+
   async function driveBootstrap(
     workspaceId: string,
     jobId: string,
@@ -194,6 +224,7 @@ export function makeApp(
     createWorkspace,
     createOrgWorkspace,
     drive,
+    startExecution,
     driveBootstrap,
     driveEnvConfigRepair,
   }

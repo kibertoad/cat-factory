@@ -7648,6 +7648,79 @@ export function defineExecutionConformance(harness: ConformanceHarness): void {
         expect(exec.steps[1]!.state).toBe('pending')
       })
 
+      // The per-run gate-override seam (the initiative-preset gate-override, slice 2): a run
+      // started with a `gates` override runs with THAT approval-gate config instead of the
+      // pipeline's own, and the override is persisted on the run's steps (so it round-trips
+      // through each store and survives to the driver). Exercised through the `startExecution`
+      // probe (no HTTP route carries a gate override) so both stores are asserted identically.
+      describe('per-run gate overrides (initiative-preset seam)', () => {
+        it('an override turns a pipeline gate ON, pausing a step the pipeline left ungated', async () => {
+          const app = harness.makeApp({ confidence: 1 })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // The pipeline itself declares NO gates; the per-run override enables the first one.
+          const ungated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Override on',
+            agentKinds: ['architect', 'coder'],
+            gates: [false, false],
+          })
+          await app.startExecution(wsId, 'task_login', ungated.body.id, { gates: [true, false] })
+
+          const blocked = await app.drive(wsId)
+          const exec = blocked.find((e) => e.blockId === 'task_login')!
+          expect(exec.status).toBe('blocked')
+          expect(exec.steps[0]!.state).toBe('waiting_decision')
+          expect(exec.steps[0]!.approval?.status).toBe('pending')
+          expect(exec.steps[1]!.state).toBe('pending')
+
+          // The override is persisted on the run's steps, not just held in memory — read it back
+          // from the runtime's real store to prove each store round-trips `requiresApproval`.
+          const stored = await app.executionRepository().get(wsId, exec.id)
+          expect(stored!.steps[0]!.requiresApproval).toBe(true)
+          expect(stored!.steps[1]!.requiresApproval).toBe(false)
+        })
+
+        it('an override turns a pipeline gate OFF, advancing past a step the pipeline gated', async () => {
+          const app = harness.makeApp({ confidence: 1 })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          // The pipeline gates the first step; the per-run override disables it so the run flows
+          // straight through (no human approval) — the docs-refresh "human review off" default.
+          const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Override off',
+            agentKinds: ['architect', 'coder'],
+            gates: [true, false],
+          })
+          await app.startExecution(wsId, 'task_login', gated.body.id, { gates: [false, false] })
+
+          const settled = await app.drive(wsId)
+          const exec = settled.find((e) => e.blockId === 'task_login')!
+          // The first step completed without ever pausing for approval.
+          expect(exec.steps[0]!.state).toBe('done')
+          expect(exec.steps[0]!.approval ?? null).toBeNull()
+          const stored = await app.executionRepository().get(wsId, exec.id)
+          expect(stored!.steps[0]!.requiresApproval).toBe(false)
+        })
+
+        it('rejects a gate override whose length does not match the pipeline step count', async () => {
+          const app = harness.makeApp({ confidence: 1 })
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Mismatch',
+            agentKinds: ['architect', 'coder'],
+            gates: [false, false],
+          })
+
+          // A one-entry override against a two-step pipeline is rejected before any side effect.
+          await expect(
+            app.startExecution(wsId, 'task_login', pipeline.body.id, { gates: [true] }),
+          ).rejects.toThrow(/2 step/)
+        })
+      })
+
       it('re-runs a gated step with freeform feedback and per-block comments', async () => {
         const app = harness.makeApp({ confidence: 1 })
         const { workspace } = await app.createWorkspace()
