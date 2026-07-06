@@ -1,6 +1,6 @@
-# Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-main pilot)
+# Initiative: Stack recipes & shared stacks — complex-monolith environments (acme-monolith pilot)
 
-**Status:** in progress (slices 1–8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst + the setup wizard; slice 7 wizard UI landed, only its `data-testid`-only e2e spec deferred — see the checklist) · **Owner:** environments · **Started:** 2026-07-05
+**Status:** in progress (slices 1–8 landed = contracts + detection + recipe execution + SharedStack + provider integration + preflights + environment analyst + the setup wizard; slice 9 landed = the pilot fixtures + golden detection + drift alarm + reference configs; slice 7 wizard UI landed, only its `data-testid`-only e2e spec deferred — see the checklist) · **Owner:** environments · **Started:** 2026-07-05
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -12,7 +12,7 @@ single compose file (image-pull or, since `compose-build-from-source.md`, build-
 the local facade) or a Kubernetes manifest tree. The motivating pilot for this initiative is the
 opposite extreme — a **complex multi-repo system**:
 
-- **acme-main** — a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
+- **acme-monolith** — a PHP (Symfony) monolith + ~25 compose services (app + 8 daemon
   variants + nginx + ~10 private-ECR microservices + 4 node watch-build containers), whose
   bring-up is **imperative**: env-file materialization → secrets → compose up → `composer
 install` → MySQL seed import → Doctrine migrations → ES index build → health-loop gate.
@@ -44,7 +44,7 @@ way the .NET+Angular+SQL-Server app piloted build-from-source.
 
 ## The pilot system (facts the design must cover)
 
-### acme-main bring-up (from its `bin/dev-console app setup`)
+### acme-monolith bring-up (from its `bin/dev-console app setup`)
 
 The repo's own CLI (`bin/dev-console`, a generated bashly script; **WSL/mac/linux only**,
 refuses Git-Bash/msys) performs, in order:
@@ -57,7 +57,7 @@ refuses Git-Bash/msys) performs, in order:
 4. Delegate `shared-services setup` (see below).
 5. `users sync postgres` on the shared stack.
 6. Write `services/app/.env.local`, copy `.env.dev.local-dist` → `.env.dev.local`.
-7. **Vault OIDC login (Google SSO, browser)** and pull `kv/acme-main/dev/*` secrets into
+7. **Vault OIDC login (Google SSO, browser)** and pull `kv/acme-monolith/dev/*` secrets into
    `.env.dev.local` + `docker/.env.<service>` files.
 8. Hand-copy `services/app/.split.yaml.dist` → `.split.yaml` (documented manual step).
 9. `docker compose pull/build/up -d` — `docker/dev.yml` + OS override
@@ -402,7 +402,7 @@ provisioning (the compose-build rule: never re-implement a predicate).
 > `*-dist`/`*.example`/`*.dist` config templates → `recipe.envFiles`; `profiles:` → default-off
 > `profileCandidates` (never `recipe.composeProfiles`); seed-ish `*.sql` (one level deep) →
 > `seedDumpCandidates` (fullest pre-selected); `bin/*console*`/Makefile/justfile/Taskfile → the
-> report-only `repoCliHint`. Fixture-driven unit tests (incl. a combined acme-main-shaped repo)
+> report-only `repoCliHint`. Fixture-driven unit tests (incl. a combined acme-monolith-shaped repo)
 > cover every extension. Gotcha for later slices: several existing detector tests assert the WHOLE
 > recommendation with `toEqual`, so any new always-on field breaks them — gate additions behind an
 > "actually detected" check, as done here.
@@ -567,7 +567,7 @@ with remediation instructions.
 | `bin/console monitor:health` readiness loop                         | Recipe `healthGate` (`compose-exec`)                              | A     |
 | Test login users (register + Mailpit confirm)                       | `tester-environment-access.md` Slice B credential pools (seeded)  | A     |
 
-**Honesty note:** a full acme-main environment requires the five **M** rows done once per
+**Honesty note:** a full acme-monolith environment requires the five **M** rows done once per
 machine (and the ECR login refreshed ~8-hourly — the preflight makes the stale-token case a
 clear actionable failure). After that, re-provisions are unattended. The **public-image subset**
 of shared-services + a synthetic consumer runs with zero M/C rows — that is the CI-validated
@@ -589,7 +589,7 @@ changesets per touched package; contracts changes flagged as breaking-is-fine (p
 | 6   | **Preflights**: kernel port + local-facade built-in checks + recipe `prerequisites` + API + provisioning-start enforcement                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | done                       | (this) |
 | 7   | **Wizard**: detect → review → preflight → trial → save flow + inspector nudge + i18n (all locales) + `data-testid`s — **incl. the analyst draft-merge (deterministic-wins + provenance) + "run deep analysis" trigger deferred from slice 8**. _Part 1 done_: the pure `mergeAnalystRecipeDraft` draft-merge core (`@cat-factory/contracts`) + unit tests. _Part 2 done_: `EnvironmentSetupWizard.vue` + store wiring + SideBar/inspector entry points + i18n (8 locales). Only the `data-testid`-only e2e spec deferred (needs a fake `ProvisioningRepoReader` e2e seam — GitHub is off in e2e). | in progress (e2e deferred) | (this) |
 | 8   | **Environment analyst**: agent kind (structured draft recipe on `result.custom`) + `AnalystRecipeDraft` contract + seeded `pl_environment_analysis` pipeline (draft-merge moved to slice 7)                                                                                                                                                                                                                                                                                                                                                                                                       | done                       | (this) |
-| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, pilot docs                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | todo                       |        |
+| 9   | **Acme pilot**: recipe + shared-stack reference configs as fixtures, golden detection tests against the real repos, drift alarm, pilot docs. _Landed_: sanitized `__fixtures__/pilot/` snapshot of both repos (byte-for-byte reproduces the live detection), the two `*.detect.golden.json` goldens, `reference/{consumer-recipe,shared-stack}.json`, `pilot-golden.logic.test.ts`, and `scripts/pilot-detect-golden.mjs` (externalized-sanitizer drift alarm vs live clones). Live compose-up smoke is slice 10.                                                                                 | done                       | (this) |
 | 10  | **Validation harness**: golden-run script + shared-services public-subset smoke (compose up + consumer attach + health + teardown-keeps-stack)                                                                                                                                                                                                                                                                                                                                                                                                                                                    | todo                       |        |
 | S1  | _Stretch_: recipe execution on self-hosted runner pools (heavy stacks for hosted deployments)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | todo                       |        |
 | S2  | _Stretch_: registry-auth modeling beyond check-only preflights                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | todo                       |        |
@@ -627,9 +627,103 @@ image-bumping slice.
 See `docs/initiatives/deployer-single-provisioner.md` ("Docker-compose centralization") for the
 Deployer-side gate this pairs with.
 
+## Pilot fixtures & golden detection (slice 9)
+
+> **Landed (slice 9)** — the pilot's reference configs, fixtures, and golden detection, realizing
+> validation-plan items #1 (fixture-driven detection) and #5 (golden detection run + upstream-drift
+> alarm). All under `backend/packages/integrations/src/modules/environments/__fixtures__/pilot/`
+> (+ the drift script under `.../integrations/scripts/`), and **fully sanitized** — nothing names any
+> real upstream repo/product/host/registry/secret; everything uses the tracker's `acme-*` placeholders.
+>
+> - **Fixtures** — a faithful, REDUCED, sanitized snapshot of the two acceptance repos' provisioning
+>   surface: `consumer-main/` (the complex monolith — `docker/dev.yml` with all 28 services in real
+>   declaration order, the `dev.{mac,wsl}.override.yml` OS overrides, the external `acme-net`, the
+>   `blackfire`/`datadog`/`otel` profiles, the `acme-monolith-nginx` `build:`, the `deployment/acme-db-dummy/*.sql`
+>   seed dumps, the `bin/dev-console` repo CLI + a `Makefile`, and a root `catalog-info.yaml`) and
+>   `shared-services/` (`docker-compose.yml` with all 17 services, `acme-net`, the `backends`/`peer`
+>   profiles, `.env.shared.example`). "Reduced" = only the facts the deterministic detector reads
+>   (service keys / networks / profiles / build / templates / seed dumps / repo-CLI); real images, env,
+>   ports, volumes, and healthchecks are omitted (the detector ignores them and it keeps upstream detail
+>   - secrets out of the tree). The fixtures reproduce the sanitized LIVE detection **byte-for-byte**
+>     (verified via the drift script against the live clones + an `<upstream>`→`acme` sanitize map).
+> - **Goldens** — `consumer-main.detect.golden.json` (the full `docker-compose`
+>   `ProvisioningRecommendation`) and `shared-services.detect.golden.json` (the full
+>   `SharedStackRecommendation`), generated from the fixtures by the detector itself (consistent by
+>   construction).
+> - **Reference configs** — `reference/consumer-recipe.json` (the hand-authored target `StackRecipe`:
+>   the A-rows of the mapping table as ordered `setupSteps` [composer install → seed import → cache
+>   > warmup → migrations → search-index build → frontend build-file gate] + a `compose-exec` health gate
+>   - the M-rows as `prerequisites` preflights [docker-daemon / memory ≥16 / registry-auth / mkcert-ca /
+>     > hosts-entries / env-secrets-marker] with copy-paste remediation) and `reference/shared-stack.json`
+>     > (the target `CreateSharedStackInput`: the PUBLIC `backends`-only subset — the CI-validatable config —
+>     > with `acme-net` as a managed network, the `.env.shared` materialization, users-sync + Debezium-register
+>     > setup steps, and the private-registry preflight marked NON-required so the public subset still comes up).
+> - **Golden test** — `pilot-golden.logic.test.ts` reads each fixture dir over a filesystem
+>   `ProvisioningRepoReader` (the same port the GitHub/GitLab reader implements) and asserts detector
+>   output `toEqual` the golden, PLUS that the `reference/` configs are schema-valid (`stackRecipeSchema`
+>   / `createSharedStackSchema`) and wired together (the consumer's `sharedStackRefs` names the shared
+>   stack; its seed step's `stdinFile` exists in the fixture; the shared stack owns the network the
+>   consumer attaches to). Runs everywhere via `pnpm test:run` (incl. Windows) — no clone / network /
+>   Docker. `valibot` was added as an integrations devDependency (test-only, `^1.4.2` to match the
+>   workspace) for the schema-validity checks.
+> - **Drift alarm** — `scripts/pilot-detect-golden.mjs` (`pnpm --filter @cat-factory/integrations
+pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens against the fixtures
+>   OR live clones (`ACME_MONOLITH_DIR` / `ACME_SHARED_SERVICES_DIR`). Sanitization for the live path is
+>   EXTERNALIZED — a `{from,to}` map via `PILOT_SANITIZE_MAP` or a gitignored
+>   `scripts/pilot-sanitize.local.json` — so no upstream name is ever committed. It imports the compiled
+>   detector, so it needs a build first.
+>
+> **Gotchas / faithful artifacts (documented, not fought):** (1) the consumer's root `catalog-info.yaml`
+> parses as a `kind`+`apiVersion` doc, so the detector counts the repo root as a raw-manifest location and
+> the compose recommendation carries a low-confidence "Kubernetes manifests also exist" note — an
+> incidental artifact of the real repo shape, reproduced on purpose (the golden flags it if the detector
+> ever changes). (2) The real consumer's env templates live under `services/app/` (outside the compose
+> dir) — the detector now scans the compose dir + root config dirs AND one level into the monorepo
+> container dirs (`services/*`, `apps/*`, `packages/*`), so those templates ARE detected: the consumer
+> golden carries `recipe.envFiles` for `services/app/.env.dev.local-dist` + `.split.yaml.dist` (see the
+> "universality follow-up" note below). A template nested deeper than one level, or under a non-standard
+> container dir, still needs `ENVIRONMENTS_DETECTION_CONVENTIONS.envTemplateDirs` or the analyst. (3) No
+> persistence / migration work — everything rides the existing `provisioning` blob + the fixtures; this
+> slice is test/fixtures/docs/script-only (a patch changeset — no `dist` change, but the published
+> `package.json` gains the `pilot:golden` script). (4) The repo-root `.gitignore` excludes
+> `.env.*` (keeping only `.env.example`), which would silently drop the `.env.shared.example` fixture — a
+> nested `__fixtures__/pilot/.gitignore` re-includes it (verified with `git check-ignore`). (5) Slice 10
+> (the live compose-up smoke of the shared-services public subset + a synthetic consumer) still needs a
+> Linux/WSL Docker host and stays TODO.
+
+## Universality follow-up (post-slice-9): make detection adapt to non-pilot repos
+
+The deterministic detector is already service-name- and tech-stack-agnostic (it keys on compose/k8s
+STRUCTURE, never on any `acme` name), but it was CONVENTION-bound (fixed file-name/dir lists) and
+shallow (root-scoped env-template scan). Three changes broaden it so a differently-shaped
+repo — different paths, different stack — is picked up without editing the detector. They are additive
+in that detection can only ever surface MORE — it never removes or changes an existing detection.
+Two of the three (injectable conventions, the wizard nudge) leave a default-shaped repo resolving
+exactly as before; the third (item 2 below) is on by default, so a monorepo that keeps per-service
+env templates under `services/*`/`apps/*`/`packages/*` will now surface them as low-confidence,
+user-confirmed `recipe.envFiles` where it previously surfaced none.
+
+1. **Injectable detection conventions (deployment config).** `DetectionConventions`
+   (`provision-detect.logic.ts`) extends the built-in file-name/dir lists — `composeFiles` /
+   `composeDirs` / `seedDirs` / `envTemplateDirs` — and is threaded, additively (built-ins always win,
+   canonical compose names stay highest-priority), through both detectors. Sourced from the deployment
+   config `environments.detectionConventions` (`AppConfig`), parsed from the `ENVIRONMENTS_DETECTION_CONVENTIONS`
+   JSON env var by BOTH facades and carried on `CoreDependencies.detectionConventions` into the
+   `EnvironmentConnectionService` (service-provisioning detect) AND `SharedStackService` (shared-stack
+   detect). So an org whose repos use `stack.yml` / `ops/seeds/` broadens detection with an env var, no
+   code edit. Runtime-symmetric; recipe/detection ride the existing `provisioning` blob, so no migration.
+2. **Env-template scan goes one level into monorepo container dirs** (`services/*`, `apps/*`,
+   `packages/*`), closing the pilot's documented `services/app/` gap (see gotcha #2). Bounded by the same
+   `READ_BUDGET` + `MAX_ENV_FILES`; root/compose-dir templates still win the dedup.
+3. **The wizard makes the analyst nudge prominent when a `repoCliHint` is detected** — a repo that ships
+   its own imperative bring-up (a `bin/*console*` / Makefile / justfile the deterministic scan can't
+   read) now surfaces a highlighted "run deep analysis" prompt in the review step, so the imperative
+   steps (which are stack-specific and never deterministically derived for anyone) get translated by the
+   LLM analyst — the intended universality mechanism for the parts a structural scan can't see.
+
 ## Validation plan (no human testing)
 
-Both acme repos are accessible programmatically (local clones at `C:\sources\acme-main`
+Both acme repos are accessible programmatically (local clones at `C:\sources\acme-monolith`
 and `C:\sources\acme-shared-services`; git-cloneable in CI-adjacent environments with a
 deploy key). The layers, cheapest first:
 
@@ -665,7 +759,7 @@ deploy key). The layers, cheapest first:
 7. **Wizard e2e spec** (slice 7, Playwright suite conventions — `data-testid` only, seeded
    workspace, live-push assertions): detect → review → save against a fixture repo with the
    fake executor; analyst path mocked at the backend boundary.
-8. **Full acme-main bring-up is explicitly NOT CI-validated** — it requires VPN + Vault +
+8. **Full acme-monolith bring-up is explicitly NOT CI-validated** — it requires VPN + Vault +
    ECR. It is validated _indirectly_: every A-row of the mapping table has a unit/smoke test
    equivalent, every M-row has a preflight simulation test, and the golden detection run pins
    the real repo's shape. A human running the pilot once per machine is a product milestone,

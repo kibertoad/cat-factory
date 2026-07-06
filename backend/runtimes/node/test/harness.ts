@@ -131,6 +131,7 @@ export function makeConformanceApp(
     agentKindRegistry?: AgentKindRegistry
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     taskSourceProviders?: CoreDependencies['taskSourceProviders']
+    detectionConventions?: CoreDependencies['detectionConventions']
   },
 ): ConformanceApp {
   // The custom-kind suite injects a pre-loaded registry: thread it into BOTH the fake executor
@@ -185,6 +186,10 @@ export function makeConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
+    // Inject the deployment-level detection-convention extensions (a fake in the suite) so
+    // convention-honouring service-provisioning detection is asserted against real Postgres,
+    // identically to the Worker — catching a facade that forgot the config→deps threading.
+    ...(opts?.detectionConventions ? { detectionConventions: opts.detectionConventions } : {}),
     // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
     // full QC loop is driven against real Postgres without a model, identically to the Worker.
     ...(opts?.testerQualityReviewer ? { testerQualityReviewer: opts.testerQualityReviewer } : {}),

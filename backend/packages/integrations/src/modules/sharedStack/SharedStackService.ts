@@ -31,7 +31,10 @@ import {
 } from '../compose/compose-environment.logic.js'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import { runHealthGate, runRecipeStep } from '../compose/recipe-runner.js'
-import { detectSharedStack } from '../environments/provision-detect.logic.js'
+import {
+  type DetectionConventions,
+  detectSharedStack,
+} from '../environments/provision-detect.logic.js'
 import { RepoReadError } from '../environments/repo-read-error.js'
 import { parseVcsCloneUrl } from './shared-stack-detect.logic.js'
 
@@ -81,6 +84,13 @@ export interface SharedStackServiceDependencies {
     workspaceId: string,
     coords: { owner: string; repo: string; provider?: VcsProvider },
   ) => Promise<RunRepoContext | null>
+  /**
+   * Deployment-level, ADDITIVE extensions to the built-in detection conventions (extra compose file
+   * names/dirs, seed dirs, env-template dirs), passed straight into {@link detectSharedStack} so
+   * shared-stack detection honours the same house conventions as service-provisioning detection.
+   * Absent ⇒ built-in behaviour.
+   */
+  detectionConventions?: DetectionConventions
 }
 
 // Bound (ms) for the plain compose calls (network / down / version) so a wedged daemon can't hang
@@ -118,6 +128,7 @@ export class SharedStackService {
         coords: { owner: string; repo: string; provider?: VcsProvider },
       ) => Promise<RunRepoContext | null>)
     | undefined
+  private readonly detectionConventions: DetectionConventions | undefined
   // Coalesce concurrent `ensureUp` for the same stack onto one in-flight bring-up (a second caller
   // must not start a duplicate `up` / re-run non-idempotent setup steps).
   private readonly inflight = new Map<string, Promise<SharedStack>>()
@@ -132,6 +143,7 @@ export class SharedStackService {
     this.runPreflightChecks = deps.runPreflights
     this.provisioningLog = deps.provisioningLog
     this.resolveRepoFiles = deps.resolveRepoFilesForWorkspace
+    this.detectionConventions = deps.detectionConventions
   }
 
   /** List a workspace's shared stacks (ordered by creation). */
@@ -219,6 +231,7 @@ export class SharedStackService {
         gitRef: input.gitRef ?? bound.baseBranch,
         ...(input.directory ? { directory: input.directory } : {}),
         repoName: coords.repo,
+        ...(this.detectionConventions ? { conventions: this.detectionConventions } : {}),
       })
     } catch (err) {
       if (!(err instanceof RepoReadError)) throw err

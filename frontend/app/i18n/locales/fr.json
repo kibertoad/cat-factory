@@ -4403,7 +4403,8 @@
       "run": "Lancer l'analyse",
       "unavailable": "L'analyse approfondie nécessite un dépôt lié et le pipeline d'analyse.",
       "failed": "L'exécution de l'analyse a échoué.",
-      "apply": "Appliquer l'ébauche de l'analyste"
+      "apply": "Appliquer l'ébauche de l'analyste",
+      "cliNudge": "Ce dépôt fournit sa propre CLI d'installation ou un Makefile ({path}) que l'analyse déterministe ne peut pas lire. Lancez l'analyse approfondie pour le traduire en étapes de recette."
     },
     "field": {
       "composeFiles": "Fichiers Compose",

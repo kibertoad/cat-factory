@@ -1,0 +1,79 @@
+# Sanitized fixture — a faithful snapshot of the acme-shared-services pilot's
+# `docker-compose.yml`, REDUCED to what the shared-stack detector reads: the `services:`
+# keys (in the repo's real order), the external network the stack creates + owns, and the
+# declared `profiles:`. Real images, env, ports, and healthchecks are omitted. The public
+# `backends`-profile subset is what can run fully unattended; the `peer` profile carries
+# the private-registry services (see ../README.md and ../reference/shared-stack.json).
+services:
+  mysql:
+    image: mysql:8
+    profiles: [backends]
+    networks: [acme-net]
+  proxysql:
+    image: proxysql/proxysql:2
+    profiles: [backends]
+    networks: [acme-net]
+  postgres:
+    image: postgres:16
+    profiles: [backends]
+    networks: [acme-net]
+  cockroach:
+    image: private-registry.example/cockroach:latest
+    profiles: [peer]
+    networks: [acme-net]
+  mongo:
+    image: mongo:7
+    profiles: [backends]
+    networks: [acme-net]
+  valkey:
+    image: valkey/valkey:8
+    profiles: [backends]
+    networks: [acme-net]
+  fauxqs:
+    image: private-registry.example/fauxqs:latest
+    profiles: [backends]
+    networks: [acme-net]
+  rabbitmq:
+    image: rabbitmq:3-management
+    profiles: [backends]
+    networks: [acme-net]
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: [backends]
+    networks: [acme-net]
+  elasticsearch:
+    image: elasticsearch:8
+    profiles: [backends]
+    networks: [acme-net]
+  kibana:
+    image: kibana:8
+    profiles: [backends]
+    networks: [acme-net]
+  kafka:
+    image: bitnami/kafka:3
+    profiles: [backends]
+    networks: [acme-net]
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    profiles: [backends]
+    networks: [acme-net]
+  debezium-connect:
+    image: debezium/connect:2
+    profiles: [backends]
+    networks: [acme-net]
+  languagetool:
+    image: private-registry.example/languagetool:latest
+    profiles: [peer]
+    networks: [acme-net]
+  okapi:
+    image: private-registry.example/okapi:latest
+    profiles: [peer]
+    networks: [acme-net]
+  envoy:
+    image: envoyproxy/envoy:v1.31-latest
+    networks: [acme-net]
+
+networks:
+  # The shared stack creates + owns this; per-PR consumer environments attach to it.
+  acme-net:
+    external: true

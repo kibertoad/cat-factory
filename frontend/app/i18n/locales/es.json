@@ -4403,7 +4403,8 @@
       "run": "Ejecutar análisis",
       "unavailable": "El análisis profundo necesita un repositorio vinculado y la canalización de análisis.",
       "failed": "La ejecución del análisis falló.",
-      "apply": "Aplicar borrador del analista"
+      "apply": "Aplicar borrador del analista",
+      "cliNudge": "Este repositorio incluye su propia CLI de configuración o un Makefile ({path}) que el escaneo determinista no puede leer. Ejecuta el análisis profundo para traducirlo en pasos de receta."
     },
     "field": {
       "composeFiles": "Archivos Compose",

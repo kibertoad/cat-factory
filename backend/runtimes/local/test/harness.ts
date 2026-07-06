@@ -146,6 +146,7 @@ export function makeConformanceApp(
     agentKindRegistry?: AgentKindRegistry
     testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
     taskSourceProviders?: CoreDependencies['taskSourceProviders']
+    detectionConventions?: CoreDependencies['detectionConventions']
   },
 ): ConformanceApp {
   const recorder = new RecordingEventPublisher()
@@ -199,6 +200,10 @@ export function makeConformanceApp(
     ...(opts?.resolveRepoFilesForCoords
       ? { resolveRepoFilesForCoords: opts.resolveRepoFilesForCoords }
       : {}),
+    // Inject the deployment-level detection-convention extensions (a fake in the suite) so
+    // convention-honouring service-provisioning detection is asserted through the local
+    // composition root, identically to the Worker/Node.
+    ...(opts?.detectionConventions ? { detectionConventions: opts.detectionConventions } : {}),
     // Inject the test quality-control companion's inline reviewer (a fake in the suite) so the
     // full QC loop is driven through the local composition root without a model, identically to
     // the Worker/Node.
