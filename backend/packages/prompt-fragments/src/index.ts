@@ -1,6 +1,7 @@
 import type { PromptFragment } from '@cat-factory/contracts'
 import { acceptanceFragments } from './collections/acceptance.js'
 import { designFragments } from './collections/design.js'
+import { migrationFragments } from './collections/migration.js'
 import { nodeFragments } from './collections/node.js'
 import { reactFragments } from './collections/react.js'
 import { styleFragments } from './collections/style.js'
@@ -22,11 +23,13 @@ export const FRAGMENTS: PromptFragment[] = [
   ...acceptanceFragments,
   ...designFragments,
   ...styleFragments,
+  ...migrationFragments,
 ]
 
-// Re-export the document-task style defaults so the board service can seed a new document
-// task's fragment selection from the same source of truth the catalog is built from.
-export { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from './collections/style.js'
+// Re-export the writing-style collection + the document-task style defaults so a consumer (the
+// board service seeding a new document task's fragments, the docs-refresh preset building its
+// `styleFragments` form options) draws on the same source of truth the catalog is built from.
+export { styleFragments, DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from './collections/style.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(

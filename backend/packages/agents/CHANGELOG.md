@@ -1,5 +1,114 @@
 # @cat-factory/agents
 
+## 0.45.0
+
+### Minor Changes
+
+- 09a1c85: Technological-migration initiative — slice T5: the methodology prompt pack + the interviewer
+  promptAddition seam.
+
+  Adds `backend/packages/agents/src/presets/tech-migration/`, the code-side methodology steering the
+  upcoming `preset_tech_migration` registration (T8) will spread onto its `promptAdditions`. Kept OFF
+  the wire descriptor per the parent's off-the-wire rule (the descriptor's `phaseTemplate` carries
+  only the short phase ids/titles/goals; the deep methodology lives here):
+
+  - **`phases.ts`** — `MIGRATION_PHASE_IDS` (+ `MIGRATION_PHASE_ID_ORDER`), the single canonical
+    phase-id contract shared by the phase template, this prompt pack, the plan post-processor
+    (`seedMigrationPlan`, T7) and the migration E2E (T10), so no consumer retypes a phase id (a typo
+    would silently break the ingest normalizer's verbatim id match).
+  - **`prompt-additions.ts`** — `MIGRATION_PROMPT_ADDITIONS` (keyed by the kernel initiative kind
+    constants) with the interviewer / analyst / planner steering: the interviewer probes the fuzzy,
+    form-uncapturable migration facts (downtime tolerance, data-migration constraints, compat posture)
+    and never re-asks the seeded form; the analyst produces the direct + TRANSITIVE blast-zone
+    inventory with per-touchpoint existing-test coverage; the planner authors per-phase item briefs
+    (single-writer artifacts, the human-gated confidence-case item, coverage-before-delivery),
+    referencing the canonical phase ids verbatim.
+
+  Completes the interviewer half of the preset `promptAdditions` seam in
+  `InitiativeInterviewService`: the analyst/planner already fold their steering via `AgentContextBuilder`
+  → `initiativeContextLines`, but the interviewer is an inline service that builds its own prompt, so it
+  now folds `promptAdditions['initiative-interviewer']` under the same `## Initiative preset: <label>`
+  heading. Generic and preset-less initiatives register none, so their interview stays byte-for-byte
+  unchanged — the migration preset is simply the first FULL-interview preset to steer its interviewer.
+  Both changes are dormant data + a generic seam until T8 registers the preset; the loop never branches
+  on a preset id.
+
+## 0.44.1
+
+### Patch Changes
+
+- 785576b: Initiative presets — docs-refresh preset review fixes (follow-up to slice 8, #911):
+
+  - **`seedPlan` deduplicates derived target paths.** Two items whose titles slug to the same name
+    under one directory (e.g. two `diagrams` items) would previously stamp the SAME `targetPath`,
+    spawning two doc tasks that open competing PRs writing one file. Derived `<dir>/<slug>.md` paths
+    are now uniquified (`-2`, `-3`, …) across the plan.
+  - **Human review gates the `merger` step, derived from the pipeline shape.** `docsReviewGates` no
+    longer hand-maintains per-pipeline boolean arrays; it derives the override from each pipeline's
+    `agentKinds` and places the single gate on `merger`, so the human reviews the CI-green PR right
+    before it merges — the same review point for EVERY doc pipeline (previously `pl_document_quick`
+    gated a mid-pipeline `doc-reviewer` that still auto-merged afterwards, contradicting the form's
+    "review each documentation change before it merges" promise). Correct-by-construction against
+    pipeline-shape drift instead of relying on a length drift-guard.
+  - **README items are writer-placed from the description, not a dead `targetPath` mechanism.** The
+    planner's structured output has no `spawn` field (`INITIATIVE_PLANNER_SYSTEM_PROMPT`), so
+    `coerceInitiativePlan` never carries a planner-authored path to `seedPlan` — the old
+    `authored-readme` branch was inert. READMEs now name their per-service path in the item
+    description (like `comments`/`business-rules`) and carry no `targetPath`.
+  - **`seedPlan` merges its decoration OVER any planner spawn** (so a planner-authored `agentConfig`
+    survives) rather than replacing it, and reuses the package's shared `moduleSlug` for the file
+    slug instead of a fourth copy of the kebab-slug helper.
+  - **Planner steering keeps the required `foundations` phase present** (0 items when the dirs already
+    exist) rather than implying the phase may be dropped — which the exhaustive `phaseTemplate` would
+    reject as a missing required phase, failing the whole plan ingest.
+
+## 0.44.0
+
+### Minor Changes
+
+- f1906cb: Initiative presets — slice 8 (docs-refresh pilot): register the `preset_docs_refresh` initiative
+  preset — the FIRST real preset, and the registration pattern the technological-migration preset
+  (T8) copies. Incorporates inter-phase follow-up #1 (adopt the generic `phaseTemplate` shape
+  enforcement; do NOT hand-roll phase shaping in `seedPlan`); follow-up #2 (templated pipelines)
+  stays deferred.
+
+  - **agents** (`presets/docs-refresh/preset.ts`): the `preset_docs_refresh` registration — a
+    descriptor FORM (doc types, placement mode, docs/diagrams/business-rules dirs with `showWhen`,
+    scope hint, human-review opt-in, writing-style fragments), a `detect` probe reusing slice 6's
+    `detectDocsLayout`, a declarative `phaseTemplate` (Foundations `required` + one OPTIONAL phase
+    per doc type, `allowAdditionalPhases: false`), `promptAdditions` turning the analyst into a
+    documentation gap-auditor and shaping the planner's phases + item granularity, and a `seedPlan`
+    that stamps per-item spawn DECORATION only (pipeline per doc type, `taskType`/`docKind`/derived
+    `targetPath`, writing-style `fragmentIds`, and — when human review is opted in — the per-run
+    `spawn.gates` override at each pipeline's review point). Registered as a module side effect on
+    import (the `@cat-factory/gates` pattern), so it is available in every deployment with no
+    per-facade wiring — the two runtimes cannot drift on it. Plan SHAPE lives in the template + the
+    generic ingest normalizer; DECORATION lives in `seedPlan`; the two never overlap.
+  - **kernel** (`domain/seed.ts`): the preset's interviewer-free planning pipeline
+    `pl_initiative_docs` (`[initiative-analyst, initiative-planner, initiative-committer]`, no human
+    gates — the form is the interview; per-task review is the opt-in gate-override seam) + its
+    exported id `INITIATIVE_DOCS_PIPELINE_ID`, plus `DOCUMENT_QUICK_PIPELINE_ID` for the README /
+    diagram spawn pipeline.
+  - **prompt-fragments**: re-export the `styleFragments` collection so the preset builds its
+    writing-style form options from the same source of truth (no duplicated fragment ids/labels).
+
+  Backend-only: the SPA renders the new preset from its descriptor with no frontend changes (the
+  slice-4 generic form renderer + picker), and human review maps to SPAWNED-task gates, so the
+  planning run stays unattended.
+
+### Patch Changes
+
+- Updated dependencies [f1906cb]
+  - @cat-factory/kernel@0.108.0
+  - @cat-factory/prompt-fragments@0.12.0
+
+## 0.43.1
+
+### Patch Changes
+
+- Updated dependencies [4a7fca0]
+  - @cat-factory/prompt-fragments@0.11.0
+
 ## 0.43.0
 
 ### Minor Changes

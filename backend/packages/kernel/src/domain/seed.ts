@@ -542,6 +542,18 @@ export function seedPipelines(): Pipeline[] {
         'initiative-committer',
       ],
     }),
+    // The Documentation-refresh preset's planning pipeline (initiative-presets slice 8): the SAME
+    // analyst → planner → committer as `pl_initiative` but with NO interviewer (the preset's form
+    // IS the interview — `interview: 'skip'` seeds the qa) and NO human gates. The planner is
+    // steered into a documentation gap-audit → phased plan by the preset's promptAdditions +
+    // phaseTemplate; human review is opt-in per SPAWNED task via the gate-override seam
+    // (`item.spawn.gates`), not on the planning run — so the plan itself runs unattended. Kind-keyed
+    // (analyst/planner/committer are initiative kinds), so it is legal on an initiative block.
+    {
+      id: 'pl_initiative_docs',
+      name: 'Plan documentation refresh',
+      agentKinds: ['initiative-analyst', 'initiative-planner', 'initiative-committer'],
+    },
     // A spec-only pipeline, to (re)generate a service's unified in-repo specification
     // (and its Gherkin acceptance scenarios) independently.
     { id: 'pl_spec', name: 'Write spec', agentKinds: ['spec-writer'] },
@@ -671,12 +683,26 @@ export const INITIATIVE_BREAKDOWN_PIPELINE_ID = 'pl_initiative_breakdown'
 export const INITIATIVE_PIPELINE_ID = 'pl_initiative'
 
 /**
+ * Pipeline id of the Documentation-refresh preset's planning pipeline (initiative-presets slice 8):
+ * `pl_initiative` minus the interviewer + human gates. The `preset_docs_refresh` descriptor binds it
+ * as its `planningPipelineId`.
+ */
+export const INITIATIVE_DOCS_PIPELINE_ID = 'pl_initiative_docs'
+
+/**
  * Pipeline ids of the Documentation-refresh pilot's lean spawn pipelines (initiative-presets
  * slice 7). The docs-refresh preset (slice 8) stamps these onto the tasks its planner spawns
  * (in-source comments / business rules); diagrams + READMEs reuse `pl_document_quick`.
  */
 export const CODE_COMMENTS_PIPELINE_ID = 'pl_code_comments'
 export const BUSINESS_DOCS_PIPELINE_ID = 'pl_business_docs'
+
+/**
+ * Pipeline id of the lean document pipeline (`doc-writer` → auto-review → `doc-quality` → the
+ * mergeability / CI / merge tail). The docs-refresh preset (slice 8) spawns README + diagram tasks
+ * onto it.
+ */
+export const DOCUMENT_QUICK_PIPELINE_ID = 'pl_document_quick'
 
 /** Pipeline ids of the built-in recurring-pipeline presets. */
 export const DEP_UPDATE_PIPELINE_ID = 'pl_dep_update'

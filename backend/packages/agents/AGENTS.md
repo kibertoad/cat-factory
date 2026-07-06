@@ -16,6 +16,11 @@
 - `presets/` — built-in initiative-preset pilots. `docs-refresh/docs-detect.logic.ts` is the
   deterministic, checkout-free repo probe (`detectDocsLayout`) behind the docs-refresh preset's
   form prefill (see `docs/initiatives/initiative-presets-and-docs-refresh.md`).
+  `tech-migration/` holds the technological-migration preset's pieces: `phases.ts` (the canonical
+  `MIGRATION_PHASE_IDS` contract shared by the template / prompt pack / plan post-processor / E2E)
+  and `prompt-additions.ts` (`MIGRATION_PROMPT_ADDITIONS` — the per-planning-kind methodology
+  steering the registration spreads onto its `promptAdditions`; see
+  `docs/initiatives/tech-migration-preset-and-mssql-postgres-pilot.md`).
 
 **See also:** `CLAUDE.md` → "Custom agents", "Conventions" (the `FINAL_ANSWER_IN_REPLY` rule);
 `backend/docs/model-support.md`.

@@ -1,5 +1,71 @@
 # @cat-factory/prompt-fragments
 
+## 0.12.0
+
+### Minor Changes
+
+- f1906cb: Initiative presets — slice 8 (docs-refresh pilot): register the `preset_docs_refresh` initiative
+  preset — the FIRST real preset, and the registration pattern the technological-migration preset
+  (T8) copies. Incorporates inter-phase follow-up #1 (adopt the generic `phaseTemplate` shape
+  enforcement; do NOT hand-roll phase shaping in `seedPlan`); follow-up #2 (templated pipelines)
+  stays deferred.
+
+  - **agents** (`presets/docs-refresh/preset.ts`): the `preset_docs_refresh` registration — a
+    descriptor FORM (doc types, placement mode, docs/diagrams/business-rules dirs with `showWhen`,
+    scope hint, human-review opt-in, writing-style fragments), a `detect` probe reusing slice 6's
+    `detectDocsLayout`, a declarative `phaseTemplate` (Foundations `required` + one OPTIONAL phase
+    per doc type, `allowAdditionalPhases: false`), `promptAdditions` turning the analyst into a
+    documentation gap-auditor and shaping the planner's phases + item granularity, and a `seedPlan`
+    that stamps per-item spawn DECORATION only (pipeline per doc type, `taskType`/`docKind`/derived
+    `targetPath`, writing-style `fragmentIds`, and — when human review is opted in — the per-run
+    `spawn.gates` override at each pipeline's review point). Registered as a module side effect on
+    import (the `@cat-factory/gates` pattern), so it is available in every deployment with no
+    per-facade wiring — the two runtimes cannot drift on it. Plan SHAPE lives in the template + the
+    generic ingest normalizer; DECORATION lives in `seedPlan`; the two never overlap.
+  - **kernel** (`domain/seed.ts`): the preset's interviewer-free planning pipeline
+    `pl_initiative_docs` (`[initiative-analyst, initiative-planner, initiative-committer]`, no human
+    gates — the form is the interview; per-task review is the opt-in gate-override seam) + its
+    exported id `INITIATIVE_DOCS_PIPELINE_ID`, plus `DOCUMENT_QUICK_PIPELINE_ID` for the README /
+    diagram spawn pipeline.
+  - **prompt-fragments**: re-export the `styleFragments` collection so the preset builds its
+    writing-style form options from the same source of truth (no duplicated fragment ids/labels).
+
+  Backend-only: the SPA renders the new preset from its descriptor with no frontend changes (the
+  slice-4 generic form renderer + picker), and human review maps to SPAWNED-task gates, so the
+  planning run stays unattended.
+
+## 0.11.0
+
+### Minor Changes
+
+- 4a7fca0: Technological-migration initiative — slice T4: the `migration.*` best-practice prompt-fragment
+  collection.
+
+  Adds a new `migration` collection to the universal fragment catalog — the default fragment pack
+  the upcoming `preset_tech_migration` initiative preset applies to the coding, testing and document
+  agents it spawns. Three fragments, each a standalone standard folded verbatim into an agent's
+  system prompt when selected:
+
+  - **`migration.discipline`** — the invariant methodology: establish the full (direct + transitive)
+    blast zone before touching anything, pin observable behaviour with tests BEFORE the swap
+    (coverage before delivery), decide the backwards-compatibility degree deliberately, deliver
+    incrementally with the behaviour suite green throughout, and finish by removing the old path.
+  - **`migration.behaviour-preservation`** — how to prove the swap is behaviour-neutral: characterize
+    at a seam ABOVE the swapped layer, assert observable outcomes (never raw vendor error codes,
+    implicit ordering, or locking/isolation mechanics), preserve the edge-case semantics that silently
+    differ across technologies (NULL vs empty string, precision/rounding, collation, pagination,
+    identity exposure), and keep set-based work set-based — never a per-row app-side loop (the N+1
+    regression trap).
+  - **`migration.confidence-case`** — the authoring standard for the evidence-backed coverage proof a
+    human audits before delivery: a per-touchpoint map of inventory row to NAMED covering tests and
+    the behaviour each pins, gaps/waivers justified against the coverage bar, risk mitigations, and
+    the safety nets — grounded evidence, not assertion, from the single writer of the case document.
+
+  Pure additive catalog data (existing fragments and the catalog contract are unchanged); wired into
+  `FRAGMENTS`, resolvable via `getFragment`. The prompt-fragments package gains a vitest suite that
+  guards the collection's catalog invariants (namespacing/shape conventions, wiring + resolution,
+  global id uniqueness) — deliberately not the fragment prose, which is its own source of truth.
+
 ## 0.10.27
 
 ### Patch Changes
