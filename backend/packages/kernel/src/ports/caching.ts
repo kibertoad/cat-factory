@@ -1,4 +1,4 @@
-import type { GitHubRepo } from '../domain/types.js'
+import type { GitHubRepo, ModelFamilyPolicy } from '../domain/types.js'
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
@@ -131,6 +131,22 @@ export interface AppCaches {
    * document-body cache, the head-sha probe re-validates without a cross-isolate bus.
    */
   repoFiles: GroupCacheHandle<CachedRepoRead>
+  /**
+   * The account's resolved model-family allow/block policy (`AccountSettingsService`'s
+   * non-secret config), grouped AND keyed by account id — the slow-moving, admin-changed
+   * read `resolveWorkspaceCapabilities` runs on every `/models` call and every pipeline
+   * start guard. Wrapped ({@link AccountModelPolicyCacheValue}) so the common "no policy"
+   * case caches as a value rather than a re-loaded null. Coherence is invalidation-driven:
+   * the sole write path (the account-settings update controller) drops the account's entry
+   * after the write commits. Pass-through on the Worker's isolate-safe profile (our own
+   * mutable D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
+   */
+  accountModelPolicy: GroupCacheHandle<AccountModelPolicyCacheValue>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
+}
+
+/** Cache-friendly wrapper for the account policy read (`null` ⇒ no policy / `off`). */
+export interface AccountModelPolicyCacheValue {
+  policy: ModelFamilyPolicy | null
 }

@@ -1,5 +1,36 @@
 # @cat-factory/orchestration
 
+## 0.86.0
+
+### Minor Changes
+
+- 14eac27: Add an account-wide model-family allow/block policy. An account admin can constrain which
+  LLM families their teams run (block/allow lists over families like DeepSeek, Qwen, Claude,
+  OpenAI), gated to the Cloudflare / remote-Node / mothership runtimes (never plain local
+  mode). The policy is evaluated against `(family, effective-route provider)`, so a
+  residency-guaranteed route (`trustedProviders`, e.g. Bedrock) can exempt an otherwise-blocked
+  family — data-residency risk is a property of the serving route, not the model weights.
+  Region-grouped built-in presets (USA / Europe / China / Other) ship as apply-in templates.
+
+  Stored on the existing per-account settings config blob (no migration). Enforced through a
+  single choke point (`ProviderCapabilities`): the `/models` catalog flags blocked models
+  (`available: false` + `policyBlocked: true`) and the pipeline start guard refuses them
+  (`model_policy_blocked`). The per-account policy read is cached via a new `accountModelPolicy`
+  slice of the app cache seam (`AppCaches`), invalidated on the account-settings write.
+
+### Patch Changes
+
+- Updated dependencies [14eac27]
+  - @cat-factory/contracts@0.113.0
+  - @cat-factory/kernel@0.103.0
+  - @cat-factory/caching@0.5.0
+  - @cat-factory/agents@0.40.8
+  - @cat-factory/integrations@0.75.1
+  - @cat-factory/prompt-fragments@0.10.21
+  - @cat-factory/sandbox@0.9.22
+  - @cat-factory/spend@0.11.5
+  - @cat-factory/workspaces@0.12.5
+
 ## 0.85.0
 
 ### Minor Changes

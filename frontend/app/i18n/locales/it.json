@@ -745,6 +745,65 @@
         "title": "Rimuovere questo runner?",
         "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
       }
+    },
+    "modelPolicy": {
+      "title": "Policy di accesso ai modelli",
+      "description": "Limita quali famiglie di modelli possono usare i team di questo account. Il rischio di residenza dei dati dipende dalla rotta di servizio, quindi una rotta attendibile (con residenza garantita) può esentare una famiglia altrimenti bloccata.",
+      "regionLabel": "Regione operativa",
+      "applyPreset": "Applica preset:",
+      "modeLabel": "Modalità della policy",
+      "modes": {
+        "off": "Nessuna restrizione",
+        "blocklist": "Blocca le famiglie elencate",
+        "allowlist": "Consenti solo le famiglie elencate"
+      },
+      "familiesBlockLabel": "Famiglie bloccate",
+      "familiesAllowLabel": "Famiglie consentite",
+      "trustedLabel": "Rotte attendibili (con residenza garantita)",
+      "trustedHint": "Una famiglia bloccata resta disponibile quando viene servita tramite una di queste rotte.",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "Stati Uniti",
+        "europe": "Europa",
+        "china": "Cina",
+        "other": "Altro"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "Blocca le famiglie ospitate in Cina",
+          "description": "Blocca DeepSeek, Qwen, Kimi e GLM; consentile solo tramite una rotta con residenza garantita (es. Bedrock)."
+        },
+        "eu-block-cn": {
+          "label": "UE: blocca le famiglie ospitate in Cina",
+          "description": "Blocca DeepSeek, Qwen, Kimi e GLM; una rotta UE con residenza garantita (es. Bedrock) resta consentita."
+        },
+        "eu-guaranteed-only": {
+          "label": "UE: solo rotte con residenza garantita",
+          "description": "Consente un modello solo quando è servito tramite una rotta con residenza garantita."
+        },
+        "cn-prefer-domestic": {
+          "label": "Preferisci le famiglie ospitate in Cina",
+          "description": "Consente le famiglie ospitate in Cina (più Llama) e qualsiasi rotta con residenza garantita."
+        },
+        "other-block-cn": {
+          "label": "Blocca le famiglie ospitate in Cina",
+          "description": "Blocca DeepSeek, Qwen, Kimi e GLM; consentile solo tramite una rotta con residenza garantita."
+        }
+      },
+      "saved": "Policy di accesso ai modelli salvata",
+      "saveFailed": "Impossibile salvare la policy di accesso ai modelli"
     }
   },
   "inspector": {
@@ -3591,6 +3650,8 @@
         "provision_type_unhandled": "Nessun gestore per questo tipo di provisioning",
         "preset_unsatisfiable": "Il preset del modello non può eseguire questa pipeline",
         "visual_pipeline_no_frontend": "Nessun frontend da testare",
+        "model_policy_blocked": "Modello bloccato dalla policy dell'account",
+        "model_policy_unsupported": "Policy dei modelli non disponibile qui",
         "deployer_required_before_tester": "Aggiungi un Deployer prima del Tester"
       },
       "fallbackMessage": "Questa azione è in conflitto con lo stato attuale.",

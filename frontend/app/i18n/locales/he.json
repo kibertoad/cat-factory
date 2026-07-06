@@ -399,6 +399,8 @@
         "bootstrap_reference_missing": "ארכיטקטורת ההפניה נעלמה",
         "preset_unsatisfiable": "קדם‑הגדרת המודל אינה יכולה להריץ צנרת זו",
         "visual_pipeline_no_frontend": "אין frontend לבדיקה",
+        "model_policy_blocked": "המודל נחסם על ידי מדיניות החשבון",
+        "model_policy_unsupported": "מדיניות המודלים אינה זמינה כאן",
         "deployer_required_before_tester": "הוסף Deployer לפני ה-Tester"
       },
       "fallbackMessage": "פעולה זו מתנגשת עם המצב הנוכחי.",
@@ -2386,6 +2388,65 @@
         "title": "להסיר את ה־runner הזה?",
         "body": "\"{name}\" יימחק. לא ניתן לבטל פעולה זו."
       }
+    },
+    "modelPolicy": {
+      "title": "מדיניות גישה למודלים",
+      "description": "מגבילה אילו משפחות מודלים הצוותים של חשבון זה יכולים להריץ. סיכון תושבוּת הנתונים תלוי בנתיב השירות, ולכן נתיב מהימן (עם תושבוּת מובטחת) יכול לפטור משפחה שאחרת הייתה חסומה.",
+      "regionLabel": "אזור הפעילות",
+      "applyPreset": "החל תבנית:",
+      "modeLabel": "מצב המדיניות",
+      "modes": {
+        "off": "ללא הגבלה",
+        "blocklist": "חסום את המשפחות ברשימה",
+        "allowlist": "אפשר רק את המשפחות ברשימה"
+      },
+      "familiesBlockLabel": "משפחות חסומות",
+      "familiesAllowLabel": "משפחות מותרות",
+      "trustedLabel": "נתיבים מהימנים (עם תושבוּת מובטחת)",
+      "trustedHint": "משפחה חסומה נשארת זמינה כאשר היא מוגשת דרך אחד מהנתיבים האלה.",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "ארצות הברית",
+        "europe": "אירופה",
+        "china": "סין",
+        "other": "אחר"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "חסום משפחות המתארחות בסין",
+          "description": "חוסם את DeepSeek, Qwen, Kimi ו-GLM; מתיר אותן רק דרך נתיב עם תושבוּת מובטחת (למשל Bedrock)."
+        },
+        "eu-block-cn": {
+          "label": "האיחוד האירופי: חסום משפחות המתארחות בסין",
+          "description": "חוסם את DeepSeek, Qwen, Kimi ו-GLM; נתיב של האיחוד האירופי עם תושבוּת מובטחת (למשל Bedrock) נשאר מותר."
+        },
+        "eu-guaranteed-only": {
+          "label": "האיחוד האירופי: רק נתיבים עם תושבוּת מובטחת",
+          "description": "מתיר מודל רק כאשר הוא מוגש דרך נתיב עם תושבוּת מובטחת."
+        },
+        "cn-prefer-domestic": {
+          "label": "העדף משפחות המתארחות בסין",
+          "description": "מתיר משפחות המתארחות בסין (וגם Llama) וכל נתיב עם תושבוּת מובטחת."
+        },
+        "other-block-cn": {
+          "label": "חסום משפחות המתארחות בסין",
+          "description": "חוסם את DeepSeek, Qwen, Kimi ו-GLM; מתיר אותן רק דרך נתיב עם תושבוּת מובטחת."
+        }
+      },
+      "saved": "מדיניות הגישה למודלים נשמרה",
+      "saveFailed": "לא ניתן היה לשמור את מדיניות הגישה למודלים"
     }
   },
   "providers": {

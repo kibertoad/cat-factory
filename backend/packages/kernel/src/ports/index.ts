@@ -232,7 +232,12 @@ export type {
   FragmentSourceRepository,
   ResolvedCatalogEntry,
 } from './fragment-repositories.js'
-export type { AppCaches, CachedRepoRead, GroupCacheHandle } from './caching.js'
+export type {
+  AppCaches,
+  AccountModelPolicyCacheValue,
+  CachedRepoRead,
+  GroupCacheHandle,
+} from './caching.js'
 export { repoFilesCacheGroup } from './caching.js'
 export type {
   SelectableFragment,

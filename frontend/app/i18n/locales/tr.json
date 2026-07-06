@@ -399,6 +399,8 @@
         "bootstrap_reference_missing": "Referans mimari kayıp",
         "preset_unsatisfiable": "Model ön ayarı bu ardışık düzeni çalıştıramıyor",
         "visual_pipeline_no_frontend": "Test edilecek bir frontend yok",
+        "model_policy_blocked": "Model, hesap politikası tarafından engellendi",
+        "model_policy_unsupported": "Model politikası burada kullanılamıyor",
         "deployer_required_before_tester": "Tester’dan önce bir Deployer ekleyin"
       },
       "fallbackMessage": "Bu eylem mevcut durumla çelişiyor.",
@@ -2387,6 +2389,65 @@
         "title": "Bu runner kaldırılsın mı?",
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
       }
+    },
+    "modelPolicy": {
+      "title": "Model erişim politikası",
+      "description": "Bu hesabın ekiplerinin hangi model ailelerini çalıştırabileceğini kısıtlar. Veri yerleşimi riski hizmet rotasına bağlıdır; bu nedenle güvenilir (yerleşimi garantili) bir rota, aksi takdirde engellenmiş bir aileyi muaf tutabilir.",
+      "regionLabel": "Çalışma bölgesi",
+      "applyPreset": "Ön ayarı uygula:",
+      "modeLabel": "Politika modu",
+      "modes": {
+        "off": "Kısıtlama yok",
+        "blocklist": "Listelenen aileleri engelle",
+        "allowlist": "Yalnızca listelenen ailelere izin ver"
+      },
+      "familiesBlockLabel": "Engellenen aileler",
+      "familiesAllowLabel": "İzin verilen aileler",
+      "trustedLabel": "Güvenilir (yerleşimi garantili) rotalar",
+      "trustedHint": "Engellenen bir aile, bu rotalardan biri üzerinden sunulduğunda kullanılabilir kalır.",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "Amerika Birleşik Devletleri",
+        "europe": "Avrupa",
+        "china": "Çin",
+        "other": "Diğer"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "Çin'de barındırılan aileleri engelle",
+          "description": "DeepSeek, Qwen, Kimi ve GLM'yi engeller; bunlara yalnızca yerleşimi garantili bir rota üzerinden izin verir (ör. Bedrock)."
+        },
+        "eu-block-cn": {
+          "label": "AB: Çin'de barındırılan aileleri engelle",
+          "description": "DeepSeek, Qwen, Kimi ve GLM'yi engeller; yerleşimi garantili bir AB rotası (ör. Bedrock) izinli kalır."
+        },
+        "eu-guaranteed-only": {
+          "label": "AB: yalnızca yerleşimi garantili rotalar",
+          "description": "Bir modele yalnızca yerleşimi garantili bir rota üzerinden sunulduğunda izin verir."
+        },
+        "cn-prefer-domestic": {
+          "label": "Çin'de barındırılan aileleri tercih et",
+          "description": "Çin'de barındırılan ailelere (ve Llama'ya) ve yerleşimi garantili herhangi bir rotaya izin verir."
+        },
+        "other-block-cn": {
+          "label": "Çin'de barındırılan aileleri engelle",
+          "description": "DeepSeek, Qwen, Kimi ve GLM'yi engeller; bunlara yalnızca yerleşimi garantili bir rota üzerinden izin verir."
+        }
+      },
+      "saved": "Model erişim politikası kaydedildi",
+      "saveFailed": "Model erişim politikası kaydedilemedi"
     }
   },
   "providers": {

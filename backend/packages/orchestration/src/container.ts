@@ -1184,6 +1184,13 @@ export interface Core {
   tracker?: TrackerModule
   /** Present only when the service + mount repositories are wired (in-org sharing). */
   services?: ServicesModule
+  /**
+   * The app-owned cache bag (built by the facade via `createAppCaches`, or a bare in-memory
+   * default when a harness passes none). Exposed so the shared controllers can read a cached
+   * slice (the `/models` catalog's account-policy read) and invalidate one after a write (the
+   * account-settings update drops `accountModelPolicy`). Always present.
+   */
+  caches: AppCaches
 }
 
 export interface ServicesModule {
@@ -2675,6 +2682,7 @@ export function createCore(dependencies: CoreDependencies): Core {
   const services = createServicesModule(dependencies)
 
   return {
+    caches,
     workspaceService,
     accountService,
     userService,

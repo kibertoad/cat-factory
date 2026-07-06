@@ -399,6 +399,8 @@
         "bootstrap_reference_missing": "リファレンスアーキテクチャが見つかりません",
         "preset_unsatisfiable": "モデルプリセットではこのパイプラインを実行できません",
         "visual_pipeline_no_frontend": "テスト対象のフロントエンドがありません",
+        "model_policy_blocked": "アカウントのポリシーによりモデルがブロックされています",
+        "model_policy_unsupported": "モデルポリシーはここでは利用できません",
         "deployer_required_before_tester": "テスターの前にDeployerを追加してください"
       },
       "fallbackMessage": "この操作は現在の状態と競合します。",
@@ -2387,6 +2389,65 @@
         "title": "このランナーを削除しますか？",
         "body": "「{name}」が削除されます。 この操作は取り消せません。"
       }
+    },
+    "modelPolicy": {
+      "title": "モデルアクセスポリシー",
+      "description": "このアカウントのチームが実行できるモデルファミリーを制限します。データレジデンシーのリスクは提供経路に依存するため、信頼された（レジデンシー保証済みの）経路であれば、通常はブロックされるファミリーを除外できます。",
+      "regionLabel": "運用リージョン",
+      "applyPreset": "プリセットを適用:",
+      "modeLabel": "ポリシーモード",
+      "modes": {
+        "off": "制限なし",
+        "blocklist": "リストされたファミリーをブロック",
+        "allowlist": "リストされたファミリーのみ許可"
+      },
+      "familiesBlockLabel": "ブロックするファミリー",
+      "familiesAllowLabel": "許可するファミリー",
+      "trustedLabel": "信頼された（レジデンシー保証済みの）経路",
+      "trustedHint": "ブロックされたファミリーでも、これらの経路のいずれかで提供される場合は利用可能なままです。",
+      "families": {
+        "claude": "Claude (Anthropic)",
+        "openai": "OpenAI / ChatGPT",
+        "gemini": "Gemini (Google)",
+        "llama": "Llama (Meta)",
+        "qwen": "Qwen (Alibaba)",
+        "kimi": "Kimi (Moonshot)",
+        "deepseek": "DeepSeek",
+        "glm": "GLM (Z.ai)"
+      },
+      "regions": {
+        "usa": "アメリカ合衆国",
+        "europe": "ヨーロッパ",
+        "china": "中国",
+        "other": "その他"
+      },
+      "providers": {
+        "bedrock": "AWS Bedrock"
+      },
+      "presets": {
+        "us-block-cn": {
+          "label": "中国でホストされるファミリーをブロック",
+          "description": "DeepSeek、Qwen、Kimi、GLM をブロックし、レジデンシー保証済みの経路（例: Bedrock）経由でのみ許可します。"
+        },
+        "eu-block-cn": {
+          "label": "EU: 中国でホストされるファミリーをブロック",
+          "description": "DeepSeek、Qwen、Kimi、GLM をブロックしますが、レジデンシー保証済みの EU 経路（例: Bedrock）は許可されたままです。"
+        },
+        "eu-guaranteed-only": {
+          "label": "EU: レジデンシー保証済みの経路のみ",
+          "description": "レジデンシー保証済みの経路で提供される場合にのみモデルを許可します。"
+        },
+        "cn-prefer-domestic": {
+          "label": "中国でホストされるファミリーを優先",
+          "description": "中国でホストされるファミリー（および Llama）と、レジデンシー保証済みの任意の経路を許可します。"
+        },
+        "other-block-cn": {
+          "label": "中国でホストされるファミリーをブロック",
+          "description": "DeepSeek、Qwen、Kimi、GLM をブロックし、レジデンシー保証済みの経路経由でのみ許可します。"
+        }
+      },
+      "saved": "モデルアクセスポリシーを保存しました",
+      "saveFailed": "モデルアクセスポリシーを保存できませんでした"
     }
   },
   "providers": {

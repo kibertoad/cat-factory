@@ -2139,6 +2139,8 @@ export function buildContainer(
     // The Worker only runs the self-contained UI-test container (torn down with the run); it
     // has no long-lived host serve, so a browsable frontend preview is unsupported here.
     frontendPreview: { supported: false },
+    // The hosted Worker facade has account admins to govern the account-wide model policy.
+    modelPolicy: { supported: true },
   })
   const db = env.DB
   // Telemetry (llm_call_metrics + agent_context_snapshots) lives in its own D1 database
@@ -2332,15 +2334,16 @@ export function buildContainer(
 
   // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
   // cross-isolate invalidation bus (and no Redis), so caches of mutable cross-instance
-  // state (the fragment catalog / repo projection) are configured pass-through rather than
-  // TTL'd — a stale-serving cache would be a correctness bug, not an optimization (see
-  // @cat-factory/caching's README). Self-verifying caches (the document body + the head-sha-
-  // probed `repoFiles` reads) stay enabled — safe to keep on because the probe bounds their
-  // staleness even without a bus. Note the bag is rebuilt per invocation (this runs per
-  // request / per Workflow wake), so on the Worker these caches mainly dedupe reads WITHIN one
+  // state (the fragment catalog / repo projection / account policy) are configured
+  // pass-through rather than TTL'd — a stale-serving cache would be a correctness bug, not an
+  // optimization (see @cat-factory/caching's README). Self-verifying caches (the document body
+  // + the head-sha-probed `repoFiles` reads) stay enabled — safe to keep on because the probe
+  // bounds their staleness even without a bus. Note the bag is rebuilt per invocation (this runs
+  // per request / per Workflow wake), so on the Worker these caches mainly dedupe reads WITHIN one
   // wake (e.g. a post-op's batch); the cross-run refresh-window probe is chiefly the Node
-  // (process-lived cache) path. Built once here so it can be threaded into the GitHub repo-files
-  // resolver (slice 4) AND handed to `createCore`.
+  // (process-lived cache) path. Built once here and SHARED: threaded into the GitHub repo-files
+  // resolver (slice 4) AND the account-policy read the capability resolver runs, AND handed to
+  // `createCore` — all need the same instance.
   const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
 
   const dependencies: CoreDependencies = {
@@ -2451,9 +2454,9 @@ export function buildContainer(
     ...selectDeployDeps(env, config, db, clock),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
-    // The app-owned cache bag (built above so the repo-files resolver shares it). Distributed
-    // invalidation is a genuine Node-only concern, not a facade-parity gap: the Worker's
-    // cross-instance state already lives in globally-addressed DOs / D1.
+    // The app-owned cache bag (built above so the repo-files + account-policy resolvers share
+    // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
+    // Worker's cross-instance state already lives in globally-addressed DOs / D1.
     caches,
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>
@@ -2466,6 +2469,11 @@ export function buildContainer(
           baseUrlFor: (provider) => baseUrlFor(provider, env),
           localModelEndpoints,
           openRouterCatalog,
+          accountSettings,
+          workspaceAccountOf: (workspaceId) =>
+            new D1WorkspaceRepository({ db }).accountOf(workspaceId),
+          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+          caches,
         },
         workspaceId,
         initiatedBy,
