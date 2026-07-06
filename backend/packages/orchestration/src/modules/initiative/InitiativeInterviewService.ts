@@ -69,6 +69,25 @@ function formSeeded(initiative: Initiative): boolean {
   return seedPresetInterviewQa(preset.descriptor, initiative.presetInputs, () => '').length > 0
 }
 
+/**
+ * The registered preset's INTERVIEWER steering (its `promptAdditions[INITIATIVE_INTERVIEWER_AGENT_KIND]`),
+ * plus the preset label to head it. Generic and preset-less initiatives register none, so this
+ * returns undefined and the interviewer prompt stays byte-for-byte unchanged. This is the interviewer
+ * half of the same generic seam the analyst/planner already consume via `AgentContextBuilder` →
+ * `initiativeContextLines` — needed here because the interviewer is an INLINE service that builds its
+ * own prompt (it never passes through the context builder), and the technological-migration preset is
+ * the first FULL-interview preset to steer its interviewer. Never branches on a preset id.
+ */
+function presetInterviewerSteering(
+  initiative: Initiative,
+): { label: string; promptAddition: string } | undefined {
+  if (!initiative.presetId) return undefined
+  const preset = getInitiativePreset(initiative.presetId)
+  const promptAddition = preset?.promptAdditions?.[INITIATIVE_INTERVIEWER_AGENT_KIND]?.trim()
+  if (!preset || !promptAddition) return undefined
+  return { label: preset.descriptor.presentation.label, promptAddition }
+}
+
 /** What the interviewer needs to resolve its inline model + reach the provider. */
 export interface InitiativeInterviewDeps {
   /** Resolve a ModelProvider for a workspace's credential scope (preferred). */
@@ -140,6 +159,14 @@ export class InitiativeInterviewService {
     const lines: string[] = [`Initiative: ${block.title || '(untitled initiative)'}`]
     const brief = block.description?.trim()
     if (brief) lines.push('', 'Brief:', brief)
+    // Preset steering FIRST (after the brief): a full-interview preset's interviewer promptAddition
+    // frames what this interview must probe (e.g. the migration's fuzzy, form-uncapturable facts).
+    // Rendered under the same `## Initiative preset: <label>` heading the analyst/planner fold uses.
+    // Generic / preset-less initiatives register none, so the prompt is unchanged for them.
+    const steering = presetInterviewerSteering(initiative)
+    if (steering) {
+      lines.push('', `## Initiative preset: ${steering.label}`, '', steering.promptAddition)
+    }
     const answered = (initiative.qa ?? []).filter((q) => (q.answer ?? '').trim().length > 0)
     if (answered.length) {
       lines.push('', 'Answers gathered so far:')
