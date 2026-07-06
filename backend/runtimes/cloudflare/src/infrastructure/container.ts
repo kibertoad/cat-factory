@@ -1,6 +1,7 @@
 import {
   type AgentContextRecorder,
   type AgentExecutor,
+  type CachedRepoRead,
   type Clock,
   CompositeNotificationChannel,
   type DocumentSourceProvider,
@@ -8,6 +9,7 @@ import {
   type ExecutionEventPublisher,
   type FragmentOwnerKind,
   type GitHubClient,
+  type GroupCacheHandle,
   type IdGenerator,
   type ModelProviderResolver,
   type NotificationChannel,
@@ -1571,6 +1573,7 @@ function selectGitHubDeps(
   db: D1Database,
   clock: Clock,
   idGenerator: IdGenerator,
+  repoFilesCache: GroupCacheHandle<CachedRepoRead>,
 ): Partial<CoreDependencies> {
   if (!config.github.enabled) {
     // GitLab-only deployment: the App-shaped connect / projection / provisioning wiring stays
@@ -1584,7 +1587,11 @@ function selectGitHubDeps(
         clock,
       })
       return {
-        resolveRunRepoContext: makeResolveRunRepoContext(githubClient, buildResolveRepoTarget(db)),
+        resolveRunRepoContext: makeResolveRunRepoContext(
+          githubClient,
+          buildResolveRepoTarget(db),
+          repoFilesCache,
+        ),
         resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
           githubClient,
           new D1GitHubInstallationRepository({ db }),
@@ -1614,8 +1621,13 @@ function selectGitHubDeps(
     githubClient,
     // The engine binds a registered custom kind's pre/post-op hooks to a run's repo via
     // this checkout-free RepoFiles resolver (installation + repo + default branch),
-    // composed from the same client + repo-target walk the container executor uses.
-    resolveRunRepoContext: makeResolveRunRepoContext(githubClient, buildResolveRepoTarget(db)),
+    // composed from the same client + repo-target walk the container executor uses. The
+    // `repoFiles` cache (slice 4) makes the post-op idempotency re-reads a read-through hit.
+    resolveRunRepoContext: makeResolveRunRepoContext(
+      githubClient,
+      buildResolveRepoTarget(db),
+      repoFilesCache,
+    ),
     // Block-less repo resolver for the environments module's on-demand repo validation /
     // config bootstrap (operator names owner+repo).
     resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(
@@ -2316,8 +2328,18 @@ export function buildContainer(
     defaultBackend: contentStorageCapability.defaultBackend,
   })
 
-  // Built once and shared: the `caches` container field AND the account-policy read the
-  // capability resolver runs through it (both need the same instance).
+  // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
+  // cross-isolate invalidation bus (and no Redis), so caches of mutable cross-instance
+  // state (the fragment catalog / repo projection / account policy) are configured
+  // pass-through rather than TTL'd — a stale-serving cache would be a correctness bug, not an
+  // optimization (see @cat-factory/caching's README). Self-verifying caches (the document body
+  // + the head-sha-probed `repoFiles` reads) stay enabled — safe to keep on because the probe
+  // bounds their staleness even without a bus. Note the bag is rebuilt per invocation (this runs
+  // per request / per Workflow wake), so on the Worker these caches mainly dedupe reads WITHIN one
+  // wake (e.g. a post-op's batch); the cross-run refresh-window probe is chiefly the Node
+  // (process-lived cache) path. Built once here and SHARED: threaded into the GitHub repo-files
+  // resolver (slice 4) AND the account-policy read the capability resolver runs, AND handed to
+  // `createCore` — all need the same instance.
   const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
 
   const dependencies: CoreDependencies = {
@@ -2410,7 +2432,7 @@ export function buildContainer(
     envConfigRepairRunner: env.ENV_CONFIG_REPAIR_WORKFLOW
       ? new WorkflowsEnvConfigRepairRunner(env.ENV_CONFIG_REPAIR_WORKFLOW)
       : undefined,
-    ...selectGitHubDeps(env, config, db, clock, idGenerator),
+    ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
     ...selectReleaseHealthDeps(env, config, db),
     ...selectIncidentEnrichmentDeps(env, db),
@@ -2428,14 +2450,9 @@ export function buildContainer(
     ...selectDeployDeps(env, config, db, clock),
     ...selectRunnersDeps(env, config, db),
     ...selectFragmentLibraryDeps(env, config, db),
-    // The app-owned cache bag, on the ISOLATE-SAFE profile: a Worker isolate has no
-    // cross-isolate invalidation bus (and no Redis), so caches of mutable
-    // cross-instance state — the fragment catalog today — are configured
-    // pass-through rather than TTL'd (a stale-serving cache would be a correctness
-    // bug, not an optimization; see @cat-factory/caching's README). Distributed
-    // invalidation is a genuine Node-only concern, not a facade-parity gap: the
+    // The app-owned cache bag (built above so the repo-files + account-policy resolvers share
+    // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
-    // Pass-through handles are stateless, so the per-request build costs nothing.
     caches,
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
     resolveProviderCapabilities: (workspaceId, initiatedBy) =>

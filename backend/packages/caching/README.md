@@ -53,10 +53,12 @@ read. Only `fragmentCatalog`, which mirrors our own mutable D1 rows, passes thro
 
 ## Named caches
 
-| Cache                  | Value                                           | Group / key                                | Profile                                      |
-| ---------------------- | ----------------------------------------------- | ------------------------------------------ | -------------------------------------------- |
-| `fragmentCatalog`      | merged per-workspace catalog                    | `workspaceId` / `workspaceId`              | TTL + invalidation; pass-through on Worker   |
-| `fragmentDocumentBody` | a document-backed fragment's live external body | `viaWorkspaceId` / `<source>:<externalId>` | TTL + version probe; enabled on both facades |
+| Cache                  | Value                                           | Group / key                                          | Profile                                       |
+| ---------------------- | ----------------------------------------------- | ---------------------------------------------------- | --------------------------------------------- |
+| `fragmentCatalog`      | merged per-workspace catalog                    | `workspaceId` / `workspaceId`                        | TTL + invalidation; pass-through on Worker    |
+| `fragmentDocumentBody` | a document-backed fragment's live external body | `viaWorkspaceId` / `<source>:<externalId>`           | TTL + version probe; enabled on both facades  |
+| `repoProjection`       | a workspace's whole GitHub repo projection      | `workspaceId` / `workspaceId`                        | TTL + invalidation; pass-through on Worker    |
+| `repoFiles`            | checkout-free `RepoFiles` reads on a branch     | `<inst>:<owner>/<repo>@<branch>` / `f:`\|`d:` + path | TTL + head-sha probe; enabled on both facades |
 
 ## Usage
 

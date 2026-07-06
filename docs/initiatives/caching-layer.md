@@ -1,6 +1,6 @@
 # Initiative: caching layer (layered-loader, in-memory + Redis-notified invalidation)
 
-**Status:** in progress — pilot (row 0) + slices 1–3 landed · **Owner:** core ·
+**Status:** in progress — pilot (row 0) + slices 1–4 landed · **Owner:** core ·
 **Started:** 2026-07-04
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
@@ -174,8 +174,8 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
 | 0   | **Pilot: `@cat-factory/caching` + notification wiring + seams + conformance suite** (target pattern §1–§7, with slice 1 as the proving consumer; real-ioredis CI test still open — no Redis service in CI)                                                                                                  | new package; `runtimes/node/src/server.ts`, `container.ts`, `cacheNotifications.ts`; `runtimes/cloudflare/.../container.ts`; `internal/conformance/src/cache-suite.ts`; kernel `ports/caching.ts` | —                                                             | —                                                                                                                                                 | —                                                                      | ✅ done                         | [#767](https://github.com/kibertoad/cat-factory/pull/767) |
 | 1   | **Fragment catalog** — `FragmentLibraryService.resolveCatalog` (per-dispatch tenant merge)                                                                                                                                                                                                                  | `agents/src/fragmentLibrary/FragmentLibraryService.ts`                                                                                                                                            | group `workspaceId`, key `workspaceId` (see pilot deviations) | fragment `create`/`update`/`remove`/`createFromDocument`/`refresh` + the run-time document-body re-resolve; `FragmentSourceService.sync`/`unlink` | no                                                                     | ✅ done                         | [#767](https://github.com/kibertoad/cat-factory/pull/767) |
 | 2   | **Doc-backed fragment bodies** — replace `DEFAULT_DOCUMENT_FRAGMENT_TTL_MS` with the `fragmentDocumentBody` loader + version probe. (The git fragment-source `status()` half was evaluated and **dropped** — see the conventions note; it's a cold, must-be-live UI action with no hot read path to cache.) | `agents/src/fragmentLibrary/FragmentLibraryService.ts`; `kernel/ports/{document-source,caching}.ts`; `caching/src/appCaches.ts`; `integrations/.../documents/*Provider.ts`                        | group `viaWorkspaceId`, key `<source>:<externalId>`           | fragment `create`/`refresh`/`update`/`remove` (best-effort; the version probe bounds staleness regardless)                                        | **yes** (provider `version` token vs cached `DocumentContent.version`) | ✅ done                         | [#782](https://github.com/kibertoad/cat-factory/pull/782) |
-| 3   | **Repo projection** — `repoProjectionRepository.list` (per dispatch, per poll tick). Caches the whole-projection re-list only; the installation lookup + tree-depth-bounded ancestry walk stay live (so reparent/service-link need no invalidation). See the slice-3 findings.                              | `server/src/agents/resolveRepoTarget.ts`, `ContainerRepoBootstrapper.ts`; `integrations/.../github/{GitHubSyncService,WebhookService}.ts`; `orchestration/src/container.ts`                       | group `workspaceId`, key `workspaceId`                        | `GitHubSyncService` link/monorepo/setLinkedRepos/syncRepo + `WebhookService` installation-removed tombstone + `ContainerRepoBootstrapper` project | no                                                                     | ✅ done                         | _this PR_                                                 |
-| 4   | **`RepoFiles.getFile`/`listDirectory`** — repo-op idempotency re-reads (`blueprintPostOp`, `specPostOp`, spec excerpts)                                                                                                                                                                                     | `server/src/agents/repoFiles.ts`; `agents/src/repo-ops/builtin.ts`                                                                                                                                | `(installationId, owner, repo, ref, path)`                    | own `commitFiles` (self-invalidate the branch group); push webhook where ingested                                                                 | **yes** for branch refs (`headSha`); pinned shas immutable             | ⬜ todo                         |                                                           |
+| 3   | **Repo projection** — `repoProjectionRepository.list` (per dispatch, per poll tick). Caches the whole-projection re-list only; the installation lookup + tree-depth-bounded ancestry walk stay live (so reparent/service-link need no invalidation). See the slice-3 findings.                              | `server/src/agents/resolveRepoTarget.ts`, `ContainerRepoBootstrapper.ts`; `integrations/.../github/{GitHubSyncService,WebhookService}.ts`; `orchestration/src/container.ts`                       | group `workspaceId`, key `workspaceId`                        | `GitHubSyncService` link/monorepo/setLinkedRepos/syncRepo + `WebhookService` installation-removed tombstone + `ContainerRepoBootstrapper` project | no                                                                     | ✅ done                         | [#789](https://github.com/kibertoad/cat-factory/pull/789) |
+| 4   | **`RepoFiles.getFile`/`listDirectory`** — repo-op idempotency re-reads (`blueprintPostOp`, `specPostOp`). Cached ONLY on the `makeResolveRunRepoContext` (pre/post-op) path; the environments repo-validation + doc-quality reads stay live. See the slice-4 findings.                                      | `kernel/ports/caching.ts`; `caching/src/appCaches.ts`; `server/src/agents/repoFiles.ts`; `integrations/.../github/WebhookService.ts`; runtime facades                                             | group `<inst>:<owner>/<repo>@<branch>`, key `f:`/`d:` + path  | own `commitFiles` (self-invalidate the branch group); `WebhookService` push (a branch moved out-of-band)                                          | **yes** for branch refs (`headSha`); pinned shas immutable             | ✅ done                         | [#875](https://github.com/kibertoad/cat-factory/pull/875) |
 | 5   | **Workspace capabilities + per-workspace `GET /models`**                                                                                                                                                                                                                                                    | `server/src/agents/providerCapabilities.ts`; `ModelController.ts`                                                                                                                                 | `(workspaceId, userId)`                                       | API-key / subscription / local-endpoint / OpenRouter-catalog writes                                                                               | no                                                                     | ⬜ todo                         |                                                           |
 | 6   | **`LocalSettingsService`** — migrate the bespoke 5s cache (multi-replica correctness win: today a peer serves stale settings for the TTL)                                                                                                                                                                   | `integrations/src/modules/localSettings/LocalSettingsService.ts`                                                                                                                                  | singleton key                                                 | `write()`                                                                                                                                         | no                                                                     | ⬜ todo                         |                                                           |
 | 7   | **`GitHubAppAuth` token cache** — migrate the module `tokenCache` Map to a `ManualCache` (hygiene: TTL from `expiresAt`; NO notifications — tokens are per-process, never broadcast, and notifications carry keys only anyway)                                                                              | `server/src/github/GitHubAppAuth.ts`                                                                                                                                                              | `installationId`                                              | expiry only                                                                                                                                       | no                                                                     | ⬜ todo                         |                                                           |
@@ -299,6 +299,62 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
     SHARED code (`server` resolver read-through/invalidation, `integrations`
     `GitHubSyncService`/`WebhookService` invalidation, the `caching` bag field). Promote to a
     conformance assertion if the harness gains an installation+projection seam.
+- **Slice 4 findings (carry forward):**
+  - **Cache the `makeResolveRunRepoContext` path ONLY, not every `RepoFiles`.** The hot,
+    repeat-read consumer is the engine's pre/post-op hook (`blueprintPostOp`/`specPostOp` byte-compare
+    the same branch's files every run/replay). The other `makeRepoFiles` callers are COLD, must-be-live
+    reads — the environments module's on-demand repo/config validation (`makeResolveRepoFilesForCoords`,
+    an operator "check my config" action, the same must-be-live class as slice 2's dropped fragment
+    `status()`) and `GitHubDocQualityProvider` — so they pass no cache and read live. Scoping this way
+    also keeps the invalidation surface tiny: only the post-op's own `commitFiles` writes + the push
+    webhook, nothing else touches a cached branch.
+  - **The staleness probe needs the BRANCH head sha, which the value doesn't carry — so wrap it.**
+    Unlike slice 2 (where `DocumentContent.version` self-describes), a `RepoFileContent`'s `sha` is the
+    blob sha (changes per file, and re-reading it costs a full contents call — not a cheap probe). The
+    cheap branch-wide probe is `branchHeadSha`, so each entry is stored as `CachedRepoRead` carrying the
+    branch head it was read at; the probe compares the CURRENT head against it. A cold batch stamps that
+    head ONCE (a per-instance memo cleared on `commitFiles`), so caching N files on a branch costs one
+    extra head read, not N. The probe itself reads fresh (never the LOAD memo — the point is the current
+    head), but a concurrent refresh sweep of one branch's entries still coalesces to ONE head read via a
+    separate self-clearing probe memo, so re-validation is +1 head read per sweep, not +N.
+  - **`repoFiles` stays ENABLED on the Worker (and local), unlike `repoProjection`.** It is the second
+    self-verifying cache (after `fragmentDocumentBody`): the head-sha probe re-validates a branch read
+    without a cross-isolate bus, so its staleness is bounded by the probe rather than indefinite. NOTE the
+    Worker rebuilds the whole `AppCaches` bag per invocation (`buildContainer` runs per request / per
+    Workflow wake), so on the Worker this cache mainly dedupes reads WITHIN one wake (a post-op's batch);
+    the cross-run refresh-window probe is chiefly the Node (process-lived cache) path. Local is
+    single-node, so `commitFiles` self-invalidation is already fully coherent AND the probe backstops the
+    one out-of-process writer (the agent container's git push) — which never touches the `spec/`/`blueprints/`
+    paths these post-ops read anyway. So no local `cachesProfile` disable (contrast slice 3's `repoProjection`,
+    which has no probe and so must pass through where there's no bus).
+  - **Head-read robustness + group casing (review hardening).** The added head read must not make a cached
+    read LESS robust than the uncached path: a transient `branchHeadSha` failure degrades to an unstamped
+    entry (probe always reloads) instead of failing the content read, and a rejected head promise is evicted
+    from the memo (never poisons the rest of the batch). `repoFilesCacheGroup` lower-cases owner/repo (the
+    read path derives them from the projected row, the invalidation path from the raw push payload — GitHub
+    is case-insensitive, so normalising here stops a casing difference silently no-op'ing the invalidation);
+    `ref` stays case-sensitive. `isPinnedSha` is a shape check — a branch literally named as 40 hex chars is
+    a bounded, accepted edge (the engine's refs are `cat-factory/<blockId>` or genuine shas).
+  - **Group = one branch of one repo (`<inst>:<owner>/<repo>@<branch>`), key = `f:`/`d:` + path.** So
+    `commitFiles(branch)` and a push webhook each drop exactly the branch they moved, at path granularity
+    within it. The group key is a kernel helper (`repoFilesCacheGroup`) shared by the server wrapper (which
+    reads through) and the integrations webhook (which invalidates) so the two can't drift. A `getFile` with
+    NO `gitRef` (the repo default branch, whose name the bound `RepoFiles` doesn't know) bypasses the cache;
+    the post-ops always pass a concrete branch, so nothing hot is lost. Sha-pinned reads are immutable (probe
+    is a constant `true`, no head read).
+  - **Push webhook invalidates the branch group (every push, not just the app's own).** An agent
+    container's git push or a human PR-branch edit moves the branch outside the app's `commitFiles`
+    self-invalidation; the push handler drops that branch's group (one call, workspace-independent, since
+    the cache is installation+repo+branch-scoped). Over-invalidation on an unrelated-file push is safe and
+    cheap; the head-sha probe is the additional backstop between pushes.
+  - **Cross-runtime conformance deferred (same as slice 3).** The conformance harness runs GitHub OFF, so
+    `resolveRunRepoContext` resolves to `null` and there's no wired `RepoFiles` to drive a write-then-read
+    coherence test through. The read-through + probe + invalidation contract is proven by runtime-independent
+    unit tests on the SHARED code (`server` `test/repoFiles.spec.ts` — read-through/head-sha probe/commit
+    invalidation/pinned-immutable/default-branch-bypass/probe-coalescing/transient-head-failure; `integrations`
+    `WebhookService` push invalidation; the `caching` bag field). Promote if the harness gains a
+    GitHub-connected repo seam. (The `server` package's vitest only globs `test/**/*.spec.ts`, so the spec
+    lives under `test/`, not as a `src/**/*.test.ts` — the latter would silently never run.)
 
 ## Out of scope
 

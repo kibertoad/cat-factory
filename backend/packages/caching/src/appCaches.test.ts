@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ResolvedCatalogEntry } from '@cat-factory/kernel'
+import type { CachedRepoRead, ResolvedCatalogEntry } from '@cat-factory/kernel'
 import { AbstractNotificationConsumer } from 'layered-loader/dist/lib/notifications/AbstractNotificationConsumer.js'
 import type { InMemoryGroupCache } from 'layered-loader/dist/lib/memory/InMemoryGroupCache.js'
 import {
@@ -357,6 +357,52 @@ describe('profiles', () => {
       enabled: false,
     })
     expect(DEFAULT_APP_CACHES_PROFILE.repoProjection.enabled).toBe(true)
+  })
+
+  it('keeps the self-verifying repoFiles cache enabled on the isolate-safe profile', () => {
+    // A branch read is re-validated by the `headSha` probe (the git analogue of the
+    // document-body version probe), so like `fragmentDocumentBody` it holds a real TTL on
+    // a Worker isolate without a cross-isolate invalidation bus.
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.repoFiles).toEqual(DEFAULT_APP_CACHES_PROFILE.repoFiles)
+    expect(ISOLATE_SAFE_APP_CACHES_PROFILE.repoFiles.enabled).toBe(true)
+    // A refresh window is configured so the head-sha probe actually fires.
+    expect(DEFAULT_APP_CACHES_PROFILE.repoFiles.ttlLeftBeforeRefreshInMsecs).toBeGreaterThan(0)
+  })
+})
+
+describe('repoFiles cache (slice 4)', () => {
+  const fileRead = (content: string): CachedRepoRead => ({
+    kind: 'file',
+    headSha: 'sha1',
+    content: { content, sha: 'blob' },
+  })
+
+  it('reads through per (branch group, path) and invalidateGroup drops that branch', async () => {
+    const caches = createAppCaches()
+    const group = 'inst:acme/repo@main'
+    let calls = 0
+    const load = (body: string) => async () => {
+      calls++
+      return fileRead(body)
+    }
+
+    const first = await caches.repoFiles.get('f:spec/a.json', group, load('v1'))
+    await caches.repoFiles.get('f:spec/a.json', group, load('v1'))
+    expect(first.kind === 'file' && first.content?.content).toBe('v1')
+    expect(calls).toBe(1) // second read served from cache
+
+    // A different path in the same branch group is its own entry.
+    await caches.repoFiles.get('d:spec', group, async () => ({
+      kind: 'dir',
+      headSha: 'sha1',
+      entries: [],
+    }))
+    expect(calls).toBe(1)
+
+    await caches.repoFiles.invalidateGroup(group)
+    const reread = await caches.repoFiles.get('f:spec/a.json', group, load('v2'))
+    expect(reread.kind === 'file' && reread.content?.content).toBe('v2')
+    expect(calls).toBe(2) // re-fetched after the branch group was invalidated
   })
 })
 
