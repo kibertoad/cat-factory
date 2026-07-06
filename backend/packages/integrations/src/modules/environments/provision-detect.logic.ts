@@ -21,6 +21,7 @@ import type {
   SharedStackRecommendation,
   StackRecipe,
 } from '@cat-factory/contracts'
+import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
 import {
   extractComposeProfiles,
@@ -45,8 +46,8 @@ import { RepoReadError } from './repo-read-error.js'
  * structurally, and a test supplies an in-memory fake. A MISSING path yields `null` / `[]`, so the
  * heuristics degrade gracefully on partial repos. A genuine read fault (auth/permission revoked,
  * rate limit, transport error) may THROW — the real GitHub/GitLab reader throws on any non-404
- * status. The {@link Scanner} tolerates that (records it, keeps scanning best-effort) so a
- * transient fault mid-scan can't lose an otherwise-good result; see {@link Scanner.readFault}.
+ * status. The {@link BudgetedRepoScanner} tolerates that (records it, keeps scanning best-effort)
+ * so a transient fault mid-scan can't lose an otherwise-good result; see its `readFault`.
  */
 export interface ProvisioningRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
@@ -212,7 +213,7 @@ const ENV_EXAMPLE_FILES = ['.env.example', '.env.sample', '.env.template', '.env
 // intentionally SEQUENTIAL (not batched/parallel): the budget short-circuit and the "first present
 // name/dir wins" ordering both depend on deterministic, in-order accounting. In practice a real
 // repo resolves in a handful of reads well before the cap; the cap only bites on decoy-heavy repos,
-// where truncation is surfaced as a note (see `Scanner.exhausted`).
+// where truncation is surfaced as a note (see `BudgetedRepoScanner.exhausted`).
 const READ_BUDGET = 200
 const MAX_IMAGES = 8
 
@@ -303,20 +304,6 @@ function resolveEnvTemplateDirs(conventions?: DetectionConventions): string[] {
   return withExtras(ENV_TEMPLATE_DIR_CANDIDATES, conventions?.envTemplateDirs)
 }
 
-/** Join + normalize repo-relative path segments, collapsing `.`/`..` (resolves `../base` refs). */
-function joinPath(...parts: (string | undefined)[]): string {
-  const segs: string[] = []
-  for (const part of parts) {
-    if (!part) continue
-    for (const seg of part.split('/')) {
-      if (!seg || seg === '.') continue
-      if (seg === '..') segs.pop()
-      else segs.push(seg)
-    }
-  }
-  return segs.join('/')
-}
-
 function isYamlFile(name: string): boolean {
   return name.endsWith('.yaml') || name.endsWith('.yml')
 }
@@ -351,93 +338,6 @@ function parseOne(content: string): Record<string, unknown> | null {
     return asRecord(parseYaml(content) as unknown)
   } catch {
     return null
-  }
-}
-
-/**
- * Stateful repo reader with a hard read budget so detection can't fan out without bound. Reads are
- * MEMOIZED per path: the compose + recipe passes list several dirs in common (the repo root is a
- * candidate for k8s roots, compose dirs, env-template dirs, and the repo-CLI scan), so caching keeps
- * each unique path to a single real round-trip and stops those overlaps from burning the budget. A
- * cache hit is free (no budget spend) and deterministic, so the "first present name/dir wins"
- * ordering and the budget short-circuit are unaffected.
- */
-class Scanner {
-  private reads = 0
-  private firstFault: string | undefined
-  private readonly fileCache = new Map<string, string | null>()
-  private readonly dirCache = new Map<string, { name: string; type: string; path: string }[]>()
-  constructor(
-    private readonly reader: ProvisioningRepoReader,
-    private readonly gitRef: string | undefined,
-  ) {}
-
-  /** True once the read budget was hit — the scan may have stopped short of the full repo. */
-  get exhausted(): boolean {
-    return this.reads >= READ_BUDGET
-  }
-
-  /**
-   * The message of the FIRST genuine read fault the reader threw (auth/permission revoked, rate
-   * limit, transport/token-mint error), else `undefined`. A miss (absent path) is NOT a fault. The
-   * caller raises {@link RepoReadError} when it detected nothing AND this is set — so a truly
-   * unreadable repo surfaces an actionable error instead of a misleading "nothing found".
-   */
-  get readFault(): string | undefined {
-    return this.firstFault
-  }
-
-  private recordFault(err: unknown): void {
-    if (this.firstFault === undefined) {
-      this.firstFault = err instanceof Error ? err.message : String(err)
-    }
-  }
-
-  async getFile(path: string): Promise<string | null> {
-    const cached = this.fileCache.get(path)
-    if (cached !== undefined) return cached
-    if (this.reads >= READ_BUDGET) return null
-    this.reads++
-    let content: string | null = null
-    try {
-      const file = await this.reader.getFile(path, this.gitRef)
-      content = file?.content ?? null
-    } catch (err) {
-      // A genuine read fault (non-404 — the reader turns 404 into null itself). Keep scanning
-      // best-effort (a transient fault mustn't lose a good result) but record it so an all-miss
-      // outcome can be reported as "couldn't read" rather than "nothing found".
-      this.recordFault(err)
-    }
-    this.fileCache.set(path, content)
-    return content
-  }
-
-  /** Read the first present file among `names` in `dir`; returns its content + matched name. */
-  async getFirstFile(
-    dir: string,
-    names: string[],
-  ): Promise<{ name: string; content: string } | null> {
-    for (const name of names) {
-      const content = await this.getFile(joinPath(dir, name))
-      if (content !== null) return { name, content }
-    }
-    return null
-  }
-
-  async listDir(path: string): Promise<{ name: string; type: string; path: string }[]> {
-    const cached = this.dirCache.get(path)
-    if (cached !== undefined) return cached
-    if (this.reads >= READ_BUDGET) return []
-    this.reads++
-    try {
-      const entries = await this.reader.listDirectory(path, this.gitRef)
-      this.dirCache.set(path, entries)
-      return entries
-    } catch (err) {
-      this.recordFault(err)
-      this.dirCache.set(path, [])
-      return []
-    }
   }
 }
 
@@ -506,11 +406,15 @@ function scanManifestDoc(doc: Record<string, unknown>, scan: ManifestScan): void
 }
 
 /** Read every YAML doc in a flat directory (non-recursive) into the scan. */
-async function scanRawDir(scanner: Scanner, dir: string, scan: ManifestScan): Promise<void> {
+async function scanRawDir(
+  scanner: BudgetedRepoScanner,
+  dir: string,
+  scan: ManifestScan,
+): Promise<void> {
   const entries = await scanner.listDir(dir)
   for (const entry of entries) {
     if (entry.type !== 'dir' && isYamlFile(entry.name)) {
-      const content = await scanner.getFile(joinPath(dir, entry.name))
+      const content = await scanner.getFile(joinRepoPath(dir, entry.name))
       if (content) for (const doc of parseDocs(content)) scanManifestDoc(doc, scan)
     }
   }
@@ -522,7 +426,7 @@ async function scanRawDir(scanner: Scanner, dir: string, scan: ManifestScan): Pr
  * is parsed for kinds). Bounded by `depth` + the scanner's global read budget.
  */
 async function walkKustomize(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   dir: string,
   scan: ManifestScan,
   depth: number,
@@ -567,7 +471,7 @@ async function walkKustomize(
   for (const ref of refs) {
     // Skip remote bases (URLs / git refs) — only local paths are checkout-free readable.
     if (ref.includes('://') || ref.startsWith('git@')) continue
-    const refPath = joinPath(dir, ref)
+    const refPath = joinRepoPath(dir, ref)
     if (isYamlFile(ref)) {
       const content = await scanner.getFile(refPath)
       if (content) for (const doc of parseDocs(content)) scanManifestDoc(doc, scan)
@@ -605,7 +509,7 @@ interface KubernetesRoot {
  * least one YAML file that parses as a real manifest (`kind` + `apiVersion`).
  */
 async function evaluateK8sDir(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   dir: string,
   entries: { name: string; type: string; path: string }[],
 ): Promise<KubernetesRoot | null> {
@@ -620,7 +524,7 @@ async function evaluateK8sDir(
   // No kustomize markers — accept the dir only if it holds an actual k8s manifest.
   for (const entry of entries) {
     if (entry.type === 'dir' || !isYamlFile(entry.name)) continue
-    const content = await scanner.getFile(joinPath(dir, entry.name))
+    const content = await scanner.getFile(joinRepoPath(dir, entry.name))
     const looksLikeManifest =
       content !== null && parseDocs(content).some((d) => asString(d.kind) && asString(d.apiVersion))
     if (looksLikeManifest) return { dir, hasOverlays: false, hasKustomization: false }
@@ -634,7 +538,10 @@ async function evaluateK8sDir(
  * first entry is the highest-ranked (the one the detector prefills); the rest drive the "which root"
  * picker. Dedupes by directory so a dir reachable both directly and as a nested child isn't listed twice.
  */
-async function collectKubernetesRoots(scanner: Scanner, root: string): Promise<KubernetesRoot[]> {
+async function collectKubernetesRoots(
+  scanner: BudgetedRepoScanner,
+  root: string,
+): Promise<KubernetesRoot[]> {
   const found: KubernetesRoot[] = []
   const seen = new Set<string>()
   const add = (r: KubernetesRoot): void => {
@@ -644,7 +551,7 @@ async function collectKubernetesRoots(scanner: Scanner, root: string): Promise<K
   }
   for (const candidate of K8S_DIR_CANDIDATES) {
     if (found.length >= MAX_MANIFEST_ROOTS) break
-    const dir = joinPath(root, candidate)
+    const dir = joinRepoPath(root, candidate)
     const entries = await scanner.listDir(dir)
     if (entries.length === 0) continue
     const direct = await evaluateK8sDir(scanner, dir, entries)
@@ -657,7 +564,7 @@ async function collectKubernetesRoots(scanner: Scanner, root: string): Promise<K
     for (const entry of entries) {
       if (found.length >= MAX_MANIFEST_ROOTS) break
       if (entry.type !== 'dir' || !K8S_NESTED_SUBDIRS.includes(entry.name)) continue
-      const nestedDir = joinPath(dir, entry.name)
+      const nestedDir = joinRepoPath(dir, entry.name)
       const nested = await evaluateK8sDir(scanner, nestedDir, await scanner.listDir(nestedDir))
       if (nested) add(nested)
     }
@@ -672,7 +579,7 @@ async function collectKubernetesRoots(scanner: Scanner, root: string): Promise<K
  * flagged `recommended`. Case-insensitive fallback when no exact match exists.
  */
 async function findServiceDeployCandidates(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   serviceBasename: string,
 ): Promise<ProvisioningServiceDirCandidate[]> {
   const candidates: { path: string; name: string }[] = []
@@ -680,7 +587,7 @@ async function findServiceDeployCandidates(
   for (const deployRoot of SHARED_DEPLOY_ROOTS) {
     for (const entry of await scanner.listDir(deployRoot)) {
       if (entry.type !== 'dir') continue
-      const path = joinPath(deployRoot, entry.name)
+      const path = joinRepoPath(deployRoot, entry.name)
       if (seen.has(path)) continue
       // Skip a child that is itself a shared-deploy root (e.g. `manifests/services`): it's a
       // container for slices, not a per-service slice of its own.
@@ -726,19 +633,19 @@ interface ComposeHit {
  * `-f` override family).
  */
 async function findCompose(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   conventions?: DetectionConventions,
 ): Promise<ComposeHit | null> {
   const composeFileNames = resolveComposeFileNames(conventions)
   for (const dir of resolveComposeDirs(conventions)) {
-    const dirPath = joinPath(root, dir)
+    const dirPath = joinRepoPath(root, dir)
     const entries = await scanner.listDir(dirPath)
     if (entries.length === 0) continue
     const names = new Set(entries.filter((e) => e.type !== 'dir').map((e) => e.name))
     for (const candidate of composeFileNames) {
       if (!names.has(candidate)) continue
-      const path = joinPath(dirPath, candidate)
+      const path = joinRepoPath(dirPath, candidate)
       const content = await scanner.getFile(path)
       const doc = content ? parseOne(content) : null
       const servicesRecord = asRecord(doc?.services) ?? {}
@@ -775,7 +682,7 @@ function rankOverlay(name: string): number {
 
 /** Resolve the manifest source path + renderer + (when several) the overlay candidates. */
 async function resolveManifestSource(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   k8s: KubernetesRoot,
 ): Promise<{
   path: string
@@ -783,17 +690,17 @@ async function resolveManifestSource(
   overlayCandidates?: ProvisioningOverlayCandidate[]
 }> {
   if (k8s.hasOverlays) {
-    const overlaysDir = joinPath(k8s.dir, 'overlays')
+    const overlaysDir = joinRepoPath(k8s.dir, 'overlays')
     const overlays = (await scanner.listDir(overlaysDir)).filter((e) => e.type === 'dir')
     if (overlays.length > 0) {
       const ranked = [...overlays].sort((a, b) => rankOverlay(a.name) - rankOverlay(b.name))
       const chosen = ranked[0]!
       const candidates: ProvisioningOverlayCandidate[] = ranked.map((o) => ({
-        path: joinPath(overlaysDir, o.name),
+        path: joinRepoPath(overlaysDir, o.name),
         name: o.name,
         recommended: o.name === chosen.name,
       }))
-      const chosenPath = joinPath(overlaysDir, chosen.name)
+      const chosenPath = joinRepoPath(overlaysDir, chosen.name)
       const hasK = (await scanner.getFirstFile(chosenPath, KUSTOMIZATION_FILES)) !== null
       return {
         path: chosenPath,
@@ -869,7 +776,7 @@ function pinnedHelmReleases(parsedReleases: unknown[]): {
 }
 
 async function inferHelmReleases(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   k8sDir: string,
 ): Promise<{ releases: KubernetesHelmRelease[]; note: ProvisioningDetectionNote | null }> {
@@ -886,8 +793,8 @@ async function inferHelmReleases(
             confidence: 'low',
             message:
               releases.length > 0
-                ? `Proposed ${releases.length} helm release(s) from ${joinPath(dir, helmfile.name)}; review charts/versions before applying.${unpinned > 0 ? ` ${unpinned} release(s) had an unpinned version and were skipped.` : ''}`
-                : `Found ${joinPath(dir, helmfile.name)} but its release versions aren't pinned — pin them to a semver to enable.`,
+                ? `Proposed ${releases.length} helm release(s) from ${joinRepoPath(dir, helmfile.name)}; review charts/versions before applying.${unpinned > 0 ? ` ${unpinned} release(s) had an unpinned version and were skipped.` : ''}`
+                : `Found ${joinRepoPath(dir, helmfile.name)} but its release versions aren't pinned — pin them to a semver to enable.`,
           },
         }
       }
@@ -908,8 +815,8 @@ async function inferHelmReleases(
             confidence: 'low',
             message:
               releases.length > 0
-                ? `Proposed ${releases.length} helm release(s) from ${joinPath(dir, chart.name)} dependencies; review before applying.`
-                : `Found ${joinPath(dir, chart.name)} dependencies but their versions aren't pinned to a semver.`,
+                ? `Proposed ${releases.length} helm release(s) from ${joinRepoPath(dir, chart.name)} dependencies; review before applying.`
+                : `Found ${joinRepoPath(dir, chart.name)} dependencies but their versions aren't pinned to a semver.`,
           },
         }
       }
@@ -994,13 +901,13 @@ function collectComposeFiles(compose: ComposeHit): {
   for (const entry of compose.entries) {
     if (entry.type === 'dir' || entry.name === compose.baseName) continue
     const os = overrideOsFor(entry.name, stem)
-    if (os) osOverrides.push({ path: joinPath(compose.dir, entry.name), name: entry.name, os })
+    if (os) osOverrides.push({ path: joinRepoPath(compose.dir, entry.name), name: entry.name, os })
     else if (isBaseOverride(entry.name, stem)) baseOverrideNames.push(entry.name)
   }
   // No override family beyond the single base file ⇒ nothing to layer.
   if (osOverrides.length === 0 && baseOverrideNames.length === 0) return {}
 
-  for (const name of baseOverrideNames.sort()) baseFiles.push(joinPath(compose.dir, name))
+  for (const name of baseOverrideNames.sort()) baseFiles.push(joinRepoPath(compose.dir, name))
   osOverrides.sort((a, b) => a.name.localeCompare(b.name))
   const composeFileCandidates: ProvisioningComposeFileCandidate[] = [
     ...baseFiles.map((path) => ({ path, name: path.split('/').pop() ?? path, recommended: true })),
@@ -1051,7 +958,7 @@ function isConfigLikeName(target: string): boolean {
  * before the deeper container dirs so a root/compose-dir template takes precedence.
  */
 async function collectEnvFileTemplates(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   composeDir: string,
   conventions?: DetectionConventions,
@@ -1068,29 +975,32 @@ async function collectEnvFileTemplates(
       if (entry.type === 'dir') continue
       const target = deriveEnvTemplateTarget(entry.name)
       if (!target) continue
-      const targetPath = joinPath(dir, target)
+      const targetPath = joinRepoPath(dir, target)
       if (seenTargets.has(targetPath)) continue
       seenTargets.add(targetPath)
-      pairs.push({ template: joinPath(dir, entry.name), target: targetPath })
+      pairs.push({ template: joinRepoPath(dir, entry.name), target: targetPath })
       if (pairs.length >= MAX_ENV_FILES) return true
     }
     return false
   }
 
   const rootDirs = [
-    ...new Set([composeDir, ...resolveEnvTemplateDirs(conventions).map((d) => joinPath(root, d))]),
+    ...new Set([
+      composeDir,
+      ...resolveEnvTemplateDirs(conventions).map((d) => joinRepoPath(root, d)),
+    ]),
   ]
   for (const dir of rootDirs) {
     if (await scanDir(dir)) return sorted()
   }
   // One level into monorepo service containers (`services/app/…`), children sorted for determinism.
   for (const container of ENV_TEMPLATE_CONTAINER_DIRS) {
-    const containerDir = joinPath(root, container)
+    const containerDir = joinRepoPath(root, container)
     const children = [...(await scanner.listDir(containerDir))]
       .filter((e) => e.type === 'dir')
       .sort((a, b) => a.name.localeCompare(b.name))
     for (const child of children) {
-      if (await scanDir(joinPath(containerDir, child.name))) return sorted()
+      if (await scanDir(joinRepoPath(containerDir, child.name))) return sorted()
     }
   }
   return sorted()
@@ -1118,7 +1028,7 @@ function rankSeedDump(name: string): number {
  * pre-selected.
  */
 async function collectSeedDumps(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   conventions?: DetectionConventions,
 ): Promise<ProvisioningSeedDumpCandidate[]> {
@@ -1126,21 +1036,21 @@ async function collectSeedDumps(
   const seen = new Set<string>()
   const addSql = (dir: string, name: string): void => {
     if (!name.toLowerCase().endsWith('.sql')) return
-    const path = joinPath(dir, name)
+    const path = joinRepoPath(dir, name)
     if (seen.has(path)) return
     seen.add(path)
     found.push({ path, name })
   }
   for (const rel of resolveSeedDirs(conventions)) {
     if (found.length >= MAX_SEED_DUMPS) break
-    const dir = joinPath(root, rel)
+    const dir = joinRepoPath(root, rel)
     const entries = await scanner.listDir(dir)
     for (const entry of entries) {
       if (found.length >= MAX_SEED_DUMPS) break
       if (entry.type === 'dir') {
         // A `migrations`/`migration` child holds schema DDL, not seed data — never a seed dump.
         if (/^migrations?$/i.test(entry.name)) continue
-        const childDir = joinPath(dir, entry.name)
+        const childDir = joinRepoPath(dir, entry.name)
         for (const child of await scanner.listDir(childDir)) {
           if (child.type !== 'dir') addSql(childDir, child.name)
           if (found.length >= MAX_SEED_DUMPS) break
@@ -1173,14 +1083,14 @@ async function collectSeedDumps(
  * slice-8 analyst. `rootEntries` is the already-read root listing (no extra read for the top-level files).
  */
 async function detectRepoCliHint(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   rootEntries: { name: string; type: string; path: string }[],
 ): Promise<ProvisioningRepoCliHint | undefined> {
   const fileNames = new Set(rootEntries.filter((e) => e.type !== 'dir').map((e) => e.name))
   const hasBin = rootEntries.some((e) => e.type === 'dir' && e.name === 'bin')
   if (hasBin) {
-    for (const entry of await scanner.listDir(joinPath(root, 'bin'))) {
+    for (const entry of await scanner.listDir(joinRepoPath(root, 'bin'))) {
       if (entry.type === 'dir') continue
       const lower = entry.name.toLowerCase()
       if (
@@ -1189,18 +1099,18 @@ async function detectRepoCliHint(
         lower === 'dev' ||
         lower === 'setup'
       ) {
-        return { path: joinPath(root, 'bin', entry.name), kind: 'repo-cli' }
+        return { path: joinRepoPath(root, 'bin', entry.name), kind: 'repo-cli' }
       }
     }
   }
   for (const name of MAKEFILE_NAMES) {
-    if (fileNames.has(name)) return { path: joinPath(root, name), kind: 'makefile' }
+    if (fileNames.has(name)) return { path: joinRepoPath(root, name), kind: 'makefile' }
   }
   for (const name of JUSTFILE_NAMES) {
-    if (fileNames.has(name)) return { path: joinPath(root, name), kind: 'justfile' }
+    if (fileNames.has(name)) return { path: joinRepoPath(root, name), kind: 'justfile' }
   }
   for (const name of TASKFILE_NAMES) {
-    if (fileNames.has(name)) return { path: joinPath(root, name), kind: 'taskfile' }
+    if (fileNames.has(name)) return { path: joinRepoPath(root, name), kind: 'taskfile' }
   }
   return undefined
 }
@@ -1213,7 +1123,7 @@ async function detectRepoCliHint(
  * present the output is exactly the simple single-file recommendation (no `recipe`, no extra notes).
  */
 async function buildComposeRecommendation(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   compose: ComposeHit,
   serviceBasename: string,
@@ -1385,7 +1295,7 @@ interface KubernetesBuildOptions {
  * `serviceDirCandidates` — none auto-applied beyond the pre-selected one.
  */
 async function buildKubernetesRecommendation(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   roots: KubernetesRoot[],
   lookupRoot: string,
   opts: KubernetesBuildOptions,
@@ -1497,7 +1407,7 @@ async function buildKubernetesRecommendation(
 
   const secretInjections: KubernetesSecretInjection[] = []
   if (scan.secretGenerator) {
-    const envFilePath = joinPath(scan.secretGenerator.baseDir, scan.secretGenerator.envFile)
+    const envFilePath = joinRepoPath(scan.secretGenerator.baseDir, scan.secretGenerator.envFile)
     const exampleDirs = [...new Set([scan.secretGenerator.baseDir, path, lookupRoot])]
     let keys: string[] = []
     for (const dir of exampleDirs) {
@@ -1581,10 +1491,10 @@ export async function detectKubernetesProvisioning(
   reader: ProvisioningRepoReader,
   options: DetectProvisioningOptions = {},
 ): Promise<ProvisioningRecommendation> {
-  const root = joinPath(options.directory ?? '')
+  const root = joinRepoPath(options.directory ?? '')
   const repoScanEnabled = root !== ''
   const serviceBasename = root.split('/').pop() ?? ''
-  const scanner = new Scanner(reader, options.gitRef)
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
 
   const roots = await collectKubernetesRoots(scanner, root)
   const compose = await findCompose(scanner, root, options.conventions)
@@ -1715,8 +1625,8 @@ export async function detectSharedStack(
   reader: ProvisioningRepoReader,
   options: DetectSharedStackOptions = {},
 ): Promise<SharedStackRecommendation> {
-  const root = joinPath(options.directory ?? '')
-  const scanner = new Scanner(reader, options.gitRef)
+  const root = joinRepoPath(options.directory ?? '')
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
   const compose = await findCompose(scanner, root, options.conventions)
   if (!compose) {
     // Nothing compose-shaped. Distinguish "couldn't read the repo" from "read it, no compose".
@@ -1844,8 +1754,8 @@ export async function detectCustomManifest(
   reader: ProvisioningRepoReader,
   options: DetectCustomManifestOptions = {},
 ): Promise<ProvisioningRecommendation> {
-  const root = joinPath(options.directory ?? '')
-  const scanner = new Scanner(reader, options.gitRef)
+  const root = joinRepoPath(options.directory ?? '')
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
   const manifestIdPart = options.manifestId ? { manifestId: options.manifestId } : {}
   const rec = (
     detected: boolean,
@@ -1882,7 +1792,7 @@ export async function detectCustomManifest(
   }
 
   // 2a. Exact: the complete relative path (with filename) under the service subtree / repo root.
-  const exact = joinPath(root, defaultPath)
+  const exact = joinRepoPath(root, defaultPath)
   if ((await scanner.getFile(exact)) !== null) {
     return rec(true, exact, {
       field: 'manifestPath',
@@ -1895,7 +1805,7 @@ export async function detectCustomManifest(
   if (!defaultPath.includes('/')) {
     for (const entry of await scanner.listDir(root)) {
       if (entry.type !== 'dir') continue
-      const nested = joinPath(entry.path, defaultPath)
+      const nested = joinRepoPath(entry.path, defaultPath)
       if ((await scanner.getFile(nested)) !== null) {
         return rec(true, nested, {
           field: 'manifestPath',

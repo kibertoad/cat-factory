@@ -13,6 +13,9 @@
   (`providerEndpoints` — the base-URL/key source of truth, also used by the LLM proxy).
 - `fragmentLibrary/` — the prompt-fragment library plumbing.
 - `repo-ops/` — the checkout-free `RepoFiles` renderers for custom-agent artifacts.
+- `presets/` — built-in initiative-preset pilots. `docs-refresh/docs-detect.logic.ts` is the
+  deterministic, checkout-free repo probe (`detectDocsLayout`) behind the docs-refresh preset's
+  form prefill (see `docs/initiatives/initiative-presets-and-docs-refresh.md`).
 
 **See also:** `CLAUDE.md` → "Custom agents", "Conventions" (the `FINAL_ANSWER_IN_REPLY` rule);
 `backend/docs/model-support.md`.
