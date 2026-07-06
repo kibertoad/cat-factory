@@ -1,5 +1,65 @@
 # @cat-factory/server
 
+## 0.97.0
+
+### Minor Changes
+
+- 6198b08: Missing mandatory env vars / bindings now produce human-readable, actionable startup errors AND a
+  graceful degraded backend instead of an opaque crash.
+
+  - **Shared structured config errors.** A new `ConfigValidationError` (carrying a list of
+    `ConfigProblem { key, summary, remedy }`) plus a canonical `ENV_HELP` description table and a
+    `requireEnv` helper live in `@cat-factory/server`. Every facade's startup throw for a mandatory
+    variable (`DATABASE_URL`, `ENCRYPTION_KEY`, `AUTH_SESSION_SECRET`, a configured auth provider,
+    `TELEMETRY_DB`, `AGENT_MODELS`, the container-executor prerequisites) now routes through it, so the
+    message reads the same across Node, local, and the Worker and always says what the variable is for
+    and how to fill it. A `ConfigProblem` never carries a secret value.
+
+  - **Graceful misconfiguration fallback backend.** Instead of exiting (which left the SPA on a generic
+    "can't reach the backend" panel with no clue what was wrong), a facade that hits a
+    `ConfigValidationError` at boot now serves a minimal fallback app (`createMisconfiguredApp`) on the
+    normal port: `GET /auth/config` returns an auth-disabled config carrying the problem list, `/health`
+    stays 200 (`status: misconfigured`, so an orchestrator doesn't crash-loop it), and every other route
+    503s with the structured problems. Wired symmetrically in all three runtimes — Node/local
+    `serveMisconfigured`, the Worker's per-request build (which recovers automatically once bindings are
+    fixed).
+
+  - **Dedicated frontend error screen.** The SPA's boot handshake now recognises the `misconfigured`
+    field and renders `BackendMisconfiguredScreen` — a per-variable list of name + meaning + remedy with
+    a reload button — instead of the login/board. Fully translated across all locales.
+
+- 37d1517: Cache the checkout-free `RepoFiles` reads an agent's pre/post-ops run against a run's
+  branch (caching-layer initiative, slice 4). A new `AppCaches.repoFiles` group cache serves
+  the `getFile`/`listDirectory` idempotency byte-compares the `blueprints`/`spec-writer`
+  post-ops issue every run and durable-driver replay, replacing a live GitHub contents-API
+  round-trip per file. It is wired only on the `makeResolveRunRepoContext` (pre/post-op) path;
+  the environments repo-validation and doc-quality reads stay live.
+
+  - Grouped per `(installation, owner, repo, branch)` via the new kernel `repoFilesCacheGroup`
+    helper and keyed per path (`f:`/`d:` prefixes), so one branch's reads drop together.
+  - Self-verifying: each entry remembers the branch head sha it reflects, so an entry entering
+    its refresh window re-validates with a single cheap `branchHeadSha` compare (bump on an
+    unmoved branch, background reload otherwise) instead of re-fetching every file. A sha-pinned
+    read is immutable (no probe). The head sha a cold batch stamps is read once per branch
+    (memoised), so caching N files costs one extra head read, not N.
+  - Coherence: the owning `commitFiles` self-invalidates the branch group after it commits, and
+    the `push` webhook drops a branch it saw move out-of-band (an agent container's git push or a
+    human PR-branch edit). Stays enabled on the Worker's isolate-safe profile (like the
+    document-body cache, the head-sha probe re-validates without a cross-isolate bus) and in local
+    mode (single-node, so `commitFiles` self-invalidation is already fully coherent).
+
+### Patch Changes
+
+- Updated dependencies [6198b08]
+- Updated dependencies [37d1517]
+  - @cat-factory/contracts@0.114.0
+  - @cat-factory/kernel@0.104.0
+  - @cat-factory/integrations@0.76.0
+  - @cat-factory/orchestration@0.87.0
+  - @cat-factory/agents@0.40.9
+  - @cat-factory/prompt-fragments@0.10.22
+  - @cat-factory/spend@0.11.6
+
 ## 0.96.0
 
 ### Minor Changes
