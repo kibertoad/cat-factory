@@ -1,6 +1,6 @@
 import { loadNodeConfig } from '@cat-factory/node-server'
 import type { AppConfig } from '@cat-factory/server'
-import { ENV_HELP, base64urlToBytes, configProblem } from '@cat-factory/server'
+import { ENV_HELP, base64urlToBytes, configProblem, requireEnv } from '@cat-factory/server'
 import { isOffValue } from './envFlags.js'
 import { resolveHostAlias } from './runtimes/index.js'
 
@@ -44,16 +44,11 @@ const DEFAULT_LOCAL_SEARXNG_URL = 'http://localhost:8080'
  * format.
  */
 function requireStableSecret(env: NodeJS.ProcessEnv, name: string): string {
-  const help = (ENV_HELP as Record<string, { summary: string; remedy: string }>)[name]
-  const value = env[name]?.trim()
-  if (!value) {
-    throw configProblem({
-      key: name,
-      summary: help?.summary ?? `${name} is required in local mode but is not set.`,
-      remedy:
-        `Generate both secrets with \`pnpm secrets\` in deploy/local and add them to your .env. ${help?.remedy ?? ''}`.trim(),
-    })
-  }
+  // Presence + trim + the ENV_HELP meaning/remedy come from the shared `requireEnv` (both these
+  // vars have an ENV_HELP entry whose remedy already points at `pnpm secrets` in deploy/local), so
+  // a missing/blank secret reports identically across the Node, local, and Worker facades. Local
+  // mode then layers its two extra invariants below.
+  const value = requireEnv(env, name)
   // Local mode leaves the auth gate open by default, so a short session secret is a real
   // token-forgery risk if the box is reachable on a LAN — reject it up front rather than
   // running with a guessable HMAC key.

@@ -6,6 +6,7 @@ import {
   type ServerContainer,
   corsReflectsWhenUnset,
   createMisconfiguredApp,
+  formatConfigProblems,
   handleError,
   isConfigValidationError,
   logger,
@@ -114,15 +115,26 @@ export function serveAppWithRealtime(opts: {
   host?: string
   label: string
 }): { server: ReturnType<typeof serve>; stopRealtime: ReturnType<typeof attachRealtime> } {
-  const port = Number(opts.env.PORT ?? 8787)
-  const host = opts.host ?? opts.env.HOST?.trim() ?? undefined
-  const server = serve({ fetch: opts.app.fetch, port, ...(host ? { hostname: host } : {}) })
+  const { port, hostname } = resolveBind(opts.env, opts.host)
+  const server = serve({ fetch: opts.app.fetch, port, ...(hostname ? { hostname } : {}) })
   // Accept the SPA's WebSocket event-stream upgrades on the same listener (the Worker uses a
   // per-workspace Durable Object; `@hono/node-server` doesn't upgrade on its own, so attach a
   // `ws` server here).
   const stopRealtime = attachRealtime(server, opts.realtimeHub, opts.auth, logger)
-  logger.info({ port, host: host ?? '0.0.0.0' }, `${opts.label} listening`)
+  logger.info({ port, host: hostname ?? '0.0.0.0' }, `${opts.label} listening`)
   return { server, stopRealtime }
+}
+
+/**
+ * Resolve the HTTP listen address (`PORT` / `HOST`, with an optional explicit `host` override).
+ * Shared by {@link serveAppWithRealtime} and {@link serveMisconfigured} so the fallback backend can
+ * never bind a different port/host than the real server — the SPA reaches the deployment at one
+ * fixed address, and the whole point of the fallback is that it answers there too.
+ */
+function resolveBind(env: NodeJS.ProcessEnv, host?: string): { port: number; hostname?: string } {
+  const port = Number(env.PORT ?? 8787)
+  const hostname = host ?? env.HOST?.trim() ?? undefined
+  return { port, ...(hostname ? { hostname } : {}) }
 }
 
 /**
@@ -139,15 +151,12 @@ export function serveMisconfigured(
 ): ReturnType<typeof serve> {
   logger.error(
     { problems: problems.map((p) => p.key) },
-    'cat-factory node server is MISCONFIGURED — serving the fallback error backend so the UI can ' +
-      'explain what to fix:',
+    `cat-factory node server is MISCONFIGURED — serving the fallback error backend so the UI can explain what to fix.\n${formatConfigProblems(problems)}`,
   )
-  for (const p of problems) logger.error(`  • ${p.key}: ${p.summary}\n    → ${p.remedy}`)
   const app = createMisconfiguredApp(problems)
-  const port = Number(env.PORT ?? 8787)
-  const bind = host ?? env.HOST?.trim() ?? undefined
-  const server = serve({ fetch: app.fetch, port, ...(bind ? { hostname: bind } : {}) })
-  logger.info({ port, host: bind ?? '0.0.0.0' }, 'cat-factory misconfigured fallback listening')
+  const { port, hostname } = resolveBind(env, host)
+  const server = serve({ fetch: app.fetch, port, ...(hostname ? { hostname } : {}) })
+  logger.info({ port, host: hostname ?? '0.0.0.0' }, 'cat-factory misconfigured fallback listening')
   return server
 }
 

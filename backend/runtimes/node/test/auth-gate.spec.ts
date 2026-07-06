@@ -65,7 +65,7 @@ describe('Node auth gate wiring', () => {
     // Production shape: no creds, no dev-open hatch. Remote node mode has no anonymous
     // tier, so loadNodeConfig fails fast at boot rather than starting a 503-only app that
     // looks broken instead of misconfigured (see config.ts).
-    expect(() => makeApp(AUTH_UNCONFIGURED)).toThrow(/anonymous access/i)
+    expect(() => makeApp(AUTH_UNCONFIGURED)).toThrow(/anonymous tier/i)
   })
 
   // Symmetric with the Worker's auth.spec: a hosted deployment advertises the PAT-login

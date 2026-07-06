@@ -1,7 +1,9 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
 import {
+  type ConfigProblem,
   buildMisconfiguredResponse,
   isConfigValidationError,
+  logger,
   mountAuthGate,
   registerCoreControllers,
 } from '@cat-factory/server'
@@ -24,6 +26,25 @@ export interface CreateAppOptions {
   cloudflareModelsEnabled?: boolean
   /** Explicit gate providers wired on every per-request build — used by tests. */
   gateProviders?: GateProviderOverrides
+}
+
+// The Worker builds its container per request, so a persistent misconfiguration would throw on
+// every one. Log it ONCE per isolate per distinct problem-set (keyed by the var names) so an
+// operator watching `wrangler tail` gets a clear server-side breadcrumb — mirroring the Node
+// facade's `serveMisconfigured` log — without spamming a line for every request.
+const loggedMisconfigs = new Set<string>()
+function logMisconfiguredOnce(problems: ConfigProblem[]): void {
+  const signature = problems
+    .map((p) => p.key)
+    .sort()
+    .join(',')
+  if (loggedMisconfigs.has(signature)) return
+  loggedMisconfigs.add(signature)
+  logger.error(
+    { problems: problems.map((p) => p.key) },
+    'Cloudflare Worker is MISCONFIGURED — serving the fallback error backend so the SPA can ' +
+      'explain what to fix. Add the missing binding(s)/var(s) to wrangler.toml.',
+  )
 }
 
 /**
@@ -74,10 +95,18 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
       // A mandatory binding / var is missing or invalid (e.g. TELEMETRY_DB unbound, ENCRYPTION_KEY
       // absent). Rather than 500-ing every request opaquely, serve the misconfiguration fallback so
       // the SPA renders its dedicated error screen listing exactly what to add to wrangler.toml. The
-      // Worker rebuilds the container per request, so it recovers automatically once fixed. CORS
-      // headers are added by the cors middleware above on the way out.
+      // Worker rebuilds the container per request, so it recovers automatically once fixed.
       if (isConfigValidationError(err)) {
-        return buildMisconfiguredResponse(new URL(c.req.url).pathname, err.problems)
+        logMisconfiguredOnce(err.problems)
+        const res = buildMisconfiguredResponse(new URL(c.req.url).pathname, err.problems)
+        // The cors() middleware above default-DENIES a cross-origin request when
+        // CORS_ALLOWED_ORIGINS is unset in a production ENVIRONMENT — which would stop the SPA (a
+        // separate Pages origin) from ever reading this error, defeating the whole feature exactly
+        // when the deployment is most broken. The problem list carries no secret, so reflect the
+        // caller's origin unconditionally here, matching the standalone `createMisconfiguredApp`.
+        const origin = c.req.header('Origin')
+        if (origin) res.headers.set('Access-Control-Allow-Origin', origin)
+        return res
       }
       throw err
     }
