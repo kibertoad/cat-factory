@@ -119,6 +119,30 @@ function registerDocsPreset() {
   })
 }
 
+const FULL_PRESET_ID = 'preset_test_migration'
+/** A FULL-interview preset with a form — its filled fields seed the qa for the interviewer (T3). */
+function registerFullPreset() {
+  registerInitiativePreset({
+    descriptor: {
+      id: FULL_PRESET_ID,
+      presentation: {
+        label: 'Technological migration',
+        icon: 'i-lucide-database',
+        color: '#000',
+        description: 'Swap a load-bearing technology behind a safety net.',
+      },
+      fields: [
+        { key: 'fromTech', label: 'From', type: 'text', required: true },
+        { key: 'toTech', label: 'To', type: 'text', required: true },
+      ],
+      planningPipelineId: 'pl_initiative',
+      interview: 'full',
+      humanReviewDefault: true,
+      defaultFragmentIds: [],
+    },
+  })
+}
+
 describe('InitiativeService.create — presets', () => {
   beforeEach(() => {
     idSeq = 0
@@ -201,6 +225,43 @@ describe('InitiativeService.create — presets', () => {
     ])
     // No human description ⇒ the goal is templated from the preset's stated purpose.
     expect(initiative.goal).toBe('Audit and refresh the service documentation.')
+  })
+
+  it('seeds the qa digest from the form for a FULL-interview preset (interviewer builds on it)', async () => {
+    registerFullPreset()
+    const { service } = makeService()
+    const { initiative } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Migrate DB',
+      description: '',
+      presetId: FULL_PRESET_ID,
+      presetInputs: { fromTech: 'MSSQL', toTech: 'PostgreSQL 16' },
+    })
+    // The full-interview form is folded into the qa (T3), so the interviewer starts from it rather
+    // than re-asking the enumerable facts the form already captured.
+    expect(initiative.qa).toEqual([
+      { id: expect.stringMatching(/^iqa-/), question: 'From', answer: 'MSSQL' },
+      { id: expect.stringMatching(/^iqa-/), question: 'To', answer: 'PostgreSQL 16' },
+    ])
+    // A full-interview preset does NOT template the goal from its description (the interviewer
+    // synthesizes it), so with no human description the goal stays blank until the interview converges.
+    expect(initiative.goal).toBe('')
+  })
+
+  it('a full-interview preset with no fields (preset_generic) seeds no qa and is unchanged', async () => {
+    // preset_generic is interview:'full' with an EMPTY form, so the T3 seeding is a no-op — its
+    // behaviour is byte-for-byte today's (empty qa, goal = the human description, no frozen inputs).
+    const { service } = makeService()
+    const { initiative } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Open-ended work',
+      description: 'the goal',
+      presetId: 'preset_generic',
+    })
+    expect(initiative.presetId).toBe('preset_generic')
+    expect(initiative.presetInputs).toBeUndefined()
+    expect(initiative.qa).toEqual([])
+    expect(initiative.goal).toBe('the goal')
   })
 
   it("a human description wins over the preset's templated goal", async () => {

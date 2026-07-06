@@ -7,6 +7,7 @@ import type {
   ModelRef,
 } from '@cat-factory/kernel'
 import {
+  getInitiativePreset,
   INITIATIVE_INTERVIEWER_AGENT_KIND,
   inlineModelRef,
   resolveScopedModelProvider,
@@ -14,7 +15,11 @@ import {
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
 import { extractJson } from '../requirements/requirements.logic.js'
-import { coerceInterviewOutput, type InterviewOutput } from './initiative.logic.js'
+import {
+  coerceInterviewOutput,
+  type InterviewOutput,
+  seedPresetInterviewQa,
+} from './initiative.logic.js'
 
 // ---------------------------------------------------------------------------
 // The interactive-planning INTERVIEWER — an inline LLM (no container, no repo) that scopes a
@@ -45,6 +50,23 @@ export const INITIATIVE_INTERVIEW_SYSTEM_PROMPT =
   'string[], "nonGoals": string[]}. When done is false, `questions` is non-empty; when done ' +
   'is true, `questions` is empty and you MUST fill `goal` (and `constraints`/`nonGoals` where ' +
   'they apply). No prose, no code fences.'
+
+/**
+ * Whether this initiative's preset FORM actually seeded any `qa` at create (T3). Re-derived from
+ * the SAME seeder the create flow ran (`seedPresetInterviewQa` over the frozen `presetInputs`), so
+ * the gate can never disagree with what was seeded: `preset_generic` (empty form), a preset-less
+ * initiative, and a preset whose visible fields were all left blank/false (present in
+ * `presetInputs` but rendering to nothing, e.g. a cleared optional field) all read `false` — their
+ * interviewer prompt stays byte-for-byte unchanged. Checking `presetInputs` cardinality alone
+ * would wrongly fire the steering below for that all-blank case once later rounds add real answers.
+ */
+function formSeeded(initiative: Initiative): boolean {
+  if (!initiative.presetId || !initiative.presetInputs) return false
+  const preset = getInitiativePreset(initiative.presetId)
+  if (!preset) return false
+  // Only the COUNT matters here, so the id generator is irrelevant.
+  return seedPresetInterviewQa(preset.descriptor, initiative.presetInputs, () => '').length > 0
+}
 
 /** What the interviewer needs to resolve its inline model + reach the provider. */
 export interface InitiativeInterviewDeps {
@@ -119,6 +141,21 @@ export class InitiativeInterviewService {
     if (answered.length) {
       lines.push('', 'Answers gathered so far:')
       for (const { question, answer } of answered) lines.push(`- Q: ${question}`, `  A: ${answer}`)
+    }
+    // A FORM-backed preset (T3) pre-answers the enumerable facts at create; those answers are the
+    // seeded qa above. Tell the interviewer they are SETTLED so it builds on them and digs into the
+    // fuzzy, judgment-dependent aspects the form could not capture, instead of re-asking the form.
+    // `formSeeded` re-derives this from the actual seeder, so `preset_generic` (empty form), a
+    // preset-less initiative, and a preset whose visible fields were all left blank never trigger
+    // it — their interviews stay byte-for-byte unchanged.
+    if (answered.length && formSeeded(initiative)) {
+      lines.push(
+        '',
+        'The answers above include the intake-form responses the stakeholder already provided at ' +
+          'create time. Treat every one of them as SETTLED: do NOT re-ask what the form already ' +
+          'covers. Build on them and probe only the fuzzy, judgment-dependent aspects the form ' +
+          'could not capture.',
+      )
     }
     if (initiative.goal?.trim()) lines.push('', `Current goal statement: ${initiative.goal.trim()}`)
     lines.push(
