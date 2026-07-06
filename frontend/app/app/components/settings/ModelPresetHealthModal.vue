@@ -41,10 +41,24 @@ async function reseed(id: string) {
   }
 }
 
-/** Reseed every advised preset (new + outdated built-ins) in one go. */
+/** Reseed every advised preset (new + outdated built-ins) in one go, refreshing the board once. */
 async function reseedAll() {
-  const ids = [...newPresets.value, ...outdated.value].map((i) => i.id)
-  for (const id of new Set(ids)) await reseed(id)
+  const ids = [...new Set([...newPresets.value, ...outdated.value].map((i) => i.id))]
+  busy.value = new Set([...busy.value, ...ids])
+  try {
+    await presets.reseedMany(ids)
+  } catch (e) {
+    toast.add({
+      title: t('modelPreset.health.toast.reseedFailed'),
+      description: e instanceof Error ? e.message : String(e),
+      icon: 'i-lucide-triangle-alert',
+      color: 'error',
+    })
+  } finally {
+    const next = new Set(busy.value)
+    for (const id of ids) next.delete(id)
+    busy.value = next
+  }
 }
 
 const reseedableCount = computed(

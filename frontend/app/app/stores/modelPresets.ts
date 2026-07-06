@@ -82,6 +82,20 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
     return updated
   }
 
+  /**
+   * Reseed several built-ins in one go, refreshing the snapshot ONCE at the end rather than
+   * after every id (each `reseed` refetches the whole board, so a per-id refresh in a loop is
+   * wasteful). The POSTs run sequentially so the backend's single-default invariant settles
+   * deterministically.
+   */
+  async function reseedMany(presetIds: string[]) {
+    const ws = useWorkspaceStore()
+    for (const presetId of presetIds) {
+      await api.reseedModelPreset(ws.requireId(), presetId)
+    }
+    await ws.refresh()
+  }
+
   return {
     presets,
     catalogVersions,
@@ -93,5 +107,6 @@ export const useModelPresetsStore = defineStore('modelPresets', () => {
     update,
     remove,
     reseed,
+    reseedMany,
   }
 })
