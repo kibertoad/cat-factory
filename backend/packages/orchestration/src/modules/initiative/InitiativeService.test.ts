@@ -361,3 +361,107 @@ describe('InitiativeService.ingestPlan — seedPlan (slice 5)', () => {
     await expect(service.ingestPlan('ws-1', blockId, badDraft)).rejects.toThrow()
   })
 })
+
+// The phase-template SHAPE step and the `seedPlan` DECORATION hook compose in `seedPlanDraft`:
+// normalize runs FIRST (so the hook sees template-ordered phases) and AGAIN over the hook's output
+// (so a hook can't bypass plan shape). Pins that ordering contract — it is invisible to the pure
+// normalizer's own unit tests and to the conformance suite (whose template preset has no seedPlan).
+describe('InitiativeService.ingestPlan — phase-template shaping ⨯ seedPlan (T2)', () => {
+  beforeEach(() => {
+    idSeq = 0
+    clockNow = 1_000
+    clearRegisteredInitiativePresets()
+  })
+  afterEach(() => clearRegisteredInitiativePresets())
+
+  const PRESET_ID = 'preset_template_seedplan'
+
+  /** Register a skip-interview preset with an exhaustive 3-phase template + an optional seedPlan. */
+  function registerTemplatePreset(seedPlan?: InitiativePresetRegistration['seedPlan']) {
+    registerInitiativePreset({
+      descriptor: {
+        id: PRESET_ID,
+        presentation: { label: 'Templated', icon: 'i', color: '#000', description: 'x' },
+        fields: [],
+        planningPipelineId: 'pl_initiative',
+        interview: 'skip',
+        humanReviewDefault: false,
+        defaultFragmentIds: [],
+        phaseTemplate: {
+          phases: [
+            { id: 'a', title: 'A', goal: '', required: true },
+            { id: 'b', title: 'B', goal: '', required: true },
+            { id: 'c', title: 'C', goal: '', required: true },
+          ],
+          allowAdditionalPhases: false,
+        },
+      },
+      seedPlan,
+    })
+  }
+
+  /** A planner draft carrying the given phase ids (each with one item), in the given order. */
+  const draftWith = (phaseIds: string[]) => ({
+    goal: 'g',
+    phases: phaseIds.map((id) => ({ id, title: `${id} title` })),
+    items: phaseIds.map((id) => ({ id: `i-${id}`, phaseId: id, title: id, description: '' })),
+    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_full' },
+  })
+
+  async function seedInitiative(service: InitiativeService): Promise<string> {
+    const { block } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Seed',
+      description: '',
+      presetId: PRESET_ID,
+      presetInputs: {} as never,
+    })
+    return block.id
+  }
+
+  it('normalizes BEFORE running seedPlan (the hook sees template-ordered phases)', async () => {
+    let seenByHook: string[] = []
+    registerTemplatePreset((d) => {
+      seenByHook = d.phases.map((p) => p.id ?? '')
+      return d
+    })
+    const { service } = makeService()
+    const blockId = await seedInitiative(service)
+
+    const ingested = await service.ingestPlan('ws-1', blockId, draftWith(['c', 'a', 'b']))
+
+    // The hook observed the ALREADY-reordered phases (normalize ran first), and the persisted plan
+    // is in template order.
+    expect(seenByHook).toEqual(['a', 'b', 'c'])
+    expect(ingested!.phases!.map((p) => p.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('re-normalizes seedPlan output so a hook that reorders phases cannot bypass the template', async () => {
+    // A misbehaving DECORATION hook shuffles phases out of template order; the re-normalization
+    // after seedPlan puts them back — the hook cannot defeat plan SHAPE enforcement.
+    registerTemplatePreset((d) => ({ ...d, phases: [...d.phases].reverse() }))
+    const { service } = makeService()
+    const blockId = await seedInitiative(service)
+
+    const ingested = await service.ingestPlan('ws-1', blockId, draftWith(['a', 'b', 'c']))
+
+    expect(ingested!.phases!.map((p) => p.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('rejects a seedPlan that introduces a phase disallowed by an exhaustive template', async () => {
+    registerTemplatePreset((d) => ({
+      ...d,
+      phases: [...d.phases, { id: 'rogue', title: 'Rogue', goal: '' }],
+      items: [
+        ...d.items,
+        { id: 'i-rogue', phaseId: 'rogue', title: 'rogue', description: '', dependsOn: [] },
+      ],
+    }))
+    const { service } = makeService()
+    const blockId = await seedInitiative(service)
+
+    await expect(service.ingestPlan('ws-1', blockId, draftWith(['a', 'b', 'c']))).rejects.toThrow(
+      /not allowed by the preset's phase template/,
+    )
+  })
+})
