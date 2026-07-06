@@ -40,6 +40,7 @@ import {
   applyPolicyEdit,
   applyPromoteFollowUp,
   initiativeSlug,
+  normalizeDraftAgainstPhaseTemplate,
   seedPresetInterviewQa,
   validatePlanDraft,
 } from './initiative.logic.js'
@@ -219,15 +220,23 @@ export class InitiativeService {
   }
 
   /**
-   * Run the initiative preset's `seedPlan` post-processor over the parsed draft (slice 5). The
-   * preset is resolved from the entity's FROZEN `presetId`/`presetInputs` (set once at create,
-   * never mutated), so reading it outside the CAS `mutate` is race-free — `seedPlan` is pure, so
-   * its output is a deterministic function of the draft + frozen inputs and stays replay-safe.
-   * Its output is RE-PARSED through the strict schema: a `seedPlan` bug can't persist a malformed
-   * draft, and an unsafe spawn `targetPath` a hook (or the planner) emitted is rejected here by
-   * `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape the repo. Returns null
-   * when the block has no initiative (mirroring the null the caller returns), or the draft
-   * unchanged when the preset has no `seedPlan` / is absent (byte-for-byte the pre-slice-5 path).
+   * Shape + decorate the parsed draft against the entity's resolved preset, run at ingest before
+   * the reference-graph validation. Two ordered, separable steps (the preset is resolved from the
+   * entity's FROZEN `presetId`/`presetInputs`, so reading it outside the CAS `mutate` is race-free):
+   *
+   * 1. **Phase-template normalization (slice T2)** — when the preset declares a `phaseTemplate`,
+   *    `normalizeDraftAgainstPhaseTemplate` reorders the planned phases into template order and
+   *    rejects a missing-`required` / disallowed-extra phase with a `ValidationError`. Generic,
+   *    preset-id-agnostic SHAPE enforcement, run FIRST so the `seedPlan` hook sees template-ordered
+   *    phases. No template ⇒ the draft passes through unchanged.
+   * 2. **`seedPlan` post-processor (slice 5)** — the preset's own per-item DECORATION hook, pure so
+   *    its output is a deterministic function of the (shaped) draft + frozen inputs and stays
+   *    replay-safe. Its output is RE-PARSED through the strict schema: a hook bug can't persist a
+   *    malformed draft, and an unsafe spawn `targetPath` a hook (or the planner) emitted is rejected
+   *    here by `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape the repo.
+   *
+   * Returns null when the block has no initiative (mirroring the null the caller returns), or the
+   * (shaped) draft unchanged when the preset has no `seedPlan` / is absent.
    */
   private async seedPlanDraft(
     workspaceId: string,
@@ -237,8 +246,10 @@ export class InitiativeService {
     const initiative = await this.deps.initiativeRepository.getByBlock(workspaceId, blockId)
     if (!initiative) return null
     const preset = initiative.presetId ? getInitiativePreset(initiative.presetId) : undefined
-    if (!preset?.seedPlan) return draft
-    return parseInitiativePlanDraft(preset.seedPlan(draft, initiative.presetInputs ?? {}))
+    const template = preset?.descriptor.phaseTemplate
+    const shaped = template ? normalizeDraftAgainstPhaseTemplate(template, draft) : draft
+    if (!preset?.seedPlan) return shaped
+    return parseInitiativePlanDraft(preset.seedPlan(shaped, initiative.presetInputs ?? {}))
   }
 
   /**

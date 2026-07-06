@@ -13,7 +13,11 @@ import type {
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
-import type { InitiativePresetDescriptor, InitiativePresetInputs } from '@cat-factory/contracts'
+import type {
+  InitiativePresetDescriptor,
+  InitiativePresetInputs,
+  InitiativePresetPhaseTemplate,
+} from '@cat-factory/contracts'
 import {
   INITIATIVE_ITEM_TERMINAL_STATUSES,
   INITIATIVE_PROSE_MAX,
@@ -118,6 +122,59 @@ export function validatePlanDraft(draft: InitiativePlanDraft): void {
   }
   // Cycle check over the dependency edges (shared with the mid-flight item edit).
   assertAcyclicItems(draft.items.map((i) => ({ id: i.id ?? '', dependsOn: i.dependsOn })))
+}
+
+/**
+ * Normalize a planner draft's phases against a preset's declarative {@link
+ * InitiativePresetPhaseTemplate} (slice T2), run at ingest BEFORE the preset's own `seedPlan`
+ * hook. This enforces PLAN SHAPE only — which phases the plan presents, and in what order — and
+ * is deliberately kept separate from `seedPlan`'s per-item decoration (T7): the generic template
+ * machinery owns shape, the preset hook owns content, and neither re-does the other's job.
+ *
+ * - **Reorder, don't reject, for ordering.** Draft phases whose `id` matches a template phase are
+ *   reordered into template order — matched by id VERBATIM, the same contract the planner prompt
+ *   fold renders. The planner-authored `title`/`goal` are preserved untouched; the template
+ *   dictates presence + order, never content.
+ * - **Extra phases** — a draft phase with no id, or an id not in the template — are appended AFTER
+ *   the template phases (in their original relative order) when `allowAdditionalPhases` is set,
+ *   and are a hard error otherwise (the template is exhaustive).
+ * - **A missing `required` phase** is a hard error; an optional (`required !== true`) template
+ *   phase the planner omitted is fine.
+ *
+ * Rejection is a {@link ValidationError} at the ingest trust boundary (the landed
+ * `assertPipelinesExist` / strict-re-parse pattern), surfacing as a planner retry / human fix at
+ * the plan-approval gate — never a silent draft mutation for a missing-required phase. Pure +
+ * total, and deterministic: a draft already in an exhaustive template's order (no extras) returns
+ * an equal phase list, so re-ingesting the same draft stays byte-identical (the ingest idempotency
+ * check relies on it). A draft repeating a template id lands both copies in template order and is
+ * caught downstream by {@link validatePlanDraft}'s duplicate-id check — we don't silently drop it.
+ */
+export function normalizeDraftAgainstPhaseTemplate(
+  template: InitiativePresetPhaseTemplate,
+  draft: InitiativePlanDraft,
+): InitiativePlanDraft {
+  const templateIds = new Set(template.phases.map((p) => p.id))
+  // Template ids are unique (the contract enforces it), so each template slot matches its draft
+  // phase(s) exactly once — iterating the template preserves template order.
+  const matched = template.phases.flatMap((tp) => draft.phases.filter((p) => p.id === tp.id))
+  const extras = draft.phases.filter((p) => !p.id || !templateIds.has(p.id))
+
+  const missing = template.phases.filter(
+    (tp) => tp.required === true && !draft.phases.some((p) => p.id === tp.id),
+  )
+  if (missing.length > 0) {
+    throw new ValidationError(
+      `Plan is missing required phase(s): ${missing.map((p) => `'${p.id}'`).join(', ')}`,
+    )
+  }
+  if (extras.length > 0 && !template.allowAdditionalPhases) {
+    const labels = extras.map((p) => `'${p.id ?? p.title}'`).join(', ')
+    throw new ValidationError(
+      `Plan introduces phase(s) not allowed by the preset's phase template: ${labels}`,
+    )
+  }
+
+  return { ...draft, phases: [...matched, ...extras] }
 }
 
 /** Assign a unique slug-derived id, suffixing `-2`, `-3`, … on collision. */

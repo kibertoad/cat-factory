@@ -1,6 +1,6 @@
 # Initiative: Technological-migration preset & the MSSQL→PostgreSQL pilot
 
-**Status:** in progress (T1 done — preset phase templates) · **Owner:** orchestration · **Started:** 2026-07-06
+**Status:** in progress (T1–T2 done — preset phase templates + ingest normalization) · **Owner:** orchestration · **Started:** 2026-07-06
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -82,9 +82,9 @@ classic behaviour-preservation traps.
 | **S8** `preset_docs_refresh` registration (the FIRST real preset)                                                                                                                     | ⬜ todo                                | **T8** (transitively T10, T11) | S8 pioneers the registration pattern (descriptor + hooks + review mapping, incl. the full-gate-array rule from the parent's [S2] gotcha). Two presets pioneering that pattern in parallel is exactly the overlap this tracker exists to avoid; T8 **copies** S8's landed shape. |
 | **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ⬜ todo                                | **T10** (transitively T11)     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness.                                                                                                                                                                                             |
 
-Unblocked today (parallel-safe with the parent roadmap): T1, T3, T4, T5, T6, T7, T9 —
-and T2 as soon as T1 lands. Critical path: T1 → T2 → (+ parent S8) T8 → (+ parent S9)
-T10 → T11.
+Unblocked today (parallel-safe with the parent roadmap): T3, T4, T5, T6, T7, T9 (T1–T2
+now done). Critical path: T1 → T2 → (+ parent S8) T8 → (+ parent S9) T10 → T11 — the next
+critical-path slice T8 is still blocked on **parent S8** (and T3, T7).
 
 ## Target architecture
 
@@ -274,7 +274,7 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----------------------------- | ------- | ------ |
 | 0   | This tracker                                                                                                                                                                                                                                  | —         | —                             | ✅ done | (this) |
 | T1  | `phaseTemplate` contracts (wire descriptor) + generic planner prompt fold in `AgentContextBuilder`; `preset_generic` byte-for-byte                                                                                                            | SYSTEM    | —                             | ✅ done | #895   |
-| T2  | Phase-template ingest normalization/validation in the landed `seedPlanDraft` path, before `seedPlan` (reorder known phases; `ValidationError` on missing-required/disallowed-extra); conformance both runtimes                                | SYSTEM    | T1                            | ⬜ todo |        |
+| T2  | Phase-template ingest normalization/validation in the landed `seedPlanDraft` path, before `seedPlan` (reorder known phases; `ValidationError` on missing-required/disallowed-extra); conformance both runtimes                                | SYSTEM    | T1                            | ✅ done | #TBD   |
 | T3  | Full-interview qa seeding: extend `seedPresetInterviewQa` to `interview: 'full'` presets + a generic interviewer "build on seeded answers, don't re-ask" prompt line                                                                          | SYSTEM    | —                             | ⬜ todo |        |
 | T4  | `migration.*` prompt-fragment collection (behaviour-preservation, migration-discipline, confidence-case authoring standard) + tests                                                                                                           | MIGRATION | —                             | ⬜ todo |        |
 | T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ⬜ todo |        |
@@ -285,9 +285,9 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | **parent S9**, T8             | ⬜ todo |        |
 | T11 | Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo; validation checklist (see Pilot); learnings folded back into this tracker                                                                             | PILOT     | T8, T9, T10                   | ⬜ todo |        |
 
-Ordering: T1, T3–T7, T9 are unblocked today and parallel-safe with the parent roadmap;
-T2 unblocks when T1 lands. Critical path: T1 → T2 → (+ parent S8) T8 → (+ parent S9)
-T10 → T11.
+Ordering: T1–T2 are done; T3–T7 and T9 are unblocked and parallel-safe with the parent
+roadmap. Critical path: T1 → T2 → (+ parent S8) T8 → (+ parent S9) T10 → T11 (T8 now waits
+only on parent S8 + T3/T7).
 
 ## Pilot: MSSQL → PostgreSQL
 

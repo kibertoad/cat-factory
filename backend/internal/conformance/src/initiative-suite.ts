@@ -1,5 +1,17 @@
-import type { Block, BlockRepository, Initiative, InitiativeRepository } from '@cat-factory/kernel'
-import { describe, expect, it } from 'vitest'
+import type {
+  Block,
+  BlockRepository,
+  Initiative,
+  InitiativeRepository,
+  WorkspaceRepository,
+} from '@cat-factory/kernel'
+import {
+  NoopEventPublisher,
+  clearRegisteredInitiativePresets,
+  registerInitiativePreset,
+} from '@cat-factory/kernel'
+import { InitiativeService } from '@cat-factory/orchestration'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the initiative store (the long-running multi-task work
 // container). The InitiativeService and the planning-pipeline steps are runtime-neutral,
@@ -286,6 +298,115 @@ export function defineInitiativeSuite(
       await initiatives.delete(ws, id)
       expect(await initiatives.get(ws, id)).toBeNull()
       expect(await initiatives.list(ws)).toEqual([])
+    })
+
+    // Phase-template ingest normalization (initiative slice T2). The normalizer + InitiativeService
+    // are runtime-neutral, but the RESULT — the reordered phases (or the untouched entity after a
+    // rejected ingest) — is round-tripped through each facade's real store, so this proves both
+    // stores persist a template-shaped plan identically. Preset registration is a module-global
+    // side effect, so it is scoped + cleared here and the id is per-facade to avoid interference.
+    describe('phase-template ingest normalization (T2)', () => {
+      const PRESET_ID = `preset_template_${name}`
+      beforeEach(() => {
+        clearRegisteredInitiativePresets()
+        registerInitiativePreset({
+          descriptor: {
+            id: PRESET_ID,
+            presentation: { label: 'Migration', icon: 'i', color: '#000', description: 'x' },
+            fields: [],
+            planningPipelineId: 'pl_initiative',
+            interview: 'full',
+            humanReviewDefault: true,
+            defaultFragmentIds: [],
+            phaseTemplate: {
+              phases: [
+                { id: 'blast-zone', title: 'Blast zone', goal: 'Enumerate.', required: true },
+                { id: 'coverage', title: 'Coverage', goal: '', required: true },
+                { id: 'delivery', title: 'Delivery', goal: '', required: true },
+              ],
+              allowAdditionalPhases: false,
+            },
+          },
+        })
+      })
+      afterEach(() => clearRegisteredInitiativePresets())
+
+      const makeService = (repos: {
+        initiatives: InitiativeRepository
+        blocks: BlockRepository
+      }): InitiativeService =>
+        new InitiativeService({
+          // Unused by the ingest path (it reads the initiative, normalizes, then CAS-writes) — a
+          // minimal stub keeps the suite from depending on a workspace/id/block store here.
+          workspaceRepository: { get: async () => ({}) } as unknown as WorkspaceRepository,
+          blockRepository: repos.blocks,
+          initiativeRepository: repos.initiatives,
+          events: new NoopEventPublisher(),
+          clock: { now: () => 1 },
+          idGenerator: { next: (prefix: string) => `${prefix}-1` },
+        })
+
+      /** A planner draft carrying the template phases in the given order (each with one item). */
+      const draftWith = (phaseIds: string[]) => ({
+        goal: 'g',
+        phases: phaseIds.map((id) => ({ id, title: `${id} title` })),
+        items: phaseIds.map((id) => ({ id: `i-${id}`, phaseId: id, title: id, description: '' })),
+        policy: { maxConcurrent: 2, defaultPipelineId: 'pl_full' },
+      })
+
+      it('reorders the planned phases into template order and persists them on the real store', async () => {
+        const repos = makeRepos()
+        const { ws, block, id } = ids()
+        await repos.initiatives.insert(
+          ws,
+          initiative({
+            id,
+            blockId: block,
+            slug: 'tpl-reorder',
+            presetId: PRESET_ID,
+            phases: [],
+            items: [],
+          }),
+        )
+
+        const out = await makeService(repos).ingestPlan(
+          ws,
+          block,
+          draftWith(['delivery', 'blast-zone', 'coverage']),
+        )
+        expect(out!.phases!.map((p) => p.id)).toEqual(['blast-zone', 'coverage', 'delivery'])
+
+        // Read back THROUGH the real repository — the reordered phases must survive the doc-blob
+        // round-trip byte-for-byte on both stores, and the plan lands `awaiting_approval`.
+        const persisted = await repos.initiatives.get(ws, id)
+        expect(persisted!.phases!.map((p) => p.id)).toEqual(['blast-zone', 'coverage', 'delivery'])
+        expect(persisted!.status).toBe('awaiting_approval')
+      })
+
+      it('rejects a plan missing a required template phase and writes nothing', async () => {
+        const repos = makeRepos()
+        const { ws, block, id } = ids()
+        await repos.initiatives.insert(
+          ws,
+          initiative({
+            id,
+            blockId: block,
+            slug: 'tpl-missing',
+            presetId: PRESET_ID,
+            phases: [],
+            items: [],
+          }),
+        )
+
+        await expect(
+          makeService(repos).ingestPlan(ws, block, draftWith(['blast-zone', 'delivery'])),
+        ).rejects.toThrow(/missing required phase/)
+
+        // A rejected ingest is a no-op: the entity is untouched (still planning, no phases persisted).
+        const persisted = await repos.initiatives.get(ws, id)
+        expect(persisted!.status).toBe('planning')
+        expect(persisted!.phases ?? []).toEqual([])
+      })
     })
 
     it("round-trips a block-level initiative + a task's initiativeId membership link", async () => {

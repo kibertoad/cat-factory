@@ -26,6 +26,7 @@ import {
   initiativeSlug,
   interviewAtCap,
   itemDependenciesMet,
+  normalizeDraftAgainstPhaseTemplate,
   phaseIsHalted,
   reconcileItem,
   seedPresetInterviewQa,
@@ -37,7 +38,10 @@ import type {
   InitiativeExecutionPolicy,
   InitiativeItem,
 } from '@cat-factory/kernel'
-import type { InitiativePresetDescriptor } from '@cat-factory/contracts'
+import type {
+  InitiativePresetDescriptor,
+  InitiativePresetPhaseTemplate,
+} from '@cat-factory/contracts'
 
 const block = (level: Block['level']): Block => ({
   id: 'blk-1',
@@ -161,6 +165,104 @@ describe('validatePlanDraft', () => {
         }),
       ),
     ).toThrowError(/cycle/)
+  })
+})
+
+describe('normalizeDraftAgainstPhaseTemplate (T2)', () => {
+  const template = (
+    over: Partial<InitiativePresetPhaseTemplate> = {},
+  ): InitiativePresetPhaseTemplate => ({
+    phases: [
+      { id: 'blast-zone', title: 'Blast zone', goal: 'Enumerate touchpoints.', required: true },
+      { id: 'coverage', title: 'Coverage', goal: '', required: true },
+      { id: 'delivery', title: 'Delivery', goal: '', required: true },
+    ],
+    allowAdditionalPhases: false,
+    ...over,
+  })
+
+  /** A draft carrying exactly the given phase ids (each with one item), in the given order. */
+  const withPhases = (ids: string[]): InitiativePlanDraft =>
+    draft({
+      phases: ids.map((id) => ({ id, title: `${id} title`, goal: '' })),
+      items: ids.map((id) => ({
+        id: `i-${id}`,
+        phaseId: id,
+        title: id,
+        description: '',
+        dependsOn: [],
+      })),
+    })
+
+  it('reorders matched phases into template order (planner emitted them out of order)', () => {
+    const out = normalizeDraftAgainstPhaseTemplate(
+      template(),
+      withPhases(['delivery', 'blast-zone', 'coverage']),
+    )
+    expect(out.phases.map((p) => p.id)).toEqual(['blast-zone', 'coverage', 'delivery'])
+    // Items are untouched — they reference phases by id, which the reorder does not change.
+    expect(out.items.map((i) => i.id)).toEqual(['i-delivery', 'i-blast-zone', 'i-coverage'])
+  })
+
+  it("preserves the planner's title/goal on matched phases (shape, not content)", () => {
+    const out = normalizeDraftAgainstPhaseTemplate(
+      template(),
+      withPhases(['blast-zone', 'coverage', 'delivery']),
+    )
+    expect(out.phases.find((p) => p.id === 'blast-zone')?.title).toBe('blast-zone title')
+    // The template's "Blast zone" title is NOT stamped over the planner's.
+    expect(out.phases.map((p) => p.title)).not.toContain('Blast zone')
+  })
+
+  it('appends extra phases after the template ones when allowAdditionalPhases is set', () => {
+    const out = normalizeDraftAgainstPhaseTemplate(
+      template({ allowAdditionalPhases: true }),
+      withPhases(['coverage', 'extra', 'blast-zone', 'delivery']),
+    )
+    // Template phases first (in template order), then extras in their original relative order.
+    expect(out.phases.map((p) => p.id)).toEqual(['blast-zone', 'coverage', 'delivery', 'extra'])
+  })
+
+  it('rejects an unknown extra phase when the template is exhaustive', () => {
+    expect(() =>
+      normalizeDraftAgainstPhaseTemplate(
+        template(),
+        withPhases(['blast-zone', 'coverage', 'delivery', 'rogue']),
+      ),
+    ).toThrowError(/not allowed by the preset's phase template.*rogue/)
+  })
+
+  it('treats an id-less phase as a disallowed extra under an exhaustive template', () => {
+    const d = withPhases(['blast-zone', 'coverage', 'delivery'])
+    d.phases.push({ title: 'Anonymous', goal: '' })
+    expect(() => normalizeDraftAgainstPhaseTemplate(template(), d)).toThrowError(
+      /not allowed by the preset's phase template.*Anonymous/,
+    )
+  })
+
+  it('rejects a plan missing a required phase', () => {
+    expect(() =>
+      normalizeDraftAgainstPhaseTemplate(template(), withPhases(['blast-zone', 'delivery'])),
+    ).toThrowError(/missing required phase.*coverage/)
+  })
+
+  it('allows omitting an OPTIONAL phase (required !== true)', () => {
+    const tpl = template({
+      phases: [
+        { id: 'blast-zone', title: 'Blast zone', goal: '', required: true },
+        { id: 'coverage', title: 'Coverage', goal: '', required: false },
+      ],
+    })
+    const out = normalizeDraftAgainstPhaseTemplate(tpl, withPhases(['blast-zone']))
+    expect(out.phases.map((p) => p.id)).toEqual(['blast-zone'])
+  })
+
+  it('is a byte-identical no-op for an already-ordered exhaustive draft (idempotency)', () => {
+    const inOrder = withPhases(['blast-zone', 'coverage', 'delivery'])
+    const out = normalizeDraftAgainstPhaseTemplate(template(), inOrder)
+    expect(out.phases).toEqual(inOrder.phases)
+    // Re-running over the output changes nothing.
+    expect(normalizeDraftAgainstPhaseTemplate(template(), out).phases).toEqual(out.phases)
   })
 })
 
