@@ -1835,6 +1835,62 @@ export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused', 'failed'])
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
+/**
+ * Per-run diagnostic context captured for AFTER-THE-FACT investigation of a run (esp. a
+ * failure) — the "where/what did this run actually execute on" facts that were previously
+ * spread across the DB (repo↔service↔installation joins), the harness transcript (model), or
+ * lost entirely (which backend a step ran on). Stamped by the engine at dispatch and refined
+ * on the first poll; it reflects the MOST RECENT container-step dispatch (the step most likely
+ * relevant to a failure), not a per-step history. Rides in the run's `detail` JSON (no dedicated
+ * column), like {@link ExecutionInstance.notes}/`frontendBindings`. Absent on legacy runs and on
+ * runs with no container step (pure inline/gate pipelines). NEVER carries a token or secret.
+ */
+export const runDiagnosticsSchema = v.object({
+  /** Context of the most recent container-step dispatch. */
+  lastDispatch: v.optional(
+    v.object({
+      /** Index of the dispatched step within the pipeline. */
+      stepIndex: v.number(),
+      /** The step's agent kind (`coder`, `merger`, a custom kind, …). */
+      agentKind: v.string(),
+      /** Resolved model ref `provider:model` (e.g. `anthropic:claude-opus-4-8`); null if unresolved. */
+      model: v.optional(v.nullable(v.string())),
+      /**
+       * Which runner backend the step actually ran on — the datum that distinguishes a native
+       * host-process run from a sandboxed container: `local-native` | `local-container` |
+       * `runner-pool` | `cloudflare-container`. Filled on the first poll (the transport reports
+       * it); absent until then or on an older runtime.
+       */
+      executionBackend: v.optional(v.string()),
+      /** The repo the step operated on. */
+      repo: v.optional(
+        v.object({
+          owner: v.string(),
+          name: v.string(),
+          /** The base branch the work branched from. */
+          baseBranch: v.optional(v.string()),
+          /** VCS provider (`github` | `gitlab`), resolved from the run's repo origin. */
+          provider: v.optional(v.string()),
+        }),
+      ),
+      /** Epoch ms the dispatch was recorded. */
+      at: v.number(),
+    }),
+  ),
+  /**
+   * The control-plane (orchestrator) host running the engine — NOT necessarily where the agent
+   * ran (a container step runs elsewhere; see `lastDispatch.executionBackend`). `platform` is the
+   * orchestrator's `process.platform` (e.g. `win32` pins a Windows local deployment — the class
+   * of host that surfaced the native-Windows git-auth break). Best-effort.
+   */
+  host: v.optional(
+    v.object({
+      platform: v.optional(v.string()),
+    }),
+  ),
+})
+export type RunDiagnostics = v.InferOutput<typeof runDiagnosticsSchema>
+
 export const executionInstanceSchema = v.object({
   id: v.string(),
   blockId: v.string(),
@@ -1912,6 +1968,12 @@ export const executionInstanceSchema = v.object({
    * event already advanced.
    */
   rev: v.optional(v.number()),
+  /**
+   * After-the-fact investigation context — where/what the run's most recent container step
+   * executed on (backend, model, repo) plus the control-plane host. Rides in the `detail` JSON
+   * (see {@link runDiagnosticsSchema}); absent on legacy runs and pure inline pipelines.
+   */
+  diagnostics: v.optional(runDiagnosticsSchema),
 })
 export type ExecutionInstance = v.InferOutput<typeof executionInstanceSchema>
 

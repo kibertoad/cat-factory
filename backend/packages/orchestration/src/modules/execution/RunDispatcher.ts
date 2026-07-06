@@ -471,6 +471,12 @@ export class RunDispatcher {
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search
+        // Stamp after-the-fact investigation diagnostics for this dispatch: the step's
+        // agent kind, resolved model, and repo — the facts a failure post-mortem needs but
+        // that are otherwise spread across DB joins / the harness transcript. The execution
+        // backend (native vs. container) is unknown until the transport reports it on the
+        // first poll, so `pollAgentJob` fills it in then.
+        this.recordDispatchDiagnostics(instance, context, handle)
         // The dispatch returned, so the container is up and the job is accepted; the
         // live phase + the container id/url arrive on the first poll.
         step.container = { status: 'up' }
@@ -492,6 +498,55 @@ export class RunDispatcher {
 
     const result = await this.runAgent(context, options)
     return this.recordStepResult(workspaceId, instance, step, isFinalStep, result)
+  }
+
+  /**
+   * Stamp the run's investigation diagnostics from a container dispatch (the `lastDispatch`
+   * block + the control-plane host). Mutates `instance` in place; the caller upserts. Reflects
+   * the MOST RECENT dispatch — a run's failure is almost always in its latest step, and keeping
+   * one block (not a per-step history) keeps the record small. `executionBackend` is left for the
+   * first poll to fill (the transport reports it). Never carries a token/secret.
+   */
+  private recordDispatchDiagnostics(
+    instance: ExecutionInstance,
+    context: AgentRunContext,
+    handle: AgentJobHandle,
+  ): void {
+    // Orchestration is runtime-neutral (no @types/node), so read `process.platform` off globalThis
+    // with a guard rather than the bare global — undefined on a runtime that doesn't expose it
+    // (e.g. workerd), which just omits the host block. Best-effort investigation context.
+    const platform = (globalThis as { process?: { platform?: string } }).process?.platform
+    instance.diagnostics = {
+      ...instance.diagnostics,
+      lastDispatch: {
+        stepIndex: instance.currentStep,
+        agentKind: context.agentKind,
+        ...(handle.model ? { model: handle.model } : {}),
+        ...(handle.repo ? { repo: handle.repo } : {}),
+        at: this.clock.now(),
+      },
+      ...(platform ? { host: { platform } } : {}),
+    }
+  }
+
+  /**
+   * Fill in `diagnostics.lastDispatch.executionBackend` from the transport-reported backend on
+   * the first poll that carries it (native host process vs. sandboxed container — the datum that
+   * is otherwise indistinguishable after the fact). Idempotent: a no-op once set, or when the
+   * update carries no backend / the dispatch block is missing. Returns whether it changed
+   * anything (so the caller can skip a redundant upsert).
+   */
+  private recordBackendDiagnostics(
+    instance: ExecutionInstance,
+    backend: string | undefined,
+  ): boolean {
+    const dispatch = instance.diagnostics?.lastDispatch
+    if (!backend || !dispatch || dispatch.executionBackend === backend) return false
+    instance.diagnostics = {
+      ...instance.diagnostics,
+      lastDispatch: { ...dispatch, executionBackend: backend },
+    }
+    return true
   }
 
   /**
@@ -621,6 +676,9 @@ export class RunDispatcher {
       // (clone / agent / push) and the container's id/url the transport surfaced.
       if (this.applyContainerRunning(step, update)) changed = true
       if (this.applySubtaskProgress(step, update.subtasks)) changed = true
+      // The transport reports WHICH backend served the job on the first poll (native host
+      // process vs. sandboxed container) — record it in the run diagnostics.
+      if (this.recordBackendDiagnostics(instance, update.backend)) changed = true
       // Append any forward-looking items the Coder streamed since the last poll so the
       // Follow-up companion lights up + accrues items LIVE while the container still runs.
       if (this.appendStreamedFollowUps(step, update.followUps)) changed = true
@@ -801,6 +859,10 @@ export class RunDispatcher {
       // older image (or a pool transport that doesn't forward the cause) reported none — the
       // same regex the bootstrap path uses, so a watchdog timeout still classifies as `timeout`
       // rather than a generic `agent`. The extended diagnostic surfaces as the failure detail.
+      // Preserve the transport-reported backend (a first-poll failure may never have hit the
+      // running branch that normally records it) so the failure diagnostics still name where it
+      // ran. Persisted by markContainerErrored's upsert below (failRun re-reads from storage).
+      this.recordBackendDiagnostics(instance, update.backend)
       // Mark the container errored and persist so the failed details show it (failRun
       // re-reads from storage, so an in-memory-only mutation would be lost; failRun emits
       // the terminal frame, so markContainerErrored deliberately doesn't).
@@ -811,6 +873,11 @@ export class RunDispatcher {
         failureKind:
           agentFailureKindFromCause(update.failureCause) ?? classifyAgentFailure(update.error),
         detail: update.detail ?? update.error,
+        // Preserve the harness's FINE-GRAINED cause (git / api / no-usable-output / no-changes)
+        // that `failureKind` collapses to the coarse `agent` — recorded on the failure's
+        // machine-readable `reason` so a post-mortem sees it was e.g. a `git` push failure, not
+        // a generic agent error, without regrepping the transcript.
+        ...(update.failureCause ? { reason: update.failureCause } : {}),
       }
     }
 

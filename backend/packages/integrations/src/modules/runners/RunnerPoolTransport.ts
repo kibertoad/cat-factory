@@ -32,6 +32,9 @@ import type {
 // the pool is BYO infra inside the workspace's trust domain.
 
 export class RunnerPoolTransport implements RunnerTransport {
+  /** Backend id recorded in run diagnostics (self-hosted runner pool). */
+  readonly backend = 'runner-pool'
+
   constructor(
     private readonly provider: RunnerPoolProvider,
     private readonly manifest: RunnerPoolManifest,
