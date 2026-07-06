@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { provisioningDetectionNoteSchema } from './environments.js'
+import { preflightRefSchema } from './preflights.js'
 import { urlString } from './primitives.js'
 import { recipeEnvFileSchema, recipeHealthGateSchema, recipeStepSchema } from './stack-recipes.js'
 
@@ -67,6 +68,15 @@ export const sharedStackSchema = v.object({
   managedNetworks: v.array(stackName),
   /** Ordered post-`up` setup steps (users sync, connector registration, seed import, …). */
   setupSteps: v.array(recipeStepSchema),
+  /**
+   * Machine-prerequisite checks re-run at the START of every bring-up (before clone / networks /
+   * `up`), so a shared stack's own mkcert-CA / hosts-entry / ECR-login (the acme-shared-services
+   * M-rows) fails fast with copy-paste remediation instead of a mystery deep inside a 40-image
+   * pull — the same {@link preflightRefSchema} vocabulary a consumer recipe declares. A failing
+   * REQUIRED check blocks the bring-up; a non-required one is advisory. Probes are host-bound
+   * (local facade); a stack that declares these on a deployment with no host daemon fails loudly.
+   */
+  prerequisites: v.array(preflightRefSchema),
   /** Terminal readiness gate; absent ⇒ `compose-healthy` (`up --wait` semantics). */
   healthGate: v.nullable(recipeHealthGateSchema),
   /**
@@ -94,6 +104,7 @@ export const createSharedStackSchema = v.object({
   envFiles: v.optional(v.array(recipeEnvFileSchema), []),
   managedNetworks: v.optional(v.array(stackName), []),
   setupSteps: v.optional(v.array(recipeStepSchema), []),
+  prerequisites: v.optional(v.array(preflightRefSchema), []),
   healthGate: v.optional(recipeHealthGateSchema),
   allowHostCommands: v.optional(v.boolean(), false),
 })
@@ -151,6 +162,7 @@ export const updateSharedStackSchema = v.object({
   envFiles: v.optional(v.array(recipeEnvFileSchema)),
   managedNetworks: v.optional(v.array(stackName)),
   setupSteps: v.optional(v.array(recipeStepSchema)),
+  prerequisites: v.optional(v.array(preflightRefSchema)),
   healthGate: v.optional(v.nullable(recipeHealthGateSchema)),
   allowHostCommands: v.optional(v.boolean()),
 })

@@ -2085,7 +2085,10 @@ function createMergePresetsModule(deps: CoreDependencies): MergePresetsModule | 
  * (ensureUp/teardown) refuses without a host daemon (the documented compose runtime-binding
  * exception). Persistence is fully runtime-symmetric.
  */
-function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | undefined {
+function createSharedStacksModule(
+  deps: CoreDependencies,
+  preflightService: PreflightService | undefined,
+): SharedStacksModule | undefined {
   const { sharedStackRepository } = deps
   if (!sharedStackRepository) return undefined
   const service = new SharedStackService({
@@ -2100,6 +2103,9 @@ function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | 
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
       : {}),
+    // Re-run a stack's declared machine-prerequisite checks at bring-up start. Present only where
+    // the host-probe seam is wired (the local facade — same runtime binding as `composeRuntime`).
+    ...(preflightService ? { runPreflights: (refs) => preflightService.run(refs) } : {}),
   })
   return { service }
 }
@@ -2447,15 +2453,17 @@ export function createCore(dependencies: CoreDependencies): Core {
         service: new ProvisioningLogService({ repository: dependencies.provisioningLogRepository }),
       }
     : undefined
+  // Built before the shared-stacks + environments modules so a compose stack recipe's
+  // `prerequisites` (and a shared stack's own prerequisites) are re-run at provision / bring-up
+  // start through this service. The host probes exist only on the local facade; absent ⇒ a recipe /
+  // stack that declares prerequisites fails loudly (the preflight API 503s too).
+  const preflight = createPreflightModule(dependencies)
   // Built before the environments module so a compose stack recipe's `sharedStackRefs` can be
   // brought up (provider-before-consumer) through this service during provisioning. Persistence is
   // runtime-symmetric (present on every facade); the lifecycle only runs where a host daemon is
-  // wired (`composeRuntime` — the local facade), else `ensureRefsUp` returns a clean error.
-  const sharedStacks = createSharedStacksModule(dependencies)
-  // Built before the environments module so a compose stack recipe's `prerequisites` are re-run at
-  // provision start through this service. The host probes exist only on the local facade; absent ⇒
-  // a recipe that declares prerequisites fails loudly (the preflight API 503s too).
-  const preflight = createPreflightModule(dependencies)
+  // wired (`composeRuntime` — the local facade), else `ensureRefsUp` returns a clean error. It gets
+  // the preflight service so a shared stack re-checks its own machine prerequisites at bring-up.
+  const sharedStacks = createSharedStacksModule(dependencies, preflight?.service)
   const environments = createEnvironmentsModule(
     dependencies,
     provisioningLogRecorder,

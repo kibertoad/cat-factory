@@ -10,6 +10,7 @@ import {
 } from '@cat-factory/server'
 import type { AgentRunRepository, WorkRunner } from '@cat-factory/kernel'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
+import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
 import {
   type LocalMachineTokenStore,
   createLocalMachineTokenStore,
@@ -61,8 +62,20 @@ export interface MothershipComposition {
    * local (the `node:sqlite` store), composed over the top of this registry by the facade.
    */
   repos: CoreRepositories
-  /** The local-sqlite credential store (kept on the laptop, sealed with the local key). */
+  /**
+   * The local-sqlite credential store (kept on the laptop, sealed with the local key). Beyond the
+   * direct-vendor API-key pool + local-model endpoints, it now also backs the subscription
+   * credentials the local container executor leases — `providerSubscriptionTokenRepository`,
+   * `personalSubscriptionRepository`, `subscriptionActivationRepository` — for the same reason
+   * (they never traverse the machine API to the mothership).
+   */
   credentialStore: LocalCredentialStore
+  /**
+   * The local-sqlite store for the local-mode operational settings singleton (warm-pool +
+   * checkout config for the local Docker runner). NOT org state — it configures the local
+   * facade's own differentiator — so it lives on the laptop, not the mothership.
+   */
+  localSettingsStore: LocalSettingsStore
   /** The durable local-sqlite execution work queue (the no-pg-boss durability substrate). */
   workQueue: SqliteWorkQueue
   /**
@@ -107,14 +120,19 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   const credentialStore = createLocalCredentialStore(
     localDbPath(env.LOCAL_MOTHERSHIP_CREDENTIAL_DB, 'credentials.sqlite'),
   )
+  const localSettingsStore = createLocalSettingsStore(
+    localDbPath(env.LOCAL_MOTHERSHIP_SETTINGS_DB, 'local-settings.sqlite'),
+  )
   const workQueue = createWorkQueue(localDbPath(env.LOCAL_MOTHERSHIP_WORK_DB, 'work-queue.sqlite'))
   return {
     repos,
     credentialStore,
+    localSettingsStore,
     workQueue,
     machineTokenStore,
     close: () => {
       credentialStore.close()
+      localSettingsStore.close()
       workQueue.close()
       machineTokenStore.close()
     },

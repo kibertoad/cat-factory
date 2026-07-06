@@ -1,4 +1,6 @@
 import type {
+  PreflightRef,
+  PreflightResult,
   SharedStack,
   SharedStackRepository,
   Workspace,
@@ -76,7 +78,10 @@ function makeRuntime(overrides: Partial<ComposeRuntime> = {}) {
 function makeService(
   repo: SharedStackRepository,
   runtime?: ComposeRuntime,
-  opts: { cloneToken?: string } = {},
+  opts: {
+    cloneToken?: string
+    runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
+  } = {},
 ): SharedStackService {
   let n = 0
   return new SharedStackService({
@@ -86,6 +91,7 @@ function makeService(
     clock: { now: () => 1_700_000_000_000 },
     ...(runtime ? { composeRuntime: runtime } : {}),
     ...(opts.cloneToken ? { cloneToken: opts.cloneToken } : {}),
+    ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
   })
 }
 
@@ -97,6 +103,7 @@ const baseInput = {
   envFiles: [] as { template: string; target: string }[],
   managedNetworks: [] as string[],
   setupSteps: [] as SharedStack['setupSteps'],
+  prerequisites: [] as PreflightRef[],
   allowHostCommands: false,
 }
 
@@ -238,6 +245,76 @@ describe('SharedStackService', () => {
     const result = await makeService(repo, runtime).ensureUp(WS, created.id)
     expect(result.status).toBe('failed')
     expect(result.lastError).toContain('host-command')
+  })
+
+  it('runs declared preflights BEFORE clone and fails fast on a blocking failure (no up)', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      prerequisites: [{ check: 'mkcert-ca' }],
+    })
+    const { runtime, calls, checkouts } = makeRuntime()
+    const runPreflights = vi.fn(
+      async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+        refs.map((r) => ({
+          check: r.check,
+          title: 'mkcert local CA installed',
+          status: 'fail',
+          required: true,
+          detail: 'CA not in trust store',
+          remediation: 'Run `mkcert -install`.',
+        })),
+    )
+    const result = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
+    expect(result.status).toBe('failed')
+    expect(result.lastError).toContain('Preflight check(s) failed')
+    expect(result.lastError).toContain('mkcert -install')
+    // The gate ran before any clone / compose work.
+    expect(runPreflights).toHaveBeenCalledOnce()
+    expect(checkouts).toHaveLength(0)
+    expect(calls.every((c) => !c.includes('up'))).toBe(true)
+  })
+
+  it('proceeds past a passing (and a non-required warn) preflight to running', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      prerequisites: [{ check: 'mkcert-ca' }, { check: 'registry-auth', required: false }],
+      healthGate: { kind: 'compose-exec', service: 'app', command: ['health'] },
+    })
+    const runPreflights = vi.fn(
+      async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+        refs.map((r) => ({
+          check: r.check,
+          title: r.check,
+          // A non-required check downgrades to an advisory `warn`, which must NOT block.
+          status: r.required === false ? 'warn' : 'pass',
+          required: r.required ?? true,
+        })),
+    )
+    const { runtime } = makeRuntime()
+    const up = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
+    expect(up.status).toBe('running')
+    expect(up.lastError).toBeNull()
+  })
+
+  it('fails loudly when a stack declares preflights but no host-probe runner is wired', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      prerequisites: [{ check: 'docker-daemon' }],
+    })
+    // Runtime present (so bring-up would otherwise proceed) but NO runPreflights seam.
+    const { runtime } = makeRuntime()
+    const result = await makeService(repo, runtime).ensureUp(WS, created.id)
+    expect(result.status).toBe('failed')
+    expect(result.lastError).toContain('preflight')
+  })
+
+  it('skips the preflight gate entirely when no prerequisites are declared', async () => {
+    const created = await makeService(repo).create(WS, baseInput) // prerequisites: []
+    const runPreflights = vi.fn(async (): Promise<PreflightResult[]> => [])
+    const { runtime } = makeRuntime()
+    const up = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
+    expect(up.status).toBe('running')
+    expect(runPreflights).not.toHaveBeenCalled()
   })
 
   it('ensureUp/teardown refuse without a Docker runtime', async () => {

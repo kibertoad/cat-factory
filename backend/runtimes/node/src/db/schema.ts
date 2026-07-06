@@ -1224,6 +1224,7 @@ export const sharedStacks = pgTable(
     env_files: text('env_files').notNull().default('[]'),
     managed_networks: text('managed_networks').notNull().default('[]'),
     setup_steps: text('setup_steps').notNull().default('[]'),
+    prerequisites: text('prerequisites').notNull().default('[]'),
     health_gate: text('health_gate'),
     allow_host_commands: integer('allow_host_commands').notNull().default(0),
     status: text('status').notNull().default('stopped'),

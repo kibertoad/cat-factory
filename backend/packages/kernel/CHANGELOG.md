@@ -1,5 +1,12 @@
 # @cat-factory/kernel
 
+## 0.101.2
+
+### Patch Changes
+
+- Updated dependencies [fdba1ea]
+  - @cat-factory/contracts@0.111.0
+
 ## 0.101.1
 
 ### Patch Changes

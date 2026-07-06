@@ -1,4 +1,5 @@
 import type {
+  PreflightRef,
   RecipeEnvFile,
   RecipeHealthGate,
   RecipeStep,
@@ -19,6 +20,7 @@ interface SharedStackRow {
   env_files: string
   managed_networks: string
   setup_steps: string
+  prerequisites: string
   health_gate: string | null
   allow_host_commands: number
   status: string
@@ -58,6 +60,7 @@ function rowToStack(row: SharedStackRow): SharedStack {
     envFiles: parseJsonArray<RecipeEnvFile>(row.env_files),
     managedNetworks: parseJsonArray<string>(row.managed_networks),
     setupSteps: parseJsonArray<RecipeStep>(row.setup_steps),
+    prerequisites: parseJsonArray<PreflightRef>(row.prerequisites),
     healthGate: parseHealthGate(row.health_gate),
     allowHostCommands: row.allow_host_commands === 1,
     status: row.status as SharedStackStatus,
@@ -102,9 +105,9 @@ export class D1SharedStackRepository implements SharedStackRepository {
       .prepare(
         `INSERT INTO shared_stacks
            (workspace_id, id, name, clone_url, git_ref, compose_files, compose_profiles,
-            env_files, managed_networks, setup_steps, health_gate, allow_host_commands,
-            status, last_error, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            env_files, managed_networks, setup_steps, prerequisites, health_gate,
+            allow_host_commands, status, last_error, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            clone_url = excluded.clone_url,
@@ -114,6 +117,7 @@ export class D1SharedStackRepository implements SharedStackRepository {
            env_files = excluded.env_files,
            managed_networks = excluded.managed_networks,
            setup_steps = excluded.setup_steps,
+           prerequisites = excluded.prerequisites,
            health_gate = excluded.health_gate,
            allow_host_commands = excluded.allow_host_commands,
            status = excluded.status,
@@ -131,6 +135,7 @@ export class D1SharedStackRepository implements SharedStackRepository {
         JSON.stringify(stack.envFiles),
         JSON.stringify(stack.managedNetworks),
         JSON.stringify(stack.setupSteps),
+        JSON.stringify(stack.prerequisites),
         stack.healthGate ? JSON.stringify(stack.healthGate) : null,
         stack.allowHostCommands ? 1 : 0,
         stack.status,
