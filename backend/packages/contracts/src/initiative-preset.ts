@@ -1,5 +1,8 @@
 import * as v from 'valibot'
 import {
+  INITIATIVE_ID_MAX,
+  INITIATIVE_SHORT_MAX,
+  INITIATIVE_TITLE_MAX,
   initiativeExecutionPolicySchema,
   initiativePresetInputsSchema,
   type InitiativePresetInputs,
@@ -103,6 +106,70 @@ export const initiativePresetPresentationSchema = v.object({
 })
 export type InitiativePresetPresentation = v.InferOutput<typeof initiativePresetPresentationSchema>
 
+// ---------------------------------------------------------------------------
+// Preset phase templates (a generic, declarative plan-shape capability).
+//
+// A preset MAY declare a fixed set of phases its plan must be built around — a
+// database migration always runs blast-zone → coverage → transition → delivery →
+// decommission, regardless of the specific from/to technologies. The template is pure
+// serialisable data on the wire descriptor (exactly like `policyDefaults`), which lets
+// the SPA preview "this preset runs these N phases" at create time with zero per-preset
+// frontend work. Deep per-phase methodology stays code-side in the registration's
+// `promptAdditions` (the off-the-wire rule) — the template carries only the short
+// ids/titles/goals the planner emits and the ingest normalizer enforces.
+//
+// Generic machinery consumes it: the planner prompt fold renders a "required plan shape"
+// section, and the ingest normalizer matches planned phases by id, reorders them into
+// template order, and rejects a missing `required` phase (or an unknown extra phase when
+// `allowAdditionalPhases` is false). `preset_generic` declares NO template, so it — and
+// the loop — never branch on a preset id and free-form planning is byte-for-byte unchanged.
+// ---------------------------------------------------------------------------
+
+/**
+ * One phase a preset's plan must be built around. `id`/`title`/`goal` reuse the exact clamps
+ * of the plan's own {@link initiativePhaseSchema} (so a template phase and a planned phase are
+ * byte-compatible and match by id at ingest); `goal` is the phase's charter — short prose shown
+ * on the tracker and folded into the planner prompt. `required` marks a phase the ingest
+ * normalizer refuses to drop (absent ⇒ an optional phase the planner may omit).
+ */
+export const initiativePresetTemplatePhaseSchema = v.object({
+  /** Stable phase id, matched VERBATIM against the planned phases at ingest. */
+  id: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX)),
+  /** Human phase title (backend-supplied English). */
+  title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(INITIATIVE_TITLE_MAX)),
+  /** The phase's charter — short prose shown on the tracker and fed to the planner. */
+  goal: v.optional(v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX)), ''),
+  /** Whether ingest must reject a plan missing this phase (absent ⇒ optional). */
+  required: v.optional(v.boolean()),
+})
+export type InitiativePresetTemplatePhase = v.InferOutput<
+  typeof initiativePresetTemplatePhaseSchema
+>
+
+/**
+ * A preset's declarative PLAN-SHAPE template: the phases the plan must present, in order. Phase
+ * ids must be unique (the ingest normalizer matches by id, so a duplicate would be ambiguous).
+ * `allowAdditionalPhases` (absent ⇒ false — the template is exhaustive) governs whether the
+ * planner may add phases beyond the template. Consumed generically (planner prompt fold + ingest
+ * normalization); a preset with no template plans free-form.
+ */
+export const initiativePresetPhaseTemplateSchema = v.object({
+  /** The template phases, in the order the plan must present them (at least one). */
+  phases: v.pipe(
+    v.array(initiativePresetTemplatePhaseSchema),
+    v.minLength(1),
+    v.check(
+      (phases) => new Set(phases.map((p) => p.id)).size === phases.length,
+      'Phase template ids must be unique.',
+    ),
+  ),
+  /** Whether the planner may add phases beyond the template (absent ⇒ false — exhaustive). */
+  allowAdditionalPhases: v.optional(v.boolean()),
+})
+export type InitiativePresetPhaseTemplate = v.InferOutput<
+  typeof initiativePresetPhaseTemplateSchema
+>
+
 /**
  * The serialisable, SPA-facing description of a preset: everything the create-initiative
  * modal needs to render the picker + form and start planning, attached to the workspace
@@ -125,6 +192,13 @@ export const initiativePresetDescriptorSchema = v.object({
   defaultFragmentIds: v.optional(v.array(v.string()), []),
   /** Partial execution-policy overrides folded in at plan ingest. */
   policyDefaults: v.optional(v.partial(initiativeExecutionPolicySchema)),
+  /**
+   * Optional declarative plan-shape template (see {@link initiativePresetPhaseTemplateSchema}).
+   * When present, the planner prompt fold renders a "required plan shape" section and the ingest
+   * normalizer enforces the shape (match by id, reorder into template order, reject a missing
+   * `required` / disallowed-extra phase). Absent ⇒ free-form planning (the generic preset).
+   */
+  phaseTemplate: v.optional(initiativePresetPhaseTemplateSchema),
   /**
    * Whether this preset supports a repo-detection PREFILL probe (a `detect` hook is wired on
    * the registration). Computed server-side when the snapshot is built (the `supportsTest`

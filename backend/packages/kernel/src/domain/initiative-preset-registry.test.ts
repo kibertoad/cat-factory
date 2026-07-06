@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   isPresetFieldVisible,
   isSafeRepoDirPath,
+  parseInitiativePresetDescriptor,
   validateInitiativePresetInputs,
   type InitiativePresetDescriptor,
   type InitiativePresetField,
@@ -84,6 +85,51 @@ describe('initiative preset registry', () => {
     const byId = new Map(initiativePresetDescriptors().map((d) => [d.id, d]))
     expect(byId.get('preset_probe')?.probe).toBe(true)
     expect(byId.get('preset_noprobe')?.probe).toBe(false)
+  })
+})
+
+describe('phaseTemplate on the descriptor', () => {
+  const withTemplate = (template: unknown): unknown => ({
+    ...descriptor({ id: 'preset_migration' }),
+    phaseTemplate: template,
+  })
+
+  it('parses a well-formed template, preserving id/title/order and defaulting goal to ""', () => {
+    const parsed = parseInitiativePresetDescriptor(
+      withTemplate({
+        phases: [
+          { id: 'blast-zone', title: 'Blast zone', goal: 'Enumerate touchpoints.', required: true },
+          { id: 'coverage', title: 'Coverage hardening', required: true },
+        ],
+        allowAdditionalPhases: false,
+      }),
+    )
+    expect(parsed.phaseTemplate?.phases.map((p) => p.id)).toEqual(['blast-zone', 'coverage'])
+    expect(parsed.phaseTemplate?.phases[0]?.goal).toBe('Enumerate touchpoints.')
+    // Omitted `goal` clamps to '' exactly like the plan's own phase schema.
+    expect(parsed.phaseTemplate?.phases[1]?.goal).toBe('')
+    expect(parsed.phaseTemplate?.allowAdditionalPhases).toBe(false)
+  })
+
+  it('treats an absent phaseTemplate as free-form (the generic preset)', () => {
+    expect(parseInitiativePresetDescriptor(descriptor()).phaseTemplate).toBeUndefined()
+  })
+
+  it('rejects duplicate phase ids (the ingest normalizer matches by id)', () => {
+    expect(() =>
+      parseInitiativePresetDescriptor(
+        withTemplate({
+          phases: [
+            { id: 'dup', title: 'One' },
+            { id: 'dup', title: 'Two' },
+          ],
+        }),
+      ),
+    ).toThrow()
+  })
+
+  it('rejects an empty phases array', () => {
+    expect(() => parseInitiativePresetDescriptor(withTemplate({ phases: [] }))).toThrow()
   })
 })
 
