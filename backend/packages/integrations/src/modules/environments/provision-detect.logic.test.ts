@@ -886,6 +886,20 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     expect(withConv.provisioning.composePath).toBe('stack.yml')
   })
 
+  it('a convention-added name that is NOT a compose file (no services:) is still not detected', async () => {
+    // A house name added via conventions is non-canonical, so — like the bare `dev.*` names — it is
+    // only trusted as a compose file when it actually declares `services:`. Here `stack.yml` is an
+    // unrelated app-config YAML (no `services:` map), so adding it as a convention must NOT make the
+    // detector mistake it for a compose file.
+    const reader = makeReader({ 'stack.yml': 'name: my-app\njobs:\n  - build\n' })
+    const rec = await detectKubernetesProvisioning(reader, {
+      prefer: 'docker-compose',
+      conventions: { composeFiles: ['stack.yml'] },
+    })
+    expect(rec.detected).toBe(false)
+    expect(rec.provisioning.type).toBe('infraless')
+  })
+
   it('a canonical compose name still wins over a convention-added extra', async () => {
     const reader = makeReader({
       'compose.yaml': 'services:\n  app:\n    image: nginx\n',

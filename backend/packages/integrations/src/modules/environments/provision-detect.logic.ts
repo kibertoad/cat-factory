@@ -123,6 +123,10 @@ const COMPOSE_FILES = [
 // it — so unlike the canonical `compose.*`/`docker-compose.*` names it is only accepted as a compose
 // file when it actually declares a `services:` map (an empty/absent one ⇒ it isn't a compose file).
 const AMBIGUOUS_COMPOSE_FILES = new Set(['dev.yaml', 'dev.yml'])
+// The built-in (canonical) compose names, as a Set for a cheap membership test. A convention-added
+// EXTRA name (not in here) is non-canonical, so — like the bare `dev.*` names — it is trusted as a
+// compose file only when it actually declares `services:` (see `findCompose`).
+const COMPOSE_FILE_SET = new Set(COMPOSE_FILES)
 // Directories (relative to the service root) a compose file commonly nests under, in addition to
 // the root itself. One `listDir` per entry (cheap membership test against COMPOSE_FILES).
 const COMPOSE_DIR_CANDIDATES = ['', 'deploy', 'docker', '.docker', 'compose']
@@ -739,9 +743,13 @@ async function findCompose(
       const doc = content ? parseOne(content) : null
       const servicesRecord = asRecord(doc?.services) ?? {}
       const services = Object.keys(servicesRecord)
-      // An ambiguous bare `dev.ya?ml` is only a compose file when it declares services; otherwise
-      // it's some other `dev.yml` (CLI/CI/Ansible config) and must not be detected as compose.
-      if (AMBIGUOUS_COMPOSE_FILES.has(candidate) && services.length === 0) continue
+      // An ambiguous bare `dev.ya?ml` — or ANY convention-added extra name, which is non-canonical
+      // by definition — is only a compose file when it declares services; otherwise it's some other
+      // YAML (CLI/CI/Ansible/app config) that merely matches the name and must not be detected as
+      // compose. Canonical `compose.*`/`docker-compose.*` names are trusted without this guard.
+      const requiresServices =
+        AMBIGUOUS_COMPOSE_FILES.has(candidate) || !COMPOSE_FILE_SET.has(candidate)
+      if (requiresServices && services.length === 0) continue
       // Single source of truth with the provider's build-mode rejection: any service with a
       // `build:` means the stack builds from source, so build mode is required to provision it.
       const hasBuild = Object.values(servicesRecord).some((s) => hasBuildDirective(s))

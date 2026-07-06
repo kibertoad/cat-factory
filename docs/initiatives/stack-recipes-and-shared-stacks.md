@@ -695,9 +695,13 @@ pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens
 
 The deterministic detector is already service-name- and tech-stack-agnostic (it keys on compose/k8s
 STRUCTURE, never on any `acme` name), but it was CONVENTION-bound (fixed file-name/dir lists) and
-shallow (root-scoped env-template scan). Three additive changes broaden it so a differently-shaped
-repo — different paths, different stack — is picked up without editing the detector. All are additive:
-a default-shaped repo resolves EXACTLY as before.
+shallow (root-scoped env-template scan). Three changes broaden it so a differently-shaped
+repo — different paths, different stack — is picked up without editing the detector. They are additive
+in that detection can only ever surface MORE — it never removes or changes an existing detection.
+Two of the three (injectable conventions, the wizard nudge) leave a default-shaped repo resolving
+exactly as before; the third (item 2 below) is on by default, so a monorepo that keeps per-service
+env templates under `services/*`/`apps/*`/`packages/*` will now surface them as low-confidence,
+user-confirmed `recipe.envFiles` where it previously surfaced none.
 
 1. **Injectable detection conventions (deployment config).** `DetectionConventions`
    (`provision-detect.logic.ts`) extends the built-in file-name/dir lists — `composeFiles` /

@@ -4,6 +4,7 @@ import type {
   LocalModeConfig,
   ModelOption,
 } from '@cat-factory/contracts'
+import type { DetectionConventions } from '@cat-factory/integrations'
 import type { DocumentSourceKind, HarnessKind, ModelRef } from '@cat-factory/kernel'
 import type { SpendPricing } from '@cat-factory/spend'
 
@@ -212,20 +213,12 @@ export interface EnvironmentsConfig {
    * Deployment-level, ADDITIVE extensions to the built-in provisioning-DETECTION conventions, for
    * an org whose repos follow house conventions the defaults don't name. Every field appends to the
    * built-in list (the built-ins always win / stay highest-priority), so it can only make detection
-   * find MORE, never change what a default-shaped repo resolves to. Threaded into the detectors via
-   * `CoreDependencies.detectionConventions`. Structurally mirrors integrations' `DetectionConventions`
-   * (kept inline so the config layer takes no dependency on the service layer). Absent ⇒ built-in.
+   * find MORE, never remove or change an existing detection. Threaded into the detectors via
+   * `CoreDependencies.detectionConventions`. This is the SAME `DetectionConventions` the detectors
+   * consume (imported from `@cat-factory/integrations`, an existing dependency of this package), so
+   * the two can't drift. Absent ⇒ built-in.
    */
-  detectionConventions?: {
-    /** Extra compose file base names, appended after the canonical set (lowest priority). */
-    composeFiles?: string[]
-    /** Extra directories (repo-relative) to search for a compose file. */
-    composeDirs?: string[]
-    /** Extra directories a SQL seed dump may live under. */
-    seedDirs?: string[]
-    /** Extra directories an env/config template may sit in. */
-    envTemplateDirs?: string[]
-  }
+  detectionConventions?: DetectionConventions
 }
 
 export interface RunnerPoolConfig {

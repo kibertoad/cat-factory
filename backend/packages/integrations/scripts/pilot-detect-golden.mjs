@@ -20,8 +20,10 @@
 // them to the fixtures' placeholders BEFORE comparing — either PILOT_SANITIZE_MAP (a JSON
 // array of {"from","to"}) or a gitignored `scripts/pilot-sanitize.local.json` of the same
 // shape. Keeping the map out of the repo is deliberate: no upstream name is committed here.
-// `--write` REFUSES to run against a live clone with no map (exit 2), so a golden refresh can
-// never accidentally bake upstream names into the committed files.
+// `--write` NEVER reads a live clone — it always regenerates from the committed (already-sanitized)
+// fixtures, so a golden refresh can never bake an upstream name (or one a partial map missed) into
+// the committed files. Live clones are used only by `--check`. To reflect an upstream change, update
+// the sanitized fixtures first, then `--write` from them.
 //
 // Usage:
 //   node scripts/pilot-detect-golden.mjs            # --check (default): diff, exit 1 on drift
@@ -108,25 +110,28 @@ const targets = [
   },
 ]
 
-// Refuse to REGENERATE goldens from a live clone with no sanitize map: that would write raw
-// upstream names into the committed goldens, defeating "no upstream name is committed here".
-// (The --check path only warns; --write is the committing action, so it hard-fails instead.)
-if (mode === 'write' && sanitizeMap.length === 0) {
-  const liveTargets = targets.filter((t) => process.env[t.liveEnv])
-  if (liveTargets.length > 0) {
+// `--write` regenerates the committed goldens ONLY from the sanitized FIXTURES, never from a live
+// clone. The goldens are DEFINED as the detector's output over the committed fixtures (so anyone can
+// reproduce them without the upstream clone), and sourcing a WRITE from a live clone risks baking an
+// un- or under-sanitized upstream name into a committed file — a partial sanitize map would silently
+// leak the names it doesn't cover. Live clones are used EXCLUSIVELY by `--check` (the drift alarm).
+// So on --write we ignore the live env vars entirely; to pick up an upstream change, update the
+// sanitized fixtures first (the deliberate, reviewable step), then --write from them.
+if (mode === 'write') {
+  const liveSet = targets.filter((t) => process.env[t.liveEnv]).map((t) => t.liveEnv)
+  if (liveSet.length > 0) {
     console.error(
-      `Refusing to --write goldens from a LIVE clone (${liveTargets.map((t) => t.liveEnv).join(', ')}) ` +
-        'with no sanitize map — this would commit unsanitized upstream names. Set PILOT_SANITIZE_MAP ' +
-        'or scripts/pilot-sanitize.local.json first, or regenerate from the committed fixtures ' +
-        '(unset the live env var(s)).',
+      `Note: --write regenerates goldens from the committed FIXTURES only; ignoring the live clone ` +
+        `env var(s) ${liveSet.join(', ')} (those are used by --check). To reflect an upstream change, ` +
+        'update the sanitized fixtures first, then --write.',
     )
-    process.exit(2)
   }
 }
 
 let drift = 0
 for (const target of targets) {
-  const liveDir = process.env[target.liveEnv]
+  // --write is fixtures-only (see above); only --check may read a live clone.
+  const liveDir = mode === 'check' ? process.env[target.liveEnv] : undefined
   const source = liveDir ? `live:${liveDir}` : 'fixtures'
   const dir = liveDir || join(FIX, target.name)
   const result = await target.detect(fsReader(dir))
@@ -140,7 +145,15 @@ for (const target of targets) {
     console.log(`wrote  ${target.golden}  (source: ${source})`)
     continue
   }
-  const golden = existsSync(goldenPath) ? JSON.parse(readFileSync(goldenPath, 'utf-8')) : null
+  // A corrupt / hand-edited golden reads as drift (something to regenerate), not a script crash.
+  let golden = null
+  if (existsSync(goldenPath)) {
+    try {
+      golden = JSON.parse(readFileSync(goldenPath, 'utf-8'))
+    } catch {
+      golden = null
+    }
+  }
   if (isDeepStrictEqual(sanitized, golden)) {
     console.log(`ok     ${target.golden}  (source: ${source})`)
   } else {
