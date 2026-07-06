@@ -2,6 +2,8 @@ import type {
   Clock,
   CreateSharedStackInput,
   IdGenerator,
+  PreflightRef,
+  PreflightResult,
   RecipeStepRecorder,
   SharedStack,
   SharedStackEnsureResult,
@@ -23,6 +25,7 @@ import {
   DEFAULT_RECIPE_HEALTH_GATE,
   tailOutput,
 } from '../compose/compose-environment.logic.js'
+import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import { runHealthGate, runRecipeStep } from '../compose/recipe-runner.js'
 
 export interface SharedStackServiceDependencies {
@@ -44,6 +47,15 @@ export interface SharedStackServiceDependencies {
    * Absent ⇒ the clone runs unauthenticated (public repos only), exactly as before.
    */
   cloneToken?: string
+  /**
+   * Optional host-bound preflight runner: given the stack's declared `prerequisites`, returns one
+   * verdict per check. Wired ONLY where the host-probe seam exists (the local facade — the same
+   * runtime binding as {@link composeRuntime}); it is the integrations `PreflightService.run` seam.
+   * When a stack declares `prerequisites` but this is ABSENT (no host daemon), the bring-up fails
+   * loudly rather than silently skipping a declared machine-prerequisite gate — mirroring the
+   * compose provider's `runPreflights` seam. Absent + no declared prerequisites ⇒ a no-op.
+   */
+  runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
   /**
    * Optional per-step provisioning-log recorder factory: given a stack, returns a recorder the
    * bring-up streams per-step verdicts through (clone, network, env-file, up, each setup step,
@@ -78,6 +90,9 @@ export class SharedStackService {
   private readonly clock: Clock
   private readonly runtime: ComposeRuntime | undefined
   private readonly cloneToken: string | undefined
+  private readonly runPreflightChecks:
+    | ((refs: PreflightRef[]) => Promise<PreflightResult[]>)
+    | undefined
   private readonly provisioningLog: ((stack: SharedStack) => RecipeStepRecorder) | undefined
   // Coalesce concurrent `ensureUp` for the same stack onto one in-flight bring-up (a second caller
   // must not start a duplicate `up` / re-run non-idempotent setup steps).
@@ -90,6 +105,7 @@ export class SharedStackService {
     this.clock = deps.clock
     this.runtime = deps.composeRuntime
     this.cloneToken = deps.cloneToken
+    this.runPreflightChecks = deps.runPreflights
     this.provisioningLog = deps.provisioningLog
   }
 
@@ -120,6 +136,7 @@ export class SharedStackService {
       envFiles: input.envFiles,
       managedNetworks: input.managedNetworks,
       setupSteps: input.setupSteps,
+      prerequisites: input.prerequisites,
       healthGate: input.healthGate ?? null,
       allowHostCommands: input.allowHostCommands,
       status: 'stopped',
@@ -152,6 +169,7 @@ export class SharedStackService {
       ...(patch.envFiles !== undefined ? { envFiles: patch.envFiles } : {}),
       ...(patch.managedNetworks !== undefined ? { managedNetworks: patch.managedNetworks } : {}),
       ...(patch.setupSteps !== undefined ? { setupSteps: patch.setupSteps } : {}),
+      ...(patch.prerequisites !== undefined ? { prerequisites: patch.prerequisites } : {}),
       ...(patch.healthGate !== undefined ? { healthGate: patch.healthGate } : {}),
       ...(patch.allowHostCommands !== undefined
         ? { allowHostCommands: patch.allowHostCommands }
@@ -310,6 +328,14 @@ export class SharedStackService {
     await this.persist(workspaceId, stack, { status: 'starting', lastError: null })
     const project = this.projectName(stack)
 
+    // Machine-prerequisite checks FIRST — before the clone / networks / `up` — so a stale ECR
+    // token / missing mkcert CA / missing hosts entry fails fast with copy-paste remediation
+    // instead of a mystery deep inside a 40-image pull.
+    const preflightIssue = await this.runPreflights(stack, record)
+    if (preflightIssue) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: preflightIssue })
+    }
+
     if (!runtime.checkout || !runtime.copyCheckoutFile) {
       return this.persist(workspaceId, stack, {
         status: 'failed',
@@ -428,6 +454,37 @@ export class SharedStackService {
     }
 
     return this.persist(workspaceId, stack, { status: 'running', lastError: null })
+  }
+
+  /**
+   * Re-run the stack's declared machine-prerequisite checks (`prerequisites`) at bring-up start,
+   * streaming one provisioning-log step per check, and return a blocking message when any REQUIRED
+   * check fails (with its detail + remediation) — else null. No declared prerequisites ⇒ a no-op. A
+   * stack that DECLARES prerequisites on a deployment where the host-probe runtime isn't wired
+   * (`runPreflightChecks` absent — no host daemon) fails loudly rather than silently skipping a
+   * declared safety gate, mirroring the compose provider's `runPreflights` seam.
+   */
+  private async runPreflights(
+    stack: SharedStack,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    const refs = stack.prerequisites
+    if (refs.length === 0) return null
+    if (!this.runPreflightChecks) {
+      return 'This shared stack declares preflight prerequisite check(s), but preflight checks are not available on this deployment (they need a host Docker daemon).'
+    }
+    const started = this.clock.now()
+    const results = await this.runPreflightChecks(refs)
+    // Stream each check as its own provisioning-log entry (a `warn` is advisory — a success note).
+    for (const r of results) {
+      await this.logStep(record, `preflight: ${r.title}`, started, {
+        ok: r.status !== 'fail',
+        ...(r.detail ? { detail: r.status === 'warn' ? `warn: ${r.detail}` : r.detail } : {}),
+        ...(r.status === 'fail' ? { error: r.detail ?? 'failed' } : {}),
+      })
+    }
+    const blocking = preflightBlockingFailures(results)
+    return blocking.length > 0 ? formatPreflightFailure(blocking) : null
   }
 
   /**

@@ -30,6 +30,16 @@ function stack(
       },
       { kind: 'wait-http', name: 'debezium up', url: 'http://localhost:8083/connectors' },
     ],
+    prerequisites: [
+      { check: 'mkcert-ca' },
+      {
+        check: 'registry-auth',
+        params: { registry: '053497547689.dkr.ecr.eu-central-1.amazonaws.com' },
+        required: false,
+        remediation: 'Refresh the ECR token: `aws ecr get-login-password …`.',
+        label: 'ECR login',
+      },
+    ],
     healthGate: { kind: 'http', url: 'https://acme.local/health' },
     allowHostCommands: false,
     status: 'stopped',
@@ -76,6 +86,7 @@ export function defineSharedStackSuite(name: string, makeRepo: () => SharedStack
         envFiles: [],
         managedNetworks: [],
         setupSteps: [],
+        prerequisites: [],
         healthGate: null,
         allowHostCommands: true,
       })

@@ -302,10 +302,27 @@ provisioning log instead of a mid-provision mystery.
 >
 > - `tcp-reachable` deliberately bypass the SSRF allow-list (they probe VPN-only LAN hosts on the
 >   operator's trusted local machine, exactly what an allow-list would block — same posture as the
->   `wait-http` recipe step). (5) **SharedStack preflights are NOT wired** — a `SharedStack` reuses the
->   recipe vocabulary but carries no `prerequisites` column (that needs a D1⇄Drizzle migration); a
->   shared stack's own bring-up already surfaces per-step failures, and its mkcert/hosts/ECR M-rows are a
->   clean follow-up (add `prerequisites` to `sharedStackSchema` + enforce in `SharedStackService.bringUp`).
+>   `wait-http` recipe step). (5) ~~**SharedStack preflights are NOT wired**~~ **— LANDED (slice-6
+>   follow-up, see below).**
+>
+> **Landed (slice-6 follow-up — SharedStack preflights).** A `SharedStack` now carries a
+> `prerequisites: PreflightRef[]` (`sharedStackSchema` + the create/update bodies), and
+> `SharedStackService.bringUp` re-runs them FIRST — before the clone / managed-network / `up` work —
+> through an injected `runPreflights` seam, streaming one provisioning-log step per check and failing
+> fast (persisting `failed` + a `formatPreflightFailure` `lastError`) when a REQUIRED check is red; a
+> non-required check downgrades to an advisory `warn`. Wired in `createSharedStacksModule` from the
+> preflight module's `PreflightService.run` (reordered so `preflight` builds before `sharedStacks`),
+> so it is present only where the host-probe seam is (the local facade — same runtime binding as
+> `composeRuntime`); a stack that DECLARES prerequisites on a deployment with no host daemon fails
+> loudly rather than silently skipping the gate (mirroring the compose provider's `runPreflights`).
+> Persistence is fully symmetric: a new `prerequisites` text-JSON column mirrored D1
+> (`0042_shared_stacks_prerequisites.sql`) ⇄ Drizzle (a generated migration), with the cross-runtime
+> `defineSharedStackSuite` round-trip extended to assert the column on both stores. No data migration
+> (pre-1.0; existing rows default to `[]`). The simplified `SharedStacksPanel.vue` form does NOT edit
+> `prerequisites` yet — consistent with how it already omits `setupSteps`/`envFiles`/`healthGate`
+> (those ride the API / a future richer editor); the field defaults to `[]` on create and is
+> preserved by the partial update. This closes the acme-shared-services mkcert/hosts/ECR **M-rows** for
+> the shared stack itself, not just per-PR consumer recipes.
 
 ### 4. Recipe execution engine (compose provider path)
 
