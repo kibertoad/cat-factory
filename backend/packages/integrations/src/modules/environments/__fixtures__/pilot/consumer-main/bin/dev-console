@@ -5,4 +5,4 @@
 # which translates such a CLI's setup order into declarative recipe steps. The real CLI's
 # ordering (composer install -> seed -> migrate -> index build -> health loop) is captured
 # as the reference recipe in ../../reference/consumer-recipe.json.
-echo "acme-main dev console (fixture stub)"
+echo "acme-monolith dev console (fixture stub)"

@@ -95,7 +95,7 @@ describe('pilot golden detection', () => {
       prefer: 'docker-compose',
     })
     expect(rec.provisioning.type).toBe('docker-compose')
-    // Builds its images from source (acme-main-nginx has a `build:`) ⇒ build-from-source mode.
+    // Builds its images from source (acme-monolith-nginx has a `build:`) ⇒ build-from-source mode.
     expect(rec.provisioning.composeBuild).toBe(true)
     // Attaches to the shared stack's network ⇒ the shared-stack nudge.
     expect(rec.provisioning.recipe?.externalNetworks).toEqual(['acme-net'])

@@ -751,10 +751,10 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     expect(rec.repoCliHint).toEqual({ path: 'Makefile', kind: 'makefile' })
   })
 
-  // The pilot acceptance fixture: a acme-main-shaped complex compose repo (sanitized) exercising
+  // The pilot acceptance fixture: a acme-monolith-shaped complex compose repo (sanitized) exercising
   // every slice-2 extension at once — layered OS overrides, an external network, profiles, env-file
   // templates, a nested seed dump, and the repo's own imperative CLI.
-  it('detects the full acme-main-shaped stack recipe end to end', async () => {
+  it('detects the full acme-monolith-shaped stack recipe end to end', async () => {
     const reader = makeReader({
       'docker/dev.yml':
         'services:\n' +

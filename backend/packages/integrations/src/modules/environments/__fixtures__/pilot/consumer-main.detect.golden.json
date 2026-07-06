@@ -72,7 +72,7 @@
     },
     {
       "composePath": "docker/dev.yml",
-      "service": "acme-main-nginx",
+      "service": "acme-monolith-nginx",
       "recommended": false
     },
     {

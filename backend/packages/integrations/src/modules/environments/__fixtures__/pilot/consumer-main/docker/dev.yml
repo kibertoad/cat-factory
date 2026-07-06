@@ -1,4 +1,4 @@
-# Sanitized fixture — a faithful snapshot of the acme-main pilot's `docker/dev.yml`,
+# Sanitized fixture — a faithful snapshot of the acme-monolith pilot's `docker/dev.yml`,
 # REDUCED to the fields the provisioning detector reads: the `services:` keys (in the
 # repo's real declaration order), the external network it attaches to, the declared
 # `profiles:`, and the one `build:` service. Real image names, env blocks, volumes,
@@ -43,7 +43,7 @@ services:
   daemon-dev-events:
     image: acme/app:dev
     networks: [acme-net]
-  acme-main-nginx:
+  acme-monolith-nginx:
     build:
       context: ..
       dockerfile: docker/nginx/Dockerfile

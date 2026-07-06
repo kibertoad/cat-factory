@@ -6,7 +6,7 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: acme-main
+  name: acme-monolith
 spec:
   type: service
   lifecycle: production

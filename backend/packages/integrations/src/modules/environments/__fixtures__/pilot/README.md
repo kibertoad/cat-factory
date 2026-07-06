@@ -58,7 +58,7 @@ It requires a build first (`pnpm --filter @cat-factory/integrations build`).
   or a gitignored `scripts/pilot-sanitize.local.json` (never committed — it names the real
   repo). Drift here means the upstream repo's shape changed; update the fixtures to match.
   ```
-  ACME_MAIN_DIR=/path/to/consumer \
+  ACME_MONOLITH_DIR=/path/to/consumer \
   ACME_SHARED_SERVICES_DIR=/path/to/shared \
   PILOT_SANITIZE_MAP='[{"from":"<upstream>","to":"acme"}]' \
   node scripts/pilot-detect-golden.mjs --check

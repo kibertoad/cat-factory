@@ -3,4 +3,4 @@
 # (only its filename matters); a minimal stanza keeps it a valid compose override.
 services:
   app: {}
-  acme-main-nginx: {}
+  acme-monolith-nginx: {}

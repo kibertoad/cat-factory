@@ -90,7 +90,7 @@ const COMPOSE_FILES = [
   'docker-compose.prod.yml',
   'docker-compose.dev.yaml',
   'docker-compose.dev.yml',
-  // A bare `dev.yml` base (the acme-main `docker/dev.yml` shape) — lowest priority so a
+  // A bare `dev.yml` base (the acme-monolith `docker/dev.yml` shape) — lowest priority so a
   // canonical name still wins, but recognized so a complex multi-file compose repo is detected
   // (its OS overrides `dev.<os>.override.yml` become recipe compose-file candidates).
   'dev.yaml',
@@ -1108,7 +1108,7 @@ async function detectRepoCliHint(
 
 /**
  * Build the `docker-compose` recommendation. Beyond the base `composePath` + build-mode detection,
- * this reads the STACK RECIPE a complex compose repo implies (the acme-main pilot): multi-`-f`
+ * this reads the STACK RECIPE a complex compose repo implies (the acme-monolith pilot): multi-`-f`
  * layering, external networks, env-file materialization → `recipe`; profiles + seed dumps →
  * candidate arrays the wizard confirms; a repo-CLI hint → the analyst nudge. When NONE of those are
  * present the output is exactly the simple single-file recommendation (no `recipe`, no extra notes).

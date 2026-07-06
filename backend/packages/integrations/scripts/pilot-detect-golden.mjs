@@ -9,7 +9,7 @@
 // `src/modules/environments/__fixtures__/pilot/`.
 //
 // Two sources per target, in priority order:
-//   1. A LIVE clone, when its env var is set (ACME_MAIN_DIR / ACME_SHARED_SERVICES_DIR)
+//   1. A LIVE clone, when its env var is set (ACME_MONOLITH_DIR / ACME_SHARED_SERVICES_DIR)
 //      — the upstream-drift alarm: run `--check` after pulling the pilot repos to catch a
 //      structural change (a new service, a renamed override, a moved seed dir).
 //   2. The committed, sanitized FIXTURES (the default) — regenerate the goldens after a
@@ -26,7 +26,7 @@
 // Usage:
 //   node scripts/pilot-detect-golden.mjs            # --check (default): diff, exit 1 on drift
 //   node scripts/pilot-detect-golden.mjs --write     # regenerate the committed goldens
-//   ACME_MAIN_DIR=/path/to/consumer node scripts/pilot-detect-golden.mjs --check
+//   ACME_MONOLITH_DIR=/path/to/consumer node scripts/pilot-detect-golden.mjs --check
 //
 // Exit codes: 0 = up to date, 1 = drift detected (--check), 2 = usage / not built.
 // Requires a build first (imports the compiled detector): `pnpm build`.
@@ -97,7 +97,7 @@ const targets = [
   {
     name: 'consumer-main',
     golden: 'consumer-main.detect.golden.json',
-    liveEnv: 'ACME_MAIN_DIR',
+    liveEnv: 'ACME_MONOLITH_DIR',
     detect: (reader) => detectKubernetesProvisioning(reader, { prefer: 'docker-compose' }),
   },
   {
