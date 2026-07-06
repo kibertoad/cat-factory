@@ -43,6 +43,16 @@ export const CONFLICT_REASONS = [
   // playwright step with no enabled `deployer` before it, so nothing would provision the env it
   // needs — the run would dead-end inside the consumer. The Deployer is the single provisioner.
   'deployer_required_before_tester',
+  // A pipeline INCLUDES an enabled `deployer` step, but the SERVICE's ephemeral-environment
+  // provisioning config (the in-repo "what/where") is incomplete for its declared type — e.g. a
+  // `kubernetes` service with no manifest source, a `docker-compose` one with no compose path, a
+  // `custom` one with no manifest id. The SPA steers the user to the service's environment config.
+  'deployer_service_provisioning_incomplete',
+  // A pipeline INCLUDES an enabled `deployer` step and the config is structurally complete, but the
+  // live connection probe of the resolved deployment integration (the workspace handler) failed —
+  // an unreachable endpoint / apiserver, a revoked token. The SPA steers the user to fix + re-test
+  // the infrastructure handler. (A MISSING handler is `provision_type_unhandled`, not this.)
+  'deployer_connection_test_failed',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

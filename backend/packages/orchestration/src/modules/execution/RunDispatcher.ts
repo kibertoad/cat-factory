@@ -1454,7 +1454,16 @@ export class RunDispatcher {
     const composeEnv =
       provisionType === 'docker-compose' &&
       next.provisioning !== undefined &&
-      ((await this.environmentProvisioning?.canProvision(workspaceId, next.provisioning))?.ok ??
+      // Thread the run initiator so a local per-user handler OVERRIDE resolves exactly as it does at
+      // provision time (and in the start-time gate) — else an override-only compose setup that
+      // passed `assertDeployerConfigured` would silently no-op here (the very dead-end the gate closes).
+      ((
+        await this.environmentProvisioning?.canProvision(
+          workspaceId,
+          next.provisioning,
+          instance.initiatedBy,
+        )
+      )?.ok ??
         false)
     const legacyEnv =
       provisionType === undefined &&
