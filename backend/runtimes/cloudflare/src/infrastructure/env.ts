@@ -394,6 +394,12 @@ export interface Env {
   ENVIRONMENTS_ALLOW_URL_HOSTS?: string
   /** `true` to permit `http` (not just `https`) for trusted env/provider URLs. */
   ENVIRONMENTS_ALLOW_HTTP_URLS?: string
+  /**
+   * ADDITIVE house-convention extensions to provisioning detection — a JSON object with any of
+   * `composeFiles` / `composeDirs` / `seedDirs` / `envTemplateDirs` string arrays. Only broadens
+   * what detection recognises (built-ins always win); malformed/unset ⇒ built-in behaviour.
+   */
+  ENVIRONMENTS_DETECTION_CONVENTIONS?: string
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) -----------
   /**

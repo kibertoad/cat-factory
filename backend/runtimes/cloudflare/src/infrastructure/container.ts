@@ -1854,6 +1854,10 @@ function selectEnvironmentsDeps(
     }),
     environmentCustomTlsSupported: false,
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
+    // Deployment-level, additive extensions to the built-in provisioning-detection conventions.
+    ...(config.environments.detectionConventions
+      ? { detectionConventions: config.environments.detectionConventions }
+      : {}),
   }
 }
 

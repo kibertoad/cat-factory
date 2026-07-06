@@ -71,8 +71,11 @@ It requires a build first (`pnpm --filter @cat-factory/integrations build`).
   recommendation carries a low-confidence "Kubernetes manifests also exist" note. That is an
   incidental artifact of the real repo shape, reproduced on purpose; if the detector later
   stops treating a Backstage catalog as a manifest, the golden test flags it (correct drift).
-- **Env templates outside the compose dir aren't detected at repo scope.** The real consumer
-  keeps its `*-dist` templates under `services/app/`, which the root-scoped detector doesn't
-  scan — so the consumer golden has no `envFiles`, and the `reference/consumer-recipe.json`
-  supplies them by hand. That gap is exactly what the setup wizard's directory scoping and the
-  environment analyst (slices 7–8) exist to close.
+- **Env templates one level into monorepo service dirs ARE detected.** The real consumer keeps its
+  `*-dist` templates under `services/app/` (outside the compose dir). The detector scans the compose
+  dir + the root config dirs AND one level into the monorepo container dirs (`services/*`, `apps/*`,
+  `packages/*`), so those templates are surfaced — the consumer golden carries `recipe.envFiles` for
+  `services/app/.env.dev.local-dist` + `.split.yaml.dist`. A template nested deeper than one level, or
+  under a non-standard container dir, still isn't seen by the deterministic scan — set
+  `ENVIRONMENTS_DETECTION_CONVENTIONS.envTemplateDirs` (deployment config) or lean on the environment
+  analyst for those.

@@ -5,8 +5,22 @@
     "composePath": "docker/dev.yml",
     "composeBuild": true,
     "recipe": {
-      "composeFiles": ["docker/dev.yml"],
-      "externalNetworks": ["acme-net"]
+      "composeFiles": [
+        "docker/dev.yml"
+      ],
+      "externalNetworks": [
+        "acme-net"
+      ],
+      "envFiles": [
+        {
+          "template": "services/app/.env.dev.local-dist",
+          "target": "services/app/.env.dev.local"
+        },
+        {
+          "template": "services/app/.split.yaml.dist",
+          "target": "services/app/.split.yaml"
+        }
+      ]
     }
   },
   "composeServiceCandidates": [
@@ -235,6 +249,11 @@
       "field": "sharedStackRefs",
       "confidence": "low",
       "message": "Bind the external network(s) (acme-net) to a shared stack so it is brought up first, or create them on the host manually."
+    },
+    {
+      "field": "envFiles",
+      "confidence": "low",
+      "message": "Found 2 env/config template(s) to materialize before up: services/app/.env.dev.local-dist → services/app/.env.dev.local, services/app/.split.yaml.dist → services/app/.split.yaml. Confirm each pair."
     },
     {
       "field": "composeProfiles",

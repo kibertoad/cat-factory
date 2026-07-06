@@ -4401,7 +4401,8 @@
       "run": "Uruchom analizę",
       "unavailable": "Analiza pogłębiona wymaga powiązanego repozytorium i potoku analizy.",
       "failed": "Uruchomienie analizy nie powiodło się.",
-      "apply": "Zastosuj szkic analityka"
+      "apply": "Zastosuj szkic analityka",
+      "cliNudge": "To repozytorium ma własne CLI konfiguracyjne lub plik Makefile ({path}), którego deterministyczne skanowanie nie potrafi odczytać. Uruchom analizę pogłębioną, aby przełożyć je na kroki przepisu."
     },
     "field": {
       "composeFiles": "Pliki Compose",

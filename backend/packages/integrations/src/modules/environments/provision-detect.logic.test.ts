@@ -852,6 +852,91 @@ describe('detectKubernetesProvisioning — stack recipes', () => {
     ])
     expect(reverse.provisioning.recipe?.envFiles).toEqual(forward.provisioning.recipe?.envFiles)
   })
+
+  // --- Universality: monorepo env-template depth + deployment-level convention extensions ---------
+
+  it('detects env templates ONE LEVEL into monorepo service-container dirs', async () => {
+    // The real pilot keeps its templates under `services/app/` (outside the compose dir); the
+    // detector scans one level into services/apps/packages so they're still surfaced.
+    const reader = makeReader({
+      'docker/dev.yml': 'services:\n  app:\n    image: nginx\n',
+      'services/app/.env.dev.local-dist': 'DATABASE_URL=\n',
+      'apps/web/.env.example': 'API=\n',
+      'packages/lib/README.md': 'not a template',
+    })
+    const rec = await detectKubernetesProvisioning(reader, { prefer: 'docker-compose' })
+    // Sorted by template path (apps/… < services/…); deeper-than-one-level is NOT scanned.
+    expect(rec.provisioning.recipe?.envFiles).toEqual([
+      { template: 'apps/web/.env.example', target: 'apps/web/.env' },
+      { template: 'services/app/.env.dev.local-dist', target: 'services/app/.env.dev.local' },
+    ])
+  })
+
+  it('does NOT recognize a non-canonical compose name until conventions add it', async () => {
+    const reader = makeReader({ 'stack.yml': 'services:\n  app:\n    image: nginx\n' })
+    const without = await detectKubernetesProvisioning(reader, { prefer: 'docker-compose' })
+    expect(without.detected).toBe(false)
+    expect(without.provisioning.type).toBe('infraless')
+
+    const withConv = await detectKubernetesProvisioning(reader, {
+      prefer: 'docker-compose',
+      conventions: { composeFiles: ['stack.yml'] },
+    })
+    expect(withConv.provisioning.type).toBe('docker-compose')
+    expect(withConv.provisioning.composePath).toBe('stack.yml')
+  })
+
+  it('a canonical compose name still wins over a convention-added extra', async () => {
+    const reader = makeReader({
+      'compose.yaml': 'services:\n  app:\n    image: nginx\n',
+      'stack.yml': 'services:\n  other:\n    image: redis\n',
+    })
+    const rec = await detectKubernetesProvisioning(reader, {
+      prefer: 'docker-compose',
+      conventions: { composeFiles: ['stack.yml'] },
+    })
+    expect(rec.provisioning.composePath).toBe('compose.yaml')
+  })
+
+  it('conventions extend the compose-dir / seed-dir / env-template-dir search', async () => {
+    const reader = makeReader({
+      'infra/compose.yaml': 'services:\n  app:\n    image: nginx\n',
+      'ops/seed.sql': 'INSERT ...',
+      'vault/.env-dist': 'TOKEN=\n',
+    })
+    // Default: compose lives under an unlisted dir, so nothing is found.
+    const without = await detectKubernetesProvisioning(reader, { prefer: 'docker-compose' })
+    expect(without.detected).toBe(false)
+
+    const rec = await detectKubernetesProvisioning(reader, {
+      prefer: 'docker-compose',
+      conventions: {
+        composeDirs: ['infra'],
+        seedDirs: ['ops'],
+        envTemplateDirs: ['vault'],
+      },
+    })
+    expect(rec.provisioning.composePath).toBe('infra/compose.yaml')
+    expect(rec.seedDumpCandidates?.map((c) => c.path)).toEqual(['ops/seed.sql'])
+    expect(rec.provisioning.recipe?.envFiles).toContainEqual({
+      template: 'vault/.env-dist',
+      target: 'vault/.env',
+    })
+  })
+
+  it('detectSharedStack honors the same convention extensions', async () => {
+    const reader = makeReader({
+      'stack.yml':
+        'services:\n  db:\n    image: postgres\nnetworks:\n  shared-net:\n    external: true\n',
+    })
+    const without = await detectSharedStack(reader)
+    expect(without.detected).toBe(false)
+
+    const rec = await detectSharedStack(reader, { conventions: { composeFiles: ['stack.yml'] } })
+    expect(rec.detected).toBe(true)
+    expect(rec.composeFiles).toEqual(['stack.yml'])
+    expect(rec.managedNetworks).toEqual(['shared-net'])
+  })
 })
 
 describe('detectCustomManifest', () => {

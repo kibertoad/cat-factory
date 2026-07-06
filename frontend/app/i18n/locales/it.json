@@ -4409,7 +4409,8 @@
       "run": "Esegui analisi",
       "unavailable": "L'analisi approfondita richiede un repository collegato e la pipeline di analisi.",
       "failed": "L'esecuzione dell'analisi non è riuscita.",
-      "apply": "Applica la bozza dell'analista"
+      "apply": "Applica la bozza dell'analista",
+      "cliNudge": "Questo repository include una propria CLI di configurazione o un Makefile ({path}) che la scansione deterministica non riesce a leggere. Esegui l'analisi approfondita per tradurlo in passaggi della ricetta."
     },
     "field": {
       "composeFiles": "File compose",

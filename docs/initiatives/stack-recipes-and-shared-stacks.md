@@ -677,9 +677,12 @@ pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens
 > parses as a `kind`+`apiVersion` doc, so the detector counts the repo root as a raw-manifest location and
 > the compose recommendation carries a low-confidence "Kubernetes manifests also exist" note — an
 > incidental artifact of the real repo shape, reproduced on purpose (the golden flags it if the detector
-> ever changes). (2) The real consumer's env templates live under `services/app/` (outside the
-> compose dir the root-scoped detector scans), so the golden has NO `envFiles` and the reference recipe
-> supplies them by hand — exactly the gap the wizard's directory scoping + the analyst close. (3) No
+> ever changes). (2) The real consumer's env templates live under `services/app/` (outside the compose
+> dir) — the detector now scans the compose dir + root config dirs AND one level into the monorepo
+> container dirs (`services/*`, `apps/*`, `packages/*`), so those templates ARE detected: the consumer
+> golden carries `recipe.envFiles` for `services/app/.env.dev.local-dist` + `.split.yaml.dist` (see the
+> "universality follow-up" note below). A template nested deeper than one level, or under a non-standard
+> container dir, still needs `ENVIRONMENTS_DETECTION_CONVENTIONS.envTemplateDirs` or the analyst. (3) No
 > persistence / migration work — everything rides the existing `provisioning` blob + the fixtures; this
 > slice is test/fixtures/docs/script-only (a patch changeset — no `dist` change, but the published
 > `package.json` gains the `pilot:golden` script). (4) The repo-root `.gitignore` excludes
@@ -687,6 +690,32 @@ pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens
 > nested `__fixtures__/pilot/.gitignore` re-includes it (verified with `git check-ignore`). (5) Slice 10
 > (the live compose-up smoke of the shared-services public subset + a synthetic consumer) still needs a
 > Linux/WSL Docker host and stays TODO.
+
+## Universality follow-up (post-slice-9): make detection adapt to non-pilot repos
+
+The deterministic detector is already service-name- and tech-stack-agnostic (it keys on compose/k8s
+STRUCTURE, never on any `acme` name), but it was CONVENTION-bound (fixed file-name/dir lists) and
+shallow (root-scoped env-template scan). Three additive changes broaden it so a differently-shaped
+repo — different paths, different stack — is picked up without editing the detector. All are additive:
+a default-shaped repo resolves EXACTLY as before.
+
+1. **Injectable detection conventions (deployment config).** `DetectionConventions`
+   (`provision-detect.logic.ts`) extends the built-in file-name/dir lists — `composeFiles` /
+   `composeDirs` / `seedDirs` / `envTemplateDirs` — and is threaded, additively (built-ins always win,
+   canonical compose names stay highest-priority), through both detectors. Sourced from the deployment
+   config `environments.detectionConventions` (`AppConfig`), parsed from the `ENVIRONMENTS_DETECTION_CONVENTIONS`
+   JSON env var by BOTH facades and carried on `CoreDependencies.detectionConventions` into the
+   `EnvironmentConnectionService` (service-provisioning detect) AND `SharedStackService` (shared-stack
+   detect). So an org whose repos use `stack.yml` / `ops/seeds/` broadens detection with an env var, no
+   code edit. Runtime-symmetric; recipe/detection ride the existing `provisioning` blob, so no migration.
+2. **Env-template scan goes one level into monorepo container dirs** (`services/*`, `apps/*`,
+   `packages/*`), closing the pilot's documented `services/app/` gap (see gotcha #2). Bounded by the same
+   `READ_BUDGET` + `MAX_ENV_FILES`; root/compose-dir templates still win the dedup.
+3. **The wizard makes the analyst nudge prominent when a `repoCliHint` is detected** — a repo that ships
+   its own imperative bring-up (a `bin/*console*` / Makefile / justfile the deterministic scan can't
+   read) now surfaces a highlighted "run deep analysis" prompt in the review step, so the imperative
+   steps (which are stack-specific and never deterministically derived for anyone) get translated by the
+   LLM analyst — the intended universality mechanism for the parts a structural scan can't see.
 
 ## Validation plan (no human testing)
 

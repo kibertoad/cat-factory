@@ -56,6 +56,27 @@ export interface ProvisioningRepoReader {
   ): Promise<{ name: string; type: string; path: string }[]>
 }
 
+/**
+ * Deployment-level EXTENSIONS to the built-in detection conventions, so an org whose repos follow
+ * house conventions the defaults don't name (a compose file called `stack.yml`, seeds under
+ * `ops/seeds/`, …) can broaden detection WITHOUT a code edit — set on the deployment config and
+ * threaded into the detectors as {@link DetectProvisioningOptions.conventions}. Every field is
+ * ADDITIVE: the built-in list always wins where it and an extra overlap, and the canonical compose
+ * names still take priority (extras are appended lowest-priority), so widening the search can only
+ * find MORE, never change what a default-shaped repo already resolves to. Absent ⇒ exactly the
+ * built-in behaviour.
+ */
+export interface DetectionConventions {
+  /** Extra compose file base names to recognize, appended AFTER the canonical set (lowest priority). */
+  composeFiles?: string[]
+  /** Extra directories (repo-relative) to search for a compose file, beyond `deploy`/`docker`/…. */
+  composeDirs?: string[]
+  /** Extra directories a SQL seed dump may live under, beyond `deployment`/`seed`/`db`/…. */
+  seedDirs?: string[]
+  /** Extra directories an env/config template may sit in, beyond the compose dir + `config`/`env`/…. */
+  envTemplateDirs?: string[]
+}
+
 export interface DetectProvisioningOptions {
   /** Service subdirectory within the repo (monorepo); absent/'' ⇒ the repo root. */
   directory?: string
@@ -69,6 +90,8 @@ export interface DetectProvisioningOptions {
    * search order — the other types have nothing to auto-detect.
    */
   prefer?: ProvisionType
+  /** Deployment-level extensions to the built-in file-name/directory conventions (additive). */
+  conventions?: DetectionConventions
 }
 
 const PINNED_SEMVER = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
@@ -237,6 +260,44 @@ const OS_OVERRIDE_RE = /^(.+?)\.(wsl|mac|macos|osx|linux|windows|win)(?:\.overri
 const MAKEFILE_NAMES = ['Makefile', 'makefile', 'GNUmakefile']
 const JUSTFILE_NAMES = ['justfile', 'Justfile', '.justfile']
 const TASKFILE_NAMES = ['Taskfile.yml', 'Taskfile.yaml', 'taskfile.yml', 'taskfile.yaml']
+// Monorepo "service container" dirs an env/config template commonly lives ONE LEVEL DOWN in
+// (`services/app/.env.dev.local-dist`, `apps/web/.env.example`). Scanned a single level deep by
+// `collectEnvFileTemplates` in addition to the root-level dirs, so a per-service template outside
+// the compose dir is still surfaced (the pilot's documented `services/app/` gap).
+const ENV_TEMPLATE_CONTAINER_DIRS = ['services', 'apps', 'packages']
+
+/** Append `extras` after `base`, dropping any already present in `base` (base wins / stays first). */
+function withExtras(base: readonly string[], extras: string[] | undefined): string[] {
+  if (!extras || extras.length === 0) return [...base]
+  const seen = new Set(base)
+  const out = [...base]
+  for (const raw of extras) {
+    const value = raw.trim()
+    if (value && !seen.has(value)) {
+      seen.add(value)
+      out.push(value)
+    }
+  }
+  return out
+}
+
+/**
+ * The compose file names to try, canonical-first: the built-in {@link COMPOSE_FILES} then any
+ * deployment-supplied extras (lowest priority, so a canonical name still wins). The
+ * {@link AMBIGUOUS_COMPOSE_FILES} `services:`-required guard still applies to the bare `dev.*` names.
+ */
+function resolveComposeFileNames(conventions?: DetectionConventions): string[] {
+  return withExtras(COMPOSE_FILES, conventions?.composeFiles)
+}
+function resolveComposeDirs(conventions?: DetectionConventions): string[] {
+  return withExtras(COMPOSE_DIR_CANDIDATES, conventions?.composeDirs)
+}
+function resolveSeedDirs(conventions?: DetectionConventions): string[] {
+  return withExtras(SEED_DIRS, conventions?.seedDirs)
+}
+function resolveEnvTemplateDirs(conventions?: DetectionConventions): string[] {
+  return withExtras(ENV_TEMPLATE_DIR_CANDIDATES, conventions?.envTemplateDirs)
+}
 
 /** Join + normalize repo-relative path segments, collapsing `.`/`..` (resolves `../base` refs). */
 function joinPath(...parts: (string | undefined)[]): string {
@@ -660,13 +721,18 @@ interface ComposeHit {
  * picker), external networks + profiles (for the recipe), and the containing dir's listing (for the
  * `-f` override family).
  */
-async function findCompose(scanner: Scanner, root: string): Promise<ComposeHit | null> {
-  for (const dir of COMPOSE_DIR_CANDIDATES) {
+async function findCompose(
+  scanner: Scanner,
+  root: string,
+  conventions?: DetectionConventions,
+): Promise<ComposeHit | null> {
+  const composeFileNames = resolveComposeFileNames(conventions)
+  for (const dir of resolveComposeDirs(conventions)) {
     const dirPath = joinPath(root, dir)
     const entries = await scanner.listDir(dirPath)
     if (entries.length === 0) continue
     const names = new Set(entries.filter((e) => e.type !== 'dir').map((e) => e.name))
-    for (const candidate of COMPOSE_FILES) {
+    for (const candidate of composeFileNames) {
       if (!names.has(candidate)) continue
       const path = joinPath(dirPath, candidate)
       const content = await scanner.getFile(path)
@@ -968,18 +1034,25 @@ function isConfigLikeName(target: string): boolean {
  * Find committed env/config TEMPLATE files (`*-dist` / `*.example` / …) beside the compose file and
  * in the service root's common config dirs, and pair each with its gitignored target. Deduped by
  * target; bounded by `MAX_ENV_FILES`. These become `recipe.envFiles` — materialized before `up`.
+ *
+ * Scans, in order: the compose dir, the root-level config dirs (`ENV_TEMPLATE_DIR_CANDIDATES` +
+ * any deployment `conventions.envTemplateDirs`), then ONE LEVEL DOWN into the monorepo
+ * service-container dirs (`ENV_TEMPLATE_CONTAINER_DIRS` — `services/<svc>/`, `apps/<svc>/`), so a
+ * per-service template that lives outside the compose dir (the pilot's `services/app/.env.dev.local-dist`
+ * gap) is still surfaced. First template seen for a given target wins; the root-level dirs are scanned
+ * before the deeper container dirs so a root/compose-dir template takes precedence.
  */
 async function collectEnvFileTemplates(
   scanner: Scanner,
   root: string,
   composeDir: string,
+  conventions?: DetectionConventions,
 ): Promise<RecipeEnvFile[]> {
-  const dirs = [
-    ...new Set([composeDir, ...ENV_TEMPLATE_DIR_CANDIDATES.map((d) => joinPath(root, d))]),
-  ]
   const pairs: RecipeEnvFile[] = []
   const seenTargets = new Set<string>()
-  for (const dir of dirs) {
+  const sorted = (): RecipeEnvFile[] => pairs.sort((a, b) => a.template.localeCompare(b.template))
+  // Scan one flat directory; returns true once MAX_ENV_FILES is reached (caller stops).
+  const scanDir = async (dir: string): Promise<boolean> => {
     // Sort by name so the dedup-by-target choice (first template seen wins) is deterministic
     // regardless of the reader's directory-listing order.
     const entries = [...(await scanner.listDir(dir))].sort((a, b) => a.name.localeCompare(b.name))
@@ -991,11 +1064,28 @@ async function collectEnvFileTemplates(
       if (seenTargets.has(targetPath)) continue
       seenTargets.add(targetPath)
       pairs.push({ template: joinPath(dir, entry.name), target: targetPath })
-      if (pairs.length >= MAX_ENV_FILES)
-        return pairs.sort((a, b) => a.template.localeCompare(b.template))
+      if (pairs.length >= MAX_ENV_FILES) return true
+    }
+    return false
+  }
+
+  const rootDirs = [
+    ...new Set([composeDir, ...resolveEnvTemplateDirs(conventions).map((d) => joinPath(root, d))]),
+  ]
+  for (const dir of rootDirs) {
+    if (await scanDir(dir)) return sorted()
+  }
+  // One level into monorepo service containers (`services/app/…`), children sorted for determinism.
+  for (const container of ENV_TEMPLATE_CONTAINER_DIRS) {
+    const containerDir = joinPath(root, container)
+    const children = [...(await scanner.listDir(containerDir))]
+      .filter((e) => e.type === 'dir')
+      .sort((a, b) => a.name.localeCompare(b.name))
+    for (const child of children) {
+      if (await scanDir(joinPath(containerDir, child.name))) return sorted()
     }
   }
-  return pairs.sort((a, b) => a.template.localeCompare(b.template))
+  return sorted()
 }
 
 // Whole-token matches (bounded by `^`/`$` or a non-letter — `-`, `_`, `.`, digits — so `pre` does
@@ -1022,6 +1112,7 @@ function rankSeedDump(name: string): number {
 async function collectSeedDumps(
   scanner: Scanner,
   root: string,
+  conventions?: DetectionConventions,
 ): Promise<ProvisioningSeedDumpCandidate[]> {
   const found: { path: string; name: string }[] = []
   const seen = new Set<string>()
@@ -1032,7 +1123,7 @@ async function collectSeedDumps(
     seen.add(path)
     found.push({ path, name })
   }
-  for (const rel of SEED_DIRS) {
+  for (const rel of resolveSeedDirs(conventions)) {
     if (found.length >= MAX_SEED_DUMPS) break
     const dir = joinPath(root, rel)
     const entries = await scanner.listDir(dir)
@@ -1119,6 +1210,7 @@ async function buildComposeRecommendation(
   compose: ComposeHit,
   serviceBasename: string,
   kubernetesAlsoExists = false,
+  conventions?: DetectionConventions,
 ): Promise<ProvisioningRecommendation> {
   const notes: ProvisioningDetectionNote[] = [
     {
@@ -1187,7 +1279,7 @@ async function buildComposeRecommendation(
     })
   }
 
-  const envFiles = await collectEnvFileTemplates(scanner, root, compose.dir)
+  const envFiles = await collectEnvFileTemplates(scanner, root, compose.dir, conventions)
   if (envFiles.length > 0) {
     recipe.envFiles = envFiles
     notes.push({
@@ -1209,7 +1301,7 @@ async function buildComposeRecommendation(
     })
   }
 
-  const seedDumpCandidates = await collectSeedDumps(scanner, root)
+  const seedDumpCandidates = await collectSeedDumps(scanner, root, conventions)
   if (seedDumpCandidates.length > 0) {
     const pick = seedDumpCandidates.find((s) => s.recommended)
     notes.push({
@@ -1487,14 +1579,21 @@ export async function detectKubernetesProvisioning(
   const scanner = new Scanner(reader, options.gitRef)
 
   const roots = await collectKubernetesRoots(scanner, root)
-  const compose = await findCompose(scanner, root)
+  const compose = await findCompose(scanner, root, options.conventions)
 
   // Honor the selected tab: on docker-compose, recommend the compose file first (noting any
   // co-existing k8s manifests). Falls through to kubernetes when the user is on compose but no
   // compose file exists. With no preference (or any non-compose tab) we keep the historical
   // kubernetes-first order.
   if (options.prefer === 'docker-compose' && compose) {
-    return buildComposeRecommendation(scanner, root, compose, serviceBasename, roots.length > 0)
+    return buildComposeRecommendation(
+      scanner,
+      root,
+      compose,
+      serviceBasename,
+      roots.length > 0,
+      options.conventions,
+    )
   }
 
   // Colocated k8s manifests win (highest confidence). In a monorepo, ALSO surface a root-shared
@@ -1558,7 +1657,15 @@ export async function detectKubernetesProvisioning(
     }
   }
 
-  if (compose) return buildComposeRecommendation(scanner, root, compose, serviceBasename)
+  if (compose)
+    return buildComposeRecommendation(
+      scanner,
+      root,
+      compose,
+      serviceBasename,
+      false,
+      options.conventions,
+    )
   // Nothing detected. If that "nothing" is really "the repo couldn't be read" (the scan hit a
   // genuine read fault), raise it rather than falsely reporting an empty repo.
   if (scanner.readFault) throw new RepoReadError(scanner.readFault)
@@ -1572,6 +1679,8 @@ export interface DetectSharedStackOptions {
   gitRef?: string
   /** The repo basename, used as the suggested stack name when a stack is detected. */
   repoName?: string
+  /** Deployment-level extensions to the built-in file-name/directory conventions (additive). */
+  conventions?: DetectionConventions
 }
 
 /**
@@ -1600,7 +1709,7 @@ export async function detectSharedStack(
 ): Promise<SharedStackRecommendation> {
   const root = joinPath(options.directory ?? '')
   const scanner = new Scanner(reader, options.gitRef)
-  const compose = await findCompose(scanner, root)
+  const compose = await findCompose(scanner, root, options.conventions)
   if (!compose) {
     // Nothing compose-shaped. Distinguish "couldn't read the repo" from "read it, no compose".
     if (scanner.readFault) throw new RepoReadError(scanner.readFault)
@@ -1665,7 +1774,7 @@ export async function detectSharedStack(
     })
   }
 
-  const envFiles = await collectEnvFileTemplates(scanner, root, compose.dir)
+  const envFiles = await collectEnvFileTemplates(scanner, root, compose.dir, options.conventions)
   if (envFiles.length > 0) {
     notes.push({
       field: 'envFiles',

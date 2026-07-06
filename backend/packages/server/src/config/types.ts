@@ -208,6 +208,24 @@ export interface EnvironmentsConfig {
   allowUrlHosts?: string[]
   /** Permit `http` (not just `https`) for trusted provider/env URLs. */
   allowHttpUrls?: boolean
+  /**
+   * Deployment-level, ADDITIVE extensions to the built-in provisioning-DETECTION conventions, for
+   * an org whose repos follow house conventions the defaults don't name. Every field appends to the
+   * built-in list (the built-ins always win / stay highest-priority), so it can only make detection
+   * find MORE, never change what a default-shaped repo resolves to. Threaded into the detectors via
+   * `CoreDependencies.detectionConventions`. Structurally mirrors integrations' `DetectionConventions`
+   * (kept inline so the config layer takes no dependency on the service layer). Absent ⇒ built-in.
+   */
+  detectionConventions?: {
+    /** Extra compose file base names, appended after the canonical set (lowest priority). */
+    composeFiles?: string[]
+    /** Extra directories (repo-relative) to search for a compose file. */
+    composeDirs?: string[]
+    /** Extra directories a SQL seed dump may live under. */
+    seedDirs?: string[]
+    /** Extra directories an env/config template may sit in. */
+    envTemplateDirs?: string[]
+  }
 }
 
 export interface RunnerPoolConfig {

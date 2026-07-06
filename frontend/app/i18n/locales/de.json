@@ -4409,7 +4409,8 @@
       "run": "Analyse ausführen",
       "unavailable": "Die Tiefenanalyse benötigt ein verknüpftes Repository und die Analyse-Pipeline.",
       "failed": "Der Analyselauf ist fehlgeschlagen.",
-      "apply": "Analysten-Entwurf anwenden"
+      "apply": "Analysten-Entwurf anwenden",
+      "cliNudge": "Dieses Repository bringt eine eigene Setup-CLI oder ein Makefile ({path}) mit, das der deterministische Scan nicht lesen kann. Führe die Tiefenanalyse aus, um es in Rezeptschritte zu übersetzen."
     },
     "field": {
       "composeFiles": "Compose-Dateien",

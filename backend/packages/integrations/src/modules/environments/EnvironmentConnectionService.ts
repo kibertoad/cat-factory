@@ -39,7 +39,11 @@ import type {
   ProvisioningRecommendation,
   RepairCustomManifestInput,
 } from '@cat-factory/contracts'
-import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
+import {
+  type DetectionConventions,
+  detectCustomManifest,
+  detectKubernetesProvisioning,
+} from './provision-detect.logic.js'
 import { detectFrontendConfig } from './frontend-detect.logic.js'
 import { RepoReadError } from './repo-read-error.js'
 import type {
@@ -234,6 +238,13 @@ export interface EnvironmentConnectionServiceDependencies {
   customManifestTypeRepository?: CustomManifestTypeRepository
   /** The app-owned registry of code-defined custom manifest types (merged into the catalog). */
   customManifestTypeRegistry?: CustomManifestTypeRegistry
+  /**
+   * Deployment-level, ADDITIVE extensions to the built-in provisioning-detection conventions
+   * (extra compose file names/dirs, seed dirs, env-template dirs). Passed straight into
+   * {@link detectKubernetesProvisioning} so an org whose repos follow house conventions the
+   * defaults don't name broadens detection without a code edit. Absent ⇒ built-in behaviour.
+   */
+  detectionConventions?: DetectionConventions
 }
 
 export interface ResolvedConnection {
@@ -736,6 +747,9 @@ export class EnvironmentConnectionService {
         gitRef: input.gitRef ?? bound.baseBranch,
         ...(input.directory ? { directory: input.directory } : {}),
         ...(input.prefer ? { prefer: input.prefer } : {}),
+        ...(this.deps.detectionConventions
+          ? { conventions: this.deps.detectionConventions }
+          : {}),
       }),
     )
   }
