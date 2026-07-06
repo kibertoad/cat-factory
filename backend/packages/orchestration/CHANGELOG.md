@@ -1,5 +1,28 @@
 # @cat-factory/orchestration
 
+## 0.89.0
+
+### Minor Changes
+
+- 802fc05: Deployer run-start config gate: when a pipeline includes an enabled `deployer` step, validate the service's ephemeral-environment provisioning (the in-repo "what/where") AND the workspace's infra handler (the "how") are complete + correct BEFORE starting, and — best-effort — probe the resolved deployment integration's live connection. A gap now fails loudly at start with an actionable, deep-linked toast (fix the service config / configure the handler / re-test the connection) instead of an async failed environment (or a silent docker-compose no-op) mid-run.
+
+  - New pure decision logic (`decideDeployerConfig` / `deployerServiceConfigIssues` / `hasEnabledDeployerStep`) drives a new `ExecutionService` start guard shared by start/retry/restart.
+  - New `EnvironmentProvisioningService.testProvisioning` probes the already-saved handler's connection; `canProvision` now honors the run initiator's local per-user handler overrides. The run initiator is threaded through every handler-resolution path — the new gate, the Tester infra gate, and the deployer's own dispatch decision — so a valid override-only local compose setup resolves identically at start and at provision time (a run that passes the gate provisions instead of silently no-opping).
+  - New wire conflict reasons `deployer_service_provisioning_incomplete` and `deployer_connection_test_failed`; `provision_type_unhandled` toasts now carry a "Configure infrastructure" jump.
+
+### Patch Changes
+
+- Updated dependencies [802fc05]
+  - @cat-factory/integrations@0.77.0
+  - @cat-factory/contracts@0.115.0
+  - @cat-factory/agents@0.40.10
+  - @cat-factory/kernel@0.104.1
+  - @cat-factory/prompt-fragments@0.10.23
+  - @cat-factory/sandbox@0.9.24
+  - @cat-factory/spend@0.11.7
+  - @cat-factory/workspaces@0.12.7
+  - @cat-factory/caching@0.6.1
+
 ## 0.88.0
 
 ### Minor Changes
