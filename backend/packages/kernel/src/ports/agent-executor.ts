@@ -529,6 +529,13 @@ export interface AgentJobHandle {
    * that don't resolve search availability (inline agents, tests).
    */
   search?: WebSearchAvailability
+  /**
+   * The repo this job operates on, resolved at dispatch. Recorded in the run's diagnostics so a
+   * later investigation knows which repo/branch the step ran against without re-joining the
+   * service↔repo↔installation projection. `provider` is the VCS provider (`github`/`gitlab`) from
+   * the run's repo origin. Absent for executors that don't operate on a repo (inline agents, tests).
+   */
+  repo?: { owner: string; name: string; baseBranch?: string; provider?: string }
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */
@@ -550,6 +557,9 @@ export type AgentJobUpdate =
       followUps?: StreamedFollowUp[]
       phase?: string
       container?: { id?: string; url?: string }
+      /** Which runner backend served this job (see {@link RunnerJobView.backend}); recorded in
+       *  the run diagnostics on the first poll that reports it. */
+      backend?: string
     }
   /**
    * Finished successfully; `result` carries the work product. `followUps`, when present,
@@ -566,7 +576,7 @@ export type AgentJobUpdate =
    * extended, redacted diagnostic (phase timings, last-tool breadcrumb) distinct from the
    * one-line `error`, surfaced as the failure detail on the board.
    */
-  | { state: 'failed'; error: string; failureCause?: string; detail?: string }
+  | { state: 'failed'; error: string; failureCause?: string; detail?: string; backend?: string }
 
 /**
  * An executor whose work can outlive a single request. Instead of `run()`

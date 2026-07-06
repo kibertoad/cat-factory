@@ -49,6 +49,9 @@ const POLL_TIMEOUT_MS = 30_000
 const HARNESS_SECRET_HEADER = 'x-harness-secret'
 
 export class CloudflareContainerTransport implements RunnerTransport {
+  /** Backend id recorded in run diagnostics (per-run Cloudflare Container). */
+  readonly backend = 'cloudflare-container'
+
   constructor(
     // Either per-run container class: `ExecutionContainer` (the agent harness, bound as
     // `EXEC_CONTAINER`) or `DeployContainer` (the deploy harness, bound as `DEPLOY_CONTAINER`).

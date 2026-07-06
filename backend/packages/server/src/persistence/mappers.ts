@@ -8,6 +8,7 @@ import type {
   PipelineStep,
   PriorStepOutput,
   ResolvedFrontendBinding,
+  RunDiagnostics,
   Workspace,
 } from '@cat-factory/contracts'
 import {
@@ -19,6 +20,7 @@ import {
   issueIntakeConfigSchema,
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
+  runDiagnosticsSchema,
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'
@@ -680,6 +682,8 @@ interface ExecutionDetail {
   notes?: string[]
   /** Frontend bindings resolved once at run start (see {@link ExecutionInstance.frontendBindings}). */
   frontendBindings?: ResolvedFrontendBinding[]
+  /** After-the-fact investigation context (see {@link ExecutionInstance.diagnostics}). */
+  diagnostics?: RunDiagnostics
 }
 
 // ---------------------------------------------------------------------------
@@ -760,6 +764,15 @@ function parseFrontendBindings(list: unknown): ResolvedFrontendBinding[] {
   return Array.isArray(list) ? list.filter((b) => is(resolvedFrontendBindingSchema, b)) : []
 }
 
+/**
+ * The run's diagnostics packed into `detail`. Tolerant like the failure parsers: a value that
+ * doesn't match the wire schema is dropped rather than bricking the whole snapshot decode (the
+ * SPA re-validates the full snapshot against `runDiagnosticsSchema`).
+ */
+function parseRunDiagnostics(value: unknown): RunDiagnostics | undefined {
+  return is(runDiagnosticsSchema, value) ? value : undefined
+}
+
 export function rowToExecution(row: ExecutionRow): ExecutionInstance {
   let detail: Partial<ExecutionDetail>
   try {
@@ -825,6 +838,12 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
     initiatedBy: legacyUserId(detail.initiatedBy),
     // Epoch-ms creation time stamped at start; omitted on legacy rows (undefined).
     ...(detail.createdAt != null ? { createdAt: detail.createdAt } : {}),
+    // Investigation diagnostics ride in `detail` too (only present once a container step
+    // dispatched); dropped if malformed so a bad record can't brick the snapshot decode.
+    ...(() => {
+      const diagnostics = parseRunDiagnostics(detail.diagnostics)
+      return diagnostics ? { diagnostics } : {}
+    })(),
     // Optimistic-concurrency token; a legacy row without the column reads as 0.
     rev: row.rev ?? 0,
   }
@@ -850,5 +869,8 @@ export function executionToDetail(instance: ExecutionInstance): string {
     notes: instance.notes?.length ? instance.notes : undefined,
     // The resolved bindings are stamped once at start; only a frontend run carries any.
     frontendBindings: instance.frontendBindings?.length ? instance.frontendBindings : undefined,
+    // Diagnostics are stamped once a container step dispatches; a pure inline/gate run has none
+    // (JSON.stringify omits the undefined key so those runs carry nothing extra).
+    diagnostics: instance.diagnostics,
   } satisfies ExecutionDetail)
 }

@@ -254,6 +254,9 @@ describe('ContainerAgentExecutor', () => {
       subtasks: { completed: 3, inProgress: 1, total: 8 },
       // The transport also forwards the per-run container's DO id on a running poll.
       container: { id: 'ex-1' },
+      // …and the backend it served the job on (stamped by the shared job client from
+      // CloudflareContainerTransport.backend), recorded in the run diagnostics.
+      backend: 'cloudflare-container',
     })
   })
 

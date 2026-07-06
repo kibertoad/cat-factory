@@ -176,6 +176,8 @@ interface PoolMember extends ContainerEndpoint {
 }
 
 export class LocalContainerRunnerTransport implements RunnerTransport {
+  /** Backend id recorded in run diagnostics (per-run local container). */
+  readonly backend = 'local-container'
   private readonly adapter: ContainerRuntimeAdapter
   private readonly image: string
   private readonly sharedSecret: string

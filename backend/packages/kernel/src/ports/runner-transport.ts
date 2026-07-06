@@ -242,6 +242,15 @@ export interface RunnerJobView {
    * run's step (the Follow-up companion). Absent on most polls / non-coder jobs.
    */
   followUps?: RunnerJobFollowUp[]
+  /**
+   * Which runner backend actually served this job — `local-native` (host process),
+   * `local-container`, `runner-pool`, `cloudflare-container`. Reported so the engine can record
+   * it in the run's diagnostics (a native host-process run vs. a sandboxed container is otherwise
+   * indistinguishable after the fact). Stamped by {@link RunnerTransport.backend} via the shared
+   * job client, or overridden by a composite router that picks a leg per job. Free-form; absent
+   * on a transport that doesn't declare one.
+   */
+  backend?: string
 }
 
 /**
@@ -257,6 +266,14 @@ export interface RunnerJobRef {
 }
 
 export interface RunnerTransport {
+  /**
+   * A stable identifier for this backend (`local-native` / `local-container` / `runner-pool` /
+   * `cloudflare-container`), stamped onto every {@link RunnerJobView} by the shared job client so
+   * the engine can record which backend a run's step executed on. A composite router that picks a
+   * leg per job leaves this undefined and stamps the leg's id on the view itself. Optional so a
+   * transport that doesn't care is unaffected.
+   */
+  readonly backend?: string
   /**
    * Start the job `ref.jobId` (in run `ref.runId`) with the harness job `spec`, or
    * re-attach to one already running for that ref. Must be idempotent per ref so a

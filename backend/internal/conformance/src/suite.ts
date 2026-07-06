@@ -360,6 +360,42 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
         expect(afterForce?.status).toBe('paused')
         expect(afterForce?.rev).toBe(2)
       })
+
+      // Run diagnostics (dispatch context — backend/model/repo — for after-the-fact
+      // investigation) ride in the `detail` JSON, so a repo that serialized `detail`
+      // differently would drop them. Asserted at the repository layer so D1 and Postgres
+      // are proven to round-trip the whole diagnostics object identically.
+      it('round-trips run diagnostics through upsert/get', async () => {
+        const app = harness.makeApp()
+        const repo = app.executionRepository()
+        const { workspace } = await app.createWorkspace()
+
+        const withDiagnostics: ExecutionInstance = {
+          id: 'exec_diag',
+          blockId: 'blk_diag',
+          pipelineId: 'pl',
+          pipelineName: 'Pipeline',
+          steps: [],
+          currentStep: 0,
+          status: 'running',
+          initiatedBy: null,
+          diagnostics: {
+            lastDispatch: {
+              stepIndex: 2,
+              agentKind: 'coder',
+              model: 'anthropic:claude-opus-4-8',
+              executionBackend: 'local-native',
+              repo: { owner: 'acme', name: 'widget', baseBranch: 'main', provider: 'github' },
+              at: 1_700_000_000_000,
+            },
+            host: { platform: 'win32' },
+          },
+        }
+        await repo.upsert(workspace.id, withDiagnostics)
+
+        const loaded = await repo.get(workspace.id, 'exec_diag')
+        expect(loaded?.diagnostics).toEqual(withDiagnostics.diagnostics)
+      })
     })
 
     describe('one live execution run per block (insertLive)', () => {
