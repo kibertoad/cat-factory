@@ -222,21 +222,38 @@ function planShapeLines(template: InitiativePresetPhaseTemplate): string[] {
     '',
     '## Required plan shape',
     '',
-    'This preset runs a fixed multi-phase methodology. Build the plan around EXACTLY these ' +
-      'phases, in this order, using each phase `id` VERBATIM:',
+    'This preset runs a fixed multi-phase methodology. Build the plan around these phases, in ' +
+      'this order, using each phase `id` VERBATIM:',
     '',
   ]
+  let hasOptional = false
   template.phases.forEach((phase, i) => {
-    const optional = phase.required === true ? '' : ' (optional)'
-    lines.push(`${i + 1}. \`${phase.id}\` — ${phase.title}${optional}`)
+    const isOptional = phase.required !== true
+    if (isOptional) hasOptional = true
+    lines.push(`${i + 1}. \`${phase.id}\` — ${phase.title}${isOptional ? ' (optional)' : ''}`)
     if (phase.goal?.trim()) lines.push(`   ${phase.goal.trim()}`)
   })
+  lines.push('')
+  // Fidelity of whatever phases you DO include is non-negotiable, independent of the extra-phase
+  // policy below.
   lines.push(
-    '',
+    'For every phase you include, use its `id` VERBATIM and keep this order — do NOT rename, ' +
+      'reorder or merge phases.',
+  )
+  // Presence: required phases are mandatory; optional ones may be omitted. Only draw the
+  // distinction when the template actually has an optional phase, so an all-required template
+  // reads as a flat "every phase must be present" with no confusing "(optional)" carve-out.
+  lines.push(
+    hasOptional
+      ? 'Every phase NOT marked (optional) must be present; you may omit an (optional) phase when ' +
+          'the work does not need it.'
+      : 'Every phase above must be present.',
+  )
+  // Extra-phase policy — the ONE knob `allowAdditionalPhases` governs.
+  lines.push(
     template.allowAdditionalPhases
-      ? 'You MAY append further phases after these when the work needs them, but every phase ' +
-          'above must be present, in this order.'
-      : 'Do NOT add, drop, rename, reorder or merge phases — this is the complete, exhaustive set.',
+      ? 'You MAY append further phases after these when the work needs them.'
+      : 'Do NOT introduce any phase beyond this set — it is otherwise exhaustive.',
   )
   return lines
 }

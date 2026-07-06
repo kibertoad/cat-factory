@@ -57,7 +57,15 @@ describe('initiative planner prompt fold — phaseTemplate', () => {
     )
     // `migration-delivery` has no `required: true`, so it is annotated optional.
     expect(exhaustive).toContain('`migration-delivery` — Delivery (optional)')
-    expect(exhaustive).toContain('Do NOT add, drop, rename, reorder or merge phases')
+    // The presence directive must NOT contradict the (optional) marker: an optional phase is
+    // explicitly droppable, while required phases stay mandatory.
+    expect(exhaustive).toContain('you may omit an (optional) phase')
+    expect(exhaustive).toContain('Every phase NOT marked (optional) must be present')
+    // Fidelity + exhaustiveness are worded so they don't demand keeping every listed phase.
+    expect(exhaustive).toContain('do NOT rename, reorder or merge phases')
+    expect(exhaustive).toContain('Do NOT introduce any phase beyond this set')
+    // The flat all-present line is reserved for all-required templates; it must not appear here.
+    expect(exhaustive).not.toContain('Every phase above must be present.')
 
     const open = initiativePlannerUserPrompt(
       context({
@@ -65,7 +73,27 @@ describe('initiative planner prompt fold — phaseTemplate', () => {
       }),
     )
     expect(open).toContain('You MAY append further phases')
-    expect(open).not.toContain('Do NOT add, drop, rename')
+    // The open policy governs only ADDING phases; it must not re-assert that every listed phase
+    // (including the optional one) has to be present.
+    expect(open).toContain('you may omit an (optional) phase')
+    expect(open).not.toContain('Do NOT introduce any phase beyond this set')
+  })
+
+  it('states a flat "every phase must be present" for an all-required template (no optional carve-out)', () => {
+    const allRequired: InitiativePresetPhaseTemplate = {
+      phases: [
+        { id: 'a', title: 'A', goal: '', required: true },
+        { id: 'b', title: 'B', goal: '', required: true },
+      ],
+      allowAdditionalPhases: false,
+    }
+    const prompt = initiativePlannerUserPrompt(
+      context({ preset: { label: 'X', phaseTemplate: allRequired } }),
+    )
+    expect(prompt).toContain('Every phase above must be present.')
+    // No optional phases ⇒ no "(optional)" marker and no droppable-phase clause.
+    expect(prompt).not.toContain('(optional)')
+    expect(prompt).not.toContain('you may omit')
   })
 
   it('renders the promptAddition heading independently of the template', () => {
