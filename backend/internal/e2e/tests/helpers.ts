@@ -148,6 +148,67 @@ export async function startRun(
   )
 }
 
+/** One run's step, as the execution snapshot returns it (only the fields the specs read). */
+interface ExecutionStep {
+  agentKind: string
+  state: string
+  approval?: { id: string; status: string } | null
+}
+/** One execution instance (only the fields the specs read). */
+interface ExecutionInstance {
+  id: string
+  status: string
+  steps: ExecutionStep[]
+}
+/** A parked human-approval gate located on a block's live run. */
+export interface ParkedApproval {
+  executionId: string
+  approvalId: string
+}
+
+/**
+ * Find a block's currently-PARKED human-approval gate for the given step `agentKind`, or null.
+ * A `gate: true` pipeline step parks its run `blocked` with the step `waiting_decision` and a
+ * `pending` approval — the same generic gate `approval-gate.spec` drives through the UI. The
+ * initiative planner gate rides this exact mechanism, but no SPA surface exposes it for an
+ * initiative-level block, so its e2e approves it over REST (a trigger). Reads the block's
+ * executions and returns the parked run + approval ids to approve.
+ */
+export async function findParkedApproval(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+  agentKind: string,
+): Promise<ParkedApproval | null> {
+  const executions = await json<ExecutionInstance[]>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}/executions`),
+  )
+  for (const instance of executions) {
+    const step = instance.steps.find(
+      (s) =>
+        s.agentKind === agentKind &&
+        s.state === 'waiting_decision' &&
+        s.approval?.status === 'pending',
+    )
+    if (step?.approval) return { executionId: instance.id, approvalId: step.approval.id }
+  }
+  return null
+}
+
+/** Approve a parked step gate over REST (the endpoint the step-detail "Approve" button calls). */
+export async function approveStep(
+  request: APIRequestContext,
+  workspaceId: string,
+  approval: ParkedApproval,
+): Promise<void> {
+  await json(
+    await request.post(
+      `${BACKEND_URL}/workspaces/${workspaceId}/executions/${approval.executionId}/steps/${approval.approvalId}/approve`,
+      { data: {} },
+    ),
+  )
+}
+
 /** A recurring schedule as the controller returns it (only the fields the specs read). */
 export interface Schedule {
   id: string

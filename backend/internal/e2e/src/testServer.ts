@@ -20,6 +20,7 @@
 import { createServer } from 'node:http'
 import { AsyncFakeAgentExecutor } from '@cat-factory/conformance'
 import { buildNodeContainer, start } from '@cat-factory/node-server'
+import { fakeInlineModelResolver } from './fakeInlineModel.ts'
 import { E2eFakeAgentExecutor, E2eRepoBootstrapper, type FakeProfile } from './fakeProfile.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
@@ -174,6 +175,11 @@ await start({
       overrides: {
         agentExecutor,
         repoBootstrapper,
+        // Fake the INLINE LLM path too (the agent executor above only fakes CONTAINER steps). The
+        // full-interview `pl_initiative` pipeline runs its interviewer inline through this resolver;
+        // on the keyless e2e backend the real resolver would fault it, so serve a converging mock.
+        // See `fakeInlineModel.ts` — safe for existing specs (none assert on an inline-gate outcome).
+        modelProviderResolver: fakeInlineModelResolver,
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
       // model, so the execution start guard needs that provider marked available to start a
