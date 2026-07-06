@@ -1,5 +1,68 @@
 # @cat-factory/node-server
 
+## 0.87.0
+
+### Minor Changes
+
+- 7157908: Expose the seeded default model preset as a programmatic override on the deploy-app boot
+  seams, so a deployment can change its out-of-the-box default without editing library code.
+
+  - `start({ defaultModelPresetId })` (Node) and `startLocal({ defaultModelPresetId })` (local)
+    now accept the catalog id of the built-in preset a fresh workspace is seeded with as its
+    default; it is forwarded to `buildNodeContainer` / `buildLocalContainer` (both the Postgres
+    and mothership local paths). The Worker already honours `defaultModelPresetId` via
+    `createApp`'s / `buildContainer`'s `overrides`; that read is now explicit rather than
+    relying on the trailing spread.
+  - `MODEL_PRESET_SEED_IDS` and `DEFAULT_MODEL_PRESET_ID` are re-exported from all three facade
+    packages, so a wrapper can name a preset (`.kimi` / `.glm` / `.claude`) without a direct
+    `@cat-factory/kernel` import.
+
+  Applied only at the first seed of a workspace, so a user's later manual default choice is
+  always preserved. Facade defaults are unchanged (Node/Cloudflare → Kimi K2.7, local → Claude
+  Opus 4.8). Documented in the `deploy/{node,local,backend}` READMEs.
+
+- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
+  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
+
+  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
+    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
+    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
+    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
+    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
+    merge-preset ones.
+  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
+    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
+    (local runs subscription models via the ambient CLI / a leased personal credential). The
+    deployment default is applied only at first seed, so a user's later manual default choice is
+    always preserved.
+
+  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
+  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
+  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
+  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/contracts@0.119.0
+  - @cat-factory/kernel@0.109.0
+  - @cat-factory/server@0.101.0
+  - @cat-factory/orchestration@0.97.0
+  - @cat-factory/integrations@0.78.0
+  - @cat-factory/agents@0.48.1
+  - @cat-factory/consensus@0.10.8
+  - @cat-factory/eks@0.1.32
+  - @cat-factory/gates@0.4.29
+  - @cat-factory/gitlab@0.7.32
+  - @cat-factory/prompt-fragments@0.13.1
+  - @cat-factory/spend@0.11.15
+  - @cat-factory/caching@0.6.9
+  - @cat-factory/observability-langfuse@0.7.164
+  - @cat-factory/provider-bedrock@0.7.178
+  - @cat-factory/provider-cloudflare@0.7.179
+  - @cat-factory/provider-s3@0.2.114
+
 ## 0.86.8
 
 ### Patch Changes

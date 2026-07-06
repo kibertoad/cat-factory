@@ -1,5 +1,13 @@
 # @cat-factory/caching
 
+## 0.6.9
+
+### Patch Changes
+
+- Updated dependencies [8728bf7]
+- Updated dependencies [7157908]
+  - @cat-factory/kernel@0.109.0
+
 ## 0.6.8
 
 ### Patch Changes
