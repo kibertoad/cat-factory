@@ -29,7 +29,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:run": "vitest run",
-    "test:integration": "vitest run -c vitest.integration.config.ts"
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "pilot:golden": "node scripts/pilot-detect-golden.mjs"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "typescript": "7.0.1-rc",
     "undici": "^8.7.0",
+    "valibot": "^1.4.2",
     "vitest": "^4.1.9"
   }
 }

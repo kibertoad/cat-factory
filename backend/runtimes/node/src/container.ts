@@ -2852,6 +2852,10 @@ function selectNodeEnvironmentsDeps(config: AppConfig, db: DrizzleDb): Partial<C
       masterKeyBase64: config.environments.encryptionKey,
     }),
     ...(urlPolicy ? { environmentUrlSafetyPolicy: urlPolicy } : {}),
+    // Deployment-level, additive extensions to the built-in provisioning-detection conventions.
+    ...(config.environments.detectionConventions
+      ? { detectionConventions: config.environments.detectionConventions }
+      : {}),
   }
 }
 

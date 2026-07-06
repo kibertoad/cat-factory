@@ -172,6 +172,7 @@ import {
   type ComposeRuntime,
   type CustomManifestTypeRegistry,
   type DeployJobClient,
+  type DetectionConventions,
   type EnvironmentBackendRegistry,
   type RunnerBackendRegistry,
   type UserSecretKindRegistry,
@@ -556,6 +557,12 @@ export interface CoreDependencies {
   // adapter can reach an internal platform on a private/VPN host. Scoped independently of
   // the runner pool: widening one integration must not widen the other's SSRF guard.
   environmentUrlSafetyPolicy?: UrlSafetyPolicy
+  // Deployment-level, ADDITIVE extensions to the built-in provisioning-detection conventions
+  // (extra compose file names/dirs, seed dirs, env-template dirs), read from
+  // `config.environments.detectionConventions` by each facade and threaded into BOTH detection
+  // consumers (the connection service's `detectServiceProvisioning` + the shared-stack `detect`), so
+  // an org broadens detection to its house repo layout without a code edit. Absent ⇒ built-in.
+  detectionConventions?: DetectionConventions
 
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) ------------
   // Lets a workspace route its repo-operating coding jobs to its own container
@@ -1477,6 +1484,7 @@ function createEnvironmentsModule(
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
       : {}),
+    ...(deps.detectionConventions ? { detectionConventions: deps.detectionConventions } : {}),
     ...(canRepair
       ? {
           dispatchConfigRepair: (input) =>
@@ -2112,6 +2120,9 @@ function createSharedStacksModule(
     ...(deps.resolveRepoFilesForCoords
       ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
       : {}),
+    // Same deployment-level detection-convention extensions the environment detector honours, so
+    // shared-stack `detect` recognises the org's house compose layout too.
+    ...(deps.detectionConventions ? { detectionConventions: deps.detectionConventions } : {}),
     // Re-run a stack's declared machine-prerequisite checks at bring-up start. Present only where
     // the host-probe seam is wired (the local facade — same runtime binding as `composeRuntime`).
     ...(preflightService ? { runPreflights: (refs) => preflightService.run(refs) } : {}),

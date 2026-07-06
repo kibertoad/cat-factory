@@ -1,6 +1,10 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { GateProviderOverrides } from '@cat-factory/gates'
-import type { BackendRegistries, DeployJobClient } from '@cat-factory/integrations'
+import type {
+  BackendRegistries,
+  DeployJobClient,
+  DetectionConventions,
+} from '@cat-factory/integrations'
 import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
@@ -430,4 +434,14 @@ export interface ConformanceAppOptions {
    * query. Absent → the facade's default fakes.
    */
   taskSourceProviders?: TaskSourceProvider[]
+  /**
+   * Inject the deployment-level detection-convention extensions (`CoreDependencies.detectionConventions`)
+   * so the suite can assert that a convention-added compose name is honoured by service-provisioning
+   * detection on EVERY runtime. This is the drift-prone part of the feature — the detection LOGIC is a
+   * shared pure function, but each facade must thread `config.environments.detectionConventions` from
+   * its own config into the core deps. A facade that forgets that wiring (or wires only one runtime)
+   * fails the convention assertion here instead of silently reverting to built-ins. Each facade harness
+   * threads it into its container build exactly as a real facade composes it from config.
+   */
+  detectionConventions?: DetectionConventions
 }

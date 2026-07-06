@@ -5002,6 +5002,80 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
         expect(good.body).toEqual({ ok: true, issues: [] })
       })
 
+      it('honours deployment-level detection conventions for service-provisioning detection', async () => {
+        // The detection LOGIC is a shared pure function (unit-tested in @cat-factory/integrations);
+        // the runtime-specific part is each facade threading `config.environments.detectionConventions`
+        // into the core deps. This asserts that wiring on EVERY runtime: a repo whose only compose
+        // file uses a NON-canonical name (`stack.yml`) is invisible to a default detector, but is
+        // detected once the deployment adds that name via conventions. A facade that forgot the
+        // config→deps threading (or wired only one runtime) fails here instead of silently reverting
+        // to built-ins. The reader is a fake (an in-memory path→content map) so no GitHub is needed —
+        // it flows through the SAME `resolveRepoFilesForCoords` seam the validate-repo route uses.
+        const seed = (files: Record<string, string>): RunRepoContext => {
+          const paths = Object.keys(files)
+          const repo = {
+            getFile: async (path: string) =>
+              path in files ? { content: files[path]!, sha: `sha:${path}` } : null,
+            // A minimal one-level directory listing over the in-memory paths, enough for the
+            // compose-file scan (`findCompose` lists the root + common compose dirs).
+            listDirectory: async (dir: string) => {
+              const prefix = dir ? `${dir}/` : ''
+              const seen = new Set<string>()
+              const entries: { name: string; type: string; path: string }[] = []
+              for (const p of paths) {
+                if (prefix && !p.startsWith(prefix)) continue
+                const rest = p.slice(prefix.length)
+                if (!rest) continue
+                const seg = rest.split('/')[0]!
+                if (seen.has(seg)) continue
+                seen.add(seg)
+                entries.push({
+                  name: seg,
+                  type: rest.includes('/') ? 'dir' : 'file',
+                  path: prefix + seg,
+                })
+              }
+              return entries
+            },
+            headSha: async () => 'base-sha',
+            createBranch: async () => {},
+            commitFiles: async () => ({ sha: 'c' }),
+            openPullRequest: async () => ({ number: 1 }) as never,
+          }
+          return { repo, baseBranch: 'main' } as unknown as RunRepoContext
+        }
+        const files = { 'stack.yml': 'services:\n  app:\n    image: nginx\n' }
+        type DetectResult = { provisioning: { type: string; composePath?: string } }
+
+        // Default (no conventions): the non-canonical name is not a compose file ⇒ nothing detected.
+        const plain = harness.makeApp(undefined, {
+          resolveRepoFilesForCoords: async () => seed(files),
+        })
+        const wsPlain = (await plain.createWorkspace()).workspace
+        const off = await plain.call<DetectResult>(
+          'POST',
+          `/workspaces/${wsPlain.id}/environments/detect-provisioning`,
+          { owner: 'acme', repo: 'widgets', prefer: 'docker-compose' },
+        )
+        expect(off.status).toBe(200)
+        expect(off.body.provisioning.type).toBe('infraless')
+
+        // With the deployment convention adding `stack.yml`: detected as docker-compose here too.
+        const conv = harness.makeApp(undefined, {
+          resolveRepoFilesForCoords: async () => seed(files),
+          detectionConventions: { composeFiles: ['stack.yml'] },
+        })
+        const wsConv = (await conv.createWorkspace()).workspace
+        const on = await conv.call<DetectResult>(
+          'POST',
+          `/workspaces/${wsConv.id}/environments/detect-provisioning`,
+          { owner: 'acme', repo: 'widgets', prefer: 'docker-compose' },
+        )
+        expect(on.status).toBe(200)
+        expect(on.body.provisioning.type).toBe('docker-compose')
+        expect(on.body.provisioning.composePath).toBe('stack.yml')
+      })
+
       it('drives an env-config-repair run to success and records the post-repair validation', async () => {
         // The durable, asynchronous config-repair fallback (PR #424 follow-up): when
         // mechanical bootstrap can't synthesise a valid provider config and the caller opts

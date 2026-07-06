@@ -155,6 +155,10 @@ export {
   type EnvironmentHandlerView,
   type ResolvedTypeProvider,
 } from './modules/environments/EnvironmentConnectionService.js'
+// Deployment-level, additive extensions to the built-in provisioning-detection conventions
+// (extra compose file names/dirs, seed dirs, env-template dirs). Threaded from the app config
+// through `CoreDependencies` into the detectors so an org can broaden detection without a code edit.
+export type { DetectionConventions } from './modules/environments/provision-detect.logic.js'
 // The ephemeral-environment backend provider-registry seam: maps a backend kind
 // (`manifest` | `kubernetes` | future `nomad`/…) → an EnvironmentProvider. The registry is
 // an app-owned INSTANCE (built via `defaultEnvironmentBackendRegistry` / the unified
