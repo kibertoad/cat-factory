@@ -1,5 +1,24 @@
 # @cat-factory/node-server
 
+## 0.87.2
+
+### Patch Changes
+
+- 35636d5: Honour `INITIATIVE_LOOP_INTERVAL_MS` when it is supplied through `start({ env })`. The initiative-
+  loop sweeper resolved its interval from `process.env` directly, but `start()` takes its config from
+  an injected `env` object it never writes back to `process.env` — so a deployment (or the e2e
+  backend) that set the knob via the injected env was silently ignored and the loop ran at the 60s
+  backstop. `resolveSweepInterval(env)` now reads the passed env and `start()` threads its own `env`
+  through. This deflakes an intermittent e2e failure where an initiative's first task spawn (which,
+  absent a terminal poke, waits for the sweep) landed ~60s later — past the spec's timeout.
+- Updated dependencies [35636d5]
+  - @cat-factory/agents@0.48.3
+  - @cat-factory/consensus@0.10.10
+  - @cat-factory/orchestration@0.97.2
+  - @cat-factory/provider-bedrock@0.7.180
+  - @cat-factory/provider-cloudflare@0.7.181
+  - @cat-factory/server@0.101.2
+
 ## 0.87.1
 
 ### Patch Changes

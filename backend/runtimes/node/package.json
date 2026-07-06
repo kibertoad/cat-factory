@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/node-server",
-  "version": "0.87.1",
+  "version": "0.87.2",
   "description": "Node.js runtime facade for the Agent Architecture Board: serves the shared @cat-factory/server Hono app via @hono/node-server, wiring Node implementations of the runtime ports (persistence, gateways, model provisioning).",
   "repository": {
     "type": "git",
