@@ -4532,7 +4532,8 @@
       "run": "Run analysis",
       "unavailable": "Deep analysis needs a linked repository and the analysis pipeline.",
       "failed": "The analysis run failed.",
-      "apply": "Apply analyst draft"
+      "apply": "Apply analyst draft",
+      "cliNudge": "This repo ships its own setup CLI or Makefile ({path}) the deterministic scan can't read. Run deep analysis to translate it into recipe steps."
     },
     "field": {
       "composeFiles": "Compose files",

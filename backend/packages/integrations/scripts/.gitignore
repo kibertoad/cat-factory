@@ -1,0 +1,4 @@
+# A developer's local sanitize map for `pilot-detect-golden.mjs` maps upstream repo
+# names to the fixture placeholders. It names the real upstream repo, so it is never
+# committed — the drift alarm stays free of any upstream-specific string.
+pilot-sanitize.local.json

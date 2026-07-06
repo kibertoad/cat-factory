@@ -4415,7 +4415,8 @@
       "run": "Analizi çalıştır",
       "unavailable": "Derin analiz için bağlı bir depo ve analiz hattı gerekir.",
       "failed": "Analiz çalışması başarısız oldu.",
-      "apply": "Analist taslağını uygula"
+      "apply": "Analist taslağını uygula",
+      "cliNudge": "Bu depo, belirlenimci taramanın okuyamadığı kendi kurulum CLI'sini veya Makefile'ını ({path}) içeriyor. Reçete adımlarına dönüştürmek için derin analizi çalıştır."
     },
     "field": {
       "composeFiles": "Compose dosyaları",

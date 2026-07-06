@@ -14,7 +14,12 @@ import type {
   PrivilegedAppConfig,
   TasksConfig,
 } from '@cat-factory/server'
-import { ENV_HELP, configProblem, resolveMachineTokenTtlMs } from '@cat-factory/server'
+import {
+  ENV_HELP,
+  configProblem,
+  parseDetectionConventions,
+  resolveMachineTokenTtlMs,
+} from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import { DEFAULT_SPEND_PRICING, budgetCapsOverlay, modelCostResolver } from '@cat-factory/spend'
 
@@ -203,6 +208,7 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
   // Self-hosted runner pools encrypt their scheduler credentials at rest; opt-in via
   // the enable flag, sealed with the shared ENCRYPTION_KEY (mirroring the Worker).
   const runnersEncryptionKey = env.ENCRYPTION_KEY?.trim() ?? ''
+  const detectionConventions = parseDetectionConventions(env.ENVIRONMENTS_DETECTION_CONVENTIONS)
   // Slack notification transport: opt-in (SLACK_ENABLED), the per-account bot token
   // sealed with the shared ENCRYPTION_KEY. OAuth credentials are optional (manual
   // bot-token onboarding works without them); when set they enable "Add to Slack".
@@ -378,6 +384,8 @@ export function loadNodeConfig(env: NodeJS.ProcessEnv): AppConfig {
       // internal/VPN host (otherwise the strict public-https guard rejects it).
       allowUrlHosts: csv(env.ENVIRONMENTS_ALLOW_URL_HOSTS),
       allowHttpUrls: env.ENVIRONMENTS_ALLOW_HTTP_URLS === 'true',
+      // Additive house-convention extensions to provisioning detection (JSON object).
+      ...(detectionConventions ? { detectionConventions } : {}),
     },
     runners: runnersEncryptionKey
       ? {

@@ -88,6 +88,10 @@ const composeServiceOptions = computed(() =>
     value: c.service,
   })),
 )
+// The repo ships its own imperative bring-up (a `bin/*console*` / Makefile / justfile the
+// deterministic scan can't read) — the strongest signal to run the analyst, so when present we
+// elevate the deep-analysis affordance from a quiet opt-in to a prominent nudge naming the CLI.
+const repoCliHint = computed(() => store.recommendation?.repoCliHint)
 
 function fileEnabled(path: string): boolean {
   return store.recipe.composeFiles?.includes(path) ?? false
@@ -242,8 +246,25 @@ function next() {
           </p>
 
           <template v-if="store.recommendation && !store.detecting">
-            <!-- deep analysis (opt-in) -->
-            <div class="rounded-md border border-slate-800 bg-slate-900/40 p-3">
+            <!-- deep analysis (opt-in; elevated to a prominent nudge when the repo ships its own CLI) -->
+            <div
+              class="rounded-md border p-3"
+              :class="
+                repoCliHint
+                  ? 'border-primary-700/60 bg-primary-950/30'
+                  : 'border-slate-800 bg-slate-900/40'
+              "
+            >
+              <p
+                v-if="repoCliHint"
+                class="mb-2 flex items-start gap-1.5 text-[11px] text-primary-300"
+                data-testid="env-setup-cli-nudge"
+              >
+                <UIcon name="i-lucide-lightbulb" class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{{
+                  t('environmentWizard.analysis.cliNudge', { path: repoCliHint.path })
+                }}</span>
+              </p>
               <div class="flex items-center justify-between gap-2">
                 <div class="min-w-0">
                   <p class="text-[12px] font-medium text-slate-300">
@@ -256,7 +277,7 @@ function next() {
                 <UButton
                   size="xs"
                   variant="soft"
-                  color="neutral"
+                  :color="repoCliHint ? 'primary' : 'neutral'"
                   icon="i-lucide-sparkles"
                   :loading="store.analysisStatus === 'running'"
                   :disabled="!store.canAnalyze || store.analysisStatus === 'running'"

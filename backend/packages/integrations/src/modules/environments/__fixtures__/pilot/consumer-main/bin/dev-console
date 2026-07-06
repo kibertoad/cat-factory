@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Sanitized fixture — a stand-in for the pilot repo's own imperative bring-up CLI
+# (`bin/dev-console app setup`). The detector NEVER parses this file; it only flags its
+# presence as a `repoCliHint` (kind: repo-cli) — the nudge toward the environment analyst,
+# which translates such a CLI's setup order into declarative recipe steps. The real CLI's
+# ordering (composer install -> seed -> migrate -> index build -> health loop) is captured
+# as the reference recipe in ../../reference/consumer-recipe.json.
+echo "acme-monolith dev console (fixture stub)"
