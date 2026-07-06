@@ -27,4 +27,5 @@ system prompt when selected:
 
 Pure additive catalog data (existing fragments and the catalog contract are unchanged); wired into
 `FRAGMENTS`, resolvable via `getFragment`. The prompt-fragments package gains a vitest suite that
-locks the collection's shape and intent.
+guards the collection's catalog invariants (namespacing/shape conventions, wiring + resolution,
+global id uniqueness) — deliberately not the fragment prose, which is its own source of truth.
