@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentRunContext, GitHubClient, RepoOp, RepoOpContext } from '@cat-factory/kernel'
+import type {
+  AgentRunContext,
+  CachedRepoRead,
+  GitHubClient,
+  GroupCacheHandle,
+  RepoOp,
+  RepoOpContext,
+} from '@cat-factory/kernel'
 import { makeRepoFiles, makeResolveRepoFiles, runRepoOps } from './repoFiles.js'
 
 const REF = { owner: 'acme', repo: 'widgets' }
@@ -75,6 +82,134 @@ describe('makeRepoFiles', () => {
     const resolve = makeResolveRepoFiles(client)
     await resolve(99, REF).getFile('x')
     expect(client.getFileContent).toHaveBeenCalledWith(99, REF, 'x', undefined)
+  })
+})
+
+// A tiny in-memory `repoFiles` cache stand-in. It records the load + probe per (group, key)
+// so a test can drive the refresh-window probe deterministically via `runProbes()` (the real
+// timing behaviour lives in @cat-factory/caching's suite). Read-through with the same
+// contract the wrapper relies on: a hit re-runs neither the load nor the client.
+function fakeRepoFilesCache(): GroupCacheHandle<CachedRepoRead> & {
+  runProbes: () => Promise<void>
+} {
+  const store = new Map<
+    string,
+    {
+      value: CachedRepoRead
+      load: () => Promise<CachedRepoRead>
+      probe?: (c: CachedRepoRead) => Promise<boolean>
+    }
+  >()
+  const id = (key: string, group: string) => `${group} ${key}`
+  return {
+    async get(key, group, load, isStillCurrent) {
+      const k = id(key, group)
+      const existing = store.get(k)
+      if (existing) {
+        existing.load = load
+        existing.probe = isStillCurrent
+        return existing.value
+      }
+      const value = await load()
+      store.set(k, { value, load, probe: isStillCurrent })
+      return value
+    },
+    async invalidate(key, group) {
+      store.delete(id(key, group))
+    },
+    async invalidateGroup(group) {
+      for (const k of Array.from(store.keys())) if (k.startsWith(`${group} `)) store.delete(k)
+    },
+    async invalidateAll() {
+      store.clear()
+    },
+    // Simulate an entry entering its refresh window: probe, reload on a stale/absent probe.
+    async runProbes() {
+      for (const entry of store.values()) {
+        if (entry.probe && !(await entry.probe(entry.value))) entry.value = await entry.load()
+      }
+    },
+  }
+}
+
+describe('makeRepoFiles (cached, slice 4)', () => {
+  it('reads a branch file through the cache — a second read hits neither client nor a re-load', async () => {
+    const client = fakeClient()
+    const repo = makeRepoFiles(client, 42, REF, fakeRepoFilesCache())
+
+    const first = await repo.getFile('spec/a.json', 'cat-factory/blk')
+    const second = await repo.getFile('spec/a.json', 'cat-factory/blk')
+    expect(first).toEqual({ content: 'baseline', sha: 'blob1' })
+    expect(second).toEqual(first)
+    expect(client.getFileContent).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the branch head once per batch (memoised), stamping it on every entry for the probe', async () => {
+    const client = fakeClient()
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    await repo.getFile('spec/a.json', 'cat-factory/blk')
+    await repo.getFile('spec/b.json', 'cat-factory/blk')
+    await repo.listDirectory('spec', 'cat-factory/blk')
+    // One head read stamps all three entries — not one per file.
+    expect(client.branchHeadSha).toHaveBeenCalledTimes(1)
+
+    // Head unchanged ⇒ the probe keeps every entry (no re-fetch) when the refresh window fires.
+    await cache.runProbes()
+    expect(client.getFileContent).toHaveBeenCalledTimes(2)
+    expect(client.listDirectory).toHaveBeenCalledTimes(1)
+  })
+
+  it('the head-sha probe re-fetches when the branch has moved', async () => {
+    let head = 'sha-work'
+    const client = fakeClient({
+      branchHeadSha: vi.fn(async () => head),
+      getFileContent: vi.fn(async () => ({ content: head, sha: head })),
+    })
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    expect((await repo.getFile('spec/a.json', 'cat-factory/blk'))?.content).toBe('sha-work')
+    head = 'sha-moved' // an out-of-band push advanced the branch
+    await cache.runProbes()
+    expect((await repo.getFile('spec/a.json', 'cat-factory/blk'))?.content).toBe('sha-moved')
+  })
+
+  it('commitFiles invalidates the branch group so the next read re-fetches', async () => {
+    const client = fakeClient()
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    await repo.getFile('spec/a.json', 'cat-factory/blk')
+    await repo.commitFiles({ branch: 'cat-factory/blk', message: 'm', files: [] })
+    await repo.getFile('spec/a.json', 'cat-factory/blk')
+    expect(client.getFileContent).toHaveBeenCalledTimes(2) // cache dropped by the commit
+    // A different branch's entry is untouched by the commit's group invalidation.
+    await repo.getFile('spec/a.json', 'main')
+    await repo.getFile('spec/a.json', 'main')
+    expect(client.getFileContent).toHaveBeenCalledTimes(3)
+  })
+
+  it('a sha-pinned read is immutable: the probe never reads a head and always keeps the entry', async () => {
+    const sha = 'a'.repeat(40)
+    const client = fakeClient()
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    await repo.getFile('spec/a.json', sha)
+    await cache.runProbes()
+    await repo.getFile('spec/a.json', sha)
+    expect(client.getFileContent).toHaveBeenCalledTimes(1) // never re-fetched
+    expect(client.branchHeadSha).not.toHaveBeenCalled() // pinned ⇒ no head read at all
+  })
+
+  it('a read with no gitRef (default branch) bypasses the cache', async () => {
+    const client = fakeClient()
+    const repo = makeRepoFiles(client, 42, REF, fakeRepoFilesCache())
+    await repo.getFile('README.md')
+    await repo.getFile('README.md')
+    expect(client.getFileContent).toHaveBeenCalledTimes(2) // uncached — served live each time
   })
 })
 

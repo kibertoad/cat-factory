@@ -1,6 +1,7 @@
 import type { GitHubRepo } from '../domain/types.js'
 import type { DocumentContent } from './document-source.js'
 import type { ResolvedCatalogEntry } from './fragment-repositories.js'
+import type { RepoContentEntry, RepoFileContent } from './github-client.js'
 
 // ---------------------------------------------------------------------------
 // The app-level caching seam (docs/initiatives/caching-layer.md). Services read
@@ -46,6 +47,38 @@ export interface GroupCacheHandle<T> {
 }
 
 /**
+ * One cached `RepoFiles` read (slice 4). A getFile / listDirectory result plus the
+ * branch head sha it reflects, so the staleness probe can re-validate a git-backed
+ * entry with a single cheap `headSha` compare instead of a per-file contents-API
+ * refetch. `headSha` is null for a sha-pinned or tag ref (immutable — those entries
+ * never probe stale). Discriminated by `kind` because getFile and listDirectory share
+ * one branch-scoped cache (distinct key prefixes within the same group).
+ */
+export type CachedRepoRead =
+  | {
+      readonly kind: 'file'
+      readonly headSha: string | null
+      readonly content: RepoFileContent | null
+    }
+  | { readonly kind: 'dir'; readonly headSha: string | null; readonly entries: RepoContentEntry[] }
+
+/**
+ * The group a cached {@link CachedRepoRead} lives under: one branch of one repo of one
+ * installation. `commitFiles` self-invalidates the branch it wrote, and the push webhook
+ * invalidates the branch it saw move, both via this exact key — so the server wrapper (which
+ * reads through the cache) and the integrations webhook (which invalidates it) MUST build the
+ * group identically. Kept here in kernel, the shared layer both import, to keep the two in step.
+ */
+export function repoFilesCacheGroup(
+  installationId: number,
+  owner: string,
+  repo: string,
+  ref: string,
+): string {
+  return `${installationId}:${owner}/${repo}@${ref}`
+}
+
+/**
  * The app-owned bag of named caches, one per adopted slice of the caching
  * initiative. Built once per process by a facade (`createAppCaches`) and
  * threaded through the dependency bag; consuming services take their handle off
@@ -79,6 +112,19 @@ export interface AppCaches {
    * D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
    */
   repoProjection: GroupCacheHandle<GitHubRepo[]>
+  /**
+   * Checkout-free {@link RepoFiles} reads (`getFile`/`listDirectory`) an agent's
+   * repo-op runs against a run's branch for idempotency byte-compares — grouped by
+   * `(installationId, owner, repo, branch)` via {@link repoFilesCacheGroup} and keyed
+   * per path (`f:`/`d:` prefixes). A self-verifying cache: an entry entering its refresh
+   * window runs the branch's cheap `headSha` probe and keeps its cached content when the
+   * branch hasn't moved, so the blueprint/spec post-ops don't re-fetch the same files on a
+   * re-run/replay. The owning `commitFiles` self-invalidates the branch group after it
+   * commits, and the push webhook invalidates a branch it saw move; a sha-pinned read is
+   * immutable (no probe). Stays enabled on the Worker's isolate-safe profile — like the
+   * document-body cache, the head-sha probe re-validates without a cross-isolate bus.
+   */
+  repoFiles: GroupCacheHandle<CachedRepoRead>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }

@@ -1,6 +1,7 @@
 import type { Clock } from '@cat-factory/kernel'
 import type {
   BranchProjectionRepository,
+  CachedRepoRead,
   CheckRunProjectionRepository,
   CommitProjectionRepository,
   GitHubInstallationRepository,
@@ -10,6 +11,7 @@ import type {
   PullRequestProjectionRepository,
   RepoProjectionRepository,
 } from '@cat-factory/kernel'
+import { repoFilesCacheGroup } from '@cat-factory/kernel'
 import {
   type GhCheckRunPayload,
   type GhCommitPayload,
@@ -52,6 +54,15 @@ export interface WebhookServiceDependencies {
    * pass-through profile) ⇒ no-op.
    */
   repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
+  /**
+   * The checkout-free `RepoFiles` read cache (`AppCaches.repoFiles`, slice 4). A push moves a
+   * branch, so its cached file/dir reads must drop — this is the invalidation site for a branch
+   * advanced OUTSIDE the app's own `commitFiles` (which self-invalidates): an agent container's
+   * git push, or a human editing the PR branch. Keyed per `(installation, owner, repo, branch)`
+   * and workspace-independent, so it's ONE `invalidateGroup` per push (not per linked workspace).
+   * Absent (tests / no cache) ⇒ no-op; the head-sha probe still bounds staleness regardless.
+   */
+  repoFilesCache?: GroupCacheHandle<CachedRepoRead>
 }
 
 type Json = Record<string, unknown>
@@ -130,6 +141,18 @@ export class WebhookService {
             )
           }
         })
+        // Drop the pushed branch's cached RepoFiles reads (slice 4). Workspace-independent —
+        // the cache is grouped by installation+repo+branch — so one call, outside the fan-out.
+        if (ref.startsWith('refs/heads/') && this.deps.repoFilesCache) {
+          const repo = asObject(root.repository)
+          const owner = asObject(repo?.owner)?.login
+          const name = repo?.name
+          if (typeof owner === 'string' && typeof name === 'string') {
+            await this.deps.repoFilesCache.invalidateGroup(
+              repoFilesCacheGroup(installationId, owner, name, ref.slice('refs/heads/'.length)),
+            )
+          }
+        }
         return
       }
       case 'check_run': {

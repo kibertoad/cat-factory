@@ -1,14 +1,17 @@
 import type {
+  CachedRepoRead,
   DeployCloneTarget,
   GitHubClient,
   GitHubInstallationRepository,
   GitHubRepoRef,
+  GroupCacheHandle,
   RepoFiles,
   RepoProjectionRepository,
   ResolveRepoFiles,
   ResolveRunRepoContext,
   RunRepoContext,
 } from '@cat-factory/kernel'
+import { repoFilesCacheGroup } from '@cat-factory/kernel'
 import type {
   MintInstallationToken,
   RepoTarget,
@@ -27,20 +30,106 @@ export { runRepoOps } from '@cat-factory/agents'
 // cloning. Each instance is bound to ONE installation + repo, so a repo-op names only
 // paths/branches.
 
-/** Bind a {@link GitHubClient} to one installation + repo as a {@link RepoFiles}. */
+/** A full 40-hex commit sha — an immutable ref, so its reads never need the head-sha probe. */
+function isPinnedSha(gitRef: string): boolean {
+  return /^[0-9a-f]{40}$/i.test(gitRef)
+}
+
+/**
+ * Bind a {@link GitHubClient} to one installation + repo as a {@link RepoFiles}.
+ *
+ * When `cache` (the app's `repoFiles` cache, slice 4) is supplied, `getFile`/`listDirectory`
+ * against a NAMED ref read through it — grouped per `(installation, owner, repo, ref)` so one
+ * `commitFiles` (or a push webhook) drops exactly the branch it touched, and keyed per path
+ * (`f:`/`d:` prefixes). Each entry remembers the branch head sha it reflects, so an entry
+ * entering its refresh window re-validates with a single cheap `branchHeadSha` compare instead
+ * of re-fetching every file; a sha-pinned read is immutable (no probe). The head sha a cold
+ * batch stamps onto its entries is read ONCE per branch (memoised for this instance's lifetime,
+ * cleared when we commit to that branch), so caching N files on a branch costs one extra head
+ * read, not N. Reads with no `gitRef` (the repo default branch, whose name we don't know here)
+ * bypass the cache. Absent `cache` ⇒ the original direct pass-through.
+ */
 export function makeRepoFiles(
   client: GitHubClient,
   installationId: number,
   ref: GitHubRepoRef,
+  cache?: GroupCacheHandle<CachedRepoRead>,
 ): RepoFiles {
+  const headSha = (branch: string) => client.branchHeadSha(installationId, ref, branch)
+  if (!cache) {
+    return {
+      getFile: (path, gitRef) => client.getFileContent(installationId, ref, path, gitRef),
+      listDirectory: (path, gitRef) => client.listDirectory(installationId, ref, path, gitRef),
+      // Exact single-ref lookup — correct even on repos with more branches than one
+      // `listBranches` page. Null ⇒ the branch does not exist yet (create-vs-commit).
+      headSha,
+      createBranch: (branch, fromSha) => client.createBranch(installationId, ref, branch, fromSha),
+      commitFiles: (input) => client.commitFiles(installationId, ref, input),
+      openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
+    }
+  }
+
+  // One head-sha read per branch for this instance's whole read batch (a cold post-op reads
+  // many files on the same branch). NOT reused by the probe — that reads fresh, since the
+  // whole point of the probe is the CURRENT head.
+  const headMemo = new Map<string, Promise<string | null>>()
+  const memoHead = (branch: string): Promise<string | null> => {
+    let pending = headMemo.get(branch)
+    if (!pending) {
+      pending = headSha(branch)
+      headMemo.set(branch, pending)
+    }
+    return pending
+  }
+  const group = (gitRef: string) => repoFilesCacheGroup(installationId, ref.owner, ref.repo, gitRef)
+  // The refresh-window probe: a pinned sha is immutable (always current); a branch entry is
+  // current only while the branch head still matches the sha it was read at.
+  const probeFor = (gitRef: string): ((cached: CachedRepoRead) => Promise<boolean>) =>
+    isPinnedSha(gitRef)
+      ? () => Promise.resolve(true)
+      : async (cached) => (await headSha(gitRef)) === cached.headSha
+  const headForLoad = (gitRef: string): Promise<string | null> =>
+    isPinnedSha(gitRef) ? Promise.resolve(null) : memoHead(gitRef)
+
   return {
-    getFile: (path, gitRef) => client.getFileContent(installationId, ref, path, gitRef),
-    listDirectory: (path, gitRef) => client.listDirectory(installationId, ref, path, gitRef),
-    // Exact single-ref lookup — correct even on repos with more branches than one
-    // `listBranches` page. Null ⇒ the branch does not exist yet (create-vs-commit).
-    headSha: (branch) => client.branchHeadSha(installationId, ref, branch),
+    getFile: async (path, gitRef) => {
+      if (!gitRef) return client.getFileContent(installationId, ref, path, gitRef)
+      const cached = await cache.get(
+        `f:${path}`,
+        group(gitRef),
+        async () => ({
+          kind: 'file' as const,
+          headSha: await headForLoad(gitRef),
+          content: await client.getFileContent(installationId, ref, path, gitRef),
+        }),
+        probeFor(gitRef),
+      )
+      return cached.kind === 'file' ? cached.content : null
+    },
+    listDirectory: async (path, gitRef) => {
+      if (!gitRef) return client.listDirectory(installationId, ref, path, gitRef)
+      const cached = await cache.get(
+        `d:${path}`,
+        group(gitRef),
+        async () => ({
+          kind: 'dir' as const,
+          headSha: await headForLoad(gitRef),
+          entries: await client.listDirectory(installationId, ref, path, gitRef),
+        }),
+        probeFor(gitRef),
+      )
+      return cached.kind === 'dir' ? cached.entries : []
+    },
+    headSha,
     createBranch: (branch, fromSha) => client.createBranch(installationId, ref, branch, fromSha),
-    commitFiles: (input) => client.commitFiles(installationId, ref, input),
+    commitFiles: async (input) => {
+      const result = await client.commitFiles(installationId, ref, input)
+      // The branch moved: drop its cached reads (this replica's, and — when a notification
+      // pair is wired — every peer's) and forget its memoised head so a later read re-stamps.
+      headMemo.delete(input.branch)
+      await cache.invalidateGroup(group(input.branch))
+      return result
+    },
     openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
   }
 }
@@ -59,19 +148,26 @@ export function makeResolveRepoFiles(client: GitHubClient): ResolveRepoFiles {
  * no repo (GitHub not connected); a throw from the target resolver (a block under no
  * linked service) propagates so the misconfiguration surfaces — failing the run loudly —
  * rather than guessing a repo, exactly as it does for a container kind at dispatch.
+ *
+ * `cache` (the app's `repoFiles` cache, slice 4) is threaded into the bound {@link RepoFiles}
+ * so a registered kind's pre/post-op idempotency re-reads hit the read-through cache; absent
+ * (tests / the pass-through profile) ⇒ direct reads, unchanged.
  */
 export function makeResolveRunRepoContext(
   client: GitHubClient,
   resolveRepoTarget: ResolveRepoTarget,
+  cache?: GroupCacheHandle<CachedRepoRead>,
 ): ResolveRunRepoContext {
   return async (workspaceId, blockId) => {
     const target = await resolveRepoTarget(workspaceId, blockId)
     if (!target) return null
     return {
-      repo: makeRepoFiles(client, target.installationId, {
-        owner: target.owner,
-        repo: target.name,
-      }),
+      repo: makeRepoFiles(
+        client,
+        target.installationId,
+        { owner: target.owner, repo: target.name },
+        cache,
+      ),
       baseBranch: target.baseBranch,
     }
   }

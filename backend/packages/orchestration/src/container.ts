@@ -1267,6 +1267,8 @@ function createGitHubModule(deps: CoreDependencies, caches: AppCaches): GitHubMo
     checkRunProjectionRepository,
     clock: deps.clock,
     repoProjectionCache: caches.repoProjection,
+    // Drop a pushed branch's cached RepoFiles reads (slice 4) when a branch moves out-of-band.
+    repoFilesCache: caches.repoFiles,
   })
   const service = new GitHubService({
     githubClient,

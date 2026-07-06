@@ -1944,8 +1944,13 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     githubGateDeps = {
       // The engine binds a registered custom kind's pre/post-op hooks to a run's repo
       // via this checkout-free RepoFiles resolver, composed from the same client +
-      // repo-target walk the gates/merger use — parity with the Worker.
-      resolveRunRepoContext: makeResolveRunRepoContext(engineVcsClient, resolveRepoTarget),
+      // repo-target walk the gates/merger use — parity with the Worker. The `repoFiles`
+      // cache (slice 4) makes the post-op idempotency re-reads a read-through hit.
+      resolveRunRepoContext: makeResolveRunRepoContext(
+        engineVcsClient,
+        resolveRepoTarget,
+        options.caches?.repoFiles,
+      ),
       // Block-less repo resolver for the environments module's on-demand repo
       // validation / config bootstrap (operator names owner+repo).
       resolveRepoFilesForCoords: makeResolveRepoFilesForCoords(

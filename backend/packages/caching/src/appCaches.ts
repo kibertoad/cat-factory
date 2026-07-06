@@ -1,5 +1,6 @@
 import type {
   AppCaches,
+  CachedRepoRead,
   DocumentContent,
   GitHubRepo,
   GroupCacheHandle,
@@ -55,6 +56,7 @@ export interface AppCachesProfile {
   fragmentCatalog: GroupCacheProfile
   fragmentDocumentBody: GroupCacheProfile
   repoProjection: GroupCacheProfile
+  repoFiles: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -77,6 +79,18 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // entry per group). Invalidation-driven — no version probe (a DB read as the probe
   // would cost as much as the DB read as the load).
   repoProjection: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 1 },
+  // Checkout-free RepoFiles reads, grouped per (installation, repo, branch) and keyed per
+  // path. Self-verifying like the document body: an entry entering the last minute of its
+  // TTL runs the branch's cheap `headSha` probe (bump on an unmoved branch, background
+  // reload otherwise) so a repo-op re-run doesn't re-fetch every file. A branch can hold
+  // many spec/blueprint shards, so a generous per-group bound.
+  repoFiles: {
+    enabled: true,
+    ttlInMsecs: 5 * 60_000,
+    maxGroups: 500,
+    maxItemsPerGroup: 256,
+    ttlLeftBeforeRefreshInMsecs: 60_000,
+  },
 }
 
 /**
@@ -100,6 +114,12 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // whose external entries self-verify via a version probe). So the Worker reads it
   // live every time, exactly like `fragmentCatalog`.
   repoProjection: { ...DEFAULT_APP_CACHES_PROFILE.repoProjection, enabled: false },
+  // Stays ENABLED here: a RepoFiles branch read is re-validated by the branch `headSha`
+  // probe (the git analogue of the document-body version probe), so a peer isolate's cached
+  // file self-heals within the refresh window without an invalidation bus — its staleness is
+  // bounded by the probe, not indefinite. The same reasoning that keeps `fragmentDocumentBody`
+  // on; only caches of our own mutable D1 state (`fragmentCatalog`/`repoProjection`) pass through.
+  repoFiles: { ...DEFAULT_APP_CACHES_PROFILE.repoFiles },
 }
 
 /**
@@ -253,15 +273,18 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.repoProjection,
     options,
   )
+  const repoFiles = buildGroupCache<CachedRepoRead>('repo-files', profile.repoFiles, options)
   return {
     fragmentCatalog,
     fragmentDocumentBody,
     repoProjection,
+    repoFiles,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
         fragmentDocumentBody.close(),
         repoProjection.close(),
+        repoFiles.close(),
       ])
     },
   }

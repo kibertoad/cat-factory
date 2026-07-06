@@ -1,4 +1,4 @@
-import type { GitHubRepo, GroupCacheHandle } from '@cat-factory/kernel'
+import type { CachedRepoRead, GitHubRepo, GroupCacheHandle } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { WebhookService, type WebhookServiceDependencies } from './WebhookService.js'
 
@@ -87,6 +87,66 @@ describe('WebhookService — repoProjection cache invalidation (slice 3)', () =>
       commits: [],
     })
 
+    expect(invalidated).toEqual([])
+  })
+})
+
+// Caching-initiative slice 4: a push moves a branch, so its cached checkout-free RepoFiles
+// reads (`AppCaches.repoFiles`) must drop — the invalidation site for a branch advanced OUTSIDE
+// the app's own `commitFiles`. Grouped by installation+repo+branch, so ONE call per push.
+function fakeRepoFilesCache(): {
+  handle: GroupCacheHandle<CachedRepoRead>
+  invalidated: string[]
+} {
+  const invalidated: string[] = []
+  return {
+    handle: {
+      get: async (_k, _g, load) => load(),
+      invalidate: async () => {},
+      invalidateGroup: async (group) => {
+        invalidated.push(group)
+      },
+      invalidateAll: async () => {},
+    },
+    invalidated,
+  }
+}
+
+describe('WebhookService — repoFiles cache invalidation (slice 4)', () => {
+  const pushDeps = (repoFilesCache: GroupCacheHandle<CachedRepoRead>) =>
+    ({
+      githubInstallationRepository: {
+        getByInstallationId: async () => ({ installationId: 1, deletedAt: null }),
+        listWorkspacesForInstallation: async () => ['ws-a'],
+      },
+      repoProjectionRepository: { linkedWorkspaces: async (_id: number, c: string[]) => c },
+      branchProjectionRepository: { upsertMany: async () => {} },
+      commitProjectionRepository: { upsertMany: async () => {} },
+      clock: { now: () => 0 },
+      repoFilesCache,
+    }) as unknown as WebhookServiceDependencies
+
+  it('invalidates the pushed branch group (once, workspace-independent)', async () => {
+    const { handle, invalidated } = fakeRepoFilesCache()
+    await new WebhookService(pushDeps(handle)).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'widgets', owner: { login: 'acme' } },
+      ref: 'refs/heads/cat-factory/blk',
+      after: 'abc123',
+      commits: [{ id: 'abc123' }],
+    })
+    expect(invalidated).toEqual(['1:acme/widgets@cat-factory/blk'])
+  })
+
+  it('ignores a tag push (only branch heads carry cached reads)', async () => {
+    const { handle, invalidated } = fakeRepoFilesCache()
+    await new WebhookService(pushDeps(handle)).handle('push', {
+      installation: { id: 1 },
+      repository: { id: 7, name: 'widgets', owner: { login: 'acme' } },
+      ref: 'refs/tags/v1.0.0',
+      after: 'abc123',
+      commits: [],
+    })
     expect(invalidated).toEqual([])
   })
 })
