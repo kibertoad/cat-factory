@@ -4268,10 +4268,12 @@
     "create": {
       "title": "Crear iniciativa",
       "inFrame": "Nueva iniciativa en {frame}",
+      "preset": "Tipo",
       "titleField": "Titulo",
       "titlePlaceholder": "p. ej. Migrar la API al nuevo modelo de autenticacion",
       "goalField": "Objetivo",
       "goalPlaceholder": "Describe el objetivo, las restricciones y el alcance aproximado. El planificador lo refina en un plan multifase.",
+      "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas).",
       "hint": "Todavia no se ejecuta nada: tras crearla, ejecuta el pipeline de planificacion de iniciativas sobre el bloque. Analiza el codigo y redacta el plan multifase para tu aprobacion.",
       "submit": "Crear iniciativa",
       "failedTitle": "No se pudo crear la iniciativa"

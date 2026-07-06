@@ -3451,10 +3451,12 @@
     "create": {
       "title": "Crea iniziativa",
       "inFrame": "Nuova iniziativa in {frame}",
+      "preset": "Tipo",
       "titleField": "Titolo",
       "titlePlaceholder": "es. Migrare l'API al nuovo modello di autenticazione",
       "goalField": "Obiettivo",
       "goalPlaceholder": "Descrivi l'obiettivo, i vincoli e l'ambito approssimativo. Il pianificatore lo affina in un piano multi-fase.",
+      "pathInvalid": "Inserisci un percorso all'interno del repository (senza \"..\", percorsi assoluti o barre rovesciate).",
       "hint": "Non viene eseguito ancora nulla: dopo la creazione, esegui la pipeline di Pianificazione dell'iniziativa sul blocco. Analizza il codebase e redige il piano multi-fase per la tua approvazione.",
       "submit": "Crea iniziativa",
       "failedTitle": "Impossibile creare l'iniziativa"

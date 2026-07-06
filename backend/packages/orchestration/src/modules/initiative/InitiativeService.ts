@@ -198,23 +198,47 @@ export class InitiativeService {
   /**
    * Ingest an `initiative-planner` step's plan draft into the block's entity:
    * strict-parse (the trust boundary — a malformed draft is rejected, never
-   * half-applied), validate the reference graph, fold it in preserving runtime
-   * state, and CAS-write. IDEMPOTENT: re-ingesting a draft that produces
-   * byte-identical content (a durable-driver replay) is a no-op, so the ingest
-   * is replay-safe. Returns the updated entity, or null when the block has no
-   * initiative (nothing to ingest into).
+   * half-applied), run the initiative preset's `seedPlan` hook (slice 5), validate
+   * the reference graph, fold it in preserving runtime state, and CAS-write.
+   * IDEMPOTENT: re-ingesting a draft that produces byte-identical content (a
+   * durable-driver replay) is a no-op, so the ingest is replay-safe. Returns the
+   * updated entity, or null when the block has no initiative (nothing to ingest into).
    */
   async ingestPlan(
     workspaceId: string,
     blockId: string,
     rawDraft: unknown,
   ): Promise<Initiative | null> {
-    const draft = parseInitiativePlanDraft(rawDraft)
+    const draft = await this.seedPlanDraft(workspaceId, blockId, parseInitiativePlanDraft(rawDraft))
+    if (!draft) return null
     validatePlanDraft(draft)
     await this.assertPipelinesExist(workspaceId, draft)
     return this.mutate(workspaceId, blockId, (current) =>
       applyPlanDraft(current, draft, this.deps.clock.now()),
     )
+  }
+
+  /**
+   * Run the initiative preset's `seedPlan` post-processor over the parsed draft (slice 5). The
+   * preset is resolved from the entity's FROZEN `presetId`/`presetInputs` (set once at create,
+   * never mutated), so reading it outside the CAS `mutate` is race-free — `seedPlan` is pure, so
+   * its output is a deterministic function of the draft + frozen inputs and stays replay-safe.
+   * Its output is RE-PARSED through the strict schema: a `seedPlan` bug can't persist a malformed
+   * draft, and an unsafe spawn `targetPath` a hook (or the planner) emitted is rejected here by
+   * `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape the repo. Returns null
+   * when the block has no initiative (mirroring the null the caller returns), or the draft
+   * unchanged when the preset has no `seedPlan` / is absent (byte-for-byte the pre-slice-5 path).
+   */
+  private async seedPlanDraft(
+    workspaceId: string,
+    blockId: string,
+    draft: ReturnType<typeof parseInitiativePlanDraft>,
+  ): Promise<ReturnType<typeof parseInitiativePlanDraft> | null> {
+    const initiative = await this.deps.initiativeRepository.getByBlock(workspaceId, blockId)
+    if (!initiative) return null
+    const preset = initiative.presetId ? getInitiativePreset(initiative.presetId) : undefined
+    if (!preset?.seedPlan) return draft
+    return parseInitiativePlanDraft(preset.seedPlan(draft, initiative.presetInputs ?? {}))
   }
 
   /**

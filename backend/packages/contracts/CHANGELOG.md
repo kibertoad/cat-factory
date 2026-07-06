@@ -1,5 +1,76 @@
 # @cat-factory/contracts
 
+## 0.117.0
+
+### Minor Changes
+
+- 4a3e536: Initiative presets — slice 5: loop/ingest glue (spawn decoration + `seedPlan` at ingest).
+
+  - **contracts** (`initiativeItemSpawnSchema`): the spawn bag now carries an optional `taskType`, so
+    a preset's `seedPlan` can declare a spawned item's kind (`document`/`bug`/`spike`/…) exactly as
+    the create-task form does.
+  - **orchestration** (`InitiativeLoopService.buildTaskBlock`): a spawned item's preset-authored
+    `spawn` bag is now folded onto the task block, so a planned item comes out as a first-class
+    TYPED task rather than a bare description block — its `taskType` (so a doc task classifies as
+    `document`, not the default `feature` — `taskType`-keyed per-type task limits and the SPA's
+    document affordances now apply), the doc task's `taskTypeFields` (`docKind`/`targetPath`/…),
+    best-practice `fragmentIds`, and per-agent `agentConfig`. Each is additive + sparse (an empty bag
+    is omitted), mirroring `BoardService.addTask`, so a decoration-less item (the generic / no-preset
+    case) spawns a block byte-identical to before. A `document`-typed spawn with no explicit
+    `fragmentIds` inherits the default writing-style fragments, exactly as `BoardService.addTask`
+    seeds them for a board-created document task. The per-run gate override (`spawn.gates`, slice 2)
+    is unchanged.
+  - **orchestration** (`applyPlanDraft`): the draft item's `spawn` decoration is now carried onto the
+    persisted item (it follows the draft like the other content fields), so `buildTaskBlock` can read
+    it. A re-plan refreshing an already-materialised item is harmless — its block was decorated when
+    it spawned.
+  - **orchestration** (`InitiativeService.ingestPlan`): runs the resolved initiative preset's
+    `seedPlan` post-processor over the parsed draft BEFORE `applyPlanDraft`. The preset is resolved
+    from the entity's FROZEN `presetId`/`presetInputs`, so reading it outside the CAS `mutate` is
+    race-free and (being pure) replay-safe. The hook's output is RE-PARSED through the strict schema:
+    a `seedPlan` bug can't persist a malformed draft, and an unsafe spawn `targetPath` (from a hook OR
+    the planner) is rejected by `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape
+    the repo. Absent preset / no `seedPlan` ⇒ the draft is applied unchanged (byte-for-byte the
+    pre-slice-5 path).
+  - **conformance**: asserts a preset-authored item `spawn` bag (task type, typed-task fields,
+    fragments, agent config, gate override) round-trips through the initiative store intact on both
+    runtimes — a store that dropped it would silently spawn a bare block instead of a first-class doc
+    task.
+
+## 0.116.1
+
+### Patch Changes
+
+- 18a9cb5: Initiative presets — slice 4: SPA preset picker + generic descriptor-driven create form.
+
+  - **CreateInitiativeModal** becomes a preset-aware create surface: a picker over the registered
+    presets (built-in "Custom initiative" + any a deployment registered), defaulting to
+    `preset_generic`. The picker is shown only when more than one preset exists, so a stock install
+    keeps today's plain title/goal form. On submit the modal sends the selected `presetId` + the
+    sanitized `presetInputs`.
+  - **New `InitiativePresetFields.vue`** — a GENERIC descriptor-driven field renderer (zero per-preset
+    frontend code), extending the `ProviderConnectionTab` flat-field pattern with the three shapes a
+    preset form needs: `checkbox-group` (multi-select → `string[]`), `path` (repo-relative dir with an
+    inline safety error via the shared `isSafeRepoDirPath`), and single-condition `showWhen`
+    visibility (via the shared `isPresetFieldVisible`). The model is the typed `InitiativePresetInputs`
+    so it round-trips the wire contract unchanged.
+  - **Probe prefill**: selecting a preset with a detection probe fires
+    `POST …/initiative-presets/:id/probe` for the target frame and merges the detected values (known
+    fields only) over the descriptor defaults, with a stale-response guard. Best-effort — a failure /
+    unwired GitHub falls back to defaults and never blocks create.
+  - Client-side create validation mirrors the server via the SAME shared
+    `validateInitiativePresetInputs`, gating the submit button; the per-field path error renders
+    inline. New pure `defaultPresetInputs` util seeds the form's initial typed values from the
+    descriptor. Store `create` now forwards `presetId`/`presetInputs`; new `probePreset` store action
+    - `probeInitiativePreset` API binding. i18n chrome (`initiative.create.preset` /
+      `.pathInvalid`) added across all locales.
+  - Review follow-ups: the renderer now DROPS emptied fields (blank string / empty multi-select /
+    unchecked box) so a cleared field stays absent instead of freezing an empty value on the entity;
+    the in-flight probe no longer clobbers a value the user typed while it was loading; and
+    `isPresetFieldVisible` (`@cat-factory/contracts`) treats an absent value as `false` for a boolean
+    `equals: false` condition, so a `showWhen`-gated field appears at first render for an unchecked box
+    (previously only after a toggle) — the same shared function both facades already use.
+
 ## 0.116.0
 
 ### Minor Changes

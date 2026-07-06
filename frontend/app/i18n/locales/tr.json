@@ -4280,10 +4280,12 @@
     "create": {
       "title": "Girisim olustur",
       "inFrame": "{frame} icinde yeni girisim",
+      "preset": "Tur",
       "titleField": "Baslik",
       "titlePlaceholder": "orn. API'yi yeni kimlik dogrulama modeline tasi",
       "goalField": "Hedef",
       "goalPlaceholder": "Hedefi, kisitlari ve yaklasik kapsami aciklayin. Planlayici bunu cok asamali bir plana donusturur.",
+      "pathInvalid": "Depo icinde bir yol girin (\"..\", mutlak yollar veya ters egik cizgi olmadan).",
       "hint": "Henuz hicbir sey calismiyor: olusturduktan sonra blok uzerinde Girisim Planlama hattini calistirin. Kod tabanini analiz eder ve onayiniz icin cok asamali plani taslak olarak hazirlar.",
       "submit": "Girisim olustur",
       "failedTitle": "Girisim olusturulamadi"

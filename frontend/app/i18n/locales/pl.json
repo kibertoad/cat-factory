@@ -4268,10 +4268,12 @@
     "create": {
       "title": "Utworz inicjatywe",
       "inFrame": "Nowa inicjatywa w {frame}",
+      "preset": "Typ",
       "titleField": "Tytul",
       "titlePlaceholder": "np. Migracja API do nowego modelu uwierzytelniania",
       "goalField": "Cel",
       "goalPlaceholder": "Opisz cel, ograniczenia i przyblizony zakres. Planista doprecyzuje to w wielofazowy plan.",
+      "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych).",
       "hint": "Nic jeszcze nie jest uruchamiane: po utworzeniu uruchom na bloku pipeline planowania inicjatywy. Analizuje on kod i przygotowuje wielofazowy plan do zatwierdzenia.",
       "submit": "Utworz inicjatywe",
       "failedTitle": "Nie udalo sie utworzyc inicjatywy"

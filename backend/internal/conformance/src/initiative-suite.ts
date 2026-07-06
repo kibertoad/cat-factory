@@ -240,6 +240,45 @@ export function defineInitiativeSuite(
       })
     })
 
+    it('round-trips a preset-authored item spawn bag through the CAS (slice 5)', async () => {
+      // The spawn decoration (`item.spawn`: the `taskType`, the typed-task `taskTypeFields`,
+      // best-practice `fragmentIds`, per-agent `agentConfig`, and the per-run gate override) rides the entity's
+      // `doc` blob, so both stores must (de)serialise the nested bag intact — it's exactly what the
+      // loop's `buildTaskBlock` folds onto the spawned task block, so a store that dropped it would
+      // silently spawn a bare description block instead of a first-class doc task.
+      const { initiatives } = makeRepos()
+      const { ws, block, id } = ids()
+      await initiatives.insert(ws, initiative({ id, blockId: block, slug: 'spawn-decoration' }))
+      const decorated: Initiative = {
+        ...initiative({ id, blockId: block, slug: 'spawn-decoration' }),
+        status: 'executing',
+        items: [
+          {
+            id: 'item-1',
+            phaseId: 'phase-1',
+            title: 'Refresh the API reference',
+            description: 'Document the public API surface.',
+            dependsOn: [],
+            status: 'pending',
+            spawn: {
+              taskType: 'document',
+              taskTypeFields: { docKind: 'reference', targetPath: 'docs/api/reference.md' },
+              fragmentIds: ['style.anti-llmisms', 'style.concise-actionable'],
+              agentConfig: { 'tester.environment': 'local' },
+              gates: [true, false, false],
+            },
+          },
+        ],
+        rev: 1,
+        updatedAt: 2,
+      }
+      expect(await initiatives.compareAndSwap(ws, decorated, 0)).toBe(true)
+
+      const read = await initiatives.get(ws, id)
+      expect(read).toEqual(decorated)
+      expect(read!.items![0]!.spawn).toEqual(decorated.items![0]!.spawn)
+    })
+
     it('delete removes the entity', async () => {
       const { initiatives } = makeRepos()
       const { ws, block, id } = ids()

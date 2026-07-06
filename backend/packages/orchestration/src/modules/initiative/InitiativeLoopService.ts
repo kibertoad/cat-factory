@@ -14,6 +14,7 @@ import type {
 } from '@cat-factory/kernel'
 import { ConflictError, DomainError } from '@cat-factory/kernel'
 import { commitInitiativeTracker } from '@cat-factory/agents'
+import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { InitiativeService } from './InitiativeService.js'
@@ -386,7 +387,17 @@ export class InitiativeLoopService {
     }
   }
 
-  /** Build the task block a spawned item runs as (item estimate stamped, `initiativeId` linked). */
+  /**
+   * Build the task block a spawned item runs as: item estimate stamped, `initiativeId` linked,
+   * and the item's preset-authored `spawn` decoration folded on (slice 5) so it comes out a
+   * first-class TYPED task rather than a bare description block — its `taskType` (so a doc task
+   * classifies as `document`, not `feature`), the doc task's `taskTypeFields` (docKind /
+   * targetPath / …), best-practice `fragmentIds`, and per-agent-kind `agentConfig`. Each is
+   * additive + sparse, mirroring `BoardService.addTask`: an empty bag is omitted so a
+   * decoration-less item is byte-identical to the pre-slice-5 block. A `document`-typed spawn
+   * with no explicit `fragmentIds` inherits the default writing-style fragments, exactly as
+   * `BoardService.addTask` seeds them for a document task created on the board.
+   */
   private buildTaskBlock(
     blockId: string,
     item: InitiativeItem,
@@ -394,6 +405,16 @@ export class InitiativeLoopService {
     initiativeBlockId: string,
   ): Block {
     const estimate = estimateForItem(item, this.deps.clock.now())
+    const spawn = item.spawn
+    // Explicit spawn fragments win; else a document task falls back to the default writing-style
+    // fragments (the same default `BoardService.addTask` seeds), so a typed doc task is
+    // byte-identical however it was created. Any other (or untyped) item stays bare.
+    const fragmentIds =
+      spawn?.fragmentIds && spawn.fragmentIds.length
+        ? spawn.fragmentIds
+        : spawn?.taskType === 'document'
+          ? [...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS]
+          : []
     return {
       id: blockId,
       title: item.title,
@@ -411,6 +432,14 @@ export class InitiativeLoopService {
       // loop OWNS sequencing, so NEVER opt into `autoStartDependents` on a spawned block.
       initiativeId: initiativeBlockId,
       ...(estimate ? { estimate } : {}),
+      ...(spawn?.taskType ? { taskType: spawn.taskType } : {}),
+      ...(spawn?.taskTypeFields && Object.keys(spawn.taskTypeFields).length
+        ? { taskTypeFields: spawn.taskTypeFields }
+        : {}),
+      ...(fragmentIds.length ? { fragmentIds } : {}),
+      ...(spawn?.agentConfig && Object.keys(spawn.agentConfig).length
+        ? { agentConfig: spawn.agentConfig }
+        : {}),
     }
   }
 

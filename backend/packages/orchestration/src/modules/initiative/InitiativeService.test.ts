@@ -2,6 +2,7 @@ import type {
   Block,
   BlockRepository,
   Initiative,
+  InitiativePresetRegistration,
   InitiativeRepository,
   Workspace,
   WorkspaceRepository,
@@ -58,8 +59,15 @@ function makeService() {
     insert: async (_ws: string, entity: Initiative) => {
       initiatives.set(entity.id, entity)
     },
+    get: async (_ws: string, id: string) => initiatives.get(id) ?? null,
     getByBlock: async (_ws: string, blockId: string) =>
       [...initiatives.values()].find((i) => i.blockId === blockId) ?? null,
+    compareAndSwap: async (_ws: string, next: Initiative, expectedRev: number) => {
+      const cur = initiatives.get(next.id)
+      if (!cur || cur.rev !== expectedRev) return false
+      initiatives.set(next.id, next)
+      return true
+    },
   } as unknown as InitiativeRepository
   const service = new InitiativeService({
     workspaceRepository,
@@ -69,7 +77,7 @@ function makeService() {
     clock,
     idGenerator,
   })
-  return { service }
+  return { service, initiatives }
 }
 
 const DOCS_PRESET_ID = 'preset_test_docs'
@@ -236,5 +244,120 @@ describe('InitiativeService.create — presets', () => {
     expect(initiative.presetInputs).toEqual({ docTypes: ['readme'], docsRoot: 'docs/' })
     // ...and the escaping path is nowhere on the entity.
     expect(JSON.stringify(initiative.presetInputs)).not.toContain('..')
+  })
+})
+
+describe('InitiativeService.ingestPlan — seedPlan (slice 5)', () => {
+  beforeEach(() => {
+    idSeq = 0
+    clockNow = 1_000
+    clearRegisteredInitiativePresets()
+  })
+  afterEach(() => clearRegisteredInitiativePresets())
+
+  const PRESET_ID = 'preset_seedplan_test'
+
+  /** Register a skip-interview preset whose optional `seedPlan` post-processes the draft. */
+  function registerSeedingPreset(seedPlan?: InitiativePresetRegistration['seedPlan']) {
+    registerInitiativePreset({
+      descriptor: {
+        id: PRESET_ID,
+        presentation: { label: 'Seeding preset', icon: 'i', color: '#000', description: 'x' },
+        fields: [{ key: 'docsRoot', label: 'Docs root', type: 'path' }],
+        planningPipelineId: 'pl_initiative',
+        interview: 'skip',
+        humanReviewDefault: false,
+        defaultFragmentIds: [],
+      },
+      seedPlan,
+    })
+  }
+
+  /** A minimal well-formed planner draft (no pipeline repo wired ⇒ pipeline ids aren't checked). */
+  const draft = {
+    goal: 'g',
+    phases: [{ id: 'p1', title: 'Phase' }],
+    items: [{ id: 'i1', phaseId: 'p1', title: 'Item 1', description: 'd' }],
+    policy: { maxConcurrent: 2, defaultPipelineId: 'pl_full' },
+  }
+
+  async function seedInitiative(
+    service: InitiativeService,
+    presetInputs: Record<string, unknown>,
+  ): Promise<string> {
+    const { block } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Seed',
+      description: '',
+      presetId: PRESET_ID,
+      presetInputs: presetInputs as never,
+    })
+    return block.id
+  }
+
+  it("runs the preset's seedPlan over the draft, stamping item spawn decoration from the frozen inputs", async () => {
+    // The essence of the docs-refresh pilot: seedPlan derives each item's typed-task decoration
+    // from the frozen form (here the `docsRoot`) — exercised generically over an arbitrary preset.
+    registerSeedingPreset((d, inputs) => ({
+      ...d,
+      items: d.items.map((it) => ({
+        ...it,
+        spawn: {
+          taskType: 'document' as const,
+          taskTypeFields: { docKind: 'reference' as const, targetPath: `${inputs.docsRoot}api.md` },
+          fragmentIds: ['style.anti-llmisms'],
+        },
+      })),
+    }))
+    const { service } = makeService()
+    const blockId = await seedInitiative(service, { docsRoot: 'docs/' })
+
+    const ingested = await service.ingestPlan('ws-1', blockId, draft)
+
+    expect(ingested!.items![0]!.spawn).toEqual({
+      taskType: 'document',
+      taskTypeFields: { docKind: 'reference', targetPath: 'docs/api.md' },
+      fragmentIds: ['style.anti-llmisms'],
+    })
+  })
+
+  it('rejects a seedPlan that emits an unsafe spawn targetPath (path-safety re-validation)', async () => {
+    // seedPlan is trusted code, but its output is RE-PARSED through the strict schema, so a hook
+    // bug can't persist a spawn `targetPath` escaping the repo — `isSafeDocPath` fails the ingest.
+    registerSeedingPreset((d) => ({
+      ...d,
+      items: d.items.map((it) => ({
+        ...it,
+        spawn: { taskTypeFields: { targetPath: '../../etc/passwd.md' } },
+      })),
+    }))
+    const { service } = makeService()
+    const blockId = await seedInitiative(service, { docsRoot: 'docs/' })
+
+    await expect(service.ingestPlan('ws-1', blockId, draft)).rejects.toThrow()
+  })
+
+  it('applies the draft unchanged when the preset has no seedPlan hook', async () => {
+    registerSeedingPreset() // no hook
+    const { service } = makeService()
+    const blockId = await seedInitiative(service, { docsRoot: 'docs/' })
+
+    const ingested = await service.ingestPlan('ws-1', blockId, draft)
+
+    expect(ingested!.items![0]!.spawn).toBeUndefined()
+    expect(ingested!.items![0]!.title).toBe('Item 1')
+  })
+
+  it('rejects a planner draft whose spawn targetPath escapes the repo (initial trust boundary)', async () => {
+    // No seedPlan needed — the FIRST parse of the raw planner draft rejects the unsafe path.
+    registerSeedingPreset()
+    const { service } = makeService()
+    const blockId = await seedInitiative(service, { docsRoot: 'docs/' })
+    const badDraft = {
+      ...draft,
+      items: [{ ...draft.items[0], spawn: { taskTypeFields: { targetPath: '/etc/passwd.md' } } }],
+    }
+
+    await expect(service.ingestPlan('ws-1', blockId, badDraft)).rejects.toThrow()
   })
 })

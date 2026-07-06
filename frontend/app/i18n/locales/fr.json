@@ -4268,10 +4268,12 @@
     "create": {
       "title": "Creer une initiative",
       "inFrame": "Nouvelle initiative dans {frame}",
+      "preset": "Type",
       "titleField": "Titre",
       "titlePlaceholder": "p. ex. Migrer l'API vers le nouveau modele d'authentification",
       "goalField": "Objectif",
       "goalPlaceholder": "Decrivez l'objectif, les contraintes et le perimetre approximatif. Le planificateur l'affine en un plan multiphase.",
+      "pathInvalid": "Saisissez un chemin a l'interieur du depot (pas de \"..\", de chemins absolus ni d'antislashs).",
       "hint": "Rien ne s'execute encore : apres la creation, lancez le pipeline de planification d'initiative sur le bloc. Il analyse le code et redige le plan multiphase pour votre approbation.",
       "submit": "Creer l'initiative",
       "failedTitle": "Impossible de creer l'initiative"
