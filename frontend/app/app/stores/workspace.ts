@@ -247,10 +247,24 @@ export const useWorkspaceStore = defineStore(
       }
     }
 
+    // Monotonic guard for {@link refresh}: `board`-type stream events (and the on-connect resync)
+    // each fire a full-snapshot refresh, and {@link hydrate} REPLACES the block list. Without
+    // ordering, two in-flight fetches can resolve out of order, so a slower/staler snapshot's
+    // hydrate clobbers a newer one — dropping a just-spawned block whose ONLY live delivery was
+    // the coarse `board` event (there is no per-block push), so its card never reappears (no
+    // further event to restore it). Stamping each call lets only the latest-issued refresh commit.
+    let refreshSeq = 0
+
     /** Re-fetch the snapshot and re-hydrate (after mutations and on stream (re)connect). */
     async function refresh() {
-      if (!workspaceId.value) return
-      hydrate(await api.getWorkspace(workspaceId.value))
+      const targetId = workspaceId.value
+      if (!targetId) return
+      const seq = ++refreshSeq
+      const snapshot = await api.getWorkspace(targetId)
+      // A newer refresh was issued (or the active board switched) while this fetch was in flight —
+      // discard this older/staler result so it can't clobber the newer hydrate.
+      if (seq !== refreshSeq || workspaceId.value !== targetId) return
+      hydrate(snapshot)
     }
 
     /** The active workspace id, or throw if the app isn't bootstrapped yet. */

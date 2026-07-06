@@ -1388,6 +1388,41 @@ shard, or a "N flaky" line in the report, treat it exactly like a hard failure:
   `--repeat-each` locally AND the root-cause fix (with its regression test) must be in the
   same change. Only then is the flake closed.
 
+### Real-time (live-push) store coherence — avoid the full-refresh CLOBBER
+
+Most of the flakes above are one recurring product bug, not test noise: **a stale full-snapshot
+refresh clobbering newer live state**. The SPA's real-time layer has two delivery shapes
+(`useWorkspaceStream.ts`), and mixing them wrong drops live-added state with NO event left to
+restore it — so a card/badge simply never appears (an e2e timeout, not a slow test). Design new
+live surfaces to avoid it:
+
+- **Know how your entity is delivered.** A `board`-type `WorkspaceEvent` is COARSE: it carries no
+  payload and only triggers a **debounced full `workspace.refresh()`** (`hydrate` REPLACES whole
+  lists — blocks, executions, …). A spawned task/module block reaches the browser ONLY this way
+  (there is no per-block push), so its appearance depends entirely on a full refresh landing and
+  STICKING. Targeted events (`execution`/`bootstrap`/`initiative`/…) instead carry the entity and
+  `upsert` it directly — those don't REPLACE, so they don't clobber. Prefer a targeted upsert for
+  anything that must appear reliably and fast; fall back to the coarse refresh only for genuinely
+  structural changes.
+- **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight at once (board
+  events >300ms apart, or the on-connect resync racing a board event). Since each ends in a
+  REPLACE-style `hydrate`, a slower/staler fetch resolving AFTER a newer one overwrites it and
+  drops the just-added entity. `workspace.refresh()` guards this with a monotonic sequence (only
+  the latest-issued call commits its hydrate) — do NOT reintroduce an unguarded
+  `hydrate(await fetch())`, and apply the same guard to any new coalesced full-refresh path.
+- **Never gate readiness on a snapshot that a later resync can undo.** The on-connect resync flips
+  `connected` only AFTER it settles, so an action taken on a `connected` board can't be clobbered
+  by a lagging initial resync (this is why e2e specs gate on `data-connected`). A new (re)hydrate
+  trigger must preserve that ordering.
+- **A REPLACE-style `hydrate` must never silently drop live-only state.** If a store holds state
+  that arrives ONLY via a live event (never in the snapshot), a full refresh will wipe it — either
+  fold that state into the snapshot or reconcile (merge) rather than replace. The bootstrap-frame
+  and spawned-block flakes were both this: a full `hydrate` REPLACED a list the stale snapshot
+  hadn't caught up to.
+- **Pin it with a store-level unit test** (see `stores/workspace.spec.ts`): drive two
+  out-of-order-resolving refreshes and assert the fresher one wins. This is the cheap regression
+  guard the e2e flake rule above asks for — write it alongside the fix.
+
 ## Internationalization (i18n)
 
 All user-facing copy in the SPA is translatable via **`@nuxtjs/i18n`** (vue-i18n under
