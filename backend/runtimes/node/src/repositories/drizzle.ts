@@ -886,6 +886,33 @@ class DrizzleAccountRepository implements AccountRepository {
     })
   }
 
+  async ensurePersonal(account: AccountRecord): Promise<AccountRecord> {
+    // Atomic get-or-create: `ON CONFLICT DO NOTHING` no-ops when a personal account already
+    // exists for this owner (the partial unique index `idx_accounts_personal` arbitrates), so
+    // concurrent first-sign-in callers converge on the one surviving row instead of racing to
+    // a duplicate-key error. Re-select to return whichever row won.
+    await this.db
+      .insert(accounts)
+      .values({
+        id: account.id,
+        type: account.type,
+        name: account.name,
+        github_account_login: account.githubAccountLogin,
+        owner_user_id: account.ownerUserId,
+        created_at: account.createdAt,
+        default_cloud_provider: account.defaultCloudProvider ?? null,
+        spend_monthly_limit: account.spendMonthlyLimit ?? null,
+      })
+      .onConflictDoNothing()
+    const row = await this.findPersonalByUser(account.ownerUserId ?? '')
+    if (!row) {
+      throw new Error(
+        `ensurePersonal: personal account missing after insert for ${account.ownerUserId}`,
+      )
+    }
+    return row
+  }
+
   async rename(id: string, name: string): Promise<void> {
     await this.db.update(accounts).set({ name }).where(eq(accounts.id, id))
   }
