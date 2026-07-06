@@ -308,6 +308,8 @@ export type {
   SharedStackStatus,
   CreateSharedStackInput,
   UpdateSharedStackInput,
+  DetectSharedStackInput,
+  SharedStackRecommendation,
   // Consensus-orchestration shapes (optional `@cat-factory/consensus` mechanism)
   // + the core task-estimator triage that gates it.
   ConsensusStrategy,

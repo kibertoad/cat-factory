@@ -2172,6 +2172,8 @@
         "cloneUrl": "Depo klonlama URL'si",
         "cloneUrlHelp": "Yığının Compose dosyalarının bulunduğu git deposu.",
         "gitRef": "Dal veya etiket (isteğe bağlı)",
+        "directory": "Alt dizin (isteğe bağlı)",
+        "directoryHelp": "Yalnızca otomatik algılama tarafından kullanılır: compose yığınının bulunduğu monorepo alt dizini.",
         "composeFiles": "Compose dosyaları",
         "composeFilesHelp": "Virgülle ayrılmış, depoya göreli, geçersiz kılma sırasında.",
         "composeProfiles": "Compose profilleri (isteğe bağlı)",
@@ -2179,6 +2181,15 @@
         "managedNetworksHelp": "Tüketicilerin bağlanması için bu yığının oluşturup sahip olduğu ağlar.",
         "allowHostCommands": "Ana makine komutu kurulum adımlarına izin ver",
         "save": "Yığın ekle"
+      },
+      "detect": {
+        "button": "Otomatik algıla",
+        "hint": "Depoyu okuyup compose dosyalarını, profilleri ve ağları önceden doldurur.",
+        "detected": "Yığın yapılandırması algılandı",
+        "detectedBody": "Depodan önceden dolduruldu. Kaydetmeden önce alanları gözden geçirin.",
+        "nothing": "Otomatik algılanacak bir şey yok",
+        "failed": "Otomatik algılama başarısız oldu",
+        "envFiles": "Başlatmadan önce oluşturulacak env şablonları:"
       },
       "edit": {
         "heading": "Paylaşılan yığını düzenle",

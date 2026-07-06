@@ -2,6 +2,8 @@ import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import {
   createSharedStackSchema,
+  detectSharedStackSchema,
+  sharedStackRecommendationSchema,
   sharedStackSchema,
   updateSharedStackSchema,
 } from '../shared-stacks.js'
@@ -27,6 +29,17 @@ export const createSharedStackContract = defineApiContract({
   pathResolver: () => '/shared-stacks',
   requestBodySchema: createSharedStackSchema,
   responsesByStatusCode: { 201: sharedStackSchema, ...errorResponses },
+})
+
+/**
+ * Auto-detect a NON-BINDING recommended shared-stack config from a repo (read checkout-free over
+ * the workspace's VCS connection). Nothing persisted — the panel prefills the create/edit form.
+ */
+export const detectSharedStackContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/shared-stacks/detect',
+  requestBodySchema: detectSharedStackSchema,
+  responsesByStatusCode: { 200: sharedStackRecommendationSchema, ...errorResponses },
 })
 
 export const updateSharedStackContract = defineApiContract({

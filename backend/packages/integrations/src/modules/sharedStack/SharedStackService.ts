@@ -1,14 +1,18 @@
 import type {
   Clock,
   CreateSharedStackInput,
+  DetectSharedStackInput,
   IdGenerator,
   PreflightRef,
   PreflightResult,
   RecipeStepRecorder,
+  RunRepoContext,
   SharedStack,
   SharedStackEnsureResult,
+  SharedStackRecommendation,
   SharedStackRepository,
   UpdateSharedStackInput,
+  VcsProvider,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import {
@@ -27,6 +31,9 @@ import {
 } from '../compose/compose-environment.logic.js'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import { runHealthGate, runRecipeStep } from '../compose/recipe-runner.js'
+import { detectSharedStack } from '../environments/provision-detect.logic.js'
+import { RepoReadError } from '../environments/repo-read-error.js'
+import { parseVcsCloneUrl } from './shared-stack-detect.logic.js'
 
 export interface SharedStackServiceDependencies {
   sharedStackRepository: SharedStackRepository
@@ -63,6 +70,17 @@ export interface SharedStackServiceDependencies {
    * per-step logging (the status/lastError on the record are still updated).
    */
   provisioningLog?: (stack: SharedStack) => RecipeStepRecorder
+  /**
+   * Resolve a VCS-neutral, workspace+repo-bound {@link RunRepoContext} for checkout-free repo
+   * reads — the SAME seam the environment connection service uses to auto-detect provisioning.
+   * Wired by the runtime from the workspace's VCS connection + the supplied repo coords. Used only
+   * by {@link SharedStackService.detect}; absent ⇒ detection reports "no VCS connection" instead of
+   * reading the repo (CRUD + the lifecycle are unaffected).
+   */
+  resolveRepoFilesForWorkspace?: (
+    workspaceId: string,
+    coords: { owner: string; repo: string; provider?: VcsProvider },
+  ) => Promise<RunRepoContext | null>
 }
 
 // Bound (ms) for the plain compose calls (network / down / version) so a wedged daemon can't hang
@@ -94,6 +112,12 @@ export class SharedStackService {
     | ((refs: PreflightRef[]) => Promise<PreflightResult[]>)
     | undefined
   private readonly provisioningLog: ((stack: SharedStack) => RecipeStepRecorder) | undefined
+  private readonly resolveRepoFiles:
+    | ((
+        workspaceId: string,
+        coords: { owner: string; repo: string; provider?: VcsProvider },
+      ) => Promise<RunRepoContext | null>)
+    | undefined
   // Coalesce concurrent `ensureUp` for the same stack onto one in-flight bring-up (a second caller
   // must not start a duplicate `up` / re-run non-idempotent setup steps).
   private readonly inflight = new Map<string, Promise<SharedStack>>()
@@ -107,6 +131,7 @@ export class SharedStackService {
     this.cloneToken = deps.cloneToken
     this.runPreflightChecks = deps.runPreflights
     this.provisioningLog = deps.provisioningLog
+    this.resolveRepoFiles = deps.resolveRepoFilesForWorkspace
   }
 
   /** List a workspace's shared stacks (ordered by creation). */
@@ -146,6 +171,64 @@ export class SharedStackService {
     }
     await this.stacks.upsert(workspaceId, stack)
     return stack
+  }
+
+  /**
+   * Auto-detect a NON-BINDING recommended config for a shared stack from its repo, read
+   * checkout-free over the workspace's VCS connection (no clone, no host daemon — pure repo
+   * introspection). The clone URL is parsed into `{ owner, repo, provider }` coords; the workspace's
+   * connection resolves a {@link RunRepoContext} the deterministic compose scan reads through.
+   * Nothing is persisted — the panel prefills the create/edit form and the user confirms. Reports
+   * `detected: false` (never throws) when no VCS connection is wired or the URL isn't parseable; a
+   * genuine read fault (auth/rate-limit/transport) surfaces as an actionable {@link ValidationError}.
+   */
+  async detect(
+    workspaceId: string,
+    input: DetectSharedStackInput,
+  ): Promise<SharedStackRecommendation> {
+    await requireWorkspace(this.workspaceRepository, workspaceId)
+    const empty = (message: string): SharedStackRecommendation => ({
+      detected: false,
+      composeFiles: [],
+      composeProfiles: [],
+      managedNetworks: [],
+      envFiles: [],
+      notes: [{ field: 'provisionType', confidence: 'low', message }],
+    })
+
+    if (!this.resolveRepoFiles) {
+      return empty(
+        'No VCS connection is configured for this workspace; cannot read the repo to detect the stack.',
+      )
+    }
+    const coords = parseVcsCloneUrl(input.cloneUrl)
+    if (!coords) {
+      return empty(
+        `Could not parse an owner/repo from the clone URL "${input.cloneUrl}". Enter the compose files manually.`,
+      )
+    }
+    const bound = await this.resolveRepoFiles(workspaceId, coords)
+    if (!bound) {
+      return empty(
+        `No VCS connection could read ${coords.owner}/${coords.repo}. Connect the matching provider, then retry — or enter the compose files manually.`,
+      )
+    }
+
+    try {
+      return await detectSharedStack(bound.repo, {
+        gitRef: input.gitRef ?? bound.baseBranch,
+        ...(input.directory ? { directory: input.directory } : {}),
+        repoName: coords.repo,
+      })
+    } catch (err) {
+      if (!(err instanceof RepoReadError)) throw err
+      const at = input.gitRef ? ` at "${input.gitRef}"` : ''
+      throw new ValidationError(
+        `Could not read ${coords.owner}/${coords.repo}${at} to auto-detect the stack. Check that the ` +
+          `repo is accessible via your VCS connection, that the branch exists, and that you are not ` +
+          `rate-limited, then retry. Underlying error: ${err.reason}`,
+      )
+    }
   }
 
   /** Patch a shared stack's config. A running stack cannot be reconfigured — tear it down first. */

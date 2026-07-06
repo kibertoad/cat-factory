@@ -2098,6 +2098,11 @@ function createSharedStacksModule(
     clock: deps.clock,
     ...(deps.composeRuntime ? { composeRuntime: deps.composeRuntime } : {}),
     ...(deps.sharedStackCloneToken ? { cloneToken: deps.sharedStackCloneToken } : {}),
+    // Enables the checkout-free repo autodetection (`detect`); wired from the same coords-bound
+    // RepoFiles resolver the environment detector uses, so both facades get it for free.
+    ...(deps.resolveRepoFilesForCoords
+      ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
+      : {}),
     // Re-run a stack's declared machine-prerequisite checks at bring-up start. Present only where
     // the host-probe seam is wired (the local facade — same runtime binding as `composeRuntime`).
     ...(preflightService ? { runPreflights: (refs) => preflightService.run(refs) } : {}),

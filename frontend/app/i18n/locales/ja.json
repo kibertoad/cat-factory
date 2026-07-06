@@ -2172,6 +2172,8 @@
         "cloneUrl": "リポジトリのクローン URL",
         "cloneUrlHelp": "スタックの Compose ファイルが置かれている git リポジトリ。",
         "gitRef": "ブランチまたはタグ（任意）",
+        "directory": "サブディレクトリ（任意）",
+        "directoryHelp": "自動検出でのみ使用されます。compose スタックが存在するモノレポのサブディレクトリです。",
         "composeFiles": "Compose ファイル",
         "composeFilesHelp": "カンマ区切り、リポジトリ相対、オーバーライド順。",
         "composeProfiles": "Compose プロファイル（任意）",
@@ -2179,6 +2181,15 @@
         "managedNetworksHelp": "コンシューマーが接続するために、このスタックが作成・所有するネットワーク。",
         "allowHostCommands": "ホストコマンドのセットアップ手順を許可する",
         "save": "スタックを追加"
+      },
+      "detect": {
+        "button": "自動検出",
+        "hint": "リポジトリを読み取り、compose ファイル、プロファイル、ネットワークを事前入力します。",
+        "detected": "スタック構成を検出しました",
+        "detectedBody": "リポジトリから事前入力しました。保存する前にフィールドを確認してください。",
+        "nothing": "自動検出するものがありません",
+        "failed": "自動検出に失敗しました",
+        "envFiles": "起動前に生成される env テンプレート:"
       },
       "edit": {
         "heading": "共有スタックを編集",
