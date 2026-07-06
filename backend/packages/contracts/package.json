@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/contracts",
-  "version": "0.114.0",
+  "version": "0.115.0",
   "description": "Valibot wire contract shared between the Agent Architecture Board frontend and backend.",
   "repository": {
     "type": "git",
