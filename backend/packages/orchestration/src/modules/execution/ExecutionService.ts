@@ -1070,9 +1070,16 @@ export class ExecutionService {
    * gated instead on having a live service under test. Throws an actionable {@link ConflictError}
    * (`tester_infra_unsupported` for the frontend case, `provision_type_unhandled` for a missing
    * handler); passes through when the provisioning seam is unwired (tests / no environment
-   * integration), like the other optional start guards.
+   * integration), like the other optional start guards. `initiatedBy` is threaded into
+   * `canProvision` so the run initiator's local per-user handler OVERRIDES resolve exactly as they
+   * do at provision time (and as the Deployer-config gate does) — else a valid override-only local
+   * setup would be falsely refused here while the deployer would actually provision it.
    */
-  private async assertTesterInfraConfigured(workspaceId: string, block: Block): Promise<void> {
+  private async assertTesterInfraConfigured(
+    workspaceId: string,
+    block: Block,
+    initiatedBy: string | null | undefined,
+  ): Promise<void> {
     // A `frontend` frame (the self-contained UI-test flow) is gated on having a live service
     // under test, NOT on a provision type — resolved first and short-circuiting the backend
     // branch. Only enforce it when the environment seam is wired (else, like the other optional
@@ -1104,7 +1111,8 @@ export class ExecutionService {
       provisioning?.type === 'custom'
     const handlerResolves =
       needsHandler && this.environmentProvisioning
-        ? (await this.environmentProvisioning.canProvision(workspaceId, provisioning)).ok
+        ? (await this.environmentProvisioning.canProvision(workspaceId, provisioning, initiatedBy))
+            .ok
         : true
     const decision = decideTesterInfra({ provisionType: provisioning?.type, handlerResolves })
     if (decision.ok) return
@@ -1474,7 +1482,7 @@ export class ExecutionService {
     // A chain with a Tester needs the service's declared provisioning to be runnable
     // (`infraless`/none = no infra; `docker-compose`/`kubernetes`/`custom` = a workspace handler).
     if (shape.agentKinds.some(isTesterKind)) {
-      await this.assertTesterInfraConfigured(workspaceId, block)
+      await this.assertTesterInfraConfigured(workspaceId, block, initiatedBy)
     }
 
     // A `docker-compose`/`kubernetes`/`custom` service whose enabled chain reaches an env-consumer
