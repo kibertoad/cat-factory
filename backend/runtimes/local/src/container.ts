@@ -21,7 +21,7 @@ import {
   createMothershipConnector,
   isMothershipMode,
 } from './mothership.js'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger, RunnerJobClient } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
@@ -560,6 +560,14 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     env,
     config,
     repos,
+    // Local mode seeds a fresh workspace's model-preset library with Claude Opus 4.8 as the
+    // default: the local facade runs subscription-only models (via the developer's ambient
+    // `claude` CLI for inline steps + a leased personal credential for container steps), so
+    // Claude is a first-class default here even though it can't run on the bare Cloudflare
+    // baseline. Overridable (the conformance harness passes Kimi so its fake-executor runs
+    // resolve to a Cloudflare-usable model). Applied only at first seed — a user's later
+    // manual default choice always wins.
+    defaultModelPresetId: options.defaultModelPresetId ?? MODEL_PRESET_SEED_IDS.claude,
     // Mothership credentials stay on the laptop: inject the local node:sqlite store's repos so
     // the API-key pool, local-model endpoints, AND the subscription credentials (pooled tokens +
     // per-user personal creds + their per-run activations) are sealed with the LOCAL key and

@@ -35,6 +35,13 @@ export const modelPresetSchema = v.object({
   overrides: v.record(v.string(), v.string()),
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
+  /**
+   * Monotonic seed version for a BUILT-IN preset (`seedModelPresets()` assigns it). When the
+   * current catalog version for this id exceeds the persisted copy's `version`, the SPA offers
+   * to reseed it. Absent on user-created presets (not version-tracked) and on rows persisted
+   * before versioning existed (treated as 0).
+   */
+  version: v.optional(v.number()),
   createdAt: v.number(),
 })
 export type ModelPreset = v.InferOutput<typeof modelPresetSchema>

@@ -211,6 +211,15 @@ export const workspaceSnapshotSchema = v.object({
    */
   mergePresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
   /**
+   * Current built-in model-preset catalog versions (`seedModelPresets()`), keyed by preset id.
+   * The SPA compares each persisted built-in's `version` against this to detect a stale copy
+   * (a newer definition is available) and a built-in id present here but absent from the
+   * workspace's presets (a NEW built-in appeared), offering a reseed for either. Static,
+   * workspace-independent; built by the shared `WorkspaceService.snapshot()` (automatically
+   * symmetric across runtimes), optional on the wire for forward-compatibility.
+   */
+  modelPresetCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
    * The workspace's initiatives (long-running multi-task bodies of work, each
    * anchored to an `initiative`-level block). Carried in the snapshot so the
    * board renders initiative cards + trackers on load. Attached by the facade

@@ -1,0 +1,1 @@
+ALTER TABLE "model_presets" ADD COLUMN "version" integer;

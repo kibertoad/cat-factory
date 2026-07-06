@@ -4374,6 +4374,25 @@
       }
     }
   },
+  "modelPreset": {
+    "health": {
+      "title": "Aggiornamenti dei preset di modello",
+      "allValid": "Tutti i preset di modello integrati sono aggiornati.",
+      "newHeading": "Nuovi preset disponibili",
+      "newDescription": "Sono stati rilasciati nuovi preset di modello integrati. Aggiungili alla libreria di questa board.",
+      "add": "Aggiungi",
+      "updatesHeading": "Aggiornamenti disponibili",
+      "updatesDescription": "È stata rilasciata una versione più recente di questi preset di modello integrati. Ripristina i valori iniziali per adottarla (il predefinito e l'ordinamento vengono mantenuti).",
+      "versionAvailable": "Versione {from} → {to} disponibile.",
+      "reseed": "Ripristina",
+      "reseedAll": "Aggiorna tutti ({count})",
+      "dismiss": "Ignora",
+      "done": "Fatto",
+      "toast": {
+        "reseedFailed": "Impossibile ripristinare il preset di modello"
+      }
+    }
+  },
   "environmentWizard": {
     "title": "Configura un ambiente di test",
     "subtitle": "Rileva, rivedi e salva una ricetta Docker Compose in modo che il Deployer la esegua.",

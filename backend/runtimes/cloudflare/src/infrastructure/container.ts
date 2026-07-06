@@ -4,6 +4,7 @@ import {
   type CachedRepoRead,
   type Clock,
   CompositeNotificationChannel,
+  DEFAULT_MODEL_PRESET_ID,
   type DocumentSourceProvider,
   type EmailSender,
   type ExecutionEventPublisher,
@@ -2450,6 +2451,10 @@ export function buildContainer(
       : undefined,
     ...selectGitHubDeps(env, config, db, clock, idGenerator, caches.repoFiles),
     ...selectMergeLifecycleDeps(env, config, db, clock, idGenerator),
+    // A fresh workspace's model-preset library is seeded with Kimi K2.7 as the default
+    // (Cloudflare-runnable on the bare AI binding). Applied only at first seed, so a user's
+    // later manual default choice always wins.
+    defaultModelPresetId: DEFAULT_MODEL_PRESET_ID,
     ...selectReleaseHealthDeps(env, config, db),
     ...selectIncidentEnrichmentDeps(env, db),
     ...selectPackageRegistryDeps(env, db),

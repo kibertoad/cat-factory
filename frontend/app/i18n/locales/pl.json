@@ -4264,6 +4264,25 @@
       }
     }
   },
+  "modelPreset": {
+    "health": {
+      "title": "Aktualizacje presetów modelu",
+      "allValid": "Wszystkie wbudowane presety modelu są aktualne.",
+      "newHeading": "Dostępne nowe presety",
+      "newDescription": "Pojawiły się nowe wbudowane presety modelu. Dodaj je do biblioteki tej tablicy.",
+      "add": "Dodaj",
+      "updatesHeading": "Dostępne aktualizacje",
+      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów modelu. Zregeneruj, aby ją przyjąć (domyślny i kolejność są zachowane).",
+      "versionAvailable": "Dostępna wersja {from} → {to}.",
+      "reseed": "Zregeneruj",
+      "reseedAll": "Zaktualizuj wszystkie ({count})",
+      "dismiss": "Odrzuć",
+      "done": "Gotowe",
+      "toast": {
+        "reseedFailed": "Nie udało się zregenerować presetu modelu"
+      }
+    }
+  },
   "initiative": {
     "create": {
       "title": "Utworz inicjatywe",
