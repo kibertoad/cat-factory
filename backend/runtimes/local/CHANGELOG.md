@@ -1,5 +1,55 @@
 # @cat-factory/local-server
 
+## 0.60.0
+
+### Minor Changes
+
+- b3bd653: Make `HARNESS_SHARED_SECRET` a mandatory, stable local-mode secret and a required runner-transport parameter.
+
+  Local mode previously let the runner transports mint a RANDOM `HARNESS_SHARED_SECRET` per process when the env var was unset. That value is the inbound-auth secret between the orchestrator and its agent containers, so after a restart, polls against a container still running from before the restart failed auth (not mapped to eviction) and the run flapped instead of re-attaching.
+
+  Now:
+
+  - `applyLocalDefaults` REQUIRES `HARNESS_SHARED_SECRET` (min 16 chars) and fails loudly at boot with a clear, actionable error when it is missing/blank/too-short, exactly like `AUTH_SESSION_SECRET` / `ENCRYPTION_KEY`.
+  - `sharedSecret` is now a REQUIRED constructor argument on `LocalContainerRunnerTransport`, `LocalProcessRunnerTransport`, and `LocalPreviewTransport` — the random per-process fallback is gone. The `*FromEnv` factories read it via the new `requireHarnessSharedSecret(env)`.
+  - `pnpm secrets` (deploy/local) now emits `HARNESS_SHARED_SECRET` alongside the other two, and `deploy/local/.env.example` documents it.
+
+  BREAKING (local mode): a local deployment with no `HARNESS_SHARED_SECRET` set now fails at boot instead of running with an unstable per-process secret. Set a stable value (via `pnpm secrets`) before upgrading.
+
+### Patch Changes
+
+- cb088c7: Cap concurrent inline (non-container) LLM calls to a subscription/shared-pool vendor so a burst
+  can't overwhelm it. A new `VendorConcurrencyLimiter` + `LimitedModelProvider` decorator
+  (`@cat-factory/agents`) gates each resolved subscription-vendor model behind an in-process
+  per-vendor semaphore, keyed by `subscriptionVendorForRef(ref)`. It is applied as the outermost
+  resolver wrap in every facade via `wrapResolverWithLimiter` (`@cat-factory/server`), mirroring the
+  existing `InstrumentedModelProvider` shape, so no inline call site changes. Both the buffered
+  (`wrapGenerate`) and streaming (`wrapStream`) inline paths are gated — a stream holds its permit
+  until it ends — and a queued call whose request is aborted releases its slot instead of
+  head-of-line blocking. Only the five subscription vendors (`claude`/`codex`/`glm`/`kimi`/`deepseek`)
+  are capped; API-key vendors and Cloudflare pass through untouched.
+
+  Configured by `LLM_SUBSCRIPTION_MAX_CONCURRENCY` (default 3 per vendor; a
+  `LLM_SUBSCRIPTION_MAX_CONCURRENCY_<VENDOR>` overrides that one vendor and always wins). Any value
+  `<= 0` is uncapped, so setting the default to `0` uncaps every vendor that has no explicit
+  per-vendor override (to turn the feature off entirely, leave the per-vendor overrides unset too).
+  The limiter is
+  in-process only — one per Node process (per container/tenant) or per Worker isolate, which is the
+  scope of a single inline fan-out (a consensus panel, the requirements recommendation writer, a
+  sandbox sweep). It bounds in-flight concurrency, not requests-per-minute, and does not coordinate
+  across replicas/isolates; global rate-limiting stays out of scope. Because inline subscription
+  refs are degraded to a pool/API-key provider before resolve on Node/Worker, the cap primarily
+  bites in local mode (the prewarmed-container inline subscription backend keeps the ref) and is a
+  wired pass-through elsewhere.
+
+- Updated dependencies [cb088c7]
+- Updated dependencies [b3bd653]
+  - @cat-factory/agents@0.46.0
+  - @cat-factory/server@0.100.0
+  - @cat-factory/node-server@0.86.5
+  - @cat-factory/orchestration@0.96.1
+  - @cat-factory/executor-harness@1.37.0
+
 ## 0.59.4
 
 ### Patch Changes
