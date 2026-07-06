@@ -233,6 +233,13 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 
 Ordering: 1 → {2, 3} → {4, 5}; 6–8 need 1+3; 7 is independent of 6.
 
+**Downstream consumers:** the technological-migration preset
+([`tech-migration-preset-and-mssql-postgres-pilot.md`](./tech-migration-preset-and-mssql-postgres-pilot.md))
+hard-depends on the remaining **S8** (its registration copies the pattern S8 pioneers)
+and **S9** (its E2E extends the baseline), and builds generic phase-template machinery
+on S5's landed ingest hook — reprioritizing or re-scoping those slices affects that
+tracker's critical path.
+
 ## Conventions & gotchas (carry between iterations)
 
 - **Keep the runtimes symmetric.** The entity fields ride the `doc` blob (symmetric by
