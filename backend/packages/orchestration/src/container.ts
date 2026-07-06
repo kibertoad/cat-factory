@@ -1904,6 +1904,11 @@ function createBrainstormModule(
     modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
     resolveBlockModel: deps.requirementReviewResolveModel,
     ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
+    // Brainstorm stages are pipeline gate steps that run during a parked run, so their
+    // execution + initiator come from the block's active run — threaded into the model scope
+    // so an inline subscription ref served through a leased per-run activation (local container
+    // inline backend) can lease it, exactly like the requirements/clarity reviewers.
+    resolveRunContext: resolveBlockRunContext(deps),
     resolveWorkspaceModelDefault,
   }
 
