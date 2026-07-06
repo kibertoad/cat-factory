@@ -1,4 +1,6 @@
 import * as v from 'valibot'
+import { provisioningDetectionNoteSchema } from './environments.js'
+import { preflightRefSchema } from './preflights.js'
 import { urlString } from './primitives.js'
 import { recipeEnvFileSchema, recipeHealthGateSchema, recipeStepSchema } from './stack-recipes.js'
 
@@ -66,6 +68,15 @@ export const sharedStackSchema = v.object({
   managedNetworks: v.array(stackName),
   /** Ordered post-`up` setup steps (users sync, connector registration, seed import, …). */
   setupSteps: v.array(recipeStepSchema),
+  /**
+   * Machine-prerequisite checks re-run at the START of every bring-up (before clone / networks /
+   * `up`), so a shared stack's own mkcert-CA / hosts-entry / ECR-login (the acme-shared-services
+   * M-rows) fails fast with copy-paste remediation instead of a mystery deep inside a 40-image
+   * pull — the same {@link preflightRefSchema} vocabulary a consumer recipe declares. A failing
+   * REQUIRED check blocks the bring-up; a non-required one is advisory. Probes are host-bound
+   * (local facade); a stack that declares these on a deployment with no host daemon fails loudly.
+   */
+  prerequisites: v.array(preflightRefSchema),
   /** Terminal readiness gate; absent ⇒ `compose-healthy` (`up --wait` semantics). */
   healthGate: v.nullable(recipeHealthGateSchema),
   /**
@@ -93,10 +104,53 @@ export const createSharedStackSchema = v.object({
   envFiles: v.optional(v.array(recipeEnvFileSchema), []),
   managedNetworks: v.optional(v.array(stackName), []),
   setupSteps: v.optional(v.array(recipeStepSchema), []),
+  prerequisites: v.optional(v.array(preflightRefSchema), []),
   healthGate: v.optional(recipeHealthGateSchema),
   allowHostCommands: v.optional(v.boolean(), false),
 })
 export type CreateSharedStackInput = v.InferOutput<typeof createSharedStackSchema>
+
+// ---- Autodetection --------------------------------------------------------
+
+/**
+ * Read a shared stack's repo (from its clone URL, checkout-free over the workspace's VCS
+ * connection) and RECOMMEND its compose-shaped fields — the same deterministic scan the
+ * environment provisioning detector runs, narrowed to what a shared stack needs. Nothing is
+ * persisted; the panel prefills the create/edit form from the result and the user confirms.
+ */
+export const detectSharedStackSchema = v.object({
+  /** The git repo to introspect — the value the `cloneUrl` field takes. */
+  cloneUrl: urlString,
+  /** Branch / tag / sha to read at; absent ⇒ the repo's default branch. */
+  gitRef: v.optional(stackRef),
+  /** Subdirectory within the repo the compose stack lives in (monorepo); absent ⇒ the repo root. */
+  directory: v.optional(stackPathString),
+})
+export type DetectSharedStackInput = v.InferOutput<typeof detectSharedStackSchema>
+
+/**
+ * A NON-BINDING recommended shared-stack config inferred from the repo. Maps the compose scan
+ * onto the shared-stack form: the layered `composeFiles`, the declared `composeProfiles`, the
+ * external networks the stack must create + own (`managedNetworks`), and the env/config
+ * templates to materialize before `up` (`envFiles`). `notes` carry the per-field rationale +
+ * confidence (reusing the provisioning-detection note shape). `detected: false` ⇒ nothing
+ * compose-shaped was found (or the repo couldn't be read via the workspace's VCS connection).
+ */
+export const sharedStackRecommendationSchema = v.object({
+  detected: v.boolean(),
+  /** A suggested stack name derived from the repo (its basename); the user can rename. */
+  name: v.optional(stackName),
+  /** Ordered `-f` compose files (base + any auto-merge override family). */
+  composeFiles: v.array(stackPathString),
+  /** `COMPOSE_PROFILES` the compose file declares — enable the optional service groups you need. */
+  composeProfiles: v.array(stackName),
+  /** External networks the compose references — a shared stack creates + owns these. */
+  managedNetworks: v.array(stackName),
+  /** Committed env/config templates to materialize into their gitignored targets before `up`. */
+  envFiles: v.array(recipeEnvFileSchema),
+  notes: v.array(provisioningDetectionNoteSchema),
+})
+export type SharedStackRecommendation = v.InferOutput<typeof sharedStackRecommendationSchema>
 
 /** Patch an existing shared stack (all fields optional). */
 export const updateSharedStackSchema = v.object({
@@ -108,6 +162,7 @@ export const updateSharedStackSchema = v.object({
   envFiles: v.optional(v.array(recipeEnvFileSchema)),
   managedNetworks: v.optional(v.array(stackName)),
   setupSteps: v.optional(v.array(recipeStepSchema)),
+  prerequisites: v.optional(v.array(preflightRefSchema)),
   healthGate: v.optional(v.nullable(recipeHealthGateSchema)),
   allowHostCommands: v.optional(v.boolean()),
 })

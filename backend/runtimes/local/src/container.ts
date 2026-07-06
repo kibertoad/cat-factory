@@ -252,9 +252,16 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // so the panel takes effect without a restart.
   let containerTransport: Promise<LocalContainerRunnerTransport> | undefined
 
-  const localSettingsService = options.db
+  // The warm-pool + checkout config repo: Drizzle over the local Postgres (siloed local mode),
+  // else the local `node:sqlite` singleton in mothership mode (no Postgres, but these settings
+  // configure the LOCAL Docker runner — the local facade's own differentiator — so they belong on
+  // the laptop, not the mothership). Either way the panel persists + reads back live.
+  const localSettingsRepository = options.db
+    ? new DrizzleLocalSettingsRepository(options.db)
+    : mothership?.localSettingsStore.localSettingsRepository
+  const localSettingsService = localSettingsRepository
     ? new LocalSettingsService({
-        localSettingsRepository: new DrizzleLocalSettingsRepository(options.db),
+        localSettingsRepository,
         clock: { now: () => Date.now() },
         // Apply an edit to the already-built serving transport so the warm-pool + checkout
         // config takes effect WITHOUT a restart. No-op until the transport is built (the
@@ -528,13 +535,22 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     env,
     config,
     repos,
-    // Mothership credentials stay on the laptop: inject the local node:sqlite store's two repos
-    // so the API-key pool + local-model endpoints are sealed with the LOCAL key (the
-    // mothership's ENCRYPTION_KEY never reaches this machine). Off → Drizzle over Postgres.
+    // Mothership credentials stay on the laptop: inject the local node:sqlite store's repos so
+    // the API-key pool, local-model endpoints, AND the subscription credentials (pooled tokens +
+    // per-user personal creds + their per-run activations) are sealed with the LOCAL key and
+    // leased by the LOCAL container executor — the mothership's ENCRYPTION_KEY never reaches this
+    // machine. Off → Drizzle over Postgres. `subscriptionActivationRepository` is threaded ONCE
+    // here and reused by BOTH consumers in buildNodeContainer (the personal-subscription service's
+    // mint + the engine core's clear-on-completion), so they agree on one store.
     ...(mothership
       ? {
           providerApiKeyRepository: mothership.credentialStore.providerApiKeyRepository,
           localModelEndpointRepository: mothership.credentialStore.localModelEndpointRepository,
+          providerSubscriptionTokenRepository:
+            mothership.credentialStore.providerSubscriptionTokenRepository,
+          personalSubscriptionRepository: mothership.credentialStore.personalSubscriptionRepository,
+          subscriptionActivationRepository:
+            mothership.credentialStore.subscriptionActivationRepository,
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

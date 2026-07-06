@@ -5,4 +5,6 @@ export type {
   SharedStackStatus,
   CreateSharedStackInput,
   UpdateSharedStackInput,
+  DetectSharedStackInput,
+  SharedStackRecommendation,
 } from '@cat-factory/contracts'

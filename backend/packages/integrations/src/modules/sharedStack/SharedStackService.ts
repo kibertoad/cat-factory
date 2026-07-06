@@ -1,12 +1,18 @@
 import type {
   Clock,
   CreateSharedStackInput,
+  DetectSharedStackInput,
   IdGenerator,
+  PreflightRef,
+  PreflightResult,
   RecipeStepRecorder,
+  RunRepoContext,
   SharedStack,
   SharedStackEnsureResult,
+  SharedStackRecommendation,
   SharedStackRepository,
   UpdateSharedStackInput,
+  VcsProvider,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import {
@@ -23,7 +29,11 @@ import {
   DEFAULT_RECIPE_HEALTH_GATE,
   tailOutput,
 } from '../compose/compose-environment.logic.js'
+import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
 import { runHealthGate, runRecipeStep } from '../compose/recipe-runner.js'
+import { detectSharedStack } from '../environments/provision-detect.logic.js'
+import { RepoReadError } from '../environments/repo-read-error.js'
+import { parseVcsCloneUrl } from './shared-stack-detect.logic.js'
 
 export interface SharedStackServiceDependencies {
   sharedStackRepository: SharedStackRepository
@@ -45,12 +55,32 @@ export interface SharedStackServiceDependencies {
    */
   cloneToken?: string
   /**
+   * Optional host-bound preflight runner: given the stack's declared `prerequisites`, returns one
+   * verdict per check. Wired ONLY where the host-probe seam exists (the local facade — the same
+   * runtime binding as {@link composeRuntime}); it is the integrations `PreflightService.run` seam.
+   * When a stack declares `prerequisites` but this is ABSENT (no host daemon), the bring-up fails
+   * loudly rather than silently skipping a declared machine-prerequisite gate — mirroring the
+   * compose provider's `runPreflights` seam. Absent + no declared prerequisites ⇒ a no-op.
+   */
+  runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
+  /**
    * Optional per-step provisioning-log recorder factory: given a stack, returns a recorder the
    * bring-up streams per-step verdicts through (clone, network, env-file, up, each setup step,
    * health gate), so the Infrastructure "View logs" drawer shows which step ran/died. Absent ⇒ no
    * per-step logging (the status/lastError on the record are still updated).
    */
   provisioningLog?: (stack: SharedStack) => RecipeStepRecorder
+  /**
+   * Resolve a VCS-neutral, workspace+repo-bound {@link RunRepoContext} for checkout-free repo
+   * reads — the SAME seam the environment connection service uses to auto-detect provisioning.
+   * Wired by the runtime from the workspace's VCS connection + the supplied repo coords. Used only
+   * by {@link SharedStackService.detect}; absent ⇒ detection reports "no VCS connection" instead of
+   * reading the repo (CRUD + the lifecycle are unaffected).
+   */
+  resolveRepoFilesForWorkspace?: (
+    workspaceId: string,
+    coords: { owner: string; repo: string; provider?: VcsProvider },
+  ) => Promise<RunRepoContext | null>
 }
 
 // Bound (ms) for the plain compose calls (network / down / version) so a wedged daemon can't hang
@@ -78,7 +108,16 @@ export class SharedStackService {
   private readonly clock: Clock
   private readonly runtime: ComposeRuntime | undefined
   private readonly cloneToken: string | undefined
+  private readonly runPreflightChecks:
+    | ((refs: PreflightRef[]) => Promise<PreflightResult[]>)
+    | undefined
   private readonly provisioningLog: ((stack: SharedStack) => RecipeStepRecorder) | undefined
+  private readonly resolveRepoFiles:
+    | ((
+        workspaceId: string,
+        coords: { owner: string; repo: string; provider?: VcsProvider },
+      ) => Promise<RunRepoContext | null>)
+    | undefined
   // Coalesce concurrent `ensureUp` for the same stack onto one in-flight bring-up (a second caller
   // must not start a duplicate `up` / re-run non-idempotent setup steps).
   private readonly inflight = new Map<string, Promise<SharedStack>>()
@@ -90,7 +129,9 @@ export class SharedStackService {
     this.clock = deps.clock
     this.runtime = deps.composeRuntime
     this.cloneToken = deps.cloneToken
+    this.runPreflightChecks = deps.runPreflights
     this.provisioningLog = deps.provisioningLog
+    this.resolveRepoFiles = deps.resolveRepoFilesForWorkspace
   }
 
   /** List a workspace's shared stacks (ordered by creation). */
@@ -120,6 +161,7 @@ export class SharedStackService {
       envFiles: input.envFiles,
       managedNetworks: input.managedNetworks,
       setupSteps: input.setupSteps,
+      prerequisites: input.prerequisites,
       healthGate: input.healthGate ?? null,
       allowHostCommands: input.allowHostCommands,
       status: 'stopped',
@@ -129,6 +171,64 @@ export class SharedStackService {
     }
     await this.stacks.upsert(workspaceId, stack)
     return stack
+  }
+
+  /**
+   * Auto-detect a NON-BINDING recommended config for a shared stack from its repo, read
+   * checkout-free over the workspace's VCS connection (no clone, no host daemon — pure repo
+   * introspection). The clone URL is parsed into `{ owner, repo, provider }` coords; the workspace's
+   * connection resolves a {@link RunRepoContext} the deterministic compose scan reads through.
+   * Nothing is persisted — the panel prefills the create/edit form and the user confirms. Reports
+   * `detected: false` (never throws) when no VCS connection is wired or the URL isn't parseable; a
+   * genuine read fault (auth/rate-limit/transport) surfaces as an actionable {@link ValidationError}.
+   */
+  async detect(
+    workspaceId: string,
+    input: DetectSharedStackInput,
+  ): Promise<SharedStackRecommendation> {
+    await requireWorkspace(this.workspaceRepository, workspaceId)
+    const empty = (message: string): SharedStackRecommendation => ({
+      detected: false,
+      composeFiles: [],
+      composeProfiles: [],
+      managedNetworks: [],
+      envFiles: [],
+      notes: [{ field: 'provisionType', confidence: 'low', message }],
+    })
+
+    if (!this.resolveRepoFiles) {
+      return empty(
+        'No VCS connection is configured for this workspace; cannot read the repo to detect the stack.',
+      )
+    }
+    const coords = parseVcsCloneUrl(input.cloneUrl)
+    if (!coords) {
+      return empty(
+        `Could not parse an owner/repo from the clone URL "${input.cloneUrl}". Enter the compose files manually.`,
+      )
+    }
+    const bound = await this.resolveRepoFiles(workspaceId, coords)
+    if (!bound) {
+      return empty(
+        `No VCS connection could read ${coords.owner}/${coords.repo}. Connect the matching provider, then retry — or enter the compose files manually.`,
+      )
+    }
+
+    try {
+      return await detectSharedStack(bound.repo, {
+        gitRef: input.gitRef ?? bound.baseBranch,
+        ...(input.directory ? { directory: input.directory } : {}),
+        repoName: coords.repo,
+      })
+    } catch (err) {
+      if (!(err instanceof RepoReadError)) throw err
+      const at = input.gitRef ? ` at "${input.gitRef}"` : ''
+      throw new ValidationError(
+        `Could not read ${coords.owner}/${coords.repo}${at} to auto-detect the stack. Check that the ` +
+          `repo is accessible via your VCS connection, that the branch exists, and that you are not ` +
+          `rate-limited, then retry. Underlying error: ${err.reason}`,
+      )
+    }
   }
 
   /** Patch a shared stack's config. A running stack cannot be reconfigured — tear it down first. */
@@ -152,6 +252,7 @@ export class SharedStackService {
       ...(patch.envFiles !== undefined ? { envFiles: patch.envFiles } : {}),
       ...(patch.managedNetworks !== undefined ? { managedNetworks: patch.managedNetworks } : {}),
       ...(patch.setupSteps !== undefined ? { setupSteps: patch.setupSteps } : {}),
+      ...(patch.prerequisites !== undefined ? { prerequisites: patch.prerequisites } : {}),
       ...(patch.healthGate !== undefined ? { healthGate: patch.healthGate } : {}),
       ...(patch.allowHostCommands !== undefined
         ? { allowHostCommands: patch.allowHostCommands }
@@ -310,6 +411,14 @@ export class SharedStackService {
     await this.persist(workspaceId, stack, { status: 'starting', lastError: null })
     const project = this.projectName(stack)
 
+    // Machine-prerequisite checks FIRST — before the clone / networks / `up` — so a stale ECR
+    // token / missing mkcert CA / missing hosts entry fails fast with copy-paste remediation
+    // instead of a mystery deep inside a 40-image pull.
+    const preflightIssue = await this.runPreflights(stack, record)
+    if (preflightIssue) {
+      return this.persist(workspaceId, stack, { status: 'failed', lastError: preflightIssue })
+    }
+
     if (!runtime.checkout || !runtime.copyCheckoutFile) {
       return this.persist(workspaceId, stack, {
         status: 'failed',
@@ -428,6 +537,37 @@ export class SharedStackService {
     }
 
     return this.persist(workspaceId, stack, { status: 'running', lastError: null })
+  }
+
+  /**
+   * Re-run the stack's declared machine-prerequisite checks (`prerequisites`) at bring-up start,
+   * streaming one provisioning-log step per check, and return a blocking message when any REQUIRED
+   * check fails (with its detail + remediation) — else null. No declared prerequisites ⇒ a no-op. A
+   * stack that DECLARES prerequisites on a deployment where the host-probe runtime isn't wired
+   * (`runPreflightChecks` absent — no host daemon) fails loudly rather than silently skipping a
+   * declared safety gate, mirroring the compose provider's `runPreflights` seam.
+   */
+  private async runPreflights(
+    stack: SharedStack,
+    record: RecipeStepRecorder | undefined,
+  ): Promise<string | null> {
+    const refs = stack.prerequisites
+    if (refs.length === 0) return null
+    if (!this.runPreflightChecks) {
+      return 'This shared stack declares preflight prerequisite check(s), but preflight checks are not available on this deployment (they need a host Docker daemon).'
+    }
+    const started = this.clock.now()
+    const results = await this.runPreflightChecks(refs)
+    // Stream each check as its own provisioning-log entry (a `warn` is advisory — a success note).
+    for (const r of results) {
+      await this.logStep(record, `preflight: ${r.title}`, started, {
+        ok: r.status !== 'fail',
+        ...(r.detail ? { detail: r.status === 'warn' ? `warn: ${r.detail}` : r.detail } : {}),
+        ...(r.status === 'fail' ? { error: r.detail ?? 'failed' } : {}),
+      })
+    }
+    const blocking = preflightBlockingFailures(results)
+    return blocking.length > 0 ? formatPreflightFailure(blocking) : null
   }
 
   /**

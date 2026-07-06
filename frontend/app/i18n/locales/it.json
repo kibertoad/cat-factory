@@ -530,6 +530,8 @@
         "cloneUrl": "URL di clone del repository",
         "cloneUrlHelp": "Il repository git in cui risiedono i file compose dello stack.",
         "gitRef": "Branch o tag (facoltativo)",
+        "directory": "Sottodirectory (facoltativo)",
+        "directoryHelp": "Usato solo dal rilevamento automatico: la sottodirectory del monorepo in cui si trova lo stack compose.",
         "composeFiles": "File compose",
         "composeFilesHelp": "Separati da virgola, relativi al repository, in ordine di override.",
         "composeProfiles": "Profili compose (facoltativo)",
@@ -537,6 +539,15 @@
         "managedNetworksHelp": "Reti che questo stack crea e possiede affinche i consumatori vi si colleghino.",
         "allowHostCommands": "Consenti passaggi di setup con comandi host",
         "save": "Aggiungi stack"
+      },
+      "detect": {
+        "button": "Rilevamento automatico",
+        "hint": "Legge il repository e precompila i file compose, i profili e le reti.",
+        "detected": "Configurazione dello stack rilevata",
+        "detectedBody": "Precompilato dal repository. Controlla i campi prima di salvare.",
+        "nothing": "Niente da rilevare automaticamente",
+        "failed": "Rilevamento automatico non riuscito",
+        "envFiles": "Modelli di ambiente da materializzare prima dell'avvio:"
       },
       "edit": {
         "heading": "Modifica stack condiviso",

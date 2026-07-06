@@ -1,5 +1,65 @@
 # @cat-factory/worker
 
+## 0.75.1
+
+### Patch Changes
+
+- Updated dependencies [ecbcbec]
+  - @cat-factory/contracts@0.112.0
+  - @cat-factory/kernel@0.102.0
+  - @cat-factory/integrations@0.75.0
+  - @cat-factory/orchestration@0.85.0
+  - @cat-factory/server@0.95.0
+  - @cat-factory/agents@0.40.7
+  - @cat-factory/consensus@0.9.21
+  - @cat-factory/eks@0.1.20
+  - @cat-factory/gates@0.4.18
+  - @cat-factory/gitlab@0.7.21
+  - @cat-factory/prompt-fragments@0.10.20
+  - @cat-factory/spend@0.11.4
+  - @cat-factory/caching@0.4.22
+  - @cat-factory/observability-langfuse@0.7.153
+  - @cat-factory/provider-cloudflare@0.7.162
+
+## 0.75.0
+
+### Minor Changes
+
+- fdba1ea: Shared stacks now declare their own preflight `prerequisites` (the slice-6 follow-up in the
+  stack-recipes-and-shared-stacks initiative). A `SharedStack` carries a
+  `prerequisites: PreflightRef[]` — the same machine-prerequisite vocabulary a consumer recipe
+  declares — and `SharedStackService` re-runs those checks at the START of every bring-up
+  (before clone / networks / `up`), streaming one provisioning-log step per check and failing fast
+  with copy-paste remediation when a REQUIRED check is red (a non-required one is advisory). This
+  closes the acme-shared-services M-rows (mkcert CA / hosts entries / ECR login) for the shared
+  stack itself, not just per-PR consumer recipes.
+
+  The probes are host-bound (local facade); a stack that declares `prerequisites` on a deployment
+  with no host-probe runtime fails loudly rather than silently skipping a declared safety gate,
+  mirroring the compose provider's `runPreflights` seam. Persistence is fully symmetric: a new
+  `prerequisites` text-JSON column mirrored D1 (`0042_shared_stacks_prerequisites.sql`) ⇄ Drizzle,
+  asserted by the cross-runtime shared-stack conformance round-trip. Pre-1.0, no data migration —
+  existing rows default to `[]` (no prerequisites), unchanged behaviour.
+
+### Patch Changes
+
+- Updated dependencies [fdba1ea]
+  - @cat-factory/contracts@0.111.0
+  - @cat-factory/integrations@0.74.0
+  - @cat-factory/orchestration@0.84.0
+  - @cat-factory/agents@0.40.6
+  - @cat-factory/consensus@0.9.20
+  - @cat-factory/eks@0.1.19
+  - @cat-factory/gates@0.4.17
+  - @cat-factory/gitlab@0.7.20
+  - @cat-factory/kernel@0.101.2
+  - @cat-factory/prompt-fragments@0.10.19
+  - @cat-factory/server@0.94.3
+  - @cat-factory/spend@0.11.3
+  - @cat-factory/provider-cloudflare@0.7.161
+  - @cat-factory/caching@0.4.21
+  - @cat-factory/observability-langfuse@0.7.152
+
 ## 0.74.2
 
 ### Patch Changes

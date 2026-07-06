@@ -1,6 +1,7 @@
 import {
   createSharedStackContract,
   deleteSharedStackContract,
+  detectSharedStackContract,
   ensureSharedStackUpContract,
   listSharedStacksContract,
   teardownSharedStackContract,
@@ -42,6 +43,13 @@ export function sharedStackController(): Hono<AppEnv> {
     if (!stacks) return unavailable(c)
     const stack = await stacks.service.create(param(c, 'workspaceId'), c.req.valid('json'))
     return c.json(stack, 201)
+  })
+
+  buildHonoRoute(app, detectSharedStackContract, async (c) => {
+    const stacks = requireSharedStacks(c)
+    if (!stacks) return unavailable(c)
+    const recommendation = await stacks.service.detect(param(c, 'workspaceId'), c.req.valid('json'))
+    return c.json(recommendation, 200)
   })
 
   buildHonoRoute(app, updateSharedStackContract, async (c) => {

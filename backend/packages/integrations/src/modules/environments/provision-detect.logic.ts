@@ -18,6 +18,7 @@ import type {
   ProvisioningServiceDirCandidate,
   RecipeEnvFile,
   ServiceProvisioning,
+  SharedStackRecommendation,
   StackRecipe,
 } from '@cat-factory/contracts'
 import { parse as parseYaml, parseAllDocuments } from 'yaml'
@@ -1562,6 +1563,137 @@ export async function detectKubernetesProvisioning(
   // genuine read fault), raise it rather than falsely reporting an empty repo.
   if (scanner.readFault) throw new RepoReadError(scanner.readFault)
   return noneRecommendation()
+}
+
+export interface DetectSharedStackOptions {
+  /** Subdirectory the compose stack lives in (monorepo); absent/'' ⇒ the repo root. */
+  directory?: string
+  /** Git ref to read at; absent ⇒ the reader's default branch. */
+  gitRef?: string
+  /** The repo basename, used as the suggested stack name when a stack is detected. */
+  repoName?: string
+}
+
+/**
+ * Detect a recommended SHARED-STACK config from a repo, read CHECKOUT-FREE over the same minimal
+ * {@link ProvisioningRepoReader} the provisioning detector uses. A shared stack is just the
+ * compose half of that scan (a shared stack has no Kubernetes analogue), narrowed to the fields
+ * the shared-stack form carries:
+ *
+ * - `composeFiles` — the base compose file plus any `<stem>.override.ya?ml` auto-merge family
+ *   (OS-specific overrides are NOT auto-layered; the user picks the one for their machine).
+ * - `composeProfiles` — the `COMPOSE_PROFILES` the file declares (surfaced, not auto-enabled).
+ * - `managedNetworks` — the `external: true` networks the compose references. A shared stack is
+ *   responsible for creating + owning these (`docker network create`), which is exactly what an
+ *   external network in the consumed compose means (the acme `acme-net` shape). A self-contained
+ *   compose that defines all its dependencies internally declares no external network, so this is
+ *   empty — the honest result (compose owns those networks; add one to expose it if you want).
+ * - `envFiles` — committed `*-dist`/`*.example` templates to materialize before `up`.
+ *
+ * Every inferred field carries a confidence note. Nothing is auto-applied; the panel prefills the
+ * form and the user confirms. A genuine read fault (auth/rate-limit/transport) throws
+ * {@link RepoReadError}; a clean "no compose file here" returns `detected: false`.
+ */
+export async function detectSharedStack(
+  reader: ProvisioningRepoReader,
+  options: DetectSharedStackOptions = {},
+): Promise<SharedStackRecommendation> {
+  const root = joinPath(options.directory ?? '')
+  const scanner = new Scanner(reader, options.gitRef)
+  const compose = await findCompose(scanner, root)
+  if (!compose) {
+    // Nothing compose-shaped. Distinguish "couldn't read the repo" from "read it, no compose".
+    if (scanner.readFault) throw new RepoReadError(scanner.readFault)
+    return {
+      detected: false,
+      composeFiles: [],
+      composeProfiles: [],
+      managedNetworks: [],
+      envFiles: [],
+      notes: [
+        {
+          field: 'provisionType',
+          confidence: 'high',
+          message:
+            'No Docker Compose file was found in this repo — enter the stack’s compose files manually.',
+        },
+      ],
+    }
+  }
+
+  const notes: ProvisioningDetectionNote[] = [
+    {
+      field: 'composeFiles',
+      confidence: 'high',
+      message: `Detected a Docker Compose file at ${compose.path}.`,
+    },
+  ]
+
+  // Layer the base file + its `<stem>.override` auto-merge family; a lone file ⇒ just itself.
+  const { composeFiles } = collectComposeFiles(compose)
+  const files = composeFiles ?? [compose.path]
+  if (composeFiles && composeFiles.length > 1) {
+    notes.push({
+      field: 'composeFiles',
+      confidence: 'high',
+      message: `Layered ${composeFiles.length} compose files: ${composeFiles.join(' → ')}.`,
+    })
+  }
+
+  // External networks the compose expects to pre-exist ARE the networks a shared stack owns.
+  const managedNetworks = compose.externalNetworks
+  if (managedNetworks.length > 0) {
+    notes.push({
+      field: 'externalNetworks',
+      confidence: 'high',
+      message: `This stack’s compose references external network(s) it must create + own: ${managedNetworks.join(', ')}. Consumers attach to these.`,
+    })
+  } else {
+    notes.push({
+      field: 'externalNetworks',
+      confidence: 'low',
+      message:
+        'The compose declares no external network; its services share compose-owned networks. Add a managed network only if consumers need to attach to this stack.',
+    })
+  }
+
+  if (compose.profiles.length > 0) {
+    notes.push({
+      field: 'composeProfiles',
+      confidence: 'low',
+      message: `The compose file declares ${compose.profiles.length} profile(s): ${compose.profiles.join(', ')}. Enable the optional service groups this stack should run.`,
+    })
+  }
+
+  const envFiles = await collectEnvFileTemplates(scanner, root, compose.dir)
+  if (envFiles.length > 0) {
+    notes.push({
+      field: 'envFiles',
+      confidence: 'low',
+      message: `Found ${envFiles.length} env/config template(s) to materialize before up: ${envFiles
+        .map((e) => `${e.template} → ${e.target}`)
+        .join(', ')}.`,
+    })
+  }
+
+  if (scanner.exhausted) {
+    notes.push({
+      field: 'provisionType',
+      confidence: 'low',
+      message:
+        'The repository scan was truncated (read budget reached); an unusual layout may have been missed. Review the fields before saving.',
+    })
+  }
+
+  return {
+    detected: true,
+    ...(options.repoName ? { name: options.repoName } : {}),
+    composeFiles: files,
+    composeProfiles: compose.profiles,
+    managedNetworks,
+    envFiles,
+    notes,
+  }
 }
 
 export interface DetectCustomManifestOptions {

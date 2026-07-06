@@ -1,4 +1,6 @@
 import type {
+  PreflightRef,
+  PreflightResult,
   SharedStack,
   SharedStackRepository,
   Workspace,
@@ -7,6 +9,7 @@ import type {
 import { ConflictError } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComposeExecResult, ComposeRuntime } from '../compose/compose-environment.logic.js'
+import type { SharedStackServiceDependencies } from './SharedStackService.js'
 import { SharedStackService } from './SharedStackService.js'
 
 // In-memory shared-stack repository + a workspace-guard stub + a scriptable fake ComposeRuntime,
@@ -76,7 +79,10 @@ function makeRuntime(overrides: Partial<ComposeRuntime> = {}) {
 function makeService(
   repo: SharedStackRepository,
   runtime?: ComposeRuntime,
-  opts: { cloneToken?: string } = {},
+  opts: {
+    cloneToken?: string
+    runPreflights?: (refs: PreflightRef[]) => Promise<PreflightResult[]>
+  } = {},
 ): SharedStackService {
   let n = 0
   return new SharedStackService({
@@ -86,6 +92,7 @@ function makeService(
     clock: { now: () => 1_700_000_000_000 },
     ...(runtime ? { composeRuntime: runtime } : {}),
     ...(opts.cloneToken ? { cloneToken: opts.cloneToken } : {}),
+    ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
   })
 }
 
@@ -97,6 +104,7 @@ const baseInput = {
   envFiles: [] as { template: string; target: string }[],
   managedNetworks: [] as string[],
   setupSteps: [] as SharedStack['setupSteps'],
+  prerequisites: [] as PreflightRef[],
   allowHostCommands: false,
 }
 
@@ -240,6 +248,76 @@ describe('SharedStackService', () => {
     expect(result.lastError).toContain('host-command')
   })
 
+  it('runs declared preflights BEFORE clone and fails fast on a blocking failure (no up)', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      prerequisites: [{ check: 'mkcert-ca' }],
+    })
+    const { runtime, calls, checkouts } = makeRuntime()
+    const runPreflights = vi.fn(
+      async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+        refs.map((r) => ({
+          check: r.check,
+          title: 'mkcert local CA installed',
+          status: 'fail',
+          required: true,
+          detail: 'CA not in trust store',
+          remediation: 'Run `mkcert -install`.',
+        })),
+    )
+    const result = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
+    expect(result.status).toBe('failed')
+    expect(result.lastError).toContain('Preflight check(s) failed')
+    expect(result.lastError).toContain('mkcert -install')
+    // The gate ran before any clone / compose work.
+    expect(runPreflights).toHaveBeenCalledOnce()
+    expect(checkouts).toHaveLength(0)
+    expect(calls.every((c) => !c.includes('up'))).toBe(true)
+  })
+
+  it('proceeds past a passing (and a non-required warn) preflight to running', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      prerequisites: [{ check: 'mkcert-ca' }, { check: 'registry-auth', required: false }],
+      healthGate: { kind: 'compose-exec', service: 'app', command: ['health'] },
+    })
+    const runPreflights = vi.fn(
+      async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+        refs.map((r) => ({
+          check: r.check,
+          title: r.check,
+          // A non-required check downgrades to an advisory `warn`, which must NOT block.
+          status: r.required === false ? 'warn' : 'pass',
+          required: r.required ?? true,
+        })),
+    )
+    const { runtime } = makeRuntime()
+    const up = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
+    expect(up.status).toBe('running')
+    expect(up.lastError).toBeNull()
+  })
+
+  it('fails loudly when a stack declares preflights but no host-probe runner is wired', async () => {
+    const created = await makeService(repo).create(WS, {
+      ...baseInput,
+      prerequisites: [{ check: 'docker-daemon' }],
+    })
+    // Runtime present (so bring-up would otherwise proceed) but NO runPreflights seam.
+    const { runtime } = makeRuntime()
+    const result = await makeService(repo, runtime).ensureUp(WS, created.id)
+    expect(result.status).toBe('failed')
+    expect(result.lastError).toContain('preflight')
+  })
+
+  it('skips the preflight gate entirely when no prerequisites are declared', async () => {
+    const created = await makeService(repo).create(WS, baseInput) // prerequisites: []
+    const runPreflights = vi.fn(async (): Promise<PreflightResult[]> => [])
+    const { runtime } = makeRuntime()
+    const up = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
+    expect(up.status).toBe('running')
+    expect(runPreflights).not.toHaveBeenCalled()
+  })
+
   it('ensureUp/teardown refuse without a Docker runtime', async () => {
     const created = await makeService(repo).create(WS, baseInput)
     const svc = makeService(repo) // no runtime
@@ -321,5 +399,95 @@ describe('SharedStackService', () => {
       name: 'renamed',
     })
     await expect(svc.remove(WS, created.id)).resolves.toBeUndefined()
+  })
+
+  describe('detect', () => {
+    // A checkout-free RepoFiles reader over a flat path→content map (only the two methods the
+    // detector calls) wrapped in a RunRepoContext, plus a resolver that hands it back.
+    function makeResolver(files: Record<string, string>, baseBranch = 'main') {
+      const calls: { owner: string; repo: string; provider?: string }[] = []
+      const repoFiles = {
+        async getFile(path: string) {
+          return path in files ? { content: files[path]!, sha: 'sha' } : null
+        },
+        async listDirectory(path: string) {
+          const prefix = path ? `${path}/` : ''
+          const children = new Map<string, 'file' | 'dir'>()
+          for (const full of Object.keys(files)) {
+            if (!full.startsWith(prefix)) continue
+            const rest = full.slice(prefix.length)
+            if (!rest) continue
+            const slash = rest.indexOf('/')
+            if (slash === -1) children.set(rest, 'file')
+            else children.set(rest.slice(0, slash), 'dir')
+          }
+          return [...children].map(([name, type]) => ({ name, type, path: prefix + name }))
+        },
+      }
+      const resolve = async (
+        _ws: string,
+        coords: { owner: string; repo: string; provider?: string },
+      ) => {
+        calls.push(coords)
+        return { repo: repoFiles, baseBranch } as never
+      }
+      return { resolve, calls }
+    }
+
+    function detectService(
+      repo: SharedStackRepository,
+      resolveRepoFilesForWorkspace?: SharedStackServiceDependencies['resolveRepoFilesForWorkspace'],
+    ): SharedStackService {
+      let n = 0
+      return new SharedStackService({
+        sharedStackRepository: repo,
+        workspaceRepository,
+        idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+        clock: { now: () => 1_700_000_000_000 },
+        ...(resolveRepoFilesForWorkspace ? { resolveRepoFilesForWorkspace } : {}),
+      })
+    }
+
+    it('reads the clone URL repo and recommends compose files + managed networks', async () => {
+      const { resolve, calls } = makeResolver({
+        'docker-compose.yml': `
+services:
+  mysql:
+    image: mysql:8
+    networks: [acme-net]
+networks:
+  acme-net:
+    external: true
+`,
+      })
+      const svc = detectService(makeRepo(), resolve)
+      const rec = await svc.detect(WS, {
+        cloneUrl: 'https://github.com/acme/acme-shared-services.git',
+      })
+      expect(rec.detected).toBe(true)
+      expect(rec.name).toBe('acme-shared-services')
+      expect(rec.composeFiles).toEqual(['docker-compose.yml'])
+      expect(rec.managedNetworks).toEqual(['acme-net'])
+      // The clone URL was parsed into the coords the resolver was called with.
+      expect(calls).toEqual([{ owner: 'acme', repo: 'acme-shared-services', provider: 'github' }])
+    })
+
+    it('reports detected:false (no throw) when no VCS resolver is wired', async () => {
+      const svc = detectService(makeRepo())
+      const rec = await svc.detect(WS, {
+        cloneUrl: 'https://github.com/acme/acme-shared-services.git',
+      })
+      expect(rec.detected).toBe(false)
+      expect(rec.notes[0]?.message).toContain('No VCS connection')
+    })
+
+    it('reports detected:false when the resolver has no connection for the repo', async () => {
+      const svc = detectService(makeRepo(), async () => null as never)
+      const rec = await svc.detect(WS, {
+        cloneUrl: 'https://github.com/acme/acme-shared-services.git',
+      })
+      expect(rec.detected).toBe(false)
+      expect(rec.notes[0]?.message).toContain('acme/acme-shared-services')
+    })
   })
 })

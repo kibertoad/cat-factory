@@ -18,9 +18,11 @@
 >
 > **Residuals that are explicitly NOT gating** (a maintainer decides if/when to lift any draft
 > status in light of them): decrypting a remotely-sealed PROVISIONED environment's access cipher
-> (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry /
-> subscription-activation no-ops a run makes over the remote (telemetry is local-first, Phase 5;
-> activation is the local-sqlite bucket); and the `fragments` / `slack` connect/provision surfaces.
+> (needs the mothership's key — the secrets-delegation slice); the best-effort kaizen / telemetry
+> no-ops a run makes over the remote (telemetry is local-first, Phase 5); and the `fragments` /
+> `slack` connect/provision surfaces. (Subscription activation is no longer among these — PR 3 gave
+> it, and the rest of the subscription-credential trio + local settings, their real `local-sqlite`
+> home; see the [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings).)
 > The remaining `pending` org methods are the live per-repo checklist below.
 
 ### Landed so far
@@ -178,6 +180,29 @@
   none), so a token-less node boots INERT. `AUTH_MACHINE_TOKEN_TTL_MS` (default 30d); expired = re-login.
   **Deferred:** device-code / headless CLI login, token rotation/revocation (PR 6), silent refresh.
 
+**Local credential + settings buckets (PR 3)**
+
+- **Subscription credentials + local settings move onto the laptop** — the four remaining
+  `local-sqlite` bucket rows now have a `node:sqlite` home, so the subscription features + the
+  local-settings panel work in mothership mode (previously the services were OFF for lack of a db).
+  `credentialStore.ts` gains three sealed-credential repos —
+  `SqliteProviderSubscriptionTokenRepository` (per-workspace pooled Claude Code / Codex / GLM
+  tokens), `SqlitePersonalSubscriptionRepository` (per-user individual-usage creds, the outer
+  double-encryption blob), and `SqliteSubscriptionActivationRepository` (their short-lived per-run,
+  system-key-only copies) — and a new `localSettingsStore.ts` holds the local-mode operational
+  settings singleton (`SqliteLocalSettingsRepository`; kept out of the credential store so that
+  store's "only credentials" invariant holds). All mirror their `D1*` SQL (D1 is SQLite) and stay
+  LOCAL for the same reason the API-key pool does: the tokens are leased + decrypted by the LOCAL
+  container executor, so they must never traverse the machine API. Wired via new `NodeContainerOptions`
+  credential-override seams (`providerSubscriptionTokenRepository` /
+  `personalSubscriptionRepository` / `subscriptionActivationRepository`, mirroring the existing
+  `providerApiKeyRepository` seam) that let `buildNode{Subscription,PersonalSubscription}Service`
+  build even without a `db`; `subscriptionActivationRepository` is threaded ONCE and reused by BOTH
+  its consumers (the personal-subscription service's mint + the engine core's clear-on-completion).
+  `localSettingsService` is built in `buildLocalContainer` from the local-sqlite repo when there's no
+  `db`. Removes the last mothership-mode "service OFF (no db)" gaps for these features. See the
+  [local-sqlite bucket pattern](#the-local-sqlite-bucket-pattern-credentials--settings) below.
+
 ## Goal & rationale
 
 Local mode (`backend/runtimes/local`, `@cat-factory/local-server`) today runs the **whole**
@@ -250,6 +275,62 @@ The **generic persistence-RPC** spine is the template every later slice follows:
   an error code in the envelope, so CAS-retry / 404 control flow is preserved.
 - **`Clock` / `IdGenerator` stay local** — never serialized.
 
+### The local-sqlite bucket pattern (credentials + settings)
+
+The mirror of the remote spine for the OTHER bucket: state that must NOT go to the mothership
+because it is a per-user/per-deployment credential or a local-runner knob. This is the reference
+for adding a new `local-sqlite` repo (and the template a future agent should copy rather than
+re-derive). It is a **local-facade-only differentiator** — no symmetry obligation (see Conventions).
+
+- **Where it lives.** `backend/runtimes/local/src/sqlite/`. The credential store
+  (`credentialStore.ts`, file `credentials.sqlite`) holds every SEALED credential repo:
+  `providerApiKey`, `localModelEndpoint`, and (PR 3) the subscription trio
+  `providerSubscriptionToken` / `personalSubscription` / `subscriptionActivation`. The local-mode
+  operational settings singleton has its OWN store (`localSettingsStore.ts`, file
+  `local-settings.sqlite`) so the credential store's "ONLY credentials" invariant holds — it is
+  non-secret config, not a credential. Both open through the shared `db.ts` `openSqliteDb` (WAL +
+  busy-timeout). The machine-token cache (`machineTokenStore.ts`) and the durable work queue
+  (`workQueue.ts`) are the other two local stores.
+- **Implementing a repo.** `node:sqlite`'s `DatabaseSync` is SYNCHRONOUS + single-process, so a
+  select-then-write is inherently atomic (no `FOR UPDATE` analogue needed) and the port's async
+  methods just execute synchronously. **Mirror the `D1*` repository's SQL** — D1 IS SQLite, so the
+  `D1ProviderSubscriptionTokenRepository` / `D1PersonalSubscriptionRepository` (in
+  `backend/runtimes/cloudflare/.../repositories/`) are the closest reference, adapted to the
+  `.prepare().run(...)/.get(...)/.all(...)` API (`Number(res.changes)` for a delete count). Add the
+  table to the store's `SCHEMA` const. The repo is **crypto-agnostic**: it stores only the opaque
+  `*Cipher` blob the SERVICE hands it.
+- **The sealing model.** The cipher is applied ABOVE the store, in the service (e.g.
+  `ProviderSubscriptionService` seals with a `WebCryptoSecretCipher` keyed by the LOCAL
+  `ENCRYPTION_KEY` that `applyLocalDefaults` guarantees). Personal subscriptions are
+  DOUBLE-encrypted (`system.encrypt(personal.seal(token, password))`) — the inner password layer
+  (`WebCryptoPersonalSecretCipher`) is also above the store, so the password never touches disk.
+  The mothership's `ENCRYPTION_KEY` NEVER reaches the laptop (product decision 3): these creds are
+  leased + decrypted by the LOCAL container executor, which is exactly why they can't be remoted.
+- **The wiring seam.** `NodeContainerOptions` carries a per-repo credential OVERRIDE
+  (`providerApiKeyRepository`, and PR 3's `providerSubscriptionTokenRepository` /
+  `personalSubscriptionRepository` / `subscriptionActivationRepository`). Each `buildNode*Service`
+  takes a `repositoryOverride?` and builds even without a `db` (`override ?? (db ? new Drizzle… :
+undefined)`; off only when neither is present) — so the feature turns ON in mothership mode. When
+  ONE repo has TWO consumers (e.g. `subscriptionActivationRepository` feeds both the
+  personal-subscription service's mint AND the engine core's clear-on-completion), thread the ONE
+  injected instance into both so they agree. `buildLocalContainer` reads the repos off
+  `mothership.credentialStore.*` and passes them in the `...(mothership ? {…} : {})` block.
+  `localSettingsService` (local-facade-built, not a `NodeContainerOptions` seam) is constructed from
+  the Drizzle repo when `options.db` is present, else `mothership.localSettingsStore.localSettingsRepository`.
+- **composeMothership** opens each store, exposes it on `MothershipComposition`, and closes it in
+  `close()` (called from `onShutdown`). Each store's file path is `localDbPath(env.LOCAL_MOTHERSHIP_*_DB,
+'<name>.sqlite')` — an env override (incl. `:memory:` for tests) else `~/.cat-factory/<name>.sqlite`.
+  **Tests that build a mothership container MUST set every `LOCAL_MOTHERSHIP_*_DB` to `:memory:`**
+  (incl. `LOCAL_MOTHERSHIP_SETTINGS_DB`) or they write real files under `~/.cat-factory`.
+- **Drift guard.** `runtimes/node/test/mothership-allowlist.spec.ts` reflects the DRIZZLE repos only,
+  so a local-sqlite repo needs NO allow-list entry; a repo that also has a Drizzle impl is classified
+  `local` in that guard's `NON_REMOTE` map (the subscription trio already is), and a local-ONLY repo
+  (e.g. `localSettings`) isn't reflected at all. The `node:sqlite` classes are covered by unit tests
+  (`credentialStore.test.ts` / `localSettingsStore.test.ts`) asserting parity with the D1/Drizzle SQL.
+- **NOT this pattern:** the telemetry repos (Phase 5) are `telemetry`-bucket, not `local-sqlite` —
+  they are local-FIRST + batch-synced-up + short-TTL-pruned, a different model, not a plain
+  laptop-only store.
+
 ## Per-repository bucket checklist
 
 Every persistence port, and where it lives in mothership mode. `remote` = mothership RPC;
@@ -298,10 +379,10 @@ never remotely invocable (mothership-internal cron).
 | GitHub projection repos (repo/branch/PR/issue/commit/check) | remote (board-panel reads; sync/repo-writes pending)               | ◑ part  | PR 3 (VCS projection reads)      |
 | `providerApiKeyRepository`                                  | local-sqlite                                                       | ✅ done | PR 1 (store)                     |
 | `localModelEndpointRepository`                              | local-sqlite                                                       | ✅ done | PR 1 (store)                     |
-| `providerSubscriptionTokenRepository`                       | local-sqlite                                                       | ⬜ todo | PR 3                             |
-| `personalSubscriptionRepository`                            | local-sqlite                                                       | ⬜ todo | PR 3                             |
-| `subscriptionActivationRepository`                          | local-sqlite                                                       | ⬜ todo | PR 3                             |
-| `localSettingsRepository`                                   | local-sqlite                                                       | ⬜ todo | PR 3                             |
+| `providerSubscriptionTokenRepository`                       | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
+| `personalSubscriptionRepository`                            | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
+| `subscriptionActivationRepository`                          | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
+| `localSettingsRepository`                                   | local-sqlite                                                       | ✅ done | PR 3 (local subscription bucket) |
 | durable execution work queue                                | local-sqlite (replaces pg-boss)                                    | ✅ done | PR 1 (in-proc) → PR 2 (durable)  |
 | cached mothership machine token                             | local-sqlite                                                       | ✅ done | PR 3                             |
 | `llmCallMetricRepository`                                   | telemetry                                                          | ⬜ todo | PR 5                             |
@@ -353,8 +434,9 @@ backend, asserted by `mothership-integration.spec.ts` (green). The three parts o
 3. **Expose those repos in the mothership-side registry** (the dispatcher reflects over it) with
    round-trip + cross-account-scope tests + the fake-mothership integration test (slice 4).
 
-Residual items (provisioned-env secret decryption; best-effort kaizen/telemetry/activation no-ops;
-`fragments` / `slack` connect surfaces) are NOT on the basic board-load + run path.
+Residual items (provisioned-env secret decryption; best-effort kaizen/telemetry no-ops;
+`fragments` / `slack` connect surfaces) are NOT on the basic board-load + run path. (Subscription
+activation is no longer a residual — PR 3 landed its `local-sqlite` bucket; see "Landed so far".)
 
 - **PR 4 — notifications + email + Slack delegation.**
 - **PR 5 — telemetry/logs local-first sync.**

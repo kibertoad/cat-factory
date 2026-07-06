@@ -1,5 +1,91 @@
 # @cat-factory/node-server
 
+## 0.83.1
+
+### Patch Changes
+
+- Updated dependencies [ecbcbec]
+  - @cat-factory/contracts@0.112.0
+  - @cat-factory/kernel@0.102.0
+  - @cat-factory/integrations@0.75.0
+  - @cat-factory/orchestration@0.85.0
+  - @cat-factory/server@0.95.0
+  - @cat-factory/agents@0.40.7
+  - @cat-factory/consensus@0.9.21
+  - @cat-factory/eks@0.1.20
+  - @cat-factory/gates@0.4.18
+  - @cat-factory/gitlab@0.7.21
+  - @cat-factory/prompt-fragments@0.10.20
+  - @cat-factory/spend@0.11.4
+  - @cat-factory/caching@0.4.22
+  - @cat-factory/observability-langfuse@0.7.153
+  - @cat-factory/provider-bedrock@0.7.161
+  - @cat-factory/provider-cloudflare@0.7.162
+  - @cat-factory/provider-s3@0.2.103
+
+## 0.83.0
+
+### Minor Changes
+
+- fdba1ea: Shared stacks now declare their own preflight `prerequisites` (the slice-6 follow-up in the
+  stack-recipes-and-shared-stacks initiative). A `SharedStack` carries a
+  `prerequisites: PreflightRef[]` — the same machine-prerequisite vocabulary a consumer recipe
+  declares — and `SharedStackService` re-runs those checks at the START of every bring-up
+  (before clone / networks / `up`), streaming one provisioning-log step per check and failing fast
+  with copy-paste remediation when a REQUIRED check is red (a non-required one is advisory). This
+  closes the acme-shared-services M-rows (mkcert CA / hosts entries / ECR login) for the shared
+  stack itself, not just per-PR consumer recipes.
+
+  The probes are host-bound (local facade); a stack that declares `prerequisites` on a deployment
+  with no host-probe runtime fails loudly rather than silently skipping a declared safety gate,
+  mirroring the compose provider's `runPreflights` seam. Persistence is fully symmetric: a new
+  `prerequisites` text-JSON column mirrored D1 (`0042_shared_stacks_prerequisites.sql`) ⇄ Drizzle,
+  asserted by the cross-runtime shared-stack conformance round-trip. Pre-1.0, no data migration —
+  existing rows default to `[]` (no prerequisites), unchanged behaviour.
+
+### Patch Changes
+
+- 23f7342: Mothership mode: give the four remaining `local-sqlite` bucket repositories a `node:sqlite` home on
+  the laptop, so the subscription features and the local-mode settings panel work in mothership mode
+  (previously their services were OFF for lack of a database).
+
+  - The local credential store (`credentialStore.ts`) gains three sealed-credential repositories —
+    `SqliteProviderSubscriptionTokenRepository` (the per-workspace pooled Claude Code / Codex / GLM
+    subscription tokens), `SqlitePersonalSubscriptionRepository` (per-user individual-usage
+    credentials, the outer double-encryption blob), and `SqliteSubscriptionActivationRepository`
+    (their short-lived per-run, system-key-only copies). A new `localSettingsStore.ts` holds the
+    local-mode operational settings singleton (`SqliteLocalSettingsRepository`), kept out of the
+    credential store so its "only credentials" invariant holds.
+  - All mirror their `D1*` SQL (D1 is SQLite) and stay LOCAL for the same reason the API-key pool
+    does: the tokens are leased + decrypted by the LOCAL container executor with the LOCAL key, so
+    they must never traverse the machine API to the mothership.
+  - New `NodeContainerOptions` credential-override seams (`providerSubscriptionTokenRepository` /
+    `personalSubscriptionRepository` / `subscriptionActivationRepository`, mirroring the existing
+    `providerApiKeyRepository` seam) let `buildNodeSubscriptionService` /
+    `buildNodePersonalSubscriptionService` build without a `db`; the activation repo is threaded once
+    and shared by both its consumers (the personal-subscription service's mint + the engine core's
+    clear-on-completion). `localSettingsService` is built in the local facade from the local-sqlite
+    repo when there is no `db`.
+
+- Updated dependencies [fdba1ea]
+  - @cat-factory/contracts@0.111.0
+  - @cat-factory/integrations@0.74.0
+  - @cat-factory/orchestration@0.84.0
+  - @cat-factory/agents@0.40.6
+  - @cat-factory/consensus@0.9.20
+  - @cat-factory/eks@0.1.19
+  - @cat-factory/gates@0.4.17
+  - @cat-factory/gitlab@0.7.20
+  - @cat-factory/kernel@0.101.2
+  - @cat-factory/prompt-fragments@0.10.19
+  - @cat-factory/server@0.94.3
+  - @cat-factory/spend@0.11.3
+  - @cat-factory/provider-bedrock@0.7.160
+  - @cat-factory/provider-cloudflare@0.7.161
+  - @cat-factory/caching@0.4.21
+  - @cat-factory/observability-langfuse@0.7.152
+  - @cat-factory/provider-s3@0.2.102
+
 ## 0.82.2
 
 ### Patch Changes

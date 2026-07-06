@@ -6,7 +6,11 @@
 // they succeed only on the local facade (elsewhere the backend returns a clear error surfaced as
 // a toast). Renders inline inside the Infrastructure window's "Shared stacks" tab.
 import { computed, reactive, ref } from 'vue'
-import type { SharedStack, SharedStackStatus } from '~/types/sharedStacks'
+import type {
+  SharedStack,
+  SharedStackRecommendation,
+  SharedStackStatus,
+} from '~/types/sharedStacks'
 
 const { t } = useI18n()
 const store = useSharedStacksStore()
@@ -16,6 +20,7 @@ const { confirmAction, toastDone } = useConfirmAction()
 const stacks = computed(() => store.stacks)
 const busyId = ref<string | null>(null)
 const saving = ref(false)
+const detecting = ref(false)
 // null ⇒ the form is in "add" mode; a stack id ⇒ editing that stack's definition in place.
 const editingId = ref<string | null>(null)
 
@@ -23,11 +28,19 @@ const form = reactive({
   name: '',
   cloneUrl: '',
   gitRef: '',
+  // Subdirectory the compose stack lives in (monorepo) — a detect-time hint only, NOT persisted:
+  // the resolved `composeFiles` already carry the prefix. Absent ⇒ the repo root is scanned.
+  directory: '',
   composeFiles: '',
   composeProfiles: '',
   managedNetworks: '',
   allowHostCommands: false,
 })
+
+// Env/config templates (`*-dist` → gitignored target) the autodetect scan surfaced. The form has no
+// editor for them, so we carry the detected (or, on edit, the stack's existing) set through to the
+// save payload rather than silently dropping them — they're materialized before `up`.
+const detectedEnvFiles = ref<SharedStack['envFiles']>([])
 
 /** Status → badge colour. */
 const STATUS_COLOR: Record<SharedStackStatus, 'neutral' | 'warning' | 'success' | 'error'> = {
@@ -72,10 +85,12 @@ function resetForm() {
   form.name = ''
   form.cloneUrl = ''
   form.gitRef = ''
+  form.directory = ''
   form.composeFiles = ''
   form.composeProfiles = ''
   form.managedNetworks = ''
   form.allowHostCommands = false
+  detectedEnvFiles.value = []
 }
 
 /** Load a stack's definition into the form for in-place editing. */
@@ -84,10 +99,59 @@ function startEdit(stack: SharedStack) {
   form.name = stack.name
   form.cloneUrl = stack.cloneUrl
   form.gitRef = stack.gitRef ?? ''
+  form.directory = ''
   form.composeFiles = stack.composeFiles.join(', ')
   form.composeProfiles = stack.composeProfiles.join(', ')
   form.managedNetworks = stack.managedNetworks.join(', ')
   form.allowHostCommands = stack.allowHostCommands
+  // Preserve the stack's existing env templates so a save (or a later re-detect) doesn't drop them.
+  detectedEnvFiles.value = stack.envFiles
+}
+
+const canDetect = computed(() => Boolean(form.cloneUrl.trim()) && !detecting.value)
+
+/**
+ * Read the repo at the entered clone URL (checkout-free, via the workspace's VCS connection) and
+ * PREFILL the compose-shaped fields from the recommendation. Non-binding: the user reviews + edits
+ * before saving. A SUCCESSFUL detection is authoritative for the compose-shaped fields — it
+ * overwrites them wholesale, including clearing a field the scan found empty (so re-detecting a
+ * different repo can't leave a stale managed network / profile behind). Manual entries survive only
+ * a `detected:false` result, which returns early and touches nothing. The name is suggested only
+ * when still blank (it's a user label, not a repo-derived fact).
+ */
+async function autodetect() {
+  detecting.value = true
+  try {
+    const rec = await store.detect({
+      cloneUrl: form.cloneUrl.trim(),
+      ...(form.gitRef.trim() ? { gitRef: form.gitRef.trim() } : {}),
+      ...(form.directory.trim() ? { directory: form.directory.trim() } : {}),
+    })
+    if (!rec.detected) {
+      toast.add({
+        title: t('settings.sharedStacks.detect.nothing'),
+        description: rec.notes[0]?.message ?? '',
+        icon: 'i-lucide-info',
+        color: 'warning',
+      })
+      return
+    }
+    if (rec.name && !form.name.trim()) form.name = rec.name
+    form.composeFiles = rec.composeFiles.join(', ')
+    form.composeProfiles = rec.composeProfiles.join(', ')
+    form.managedNetworks = rec.managedNetworks.join(', ')
+    detectedEnvFiles.value = rec.envFiles
+    toast.add({
+      title: t('settings.sharedStacks.detect.detected'),
+      description: t('settings.sharedStacks.detect.detectedBody'),
+      icon: 'i-lucide-wand-sparkles',
+      color: 'success',
+    })
+  } catch (e) {
+    notifyError(t('settings.sharedStacks.detect.failed'), e)
+  } finally {
+    detecting.value = false
+  }
 }
 
 function notifyError(title: string, e: unknown) {
@@ -110,6 +174,7 @@ async function saveStack() {
     composeFiles: tokens(form.composeFiles),
     composeProfiles: tokens(form.composeProfiles),
     managedNetworks: tokens(form.managedNetworks),
+    envFiles: detectedEnvFiles.value,
     allowHostCommands: form.allowHostCommands,
   }
   try {
@@ -299,6 +364,42 @@ async function remove(stack: SharedStack) {
           data-testid="shared-stack-git-ref"
         />
       </UFormField>
+
+      <UFormField
+        :label="t('settings.sharedStacks.add.directory')"
+        :help="t('settings.sharedStacks.add.directoryHelp')"
+      >
+        <UInput
+          v-model="form.directory"
+          placeholder="shared"
+          class="w-full"
+          data-testid="shared-stack-directory"
+        />
+      </UFormField>
+
+      <div class="flex items-center gap-2">
+        <UButton
+          icon="i-lucide-wand-sparkles"
+          size="sm"
+          variant="soft"
+          :loading="detecting"
+          :disabled="!canDetect"
+          data-testid="shared-stack-autodetect"
+          @click="autodetect"
+        >
+          {{ t('settings.sharedStacks.detect.button') }}
+        </UButton>
+        <span class="text-[11px] text-slate-500">{{ t('settings.sharedStacks.detect.hint') }}</span>
+      </div>
+
+      <p
+        v-if="detectedEnvFiles.length"
+        class="text-[11px] text-slate-500"
+        data-testid="shared-stack-env-files"
+      >
+        {{ t('settings.sharedStacks.detect.envFiles') }}
+        {{ detectedEnvFiles.map((f) => `${f.template} → ${f.target}`).join(', ') }}
+      </p>
 
       <UFormField
         :label="t('settings.sharedStacks.add.composeFiles')"
