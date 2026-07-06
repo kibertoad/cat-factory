@@ -5,10 +5,12 @@ import {
   answerInitiativeQuestionSchema,
   createInitiativeSchema,
   initiativeSchema,
+  probeInitiativePresetSchema,
   promoteInitiativeFollowUpSchema,
   updateInitiativeItemSchema,
   updateInitiativePolicySchema,
 } from '../initiative.js'
+import { initiativePresetInputsSchema } from '../initiative.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -19,6 +21,7 @@ import { errorResponses, singleStringParam } from './_shared.js'
 
 const initiativeIdParams = singleStringParam('initiativeId')
 const blockIdParams = singleStringParam('blockId')
+const presetIdParams = singleStringParam('presetId')
 const followUpParams = withObjectKeys(
   v.object({ initiativeId: v.string(), followUpId: v.string() }),
 )
@@ -43,6 +46,19 @@ export const listInitiativesContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/initiatives',
   responsesByStatusCode: { 200: v.array(initiativeSchema), ...errorResponses },
+})
+
+/**
+ * Run a preset's repo-detection PREFILL probe against a frame's repo. Best-effort: returns the
+ * detected form values, or `{}` (descriptor defaults) when GitHub is unwired / the frame has no
+ * linked repo / the preset has no `detect` hook. Never blocks create — a failure just yields `{}`.
+ */
+export const probeInitiativePresetContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: presetIdParams,
+  pathResolver: ({ presetId }) => `/initiative-presets/${presetId}/probe`,
+  requestBodySchema: probeInitiativePresetSchema,
+  responsesByStatusCode: { 200: initiativePresetInputsSchema, ...errorResponses },
 })
 
 export const getInitiativeContract = defineApiContract({

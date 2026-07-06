@@ -6,6 +6,7 @@ import {
   updateWorkspaceContract,
 } from '@cat-factory/contracts'
 import { configContributionCatalog } from '@cat-factory/agents'
+import { initiativePresetDescriptors } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { logger as sharedLogger } from '../../observability/logger.js'
@@ -313,6 +314,10 @@ export function workspaceController(): Hono<AppEnv> {
       assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
+    // The registered initiative presets (built-in generic + any a deployment mixed in). Static
+    // process-global registry, so identical for every workspace and both facades — attached here
+    // in the shared controller (like `customAgentKinds`) rather than per-facade.
+    const initiativePresets = initiativePresetDescriptors()
     return c.json(
       {
         ...snapshot,
@@ -321,6 +326,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
+        ...(initiativePresets.length ? { initiativePresets } : {}),
         ...snapshotBackendKinds(container),
         infraSetup,
       },
@@ -404,6 +410,10 @@ export function workspaceController(): Hono<AppEnv> {
       container.github ? container.github.service.listRepos(workspaceId) : undefined,
     ])
     const customAgentKinds = snapshotCustomAgentKinds(container.agentKindRegistry)
+    // The registered initiative presets (built-in generic + any a deployment mixed in). Static
+    // process-global registry, so identical for every workspace and both facades — attached here
+    // in the shared controller (like `customAgentKinds`) rather than per-facade.
+    const initiativePresets = initiativePresetDescriptors()
 
     // Redact service frames backed by a repo linked via ANOTHER member's personal PAT that this
     // viewer can't reach (fail closed): scrub the frame to a locked stub + drop its subtree, so
@@ -457,6 +467,7 @@ export function workspaceController(): Hono<AppEnv> {
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...(customAgentKinds ? { customAgentKinds } : {}),
+        ...(initiativePresets.length ? { initiativePresets } : {}),
         ...snapshotBackendKinds(container),
         infraSetup,
       },

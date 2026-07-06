@@ -223,7 +223,7 @@ defaultFragmentIds, policyDefaults?: Partial<InitiativeExecutionPolicy>, probe? 
 | 0   | This tracker                                                                                                                                                                                                                                             | —      | ✅ done | (this) |
 | 1   | Preset contracts (`initiative-preset.ts`: fields incl. `checkbox-group`/`path`/`showWhen`, descriptor, inputs) + kernel `registerInitiativePreset` registry + `preset_generic` + entity/draft schema extensions (`presetId`/`presetInputs`/item `spawn`) | SYSTEM | ✅ done | #812   |
 | 2   | Per-run gate-override engine seam (`ExecutionService.start` override → run steps; loop threads `spawn.gates`) + conformance on both runtimes                                                                                                             | SYSTEM | ✅ done | #880   |
-| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ⬜ todo |        |
+| 3   | Create/planning integration: create validation + qa/goal seeding for skip-interview presets, probe endpoint, snapshot attach (both facades), `AgentContextBuilder` preset folds, SPA starts `descriptor.planningPipelineId`                              | SYSTEM | ✅ done | #883   |
 | 4   | SPA preset picker + generic descriptor form renderer (checkbox-group/path/showWhen) + probe prefill + i18n chrome                                                                                                                                        | SYSTEM | ⬜ todo |        |
 | 5   | Loop/ingest glue: `buildTaskBlock` spawn decoration, `seedPlan` invocation at ingest, path-safety validation, conformance round-trip                                                                                                                     | SYSTEM | ⬜ todo |        |
 | 6   | `docs-detect.logic.ts` (pure over `RepoFiles`) + unit tests (monorepo/root/dir-name heuristics, bounded budget, never-throw)                                                                                                                             | PILOT  | ⬜ todo |        |
@@ -287,6 +287,42 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   it via a new `ConformanceApp.startExecution(ws, block, pipeline, { gates })` probe (each facade
   wires it to `container.executionService.start`). Reuse that probe for any future start-time seam a
   preset needs rather than widening the public start endpoint.
+- **[S3] The snapshot `initiativePresets` is attached in the SHARED `WorkspaceController`** (both the
+  GET + POST handlers) via `initiativePresetDescriptors()` — a MODULE-GLOBAL read, so there is NO
+  per-facade wiring (unlike a container-instance registry like `agentKindRegistry`). Both facades
+  pick it up for free; the conformance suite asserts the generic preset is present on both.
+- **[S3] The probe endpoint lives in the CONTROLLER, not a service.** It mirrors
+  `ServiceSpecController`: it reads `container.resolveRunRepoContext` (a server-layer seam, absent →
+  `{}`), runs `getInitiativePreset(id)?.detect(ctx.repo)`, and returns `{}` on EVERY non-happy path
+  (unknown preset / no `detect` / GitHub unwired / resolver throws / detect throws). It never blocks
+  create. Do NOT thread `resolveRunRepoContext` into `InitiativeService` — the seam is on
+  `ServerContainer`, not the orchestration `Core`.
+- **[S3] Only a resolved preset persists inputs, and only its SANITIZED subset.**
+  `InitiativeService.create` freezes `presetInputs` ONLY when the `presetId` resolves, and only the
+  `sanitizeInitiativePresetInputs` subset (known + currently-VISIBLE fields). So a form posted with
+  no `presetId` is dropped, and a hidden (`showWhen`-failed) field — whose value
+  `validateInitiativePresetInputs` deliberately skips — can never freeze an unvalidated value (e.g. a
+  `path` escaping the repo). The seeding + prompt fold read the sanitized inputs, so what's frozen,
+  seeded, and steered stay in lockstep.
+- **[S3] Skip-interview seeding: the FORM is the interview.** `InitiativeService.create` seeds `qa`
+  from the sanitized form via the pure `seedPresetInterviewQa` (one answered exchange per VISIBLE,
+  FILLED field; label → option-label-mapped value via the shared `renderInitiativePresetValue`), so
+  the existing `initiativeContextLines` + tracker digest surface it with no interviewer step.
+  "Filled" mirrors `validateInitiativePresetInputs`' present-rule — an unchecked (`false`) checkbox /
+  empty string / empty multi-select is NOT seeded. The goal is templated
+  `input.description?.trim() || descriptor.presentation.description` (the human's description wins).
+  Only `interview: 'skip'` presets seed; `full`/absent-preset ⇒ today's behaviour.
+- **[S3] The preset context fold is per-kind and generic-safe.** `AgentContextBuilder` folds
+  `preset {label, promptAddition}` onto `AgentRunContext.initiative` ONLY when the RUNNING kind has a
+  (trimmed, non-empty) `promptAdditions[agentKind]`; `initiativeContextLines` renders it verbatim.
+  The generic preset registers none, so `preset` stays absent and the generic planning prompt is
+  byte-for-byte unchanged even when `presetId: 'preset_generic'` is set. The frozen form reaches the
+  prompt via the seeded `qa`, NOT a second copy on the context.
+- **[S3] Valibot-default fields are REQUIRED in the InferOutput.** `InitiativePresetDescriptor`
+  requires `defaultFragmentIds` and `CreateInitiativeInput` requires `description` (both carry a
+  valibot default), so code/test literals must supply them even though they're optional on the wire
+  (InferInput). Slice 4's create call sends the InferInput shape (both optional); the service sees the
+  defaulted output.
 
 ## Out of scope
 
@@ -306,4 +342,4 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   why a spawned task does/doesn't pause)? **Resolved (S2): no bespoke UI.** The override is
   copied onto the run's steps' `requiresApproval`, which the existing run/step detail already
   renders as per-step approval gates — a spawned task shows exactly the gates it will pause on,
-  with no new surface. Revisit only if a preset needs to explain the mapping's *rationale*.
+  with no new surface. Revisit only if a preset needs to explain the mapping's _rationale_.

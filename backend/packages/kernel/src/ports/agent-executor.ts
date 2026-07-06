@@ -310,6 +310,19 @@ export interface AgentRunContext {
     nonGoals?: string[]
     qa?: { question: string; answer: string }[]
     analysisSummary?: string
+    /**
+     * The initiative PRESET's planning-prompt steering for THIS step (slice 3), resolved by the
+     * engine from the entity's `presetId` against the registry: `label` names the preset and
+     * `promptAddition` is its per-agent-kind steering (already resolved for the running kind — the
+     * analyst/planner render it into their prompt). Present ONLY when the running kind has a
+     * `promptAddition`; the built-in generic preset registers none, so this stays absent and the
+     * generic planning prompt is byte-for-byte today's. (The frozen form is surfaced via `qa`, not
+     * here.)
+     */
+    preset?: {
+      label: string
+      promptAddition: string
+    }
   }
 }
 

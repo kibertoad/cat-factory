@@ -13,8 +13,20 @@ import type {
   UpdateInitiativeItemInput,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import { ConflictError, ValidationError, assertFound, requireWorkspace } from '@cat-factory/kernel'
-import { parseInitiativePlanDraft } from '@cat-factory/contracts'
+import {
+  ConflictError,
+  ValidationError,
+  assertFound,
+  getInitiativePreset,
+  requireWorkspace,
+} from '@cat-factory/kernel'
+import type { InitiativeQa } from '@cat-factory/kernel'
+import type { InitiativePresetInputs } from '@cat-factory/contracts'
+import {
+  parseInitiativePlanDraft,
+  sanitizeInitiativePresetInputs,
+  validateInitiativePresetInputs,
+} from '@cat-factory/contracts'
 import { initiativeContentView } from '@cat-factory/agents'
 import { gridSlot } from '../board/board.logic.js'
 import {
@@ -28,6 +40,7 @@ import {
   applyPolicyEdit,
   applyPromoteFollowUp,
   initiativeSlug,
+  seedPresetInterviewQa,
   validatePlanDraft,
 } from './initiative.logic.js'
 
@@ -79,6 +92,36 @@ export class InitiativeService {
     if (frame.level !== 'frame') {
       throw new ValidationError('An initiative can only be created under a service frame')
     }
+    // Resolve + validate the initiative preset. Absent `presetId` ⇒ the preset-less generic
+    // behaviour, byte-for-byte today's. An unknown preset / invalid form is a create-time
+    // ValidationError, so nothing is written.
+    const preset = input.presetId ? getInitiativePreset(input.presetId) : undefined
+    if (input.presetId && !preset) {
+      throw new ValidationError(`Unknown initiative preset '${input.presetId}'`)
+    }
+    // Only a resolved preset yields persisted `presetInputs`, and only its SANITIZED subset (known,
+    // currently-visible fields) is frozen — so a form posted with no `presetId`, or an unsafe value
+    // on a hidden (`showWhen`-failed) field the validator skips, never lands on the entity.
+    let presetInputs: InitiativePresetInputs | undefined
+    if (preset) {
+      const problems = validateInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
+      if (problems.length > 0) throw new ValidationError(problems.join(' '))
+      presetInputs = sanitizeInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
+    }
+    // A SKIP-interview preset has no interviewer step — the filled FORM is the interview. Seed the
+    // qa digest from it (one answered exchange per field) so the analyst/planner + committed
+    // tracker read the form, and template the goal from the human's description, falling back to
+    // the preset's stated purpose.
+    const skipInterview = preset?.descriptor.interview === 'skip'
+    const seededQa: InitiativeQa[] = skipInterview
+      ? seedPresetInterviewQa(preset!.descriptor, presetInputs ?? {}, () =>
+          this.deps.idGenerator.next('iqa'),
+        )
+      : []
+    const goal =
+      input.description?.trim() ||
+      (skipInterview ? preset!.descriptor.presentation.description.trim() : '')
+
     const blocks = await this.deps.blockRepository.listByWorkspace(workspaceId)
     const siblings = blocks.filter(
       (b) => b.parentId === frame.id && b.level === 'initiative',
@@ -111,10 +154,12 @@ export class InitiativeService {
       blockId: block.id,
       slug,
       title: input.title.trim(),
-      goal: input.description?.trim() ?? '',
+      ...(input.presetId ? { presetId: input.presetId } : {}),
+      ...(presetInputs && Object.keys(presetInputs).length ? { presetInputs } : {}),
+      goal,
       constraints: [],
       nonGoals: [],
-      qa: [],
+      qa: seededQa,
       analysisSummary: '',
       phases: [],
       items: [],
