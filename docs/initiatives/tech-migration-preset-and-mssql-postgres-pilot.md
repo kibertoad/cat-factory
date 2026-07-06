@@ -1,6 +1,6 @@
 # Initiative: Technological-migration preset & the MSSQL→PostgreSQL pilot
 
-**Status:** planning (slice 0 = this tracker) · **Owner:** orchestration · **Started:** 2026-07-06
+**Status:** in progress (T1 done — preset phase templates) · **Owner:** orchestration · **Started:** 2026-07-06
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -273,7 +273,7 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | #   | Slice                                                                                                                                                                                                                                         | Scope     | Blocked by                    | Status  | PR     |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ----------------------------- | ------- | ------ |
 | 0   | This tracker                                                                                                                                                                                                                                  | —         | —                             | ✅ done | (this) |
-| T1  | `phaseTemplate` contracts (wire descriptor) + generic planner prompt fold in `AgentContextBuilder`; `preset_generic` byte-for-byte                                                                                                            | SYSTEM    | —                             | ⬜ todo |        |
+| T1  | `phaseTemplate` contracts (wire descriptor) + generic planner prompt fold in `AgentContextBuilder`; `preset_generic` byte-for-byte                                                                                                            | SYSTEM    | —                             | ✅ done | (this) |
 | T2  | Phase-template ingest normalization/validation in the landed `seedPlanDraft` path, before `seedPlan` (reorder known phases; `ValidationError` on missing-required/disallowed-extra); conformance both runtimes                                | SYSTEM    | T1                            | ⬜ todo |        |
 | T3  | Full-interview qa seeding: extend `seedPresetInterviewQa` to `interview: 'full'` presets + a generic interviewer "build on seeded answers, don't re-ask" prompt line                                                                          | SYSTEM    | —                             | ⬜ todo |        |
 | T4  | `migration.*` prompt-fragment collection (behaviour-preservation, migration-discipline, confidence-case authoring standard) + tests                                                                                                           | MIGRATION | —                             | ⬜ todo |        |

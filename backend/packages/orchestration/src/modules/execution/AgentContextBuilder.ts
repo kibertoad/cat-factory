@@ -371,11 +371,13 @@ export class AgentContextBuilder {
 
   /**
    * Resolve the preset steering an initiative's planning step carries: the registered preset's
-   * label + its `promptAdditions` entry for the RUNNING kind (analyst / planner). Returns undefined
-   * — so the prompt is unchanged — when the entity carries no `presetId`, names an unknown preset,
-   * or the preset has no steering for this kind. The built-in generic preset registers no
-   * `promptAdditions`, so it contributes nothing and the generic planning prompt stays byte-for-byte
-   * today's. (The frozen form reaches the prompt via the seeded `qa` digest, not here.)
+   * label + its `promptAdditions` entry for the RUNNING kind (analyst / planner) + its declarative
+   * `phaseTemplate` (the plan shape the planner prompt fold renders). Returns undefined — so the
+   * prompt is unchanged — when the entity carries no `presetId`, names an unknown preset, or the
+   * preset contributes NEITHER a prompt addition for this kind NOR a phase template. The built-in
+   * generic preset registers neither, so it contributes nothing and the generic planning prompt
+   * stays byte-for-byte today's. (The frozen form reaches the prompt via the seeded `qa` digest,
+   * not here.)
    */
   private resolveInitiativePresetContext(
     initiative: Pick<Initiative, 'presetId'>,
@@ -385,8 +387,13 @@ export class AgentContextBuilder {
     const registration = getInitiativePreset(initiative.presetId)
     if (!registration) return undefined
     const promptAddition = registration.promptAdditions?.[agentKind]?.trim()
-    if (!promptAddition) return undefined
-    return { label: registration.descriptor.presentation.label, promptAddition }
+    const phaseTemplate = registration.descriptor.phaseTemplate
+    if (!promptAddition && !phaseTemplate) return undefined
+    return {
+      label: registration.descriptor.presentation.label,
+      ...(promptAddition ? { promptAddition } : {}),
+      ...(phaseTemplate ? { phaseTemplate } : {}),
+    }
   }
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */

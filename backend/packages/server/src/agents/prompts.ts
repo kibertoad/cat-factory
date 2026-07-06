@@ -1,6 +1,10 @@
 import type { AgentRunContext } from '@cat-factory/kernel'
 import { type AgentKindRegistry, FINAL_ANSWER_IN_REPLY, userPromptFor } from '@cat-factory/agents'
-import { FRONTEND_WIREMOCK_PORT, resolveFrontendServePort } from '@cat-factory/contracts'
+import {
+  FRONTEND_WIREMOCK_PORT,
+  resolveFrontendServePort,
+  type InitiativePresetPhaseTemplate,
+} from '@cat-factory/contracts'
 import type { RepoTarget } from './ContainerAgentExecutor.js'
 
 /**
@@ -206,6 +210,38 @@ export function blueprintUserPrompt(): string {
 }
 
 /**
+ * Render the generic "required plan shape" section a preset's declarative {@link
+ * InitiativePresetPhaseTemplate} dictates (slice T1): the phase ids VERBATIM, titles, goals and
+ * order, plus whether the planner may add extra phases. Pure + generic — it never branches on a
+ * preset id, so a preset with no template contributes nothing and the free-form planner prompt is
+ * byte-for-byte unchanged. Folded into the PLANNER prompt only (the planner authors the phases;
+ * the ingest normalizer then enforces this shape).
+ */
+function planShapeLines(template: InitiativePresetPhaseTemplate): string[] {
+  const lines = [
+    '',
+    '## Required plan shape',
+    '',
+    'This preset runs a fixed multi-phase methodology. Build the plan around EXACTLY these ' +
+      'phases, in this order, using each phase `id` VERBATIM:',
+    '',
+  ]
+  template.phases.forEach((phase, i) => {
+    const optional = phase.required === true ? '' : ' (optional)'
+    lines.push(`${i + 1}. \`${phase.id}\` — ${phase.title}${optional}`)
+    if (phase.goal?.trim()) lines.push(`   ${phase.goal.trim()}`)
+  })
+  lines.push(
+    '',
+    template.allowAdditionalPhases
+      ? 'You MAY append further phases after these when the work needs them, but every phase ' +
+          'above must be present, in this order.'
+      : 'Do NOT add, drop, rename, reorder or merge phases — this is the complete, exhaustive set.',
+  )
+  return lines
+}
+
+/**
  * Render the planning context an initiative-level run carries (slice 2): the interviewer's
  * synthesized goal / constraints / non-goals + the Q&A digest, and the analyst's codebase
  * analysis. Folded into the analyst and planner prompts so each is grounded in the human's
@@ -214,16 +250,22 @@ export function blueprintUserPrompt(): string {
  */
 function initiativeContextLines(
   context: AgentRunContext,
-  opts: { includeAnalysis: boolean },
+  opts: { includeAnalysis: boolean; includePlanShape: boolean },
 ): string[] {
   const init = context.initiative
   if (!init) return []
   const lines: string[] = []
   // Preset steering FIRST — it frames the step's role for this initiative kind (e.g. "you are a
   // documentation gap-auditor"). The builder only sets `preset` when this kind has a (trimmed,
-  // non-empty) `promptAddition`; the generic preset adds none, so the generic prompt is unchanged.
-  if (init.preset) {
+  // non-empty) `promptAddition` or a `phaseTemplate`; the generic preset has neither, so the
+  // generic prompt is unchanged.
+  if (init.preset?.promptAddition) {
     lines.push('', `## Initiative preset: ${init.preset.label}`, '', init.preset.promptAddition)
+  }
+  // The required plan shape (planner only): a preset's declarative phase template, rendered so the
+  // planner emits exactly the mandated phases. No template ⇒ nothing added.
+  if (opts.includePlanShape && init.preset?.phaseTemplate) {
+    lines.push(...planShapeLines(init.preset.phaseTemplate))
   }
   if (init.goal?.trim()) lines.push('', '## Agreed goal', '', init.goal.trim())
   if (init.constraints?.length) {
@@ -269,7 +311,7 @@ export function initiativeAnalystUserPrompt(context: AgentRunContext): string {
       block.title || '(untitled initiative)'
     }`,
     ...(description ? ['', description] : []),
-    ...initiativeContextLines(context, { includeAnalysis: false }),
+    ...initiativeContextLines(context, { includeAnalysis: false, includePlanShape: false }),
     '',
     'Explore the repository and produce the analysis described in your instructions — ' +
       'architecture, likely touch points, patterns to follow, risks and sequencing. ' +
@@ -291,7 +333,7 @@ export function initiativePlannerUserPrompt(context: AgentRunContext): string {
   return [
     `Plan the initiative: ${block.title || '(untitled initiative)'}`,
     ...(description ? ['', description] : []),
-    ...initiativeContextLines(context, { includeAnalysis: true }),
+    ...initiativeContextLines(context, { includeAnalysis: true, includePlanShape: true }),
     '',
     'Explore this repository to ground the plan in the real code (building on the codebase ' +
       'analysis above), honour the agreed goal / constraints / non-goals, then produce the ' +
