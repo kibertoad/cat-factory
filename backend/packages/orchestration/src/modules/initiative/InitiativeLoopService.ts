@@ -83,12 +83,6 @@ type SpawnOutcome =
  * item `pending` for the next sweep (never `blocked`); a missing pipeline (deleted after ingest)
  * records a deviation + notification and blocks the item — the sweep NEVER throws.
  */
-// TEMP diagnostic sink for the e2e spawn-hang investigation. Orchestration is runtime-neutral (no
-// node/dom lib), so reach `console` through `globalThis` with a locally-declared shape. REMOVE with
-// the `[[T10-DIAG]]` call sites once the hanging call is identified from the CI log.
-const diag = (msg: string): void =>
-  (globalThis as { console?: { warn(m: string): void } }).console?.warn(msg)
-
 export class InitiativeLoopService {
   /** In-process re-entrancy guard so a cron sweep + a terminal poke don't double-tick one initiative. */
   private readonly ticking = new Set<string>()
@@ -150,17 +144,11 @@ export class InitiativeLoopService {
 
   private async tick(workspaceId: string, seed: Initiative): Promise<TickResult> {
     const key = seed.id
-    if (this.ticking.has(key)) {
-      diag(`[[T10-DIAG]] tick: ${key} SKIPPED (lock held)`) // TEMP
-      return { spawned: 0, completed: false }
-    }
+    if (this.ticking.has(key)) return { spawned: 0, completed: false }
     this.ticking.add(key)
     try {
       // Re-read the freshest entity (the seed may be stale — from listExecuting or a poke).
       let initiative = await this.deps.initiativeRepository.getByBlock(workspaceId, seed.blockId)
-      diag(
-        `[[T10-DIAG]] tick: ${key} enter status=${initiative?.status} items=${initiative?.items?.length ?? 0}`,
-      ) // TEMP
       if (!initiative || initiative.status !== 'executing') return { spawned: 0, completed: false }
       const startRev = initiative.rev
 
@@ -280,20 +268,11 @@ export class InitiativeLoopService {
 
   private async spawn(workspaceId: string, initiative: Initiative): Promise<number> {
     const phase = deriveCurrentPhase(initiative)
-    if (!phase) {
-      diag(`[[T10-DIAG]] spawn: no current phase for ${initiative.id}`) // TEMP
-      return 0
-    }
+    if (!phase) return 0
     let slots = effectiveMaxConcurrent(initiative, phase) - activeItemCount(initiative)
-    if (slots <= 0) {
-      diag(`[[T10-DIAG]] spawn: no slots for ${initiative.id} (phase=${phase.id})`) // TEMP
-      return 0
-    }
+    if (slots <= 0) return 0
     const eligible = eligibleItemsToSpawn(initiative)
-    if (eligible.length === 0) {
-      diag(`[[T10-DIAG]] spawn: no eligible items for ${initiative.id} (phase=${phase.id})`) // TEMP
-      return 0
-    }
+    if (eligible.length === 0) return 0
 
     // Resolve the host frame ONCE (invariant across items): spawned tasks live under the
     // initiative's parent service frame (structural containment), linked to the initiative via
@@ -302,13 +281,7 @@ export class InitiativeLoopService {
     const frame = anchor?.parentId
       ? await this.deps.blockRepository.get(workspaceId, anchor.parentId)
       : null
-    if (!frame) {
-      diag(`[[T10-DIAG]] spawn: no host frame for ${initiative.id} (parent=${anchor?.parentId})`) // TEMP
-      return 0
-    }
-    diag(
-      `[[T10-DIAG]] spawn: proceeding for ${initiative.id} phase=${phase.id} eligible=${eligible.length} slots=${slots}`,
-    ) // TEMP
+    if (!frame) return 0
     const serviceId = this.deps.serviceRepository
       ? ((await this.deps.serviceRepository.getByFrameBlock(frame.id))?.id ?? null)
       : null
@@ -373,11 +346,8 @@ export class InitiativeLoopService {
     // The claim won: insert the task block, then start its run.
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
-      diag(`[[T10-DIAG]] spawnItem ${item.id}: before insert ${block.id}`) // TEMP
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
-      diag(`[[T10-DIAG]] spawnItem ${item.id}: before boardChanged`) // TEMP
       await this.deps.events.boardChanged(workspaceId, 'block-added', block.id)
-      diag(`[[T10-DIAG]] spawnItem ${item.id}: before start (pipeline=${pipelineId})`) // TEMP
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
@@ -390,12 +360,8 @@ export class InitiativeLoopService {
         undefined,
         item.spawn?.gates,
       )
-      diag(`[[T10-DIAG]] spawnItem ${item.id}: after start — spawned ${block.id}`) // TEMP
       return { outcome: 'spawned', entity: claimed }
     } catch (error) {
-      diag(
-        `[[T10-DIAG]] spawnItem ${item.id}: threw ${error instanceof Error ? error.message : String(error)}`,
-      ) // TEMP
       // Roll back the block, then decide on the item. A per-service task-limit ConflictError is
       // transient → revert the item to `pending` for the next sweep and stop spawning this tick.
       // Any OTHER failure is (likely) a persistent config problem → block + notify so it isn't

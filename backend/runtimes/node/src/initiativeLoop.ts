@@ -15,9 +15,15 @@ export const INITIATIVE_LOOP_SWEEP_INTERVAL_MS = 60 * 1000
  * shape as the other Node cadence knobs. Chiefly so a fast integration harness (the e2e suite)
  * can drive the first spawn wave within its timeouts instead of waiting a whole minute for the
  * backstop tick; a non-positive/unparseable value falls back to the default.
+ *
+ * Reads from the PASSED env (defaulting to `process.env`), NOT `process.env` unconditionally: the
+ * Node `start()` takes its config from an INJECTED `env` object that it never writes back to
+ * `process.env`, so a deployment (or the e2e backend) that sets the knob there would otherwise be
+ * silently ignored and the loop would run at the 60s backstop — which, since the e2e relies on the
+ * sweep (not the terminal poke) for the first spawn wave, timed a spawn out past the spec budget.
  */
-function resolveSweepInterval(): number {
-  const raw = process.env.INITIATIVE_LOOP_INTERVAL_MS
+export function resolveSweepInterval(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.INITIATIVE_LOOP_INTERVAL_MS
   const parsed = raw ? Number(raw) : Number.NaN
   return Number.isFinite(parsed) && parsed > 0 ? parsed : INITIATIVE_LOOP_SWEEP_INTERVAL_MS
 }
