@@ -70,6 +70,11 @@ export {
   type AgentKindDefinition,
 } from '@cat-factory/agents'
 export { registerPipeline, registerPipelines, clearRegisteredPipelines } from '@cat-factory/kernel'
+// The built-in model-preset ids + the catalog fallback default. A custom Worker entry that builds
+// its own app can seed a different out-of-the-box default with
+// `createApp({ overrides: { defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude } })` (a
+// `Partial<CoreDependencies>` field), parity with the Node/local `start()` seams.
+export { DEFAULT_MODEL_PRESET_ID, MODEL_PRESET_SEED_IDS } from '@cat-factory/kernel'
 
 // One app-owned agent-kind registry, shared by every per-request container (via the
 // `createApp` override) AND the boot-time validation below — so the check validates the SAME

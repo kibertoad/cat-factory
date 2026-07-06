@@ -502,6 +502,8 @@ export const modelPresets = pgTable(
     base_model_id: text('base_model_id').notNull(),
     overrides: text('overrides').notNull().default('{}'),
     is_default: integer('is_default').notNull().default(0),
+    // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
+    version: integer('version'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [

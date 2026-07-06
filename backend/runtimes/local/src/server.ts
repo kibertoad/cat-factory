@@ -68,6 +68,15 @@ export async function startLocal(
      * registry, which silently forgoes those preflights.
      */
     backendRegistries?: BackendRegistries
+    /**
+     * The catalog id of the built-in model preset a fresh workspace is seeded with as its
+     * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A local deploy-app wrapper passes this
+     * to change the out-of-the-box default without editing library code. Threaded into
+     * `buildLocalContainer` on BOTH the Postgres and mothership paths. Applied only at FIRST seed
+     * of a workspace's preset library, so a user's later manual default choice always wins.
+     * Omitted ⇒ the local facade default (Claude Opus 4.8).
+     */
+    defaultModelPresetId?: string
   } = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
@@ -145,6 +154,7 @@ async function bootLocal(
       options.host,
       options.agentKindRegistry,
       options.backendRegistries,
+      options.defaultModelPresetId,
     )
   }
 
@@ -157,6 +167,10 @@ async function bootLocal(
     env: localized,
     host: options.host,
     agentKindRegistry: options.agentKindRegistry,
+    // Forward the deployment's default-preset choice: `start()` puts it on the `o` it hands the
+    // `buildContainer` override below, so `buildLocalContainer` picks it up (undefined ⇒ local's
+    // Claude default). Kept off the `buildLocalContainer` call directly so there is one path.
+    defaultModelPresetId: options.defaultModelPresetId,
     // Inject the deployment's backend registries (if any) by reference — `start()` never puts a
     // `backendRegistries` on `o`, so this can't clobber one, and when absent `buildLocalContainer`
     // falls back to `createBackendRegistries()` (the built-in-only default). Unchanged from the
@@ -194,6 +208,7 @@ async function startLocalMothership(
   host?: string,
   agentKindRegistry?: AgentKindRegistry,
   backendRegistries?: BackendRegistries,
+  defaultModelPresetId?: string,
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   logger.info(
     { mothership: env.LOCAL_MOTHERSHIP_URL },
@@ -209,6 +224,7 @@ async function startLocalMothership(
     realtimeSink: realtimeHub,
     agentKindRegistry,
     backendRegistries,
+    defaultModelPresetId,
   })
 
   // Validate registered gates / agent kinds once before serving (parity with `start()`).

@@ -1904,6 +1904,7 @@ function rowToModelPreset(row: ModelPresetRow): ModelPreset {
     baseModelId: row.base_model_id,
     overrides,
     isDefault: row.is_default === 1,
+    ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
   }
 }
@@ -1956,6 +1957,7 @@ class DrizzleModelPresetRepository implements ModelPresetRepository {
       base_model_id: preset.baseModelId,
       overrides: JSON.stringify(preset.overrides),
       is_default: preset.isDefault ? 1 : 0,
+      version: preset.version ?? null,
       created_at: preset.createdAt,
     }
     // Demote + upsert run in one transaction so the single-default invariant can never
@@ -1982,6 +1984,7 @@ class DrizzleModelPresetRepository implements ModelPresetRepository {
             base_model_id: values.base_model_id,
             overrides: values.overrides,
             is_default: values.is_default,
+            version: values.version,
           },
         })
     })

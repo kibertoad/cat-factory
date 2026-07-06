@@ -171,37 +171,87 @@ export const CONTEXT_BUDGET = {
 } as const
 
 /**
- * A model preset template (no id/createdAt yet) used to seed a fresh workspace's
- * preset library. {@link DEFAULT_MODEL_PRESETS} lists the built-ins; the service
- * stamps each with an id + createdAt on first use.
+ * A built-in model-preset template (no `createdAt` yet, but with a STABLE id so a
+ * workspace's persisted copy can be matched against the catalog and reseeded). The
+ * service stamps each with `createdAt` + the resolved default flag on first seed;
+ * {@link seedModelPresets} lists the built-ins. Mirrors {@link MergePresetSeed} /
+ * the pipeline seed shape, including the monotonic `version` that drives the "reseed
+ * available" advisory. WHICH built-in is the workspace default is a DEPLOYMENT fact
+ * (see {@link DEFAULT_MODEL_PRESET_ID}), not baked into the seed.
  */
 export interface ModelPresetSeed {
+  /** Stable catalog id (e.g. `mdp_kimi`), used to match a stored copy for reseeding. */
+  id: string
   name: string
   baseModelId: string
   overrides: Record<string, string>
-  isDefault: boolean
+  /**
+   * Monotonic seed version. When the current catalog version for this id exceeds a
+   * workspace's persisted copy, the SPA offers to reseed it. Bump this when a built-in's
+   * definition changes upstream so existing workspaces are advised to adopt the update.
+   */
+  version: number
 }
 
+/** The stable catalog ids for the built-in model presets (used to seed + wire the deployment default). */
+export const MODEL_PRESET_SEED_IDS = {
+  kimi: 'mdp_kimi',
+  glm: 'mdp_glm',
+  claude: 'mdp_claude',
+} as const
+
 /**
- * The model presets seeded for every workspace. The default points every agent kind
- * at Kimi K2.7; a second built-in points everything at GLM-5.2. Both use the catalog
- * ids from {@link MODEL_CATALOG} (`kimi-k2.7`, `glm`). A workspace always keeps at
- * least these until the operator edits the library.
+ * The built-in model presets seeded for every workspace, using the catalog ids from
+ * {@link MODEL_CATALOG}: "Kimi K2.7" (everything `kimi-k2.7`, the Cloudflare-served
+ * baseline), "GLM-5.2" (everything `glm`), and "Claude Opus 4.8" (everything
+ * `claude-opus`, run via a Claude subscription or OpenRouter). A workspace always keeps
+ * at least these until the operator edits the library. WHICH one is the workspace
+ * default is chosen per deployment ({@link DEFAULT_MODEL_PRESET_ID}) at first seed —
+ * Cloudflare/Node default to Kimi (Cloudflare-runnable on the bare baseline), local mode
+ * to Claude. To ship a new built-in (or a new version of one), add it here / bump its
+ * `version`; existing workspaces are then advised to reseed.
  */
 export const DEFAULT_MODEL_PRESETS: ModelPresetSeed[] = [
-  { name: 'Kimi K2.7', baseModelId: 'kimi-k2.7', overrides: {}, isDefault: true },
-  { name: 'GLM-5.2', baseModelId: 'glm', overrides: {}, isDefault: false },
+  {
+    id: MODEL_PRESET_SEED_IDS.kimi,
+    name: 'Kimi K2.7',
+    baseModelId: 'kimi-k2.7',
+    overrides: {},
+    version: 1,
+  },
+  { id: MODEL_PRESET_SEED_IDS.glm, name: 'GLM-5.2', baseModelId: 'glm', overrides: {}, version: 1 },
+  {
+    id: MODEL_PRESET_SEED_IDS.claude,
+    name: 'Claude Opus 4.8',
+    baseModelId: 'claude-opus',
+    overrides: {},
+    version: 1,
+  },
 ]
 
-/** The built-in default preset (everything Kimi K2.7), used as the resolution fallback. */
+/**
+ * The catalog fallback default preset id (Kimi K2.7 — Cloudflare-runnable on the bare
+ * baseline), used when a deployment doesn't specify its own default preset id. A facade
+ * overrides it at seed time (local mode → Claude); the passed default only applies to a
+ * workspace whose library hasn't been seeded yet, so a user's later manual choice always
+ * wins.
+ */
+export const DEFAULT_MODEL_PRESET_ID: string = MODEL_PRESET_SEED_IDS.kimi
+
+/** The built-in model presets, fresh copies so callers can stamp ids/timestamps safely. */
+export function seedModelPresets(): ModelPresetSeed[] {
+  return DEFAULT_MODEL_PRESETS.map((p) => ({ ...p, overrides: { ...p.overrides } }))
+}
+
+/** The catalog fallback default preset (everything Kimi K2.7), used as the resolution fallback. */
 export const DEFAULT_MODEL_PRESET: ModelPresetSeed =
-  DEFAULT_MODEL_PRESETS.find((p) => p.isDefault) ?? DEFAULT_MODEL_PRESETS[0]!
+  DEFAULT_MODEL_PRESETS.find((p) => p.id === DEFAULT_MODEL_PRESET_ID) ?? DEFAULT_MODEL_PRESETS[0]!
 
 /**
  * The model id a preset assigns to an agent kind: its per-kind override, else the
  * preset's base model. When no preset is resolved (a workspace not yet seeded), falls
- * back to the built-in {@link DEFAULT_MODEL_PRESET} (everything Kimi K2.7) — so the
- * "everything Kimi" default holds even before the preset library is materialised.
+ * back to the catalog {@link DEFAULT_MODEL_PRESET} (everything Kimi K2.7) — a
+ * Cloudflare-runnable default that holds even before the preset library is materialised.
  */
 export function modelForKindFromPreset(
   preset: ModelPreset | ModelPresetSeed | null | undefined,

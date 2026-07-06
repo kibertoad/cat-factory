@@ -4276,6 +4276,25 @@
       }
     }
   },
+  "modelPreset": {
+    "health": {
+      "title": "Model ön ayarı güncellemeleri",
+      "allValid": "Tüm yerleşik model ön ayarları güncel.",
+      "newHeading": "Yeni ön ayarlar mevcut",
+      "newDescription": "Yeni yerleşik model ön ayarları geldi. Bu panonun kütüphanesine ekleyin.",
+      "add": "Ekle",
+      "updatesHeading": "Güncellemeler mevcut",
+      "updatesDescription": "Bu yerleşik model ön ayarlarının daha yeni bir sürümü geldi. Benimsemek için yeniden tohumlayın (varsayılan ve sıralama korunur).",
+      "versionAvailable": "Sürüm {from} → {to} mevcut.",
+      "reseed": "Yeniden tohumla",
+      "reseedAll": "Tümünü güncelle ({count})",
+      "dismiss": "Yoksay",
+      "done": "Tamam",
+      "toast": {
+        "reseedFailed": "Model ön ayarı yeniden tohumlanamadı"
+      }
+    }
+  },
   "initiative": {
     "create": {
       "title": "Girisim olustur",
