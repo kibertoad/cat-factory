@@ -21,7 +21,12 @@ import {
   requireWorkspace,
 } from '@cat-factory/kernel'
 import type { InitiativeQa } from '@cat-factory/kernel'
-import { parseInitiativePlanDraft, validateInitiativePresetInputs } from '@cat-factory/contracts'
+import type { InitiativePresetInputs } from '@cat-factory/contracts'
+import {
+  parseInitiativePlanDraft,
+  sanitizeInitiativePresetInputs,
+  validateInitiativePresetInputs,
+} from '@cat-factory/contracts'
 import { initiativeContentView } from '@cat-factory/agents'
 import { gridSlot } from '../board/board.logic.js'
 import {
@@ -94,9 +99,14 @@ export class InitiativeService {
     if (input.presetId && !preset) {
       throw new ValidationError(`Unknown initiative preset '${input.presetId}'`)
     }
+    // Only a resolved preset yields persisted `presetInputs`, and only its SANITIZED subset (known,
+    // currently-visible fields) is frozen — so a form posted with no `presetId`, or an unsafe value
+    // on a hidden (`showWhen`-failed) field the validator skips, never lands on the entity.
+    let presetInputs: InitiativePresetInputs | undefined
     if (preset) {
       const problems = validateInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
       if (problems.length > 0) throw new ValidationError(problems.join(' '))
+      presetInputs = sanitizeInitiativePresetInputs(preset.descriptor, input.presetInputs ?? {})
     }
     // A SKIP-interview preset has no interviewer step — the filled FORM is the interview. Seed the
     // qa digest from it (one answered exchange per field) so the analyst/planner + committed
@@ -104,7 +114,7 @@ export class InitiativeService {
     // the preset's stated purpose.
     const skipInterview = preset?.descriptor.interview === 'skip'
     const seededQa: InitiativeQa[] = skipInterview
-      ? seedPresetInterviewQa(preset!.descriptor, input.presetInputs ?? {}, () =>
+      ? seedPresetInterviewQa(preset!.descriptor, presetInputs ?? {}, () =>
           this.deps.idGenerator.next('iqa'),
         )
       : []
@@ -145,7 +155,7 @@ export class InitiativeService {
       slug,
       title: input.title.trim(),
       ...(input.presetId ? { presetId: input.presetId } : {}),
-      ...(input.presetInputs ? { presetInputs: input.presetInputs } : {}),
+      ...(presetInputs && Object.keys(presetInputs).length ? { presetInputs } : {}),
       goal,
       constraints: [],
       nonGoals: [],

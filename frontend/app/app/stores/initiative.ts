@@ -55,11 +55,16 @@ export const useInitiativesStore = defineStore('initiatives', () => {
 
   /**
    * The planning pipeline id to start for an initiative: its preset descriptor's
-   * `planningPipelineId`, falling back to the built-in `pl_initiative` when presets haven't
-   * hydrated or the initiative names a preset the snapshot didn't carry.
+   * `planningPipelineId`. No preset (or the built-in generic) → `pl_initiative`, which is always in
+   * the catalog. For a NAMED preset we return `null` (not the generic pipeline) when presets
+   * haven't hydrated or the snapshot omitted this descriptor — so the caller keeps "Run planning"
+   * disabled rather than silently launching the interviewer over an already-seeded skip-interview
+   * initiative.
    */
-  function planningPipelineIdFor(initiative: Initiative | null): string {
-    return presetById(initiative?.presetId)?.planningPipelineId ?? 'pl_initiative'
+  function planningPipelineIdFor(initiative: Initiative | null): string | null {
+    const presetId = initiative?.presetId
+    if (!presetId || presetId === GENERIC_PRESET_ID) return 'pl_initiative'
+    return presetById(presetId)?.planningPipelineId ?? null
   }
 
   /**

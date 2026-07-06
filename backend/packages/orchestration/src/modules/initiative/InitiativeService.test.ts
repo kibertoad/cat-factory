@@ -95,6 +95,13 @@ function registerDocsPreset() {
           ],
         },
         { key: 'docsRoot', label: 'Docs root', type: 'path' },
+        // Hidden unless `diagrams` is selected — its stale value must never freeze unvalidated.
+        {
+          key: 'diagramsDir',
+          label: 'Diagrams dir',
+          type: 'path',
+          showWhen: { key: 'docTypes', includes: 'diagrams' },
+        },
       ],
       planningPipelineId: 'pl_initiative_docs',
       interview: 'skip',
@@ -199,5 +206,35 @@ describe('InitiativeService.create — presets', () => {
       presetInputs: { docTypes: ['readme'] },
     })
     expect(initiative.goal).toBe('Only the payments service docs')
+  })
+
+  it('does NOT persist presetInputs when no presetId is given (orphan form data is dropped)', async () => {
+    const { service } = makeService()
+    const { initiative } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Migrate auth',
+      description: 'the goal',
+      // A form posted with no preset is meaningless — and never validated — so it must not freeze.
+      presetInputs: { docsRoot: '../../secret' },
+    })
+    expect(initiative.presetId).toBeUndefined()
+    expect(initiative.presetInputs).toBeUndefined()
+  })
+
+  it('drops a hidden field from the frozen inputs so its unvalidated value never lands', async () => {
+    registerDocsPreset()
+    const { service } = makeService()
+    // `diagramsDir` is hidden (no `diagrams` selected), so its unsafe traversal value is NOT
+    // validated — and must therefore be sanitized out of the persisted inputs rather than frozen.
+    const { initiative } = await service.create('ws-1', {
+      frameId: frame.id,
+      title: 'Docs refresh',
+      description: '',
+      presetId: DOCS_PRESET_ID,
+      presetInputs: { docTypes: ['readme'], docsRoot: 'docs/', diagramsDir: '../../etc' },
+    })
+    expect(initiative.presetInputs).toEqual({ docTypes: ['readme'], docsRoot: 'docs/' })
+    // ...and the escaping path is nowhere on the entity.
+    expect(JSON.stringify(initiative.presetInputs)).not.toContain('..')
   })
 })

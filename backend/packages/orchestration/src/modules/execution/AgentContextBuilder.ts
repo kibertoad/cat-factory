@@ -371,26 +371,22 @@ export class AgentContextBuilder {
 
   /**
    * Resolve the preset steering an initiative's planning step carries: the registered preset's
-   * id + label, the entity's frozen `presetInputs`, and the preset's `promptAdditions` entry for
-   * the RUNNING kind (analyst / planner). Absent when the entity carries no `presetId` or names an
-   * unknown preset. The built-in generic preset registers no `promptAdditions`, so it contributes
-   * no steering — the generic planning prompt stays byte-for-byte today's.
+   * label + its `promptAdditions` entry for the RUNNING kind (analyst / planner). Returns undefined
+   * — so the prompt is unchanged — when the entity carries no `presetId`, names an unknown preset,
+   * or the preset has no steering for this kind. The built-in generic preset registers no
+   * `promptAdditions`, so it contributes nothing and the generic planning prompt stays byte-for-byte
+   * today's. (The frozen form reaches the prompt via the seeded `qa` digest, not here.)
    */
   private resolveInitiativePresetContext(
-    initiative: Pick<Initiative, 'presetId' | 'presetInputs'>,
+    initiative: Pick<Initiative, 'presetId'>,
     agentKind: string,
   ): NonNullable<AgentRunContext['initiative']>['preset'] | undefined {
     if (!initiative.presetId) return undefined
     const registration = getInitiativePreset(initiative.presetId)
     if (!registration) return undefined
     const promptAddition = registration.promptAdditions?.[agentKind]?.trim()
-    const inputs = initiative.presetInputs
-    return {
-      id: registration.descriptor.id,
-      label: registration.descriptor.presentation.label,
-      ...(inputs && Object.keys(inputs).length ? { inputs } : {}),
-      ...(promptAddition ? { promptAddition } : {}),
-    }
+    if (!promptAddition) return undefined
+    return { label: registration.descriptor.presentation.label, promptAddition }
   }
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */

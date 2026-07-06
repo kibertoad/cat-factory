@@ -13,18 +13,14 @@ import type {
   UpdateInitiativeItemInput,
 } from '@cat-factory/kernel'
 import { ConflictError, ValidationError, hasInitiativeKinds } from '@cat-factory/kernel'
-import type {
-  InitiativePresetDescriptor,
-  InitiativePresetField,
-  InitiativePresetInputs,
-  InitiativePresetInputValue,
-} from '@cat-factory/contracts'
+import type { InitiativePresetDescriptor, InitiativePresetInputs } from '@cat-factory/contracts'
 import {
   INITIATIVE_ITEM_TERMINAL_STATUSES,
   INITIATIVE_PROSE_MAX,
   INITIATIVE_SHORT_MAX,
   INITIATIVE_TITLE_MAX,
   isPresetFieldVisible,
+  renderInitiativePresetValue,
 } from '@cat-factory/contracts'
 
 // Pure initiative computations — no IO, no ports — reused by the InitiativeService,
@@ -404,19 +400,6 @@ export function applyAnalysis(initiative: Initiative, summary: string): Initiati
 // Pure + total.
 // ---------------------------------------------------------------------------
 
-/** Render one filled preset value as human-readable prose (option labels preferred over raw values). */
-function renderPresetInputValue(
-  value: InitiativePresetInputValue,
-  field: InitiativePresetField,
-): string {
-  const labelOf = (v: string): string =>
-    (field.options ?? []).find((o) => o.value === v)?.label ?? v
-  if (Array.isArray(value)) return value.map(labelOf).join(', ')
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  if (typeof value === 'number') return String(value)
-  return labelOf(value)
-}
-
 /**
  * Seed the `qa` digest for a SKIP-interview preset from the filled form: one answered exchange
  * (`question` = the field label, `answer` = the rendered value) per VISIBLE field carrying a
@@ -437,7 +420,7 @@ export function seedPresetInterviewQa(
     // `validateInitiativePresetInputs`: an undefined value, an unchecked (`false`) checkbox, and
     // (via the blank `answer` guard below) an empty string / empty multi-select are all "not filled".
     if (value === undefined || value === false) continue
-    const answer = renderPresetInputValue(value, field).trim()
+    const answer = renderInitiativePresetValue(field, value).trim()
     if (!answer) continue
     qa.push({ id: nextId(), question: field.label.trim(), answer: clampShort(answer) })
   }

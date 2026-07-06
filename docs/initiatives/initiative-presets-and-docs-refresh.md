@@ -297,18 +297,27 @@ false` per step, so an override entry of `false` genuinely turns a pipeline gate
   (unknown preset / no `detect` / GitHub unwired / resolver throws / detect throws). It never blocks
   create. Do NOT thread `resolveRunRepoContext` into `InitiativeService` — the seam is on
   `ServerContainer`, not the orchestration `Core`.
+- **[S3] Only a resolved preset persists inputs, and only its SANITIZED subset.**
+  `InitiativeService.create` freezes `presetInputs` ONLY when the `presetId` resolves, and only the
+  `sanitizeInitiativePresetInputs` subset (known + currently-VISIBLE fields). So a form posted with
+  no `presetId` is dropped, and a hidden (`showWhen`-failed) field — whose value
+  `validateInitiativePresetInputs` deliberately skips — can never freeze an unvalidated value (e.g. a
+  `path` escaping the repo). The seeding + prompt fold read the sanitized inputs, so what's frozen,
+  seeded, and steered stay in lockstep.
 - **[S3] Skip-interview seeding: the FORM is the interview.** `InitiativeService.create` seeds `qa`
-  from the filled form via the pure `seedPresetInterviewQa` (one answered exchange per VISIBLE,
-  FILLED field; label → option-label-mapped value), so the existing `initiativeContextLines` +
-  tracker digest surface it with no interviewer step. "Filled" mirrors `validateInitiativePresetInputs`'
-  present-rule — an unchecked (`false`) checkbox / empty string / empty multi-select is NOT seeded.
-  The goal is templated `input.description?.trim() || descriptor.presentation.description` (the human's
-  description wins). Only `interview: 'skip'` presets seed; `full`/absent-preset ⇒ today's behaviour.
+  from the sanitized form via the pure `seedPresetInterviewQa` (one answered exchange per VISIBLE,
+  FILLED field; label → option-label-mapped value via the shared `renderInitiativePresetValue`), so
+  the existing `initiativeContextLines` + tracker digest surface it with no interviewer step.
+  "Filled" mirrors `validateInitiativePresetInputs`' present-rule — an unchecked (`false`) checkbox /
+  empty string / empty multi-select is NOT seeded. The goal is templated
+  `input.description?.trim() || descriptor.presentation.description` (the human's description wins).
+  Only `interview: 'skip'` presets seed; `full`/absent-preset ⇒ today's behaviour.
 - **[S3] The preset context fold is per-kind and generic-safe.** `AgentContextBuilder` folds
-  `preset {id,label,inputs,promptAddition}` onto `AgentRunContext.initiative`, resolving
-  `promptAdditions[agentKind]` for the RUNNING kind; `initiativeContextLines` renders it ONLY when a
-  `promptAddition` exists. The generic preset registers none, so the generic planning prompt is
-  byte-for-byte unchanged even when `presetId: 'preset_generic'` is set.
+  `preset {label, promptAddition}` onto `AgentRunContext.initiative` ONLY when the RUNNING kind has a
+  (trimmed, non-empty) `promptAdditions[agentKind]`; `initiativeContextLines` renders it verbatim.
+  The generic preset registers none, so `preset` stays absent and the generic planning prompt is
+  byte-for-byte unchanged even when `presetId: 'preset_generic'` is set. The frozen form reaches the
+  prompt via the seeded `qa`, NOT a second copy on the context.
 - **[S3] Valibot-default fields are REQUIRED in the InferOutput.** `InitiativePresetDescriptor`
   requires `defaultFragmentIds` and `CreateInitiativeInput` requires `description` (both carry a
   valibot default), so code/test literals must supply them even though they're optional on the wire
