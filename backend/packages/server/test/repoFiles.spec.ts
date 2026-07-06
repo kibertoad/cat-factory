@@ -7,7 +7,7 @@ import type {
   RepoOp,
   RepoOpContext,
 } from '@cat-factory/kernel'
-import { makeRepoFiles, makeResolveRepoFiles, runRepoOps } from './repoFiles.js'
+import { makeRepoFiles, makeResolveRepoFiles, runRepoOps } from '../src/agents/repoFiles.js'
 
 const REF = { owner: 'acme', repo: 'widgets' }
 
@@ -91,6 +91,7 @@ describe('makeRepoFiles', () => {
 // contract the wrapper relies on: a hit re-runs neither the load nor the client.
 function fakeRepoFilesCache(): GroupCacheHandle<CachedRepoRead> & {
   runProbes: () => Promise<void>
+  runProbesConcurrent: () => Promise<void>
 } {
   const store = new Map<
     string,
@@ -128,6 +129,19 @@ function fakeRepoFilesCache(): GroupCacheHandle<CachedRepoRead> & {
       for (const entry of store.values()) {
         if (entry.probe && !(await entry.probe(entry.value))) entry.value = await entry.load()
       }
+    },
+    // Same, but fire every entry's probe CONCURRENTLY (as a refresh sweep of a whole branch
+    // group does), so the wrapper's per-branch probe-head coalescing is exercised.
+    async runProbesConcurrent() {
+      const entries = Array.from(store.values())
+      const verdicts = await Promise.all(
+        entries.map((e) => (e.probe ? e.probe(e.value) : Promise.resolve(true))),
+      )
+      await Promise.all(
+        entries.map(async (e, i) => {
+          if (!verdicts[i]) e.value = await e.load()
+        }),
+      )
     },
   }
 }
@@ -210,6 +224,48 @@ describe('makeRepoFiles (cached, slice 4)', () => {
     await repo.getFile('README.md')
     await repo.getFile('README.md')
     expect(client.getFileContent).toHaveBeenCalledTimes(2) // uncached — served live each time
+  })
+
+  it('coalesces a concurrent refresh sweep on one branch to a single head read', async () => {
+    const client = fakeClient()
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    // Cold-load three shards on one branch: one head read stamps all three (the load memo).
+    await repo.getFile('spec/a.json', 'cat-factory/blk')
+    await repo.getFile('spec/b.json', 'cat-factory/blk')
+    await repo.listDirectory('spec', 'cat-factory/blk')
+    expect(client.branchHeadSha).toHaveBeenCalledTimes(1)
+
+    // A refresh window fires all three probes at once. They share ONE current-head read, not
+    // one per entry — so a branch with many shards costs +1 head read per sweep, not +N.
+    await cache.runProbesConcurrent()
+    expect(client.branchHeadSha).toHaveBeenCalledTimes(2)
+  })
+
+  it('a transient head-read failure degrades to a live content read instead of failing the batch', async () => {
+    let failHead = true
+    const client = fakeClient({
+      branchHeadSha: vi.fn(async () => {
+        if (failHead) throw new Error('transient 5xx')
+        return 'sha-work'
+      }),
+    })
+    const cache = fakeRepoFilesCache()
+    const repo = makeRepoFiles(client, 42, REF, cache)
+
+    // The head probe blips, but the content read still resolves — a cached read is no less
+    // robust than the uncached path (which never read the head at all).
+    const first = await repo.getFile('spec/a.json', 'cat-factory/blk')
+    expect(first).toEqual({ content: 'baseline', sha: 'blob1' })
+
+    // GitHub recovers. The rejected head promise was NOT memoised (it would have poisoned every
+    // later read on the branch), so a second path re-reads the head afresh and succeeds.
+    failHead = false
+    const second = await repo.getFile('spec/b.json', 'cat-factory/blk')
+    expect(second).toEqual({ content: 'baseline', sha: 'blob1' })
+    expect(client.getFileContent).toHaveBeenCalledTimes(2)
+    expect(client.branchHeadSha).toHaveBeenCalledTimes(2) // retried, not stuck on the rejection
   })
 })
 

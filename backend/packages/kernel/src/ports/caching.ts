@@ -68,6 +68,12 @@ export type CachedRepoRead =
  * invalidates the branch it saw move, both via this exact key — so the server wrapper (which
  * reads through the cache) and the integrations webhook (which invalidates it) MUST build the
  * group identically. Kept here in kernel, the shared layer both import, to keep the two in step.
+ *
+ * `owner`/`repo` are lower-cased because GitHub treats them case-insensitively but the read path
+ * (projected repo row) and the invalidation path (raw push payload) derive them from different
+ * sources whose casing isn't guaranteed identical — normalising here means a casing difference
+ * can't silently target a different group and no-op the invalidation. `ref` is left as-is: git
+ * refs ARE case-sensitive.
  */
 export function repoFilesCacheGroup(
   installationId: number,
@@ -75,7 +81,7 @@ export function repoFilesCacheGroup(
   repo: string,
   ref: string,
 ): string {
-  return `${installationId}:${owner}/${repo}@${ref}`
+  return `${installationId}:${owner.toLowerCase()}/${repo.toLowerCase()}@${ref}`
 }
 
 /**

@@ -2335,8 +2335,12 @@ export function buildContainer(
   // state (the fragment catalog / repo projection) are configured pass-through rather than
   // TTL'd — a stale-serving cache would be a correctness bug, not an optimization (see
   // @cat-factory/caching's README). Self-verifying caches (the document body + the head-sha-
-  // probed `repoFiles` reads) stay enabled. Built once here so it can be threaded into the
-  // GitHub repo-files resolver (slice 4) AND handed to `createCore`.
+  // probed `repoFiles` reads) stay enabled — safe to keep on because the probe bounds their
+  // staleness even without a bus. Note the bag is rebuilt per invocation (this runs per
+  // request / per Workflow wake), so on the Worker these caches mainly dedupe reads WITHIN one
+  // wake (e.g. a post-op's batch); the cross-run refresh-window probe is chiefly the Node
+  // (process-lived cache) path. Built once here so it can be threaded into the GitHub repo-files
+  // resolver (slice 4) AND handed to `createCore`.
   const caches = createAppCaches({ profile: ISOLATE_SAFE_APP_CACHES_PROFILE })
 
   const dependencies: CoreDependencies = {

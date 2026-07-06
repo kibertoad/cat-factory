@@ -314,14 +314,27 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
     cheap branch-wide probe is `branchHeadSha`, so each entry is stored as `CachedRepoRead` carrying the
     branch head it was read at; the probe compares the CURRENT head against it. A cold batch stamps that
     head ONCE (a per-instance memo cleared on `commitFiles`), so caching N files on a branch costs one
-    extra head read, not N. The probe itself reads fresh (never the memo) — the point is the current head.
+    extra head read, not N. The probe itself reads fresh (never the LOAD memo — the point is the current
+    head), but a concurrent refresh sweep of one branch's entries still coalesces to ONE head read via a
+    separate self-clearing probe memo, so re-validation is +1 head read per sweep, not +N.
   - **`repoFiles` stays ENABLED on the Worker (and local), unlike `repoProjection`.** It is the second
     self-verifying cache (after `fragmentDocumentBody`): the head-sha probe re-validates a branch read
-    without a cross-isolate bus, so a Worker isolate self-heals within the refresh window. Local is
+    without a cross-isolate bus, so its staleness is bounded by the probe rather than indefinite. NOTE the
+    Worker rebuilds the whole `AppCaches` bag per invocation (`buildContainer` runs per request / per
+    Workflow wake), so on the Worker this cache mainly dedupes reads WITHIN one wake (a post-op's batch);
+    the cross-run refresh-window probe is chiefly the Node (process-lived cache) path. Local is
     single-node, so `commitFiles` self-invalidation is already fully coherent AND the probe backstops the
     one out-of-process writer (the agent container's git push) — which never touches the `spec/`/`blueprints/`
     paths these post-ops read anyway. So no local `cachesProfile` disable (contrast slice 3's `repoProjection`,
     which has no probe and so must pass through where there's no bus).
+  - **Head-read robustness + group casing (review hardening).** The added head read must not make a cached
+    read LESS robust than the uncached path: a transient `branchHeadSha` failure degrades to an unstamped
+    entry (probe always reloads) instead of failing the content read, and a rejected head promise is evicted
+    from the memo (never poisons the rest of the batch). `repoFilesCacheGroup` lower-cases owner/repo (the
+    read path derives them from the projected row, the invalidation path from the raw push payload — GitHub
+    is case-insensitive, so normalising here stops a casing difference silently no-op'ing the invalidation);
+    `ref` stays case-sensitive. `isPinnedSha` is a shape check — a branch literally named as 40 hex chars is
+    a bounded, accepted edge (the engine's refs are `cat-factory/<blockId>` or genuine shas).
   - **Group = one branch of one repo (`<inst>:<owner>/<repo>@<branch>`), key = `f:`/`d:` + path.** So
     `commitFiles(branch)` and a push webhook each drop exactly the branch they moved, at path granularity
     within it. The group key is a kernel helper (`repoFilesCacheGroup`) shared by the server wrapper (which
@@ -337,9 +350,11 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
   - **Cross-runtime conformance deferred (same as slice 3).** The conformance harness runs GitHub OFF, so
     `resolveRunRepoContext` resolves to `null` and there's no wired `RepoFiles` to drive a write-then-read
     coherence test through. The read-through + probe + invalidation contract is proven by runtime-independent
-    unit tests on the SHARED code (`server` `repoFiles.test.ts` — read-through/head-sha probe/commit
-    invalidation/pinned-immutable/default-branch-bypass; `integrations` `WebhookService` push invalidation;
-    the `caching` bag field). Promote if the harness gains a GitHub-connected repo seam.
+    unit tests on the SHARED code (`server` `test/repoFiles.spec.ts` — read-through/head-sha probe/commit
+    invalidation/pinned-immutable/default-branch-bypass/probe-coalescing/transient-head-failure; `integrations`
+    `WebhookService` push invalidation; the `caching` bag field). Promote if the harness gains a
+    GitHub-connected repo seam. (The `server` package's vitest only globs `test/**/*.spec.ts`, so the spec
+    lives under `test/`, not as a `src/**/*.test.ts` — the latter would silently never run.)
 
 ## Out of scope
 
