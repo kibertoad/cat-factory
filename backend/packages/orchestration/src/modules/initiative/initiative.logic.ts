@@ -87,35 +87,52 @@ function assertAcyclicItems(
 
 /**
  * Validate a plan draft's internal references: unique phase/item ids, every item
- * pointing at a declared phase, dependencies pointing at declared items, and an
- * acyclic dependency graph. Throws {@link ValidationError} on the first violation.
- * The lenient coercion (`coerceInitiativePlan`) already produces a well-formed
- * draft; this re-checks at the trust boundary so a hand-supplied draft can't
- * smuggle a broken graph into the loop.
+ * pointing at a declared phase, dependencies pointing at declared items, no
+ * dependency crossing FORWARD into a later phase, and an acyclic dependency graph.
+ * Throws {@link ValidationError} on the first violation. The lenient coercion
+ * (`coerceInitiativePlan`) already produces a well-formed draft; this re-checks at
+ * the trust boundary so a hand-supplied draft can't smuggle a broken graph into the
+ * loop.
  */
 export function validatePlanDraft(draft: InitiativePlanDraft): void {
-  const phaseIds = new Set<string>()
-  for (const phase of draft.phases) {
-    if (!phase.id) continue
-    if (phaseIds.has(phase.id)) throw new ValidationError(`Duplicate phase id '${phase.id}'`)
-    phaseIds.add(phase.id)
-  }
-  const itemIds = new Set<string>()
+  // Phase array order IS execution order — `deriveCurrentPhase` advances phase-by-phase in this
+  // order — so we track each phase's index, not just its presence, to reject later-phase deps below.
+  const phaseOrder = new Map<string, number>()
+  draft.phases.forEach((phase, idx) => {
+    if (!phase.id) return
+    if (phaseOrder.has(phase.id)) throw new ValidationError(`Duplicate phase id '${phase.id}'`)
+    phaseOrder.set(phase.id, idx)
+  })
+  const itemPhase = new Map<string, string | undefined>()
   for (const item of draft.items) {
     if (!item.id) continue
-    if (itemIds.has(item.id)) throw new ValidationError(`Duplicate item id '${item.id}'`)
-    itemIds.add(item.id)
+    if (itemPhase.has(item.id)) throw new ValidationError(`Duplicate item id '${item.id}'`)
+    itemPhase.set(item.id, item.phaseId)
   }
   for (const item of draft.items) {
-    if (item.phaseId && phaseIds.size > 0 && !phaseIds.has(item.phaseId)) {
+    if (item.phaseId && phaseOrder.size > 0 && !phaseOrder.has(item.phaseId)) {
       throw new ValidationError(
         `Item '${item.id ?? item.title}' references unknown phase '${item.phaseId}'`,
       )
     }
+    const here = item.phaseId ? phaseOrder.get(item.phaseId) : undefined
     for (const dep of item.dependsOn ?? []) {
-      if (!itemIds.has(dep)) {
+      if (!itemPhase.has(dep)) {
         throw new ValidationError(
           `Item '${item.id ?? item.title}' depends on unknown item '${dep}'`,
+        )
+      }
+      // An item may only depend on items in its own phase or an EARLIER one. A dependency pointing
+      // at a LATER phase can never resolve — the depended-on phase never becomes current while this
+      // item keeps its own (earlier) phase current — so the whole initiative deadlocks. This is a
+      // general loop invariant, but the phase-template reorder at ingest can turn a
+      // planner-consistent draft into a violating one, so it's enforced here at the trust boundary
+      // rather than left to surface as a silent run-time stall.
+      const depPhaseId = itemPhase.get(dep)
+      const there = depPhaseId ? phaseOrder.get(depPhaseId) : undefined
+      if (here !== undefined && there !== undefined && there > here) {
+        throw new ValidationError(
+          `Item '${item.id ?? item.title}' depends on '${dep}' in a later phase '${depPhaseId}' — a dependency must not point at a later phase (it would deadlock the loop)`,
         )
       }
     }

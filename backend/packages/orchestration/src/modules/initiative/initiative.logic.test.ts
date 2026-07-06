@@ -166,6 +166,42 @@ describe('validatePlanDraft', () => {
       ),
     ).toThrowError(/cycle/)
   })
+
+  it('rejects a dependency that points forward into a later phase (would deadlock the loop)', () => {
+    // Phases execute in declared order; an item in the earlier phase depending on one in the later
+    // phase can never resolve. This is exactly the hazard a phase-template reorder can introduce.
+    expect(() =>
+      validatePlanDraft(
+        draft({
+          phases: [
+            { id: 'p1', title: 'First', goal: '' },
+            { id: 'p2', title: 'Second', goal: '' },
+          ],
+          items: [
+            { id: 'a', phaseId: 'p1', title: 'A', description: '', dependsOn: ['b'] },
+            { id: 'b', phaseId: 'p2', title: 'B', description: '', dependsOn: [] },
+          ],
+        }),
+      ),
+    ).toThrowError(/later phase 'p2'/)
+  })
+
+  it('accepts a dependency pointing at an earlier phase (backward is fine)', () => {
+    expect(() =>
+      validatePlanDraft(
+        draft({
+          phases: [
+            { id: 'p1', title: 'First', goal: '' },
+            { id: 'p2', title: 'Second', goal: '' },
+          ],
+          items: [
+            { id: 'a', phaseId: 'p1', title: 'A', description: '', dependsOn: [] },
+            { id: 'b', phaseId: 'p2', title: 'B', description: '', dependsOn: ['a'] },
+          ],
+        }),
+      ),
+    ).not.toThrow()
+  })
 })
 
 describe('normalizeDraftAgainstPhaseTemplate (T2)', () => {

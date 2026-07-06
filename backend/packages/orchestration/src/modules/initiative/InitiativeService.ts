@@ -233,7 +233,10 @@ export class InitiativeService {
    *    its output is a deterministic function of the (shaped) draft + frozen inputs and stays
    *    replay-safe. Its output is RE-PARSED through the strict schema: a hook bug can't persist a
    *    malformed draft, and an unsafe spawn `targetPath` a hook (or the planner) emitted is rejected
-   *    here by `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape the repo.
+   *    here by `taskTypeFieldsSchema`'s `isSafeDocPath` check — it can never escape the repo. It is
+   *    then RE-NORMALIZED against the template (idempotent, so a phase-untouching hook is a no-op):
+   *    exactly as the re-parse stops a hook smuggling an unsafe path, this stops a hook that touched
+   *    phases from bypassing the plan SHAPE the template enforces.
    *
    * Returns null when the block has no initiative (mirroring the null the caller returns), or the
    * (shaped) draft unchanged when the preset has no `seedPlan` / is absent.
@@ -247,9 +250,15 @@ export class InitiativeService {
     if (!initiative) return null
     const preset = initiative.presetId ? getInitiativePreset(initiative.presetId) : undefined
     const template = preset?.descriptor.phaseTemplate
-    const shaped = template ? normalizeDraftAgainstPhaseTemplate(template, draft) : draft
+    const normalize = (
+      d: ReturnType<typeof parseInitiativePlanDraft>,
+    ): ReturnType<typeof parseInitiativePlanDraft> =>
+      template ? normalizeDraftAgainstPhaseTemplate(template, d) : d
+    const shaped = normalize(draft)
     if (!preset?.seedPlan) return shaped
-    return parseInitiativePlanDraft(preset.seedPlan(shaped, initiative.presetInputs ?? {}))
+    return normalize(
+      parseInitiativePlanDraft(preset.seedPlan(shaped, initiative.presetInputs ?? {})),
+    )
   }
 
   /**

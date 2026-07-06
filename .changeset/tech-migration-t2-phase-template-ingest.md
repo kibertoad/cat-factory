@@ -18,6 +18,14 @@ order) and stays deliberately separate from `seedPlan`'s per-item decoration.
   `InitiativeService.seedPlanDraft` ahead of the `seedPlan` hook and gated on the resolved preset's
   `phaseTemplate`, so a preset with no template (including `preset_generic`) ingests byte-for-byte
   as before. Pure + deterministic, so re-ingesting the same draft stays idempotent.
+- **orchestration**: `validatePlanDraft` now also rejects a dependency that points FORWARD into a
+  later phase. Phases execute in declared order, so an earlier-phase item depending on a
+  later-phase one can never resolve and deadlocks the loop — a general invariant, but the T2 phase
+  reorder can turn a planner-consistent draft into a violating one, so it's caught loudly at the
+  ingest trust boundary instead of stalling silently at run time.
+- **orchestration**: `seedPlanDraft` now RE-NORMALIZES the `seedPlan` hook's output against the
+  template (idempotent), symmetric with the existing re-parse-for-path-safety: a hook that touched
+  phases can no longer bypass the template's shape enforcement.
 - **conformance**: `defineInitiativeSuite` now drives `InitiativeService.ingestPlan` over each
   facade's real store — asserting an out-of-order plan is reordered into template order and
   persisted, and a plan missing a required phase is rejected with nothing written — so the two
