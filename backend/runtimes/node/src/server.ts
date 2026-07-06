@@ -234,11 +234,7 @@ async function bootServer(
   // migrations. Without this the same throw would fire deep inside `buildContainer` only after the
   // heavy DB boot, and a bad-config restart would needlessly hammer Postgres first.
   loadNodeConfig(env)
-  // Optional pool-size ceiling (`DATABASE_POOL_MAX`); unset ⇒ node-postgres' default of 10. The
-  // whole app shares this pool (see `createDbClient`), so a concurrency-heavy deployment can raise it.
-  const poolMaxRaw = env.DATABASE_POOL_MAX ? Number(env.DATABASE_POOL_MAX) : Number.NaN
-  const poolMax = Number.isFinite(poolMaxRaw) && poolMaxRaw > 0 ? poolMaxRaw : undefined
-  const { db, pool } = createDbClient(databaseUrl, poolMax ? { max: poolMax } : undefined)
+  const { db, pool } = createDbClient(databaseUrl)
   const boss = new PgBoss(databaseUrl)
   // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are
   // independent — neither reads the other's tables — so run them concurrently and

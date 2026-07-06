@@ -145,13 +145,6 @@ const env: NodeJS.ProcessEnv = {
   // sweep spawns the first wave, so a slow cadence would time the spec out).
   INITIATIVE_LOOP_INTERVAL_MS: process.env.INITIATIVE_LOOP_INTERVAL_MS ?? '1000',
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? ENCRYPTION_KEY,
-  // Raise the Postgres pool ceiling above node-postgres' default of 10. This single process serves
-  // the WHOLE suite — every spec's HTTP calls, the durable execution worker, AND the 1s
-  // initiative-loop sweep all share this one pool — so under the accumulated load of a shard's runs
-  // a default-size pool can serialize their DB work and starve the sweep, landing an initiative's
-  // first spawn past the spec's timeout (an intermittent "spawned card never appears"). Extra
-  // headroom keeps the loop responsive; CI Postgres allows 100 connections.
-  DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX ?? '40',
   PORT: process.env.PORT ?? '8787',
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
   // cross-origin REST calls need this allow-listed. The WebSocket upgrade is authorised
