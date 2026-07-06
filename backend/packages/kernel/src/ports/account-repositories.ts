@@ -55,6 +55,17 @@ export interface AccountRepository {
    */
   listByIds(ids: string[]): Promise<AccountRecord[]>
   create(account: AccountRecord): Promise<void>
+  /**
+   * Atomically get-or-create the given user's personal account, returning the surviving
+   * row. Idempotent under concurrency: the partial unique index on personal accounts
+   * (one per owner, `WHERE type = 'personal'`) is the arbiter, so concurrent first-sign-in
+   * callers all resolve to the SAME account instead of racing to a duplicate-key error
+   * (the check-then-`create` 500 on a fresh DB this replaces). The passed record is inserted
+   * only when none exists yet; an existing personal account is returned untouched (its name
+   * and settings are preserved). `account.ownerUserId` must be set (it always is for a
+   * personal account).
+   */
+  ensurePersonal(account: AccountRecord): Promise<AccountRecord>
   rename(id: string, name: string): Promise<void>
   /** Apply a settings patch (today: the default cloud provider). A no-op for an empty patch. */
   updateSettings(id: string, patch: AccountSettingsPatch): Promise<void>

@@ -68,6 +68,17 @@ export interface OnboardingProbe {
     login: string
     name: string | null
   }): Promise<OnboardingUserAccount[]>
+  /**
+   * Concurrently resolve the personal account for ONE fresh user `times` over — the
+   * first-sign-in race. Every call runs `ensurePersonalAccount` before any has committed a
+   * row, so a check-then-`create` implementation would 500 all-but-one on the personal-account
+   * unique index. Returns each call's resolved personal-account id; a correct, idempotent
+   * store returns the SAME id every time with no rejection, on both runtimes.
+   */
+  concurrentPersonalAccounts(
+    user: { id: string; login: string; name: string | null },
+    times: number,
+  ): Promise<string[]>
 }
 
 /** The (structural) facade container the probe wraps — every facade's Core satisfies it. */
@@ -100,6 +111,18 @@ export function makeOnboardingProbe(c: OnboardingContainer): OnboardingProbe {
         .then((accounts) =>
           accounts.map((a) => ({ id: a.id, type: a.type, roles: a.roles ?? [] })),
         ),
+    async concurrentPersonalAccounts(user, times) {
+      // `listForUser` calls `ensurePersonalAccount`; fire it `times` over at once so every
+      // call reads "no account yet" before any INSERT commits — the exact first-load race.
+      const runs = await Promise.all(
+        Array.from({ length: times }, () => c.accountService.listForUser(user)),
+      )
+      return runs.map((accounts) => {
+        const personal = accounts.find((a) => a.type === 'personal')
+        if (!personal) throw new Error('no personal account resolved')
+        return personal.id
+      })
+    },
     async makeOrgOwner(name) {
       const subject = `org-owner-${name}-${Math.random().toString(36).slice(2)}`
       const owner = await c.userService.findOrCreateByIdentity('github', subject, {

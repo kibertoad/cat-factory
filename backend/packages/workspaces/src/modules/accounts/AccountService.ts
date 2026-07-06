@@ -86,15 +86,19 @@ export class AccountService {
       await this.ensureMembership(existing.id, user.id, ['admin'])
       return existing
     }
-    const account: AccountRecord = {
+    // First sign-in for this user: create the account atomically. The read above and this
+    // write are NOT a transaction, so concurrent first-load requests all read null; a plain
+    // `create` would then have every one of them INSERT and all-but-one 500 on the
+    // personal-account unique index. `ensurePersonal` inserts-or-returns the surviving row,
+    // so the concurrent callers converge on the same account instead.
+    const account = await this.deps.accountRepository.ensurePersonal({
       id: this.deps.idGenerator.next('acc'),
       type: 'personal',
       name: user.name?.trim() || user.login,
       githubAccountLogin: user.login,
       ownerUserId: user.id,
       createdAt: this.deps.clock.now(),
-    }
-    await this.deps.accountRepository.create(account)
+    })
     await this.ensureMembership(account.id, user.id, ['admin'])
     return account
   }
