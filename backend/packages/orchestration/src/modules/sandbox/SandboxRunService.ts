@@ -339,7 +339,10 @@ export class SandboxRunService {
 
   /** The model provider for a workspace's scope (per-scope DB pool, else the static one). */
   private async providerFor(workspaceId: string): Promise<ModelProvider> {
-    const provider = await resolveScopedModelProvider(workspaceId, this.deps)
+    // Sandbox experiments are not runs (no execution/initiator), so the scope is workspace-only.
+    // An inline subscription ref therefore resolves through a POOLED lease (Kimi/DeepSeek) — an
+    // individual-vendor ref has no per-run activation to lease here and fails loudly.
+    const provider = await resolveScopedModelProvider({ workspaceId }, this.deps)
     if (!provider) throw new ValidationError('No model provider is configured for the Sandbox')
     return provider
   }

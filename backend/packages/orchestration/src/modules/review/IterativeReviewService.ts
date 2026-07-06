@@ -21,6 +21,7 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
+import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import {
   type ReviewDisposition,
@@ -91,6 +92,15 @@ export interface IterativeReviewDeps {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  /**
+   * Resolve the run/execution + initiator a reviewer pass belongs to, from the block under
+   * review. Threaded into the model scope so a facade that serves an inline subscription ref
+   * through a LEASED per-run activation (local mode's container inline backend) can lease the
+   * initiator's credential — the reviewer runs during a parked run, so its execution is the
+   * block's active run. Wired by the engine (looks up the block's execution + `initiatedBy`);
+   * absent in tests/conformance → workspace-only scope (pooled lease only), unchanged.
+   */
+  resolveRunContext?: ResolveBlockRunContext
   /** Raises a notification when a review yields findings. Optional. */
   notificationService?: NotificationService
 }
@@ -430,9 +440,17 @@ export abstract class IterativeReviewService<
 
   // ---- internals ----------------------------------------------------------
 
-  /** The model provider for a workspace's scope (per-scope DB pool, else the static one). */
-  protected providerFor(workspaceId: string): Promise<ModelProvider | undefined> {
-    return resolveScopedModelProvider(workspaceId, this.deps)
+  /**
+   * The model provider for a block's run scope (per-scope DB pool, else the static one). The
+   * run context (execution + initiator) is folded into the scope so an inline subscription ref
+   * served through a leased per-run activation can lease it; absent → workspace-only scope.
+   */
+  protected async providerFor(
+    workspaceId: string,
+    block: Block,
+  ): Promise<ModelProvider | undefined> {
+    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    return resolveScopedModelProvider(scope, this.deps)
   }
 
   /**
@@ -464,7 +482,7 @@ export abstract class IterativeReviewService<
     workspaceId: string,
     block: Block,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await this.providerFor(workspaceId)
+    const modelProvider = await this.providerFor(workspaceId, block)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError(`No model is configured for the ${this.reviewerLabel}`)

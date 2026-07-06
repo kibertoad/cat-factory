@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import { accessSync, constants } from 'node:fs'
+import { delimiter, join } from 'node:path'
 import {
   CliInlineLanguageModel,
   type InlineCliRequest,
@@ -8,13 +10,18 @@ import {
 import {
   type HarnessKind,
   isAmbientNativeVendor,
+  isIndividualVendor,
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
   type ModelScope,
   nativeVendorForRef,
+  SUBSCRIPTION_VENDORS,
   type SubscriptionVendor,
+  subscriptionVendorForRef,
 } from '@cat-factory/kernel'
+import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
+import type { InlineJobResult } from './harnessHttp.js'
 import { sanitizedChildEnv } from './childEnv.js'
 
 // Local-mode INLINE harness execution: run the developer's ambient `claude` / `codex` CLI as a
@@ -195,52 +202,227 @@ export function runnerForVendor(
 }
 
 /**
- * Whether a ref can be served as an inline CLI call given the deployment's ambient allow-list —
- * the single predicate shared by the config (`inlineHarnessRef`, so the start guard treats such a
- * model as inline-satisfiable) and the provider wrapper below (so the two never disagree).
+ * Whether a ref can be served as an inline subscription call given the deployment's enabled
+ * inline harnesses (`LOCAL_NATIVE_INLINE`) — the single predicate shared by the config
+ * (`inlineHarnessRef`, so the start guard treats such a model as inline-satisfiable) and the
+ * provider wrapper below (so the two never disagree). Broader than C1's host-CLI-only predicate:
+ * with the prewarmed-container backend, ANY subscription vendor whose HARNESS is enabled is
+ * inline-servable (host CLI for a native ambient vendor when its binary is present, else the
+ * container on a leased credential) — so `glm`/`kimi`/`deepseek` (non-native claude-code
+ * vendors) qualify too, not just `claude`/`codex`. Empty allow-list (`LOCAL_NATIVE_INLINE=off`)
+ * ⇒ never inline (the start guard then refuses a subscription-only inline step, as before).
  */
 export function makeInlineHarnessPredicate(
-  nativeAmbientAuth: readonly HarnessKind[] | undefined,
+  inlineHarnesses: readonly HarnessKind[] | undefined,
 ): (ref: ModelRef) => boolean {
   return (ref) => {
-    const vendor = nativeVendorForRef(ref)
-    return !!vendor && isAmbientNativeVendor(nativeAmbientAuth, vendor)
+    if (!inlineHarnesses || inlineHarnesses.length === 0) return false
+    const vendor = subscriptionVendorForRef(ref)
+    return !!vendor && inlineHarnesses.includes(SUBSCRIPTION_VENDORS[vendor].harness)
   }
 }
 
-/** A {@link ModelProvider} that serves ambient-eligible harness refs via the CLI, else delegates. */
-class HarnessInlineModelProvider implements ModelProvider {
-  constructor(
-    private readonly inner: ModelProvider,
-    private readonly nativeAmbientAuth: readonly HarnessKind[],
-    private readonly exec: CliExec = spawnCliExec,
-  ) {}
-
-  resolve(ref: ModelRef): ReturnType<ModelProvider['resolve']> {
-    const vendor = nativeVendorForRef(ref)
-    if (vendor && isAmbientNativeVendor(this.nativeAmbientAuth, vendor)) {
-      return new CliInlineLanguageModel(ref.provider, ref.model, runnerForVendor(vendor, this.exec))
+/** Whether a binary is resolvable on the process PATH (sync, no spawn). Windows-aware. */
+function binaryOnPath(command: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const pathValue = env.PATH ?? env.Path ?? ''
+  if (!pathValue) return false
+  const exts = process.platform === 'win32' ? (env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';') : ['']
+  for (const dir of pathValue.split(delimiter)) {
+    if (!dir) continue
+    for (const ext of exts) {
+      try {
+        accessSync(join(dir, command + ext.toLowerCase()), constants.X_OK)
+        return true
+      } catch {
+        // not here / not executable — keep scanning
+      }
     }
-    return this.inner.resolve(ref)
+  }
+  return false
+}
+
+/**
+ * The set of native ambient vendors (`claude` / `codex`) whose HOST CLI is installed, detected
+ * ONCE at wiring time (a PATH scan, no spawn). The provider prefers the host CLI for these
+ * (unmetered, the developer's own ambient login); every other case runs in the container on a
+ * leased credential. Only the two native vendors are ever host-CLI-served — a non-native vendor
+ * (GLM/Kimi/DeepSeek) has no ambient login, so it always goes to the container.
+ */
+export function detectHostInlineClis(
+  env: NodeJS.ProcessEnv = process.env,
+): Set<SubscriptionVendor> {
+  const present = new Set<SubscriptionVendor>()
+  if (binaryOnPath('claude', env)) present.add('claude')
+  if (binaryOnPath('codex', env)) present.add('codex')
+  return present
+}
+
+/** Runs a one-shot inline job inside a leased warm container (the transport's `runInline`). */
+export type RunInlineInContainer = (req: InlineContainerRequest) => Promise<InlineJobResult>
+
+/** The subscription-credential lease seams the container inline path needs (from buildNodeContainer). */
+export interface InlineLeaseDeps {
+  /** Lease the run-initiator's activated personal credential (individual vendors). */
+  leasePersonalSubscriptionToken?: (
+    executionId: string,
+    userId: string,
+    vendor: SubscriptionVendor,
+  ) => Promise<{ secret: string }>
+  /** Lease a pooled workspace subscription token (poolable vendors). */
+  leaseSubscriptionToken?: (
+    workspaceId: string,
+    vendor: SubscriptionVendor,
+  ) => Promise<{ secret: string }>
+}
+
+/** Everything the inline resolver wrapper needs to serve subscription refs (host CLI + container). */
+export interface InlineHarnessResolverDeps extends InlineLeaseDeps {
+  /** The enabled inline harnesses (`LOCAL_NATIVE_INLINE`); empty ⇒ inline off. */
+  inlineHarnesses: readonly HarnessKind[]
+  /** Native ambient vendors whose host CLI is present (prefer the host CLI for these). */
+  hostCliVendors: ReadonlySet<SubscriptionVendor>
+  /** Run a one-shot inline job in a warm container. Absent ⇒ container backend unavailable. */
+  runInline?: RunInlineInContainer
+  /** Injectable host-CLI exec seam (defaults to a real spawn); tests pass a fake. */
+  exec?: CliExec
+}
+
+/**
+ * Build the container-backed {@link InlineCliRunner} for a subscription `vendor`/`ref` and run
+ * scope: lease the credential (personal for an individual vendor, pooled otherwise), inject it +
+ * the vendor base URL into the `inline` job, and run it in a warm container via `runInline`. The
+ * credential is turned into env INSIDE the harness (never here), mirroring the coding path.
+ */
+function makeContainerRunner(
+  vendor: SubscriptionVendor,
+  ref: ModelRef,
+  scope: ModelScope,
+  deps: InlineHarnessResolverDeps,
+): InlineCliRunner {
+  return async (req: InlineCliRequest): Promise<InlineCliResult> => {
+    if (!deps.runInline) {
+      throw new Error(
+        `Inline ${vendor} model needs the local container backend, which is not available.`,
+      )
+    }
+    let secret: string
+    if (isIndividualVendor(vendor)) {
+      if (!deps.leasePersonalSubscriptionToken) {
+        throw new Error(
+          `Personal ${vendor} subscriptions are not configured on this deployment (no ENCRYPTION_KEY).`,
+        )
+      }
+      if (!scope.executionId || !scope.userId) {
+        // An individual credential is owned by a specific user and activated per run; without
+        // the run/user we can't lease it. (Pooled vendors need only the workspace, below.)
+        throw new Error(
+          `Running an inline ${vendor} model requires a signed-in user and an active run.`,
+        )
+      }
+      const leased = await deps.leasePersonalSubscriptionToken(
+        scope.executionId,
+        scope.userId,
+        vendor,
+      )
+      secret = leased.secret
+    } else {
+      if (!deps.leaseSubscriptionToken) {
+        throw new Error(`The ${vendor} subscription pool is not configured on this deployment.`)
+      }
+      const leased = await deps.leaseSubscriptionToken(scope.workspaceId, vendor)
+      secret = leased.secret
+    }
+    const baseUrl = SUBSCRIPTION_VENDORS[vendor].baseUrl
+    const result = await deps.runInline({
+      harness: SUBSCRIPTION_VENDORS[vendor].harness,
+      model: ref.model,
+      system: req.system,
+      prompt: req.prompt,
+      ...(req.maxOutputTokens != null ? { maxOutputTokens: req.maxOutputTokens } : {}),
+      subscriptionToken: secret,
+      ...(baseUrl ? { subscriptionBaseUrl: baseUrl } : {}),
+      ...(req.signal ? { signal: req.signal } : {}),
+    })
+    return {
+      text: result.text,
+      ...(result.finishReason ? { finishReason: result.finishReason } : {}),
+      ...(result.usage
+        ? {
+            usage: {
+              ...(result.usage.inputTokens != null
+                ? { inputTokens: result.usage.inputTokens }
+                : {}),
+              ...(result.usage.outputTokens != null
+                ? { outputTokens: result.usage.outputTokens }
+                : {}),
+            },
+          }
+        : {}),
+    }
   }
 }
 
 /**
- * Wrap the Node model-provider resolver so every resolved provider serves ambient-eligible
- * subscription harness refs inline via the developer's CLI. Passed to `buildNodeContainer` as
- * `wrapModelProviderResolver` in local mode; a no-op wrapper when no inline harnesses are enabled
- * (`LOCAL_NATIVE_INLINE=off`). `exec` is the injectable CLI seam (defaults to a real spawn); tests
- * pass a fake.
+ * A {@link ModelProvider} that serves an enabled subscription harness ref inline — host CLI for a
+ * native ambient vendor whose binary is present (unmetered, the developer's ambient login), else
+ * the prewarmed container on a leased credential — and delegates everything else to `inner`.
+ * Built PER-SCOPE so the container runner can lease the run's per-run activation (`scope`).
+ */
+class SubscriptionInlineModelProvider implements ModelProvider {
+  constructor(
+    private readonly inner: ModelProvider,
+    private readonly scope: ModelScope,
+    private readonly deps: InlineHarnessResolverDeps,
+  ) {}
+
+  resolve(ref: ModelRef): ReturnType<ModelProvider['resolve']> {
+    const vendor = subscriptionVendorForRef(ref)
+    // Not a subscription ref, or its harness isn't enabled inline → the inner provider decides.
+    if (!vendor || !this.deps.inlineHarnesses.includes(SUBSCRIPTION_VENDORS[vendor].harness)) {
+      return this.inner.resolve(ref)
+    }
+    // Prefer the developer's OWN host CLI for a native ambient vendor when it's installed:
+    // unmetered, ambient login, no lease. Requires the harness be in the ambient allow-list too
+    // (that's what `isAmbientNativeVendor` + presence check together give).
+    const nativeVendor = nativeVendorForRef(ref)
+    if (
+      nativeVendor &&
+      this.deps.hostCliVendors.has(nativeVendor) &&
+      isAmbientNativeVendor(this.deps.inlineHarnesses, nativeVendor)
+    ) {
+      return new CliInlineLanguageModel(
+        ref.provider,
+        ref.model,
+        runnerForVendor(nativeVendor, this.deps.exec ?? spawnCliExec),
+      )
+    }
+    // Otherwise run it in a warm container on a leased credential (the compatibility path — no
+    // host CLI needed, works in mothership mode; serves non-native vendors too).
+    return new CliInlineLanguageModel(
+      ref.provider,
+      ref.model,
+      makeContainerRunner(vendor, ref, this.scope, this.deps),
+    )
+  }
+}
+
+/**
+ * Wrap the Node model-provider resolver so a resolved provider serves enabled subscription
+ * harness refs inline: the developer's host `claude`/`codex` CLI when present, else a warm
+ * container on the LEASED subscription credential (personal per-run activation for an individual
+ * vendor, pooled token otherwise). Passed to `buildNodeContainer` as `wrapModelProviderResolver`
+ * in local mode; a no-op when no inline harnesses are enabled (`LOCAL_NATIVE_INLINE=off`). The
+ * lease seams (`leasePersonalSubscriptionToken`/`leaseSubscriptionToken`) are supplied by
+ * `buildNodeContainer` (built from the same subscription services the container executor uses).
  */
 export function wrapResolverWithInlineHarness(
-  nativeAmbientAuth: readonly HarnessKind[] | undefined,
-  exec: CliExec = spawnCliExec,
+  deps: InlineHarnessResolverDeps,
 ): (inner: ModelProviderResolver) => ModelProviderResolver {
   return (inner) => ({
     async forScope(scope: ModelScope): Promise<ModelProvider> {
       const provider = await inner.forScope(scope)
-      if (!nativeAmbientAuth || nativeAmbientAuth.length === 0) return provider
-      return new HarnessInlineModelProvider(provider, nativeAmbientAuth, exec)
+      if (deps.inlineHarnesses.length === 0) return provider
+      return new SubscriptionInlineModelProvider(provider, scope, deps)
     },
   })
 }

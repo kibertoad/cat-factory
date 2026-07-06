@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
-import type { InlineCliRequest } from '@cat-factory/agents'
-import { CliInlineLanguageModel } from '@cat-factory/agents'
+import { CliInlineLanguageModel, type InlineCliRequest } from '@cat-factory/agents'
+import type { InlineContainerRequest } from './LocalContainerRunnerTransport.js'
+import type { InlineJobResult } from './harnessHttp.js'
 import {
   type CliExec,
+  detectHostInlineClis,
   makeInlineHarnessPredicate,
   runnerForVendor,
   spawnCliExec,
@@ -11,7 +13,8 @@ import {
 } from './harnessInline.js'
 
 // Local-mode inline harness wiring: the shared predicate the config + provider agree on, and the
-// resolver wrapper that serves ambient-eligible harness refs via the CLI while delegating the rest.
+// resolver wrapper that serves an enabled subscription harness ref either via the developer's host
+// CLI (native ambient vendor, binary present) or a warm container on a leased credential.
 
 const CLAUDE_SUB: ModelRef = {
   provider: 'anthropic',
@@ -20,26 +23,36 @@ const CLAUDE_SUB: ModelRef = {
 }
 const CODEX_SUB: ModelRef = { provider: 'openai', model: 'gpt-5.5-codex', harness: 'codex' }
 const GLM_SUB: ModelRef = { provider: 'zai', model: 'glm-5.2', harness: 'claude-code' }
+const KIMI_SUB: ModelRef = { provider: 'moonshot', model: 'kimi-k2.6', harness: 'claude-code' }
 const QWEN: ModelRef = { provider: 'qwen', model: 'qwen3-max' }
 
 describe('makeInlineHarnessPredicate', () => {
-  it('accepts native ambient vendors listed in the allow-list, rejects the rest', () => {
+  it('accepts every subscription vendor whose harness is enabled (host CLI OR container)', () => {
     const predicate = makeInlineHarnessPredicate(['claude-code', 'codex'])
     expect(predicate(CLAUDE_SUB)).toBe(true)
     expect(predicate(CODEX_SUB)).toBe(true)
-    expect(predicate(GLM_SUB)).toBe(false) // non-native (has a base URL)
-    expect(predicate(QWEN)).toBe(false) // not a harness ref
+    // Non-native claude-code vendors now qualify too — the container serves them on a leased token.
+    expect(predicate(GLM_SUB)).toBe(true)
+    expect(predicate(KIMI_SUB)).toBe(true)
+    expect(predicate(QWEN)).toBe(false) // not a subscription ref
   })
 
-  it('is empty (never inline) when no native harnesses are enabled', () => {
-    const predicate = makeInlineHarnessPredicate(undefined)
-    expect(predicate(CLAUDE_SUB)).toBe(false)
+  it('is empty (never inline) when no inline harnesses are enabled', () => {
+    expect(makeInlineHarnessPredicate(undefined)(CLAUDE_SUB)).toBe(false)
+    expect(makeInlineHarnessPredicate([])(GLM_SUB)).toBe(false)
   })
 
-  it('only accepts a vendor whose harness is in the allow-list', () => {
+  it('only accepts a vendor whose HARNESS is enabled', () => {
     const predicate = makeInlineHarnessPredicate(['codex'])
-    expect(predicate(CLAUDE_SUB)).toBe(false) // claude-code not allowed
+    expect(predicate(CLAUDE_SUB)).toBe(false) // claude-code not enabled
+    expect(predicate(GLM_SUB)).toBe(false) // claude-code not enabled
     expect(predicate(CODEX_SUB)).toBe(true)
+  })
+})
+
+describe('detectHostInlineClis', () => {
+  it('reports no native CLIs when PATH is empty', () => {
+    expect(detectHostInlineClis({ PATH: '' }).size).toBe(0)
   })
 })
 
@@ -47,25 +60,104 @@ describe('wrapResolverWithInlineHarness', () => {
   function innerResolver(inner: ModelProvider): ModelProviderResolver {
     return { forScope: async () => inner }
   }
+  const delegated = { id: 'delegated' } as unknown as ReturnType<ModelProvider['resolve']>
 
-  it('serves an ambient-eligible harness ref via the CLI model, delegating everything else', async () => {
-    const delegated = { id: 'delegated' } as unknown as ReturnType<ModelProvider['resolve']>
+  it('serves a native ambient vendor via the HOST CLI when its binary is present', async () => {
     const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
-    const wrap = wrapResolverWithInlineHarness(['claude-code'])
+    const runInline = vi.fn()
+    const wrap = wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(['claude']),
+      runInline,
+    })
     const provider = await wrap(innerResolver(inner)).forScope({ workspaceId: 'ws' })
-
     expect(provider.resolve(CLAUDE_SUB)).toBeInstanceOf(CliInlineLanguageModel)
-    expect(inner.resolve).not.toHaveBeenCalled()
-
-    // A non-native ref falls through to the inner provider.
+    expect(runInline).not.toHaveBeenCalled()
+    // A non-subscription ref falls through to the inner provider.
     expect(provider.resolve(QWEN)).toBe(delegated)
-    expect(inner.resolve).toHaveBeenCalledWith(QWEN)
   })
 
-  it('is a passthrough when no native harnesses are enabled', async () => {
-    const delegated = { id: 'delegated' } as unknown as ReturnType<ModelProvider['resolve']>
+  it('serves via the CONTAINER on a leased personal credential when no host CLI is present', async () => {
     const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
-    const wrap = wrapResolverWithInlineHarness([])
+    const runInline = vi.fn(
+      async (req: InlineContainerRequest): Promise<InlineJobResult> => ({
+        text: `ran ${req.model} via ${req.subscriptionBaseUrl ?? 'anthropic'}`,
+        usage: { inputTokens: 3, outputTokens: 1 },
+      }),
+    )
+    const leasePersonalSubscriptionToken = vi.fn(async () => ({ secret: 'oat-token' }))
+    const wrap = wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(), // no host CLI → container path
+      runInline,
+      leasePersonalSubscriptionToken,
+    })
+    const provider = await wrap(innerResolver(inner)).forScope({
+      workspaceId: 'ws',
+      userId: 'usr_1',
+      executionId: 'exec_1',
+    })
+    const model = provider.resolve(CLAUDE_SUB)
+    expect(model).toBeInstanceOf(CliInlineLanguageModel)
+
+    // Drive the runner: it leases the initiator's personal credential and dispatches to the container.
+    const runner = (model as unknown as { run: (r: InlineCliRequest) => Promise<unknown> }).run
+    const result = (await runner({
+      model: 'claude-opus-4-8',
+      system: 'sys',
+      prompt: 'go',
+    })) as { text: string }
+    expect(leasePersonalSubscriptionToken).toHaveBeenCalledWith('exec_1', 'usr_1', 'claude')
+    expect(runInline).toHaveBeenCalledOnce()
+    expect(runInline.mock.calls[0]![0].subscriptionToken).toBe('oat-token')
+    expect(result.text).toContain('claude-opus-4-8')
+  })
+
+  it('leases a POOLED token (workspace only) for a poolable vendor via the container', async () => {
+    const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
+    const runInline = vi.fn(
+      async (_req: InlineContainerRequest): Promise<InlineJobResult> => ({ text: 'ok' }),
+    )
+    const leaseSubscriptionToken = vi.fn(async () => ({ secret: 'pool-token' }))
+    const wrap = wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(),
+      runInline,
+      leaseSubscriptionToken,
+    })
+    const provider = await wrap(innerResolver(inner)).forScope({ workspaceId: 'ws' })
+    const model = provider.resolve(KIMI_SUB)
+    const runner = (model as unknown as { run: (r: InlineCliRequest) => Promise<unknown> }).run
+    await runner({ model: 'kimi-k2.6', system: '', prompt: 'go' })
+    expect(leaseSubscriptionToken).toHaveBeenCalledWith('ws', 'kimi')
+    // The vendor base URL rides the container job so the harness points ANTHROPIC_BASE_URL there.
+    expect(runInline.mock.calls[0]![0].subscriptionBaseUrl).toBe(
+      'https://api.moonshot.ai/anthropic',
+    )
+  })
+
+  it("throws for an individual vendor with no run context (can't lease a per-run activation)", async () => {
+    const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
+    const wrap = wrapResolverWithInlineHarness({
+      inlineHarnesses: ['claude-code'],
+      hostCliVendors: new Set(),
+      runInline: vi.fn(),
+      leasePersonalSubscriptionToken: vi.fn(),
+    })
+    const provider = await wrap(innerResolver(inner)).forScope({ workspaceId: 'ws' })
+    const runner = (
+      provider.resolve(CLAUDE_SUB) as unknown as {
+        run: (r: InlineCliRequest) => Promise<unknown>
+      }
+    ).run
+    await expect(runner({ model: 'claude-opus-4-8', system: '', prompt: 'go' })).rejects.toThrow(
+      /signed-in user and an active run/,
+    )
+  })
+
+  it('is a passthrough when no inline harnesses are enabled', async () => {
+    const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
+    const wrap = wrapResolverWithInlineHarness({ inlineHarnesses: [], hostCliVendors: new Set() })
     const provider = await wrap(innerResolver(inner)).forScope({ workspaceId: 'ws' })
     expect(provider.resolve(CLAUDE_SUB)).toBe(delegated)
   })

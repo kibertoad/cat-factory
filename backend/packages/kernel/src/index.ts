@@ -61,6 +61,7 @@ export {
   isModelUsable,
   isModelUsableInline,
   nativeVendorForRef,
+  subscriptionVendorForRef,
   subscriptionOptionFor,
   isIndividualVendor,
   isAmbientNativeVendor,

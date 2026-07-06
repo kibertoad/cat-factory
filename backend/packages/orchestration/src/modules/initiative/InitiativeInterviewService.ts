@@ -13,6 +13,7 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability } from '@cat-factory/agents'
+import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
 import { extractJson } from '../requirements/requirements.logic.js'
 import { coerceInterviewOutput, type InterviewOutput } from './initiative.logic.js'
 
@@ -64,6 +65,8 @@ export interface InitiativeInterviewDeps {
     agentKind: string,
     modelPresetId?: string,
   ) => Promise<string | undefined>
+  /** Resolve the block's run/execution + initiator, folded into the inline model scope. */
+  resolveRunContext?: ResolveBlockRunContext
 }
 
 export class InitiativeInterviewService {
@@ -136,7 +139,8 @@ export class InitiativeInterviewService {
     workspaceId: string,
     block: Block,
   ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
-    const modelProvider = await resolveScopedModelProvider(workspaceId, this.deps)
+    const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
+    const modelProvider = await resolveScopedModelProvider(scope, this.deps)
     const ref = await this.modelFor(workspaceId, block)
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the initiative interviewer')

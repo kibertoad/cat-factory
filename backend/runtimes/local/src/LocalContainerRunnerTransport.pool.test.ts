@@ -122,6 +122,54 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
     ).toBe(true)
   })
 
+  it('runInline leases a member, POSTs an inline job, returns the result, and keeps the member warm', async () => {
+    const { exec, calls } = fakeDockerPool()
+    // POST /jobs → 202; GET /jobs/:id → a finished inline result.
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/'))
+        return jsonResponse({
+          state: 'done',
+          result: {
+            text: 'REVIEW OK',
+            usage: { inputTokens: 5, outputTokens: 2 },
+            finishReason: 'stop',
+          },
+        })
+      // POST /jobs — capture the body for assertions.
+      void init
+      return jsonResponse({ state: 'running' }, 202)
+    })
+    const transport = new LocalContainerRunnerTransport({
+      image: 'harness:test',
+      poolSize: 1,
+      exec,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    const result = await transport.runInline({
+      harness: 'claude-code',
+      model: 'claude-opus-4-8',
+      system: 'sys',
+      prompt: 'go',
+      subscriptionToken: 'oat-token',
+    })
+    expect(result.text).toBe('REVIEW OK')
+    expect(result.usage).toEqual({ inputTokens: 5, outputTokens: 2 })
+
+    // The inline job POSTed the credential + kind, no repo checkout.
+    const post = fetchImpl.mock.calls.find(([u]) => String(u).endsWith('/jobs'))!
+    const body = JSON.parse(String(post[1]?.body))
+    expect(body.kind).toBe('inline')
+    expect(body.subscriptionToken).toBe('oat-token')
+    expect(body.harness).toBe('claude-code')
+
+    // The member is returned to the warm pool (not torn down), reusable by the next call.
+    expect(calls.some((c) => c[0] === 'rm')).toBe(false)
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+  })
+
   it('returns a member to the pool on release (no rm) instead of tearing it down', async () => {
     const { exec, calls } = fakeDockerPool()
     const transport = new LocalContainerRunnerTransport({

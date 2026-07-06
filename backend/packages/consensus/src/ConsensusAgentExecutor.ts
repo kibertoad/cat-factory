@@ -136,6 +136,9 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       return this.deps.modelProviderResolver.forScope({
         workspaceId: context.workspaceId,
         userId: context.initiatedByUserId,
+        // Carry the run so a leased-per-run inline subscription backend can lease the
+        // initiator's activation for a consensus participant's inline call.
+        executionId: context.executionId,
       })
     }
     if (this.deps.modelProvider) return this.deps.modelProvider

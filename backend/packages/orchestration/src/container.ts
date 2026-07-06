@@ -1680,6 +1680,7 @@ function createTesterQualityReviewer(
             modelPresetId,
           )
       : undefined,
+    resolveRunContext: resolveBlockRunContext(deps),
   })
 }
 
@@ -1712,7 +1713,28 @@ function createDocInterviewService(deps: CoreDependencies): DocInterviewService 
             modelPresetId,
           )
       : undefined,
+    resolveRunContext: resolveBlockRunContext(deps),
   })
+}
+
+/**
+ * Resolve a block's active run (execution id + initiator) for the iterative reviewers, so an
+ * inline subscription reviewer served through a leased per-run activation can lease it. Reads
+ * the block's `executionId` and the run's `initiatedBy`; `{}` when the block has no active run
+ * (an off-path inspector review with no pipeline) — the reviewer then resolves on a
+ * workspace-only scope (pooled lease), unchanged.
+ */
+function resolveBlockRunContext(
+  deps: CoreDependencies,
+): (workspaceId: string, block: Block) => Promise<{ executionId?: string; userId?: string }> {
+  return async (workspaceId, block) => {
+    if (!block.executionId) return {}
+    const instance = await deps.executionRepository.get(workspaceId, block.executionId)
+    return {
+      executionId: block.executionId,
+      ...(instance?.initiatedBy ? { userId: instance.initiatedBy } : {}),
+    }
+  }
 }
 
 function createRequirementsModule(
@@ -1753,6 +1775,10 @@ function createRequirementsModule(
             modelPresetId,
           )
       : undefined,
+    // The reviewer runs during a parked run, so its execution + initiator come from the
+    // block's active run — threaded into the model scope so an inline subscription ref served
+    // through a leased per-run activation (local container inline backend) can lease it.
+    resolveRunContext: resolveBlockRunContext(deps),
     documentRepository: deps.documentRepository,
     taskRepository: deps.taskRepository,
     // The Requirement Writer (second companion) grounds recommendations on the run's repo
@@ -1969,6 +1995,7 @@ function createClarityModule(
             modelPresetId,
           )
       : undefined,
+    resolveRunContext: resolveBlockRunContext(deps),
   })
   return { service }
 }
@@ -2557,6 +2584,7 @@ export function createCore(dependencies: CoreDependencies): Core {
             modelPresetId,
           )
       : undefined,
+    resolveRunContext: resolveBlockRunContext(dependencies),
   })
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
