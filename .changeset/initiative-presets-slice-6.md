@@ -1,6 +1,7 @@
 ---
 '@cat-factory/agents': minor
 '@cat-factory/kernel': minor
+'@cat-factory/integrations': patch
 ---
 
 Initiative presets — slice 6 (docs-refresh pilot): deterministic documentation-layout
@@ -21,6 +22,9 @@ autodetection.
   user edit wins and the analyst confirms placement at planning time.
 - **kernel** (`shared/repo-scan.logic.ts`): extracts the checkout-free scan primitives the repo
   auto-detectors share — `joinRepoPath` + the budgeted, memoized `BudgetedRepoScanner` (over a
-  `CheckoutFreeRepoReader`) — into one home, so `detectDocsLayout` reuses them instead of adding a
-  third private copy. The environments detectors (`provision-detect` / `frontend-detect`) still
-  carry their own copies and should converge onto this in a follow-up.
+  `CheckoutFreeRepoReader`) — into one home, so a fix to path normalization / caching / budget
+  lands once instead of drifting across copies.
+- **integrations**: the service-provisioning (`provision-detect`) and frontend-config
+  (`frontend-detect`) detectors now consume the shared kernel primitive instead of their own
+  private `joinPath` + `Scanner` copies — a behaviour-neutral refactor (the shared `exhausted`
+  uses the precise "a read was actually skipped" semantics both had converged toward).

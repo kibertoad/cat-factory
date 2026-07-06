@@ -5,6 +5,7 @@ import type {
   FrontendDetectionNote,
   FrontendPackageManager,
 } from '@cat-factory/contracts'
+import { BudgetedRepoScanner, joinRepoPath } from '@cat-factory/kernel'
 import { RepoReadError } from './repo-read-error.js'
 
 // ---------------------------------------------------------------------------
@@ -22,8 +23,8 @@ import { RepoReadError } from './repo-read-error.js'
  * structurally, and a test supplies an in-memory fake. A MISSING path yields `null`, so the
  * heuristics degrade gracefully on partial repos. A genuine read fault (auth/permission revoked,
  * rate limit, transport error) may THROW — the real reader throws on any non-404 status. The
- * {@link Scanner} tolerates that (records it, keeps scanning) so a truly unreadable repo surfaces
- * an actionable error instead of a misleading "not a frontend repo"; see {@link Scanner.readFault}.
+ * {@link BudgetedRepoScanner} tolerates that (records it, keeps scanning) so a truly unreadable
+ * repo surfaces an actionable error instead of a misleading "not a frontend repo"; see its `readFault`.
  */
 export interface FrontendRepoReader {
   getFile(path: string, gitRef?: string): Promise<{ content: string } | null>
@@ -66,74 +67,8 @@ const MAX_BINDINGS = 12
 // Bounds the total reads so a pathological repo can't fan out unboundedly. Reads are intentionally
 // SEQUENTIAL (not batched): the budget short-circuit depends on deterministic in-order accounting.
 // A real frontend resolves in a handful of reads; the cap only bites on decoy-heavy repos, where
-// truncation is surfaced as a note (see `Scanner.exhausted`).
+// truncation is surfaced as a note (see `BudgetedRepoScanner.exhausted`).
 const READ_BUDGET = 60
-
-/** Join + normalize repo-relative path segments, collapsing `.`/`..`. */
-function joinPath(...parts: (string | undefined)[]): string {
-  const segs: string[] = []
-  for (const part of parts) {
-    if (!part) continue
-    for (const seg of part.split('/')) {
-      if (!seg || seg === '.') continue
-      if (seg === '..') segs.pop()
-      else segs.push(seg)
-    }
-  }
-  return segs.join('/')
-}
-
-/** Stateful repo reader with a hard read budget so detection can't fan out without bound. */
-class Scanner {
-  private reads = 0
-  private truncated = false
-  private firstFault: string | undefined
-  constructor(
-    private readonly reader: FrontendRepoReader,
-    private readonly gitRef: string | undefined,
-  ) {}
-
-  /**
-   * True only once a read was ACTUALLY skipped because the budget was hit — so a complete scan
-   * that happens to spend exactly the budget doesn't spuriously report itself truncated.
-   */
-  get exhausted(): boolean {
-    return this.truncated
-  }
-
-  /**
-   * The message of the FIRST genuine read fault the reader threw (auth/permission revoked, rate
-   * limit, transport error), else `undefined`. A miss (absent path) is NOT a fault. The caller
-   * raises {@link RepoReadError} when nothing was detected AND this is set.
-   */
-  get readFault(): string | undefined {
-    return this.firstFault
-  }
-
-  async getFile(path: string): Promise<string | null> {
-    if (this.reads >= READ_BUDGET) {
-      this.truncated = true
-      return null
-    }
-    this.reads++
-    try {
-      const file = await this.reader.getFile(path, this.gitRef)
-      return file?.content ?? null
-    } catch (err) {
-      // A genuine read fault (non-404 — the reader turns 404 into null itself). Record it so an
-      // all-miss outcome can be reported as "couldn't read" rather than "not a frontend repo".
-      if (this.firstFault === undefined) {
-        this.firstFault = err instanceof Error ? err.message : String(err)
-      }
-      return null
-    }
-  }
-
-  /** True when a file exists (a cheap presence probe that still spends one read). */
-  async exists(path: string): Promise<boolean> {
-    return (await this.getFile(path)) !== null
-  }
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -203,7 +138,7 @@ interface FrameworkGuess {
  * the common case (`dist`); Nuxt/Next carry ambiguity (SSR vs static export) surfaced as a note.
  */
 async function detectFramework(
-  scanner: Scanner,
+  scanner: BudgetedRepoScanner,
   root: string,
   pkg: PackageJson | null,
 ): Promise<FrameworkGuess | null> {
@@ -213,7 +148,7 @@ async function detectFramework(
   const anyConfig = async (bases: string[]) => {
     for (const base of bases) {
       for (const ext of ['ts', 'js', 'mjs', 'cjs']) {
-        if (await scanner.exists(joinPath(root, `${base}.${ext}`))) return true
+        if (await scanner.exists(joinRepoPath(root, `${base}.${ext}`))) return true
       }
     }
     return false
@@ -282,15 +217,15 @@ export async function detectFrontendConfig(
   reader: FrontendRepoReader,
   options: DetectFrontendConfigOptions = {},
 ): Promise<FrontendConfigRecommendation> {
-  const root = joinPath(options.directory ?? '')
-  const scanner = new Scanner(reader, options.gitRef)
+  const root = joinRepoPath(options.directory ?? '')
+  const scanner = new BudgetedRepoScanner(reader, READ_BUDGET, options.gitRef)
   const notes: FrontendDetectionNote[] = []
   const config: FrontendConfig = { backendBindings: [] }
 
   // 1) Package manager from the lockfile (high confidence when one exists).
   let packageManager: FrontendPackageManager | undefined
   for (const { file, pm } of LOCKFILES) {
-    if (await scanner.exists(joinPath(root, file))) {
+    if (await scanner.exists(joinRepoPath(root, file))) {
       packageManager = pm
       config.packageManager = pm
       config.installCommand = INSTALL_COMMANDS[pm]
@@ -304,7 +239,7 @@ export async function detectFrontendConfig(
   }
 
   // 2) package.json drives the build/serve scripts + the framework guess.
-  const pkgContent = await scanner.getFile(joinPath(root, 'package.json'))
+  const pkgContent = await scanner.getFile(joinRepoPath(root, 'package.json'))
   const pkg = pkgContent ? parsePackageJson(pkgContent) : null
   if (!pkg && !packageManager) {
     // No package.json AND no lockfile. If the reads couldn't actually reach the repo (a genuine
@@ -393,7 +328,7 @@ export async function detectFrontendConfig(
   //    aren't scanned (too broad) — the dotenv examples are the reliable, bounded source.
   const envNames = new Set<string>()
   for (const file of ENV_EXAMPLE_FILES) {
-    const content = await scanner.getFile(joinPath(root, file))
+    const content = await scanner.getFile(joinRepoPath(root, file))
     if (!content) continue
     for (const key of parseEnvExampleKeys(content)) {
       if (BACKEND_ENV_PATTERNS.some((re) => re.test(key))) envNames.add(key)

@@ -4,17 +4,17 @@
 // The repo prefill heuristics (documentation-layout, service-provisioning, and
 // frontend-config detection) all walk a targeted, tiny slice of a repo over a
 // `RepoFiles`-shaped reader WITHOUT a clone, bounded by a hard read budget so a
-// pathological repo can't fan out unboundedly. Each grew its own near-identical copy of
-// the two primitives every one of them needs — the path join/normalize helper and the
+// pathological repo can't fan out unboundedly. Each had grown its own near-identical copy
+// of the two primitives every one of them needs — the path join/normalize helper and the
 // budgeted, memoized reader wrapper. This module is the one shared home for them, so a
 // fix (a normalization edge, a caching bug) lands once instead of drifting across copies.
 //
-// `docs-detect.logic.ts` (agents) is the first consumer. The environments detectors
-// (`provision-detect.logic.ts` / `frontend-detect.logic.ts`, integrations) still carry
-// their own copies for now — one is being refactored in a separate in-flight change — and
-// should converge onto this once that lands; the API here (fault recording, `exhausted`,
-// `getFirstFile`, `exists`, `gitRef`) is the superset they need so that migration is a
-// drop-in with no behaviour change.
+// Consumers: `docs-detect.logic.ts` (agents) and the environments detectors
+// (`provision-detect.logic.ts` / `frontend-detect.logic.ts`, integrations). The API here is
+// the superset they collectively need — a caller uses only the subset it wants: `getFile` /
+// `listDir` everywhere, `getFirstFile` (provisioning), `exists` (frontend-config), and the
+// `readFault` / `exhausted` signals for the callers that raise an actionable error or a
+// truncation note. `docs-detect` ignores `readFault` (it degrades to defaults instead).
 // ---------------------------------------------------------------------------
 
 /** A directory-listing entry as returned by the checkout-free contents API. */
