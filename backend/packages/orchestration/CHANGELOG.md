@@ -1,5 +1,13 @@
 # @cat-factory/orchestration
 
+## 0.95.3
+
+### Patch Changes
+
+- Updated dependencies [785576b]
+  - @cat-factory/agents@0.44.1
+  - @cat-factory/sandbox@0.9.33
+
 ## 0.95.2
 
 ### Patch Changes
