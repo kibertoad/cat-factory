@@ -1,6 +1,6 @@
 # Initiative: Technological-migration preset & the MSSQL→PostgreSQL pilot
 
-**Status:** in progress (T1–T5, T7, T8 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam + `seedMigrationPlan` post-processor + **`preset_tech_migration` registration**) · **Owner:** orchestration · **Started:** 2026-07-06
+**Status:** in progress (T1–T5, T7, T8 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam + `seedMigrationPlan` post-processor + **`preset_tech_migration` registration**; **T9 + T11 DROPPED** 2026-07-07 — the synthetic-fixture pilot is cut as project-specific throwaway, and the preset is instead validated on real repositories manually/separately; **T10** — the in-CI platform E2E — is the sole remaining slice, now fully unblocked since parent S9 landed (#924)) · **Owner:** orchestration · **Started:** 2026-07-06
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -83,10 +83,12 @@ classic behaviour-preservation traps.
 | **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ✅ done (#924)                         | —                     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness. **S9 landed the reusable fake-plan seam (`FakeProfile.initiativePlan` → `FakeAgentExecutor.initiativePlan`) + the env-configurable Node loop interval — T10 drives its migration plan through the SAME seam.** |
 
 Both parent blockers (S8 #911, S9 #924) are now landed, and T7 + T8 have landed on this tracker.
-Unblocked today (parallel-safe with the parent roadmap): T9 and **T10** (its blockers — parent S9
-✅ and T8 ✅ — are both satisfied). Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9)
-T10 → T11 — the next critical-path slice is now **T10** (fully unblocked), then T11 (waits on T9 +
-T10).
+**T9 and T11 were DROPPED (2026-07-07 product-owner call)** — the synthetic-fixture pilot is
+project-specific throwaway that never runs in cat-factory's CI, and the migration preset is
+instead validated in CI by **T10** and exercised against real repositories manually/separately
+(see Out of scope). The sole remaining slice is therefore **T10** — the in-CI platform E2E —
+which is fully unblocked (its blockers, parent S9 ✅ #924 and T8 ✅, are both satisfied). Critical
+path collapses to: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) **T10**.
 
 ## Target architecture
 
@@ -254,8 +256,8 @@ divergence). Artifacts live under `migrationDocsDir`, never `docs/initiatives/<s
 | G4  | No migration plan post-processor (spawn decoration, confidence-case wiring, granularity)                            | T7                                                                |
 | G5  | No second real preset registration; the registration pattern lands only with parent S8                              | T8                                                                |
 | G6  | No confidence-case control point between coverage and delivery                                                      | §C design (data-only: gated item + `decision`), enforced by T7/T8 |
-| G7  | No MSSQL fixture repo exercising the behaviour-preservation traps                                                   | T9                                                                |
-| G8  | No migration E2E; the baseline harness lands only with parent S9                                                    | T10                                                               |
+| G7  | No MSSQL fixture repo exercising the behaviour-preservation traps                                                   | ~~T9~~ — **dropped**; exercised on real repos separately (Out of scope) |
+| G8  | No migration E2E; the baseline harness lands only with parent S9                                                    | T10 (baseline S9 ✅ #924)                                         |
 
 Parent-owned, NOT ours (listed to prevent scope creep): the registration-pattern pilot
 (S8), the E2E baseline + `backend/docs/initiative-presets.md` developer doc (S9). The
@@ -273,15 +275,24 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ✅ done | #913   |
 | T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ✅ done | #921   |
 | T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4, T5, T7                                                                           | MIGRATION | **parent S8**, T1, T2, T3, T7 | ✅ done | #923   |
-| T9  | Synthetic MSSQL fixture repo (schema + procs/triggers/views + app code + dual-target-ready integration tests + CI) exercising the behaviour traps (see Pilot)                                                                                 | PILOT     | —                             | ⬜ todo |        |
-| T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | **parent S9**, T8             | ⬜ todo |        |
-| T11 | Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo; validation checklist (see Pilot); learnings folded back into this tracker                                                                             | PILOT     | T8, T9, T10                   | ⬜ todo |        |
+| T9  | ~~Synthetic MSSQL fixture repo (schema + procs/triggers/views + app code + dual-target-ready integration tests + CI) exercising the behaviour traps~~ — **DROPPED 2026-07-07**: project-specific throwaway, not platform code, never in cat-factory CI; the preset is exercised on real repos separately (see Out of scope) | PILOT     | —                             | 🚫 dropped | —      |
+| T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | — (parent S9 ✅ #924, T8 ✅)  | ⬜ todo (unblocked) |        |
+| T11 | ~~Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo~~ — **DROPPED 2026-07-07** with T9: the migration preset is validated in CI by T10 and tried on real repositories manually/separately (see Out of scope) | PILOT     | —                             | 🚫 dropped | —      |
 
-Ordering: T1–T5, T7 and T8 are done; T9 and T10 are unblocked and parallel-safe with the
-parent roadmap. Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 (T8
-landed and parent S9 #924 landed; T10 is now fully unblocked, T11 waits on T9 + T10).
+Ordering: T1–T5, T7 and T8 are done; **T9 and T11 are dropped** (see Out of scope). The sole
+remaining slice is **T10** (the in-CI platform E2E), now fully unblocked (parent S9 #924 + T8 both
+✅). Critical path collapses to: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) **T10**.
 
 ## Pilot: MSSQL → PostgreSQL
+
+> **DROPPED (2026-07-07).** The synthetic-fixture pilot (**T9**) and its productized validation
+> run (**T11**) were cut by the product owner. Rationale: a bespoke throwaway MSSQL app is
+> project-specific, not platform code, and never runs in cat-factory's CI — its only consumer
+> was a one-time manual run. The migration preset's **platform** validation is the in-CI **T10**
+> E2E (deterministic, fakes, extends the S9 baseline); real-world confidence comes from running
+> the preset against **real repositories** manually/separately. Everything in this section below
+> is retained **for reference only** (it documents the trap taxonomy a migration must survive and
+> stays useful when trying the preset on a real repo) — it is **NOT** a slice to implement.
 
 **Pilot form values:** `migrationKind: database`, `fromTech: "MSSQL (stored procedures,
 SQL Agent jobs)"`, `toTech: "PostgreSQL 16"`, `storedProcPolicy: replace-with-app-code`,
@@ -480,6 +491,16 @@ New, migration-specific:
 
 ## Out of scope
 
+- **The synthetic MSSQL fixture repo (T9) and the productized pilot run (T11) — DROPPED
+  (2026-07-07 product-owner call).** A purpose-built throwaway target app is project-specific,
+  not platform code, and never runs in cat-factory's CI; its only consumer was a one-time manual
+  run. The migration preset's platform validation is the in-CI **T10** E2E (deterministic, fakes,
+  extends the S9 baseline); real-world confidence comes from running the preset against real
+  repositories **manually/separately** (owned outside this initiative). The Pilot section above is
+  retained for reference (it catalogues the MSSQL→PG behaviour traps a real migration must survive),
+  but neither the fixture nor a productized pilot harness is built here. If a reusable acceptance
+  fixture is ever wanted, it is a benchmark-class asset (à la `benchmark-harness` /
+  `sandbox-fixtures`) and would be scoped as its own initiative — not carried on this tracker.
 - **A create-time repo-detection PREFILL probe (`migration-detect.logic.ts` — the former
   T6 slice, now cut; this is why the slice numbering skips T6).** A `detect` hook can read
   only the repo's current FROM-side stack — never the destination (`toTech`) or the
@@ -515,9 +536,9 @@ New, migration-specific:
 
 ## Open questions
 
-- Fixture repo stack (language/ORM) — pick whatever the workspace's agents handle best;
-  decide in T9.
-- Where CI gets MSSQL + PG service containers for the dual-target harness.
+- ~~Fixture repo stack (language/ORM)~~ — **MOOT** (T9 dropped; no synthetic fixture is built).
+- ~~Where CI gets MSSQL + PG service containers for the dual-target harness~~ — **MOOT** (T9/T11
+  dropped; real-repo validation is done manually/separately, outside cat-factory CI).
 - Waiver granularity under `coverageBar: pragmatic` — one `decision` per waived
   touchpoint, or one batch decision?
 - PG target version/collation choice — a deployment concern; recommend recording it as a
