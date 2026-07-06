@@ -168,6 +168,19 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     logger.warn(message),
   )
   const nativeAgents = nativeHarnesses.length > 0
+  // Inline subscription execution (DEFAULT ON, `LOCAL_NATIVE_INLINE`): which subscription
+  // harnesses may serve the INLINE LLM steps (requirements reviewer, brainstorm, task-estimator,
+  // inline document kinds) on the developer's ambient `claude` / `codex` CLI. This is DECOUPLED
+  // from `LOCAL_NATIVE_AGENTS` above: that opt-in governs running whole CONTAINER agents
+  // unsandboxed on the host; an inline step is just a one-shot text call (no repo, no tools), so
+  // running it on the local CLI is benign and defaults on. It is what lets a subscription-only
+  // preset (everything pinned to `claude-opus`/GPT) run its inline reviewers in BOTH local and
+  // mothership mode — both boot through this facade on the developer's machine, so the host CLI
+  // is reachable in either. Off via `LOCAL_NATIVE_INLINE=off`.
+  const inlineHarnesses = parseInlineHarnesses(env.LOCAL_NATIVE_INLINE, (message) =>
+    logger.warn(message),
+  )
+  const inlineAgents = inlineHarnesses.length > 0
   // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
   // from env. `configured` providers (their PAT is set in env) offer a "Sign in with configured
   // <provider> PAT" button — the only sign-in path, since that env token is also the operational
@@ -180,15 +193,19 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     // endpoints + gates are served through `vcsClient`, GitHub- or GitLab-backed alike.
     ...(gitToken ? { github: { ...base.github, enabled: true } } : {}),
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
-    // With native agents on, the inline LLM steps (requirements reviewer, brainstorm,
-    // task-estimator, inline document kinds) can run on a subscription model through the
-    // developer's ambient `claude`/`codex` CLI too — so a subscription-only preset no longer
-    // strands them (or trips the preset-satisfiability guard). The predicate matches the same
-    // ambient-native vendors the container path allows; `wrapModelProviderResolver` below serves
-    // those refs via the CLI. Off → inline steps degrade to a provider model as on stock Node.
-    ...(nativeAgents
+    // Inline LLM steps (requirements reviewer, brainstorm, task-estimator, inline document kinds)
+    // run on a subscription model through the developer's ambient `claude`/`codex` CLI — so a
+    // subscription-only preset no longer strands them (or trips the preset-satisfiability guard).
+    // Gated by `LOCAL_NATIVE_INLINE` (default on), NOT `LOCAL_NATIVE_AGENTS`: the inline predicate
+    // matches the ambient-native vendors in that set, and `wrapModelProviderResolver` below serves
+    // those refs via the CLI. Off (`LOCAL_NATIVE_INLINE=off`) → inline steps degrade to a
+    // provider model as on stock Node, and the start guard refuses a subscription-only inline step.
+    ...(inlineAgents
       ? {
-          agents: { ...base.agents, inlineHarnessRef: makeInlineHarnessPredicate(nativeHarnesses) },
+          agents: {
+            ...base.agents,
+            inlineHarnessRef: makeInlineHarnessPredicate(inlineHarnesses),
+          },
         }
       : {}),
     localMode: {
@@ -594,9 +611,10 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     previewTransport: createLocalPreviewTransportFromEnv(env),
     // Serve ambient-eligible subscription harness refs (Claude Code / Codex) as INLINE CLI
     // calls, so the inline reviewers/brainstorm/estimator + inline agent kinds run on the
-    // developer's subscription — the inline analogue of the container ambient-auth path.
-    ...(nativeAgents
-      ? { wrapModelProviderResolver: wrapResolverWithInlineHarness(nativeHarnesses) }
+    // developer's subscription — the inline analogue of the container ambient-auth path. Gated
+    // by `LOCAL_NATIVE_INLINE` (default on), independent of the container-native opt-in above.
+    ...(inlineAgents
+      ? { wrapModelProviderResolver: wrapResolverWithInlineHarness(inlineHarnesses) }
       : {}),
     // Auto-provision the synthetic per-workspace installation so the integration reports
     // connected with no manual connect step.
@@ -691,26 +709,27 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
 
 /** Affirmative values that enable BOTH native harnesses without naming one. */
 const NATIVE_ALL_VALUES = new Set(['true', '1', 'on', 'yes', 'all', 'both'])
-/** What an affirmative-with-no-harness value enables. */
+/** What an affirmative-with-no-harness value (or an unset default-on flag) enables. */
 const BOTH_NATIVE_HARNESSES: HarnessKind[] = ['claude-code', 'codex']
 
 /**
- * Parse `LOCAL_NATIVE_AGENTS` into the set of subscription harnesses to run natively. The
- * documented form is a comma-separated list of harness ids (`claude-code,codex`); `claude`
- * is accepted as an alias for `claude-code`. Blank/unset OR an explicit off value
- * (`false`/`0`/`off`/`no`/`none`/`disabled`) ⇒ off (`[]`) — so disabling native mode never
- * accidentally enables it. An affirmative value naming no harness (`true`/`1`/`on`/…) ⇒ BOTH
- * native harnesses. Only `claude-code` / `codex` are ever native; any other unrecognised
- * token is ignored. A value with neither a recognised harness nor an affirmative keyword
- * (e.g. a typo) ⇒ off, so an unintelligible setting fails safe rather than enabling an
- * unsandboxed, unmetered mode.
+ * Shared parser for the two comma-separated subscription-harness allow-lists
+ * (`LOCAL_NATIVE_AGENTS`, `LOCAL_NATIVE_INLINE`). The documented form is a list of harness ids
+ * (`claude-code,codex`); `claude` is an alias for `claude-code`. An explicit off value
+ * (`false`/`0`/`off`/`no`/`none`/`disabled`) ⇒ `[]`; an affirmative keyword naming no harness
+ * (`true`/`1`/`on`/…) ⇒ BOTH. Only `claude-code` / `codex` are ever native; any other token is
+ * ignored (a value with neither a recognised harness nor an affirmative keyword — e.g. a typo —
+ * ⇒ `[]`, warned, so an unintelligible setting fails safe rather than silently doing something).
+ * The ONLY difference between the two flags is what an UNSET/blank value yields — `defaults`.
  */
-export function parseNativeHarnesses(
+function parseHarnessSet(
   raw: string | undefined,
+  opts: { defaults: HarnessKind[]; envName: string; offNote: string },
   onWarn?: (message: string) => void,
 ): HarnessKind[] {
   const trimmed = raw?.trim().toLowerCase()
-  if (!trimmed || OFF_VALUES.has(trimmed)) return []
+  if (!trimmed) return opts.defaults
+  if (OFF_VALUES.has(trimmed)) return []
   const out = new Set<HarnessKind>()
   let affirmative = false
   const unrecognized: string[] = []
@@ -723,14 +742,55 @@ export function parseNativeHarnesses(
   // No harness named: enable both ONLY for an explicit affirmative keyword; anything else
   // unrecognised stays off (fail-safe — see the doc comment).
   const harnesses = out.size > 0 ? [...out] : affirmative ? BOTH_NATIVE_HARNESSES : []
-  // The fail-safe must not be SILENT: a typo (`claudecode`) would otherwise disable native
-  // mode with zero signal and the developer only notices when runs lease credentials.
+  // The fail-safe must not be SILENT: a typo (`claudecode`) would otherwise turn the flag off
+  // with zero signal and the developer only notices when a run behaves unexpectedly.
   if (unrecognized.length > 0) {
     onWarn?.(
-      `LOCAL_NATIVE_AGENTS: ignoring unrecognized value(s) '${unrecognized.join("', '")}' ` +
+      `${opts.envName}: ignoring unrecognized value(s) '${unrecognized.join("', '")}' ` +
         `(expected claude-code, codex, or an on/off keyword)` +
-        (harnesses.length === 0 ? ' — native mode stays OFF' : ''),
+        (harnesses.length === 0 ? ` — ${opts.offNote}` : ''),
     )
   }
   return harnesses
+}
+
+/**
+ * Parse `LOCAL_NATIVE_AGENTS` into the set of subscription harnesses to run CONTAINER agents
+ * natively (a host process on the developer's own `claude` / `codex` CLI, ambient login,
+ * UNSANDBOXED + unmetered). Default OFF (`[]`) — so this opt-in never enables itself, and a
+ * typo fails safe rather than dropping the sandbox. See {@link parseHarnessSet}.
+ */
+export function parseNativeHarnesses(
+  raw: string | undefined,
+  onWarn?: (message: string) => void,
+): HarnessKind[] {
+  return parseHarnessSet(
+    raw,
+    { defaults: [], envName: 'LOCAL_NATIVE_AGENTS', offNote: 'native mode stays OFF' },
+    onWarn,
+  )
+}
+
+/**
+ * Parse `LOCAL_NATIVE_INLINE` into the set of subscription harnesses that may serve INLINE LLM
+ * steps (requirements reviewer, brainstorm, task-estimator, inline document kinds) via the
+ * developer's ambient `claude` / `codex` CLI. Unlike {@link parseNativeHarnesses} this defaults
+ * ON (BOTH harnesses when unset): an inline step is a one-shot text call with no repo checkout
+ * or tools, so running it on the developer's own CLI is benign, and defaulting on is what lets a
+ * subscription-only preset (e.g. everything pinned to `claude-opus`) run its inline reviewers in
+ * local / mothership mode without extra setup. Explicit `LOCAL_NATIVE_INLINE=off` disables it.
+ */
+export function parseInlineHarnesses(
+  raw: string | undefined,
+  onWarn?: (message: string) => void,
+): HarnessKind[] {
+  return parseHarnessSet(
+    raw,
+    {
+      defaults: BOTH_NATIVE_HARNESSES,
+      envName: 'LOCAL_NATIVE_INLINE',
+      offNote: 'inline subscription execution stays OFF',
+    },
+    onWarn,
+  )
 }
