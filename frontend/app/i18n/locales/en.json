@@ -2232,6 +2232,14 @@
         "allowHostCommands": "Allow host-command setup steps",
         "save": "Add stack"
       },
+      "detect": {
+        "button": "Autodetect",
+        "hint": "Read the repository and prefill the compose files, profiles, and networks.",
+        "detected": "Detected stack configuration",
+        "detectedBody": "Prefilled from the repository. Review the fields before saving.",
+        "nothing": "Nothing to autodetect",
+        "failed": "Autodetection failed"
+      },
       "edit": {
         "heading": "Edit shared stack",
         "save": "Save changes",

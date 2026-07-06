@@ -2180,6 +2180,14 @@
         "allowHostCommands": "Ana makine komutu kurulum adımlarına izin ver",
         "save": "Yığın ekle"
       },
+      "detect": {
+        "button": "Otomatik algıla",
+        "hint": "Depoyu okuyup compose dosyalarını, profilleri ve ağları önceden doldurur.",
+        "detected": "Yığın yapılandırması algılandı",
+        "detectedBody": "Depodan önceden dolduruldu. Kaydetmeden önce alanları gözden geçirin.",
+        "nothing": "Otomatik algılanacak bir şey yok",
+        "failed": "Otomatik algılama başarısız oldu"
+      },
       "edit": {
         "heading": "Paylaşılan yığını düzenle",
         "save": "Değişiklikleri kaydet",

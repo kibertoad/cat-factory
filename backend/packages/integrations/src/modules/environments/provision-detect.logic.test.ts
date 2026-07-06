@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ProvisioningRepoReader } from './provision-detect.logic.js'
-import { detectCustomManifest, detectKubernetesProvisioning } from './provision-detect.logic.js'
+import {
+  detectCustomManifest,
+  detectKubernetesProvisioning,
+  detectSharedStack,
+} from './provision-detect.logic.js'
 import { RepoReadError } from './repo-read-error.js'
 
 // A reader that THROWS on every read (as the real GitHub/GitLab client does on a non-404 —
@@ -966,5 +970,100 @@ describe('detectCustomManifest', () => {
         defaultPath: 'deploy/preview.yaml',
       }),
     ).rejects.toThrow(RepoReadError)
+  })
+})
+
+describe('detectSharedStack', () => {
+  it('detects a single self-contained compose (all reused deps inside) as the stack', async () => {
+    const reader = makeReader({
+      'docker-compose.yml': `
+services:
+  postgres:
+    image: postgres:16
+  redis:
+    image: redis:7
+  rabbitmq:
+    image: rabbitmq:3
+`,
+    })
+    const rec = await detectSharedStack(reader, { repoName: 'acme-shared-services' })
+    expect(rec.detected).toBe(true)
+    expect(rec.name).toBe('acme-shared-services')
+    expect(rec.composeFiles).toEqual(['docker-compose.yml'])
+    // A self-contained compose declares no external network — honest empty result.
+    expect(rec.managedNetworks).toEqual([])
+    expect(rec.composeProfiles).toEqual([])
+    expect(rec.notes.some((n) => n.field === 'composeFiles' && n.confidence === 'high')).toBe(true)
+  })
+
+  it('detects external networks as managed networks + layers the override family', async () => {
+    const reader = makeReader({
+      'docker-compose.yml': `
+services:
+  mysql:
+    image: mysql:8
+    networks: [acme-net]
+    profiles: [backends]
+  cockroach:
+    image: cockroachdb/cockroach
+    profiles: [peer]
+networks:
+  acme-net:
+    external: true
+`,
+      'docker-compose.override.yml': `
+services:
+  mysql:
+    ports: ['3306:3306']
+`,
+    })
+    const rec = await detectSharedStack(reader, { repoName: 'acme-shared-services' })
+    expect(rec.detected).toBe(true)
+    expect(rec.composeFiles).toEqual(['docker-compose.yml', 'docker-compose.override.yml'])
+    expect(rec.managedNetworks).toEqual(['acme-net'])
+    expect(rec.composeProfiles).toEqual(['backends', 'peer'])
+    expect(rec.notes.some((n) => n.field === 'externalNetworks' && n.confidence === 'high')).toBe(
+      true,
+    )
+  })
+
+  it('surfaces env/config templates to materialize before up', async () => {
+    const reader = makeReader({
+      'compose.yaml': `
+services:
+  app:
+    image: acme/app
+`,
+      '.env.shared-dist': 'FOO=bar',
+    })
+    const rec = await detectSharedStack(reader)
+    expect(rec.detected).toBe(true)
+    expect(rec.envFiles).toEqual([{ template: '.env.shared-dist', target: '.env.shared' }])
+  })
+
+  it('reads a compose file from a monorepo subdirectory', async () => {
+    const reader = makeReader({
+      'shared/docker-compose.yml': `
+services:
+  postgres:
+    image: postgres:16
+`,
+    })
+    const rec = await detectSharedStack(reader, { directory: 'shared' })
+    expect(rec.detected).toBe(true)
+    expect(rec.composeFiles).toEqual(['shared/docker-compose.yml'])
+  })
+
+  it('reports detected:false when the repo has no compose file', async () => {
+    const reader = makeReader({ 'README.md': '# no compose here' })
+    const rec = await detectSharedStack(reader)
+    expect(rec.detected).toBe(false)
+    expect(rec.composeFiles).toEqual([])
+    expect(rec.notes[0]?.field).toBe('provisionType')
+  })
+
+  it('throws RepoReadError when the repo is unreadable rather than reporting "not found"', async () => {
+    const reader = makeThrowingReader('GitHub GET /contents → 403: forbidden')
+    await expect(detectSharedStack(reader)).rejects.toThrow(RepoReadError)
   })
 })

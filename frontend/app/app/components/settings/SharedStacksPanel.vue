@@ -16,6 +16,7 @@ const { confirmAction, toastDone } = useConfirmAction()
 const stacks = computed(() => store.stacks)
 const busyId = ref<string | null>(null)
 const saving = ref(false)
+const detecting = ref(false)
 // null ⇒ the form is in "add" mode; a stack id ⇒ editing that stack's definition in place.
 const editingId = ref<string | null>(null)
 
@@ -88,6 +89,47 @@ function startEdit(stack: SharedStack) {
   form.composeProfiles = stack.composeProfiles.join(', ')
   form.managedNetworks = stack.managedNetworks.join(', ')
   form.allowHostCommands = stack.allowHostCommands
+}
+
+const canDetect = computed(() => Boolean(form.cloneUrl.trim()) && !detecting.value)
+
+/**
+ * Read the repo at the entered clone URL (checkout-free, via the workspace's VCS connection) and
+ * PREFILL the compose-shaped fields from the recommendation. Non-binding: the user reviews + edits
+ * before saving. Leaves the name untouched when already set, and never clears a field the scan
+ * couldn't find so a partial detection doesn't wipe manual entries.
+ */
+async function autodetect() {
+  detecting.value = true
+  try {
+    const rec = await store.detect({
+      cloneUrl: form.cloneUrl.trim(),
+      ...(form.gitRef.trim() ? { gitRef: form.gitRef.trim() } : {}),
+    })
+    if (!rec.detected) {
+      toast.add({
+        title: t('settings.sharedStacks.detect.nothing'),
+        description: rec.notes[0]?.message ?? '',
+        icon: 'i-lucide-info',
+        color: 'warning',
+      })
+      return
+    }
+    if (rec.name && !form.name.trim()) form.name = rec.name
+    if (rec.composeFiles.length) form.composeFiles = rec.composeFiles.join(', ')
+    if (rec.composeProfiles.length) form.composeProfiles = rec.composeProfiles.join(', ')
+    if (rec.managedNetworks.length) form.managedNetworks = rec.managedNetworks.join(', ')
+    toast.add({
+      title: t('settings.sharedStacks.detect.detected'),
+      description: t('settings.sharedStacks.detect.detectedBody'),
+      icon: 'i-lucide-wand-sparkles',
+      color: 'success',
+    })
+  } catch (e) {
+    notifyError(t('settings.sharedStacks.detect.failed'), e)
+  } finally {
+    detecting.value = false
+  }
 }
 
 function notifyError(title: string, e: unknown) {
@@ -299,6 +341,21 @@ async function remove(stack: SharedStack) {
           data-testid="shared-stack-git-ref"
         />
       </UFormField>
+
+      <div class="flex items-center gap-2">
+        <UButton
+          icon="i-lucide-wand-sparkles"
+          size="sm"
+          variant="soft"
+          :loading="detecting"
+          :disabled="!canDetect"
+          data-testid="shared-stack-autodetect"
+          @click="autodetect"
+        >
+          {{ t('settings.sharedStacks.detect.button') }}
+        </UButton>
+        <span class="text-[11px] text-slate-500">{{ t('settings.sharedStacks.detect.hint') }}</span>
+      </div>
 
       <UFormField
         :label="t('settings.sharedStacks.add.composeFiles')"

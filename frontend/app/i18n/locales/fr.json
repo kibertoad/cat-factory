@@ -2058,6 +2058,14 @@
         "allowHostCommands": "Autoriser les étapes de configuration par commande hôte",
         "save": "Ajouter le stack"
       },
+      "detect": {
+        "button": "Détection automatique",
+        "hint": "Lire le dépôt et préremplir les fichiers compose, les profils et les réseaux.",
+        "detected": "Configuration de la pile détectée",
+        "detectedBody": "Prérempli à partir du dépôt. Vérifiez les champs avant d'enregistrer.",
+        "nothing": "Rien à détecter automatiquement",
+        "failed": "Échec de la détection automatique"
+      },
       "edit": {
         "heading": "Modifier le stack partagé",
         "save": "Enregistrer les modifications",

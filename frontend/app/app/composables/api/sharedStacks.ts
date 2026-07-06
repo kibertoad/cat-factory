@@ -1,12 +1,13 @@
 import {
   createSharedStackContract,
   deleteSharedStackContract,
+  detectSharedStackContract,
   ensureSharedStackUpContract,
   listSharedStacksContract,
   teardownSharedStackContract,
   updateSharedStackContract,
 } from '@cat-factory/contracts'
-import type { UpdateSharedStackInput } from '~/types/sharedStacks'
+import type { DetectSharedStackInput, UpdateSharedStackInput } from '~/types/sharedStacks'
 import type { SendParams } from './client'
 import type { ApiContext } from './context'
 
@@ -22,6 +23,9 @@ export function sharedStacksApi({ send, ws }: ApiContext) {
 
     createSharedStack: (workspaceId: string, body: CreateSharedStackBody) =>
       send(createSharedStackContract, { pathPrefix: ws(workspaceId), body }),
+
+    detectSharedStack: (workspaceId: string, body: DetectSharedStackInput) =>
+      send(detectSharedStackContract, { pathPrefix: ws(workspaceId), body }),
 
     updateSharedStack: (workspaceId: string, stackId: string, body: UpdateSharedStackInput) =>
       send(updateSharedStackContract, {

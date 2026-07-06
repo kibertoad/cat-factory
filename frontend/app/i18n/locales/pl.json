@@ -2058,6 +2058,14 @@
         "allowHostCommands": "Zezwól na kroki konfiguracji z poleceniami hosta",
         "save": "Dodaj stos"
       },
+      "detect": {
+        "button": "Wykryj automatycznie",
+        "hint": "Odczytaj repozytorium i wypełnij wstępnie pliki compose, profile i sieci.",
+        "detected": "Wykryto konfigurację stosu",
+        "detectedBody": "Wypełniono wstępnie na podstawie repozytorium. Sprawdź pola przed zapisaniem.",
+        "nothing": "Nie ma nic do automatycznego wykrycia",
+        "failed": "Automatyczne wykrywanie nie powiodło się"
+      },
       "edit": {
         "heading": "Edytuj współdzielony stos",
         "save": "Zapisz zmiany",

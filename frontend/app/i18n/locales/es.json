@@ -2058,6 +2058,14 @@
         "allowHostCommands": "Permitir pasos de configuración con comandos del host",
         "save": "Añadir stack"
       },
+      "detect": {
+        "button": "Detectar automáticamente",
+        "hint": "Lee el repositorio y rellena los archivos de compose, los perfiles y las redes.",
+        "detected": "Configuración del stack detectada",
+        "detectedBody": "Rellenado desde el repositorio. Revisa los campos antes de guardar.",
+        "nothing": "No hay nada que detectar automáticamente",
+        "failed": "La detección automática falló"
+      },
       "edit": {
         "heading": "Editar stack compartido",
         "save": "Guardar cambios",

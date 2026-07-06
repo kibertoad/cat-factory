@@ -322,4 +322,94 @@ describe('SharedStackService', () => {
     })
     await expect(svc.remove(WS, created.id)).resolves.toBeUndefined()
   })
+
+  describe('detect', () => {
+    // A checkout-free RepoFiles reader over a flat path→content map (only the two methods the
+    // detector calls) wrapped in a RunRepoContext, plus a resolver that hands it back.
+    function makeResolver(files: Record<string, string>, baseBranch = 'main') {
+      const calls: { owner: string; repo: string; provider?: string }[] = []
+      const repoFiles = {
+        async getFile(path: string) {
+          return path in files ? { content: files[path]!, sha: 'sha' } : null
+        },
+        async listDirectory(path: string) {
+          const prefix = path ? `${path}/` : ''
+          const children = new Map<string, 'file' | 'dir'>()
+          for (const full of Object.keys(files)) {
+            if (!full.startsWith(prefix)) continue
+            const rest = full.slice(prefix.length)
+            if (!rest) continue
+            const slash = rest.indexOf('/')
+            if (slash === -1) children.set(rest, 'file')
+            else children.set(rest.slice(0, slash), 'dir')
+          }
+          return [...children].map(([name, type]) => ({ name, type, path: prefix + name }))
+        },
+      }
+      const resolve = async (
+        _ws: string,
+        coords: { owner: string; repo: string; provider?: string },
+      ) => {
+        calls.push(coords)
+        return { repo: repoFiles, baseBranch } as never
+      }
+      return { resolve, calls }
+    }
+
+    function detectService(
+      repo: SharedStackRepository,
+      resolveRepoFilesForWorkspace?: (ws: string, coords: never) => Promise<never>,
+    ): SharedStackService {
+      let n = 0
+      return new SharedStackService({
+        sharedStackRepository: repo,
+        workspaceRepository,
+        idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
+        clock: { now: () => 1_700_000_000_000 },
+        ...(resolveRepoFilesForWorkspace ? { resolveRepoFilesForWorkspace } : {}),
+      })
+    }
+
+    it('reads the clone URL repo and recommends compose files + managed networks', async () => {
+      const { resolve, calls } = makeResolver({
+        'docker-compose.yml': `
+services:
+  mysql:
+    image: mysql:8
+    networks: [acme-net]
+networks:
+  acme-net:
+    external: true
+`,
+      })
+      const svc = detectService(makeRepo(), resolve)
+      const rec = await svc.detect(WS, {
+        cloneUrl: 'https://github.com/acme/acme-shared-services.git',
+      })
+      expect(rec.detected).toBe(true)
+      expect(rec.name).toBe('acme-shared-services')
+      expect(rec.composeFiles).toEqual(['docker-compose.yml'])
+      expect(rec.managedNetworks).toEqual(['acme-net'])
+      // The clone URL was parsed into the coords the resolver was called with.
+      expect(calls).toEqual([{ owner: 'acme', repo: 'acme-shared-services', provider: 'github' }])
+    })
+
+    it('reports detected:false (no throw) when no VCS resolver is wired', async () => {
+      const svc = detectService(makeRepo())
+      const rec = await svc.detect(WS, {
+        cloneUrl: 'https://github.com/acme/acme-shared-services.git',
+      })
+      expect(rec.detected).toBe(false)
+      expect(rec.notes[0]?.message).toContain('No VCS connection')
+    })
+
+    it('reports detected:false when the resolver has no connection for the repo', async () => {
+      const svc = detectService(makeRepo(), async () => null as never)
+      const rec = await svc.detect(WS, {
+        cloneUrl: 'https://github.com/acme/acme-shared-services.git',
+      })
+      expect(rec.detected).toBe(false)
+      expect(rec.notes[0]?.message).toContain('acme/acme-shared-services')
+    })
+  })
 })

@@ -538,6 +538,14 @@
         "allowHostCommands": "Host-Command-Setup-Schritte erlauben",
         "save": "Stack hinzufügen"
       },
+      "detect": {
+        "button": "Automatisch erkennen",
+        "hint": "Das Repository lesen und Compose-Dateien, Profile und Netzwerke vorausfüllen.",
+        "detected": "Stack-Konfiguration erkannt",
+        "detectedBody": "Aus dem Repository vorausgefüllt. Überprüfen Sie die Felder vor dem Speichern.",
+        "nothing": "Nichts automatisch zu erkennen",
+        "failed": "Automatische Erkennung fehlgeschlagen"
+      },
       "edit": {
         "heading": "Gemeinsamen Stack bearbeiten",
         "save": "Änderungen speichern",

@@ -2095,6 +2095,11 @@ function createSharedStacksModule(deps: CoreDependencies): SharedStacksModule | 
     clock: deps.clock,
     ...(deps.composeRuntime ? { composeRuntime: deps.composeRuntime } : {}),
     ...(deps.sharedStackCloneToken ? { cloneToken: deps.sharedStackCloneToken } : {}),
+    // Enables the checkout-free repo autodetection (`detect`); wired from the same coords-bound
+    // RepoFiles resolver the environment detector uses, so both facades get it for free.
+    ...(deps.resolveRepoFilesForCoords
+      ? { resolveRepoFilesForWorkspace: deps.resolveRepoFilesForCoords }
+      : {}),
   })
   return { service }
 }

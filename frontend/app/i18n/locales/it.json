@@ -538,6 +538,14 @@
         "allowHostCommands": "Consenti passaggi di setup con comandi host",
         "save": "Aggiungi stack"
       },
+      "detect": {
+        "button": "Rilevamento automatico",
+        "hint": "Legge il repository e precompila i file compose, i profili e le reti.",
+        "detected": "Configurazione dello stack rilevata",
+        "detectedBody": "Precompilato dal repository. Controlla i campi prima di salvare.",
+        "nothing": "Niente da rilevare automaticamente",
+        "failed": "Rilevamento automatico non riuscito"
+      },
       "edit": {
         "heading": "Modifica stack condiviso",
         "save": "Salva le modifiche",

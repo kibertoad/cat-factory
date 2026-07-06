@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { SharedStack, UpdateSharedStackInput } from '~/types/sharedStacks'
+import type {
+  DetectSharedStackInput,
+  SharedStack,
+  UpdateSharedStackInput,
+} from '~/types/sharedStacks'
 import { useWorkspaceStore } from '~/stores/workspace'
 
 /**
@@ -34,6 +38,11 @@ export const useSharedStacksStore = defineStore('sharedStacks', () => {
     return created
   }
 
+  async function detect(input: DetectSharedStackInput) {
+    const ws = useWorkspaceStore()
+    return api.detectSharedStack(ws.requireId(), input)
+  }
+
   async function update(stackId: string, patchInput: UpdateSharedStackInput) {
     const ws = useWorkspaceStore()
     const updated = await api.updateSharedStack(ws.requireId(), stackId, patchInput)
@@ -61,5 +70,5 @@ export const useSharedStacksStore = defineStore('sharedStacks', () => {
     return updated
   }
 
-  return { stacks, hydrate, create, update, remove, ensureUp, teardown }
+  return { stacks, hydrate, create, detect, update, remove, ensureUp, teardown }
 })
