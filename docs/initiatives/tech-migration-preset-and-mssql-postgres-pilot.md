@@ -1,6 +1,6 @@
 # Initiative: Technological-migration preset & the MSSQL→PostgreSQL pilot
 
-**Status:** in progress (T1–T5 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam) · **Owner:** orchestration · **Started:** 2026-07-06
+**Status:** in progress (T1–T5, T7, T8 done — preset phase templates + ingest normalization + full-interview qa seeding + `migration.*` fragment pack + methodology prompt pack & interviewer promptAddition seam + `seedMigrationPlan` post-processor + **`preset_tech_migration` registration**) · **Owner:** orchestration · **Started:** 2026-07-06
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -76,16 +76,17 @@ classic behaviour-preservation traps.
 
 ## Hard dependencies on the parent roadmap (STOP conditions)
 
-| Parent slice ([`initiative-presets-and-docs-refresh.md`](./initiative-presets-and-docs-refresh.md))                                                                                   | Status at authoring                    | Blocks (this tracker)          | Why                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1–S5: contracts + registry, gate-override seam, create/planning integration, SPA picker/renderer, loop/ingest glue (`seedPlan` at ingest + full `spawn` decoration incl. `taskType`) | ✅ done (#812, #880, #883, #886, #890) | —                              | Satisfied preconditions, recorded so a reader knows what this design already assumes. S5's ingest hook + spawn decoration is what T2/T7/T8 build on.                                                                                                                                               |
-| **S8** `preset_docs_refresh` registration (the FIRST real preset)                                                                                                                     | ✅ done (#911)                         | **T8** (transitively T10, T11) | S8 pioneers the registration pattern (descriptor + hooks + review mapping, incl. the full-gate-array rule from the parent's [S2] gotcha). Two presets pioneering that pattern in parallel is exactly the overlap this tracker exists to avoid; T8 **copies** S8's landed shape.                    |
-| **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ✅ done (#924)                         | **T10** (transitively T11)     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness. **S9 landed the reusable fake-plan seam (`FakeProfile.initiativePlan` → `FakeAgentExecutor.initiativePlan`) + the env-configurable Node loop interval — T10 drives its migration plan through the SAME seam.** |
+| Parent slice ([`initiative-presets-and-docs-refresh.md`](./initiative-presets-and-docs-refresh.md))                                                                                   | Status at authoring                    | Blocks (this tracker) | Why                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1–S5: contracts + registry, gate-override seam, create/planning integration, SPA picker/renderer, loop/ingest glue (`seedPlan` at ingest + full `spawn` decoration incl. `taskType`) | ✅ done (#812, #880, #883, #886, #890) | —                     | Satisfied preconditions, recorded so a reader knows what this design already assumes. S5's ingest hook + spawn decoration is what T2/T7/T8 build on.                                                                                                                                              |
+| **S8** `preset_docs_refresh` registration (the FIRST real preset)                                                                                                                     | ✅ done (#911)                         | —                     | S8 pioneered the registration pattern (descriptor + hooks + review mapping, incl. the full-gate-array rule from the parent's [S2] gotcha). T8 **copied** S8's landed shape.                                                                                                                       |
+| **S9** E2E baseline (create-with-preset → auto-plan → spawn-with-decoration) + `backend/docs/initiative-presets.md`                                                                   | ✅ done (#924)                         | —                     | The migration E2E must extend S9's baseline fixture, never fork a parallel harness. **S9 landed the reusable fake-plan seam (`FakeProfile.initiativePlan` → `FakeAgentExecutor.initiativePlan`) + the env-configurable Node loop interval — T10 drives its migration plan through the SAME seam.** |
 
-Both parent blockers are now landed. Unblocked today (parallel-safe with the parent roadmap): T7,
-T9 (T1–T5 done); **T8** (parent S8 done — waits only on T7); **T10** on the parent side (parent S9
-done — waits only on T8). Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 —
-the next critical-path slice T8 now waits only on **T7**.
+Both parent blockers (S8 #911, S9 #924) are now landed, and T7 + T8 have landed on this tracker.
+Unblocked today (parallel-safe with the parent roadmap): T9 and **T10** (its blockers — parent S9
+✅ and T8 ✅ — are both satisfied). Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9)
+T10 → T11 — the next critical-path slice is now **T10** (fully unblocked), then T11 (waits on T9 +
+T10).
 
 ## Target architecture
 
@@ -270,15 +271,15 @@ loop/ingest glue (S5) is already landed and is consumed, never modified, here.
 | T3  | Full-interview qa seeding: extend `seedPresetInterviewQa` to `interview: 'full'` presets + a generic interviewer "build on seeded answers, don't re-ask" prompt line                                                                          | SYSTEM    | —                             | ✅ done | #904   |
 | T4  | `migration.*` prompt-fragment collection (behaviour-preservation, migration-discipline, confidence-case authoring standard) + tests                                                                                                           | MIGRATION | —                             | ✅ done | #909   |
 | T5  | Methodology prompt pack: promptAdditions for interviewer/analyst/planner (transitive blast-zone method, per-phase item briefs, confidence-case/design gating expectations) as exported constants + tests                                      | MIGRATION | —                             | ✅ done | #913   |
-| T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ⬜ todo |        |
-| T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4, T5, T7                                                                           | MIGRATION | **parent S8**, T1, T2, T3, T7 | ⬜ todo |        |
+| T7  | `seedMigrationPlan` pure post-processor + unit tests over draft fixtures (spawn stamping under `migrationDocsDir`, confidence-case injection/gating/dependsOn, granularity caps, `humanReview` gate arrays) — lands unwired, dormant until T8 | MIGRATION | —                             | ✅ done | #921   |
+| T8  | `preset_tech_migration` registration: descriptor (form, `phaseTemplate`, `policyDefaults`, review mapping, `planningPipelineId: 'pl_initiative'`) wiring T4, T5, T7                                                                           | MIGRATION | **parent S8**, T1, T2, T3, T7 | ✅ done | #923   |
 | T9  | Synthetic MSSQL fixture repo (schema + procs/triggers/views + app code + dual-target-ready integration tests + CI) exercising the behaviour traps (see Pilot)                                                                                 | PILOT     | —                             | ⬜ todo |        |
 | T10 | Migration E2E extending the S9 baseline: create-with-preset → full interview with seeded qa → template-shaped plan → spawn decoration → confidence-case gate                                                                                  | BOTH      | **parent S9**, T8             | ⬜ todo |        |
 | T11 | Pilot run + validation: real MSSQL→PG initiative through the product against T9's repo; validation checklist (see Pilot); learnings folded back into this tracker                                                                             | PILOT     | T8, T9, T10                   | ⬜ todo |        |
 
-Ordering: T1–T5 are done; T7 and T9 are unblocked and parallel-safe with the parent
-roadmap. Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 (T8 now waits
-only on parent S8 + T7).
+Ordering: T1–T5, T7 and T8 are done; T9 and T10 are unblocked and parallel-safe with the
+parent roadmap. Critical path: T1 → T2 → T3 → (+ parent S8) T8 → (+ parent S9) T10 → T11 (T8
+landed and parent S9 #924 landed; T10 is now fully unblocked, T11 waits on T9 + T10).
 
 ## Pilot: MSSQL → PostgreSQL
 
@@ -413,6 +414,69 @@ New, migration-specific:
   `prompt-additions.ts` (`MIGRATION_PROMPT_ADDITIONS`, keyed by the kernel initiative kind
   constants). T7's `seedMigrationPlan`, T8's descriptor `phaseTemplate`, and T10's E2E all
   import the ids from `phases.ts` — do NOT retype a phase id anywhere else.
+- **[T7] `seedMigrationPlan` lives in `agents/src/presets/tech-migration/seed-plan.ts`**, keyed
+  purely off `item.phaseId`. It exports the field-key constants (`FIELD_MIGRATION_DOCS_DIR`,
+  `FIELD_HUMAN_REVIEW`, `DEFAULT_MIGRATION_DOCS_DIR`) and `migrationReviewGates` for T8's descriptor
+  to reuse — the form's field keys/defaults are defined ONCE here, not retyped in the descriptor.
+  The migration fragment ids come from `@cat-factory/prompt-fragments`: T8's `defaultFragmentIds`
+  draws the full `MIGRATION_FRAGMENT_IDS`, while T7 stamps per item the subset that APPLIES to the
+  item's primary producer via `migrationFragmentIdsFor(agentKind)` (`coder` for coding items,
+  `doc-writer` for documents). This is deliberate: manual per-block `fragmentIds` pins bypass a
+  fragment's `appliesTo` at run time (the resolver folds pinned bodies in unconditionally — only the
+  automatic service-fragment selector consults `appliesTo`), so the scoping is applied at STAMP time
+  instead, or a doc task would receive the coding-only `migration.behaviour-preservation` standard.
+- **[T7] The shared `seedPlan` primitives live in `presets/plan-helpers.ts`.** `strInput`, `fileSlug`,
+  `uniqueDocPath`, and the merge-step gate-override derivation (`mergeGateOverride`) are ONE
+  implementation shared by docs-refresh and tech-migration — do NOT re-copy them per preset.
+  `migrationReviewGates` / `docsReviewGates` are thin per-preset wrappers over `mergeGateOverride`.
+- **[T7] Per-phase archetype (which item is a document vs coding) is a DATA table, derived from the
+  phase, not a planner marker** — `coerceInitiativePlan` strips the planner's `spawn`, so the hook
+  can't read a hint off the draft. The document phases + their docKind/canonical-filename/gate policy
+  are declared once in `DOC_PHASE_DECORATIONS` (mirroring docs-refresh's `PHASE_DECORATIONS`); a phase
+  with no entry is CODING. Phases 1/3 are DOCUMENT phases (blast-zone report / transition-design),
+  phase 2 is coverage CODING closed by the confidence-case DOCUMENT, phases 4/5 are CODING. The
+  confidence case is matched within phase 2 by a title heuristic ANCHORED at the title start
+  (`/^(verb )*confidence[-\s]?case\b/`) so a coverage item that merely mentions it is not hijacked; a
+  planner-authored one is canonicalized rather than duplicated, and absent it is injected last.
+- **[T7] An `always`-gated document asserts its gate.** `asDocument` THROWS if an intrinsic control
+  point (confidence-case / transition-design) resolves to no merge gate (a doc pipeline with no
+  `merger` step) rather than silently shipping it unattended — the invariant is enforced, not hoped.
+- **[T7] Coding items carry NO gate override.** Their pipeline is chosen at spawn time by the policy's
+  estimate rules (`pl_quick`/`pl_full`), so a length-correct `spawn.gates` array can't be pre-computed
+  at seed time (and `selectInitiativePipeline` lives in orchestration, which agents can't import). This
+  is correct, not a gap: the coverage→delivery human control is the **confidence-case gate** (phase 4
+  can't start until phase 2 — incl. the gated confidence case — completes), plus the always-gated
+  transition-design document. Per-delivery-PR gates would duplicate that control. The confidence-case
+  and transition-design documents are human-gated ALWAYS (intrinsic control points); `humanReview`
+  only additionally gates the informational blast-zone report.
+- **[T7] Phase 5 has no separate document task.** The §D "closing section appended to
+  `transition-design.md`" is committed by the phase-5 verify/decommission CODING agent editing the
+  existing file — NOT a second document writer creating it (which would break single-writer). So T7
+  decorates all phase-5 items as coding.
+- **[T7] The granularity cap drops, then scrubs.** Phase-2 coverage is capped at 8 items; dropped
+  ids are scrubbed from every surviving item's `dependsOn` (and never appear in the confidence case's
+  deps) so no dangling reference trips `validatePlanDraft`'s unknown-dep check at ingest.
+- **[T8] `preset_tech_migration` is pure WIRING — it adds no new capability.** The registration
+  (`agents/src/presets/tech-migration/preset.ts`, self-registering as an import side effect, the
+  docs-refresh / `@cat-factory/gates` pattern) only COMPOSES the landed pieces: the wire
+  `phaseTemplate` (five `MIGRATION_PHASE_IDS` phases, all `required`, `allowAdditionalPhases: false`)
+  carries plan SHAPE (enforced by the generic ingest normalizer, NEVER hand-rolled here);
+  `seedMigrationPlan` (T7) is its `seedPlan`; `MIGRATION_PROMPT_ADDITIONS` (T5) its `promptAdditions`;
+  `MIGRATION_FRAGMENT_IDS` (T4) its `defaultFragmentIds`. The two form-field keys the hook reads
+  (`migrationDocsDir` / `humanReview`) are IMPORTED from `seed-plan.ts` (defined once), never retyped.
+- **[T8] The descriptor's `phaseTemplate` phases come from `MIGRATION_PHASE_IDS` (imported), so the
+  ids are byte-identical to the ones `seedMigrationPlan` keys off and the normalizer matches** — the
+  canonical-phase-ids-are-a-contract rule realised at the registration. A `preset.test.ts` guard
+  asserts the template ids equal `MIGRATION_PHASE_ID_ORDER` verbatim.
+- **[T8] NO `detect` hook** (so the descriptor's derived `probe` is `false` and the SPA never fires a
+  probe): a create-time probe could read only the FROM-side stack, which the analyst rediscovers far
+  more thoroughly at planning time — the former T6 detector was cut (see "Out of scope"). Contrast
+  docs-refresh, whose `detect` reuses S6's layout probe.
+- **[T8] `humanReview` defaults ON via the field's `default: 'true'` string** (the SPA seeds a
+  checked box only when a `checkbox` field's `default` is the literal `'true'`), matching the
+  descriptor-level `humanReviewDefault: true`. `seedMigrationPlan` also treats an ABSENT
+  `humanReview` as ON (`!== false`), so the two agree, and the confidence-case / transition-design
+  documents stay gated regardless of the toggle (intrinsic control points).
 
 ## Out of scope
 

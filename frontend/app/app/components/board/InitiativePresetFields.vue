@@ -49,6 +49,22 @@ function set(key: string, value: InitiativePresetInputValue | undefined): void {
   model.value = next
 }
 
+/**
+ * Set a checkbox value. A checkbox whose descriptor default is ON (`default: 'true'`) must be able
+ * to persist an explicit `false`: {@link set} otherwise drops a `false` (an off box "stays unset"),
+ * which for a default-ON field is indistinguishable from "untouched, still on" — so a consumer that
+ * reads the opt-out as `humanReview !== false` (e.g. `seedMigrationPlan`) could never observe the
+ * unchecked state and the toggle would be dead. A default-OFF checkbox keeps the drop-when-false
+ * behaviour (absent === unchecked), so it never freezes a redundant `false`.
+ */
+function setCheckbox(field: InitiativePresetField, checked: boolean): void {
+  if (!checked && field.default === 'true') {
+    model.value = { ...model.value, [field.key]: false }
+    return
+  }
+  set(field.key, checked)
+}
+
 function stringValue(key: string): string {
   const v = model.value[key]
   return typeof v === 'string' ? v : ''
@@ -118,7 +134,7 @@ function selectItems(field: InitiativePresetField) {
       <USwitch
         v-else-if="field.type === 'checkbox'"
         :model-value="boolValue(field.key)"
-        @update:model-value="(v: boolean) => set(field.key, v)"
+        @update:model-value="(v: boolean) => setCheckbox(field, v)"
       />
 
       <UTextarea
