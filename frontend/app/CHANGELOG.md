@@ -1,5 +1,32 @@
 # @cat-factory/app
 
+## 0.101.0
+
+### Minor Changes
+
+- b6e36b5: Add German (`de`) and Italian (`it`) locales. The `@cat-factory/app` layer now ships
+  `i18n/locales/de.json` and `i18n/locales/it.json` alongside the existing catalogs, both
+  registered in the `nuxt.config.ts` `i18n.locales` array and given `numberFormats` /
+  `datetimeFormats` entries in `i18n.config.ts`. Neither needs a custom plural selector (both
+  use vue-i18n's default two-form pluralization). The language switcher picks them up
+  automatically since it renders from the i18n locale list.
+
+## 0.100.3
+
+### Patch Changes
+
+- 6a701ef: Kubernetes engine (Infrastructure → environments) UX:
+
+  - **Auto-probe a saved connection on open.** When the configurator shows an already-registered
+    kube handler it now runs the saved-connection test automatically (reusing the server-side
+    token), so the operator sees a LIVE verdict instead of only the static "connection
+    established" card — which merely means a config is stored and hid a silently-expired token or
+    a recreated cluster.
+  - **Recommend a long-lived token.** The local-k3s form hint now steers the operator to a
+    durable token (flagging that a plain `kubectl create token` expires in 1 hour, and to add
+    `--duration=720h` or create a non-expiring `kubernetes.io/service-account-token` Secret).
+    Mirrored across all locales.
+
 ## 0.100.2
 
 ### Patch Changes
