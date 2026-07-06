@@ -95,6 +95,29 @@ describe('seedPipelines — named-gate lowering', () => {
     expect(gateKindOf('pl_document')).toEqual(['doc-reviewer'])
   })
 
+  it('defines the docs-refresh spawn pipelines as a single author step + the merge tail', () => {
+    // initiative-presets slice 7: each is one authoring kind, then conflicts → ci → merger, with
+    // no human gates (the author opens the PR the tail then gates + ships). Diagrams + READMEs
+    // reuse doc-writer / pl_document_quick, so only comments + business-rules get their own.
+    const map = byId()
+    expect(map.get('pl_code_comments')!.agentKinds).toEqual([
+      'code-commenter',
+      'conflicts',
+      'ci',
+      'merger',
+    ])
+    expect(map.get('pl_business_docs')!.agentKinds).toEqual([
+      'business-documenter',
+      'conflicts',
+      'ci',
+      'merger',
+    ])
+    for (const id of ['pl_code_comments', 'pl_business_docs']) {
+      expect(map.get(id)!.gates, `${id} gates`).toBeUndefined()
+      expect(map.get(id)!.enabled, `${id} enabled`).toBeUndefined()
+    }
+  })
+
   it('places a deployer before the first env-consumer in every tester/human-test pipeline', () => {
     for (const p of seedPipelines()) {
       const firstConsumer = p.agentKinds.findIndex((k) => ENV_CONSUMERS.has(k))
