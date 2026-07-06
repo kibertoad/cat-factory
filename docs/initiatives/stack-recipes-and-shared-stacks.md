@@ -655,9 +655,9 @@ Deployer-side gate this pairs with.
 >   > warmup → migrations → search-index build → frontend build-file gate] + a `compose-exec` health gate
 >   - the M-rows as `prerequisites` preflights [docker-daemon / memory ≥16 / registry-auth / mkcert-ca /
 >     > hosts-entries / env-secrets-marker] with copy-paste remediation) and `reference/shared-stack.json`
->     (the target `CreateSharedStackInput`: the PUBLIC `backends`-only subset — the CI-validatable config —
->     with `acme-net` as a managed network, the `.env.shared` materialization, users-sync + Debezium-register
->     setup steps, and the private-registry preflight marked NON-required so the public subset still comes up).
+>     > (the target `CreateSharedStackInput`: the PUBLIC `backends`-only subset — the CI-validatable config —
+>     > with `acme-net` as a managed network, the `.env.shared` materialization, users-sync + Debezium-register
+>     > setup steps, and the private-registry preflight marked NON-required so the public subset still comes up).
 > - **Golden test** — `pilot-golden.logic.test.ts` reads each fixture dir over a filesystem
 >   `ProvisioningRepoReader` (the same port the GitHub/GitLab reader implements) and asserts detector
 >   output `toEqual` the golden, PLUS that the `reference/` configs are schema-valid (`stackRecipeSchema`
@@ -681,7 +681,8 @@ pilot:golden`) regenerates (`--write`) or diffs (`--check`, default) the goldens
 > compose dir the root-scoped detector scans), so the golden has NO `envFiles` and the reference recipe
 > supplies them by hand — exactly the gap the wizard's directory scoping + the analyst close. (3) No
 > persistence / migration work — everything rides the existing `provisioning` blob + the fixtures; this
-> slice is test/fixtures/docs/script-only (empty changeset). (4) The repo-root `.gitignore` excludes
+> slice is test/fixtures/docs/script-only (a patch changeset — no `dist` change, but the published
+> `package.json` gains the `pilot:golden` script). (4) The repo-root `.gitignore` excludes
 > `.env.*` (keeping only `.env.example`), which would silently drop the `.env.shared.example` fixture — a
 > nested `__fixtures__/pilot/.gitignore` re-includes it (verified with `git check-ignore`). (5) Slice 10
 > (the live compose-up smoke of the shared-services public subset + a synthetic consumer) still needs a

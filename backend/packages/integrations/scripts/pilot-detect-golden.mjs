@@ -20,6 +20,8 @@
 // them to the fixtures' placeholders BEFORE comparing — either PILOT_SANITIZE_MAP (a JSON
 // array of {"from","to"}) or a gitignored `scripts/pilot-sanitize.local.json` of the same
 // shape. Keeping the map out of the repo is deliberate: no upstream name is committed here.
+// `--write` REFUSES to run against a live clone with no map (exit 2), so a golden refresh can
+// never accidentally bake upstream names into the committed files.
 //
 // Usage:
 //   node scripts/pilot-detect-golden.mjs            # --check (default): diff, exit 1 on drift
@@ -105,6 +107,22 @@ const targets = [
     detect: (reader) => detectSharedStack(reader, { repoName: 'acme-shared-services' }),
   },
 ]
+
+// Refuse to REGENERATE goldens from a live clone with no sanitize map: that would write raw
+// upstream names into the committed goldens, defeating "no upstream name is committed here".
+// (The --check path only warns; --write is the committing action, so it hard-fails instead.)
+if (mode === 'write' && sanitizeMap.length === 0) {
+  const liveTargets = targets.filter((t) => process.env[t.liveEnv])
+  if (liveTargets.length > 0) {
+    console.error(
+      `Refusing to --write goldens from a LIVE clone (${liveTargets.map((t) => t.liveEnv).join(', ')}) ` +
+        'with no sanitize map — this would commit unsanitized upstream names. Set PILOT_SANITIZE_MAP ' +
+        'or scripts/pilot-sanitize.local.json first, or regenerate from the committed fixtures ' +
+        '(unset the live env var(s)).',
+    )
+    process.exit(2)
+  }
+}
 
 let drift = 0
 for (const target of targets) {
