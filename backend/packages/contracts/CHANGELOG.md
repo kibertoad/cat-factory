@@ -1,5 +1,45 @@
 # @cat-factory/contracts
 
+## 0.119.0
+
+### Minor Changes
+
+- 8728bf7: Capture per-run diagnostics on `agent_runs` for after-the-fact investigation. Each run now
+  records a `diagnostics` object (riding in the run's `detail` JSON, like `notes`/`frontendBindings`)
+  with the most recent container-step dispatch context — `agentKind`, resolved `model`, the `repo`
+  (owner/name/baseBranch/provider), the **execution backend** (`local-native` vs `local-container`
+  vs `runner-pool` vs `cloudflare-container` — the datum that distinguishes a native host-process run
+  from a sandboxed container), and the control-plane host `platform`. The backend is reported by the
+  runner transport (a new optional `RunnerTransport.backend` / `RunnerJobView.backend`, stamped by
+  the shared job client; the native/container router stamps its per-job leg).
+
+  Also preserves the harness's fine-grained failure `cause` (`git` / `api` / `no-usable-output` /
+  `no-changes`) on the failure's machine-readable `reason` instead of collapsing it to the coarse
+  `agent` kind — so a push/clone failure reads as `git`, not a generic agent error, without grepping
+  the transcript. No schema migration (the diagnostics ride in the existing `detail` column; the
+  cause rides on the existing `failure.reason`); mirrored across both runtimes with a cross-runtime
+  conformance round-trip assertion.
+
+- 7157908: Model presets now support reseeding, mirroring pipelines and merge presets, plus a new
+  built-in "Claude Opus 4.8" preset (everything `claude-opus`).
+
+  - Built-in model presets carry stable catalog ids (`mdp_kimi` / `mdp_glm` / `mdp_claude`)
+    and a monotonic `version`. The workspace snapshot ships `modelPresetCatalogVersions`, and
+    `POST /workspaces/:ws/model-presets/:id/reseed` restores a built-in to the current catalog
+    (adopt an update, repair drift, or materialise a new built-in that appeared). The SPA gains
+    a once-per-session "model preset updates" advisory (reseed / add) like the pipeline and
+    merge-preset ones.
+  - The seeded workspace DEFAULT preset is now a deployment fact: Cloudflare and Node default to
+    Kimi K2.7 (Cloudflare-runnable on the bare baseline), local mode defaults to Claude Opus 4.8
+    (local runs subscription models via the ambient CLI / a leased personal credential). The
+    deployment default is applied only at first seed, so a user's later manual default choice is
+    always preserved.
+
+  Breaking (pre-1.0, no migration): model presets gain a nullable `version` column
+  (D1 `0043_model_preset_versioning`; Drizzle migration). Workspaces seeded before this change
+  hold the old index-based preset ids (`mdp-seed-0/1`); they are treated as custom presets, and
+  the three stable built-ins are offered via the reseed advisory rather than migrated in place.
+
 ## 0.118.0
 
 ### Minor Changes
