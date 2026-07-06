@@ -139,16 +139,31 @@ const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s
 // its container caught mid cold-boot) must stop looking live — no spinner, no pulse,
 // no "spinning up container" phase.
 const runFailed = computed(() => props.instance.status === 'failed')
-/** A step that is genuinely, currently working (not a stale mid-flight step). */
-function liveWorking(state: AgentState) {
-  return state === 'working' && !runFailed.value
+/**
+ * A reviewer gate (requirements-review / clarity-review) folding the answers or
+ * re-reviewing in the durable driver: the step parks in `waiting_decision` but is actively
+ * doing background LLM work and needs NO human, so it must read as working (a spinning
+ * loader), not the waiting-for-a-human question mark.
+ */
+function backgroundReview(s: PipelineStep) {
+  return reviews.isBackground(s.agentKind, props.instance.blockId)
+}
+/**
+ * A step that is genuinely, currently working (not a stale mid-flight step) — including a
+ * reviewer gate doing background fold/re-review work.
+ */
+function liveWorking(s: PipelineStep) {
+  return (s.state === 'working' || backgroundReview(s)) && !runFailed.value
 }
 /**
  * The state visual (label/color/icon) for a step: a step left `working` when the run
- * failed reads as "Failed" with a red cross, not a frozen "Working" loader.
+ * failed reads as "Failed" with a red cross, not a frozen "Working" loader; a reviewer gate
+ * mid background cycle reads as "Working" (a spinning loader), not "Needs decision".
  */
-function stepVisual(state: AgentState) {
-  return isFailedStep(state, runFailed.value) ? FAILED_STEP_META : STATE_META.value[state]
+function stepVisual(s: PipelineStep) {
+  if (isFailedStep(s.state, runFailed.value)) return FAILED_STEP_META
+  if (backgroundReview(s)) return STATE_META.value.working
+  return STATE_META.value[s.state]
 }
 
 /** A step counts as fully complete only once its state is `done`. */
@@ -248,14 +263,14 @@ const ITEM_ICON: Record<string, string> = {
         <!-- rail node -->
         <span
           class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 bg-slate-950"
-          :class="liveWorking(s.state) ? 'step-active' : ''"
-          :style="{ borderColor: stepVisual(s.state).color }"
+          :class="liveWorking(s) ? 'step-active' : ''"
+          :style="{ borderColor: stepVisual(s).color }"
         >
           <UIcon
-            :name="stepVisual(s.state).icon"
+            :name="stepVisual(s).icon"
             class="h-4 w-4"
-            :class="liveWorking(s.state) ? 'animate-spin' : ''"
-            :style="{ color: stepVisual(s.state).color }"
+            :class="liveWorking(s) ? 'animate-spin' : ''"
+            :style="{ color: stepVisual(s).color }"
           />
         </span>
 
@@ -307,9 +322,9 @@ const ITEM_ICON: Record<string, string> = {
             </div>
             <span
               class="ms-auto shrink-0 text-[11px] font-medium"
-              :style="{ color: stepVisual(s.state).color }"
+              :style="{ color: stepVisual(s).color }"
             >
-              {{ stepVisual(s.state).label }}
+              {{ stepVisual(s).label }}
             </span>
 
             <!-- restart-from-here: revealed on row hover, arms a two-click confirm
