@@ -1,5 +1,10 @@
 import type { GateProviderOverrides } from '@cat-factory/gates'
-import { mountAuthGate, registerCoreControllers } from '@cat-factory/server'
+import {
+  buildMisconfiguredResponse,
+  isConfigValidationError,
+  mountAuthGate,
+  registerCoreControllers,
+} from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -57,13 +62,25 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     }),
   )
   app.use('*', async (c, next) => {
-    c.set(
-      'container',
-      buildContainer(c.env, options.overrides, {
-        cloudflareModelsEnabled: options.cloudflareModelsEnabled,
-        gateProviders: options.gateProviders,
-      }),
-    )
+    try {
+      c.set(
+        'container',
+        buildContainer(c.env, options.overrides, {
+          cloudflareModelsEnabled: options.cloudflareModelsEnabled,
+          gateProviders: options.gateProviders,
+        }),
+      )
+    } catch (err) {
+      // A mandatory binding / var is missing or invalid (e.g. TELEMETRY_DB unbound, ENCRYPTION_KEY
+      // absent). Rather than 500-ing every request opaquely, serve the misconfiguration fallback so
+      // the SPA renders its dedicated error screen listing exactly what to add to wrangler.toml. The
+      // Worker rebuilds the container per request, so it recovers automatically once fixed. CORS
+      // headers are added by the cors middleware above on the way out.
+      if (isConfigValidationError(err)) {
+        return buildMisconfiguredResponse(new URL(c.req.url).pathname, err.problems)
+      }
+      throw err
+    }
     await next()
   })
 

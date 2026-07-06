@@ -2,14 +2,19 @@ import { serve } from '@hono/node-server'
 import {
   type AppEnv,
   CORS_ALLOWED_HEADERS,
+  type ConfigProblem,
   type ServerContainer,
   corsReflectsWhenUnset,
+  createMisconfiguredApp,
   handleError,
+  isConfigValidationError,
   logger,
+  requireEnv,
   mountAuthGate,
   registerCoreControllers,
   resolveCorsOrigin,
 } from '@cat-factory/server'
+import { loadNodeConfig } from './config.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
@@ -121,6 +126,32 @@ export function serveAppWithRealtime(opts: {
 }
 
 /**
+ * Serve the misconfiguration FALLBACK backend on the normal port/host. Used when {@link start}
+ * (or the local facade's boot) catches a {@link ConfigValidationError}: instead of exiting — which
+ * leaves the SPA showing a bare "can't reach the backend" panel with no clue what's wrong — we keep
+ * the deployment reachable serving a minimal app that reports the exact missing variables, so the
+ * SPA can render its dedicated "backend misconfigured" screen. Logs a clear operator message too.
+ */
+export function serveMisconfigured(
+  problems: ConfigProblem[],
+  env: NodeJS.ProcessEnv,
+  host?: string,
+): ReturnType<typeof serve> {
+  logger.error(
+    { problems: problems.map((p) => p.key) },
+    'cat-factory node server is MISCONFIGURED — serving the fallback error backend so the UI can ' +
+      'explain what to fix:',
+  )
+  for (const p of problems) logger.error(`  • ${p.key}: ${p.summary}\n    → ${p.remedy}`)
+  const app = createMisconfiguredApp(problems)
+  const port = Number(env.PORT ?? 8787)
+  const bind = host ?? env.HOST?.trim() ?? undefined
+  const server = serve({ fetch: app.fetch, port, ...(bind ? { hostname: bind } : {}) })
+  logger.info({ port, host: bind ?? '0.0.0.0' }, 'cat-factory misconfigured fallback listening')
+  return server
+}
+
+/**
  * Boot the Node HTTP server: connect to Postgres (`DATABASE_URL`), ensure the schema,
  * start pg-boss + the durable execution worker + the stale-run sweeper, build the app,
  * and listen. Registers SIGTERM/SIGINT handlers for a clean, ordered shutdown.
@@ -161,10 +192,29 @@ export async function start(
   } = {},
 ): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
-  const databaseUrl = env.DATABASE_URL
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required to start the Node server')
+  try {
+    return await bootServer(options, env)
+  } catch (err) {
+    // A mandatory env var / binding is missing or invalid: don't die (which leaves the SPA on a
+    // bare "can't reach the backend" panel) — keep the port reachable serving the fallback backend
+    // so the UI can tell the developer exactly what to fix. Any OTHER failure is a real crash and
+    // is rethrown to the entrypoint (which exits non-zero).
+    if (isConfigValidationError(err)) return serveMisconfigured(err.problems, env, options.host)
+    throw err
   }
+}
+
+/** The real boot sequence, wrapped by {@link start} so a {@link ConfigValidationError} falls back. */
+async function bootServer(
+  options: NonNullable<Parameters<typeof start>[0]>,
+  env: NodeJS.ProcessEnv,
+): Promise<ReturnType<typeof serve>> {
+  const databaseUrl = requireEnv(env, 'DATABASE_URL')
+  // Validate the full config UP FRONT — it is pure (no I/O), so an ENCRYPTION_KEY / auth-provider
+  // problem surfaces as a ConfigValidationError here, BEFORE we open a Postgres connection or run
+  // migrations. Without this the same throw would fire deep inside `buildContainer` only after the
+  // heavy DB boot, and a bad-config restart would needlessly hammer Postgres first.
+  loadNodeConfig(env)
   const { db, pool } = createDbClient(databaseUrl)
   const boss = new PgBoss(databaseUrl)
   // Migrations (Drizzle, app schema) and pg-boss's own schema provisioning are

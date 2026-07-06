@@ -114,6 +114,8 @@ import {
   createDefaultWebSearchUpstream,
   createWebSearchUpstream,
   createScopedModelProviderResolver,
+  ENV_HELP,
+  configProblem,
   GitHubIdentityResolver,
   resolveUrlSafetyPolicy,
   resolveWorkspaceCapabilities,
@@ -406,13 +408,7 @@ function selectAgentExecutor(
     agentContextObservability,
   )
   if (!container) {
-    throw new Error(
-      'Container-based implementation is required but its prerequisites are missing. ' +
-        'Required: a configured GitHub App (GITHUB_APP_PRIVATE_KEY), WORKER_PUBLIC_URL, ' +
-        'AUTH_SESSION_SECRET, and a runner backend (the EXEC_CONTAINER binding or a ' +
-        'registered runner pool with RUNNERS_ENABLED). Refusing to start with a broken ' +
-        'executor instead of silently degrading to one-shot LLM calls.',
-    )
+    throw configProblem({ key: 'CONTAINER_EXECUTOR', ...ENV_HELP.CONTAINER_EXECUTOR })
   }
 
   // Always the composite: non-sandbox kinds run inline; sandbox kinds run in the

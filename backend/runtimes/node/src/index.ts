@@ -7,6 +7,7 @@ export {
   createApp,
   createServer,
   serveAppWithRealtime,
+  serveMisconfigured,
   start,
   type CreateServerOptions,
 } from './server.js'

@@ -1,5 +1,5 @@
 import type { DocumentSourceKind } from '@cat-factory/kernel'
-import type { DocumentsConfig } from '@cat-factory/server'
+import { ENV_HELP, type DocumentsConfig, configProblem } from '@cat-factory/server'
 import type { Env } from '../env'
 
 export type { DocumentsConfig }
@@ -42,11 +42,7 @@ export function loadDocumentsConfig(env: Env): DocumentsConfig {
   // deterministic heading parser.
   const encryptionKey = env.ENCRYPTION_KEY?.trim()
   if (!encryptionKey) {
-    throw new Error(
-      'ENCRYPTION_KEY is required: the document-source integration (Notion, Confluence, …) ' +
-        'encrypts per-workspace source credentials at rest. Set it to a base64-encoded key of ' +
-        'at least 32 bytes.',
-    )
+    throw configProblem({ key: 'ENCRYPTION_KEY', ...ENV_HELP.ENCRYPTION_KEY })
   }
   return {
     enabled: true,

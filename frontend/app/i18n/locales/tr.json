@@ -4,7 +4,14 @@
     "loadingBoard": "Pano yükleniyor…",
     "backendUnreachable": "Arka uca ulaşılamıyor",
     "reconnecting": "Yeniden bağlanılıyor…",
-    "offline": "Canlı güncellemeler alınmıyor"
+    "offline": "Canlı güncellemeler alınmıyor",
+    "misconfigured": {
+      "title": "Arka uç yapılandırılmadı",
+      "intro": "Sunucu başladı ancak aşağıdaki ayarlar sağlanana kadar çalışamaz. Eksik değerleri ortamınıza ekleyip yeniden yükleyin.",
+      "howToFix": "Nasıl düzeltilir:",
+      "reload": "Yeniden yükle",
+      "hint": "Burada yalnızca değişken adları ve nasıl ayarlanacakları gösterilir, asla gizli değerler değil."
+    }
   },
   "language": {
     "switcher": "Dil",

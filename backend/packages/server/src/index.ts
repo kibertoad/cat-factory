@@ -118,6 +118,16 @@ export {
   parseAllowedOrigins,
   resolveCorsOrigin,
 } from './http/cors.js'
+export {
+  ConfigValidationError,
+  isConfigValidationError,
+  configProblem,
+  formatConfigProblems,
+  requireEnv,
+  ENV_HELP,
+  type ConfigProblem,
+} from './config/problems.js'
+export { createMisconfiguredApp, buildMisconfiguredResponse } from './config/misconfiguredApp.js'
 export { base64url, base64urlToBytes, pkcs8PemToDer, timingSafeEqual } from './crypto/encoding.js'
 // Runtime-neutral (Web Crypto) credential encryption + GitHub-App authentication,
 // shared by both facades so the Node service can mint installation tokens and
